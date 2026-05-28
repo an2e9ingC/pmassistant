@@ -23,6 +23,11 @@ function formatDate(d) {
   return s.length >= 10 ? s.substring(0, 10) : s;
 }
 
+function escHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 function showToast(msg, type) {
   const container = document.getElementById('toast-container');
   if (!container) return;
