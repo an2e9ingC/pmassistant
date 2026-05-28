@@ -70,7 +70,7 @@ async function loadProjectTable(filter) {
       return '<tr onclick="openProject(\'' + p.id + '\')">' +
         '<td><div class="proj-id-cell">' +
           renderProjIcon(p.type) +
-          '<div><div class="proj-name">' + escHtml(custName) + '</div><div class="proj-code">' + escHtml(p.code) + '</div></div>' +
+          '<div><div class="proj-name">' + escHtml(custName) + '</div><div class="proj-code">' + escHtml(p.code || p.name) + '</div></div>' +
         '</div></td>' +
         '<td>' + renderTypeBadge(p.type) + '</td>' +
         '<td style="font-size:13px">' + escHtml(p.pm_name || '—') + '</td>' +

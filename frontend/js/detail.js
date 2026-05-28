@@ -35,7 +35,7 @@ function renderComboOptions(q) {
       renderProjIcon(p.project_type) +
       '<div style="min-width:0">' +
         '<div class="combo-opt-name">' + escHtml(p.customer_name || p.name) + '</div>' +
-        '<div class="combo-opt-meta">' + escHtml(p.code) + ' · ' + typeTxt + '项目 · ' + escHtml(p.status || '') + '</div>' +
+        '<div class="combo-opt-meta">' + escHtml(p.code || p.name) + ' · ' + typeTxt + '项目 · ' + escHtml(p.status || '') + '</div>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -58,7 +58,8 @@ async function selectComboProject(id) {
   var p = _comboProjects.find(function(p) { return p.id == id; });
   if (p) {
     var custName = p.customer_name || p.name;
-    document.getElementById('combo-input').value = custName + '  (' + p.code + ')';
+    var codeLabel = p.code || '#' + p.id;
+    document.getElementById('combo-input').value = custName + '  (' + codeLabel + ')';
   }
   closeCombo();
   await loadProjectDetail(id);
