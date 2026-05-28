@@ -45,11 +45,12 @@ def get_project_stages(db: Session, project_id: int) -> list[dict]:
                 "completed_at": t.finished_date.strftime("%Y-%m-%d") if t.finished_date else None,
                 "location": "禅道任务附件" if t.has_files else None,
             })
+        who = _get_who(tasks) or e.name
         stages.append({
             "id": e.id,
             "name": e.stage_name or e.name,
             "status": _map_exec_status(e.status),
-            "who": e.name,
+            "who": who,
             "start": str(e.begin) if e.begin else None,
             "end": str(e.end) if e.end else None,
             "completed_date": str(e.end) if e.status in ("done", "closed") else None,
@@ -91,9 +92,10 @@ def get_project_gantt(db: Session, project_id: int) -> list[dict]:
             .filter(CachedTask.execution_id == e.id)
             .all()
         )
+        who = _get_who(tasks) or e.name
         gantt_stages.append({
             "name": e.stage_name or e.name,
-            "who": _extract_who(e.name),
+            "who": who,
             "start": str(e.begin) if e.begin else None,
             "end": str(e.end) if e.end else None,
             "status": _map_exec_status(e.status),
@@ -212,7 +214,13 @@ def _find_blocker(tasks: list[CachedTask]) -> Optional[str]:
     return None
 
 
-def _extract_who(name: str) -> str:
-    """Extract a short who description from execution name."""
-    # In Phase 1, use the execution name as the who
-    return name or ""
+def _get_who(tasks: list[CachedTask]) -> str:
+    """Get responsible persons from task assignees, deduplicated."""
+    names = []
+    seen = set()
+    for t in tasks:
+        name = (t.assigned_realname or "").strip()
+        if name and name not in seen:
+            names.append(name)
+            seen.add(name)
+    return "、".join(names) if names else ""
