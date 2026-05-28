@@ -21,7 +21,6 @@
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
   box-shadow: var(--sh);
-  overflow: hidden;
 }
 
 /* ── Toolbar ── */
@@ -58,9 +57,11 @@
   border-bottom: 1px solid var(--border);
 }
 .gantt-label-col {
-  width: 160px; min-width: 160px;
+  width: 160px; min-width: 160px; flex-shrink: 0;
   padding: 9px 12px; display: flex; gap: 1px;
   border-right: 1px solid var(--border);
+  position: sticky; left: 0; z-index: 3;
+  background: var(--surface2);
 }
 .gantt-label-col > div {
   font-size: 10.5px; font-weight: 600; color: var(--muted);
@@ -94,10 +95,14 @@
 .gantt-row.stage-alt { background: var(--bg); }
 .gantt-row.stage-alt:hover { background: var(--surface2); }
 .gantt-stage-cell {
-  width: 160px; min-width: 160px;
+  width: 160px; min-width: 160px; flex-shrink: 0;
   padding: 8px 12px; border-right: 1px solid var(--border);
   display: flex; gap: 1px; align-items: center;
+  position: sticky; left: 0; z-index: 2;
+  background: var(--surface);
 }
+.gantt-row:nth-child(even) .gantt-stage-cell { background: var(--bg); }
+.gantt-row:hover .gantt-stage-cell { background: var(--surface2); }
 .gantt-stage-cell .gs-name {
   flex: 7; font-size: 12px; font-weight: 540;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
