@@ -334,20 +334,19 @@
 <script src="/js/app.js"></script>
 <script>
 async function triggerSync() {
+  var btn = event && event.target;
+  if (btn) { btn.textContent = '同步中...'; btn.style.pointerEvents = 'none'; }
   try {
-    var result = await API.post('/sync/trigger');
-    if (result.code === 0) {
-      showToast('数据同步完成', 'success');
-      updateLinkStatus();
-      if (document.getElementById('view-dashboard').classList.contains('active')) {
-        renderDashboard();
-      }
-    } else {
-      showToast('同步失败: ' + (result.message || '未知错误'), 'error');
+    await API.post('/sync/trigger');
+    showToast('数据同步完成', 'success');
+    updateLinkStatus();
+    if (document.getElementById('view-dashboard').classList.contains('active')) {
+      renderDashboard();
     }
   } catch(e) {
-    showToast('同步请求失败: ' + e.message, 'error');
+    showToast('同步失败: ' + (e.message || '未知错误'), 'error');
   }
+  if (btn) { btn.textContent = '同步数据'; btn.style.pointerEvents = ''; }
 }
 </script>
 </body>
