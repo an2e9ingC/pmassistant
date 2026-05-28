@@ -154,11 +154,75 @@ function buildDetailHeader(p) {
 
 /* Gantt Chart */
 
+var _ganttZoomLevel = 2; // 0=day, 1=week, 2=month(default), 3=quarter
+var _ganttDragState = { down: false, startX: 0, scrollLeft: 0 };
+
+// Column width per zoom level (pixels)
+var ZOOM_COL_WIDTH = [36, 56, 80, 120];
+var ZOOM_LABELS = ['日', '周', '月', '季'];
+
+function ganttZoomIn() {
+  if (_ganttZoomLevel > 0) { _ganttZoomLevel--; refreshGantt(); }
+}
+function ganttZoomOut() {
+  if (_ganttZoomLevel < 3) { _ganttZoomLevel++; refreshGantt(); }
+}
+function refreshGantt() {
+  if (_comboCurId) {
+    API.get('/projects/' + _comboCurId + '/gantt').then(function(data) {
+      buildGantt(data);
+    });
+  }
+}
+
+// ── Drag-to-pan ──
+
+function initGanttDrag() {
+  var wrap = document.querySelector('.gantt-wrap');
+  if (!wrap) return;
+  wrap.addEventListener('mousedown', function(e) {
+    // Only start drag on bar-cell area (not on bars themselves)
+    if (e.target.closest('.gantt-bar')) return;
+    _ganttDragState.down = true;
+    _ganttDragState.startX = e.pageX;
+    _ganttDragState.scrollLeft = wrap.scrollLeft;
+    wrap.classList.add('dragging');
+  });
+  document.addEventListener('mousemove', function(e) {
+    if (!_ganttDragState.down) return;
+    var dx = e.pageX - _ganttDragState.startX;
+    wrap.scrollLeft = _ganttDragState.scrollLeft - dx;
+  });
+  document.addEventListener('mouseup', function() {
+    if (_ganttDragState.down) {
+      _ganttDragState.down = false;
+      var w = document.querySelector('.gantt-wrap');
+      if (w) w.classList.remove('dragging');
+    }
+  });
+}
+
+// ── Zoom via scroll wheel ──
+
+function initGanttWheel() {
+  var wrap = document.querySelector('.gantt-wrap');
+  if (!wrap) return;
+  wrap.addEventListener('wheel', function(e) {
+    if (!e.ctrlKey && !e.metaKey) return; // require Ctrl+scroll for zoom
+    e.preventDefault();
+    if (e.deltaY < 0) {
+      ganttZoomIn();
+    } else {
+      ganttZoomOut();
+    }
+  }, { passive: false });
+}
+
+// ── Column generation ──
+
 function ganttRange(stages) {
-  // Calculate time range from actual stage data, with padding
-  var today = new Date();
-  today.setHours(0, 0, 0, 0);
-  var minDate = today, maxDate = today;
+  var today = new Date(); today.setHours(0, 0, 0, 0);
+  var minDate = new Date(today), maxDate = new Date(today);
 
   if (stages && stages.length) {
     stages.forEach(function(s) {
@@ -166,75 +230,193 @@ function ganttRange(stages) {
       if (s.end)   { var ed = new Date(s.end);   if (ed > maxDate) maxDate = ed; }
     });
   }
-
-  // Pad: start from 1st of min month, end to last day of max month + 1 extra month
   minDate.setDate(1);
   minDate.setMonth(minDate.getMonth() - 1);
   maxDate.setDate(1);
   maxDate.setMonth(maxDate.getMonth() + 1);
 
-  // Ensure at least 6 months range
-  var minSpan = new Date(today);
-  minSpan.setMonth(today.getMonth() - 3);
-  var maxSpan = new Date(today);
-  maxSpan.setMonth(today.getMonth() + 3);
+  var minSpan = new Date(today); minSpan.setMonth(today.getMonth() - 3);
+  var maxSpan = new Date(today); maxSpan.setMonth(today.getMonth() + 3);
   if (minDate > minSpan) minDate = minSpan;
   if (maxDate < maxSpan) maxDate = maxSpan;
 
   return { start: minDate, end: maxDate, span: maxDate - minDate };
 }
 
-function ganttPct(ds, range) {
-  var t = new Date(ds) - range.start;
-  return Math.max(0, Math.min(100, (t / range.span) * 100));
+function generateColumns(range, zoomLevel) {
+  var cols = [];
+  var cursor = new Date(range.start);
+
+  if (zoomLevel === 0) {
+    // Day columns
+    cursor.setHours(0, 0, 0, 0);
+    var endMs = range.end.getTime();
+    while (cursor.getTime() <= endMs) {
+      var d = cursor.getDate(), m = cursor.getMonth() + 1;
+      var dow = cursor.getDay(); // 0=Sun, 6=Sat
+      var label = m + '/' + d;
+      if (d === 1 || cols.length === 0) label = m + '/' + d;
+      cols.push({
+        label: label,
+        isToday: isSameDay(cursor, new Date()),
+        isWeekend: dow === 0 || dow === 6,
+        isMonthStart: d === 1,
+        ts: cursor.getTime()
+      });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+  } else if (zoomLevel === 1) {
+    // Week columns
+    cursor.setDate(cursor.getDate() - cursor.getDay() + 1); // Monday
+    while (cursor.getTime() <= range.end.getTime()) {
+      var m2 = cursor.getMonth() + 1, d2 = cursor.getDate();
+      cols.push({
+        label: m2 + '/' + d2,
+        isToday: false,
+        isWeekend: false,
+        isMonthStart: d2 <= 7,
+        ts: cursor.getTime()
+      });
+      cursor.setDate(cursor.getDate() + 7);
+    }
+  } else if (zoomLevel === 2) {
+    // Month columns
+    cursor.setDate(1);
+    while (cursor <= range.end) {
+      var y = cursor.getFullYear(), mo = cursor.getMonth() + 1;
+      var today = new Date();
+      cols.push({
+        label: mo === 1 ? y + '/' + mo : mo + '月',
+        isToday: today.getFullYear() === y && today.getMonth() + 1 === mo,
+        isWeekend: false,
+        isMonthStart: true,
+        ts: cursor.getTime()
+      });
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+  } else {
+    // Quarter columns
+    cursor.setDate(1);
+    cursor.setMonth(Math.floor(cursor.getMonth() / 3) * 3);
+    while (cursor <= range.end) {
+      var qy = cursor.getFullYear(), qm = cursor.getMonth();
+      var qn = Math.floor(qm / 3) + 1;
+      cols.push({
+        label: qy + ' Q' + qn,
+        isToday: false,
+        isWeekend: false,
+        isMonthStart: true,
+        ts: cursor.getTime()
+      });
+      cursor.setMonth(cursor.getMonth() + 3);
+    }
+  }
+  return cols;
 }
 
-function buildGantt(stages) {
-  var now = new Date(), cy = now.getFullYear(), cm = now.getMonth() + 1;
-  var range = ganttRange(stages);
+function isSameDay(a, b) {
+  return a.getFullYear() === b.getFullYear() &&
+         a.getMonth() === b.getMonth() &&
+         a.getDate() === b.getDate();
+}
 
-  // Generate month headers from range.start to range.end
-  var mHdrs = '', gCols = '';
-  var cursor = new Date(range.start);
-  cursor.setDate(1);
-  while (cursor <= range.end) {
-    var y = cursor.getFullYear(), m = cursor.getMonth() + 1;
-    var isc = (y === cy && m === cm);
-    var lbl = m === 1 ? y + '/' + m : m + '月';
-    mHdrs += '<div class="gantt-mon' + (isc ? ' today-col' : '') + '">' + lbl + '</div>';
-    gCols += '<div class="gantt-grid-col"></div>';
-    cursor.setMonth(cursor.getMonth() + 1);
-  }
-  var todayPos = ganttPct(now.toISOString().slice(0, 10), range);
+// ── Pixel position helper ──
+
+function ganttPx(ds, range, totalWidth) {
+  if (!ds) return 0;
+  var t = new Date(ds) - range.start;
+  return Math.max(0, Math.min(totalWidth, (t / range.span) * totalWidth));
+}
+
+// ── Main render ──
+
+function buildGantt(stages) {
+  var range = ganttRange(stages);
+  var colW = ZOOM_COL_WIDTH[_ganttZoomLevel];
+  var cols = generateColumns(range, _ganttZoomLevel);
+  var totalWidth = cols.length * colW;
+
+  // Column headers
+  var mHdrs = cols.map(function(c) {
+    var cls = 'gantt-col-hd';
+    if (c.isToday) cls += ' today-col';
+    if (c.isWeekend) cls += ' weekend';
+    if (c.isMonthStart && !c.isToday && _ganttZoomLevel <= 1) cls += ' q-end';
+    return '<div class="' + cls + '" style="width:' + colW + 'px">' + c.label + '</div>';
+  }).join('');
+
+  // Grid columns
+  var gCols = cols.map(function(c) {
+    var cls = 'gantt-grid-col';
+    if (c.isToday) cls += ' today-bg';
+    return '<div class="' + cls + '" style="width:' + colW + 'px"></div>';
+  }).join('');
+
+  // Today position
+  var today = new Date().toISOString().slice(0, 10);
+  var todayPx = ganttPx(today, range, totalWidth);
 
   if (!stages || !stages.length) {
     document.getElementById('gantt-root').innerHTML =
-      '<div class="gantt-head-row"><div class="gantt-label-col">阶段 / 负责人</div><div class="gantt-timeline-head">' + mHdrs + '</div></div>' +
+      buildGanttToolbar() +
+      '<div class="gantt-head-row">' +
+        '<div class="gantt-label-col"><div class="gl-stage">阶段</div><div class="gl-who">负责人</div></div>' +
+        '<div class="gantt-timeline-head" style="min-width:' + totalWidth + 'px;width:' + totalWidth + 'px">' + mHdrs + '</div>' +
+      '</div>' +
       '<div class="gantt-row"><div class="gantt-stage-cell" style="width:100%;text-align:center;color:var(--muted);padding:20px">暂无阶段数据</div></div>';
     return;
   }
 
   var rows = stages.map(function(s, i) {
-    var lp = ganttPct(s.start, range), rp = ganttPct(s.end, range), wp = Math.max(1, rp - lp);
     var alt = i % 2 === 1 ? ' stage-alt' : '';
+    var lp = ganttPx(s.start, range, totalWidth);
+    var ep = ganttPx(s.end, range, totalWidth);
+    var wp = Math.max(4, ep - lp);
+    var whoShort = (s.who || '').split('（')[0].split('、')[0] || '—';
+    var barLabel = wp > 50 ? s.name : '';
     return '<div class="gantt-row' + alt + '">' +
       '<div class="gantt-stage-cell">' +
-        '<div class="gantt-stage-name">' + escHtml(s.name) + '</div>' +
-        '<div class="gantt-stage-who">' + escHtml((s.who || '').split('（')[0]) + '</div>' +
+        '<div class="gs-name" title="' + escHtml(s.name) + '">' + escHtml(s.name) + '</div>' +
+        '<div class="gs-who" title="' + escHtml(s.who || '') + '">' + escHtml(whoShort) + '</div>' +
       '</div>' +
-      '<div class="gantt-bar-cell">' +
+      '<div class="gantt-bar-cell" style="min-width:' + totalWidth + 'px;width:' + totalWidth + 'px">' +
         '<div class="gantt-grid">' + gCols + '</div>' +
-        '<div class="gantt-today-line" style="left:' + todayPos + '%"><div class="gantt-today-pip"></div></div>' +
-        '<div class="gantt-bar ' + s.status + '" style="left:calc(' + lp + '% + 3px);width:calc(' + wp + '% - 6px)" title="' + escHtml(s.name) + '  ' + s.start + ' → ' + s.end + '">' + (wp > 5 ? s.name : '') + '</div>' +
+        '<div class="gantt-today-line" style="left:' + todayPx + 'px"><div class="gantt-today-pip"></div></div>' +
+        '<div class="gantt-bar ' + s.status + '" style="left:' + lp + 'px;width:' + wp + 'px" title="' + escHtml(s.name) + '  ' + (s.start || '') + ' → ' + (s.end || '') + '">' + escHtml(barLabel) + '</div>' +
       '</div>' +
     '</div>';
   }).join('');
 
   document.getElementById('gantt-root').innerHTML =
+    buildGanttToolbar() +
     '<div class="gantt-head-row">' +
-      '<div class="gantt-label-col">阶段 / 负责人</div>' +
-      '<div class="gantt-timeline-head">' + mHdrs + '</div>' +
+      '<div class="gantt-label-col"><div class="gl-stage">阶段</div><div class="gl-who">负责人</div></div>' +
+      '<div class="gantt-timeline-head" style="min-width:' + totalWidth + 'px;width:' + totalWidth + 'px">' + mHdrs + '</div>' +
     '</div>' + rows;
+
+  // Scroll to center today
+  setTimeout(function() {
+    var wrap = document.querySelector('.gantt-wrap');
+    if (wrap && todayPx > 0) {
+      wrap.scrollLeft = todayPx - wrap.clientWidth / 2;
+    }
+  }, 50);
+
+  // Init zoom and drag
+  initGanttWheel();
+  initGanttDrag();
+}
+
+function buildGanttToolbar() {
+  return '<div class="gantt-toolbar">' +
+    '<div style="font-size:12px;font-weight:600;color:var(--fg)">甘特图</div>' +
+    '<div class="gantt-toolbar-zoom">' +
+      '<span style="font-size:10px;color:var(--muted)">Ctrl+滚轮缩放</span>' +
+      '<button class="gantt-zoom-btn" onclick="ganttZoomIn()" title="放大">+</button>' +
+      '<span class="gantt-zoom-label">' + ZOOM_LABELS[_ganttZoomLevel] + '</span>' +
+      '<button class="gantt-zoom-btn" onclick="ganttZoomOut()" title="缩小">−</button>' +
+    '</div>' +
+  '</div>';
 }
 
 /* Stages Table */
