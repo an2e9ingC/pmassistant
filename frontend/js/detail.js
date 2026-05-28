@@ -165,45 +165,64 @@ function ganttGranularity(ppd) {
 
 // ── Drag-to-pan ──
 
-function initGanttDrag() {
-  if (_ganttDragInit) return;
-  _ganttDragInit = true;
+var _ganttDragWrap = null;
+var _ganttDragState = null;
 
-  document.addEventListener('mousedown', function(e) {
-    var wrap = e.target.closest('.gantt-wrap');
-    if (!wrap) return;
-    if (e.target.closest('.gantt-bar') || e.target.closest('.gantt-zoom-btn')) return;
-    wrap._drag = { startX: e.pageX, scrollLeft: wrap.scrollLeft };
+function initGanttDrag() {
+  var wrap = document.querySelector('.gantt-wrap');
+  if (!wrap) return;
+
+  // Remove old listeners (simplest: replace element clone pattern not needed, just rebind)
+  wrap.onmousedown = null;
+
+  wrap.addEventListener('mousedown', function(e) {
+    if (e.button !== 0) return;
+    if (e.target.closest('.gantt-bar') || e.target.closest('.gantt-toolbar') ||
+        e.target.closest('input') || e.target.closest('button')) return;
+
+    _ganttDragWrap = wrap;
+    _ganttDragState = { startX: e.pageX, scrollLeft: wrap.scrollLeft };
     wrap.classList.add('dragging');
     e.preventDefault();
   });
-
-  document.addEventListener('mousemove', function(e) {
-    var wrap = document.querySelector('.gantt-wrap.dragging');
-    if (!wrap || !wrap._drag) return;
-    wrap.scrollLeft = wrap._drag.scrollLeft - (e.pageX - wrap._drag.startX);
-  });
-
-  document.addEventListener('mouseup', function() {
-    var wrap = document.querySelector('.gantt-wrap.dragging');
-    if (wrap) { wrap.classList.remove('dragging'); wrap._drag = null; }
-  });
 }
 
+// Global move/up handlers (registered once)
+document.addEventListener('mousemove', function(e) {
+  if (!_ganttDragWrap) return;
+  _ganttDragWrap.scrollLeft = _ganttDragState.scrollLeft - (e.pageX - _ganttDragState.startX);
+});
+
+document.addEventListener('mouseup', function() {
+  if (_ganttDragWrap) {
+    _ganttDragWrap.classList.remove('dragging');
+    _ganttDragWrap = null;
+    _ganttDragState = null;
+  }
+});
+
 // ── Wheel zoom ──
+
+var _ganttRefreshTimer = null;
 
 function initGanttWheel() {
   var wrap = document.querySelector('.gantt-wrap');
   if (!wrap) return;
+  if (wrap._wheelInited) return;
+  wrap._wheelInited = true;
+
   wrap.addEventListener('wheel', function(e) {
     e.preventDefault();
-    var oldPpd = _ganttPpd;
     if (e.deltaY < 0) {
-      _ganttPpd = Math.min(30, _ganttPpd * 1.15);
+      _ganttPpd = Math.min(30, _ganttPpd + 1.05);
     } else {
-      _ganttPpd = Math.max(1, _ganttPpd / 1.15);
+      _ganttPpd = Math.max(1, _ganttPpd - 1.05);
     }
-    if (Math.abs(_ganttPpd - oldPpd) > 0.01) refreshGantt();
+    // Debounce refresh: only rebuild after scrolling stops
+    clearTimeout(_ganttRefreshTimer);
+    _ganttRefreshTimer = setTimeout(function() {
+      refreshGantt();
+    }, 150);
   }, { passive: false });
 }
 
