@@ -1,7 +1,8 @@
 from __future__ import annotations
 import json
 import logging
-from datetime import datetime, timezone
+import re
+from datetime import datetime, timezone, date
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -17,12 +18,45 @@ from backend.services.zentao_client import ZentaoClient
 logger = logging.getLogger(__name__)
 
 
-def _parse_date(val) -> Optional[str]:
+def _parse_date(val) -> Optional[date]:
+    """Parse a date value, returning a date object or None.
+    Handles non-date strings like '长期' gracefully by returning None."""
     if not val:
         return None
+    if isinstance(val, (date, datetime)):
+        return val.date() if isinstance(val, datetime) else val
     if isinstance(val, str):
-        return val[:10] if "T" in val else val
-    return str(val)
+        val = val.strip()
+        if not val:
+            return None
+        # ISO datetime: "2026-05-28T06:16:11Z"
+        if "T" in val:
+            return date.fromisoformat(val[:10])
+        # Simple date: "2026-05-28"
+        if re.match(r"^\d{4}-\d{2}-\d{2}$", val):
+            return date.fromisoformat(val)
+        # Non-date string like "长期", "待定", etc.
+        logger.debug(f"Non-date value in date field: {val!r}")
+        return None
+    return None
+
+
+def _parse_float(val) -> Optional[float]:
+    """Parse a numeric value, handling strings like '24h', '8.5d' etc."""
+    if val is None:
+        return None
+    if isinstance(val, (int, float)):
+        return float(val)
+    if isinstance(val, str):
+        val = val.strip()
+        if not val:
+            return None
+        # Extract leading number: "24h" -> 24.0, "8.5d" -> 8.5, "0.00" -> 0.0
+        m = re.match(r"^(\d+\.?\d*)", val)
+        if m:
+            return float(m.group(1))
+        return None
+    return None
 
 
 def _parse_datetime(val) -> Optional[datetime]:
@@ -246,8 +280,8 @@ class SyncService:
             begin=_parse_date(p.get("begin")), end=_parse_date(p.get("end")),
             real_began=_parse_date(p.get("realBegan")),
             real_end=_parse_date(p.get("realEnd")),
-            progress=p.get("progress", "0"), estimate=p.get("estimate", 0.0),
-            consumed=p.get("consumed", 0.0),
+            progress=p.get("progress", "0"), estimate=_parse_float(p.get("estimate")) or 0.0,
+            consumed=_parse_float(p.get("consumed")) or 0.0,
             pm_name=pm.get("realname") or pm.get("account", ""),
             pm_account=pm.get("account", ""),
             raw_json=json.dumps(p, ensure_ascii=False),
@@ -264,8 +298,8 @@ class SyncService:
         existing.real_began = _parse_date(p.get("realBegan")) or existing.real_began
         existing.real_end = _parse_date(p.get("realEnd")) or existing.real_end
         existing.progress = p.get("progress", existing.progress)
-        existing.estimate = p.get("estimate", existing.estimate)
-        existing.consumed = p.get("consumed", existing.consumed)
+        existing.estimate = _parse_float(p.get("estimate")) or existing.estimate
+        existing.consumed = _parse_float(p.get("consumed")) or existing.consumed
         existing.pm_name = pm.get("realname") or pm.get("account", existing.pm_name)
         existing.pm_account = pm.get("account", existing.pm_account)
         existing.raw_json = json.dumps(p, ensure_ascii=False)
@@ -301,7 +335,7 @@ class SyncService:
             parent_id=t.get("parent", 0) or 0,
             name=t.get("name", ""), type=t.get("type", ""),
             status=t.get("status", ""), priority=t.get("pri", 3),
-            estimate=t.get("estimate", 0.0), consumed=t.get("consumed", 0.0),
+            estimate=_parse_float(t.get("estimate")) or 0.0, consumed=_parse_float(t.get("consumed")) or 0.0,
             deadline=_parse_date(t.get("deadline")),
             assigned_to=assigned.get("account", ""),
             assigned_realname=assigned.get("realname", ""),
@@ -317,8 +351,8 @@ class SyncService:
         existing.name = t.get("name", existing.name)
         existing.status = t.get("status", existing.status)
         existing.priority = t.get("pri", existing.priority)
-        existing.estimate = t.get("estimate", existing.estimate)
-        existing.consumed = t.get("consumed", existing.consumed)
+        existing.estimate = _parse_float(t.get("estimate")) or existing.estimate
+        existing.consumed = _parse_float(t.get("consumed")) or existing.consumed
         existing.deadline = _parse_date(t.get("deadline")) or existing.deadline
         existing.assigned_to = assigned.get("account", existing.assigned_to)
         existing.assigned_realname = assigned.get("realname", existing.assigned_realname)
