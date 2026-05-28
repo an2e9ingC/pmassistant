@@ -10,7 +10,7 @@ services:
       - ./frontend:/app/frontend
     environment:
       - DATABASE_URL=sqlite:///./data/pma.db
-      - ZENTAO_BASE_URL=http://192.168.0.124:8800/api.php/v1
+      - ZENTAO_BASE_URL=http://192.168.3.22/zentao/api.php/v1
       - ZENTAO_AUTH_ACCOUNT=${ZENTAO_AUTH_ACCOUNT:-}
       - ZENTAO_AUTH_PASSWORD=${ZENTAO_AUTH_PASSWORD:-}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-secret-change-in-production}
