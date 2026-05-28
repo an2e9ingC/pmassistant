@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PM Assistant · 集成禅道 & GitLab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/reset.css">
+<link rel="stylesheet" href="/css/layout.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/gantt.css">
+<link rel="stylesheet" href="/css/detail.css">
+</head>
+<body>
+
+<div class="toast-container" id="toast-container"></div>
+
+<!-- ═══════════ SIDEBAR ═══════════ -->
+<aside class="sidebar">
+  <div class="sidebar-brand" onclick="gotoView('dashboard')" title="返回首页">
+    <div class="brand-mark">PMA</div>
+    <div>
+      <div class="brand-name">PM Assistant</div>
+      <div class="brand-sub">集成禅道 · GitLab</div>
+    </div>
+  </div>
+
+  <nav class="sidebar-nav">
+    <div class="nav-group">
+      <div class="nav-group-label">工作台</div>
+      <div class="nav-item active" id="nav-dashboard" onclick="gotoView('dashboard')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor">
+          <rect x="0" y="0" width="6.5" height="6.5" rx="1.5"/>
+          <rect x="9.5" y="0" width="6.5" height="6.5" rx="1.5"/>
+          <rect x="0" y="9.5" width="6.5" height="6.5" rx="1.5"/>
+          <rect x="9.5" y="9.5" width="6.5" height="6.5" rx="1.5"/>
+        </svg>
+        项目总览
+        <span class="nav-badge" id="alert-badge">0</span>
+      </div>
+      <div class="nav-item" id="nav-detail" onclick="gotoView('detail')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="1.5" y="1.5" width="13" height="13" rx="2"/>
+          <line x1="4" y1="5.5" x2="12" y2="5.5"/>
+          <line x1="4" y1="8" x2="10" y2="8"/>
+          <line x1="4" y1="10.5" x2="7.5" y2="10.5"/>
+        </svg>
+        项目详情
+      </div>
+      <div class="nav-item" id="nav-mapping" onclick="gotoView('mapping')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="3" cy="8" r="2"/>
+          <circle cx="13" cy="3.5" r="2"/>
+          <circle cx="13" cy="12.5" r="2"/>
+          <line x1="4.8" y1="7.1" x2="11.2" y2="4.4"/>
+          <line x1="4.8" y1="8.9" x2="11.2" y2="11.6"/>
+        </svg>
+        产品↔项目映射
+      </div>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-label">报表</div>
+      <div class="nav-item dim">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <polyline points="1,12 4.5,7.5 7.5,9.5 11,5 14.5,7"/>
+          <line x1="1" y1="15" x2="15" y2="15"/>
+        </svg>
+        统计报告
+        <span class="nav-tag">即将上线</span>
+      </div>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-label">管理</div>
+      <div class="nav-item" onclick="triggerSync()" style="cursor:pointer">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M1.5 8a6.5 6.5 0 0111.7-3.7M14.5 8a6.5 6.5 0 01-11.7 3.7"/>
+          <polyline points="10,1.5 13,4.5 10,4.5"/>
+          <polyline points="6,14.5 3,11.5 6,11.5"/>
+        </svg>
+        同步数据
+      </div>
+    </div>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="link-status" id="link-status">
+      <div class="link-status-title">数据源状态</div>
+      <div class="link-status-row">
+        <span class="link-status-label" title="GitLab 代码仓库">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitLab
+        </span>
+        <span class="link-status-badge ok" id="status-gitlab">✓ 已配置</span>
+      </div>
+      <div class="link-status-row">
+        <span class="link-status-label" title="禅道项目管理">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 100 16A8 8 0 008 0zm.5 4v.5h1v1H8v.5H7v1h1.5v.5H8V8h1v-.5H8.5V7h-1V6h1V4.5h-1v-.5h.5z"/></svg>
+          禅道
+        </span>
+        <span class="link-status-badge ok" id="status-zentao">✓ 已配置</span>
+      </div>
+      <div class="link-status-row">
+        <span class="link-status-label" title="NAS 文件存储">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M1 2.5A1.5 1.5 0 012.5 1h11A1.5 1.5 0 0115 2.5v11a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 13.5v-11zM2.5 2a.5.5 0 00-.5.5v11a.5.5 0 00.5.5h11a.5.5 0 00.5-.5v-11a.5.5 0 00-.5-.5h-11z"/><path d="M3 4h10v1H3V4zm0 3h10v1H3V7zm0 3h7v1H3v-1z"/></svg>
+          NAS
+        </span>
+        <span class="link-status-badge warn" id="status-nas">⚠ 部分配置</span>
+      </div>
+    </div>
+
+    <div class="theme-row" onclick="toggleTheme()">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+        <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.2 3.2l1 1M11.8 11.8l1 1M11.8 3.2l-1 1M4.2 11.8l-1 1M5 8a3 3 0 1 0 6 0 3 3 0 0 0-6 0z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <span id="theme-lbl">浅色</span>
+      <div class="toggle" id="theme-toggle">
+        <div class="toggle-knob"></div>
+      </div>
+    </div>
+
+    <div style="margin-top:8px;text-align:center">
+      <button onclick="logout()" style="font-size:11px;color:var(--muted);cursor:pointer;background:none;border:none">退出登录</button>
+    </div>
+  </div>
+</aside>
+
+<!-- ═══════════ MAIN ═══════════ -->
+<main class="main">
+  <header class="topbar">
+    <div class="topbar-title" id="topbar-title">项目总览</div>
+    <div class="topbar-right">
+      <button class="icon-btn" title="告警通知" onclick="gotoView('dashboard')">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M8 1.5A5 5 0 0 0 3 6.5v2.5L2 11h12l-1-2V6.5A5 5 0 0 0 8 1.5z"/>
+          <path d="M6.5 13a1.5 1.5 0 0 0 3 0" stroke-linecap="round"/>
+        </svg>
+        <div class="notif-pip" id="notif-pip"></div>
+      </button>
+      <div class="user-pill">
+        <div class="avatar" id="user-avatar">--</div>
+        <span class="user-label" id="user-name">用户</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="content">
+
+    <!-- ══════════════════════ VIEW 1 — DASHBOARD ══════════════════════ -->
+    <div class="view active" id="view-dashboard">
+
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-label">进行中项目</div>
+          <div class="kpi-value" style="color:var(--accent)" id="kpi-active">—</div>
+          <div class="kpi-meta" id="kpi-meta-types">加载中...</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">待处理告警</div>
+          <div class="kpi-value" style="color:var(--danger)" id="kpi-alerts">—</div>
+          <div class="kpi-meta">所有项目</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">本月已交付</div>
+          <div class="kpi-value" style="color:var(--success)" id="kpi-delivered">—</div>
+          <div class="kpi-meta">台/套</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">整体进度达成率</div>
+          <div class="kpi-value" id="kpi-progress">—</div>
+          <div class="kpi-meta">活跃项目加权均值</div>
+        </div>
+      </div>
+
+      <div class="section-hd">
+        <div class="section-title">项目列表</div>
+        <div class="section-acts">
+          <div class="search-wrap" style="max-width:240px">
+            <svg class="search-ico" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/>
+            </svg>
+            <input class="search-inp" id="proj-search" placeholder="搜索代号、名称、客户…" oninput="onProjSearch(this.value)">
+          </div>
+          <div class="tabs" id="type-filter">
+            <div class="tab active" onclick="filterTable('all',this)">全部</div>
+            <div class="tab" onclick="filterTable('RD',this)">研发项目</div>
+            <div class="tab" onclick="filterTable('SC',this)">生产项目</div>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="overflow:hidden;margin-bottom:28px">
+        <table class="proj-table">
+          <thead>
+            <tr>
+              <th>项目</th>
+              <th>类型</th>
+              <th>项目经理</th>
+              <th>当前阶段</th>
+              <th>状态</th>
+              <th>进度</th>
+              <th>计划完成</th>
+            </tr>
+          </thead>
+          <tbody id="proj-tbody">
+            <tr><td colspan="7"><div class="loading-spinner">加载中...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section-hd">
+        <div class="section-title">需关注告警</div>
+        <div class="section-acts"><span style="font-size:12px;color:var(--muted)" id="alert-count">共 0 条</span></div>
+      </div>
+      <div class="card alert-list" id="alert-list">
+        <div class="loading-spinner">加载告警...</div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════ VIEW 2 — PROJECT DETAIL ══════════════════════ -->
+    <div class="view" id="view-detail">
+
+      <div class="proj-select-bar">
+        <div class="back-btn" onclick="gotoView('dashboard')">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9,2 4,6.5 9,11"/>
+          </svg>
+        </div>
+        <label style="font-size:13px;color:var(--muted)">查看项目：</label>
+        <div class="proj-combo" id="proj-combo">
+          <input class="proj-combo-input" id="combo-input" type="text"
+            autocomplete="off" placeholder="搜索或选择项目…"
+            onfocus="openCombo()" oninput="filterCombo(this.value)">
+          <svg class="proj-combo-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="2,5 7,10 12,5"/>
+          </svg>
+          <div class="proj-combo-dropdown" id="combo-dropdown"></div>
+        </div>
+      </div>
+
+      <div class="detail-header" id="detail-header">
+        <div class="loading-spinner">请选择项目</div>
+      </div>
+
+      <div class="detail-tabs">
+        <div class="dtab active" onclick="switchDTab('gantt',this)">甘特图</div>
+        <div class="dtab" onclick="switchDTab('stages',this)">阶段详情</div>
+        <div class="dtab" onclick="switchDTab('docs',this)">文档齐套</div>
+        <div class="dtab" onclick="switchDTab('delivery',this)">交付状态</div>
+        <div class="dtab" onclick="switchDTab('resources',this)">软硬件资料</div>
+      </div>
+
+      <div class="dsec active" id="dsec-gantt">
+        <div class="gantt-wrap">
+          <div class="gantt-root" id="gantt-root">
+            <div class="loading-spinner">请选择项目</div>
+          </div>
+        </div>
+        <div class="gantt-legend">
+          <div class="gantt-legend-item"><div class="legend-dot" style="background:var(--success)"></div>已完成</div>
+          <div class="gantt-legend-item"><div class="legend-dot" style="background:var(--accent)"></div>进行中</div>
+          <div class="gantt-legend-item"><div class="legend-dot" style="background:var(--danger)"></div>已阻塞</div>
+          <div class="gantt-legend-item"><div class="legend-dot" style="background:var(--warn)"></div>规划中</div>
+          <div class="gantt-legend-item"><div class="legend-dot" style="background:var(--border)"></div>未开始</div>
+          <div class="gantt-legend-item"><div style="width:2px;height:14px;background:var(--accent);border-radius:1px"></div>今日</div>
+        </div>
+      </div>
+      <div class="dsec" id="dsec-stages">
+        <div class="card" style="overflow:hidden">
+          <table class="stage-table">
+            <thead>
+              <tr>
+                <th style="width:140px">阶段</th>
+                <th>责任人</th>
+                <th>计划周期</th>
+                <th>状态</th>
+                <th>卡点说明</th>
+                <th>输出件</th>
+              </tr>
+            </thead>
+            <tbody id="stages-tbody">
+              <tr><td colspan="6"><div class="loading-spinner">请选择项目</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="dsec" id="dsec-docs">
+        <div class="card" style="overflow:hidden">
+          <table class="stage-table">
+            <thead>
+              <tr>
+                <th>阶段</th>
+                <th>文件名称</th>
+                <th>状态 / 完成时间</th>
+                <th>位置 / 链接</th>
+              </tr>
+            </thead>
+            <tbody id="docs-tbody">
+              <tr><td colspan="4"><div class="loading-spinner">请选择项目</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="dsec" id="dsec-delivery">
+        <div id="delivery-content">
+          <div class="loading-spinner">请选择项目</div>
+        </div>
+      </div>
+      <div class="dsec" id="dsec-resources">
+        <div id="resources-content">
+          <div class="loading-spinner">请选择项目</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════ VIEW 3 — MAPPING ══════════════════════ -->
+    <div class="view" id="view-mapping">
+      <div style="text-align:center;padding:80px;color:var(--muted)">
+        <div style="font-size:48px;margin-bottom:16px">🗺</div>
+        <div style="font-size:16px;font-weight:600;margin-bottom:8px">产品↔项目映射</div>
+        <div style="font-size:13px">即将上线，敬请期待</div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script src="/js/utils.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/auth.js"></script>
+<script src="/js/components.js"></script>
+<script src="/js/dashboard.js"></script>
+<script src="/js/detail.js"></script>
+<script src="/js/app.js"></script>
+<script>
+async function triggerSync() {
+  try {
+    var result = await API.post('/sync/trigger');
+    if (result.code === 0) {
+      showToast('数据同步完成', 'success');
+      updateLinkStatus();
+      if (document.getElementById('view-dashboard').classList.contains('active')) {
+        renderDashboard();
+      }
+    } else {
+      showToast('同步失败: ' + (result.message || '未知错误'), 'error');
+    }
+  } catch(e) {
+    showToast('同步请求失败: ' + e.message, 'error');
+  }
+}
+</script>
+</body>
+</html>

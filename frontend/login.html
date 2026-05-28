@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PMA · 登录</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 14px; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--fg);
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  -webkit-font-smoothing: antialiased;
+}
+.login-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-md);
+  padding: 40px;
+  width: 100%;
+  max-width: 400px;
+}
+.login-logo {
+  text-align: center; margin-bottom: 28px;
+}
+.login-logo-mark {
+  width: 48px; height: 48px;
+  background: var(--accent); color: #fff;
+  border-radius: 12px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 700; letter-spacing: -0.02em;
+  margin-bottom: 12px;
+}
+.login-logo h1 { font-size: 18px; font-weight: 650; letter-spacing: -0.02em; }
+.login-logo p { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.form-group { margin-bottom: 16px; }
+.form-group label {
+  display: block; font-size: 12px; font-weight: 600;
+  color: var(--muted); margin-bottom: 6px;
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.form-group input {
+  width: 100%; padding: 10px 14px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); color: var(--fg);
+  font-family: var(--font); font-size: 14px;
+  outline: none; transition: border-color 0.12s;
+}
+.form-group input:focus { border-color: var(--accent); }
+.login-btn {
+  width: 100%; padding: 11px;
+  border-radius: 8px; border: none;
+  background: var(--accent); color: #fff;
+  font-family: var(--font); font-size: 14px; font-weight: 600;
+  cursor: pointer; transition: background 0.12s;
+  margin-top: 8px;
+}
+.login-btn:hover { background: var(--accent-h); }
+.login-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.login-error {
+  color: var(--danger); font-size: 12.5px;
+  text-align: center; margin-top: 12px; min-height: 18px;
+}
+</style>
+</head>
+<body>
+
+<div class="login-card">
+  <div class="login-logo">
+    <div class="login-logo-mark">PMA</div>
+    <h1>PM Assistant</h1>
+    <p>项目管理助手 · 集成禅道 &amp; GitLab</p>
+  </div>
+  <form onsubmit="onLogin(event)">
+    <div class="form-group">
+      <label>用户名</label>
+      <input type="text" id="login-username" placeholder="请输入用户名" autocomplete="username" required autofocus>
+    </div>
+    <div class="form-group">
+      <label>密码</label>
+      <input type="password" id="login-password" placeholder="请输入密码" autocomplete="current-password" required>
+    </div>
+    <button type="submit" class="login-btn" id="login-btn">登录</button>
+    <div class="login-error" id="login-error"></div>
+  </form>
+</div>
+
+<script src="/js/utils.js"></script>
+<script src="/js/auth.js"></script>
+</body>
+</html>

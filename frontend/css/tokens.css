@@ -1,0 +1,47 @@
+/* ═══════════════════════════════════════════════════
+   DESIGN TOKENS
+═══════════════════════════════════════════════════ */
+:root {
+  --bg:          #F4F6FB;
+  --surface:     #FFFFFF;
+  --surface2:    #F8FAFD;
+  --fg:          #17191F;
+  --muted:       #6B7694;
+  --border:      #E3E8F4;
+  --accent:      #2D6FEC;
+  --accent-h:    #2260D8;
+  --accent-lt:   #EDF2FE;
+  --success:     #15803D;
+  --success-lt:  #DCFCE7;
+  --warn:        #B45309;
+  --warn-lt:     #FEF3C7;
+  --danger:      #DC2626;
+  --danger-lt:   #FEE2E2;
+  --sidebar-w:   228px;
+  --header-h:    54px;
+  --font:        'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --mono:        'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --r:           8px;
+  --r-lg:        12px;
+  --sh:          0 1px 3px rgba(16,24,48,0.06), 0 1px 2px rgba(16,24,48,0.04);
+  --sh-md:       0 4px 14px rgba(16,24,48,0.09);
+}
+[data-theme="dark"] {
+  --bg:          #0B0E14;
+  --surface:     #141820;
+  --surface2:    #1A1F2C;
+  --fg:          #E4E9F6;
+  --muted:       #717DA0;
+  --border:      #232839;
+  --accent:      #4D86F7;
+  --accent-h:    #5E93FF;
+  --accent-lt:   #151E35;
+  --success:     #34D399;
+  --success-lt:  #0A2218;
+  --warn:        #FBBF24;
+  --warn-lt:     #201800;
+  --danger:      #F87171;
+  --danger-lt:   #1E0808;
+  --sh:          0 1px 3px rgba(0,0,0,0.35), 0 1px 2px rgba(0,0,0,0.3);
+  --sh-md:       0 4px 14px rgba(0,0,0,0.45);
+}

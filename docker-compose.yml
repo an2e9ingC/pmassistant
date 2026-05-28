@@ -1,0 +1,21 @@
+version: "3.9"
+
+services:
+  backend:
+    build: .
+    container_name: pma-backend
+    ports:
+      - "8080:8000"
+    volumes:
+      - ./data:/app/data
+      - ./backend:/app/backend
+      - ./frontend:/app/frontend
+    environment:
+      - DATABASE_URL=sqlite:///./data/pma.db
+      - ZENTAO_BASE_URL=http://192.168.0.124:8800/api.php/v1
+      - ZENTAO_AUTH_ACCOUNT=${ZENTAO_AUTH_ACCOUNT:-}
+      - ZENTAO_AUTH_PASSWORD=${ZENTAO_AUTH_PASSWORD:-}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-secret-change-in-production}
+      - LOG_LEVEL=INFO
+    restart: unless-stopped
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
