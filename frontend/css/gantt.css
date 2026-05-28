@@ -144,6 +144,7 @@
 .gantt-bar.blocked   { background: var(--danger);  color: #fff; }
 .gantt-bar.planning  { background: var(--warn);    color: #fff; }
 .gantt-bar.pending   { background: #B0B8C9; color: #fff; }
+.gantt-bar.canceled  { background: #9CA3AF; color: #fff; opacity: 0.6; }
 
 /* ── Today line ── */
 .gantt-today-line {

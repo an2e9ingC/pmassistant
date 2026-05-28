@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
-from backend.middleware.auth import require_admin
+from backend.middleware.auth import get_current_user, require_admin
 from backend.models.local import SyncLog
 from backend.services.sync_service import SyncService
 
@@ -17,7 +17,7 @@ async def trigger_sync(_=Depends(require_admin)):
 
 
 @router.get("/status", response_model=dict)
-def sync_status(db: Session = Depends(get_db), _=Depends(require_admin)):
+def sync_status(db: Session = Depends(get_db), _=Depends(get_current_user)):
     # Get latest sync log for each entity type
     entity_types = db.query(SyncLog.entity_type).distinct().all()
     status_list = []

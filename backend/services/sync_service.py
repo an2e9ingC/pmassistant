@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from backend.database import SessionLocal
 from backend.models.zentao import (
     CachedProject, CachedExecution, CachedTask,
-    CachedUser, CachedProduct,
+    CachedUser, CachedProduct, ProductProjectLink,
 )
 from backend.models.local import SyncLog
 from backend.services.zentao_client import ZentaoClient
@@ -179,15 +179,16 @@ class SyncService:
                 else:
                     db.add(self._build_project(p))
                     created += 1
-            # Cleanup: delete projects no longer in Zentao
-            stale = db.query(CachedProject).filter(~CachedProject.id.in_(api_ids)).all()
-            for sp in stale:
-                # Cascade: delete related executions, tasks, and links
-                db.query(CachedTask).filter(CachedTask.project_id == sp.id).delete()
-                db.query(CachedExecution).filter(CachedExecution.project_id == sp.id).delete()
-                db.query(ProductProjectLink).filter(ProductProjectLink.project_id == sp.id).delete()
-                db.delete(sp)
-                deleted += 1
+            # Cleanup: delete projects no longer in Zentao (skip if API returned none)
+            if api_ids:
+                stale = db.query(CachedProject).filter(~CachedProject.id.in_(api_ids)).all()
+                for sp in stale:
+                    # Cascade: delete related executions, tasks, and links
+                    db.query(CachedTask).filter(CachedTask.project_id == sp.id).delete()
+                    db.query(CachedExecution).filter(CachedExecution.project_id == sp.id).delete()
+                    db.query(ProductProjectLink).filter(ProductProjectLink.project_id == sp.id).delete()
+                    db.delete(sp)
+                    deleted += 1
             db.commit()
             _finish_log(db, log, "success", len(projects), created + deleted, updated)
             return {"fetched": len(projects), "created": created, "updated": updated, "deleted": deleted}
@@ -212,6 +213,9 @@ class SyncService:
 
                 exec_api_ids = {e["id"] for e in executions}
                 total_execs += len(executions)
+                # Cache task IDs per execution to avoid double-fetching
+                exec_task_ids = {}
+
                 for e in executions:
                     existing = db.query(CachedExecution).filter(
                         CachedExecution.id == e["id"]
@@ -230,7 +234,9 @@ class SyncService:
                         continue
 
                     total_tasks += len(tasks)
+                    task_ids = set()
                     for t in tasks:
+                        task_ids.add(t["id"])
                         texisting = db.query(CachedTask).filter(
                             CachedTask.id == t["id"]
                         ).first()
@@ -239,30 +245,27 @@ class SyncService:
                         else:
                             db.add(self._build_task(t, proj.id, e["id"]))
                             created_t += 1
+                    exec_task_ids[e["id"]] = task_ids
 
-                # Cleanup stale executions for this project
-                stale_execs = db.query(CachedExecution).filter(
-                    CachedExecution.project_id == proj.id,
-                    ~CachedExecution.id.in_(exec_api_ids)
-                ).all()
-                for se in stale_execs:
-                    db.query(CachedTask).filter(CachedTask.execution_id == se.id).delete()
-                    db.delete(se)
-                    deleted_e += 1
+                # Cleanup stale executions for this project (skip if API returned none)
+                if exec_api_ids:
+                    stale_execs = db.query(CachedExecution).filter(
+                        CachedExecution.project_id == proj.id,
+                        ~CachedExecution.id.in_(exec_api_ids)
+                    ).all()
+                    for se in stale_execs:
+                        db.query(CachedTask).filter(CachedTask.execution_id == se.id).delete()
+                        db.delete(se)
+                        deleted_e += 1
 
-                # Cleanup stale tasks for remaining executions in this project
-                for e in executions:
-                    task_api_ids = set()
-                    try:
-                        tasks = await self.client.get_tasks(e["id"])
-                        task_api_ids = {t["id"] for t in tasks}
-                    except Exception:
-                        continue
-                    stale_tasks = db.query(CachedTask).filter(
-                        CachedTask.execution_id == e["id"],
-                        ~CachedTask.id.in_(task_api_ids)
-                    ).delete()
-                    deleted_t += stale_tasks
+                # Cleanup stale tasks using cached task IDs
+                for exec_id, task_api_ids in exec_task_ids.items():
+                    if task_api_ids:
+                        stale_tasks = db.query(CachedTask).filter(
+                            CachedTask.execution_id == exec_id,
+                            ~CachedTask.id.in_(task_api_ids)
+                        ).delete()
+                        deleted_t += stale_tasks
 
                 db.commit()
 

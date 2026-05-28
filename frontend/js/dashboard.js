@@ -125,6 +125,5 @@ async function loadAlertList() {
 
 function openProject(id) {
   selectComboProject(id);
-  loadProjectDetail(id);
   gotoView('detail');
 }

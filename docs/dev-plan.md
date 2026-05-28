@@ -99,3 +99,4 @@
 | 2026-05-28 | 0.1.0 | Phase 1 主体完成：后端全功能 + 前端 Dashboard + 项目详情 |
 | 2026-05-29 | 0.1.1 | 甘特图优化：线性缩放(±1.05)、拖拽平移、固定宽度、双列布局、滚动防抖、版本号 |
 | 2026-05-29 | 0.1.2 | 拖拽修复：移除gantt-root overflow:hidden；sticky固定阶段/负责人列 |
+| 2026-05-29 | 0.1.3 | Bug修复：ProductProjectLink导入缺失、sync双次fetch任务、N+1查询、硬编码生产URL、sync状态接口权限、空集合清理、openProject重复调用、canceled样式缺失 |

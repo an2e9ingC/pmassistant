@@ -3,7 +3,7 @@ import re
 from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from backend.models.zentao import CachedProject, CachedExecution, CachedTask
 
@@ -67,9 +67,9 @@ def get_project_list(
         q = q.filter(CachedProject.status == status)
 
     total = q.count()
-    items = q.order_by(CachedProject.status, CachedProject.end).offset(
-        (page - 1) * limit
-    ).limit(limit).all()
+    items = q.options(joinedload(CachedProject.executions)).order_by(
+        CachedProject.status, CachedProject.end
+    ).offset((page - 1) * limit).limit(limit).all()
 
     return items, total
 

@@ -68,6 +68,8 @@
 .pill.pending::before { background: var(--muted); }
 .pill.planning { background: var(--warn-lt); color: var(--warn); }
 .pill.planning::before { background: var(--warn); }
+.pill.canceled { background: var(--bg); color: var(--muted); border: 1px solid var(--border); text-decoration: line-through; }
+.pill.canceled::before { background: var(--muted); }
 
 .progress-bar {
   height: 6px; background: var(--border);

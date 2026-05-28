@@ -3,6 +3,9 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
+import re
+
+from backend.config import settings
 from backend.models.zentao import (
     CachedProject, CachedExecution, CachedTask, CachedProduct, ProductProjectLink,
 )
@@ -117,8 +120,10 @@ def get_project_delivery(db: Session, project_id: int) -> dict:
 
 
 def get_project_resources(db: Session, project_id: int) -> list[dict]:
+    # Build web UI base URL from API base URL (strip /api.php/v1 suffix)
+    zentao_web_base = re.sub(r"/api\.php/v1$", "", settings.ZENTAO_BASE_URL)
     links = [
-        {"label": "禅道项目页面", "url": f"http://192.168.0.124:8800/project-index-{project_id}.html", "description": "查看禅道项目详情"},
+        {"label": "禅道项目页面", "url": f"{zentao_web_base}/project-index-{project_id}.html", "description": "查看禅道项目详情"},
         {"label": "GitLab 仓库", "url": "http://192.168.0.128/", "description": "代码仓库和发布管理"},
     ]
     # Add product NAS/Git links
