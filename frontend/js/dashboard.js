@@ -30,9 +30,13 @@ async function loadKpiCards() {
 
 /* Project Table */
 
+var _searchTimer = null;
 function onProjSearch(v) {
   curSearchVal = v;
-  loadProjectTable(curTypeFilter);
+  clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(function() {
+    loadProjectTable(curTypeFilter);
+  }, 300);
 }
 
 function filterTable(f, el) {

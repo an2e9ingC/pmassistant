@@ -170,7 +170,8 @@ class SyncService:
         log = _log_sync(db, "projects")
         try:
             projects = await self.client.get_projects()
-            created, updated = 0, 0
+            api_ids = {p["id"] for p in projects}
+            created, updated, deleted = 0, 0, 0
             for p in projects:
                 existing = db.query(CachedProject).filter(CachedProject.id == p["id"]).first()
                 if existing:
@@ -178,9 +179,18 @@ class SyncService:
                 else:
                     db.add(self._build_project(p))
                     created += 1
+            # Cleanup: delete projects no longer in Zentao
+            stale = db.query(CachedProject).filter(~CachedProject.id.in_(api_ids)).all()
+            for sp in stale:
+                # Cascade: delete related executions, tasks, and links
+                db.query(CachedTask).filter(CachedTask.project_id == sp.id).delete()
+                db.query(CachedExecution).filter(CachedExecution.project_id == sp.id).delete()
+                db.query(ProductProjectLink).filter(ProductProjectLink.project_id == sp.id).delete()
+                db.delete(sp)
+                deleted += 1
             db.commit()
-            _finish_log(db, log, "success", len(projects), created, updated)
-            return {"fetched": len(projects), "created": created, "updated": updated}
+            _finish_log(db, log, "success", len(projects), created + deleted, updated)
+            return {"fetched": len(projects), "created": created, "updated": updated, "deleted": deleted}
         except Exception as e:
             _finish_log(db, log, "failed", error=str(e))
             raise
@@ -188,8 +198,8 @@ class SyncService:
     async def _sync_executions_and_tasks(self, db: Session) -> dict:
         log = _log_sync(db, "executions_tasks")
         total_execs, total_tasks = 0, 0
-        created_e, updated_e = 0, 0
-        created_t, updated_t = 0, 0
+        created_e, updated_e, deleted_e = 0, 0, 0
+        created_t, updated_t, deleted_t = 0, 0, 0
         try:
             projects = db.query(CachedProject).all()
 
@@ -200,6 +210,7 @@ class SyncService:
                     logger.warning(f"Failed to fetch executions for project {proj.id}")
                     continue
 
+                exec_api_ids = {e["id"] for e in executions}
                 total_execs += len(executions)
                 for e in executions:
                     existing = db.query(CachedExecution).filter(
@@ -229,15 +240,40 @@ class SyncService:
                             db.add(self._build_task(t, proj.id, e["id"]))
                             created_t += 1
 
+                # Cleanup stale executions for this project
+                stale_execs = db.query(CachedExecution).filter(
+                    CachedExecution.project_id == proj.id,
+                    ~CachedExecution.id.in_(exec_api_ids)
+                ).all()
+                for se in stale_execs:
+                    db.query(CachedTask).filter(CachedTask.execution_id == se.id).delete()
+                    db.delete(se)
+                    deleted_e += 1
+
+                # Cleanup stale tasks for remaining executions in this project
+                for e in executions:
+                    task_api_ids = set()
+                    try:
+                        tasks = await self.client.get_tasks(e["id"])
+                        task_api_ids = {t["id"] for t in tasks}
+                    except Exception:
+                        continue
+                    stale_tasks = db.query(CachedTask).filter(
+                        CachedTask.execution_id == e["id"],
+                        ~CachedTask.id.in_(task_api_ids)
+                    ).delete()
+                    deleted_t += stale_tasks
+
                 db.commit()
 
             _finish_log(db, log, "success", total_execs + total_tasks,
-                        created_e + created_t, updated_e + updated_t)
+                        created_e + created_t + deleted_e + deleted_t,
+                        updated_e + updated_t)
             return {
                 "executions_fetched": total_execs, "executions_created": created_e,
-                "executions_updated": updated_e,
+                "executions_updated": updated_e, "executions_deleted": deleted_e,
                 "tasks_fetched": total_tasks, "tasks_created": created_t,
-                "tasks_updated": updated_t,
+                "tasks_updated": updated_t, "tasks_deleted": deleted_t,
             }
         except Exception as e:
             _finish_log(db, log, "failed", error=str(e))

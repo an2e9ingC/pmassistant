@@ -154,18 +154,58 @@ function buildDetailHeader(p) {
 
 /* Gantt Chart */
 
+function ganttRange(stages) {
+  // Calculate time range from actual stage data, with padding
+  var today = new Date();
+  today.setHours(0, 0, 0, 0);
+  var minDate = today, maxDate = today;
+
+  if (stages && stages.length) {
+    stages.forEach(function(s) {
+      if (s.start) { var sd = new Date(s.start); if (sd < minDate) minDate = sd; }
+      if (s.end)   { var ed = new Date(s.end);   if (ed > maxDate) maxDate = ed; }
+    });
+  }
+
+  // Pad: start from 1st of min month, end to last day of max month + 1 extra month
+  minDate.setDate(1);
+  minDate.setMonth(minDate.getMonth() - 1);
+  maxDate.setDate(1);
+  maxDate.setMonth(maxDate.getMonth() + 1);
+
+  // Ensure at least 6 months range
+  var minSpan = new Date(today);
+  minSpan.setMonth(today.getMonth() - 3);
+  var maxSpan = new Date(today);
+  maxSpan.setMonth(today.getMonth() + 3);
+  if (minDate > minSpan) minDate = minSpan;
+  if (maxDate < maxSpan) maxDate = maxSpan;
+
+  return { start: minDate, end: maxDate, span: maxDate - minDate };
+}
+
+function ganttPct(ds, range) {
+  var t = new Date(ds) - range.start;
+  return Math.max(0, Math.min(100, (t / range.span) * 100));
+}
+
 function buildGantt(stages) {
   var now = new Date(), cy = now.getFullYear(), cm = now.getMonth() + 1;
+  var range = ganttRange(stages);
+
+  // Generate month headers from range.start to range.end
   var mHdrs = '', gCols = '';
-  for (var y = 2025; y <= 2026; y++) {
-    for (var m = 1; m <= 12; m++) {
-      var isc = (y === cy && m === cm);
-      var lbl = m === 1 ? y + '/' + m : m + '月';
-      mHdrs += '<div class="gantt-mon' + (isc ? ' today-col' : '') + '">' + lbl + '</div>';
-      gCols += '<div class="gantt-grid-col"></div>';
-    }
+  var cursor = new Date(range.start);
+  cursor.setDate(1);
+  while (cursor <= range.end) {
+    var y = cursor.getFullYear(), m = cursor.getMonth() + 1;
+    var isc = (y === cy && m === cm);
+    var lbl = m === 1 ? y + '/' + m : m + '月';
+    mHdrs += '<div class="gantt-mon' + (isc ? ' today-col' : '') + '">' + lbl + '</div>';
+    gCols += '<div class="gantt-grid-col"></div>';
+    cursor.setMonth(cursor.getMonth() + 1);
   }
-  var tp = todayPct();
+  var todayPos = ganttPct(now.toISOString().slice(0, 10), range);
 
   if (!stages || !stages.length) {
     document.getElementById('gantt-root').innerHTML =
@@ -175,7 +215,7 @@ function buildGantt(stages) {
   }
 
   var rows = stages.map(function(s, i) {
-    var lp = d2pct(s.start), rp = d2pct(s.end), wp = Math.max(1, rp - lp);
+    var lp = ganttPct(s.start, range), rp = ganttPct(s.end, range), wp = Math.max(1, rp - lp);
     var alt = i % 2 === 1 ? ' stage-alt' : '';
     return '<div class="gantt-row' + alt + '">' +
       '<div class="gantt-stage-cell">' +
@@ -184,7 +224,7 @@ function buildGantt(stages) {
       '</div>' +
       '<div class="gantt-bar-cell">' +
         '<div class="gantt-grid">' + gCols + '</div>' +
-        '<div class="gantt-today-line" style="left:' + tp + '%"><div class="gantt-today-pip"></div></div>' +
+        '<div class="gantt-today-line" style="left:' + todayPos + '%"><div class="gantt-today-pip"></div></div>' +
         '<div class="gantt-bar ' + s.status + '" style="left:calc(' + lp + '% + 3px);width:calc(' + wp + '% - 6px)" title="' + escHtml(s.name) + '  ' + s.start + ' → ' + s.end + '">' + (wp > 5 ? s.name : '') + '</div>' +
       '</div>' +
     '</div>';
