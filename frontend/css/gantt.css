@@ -2,12 +2,15 @@
    GANTT CHART
 ═══════════════════════════════════════════════════ */
 .gantt-wrap {
+  width: 100%;
   overflow-x: auto;
   overflow-y: hidden;
   cursor: grab;
   scroll-behavior: auto;
   -webkit-overflow-scrolling: touch;
 }
+.gantt-wrap::-webkit-scrollbar { height: 8px; }
+.gantt-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 .gantt-wrap.dragging {
   cursor: grabbing;
   user-select: none;
@@ -19,7 +22,6 @@
   border-radius: var(--r-lg);
   box-shadow: var(--sh);
   display: table;
-  min-width: 100%;
 }
 
 /* ── Toolbar ── */
