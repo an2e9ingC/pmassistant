@@ -38,7 +38,7 @@
           <rect x="9.5" y="9.5" width="6.5" height="6.5" rx="1.5"/>
         </svg>
         项目总览
-        <span class="nav-badge" id="alert-badge">0</span>
+        <span class="nav-badge" id="alert-badge" style="display:none">0</span>
       </div>
       <div class="nav-item" id="nav-detail" onclick="gotoView('detail')">
         <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -96,7 +96,7 @@
     </div>
 
     <div style="margin-top:8px;text-align:center;font-size:10px;color:var(--muted)">
-      <span id="app-version">v2026.05.29-beta17</span>
+      <span id="app-version">v2026.05.29-beta20</span>
     </div>
     <div style="text-align:center">
       <button onclick="logout()" style="font-size:11px;color:var(--muted);cursor:pointer;background:none;border:none">退出登录</button>
@@ -120,15 +120,16 @@
             <path d="M2.5 8a5.5 5.5 0 0 1 10-2.5"/>
             <path d="M13.5 8a5.5 5.5 0 0 1-10 2.5"/>
           </svg>
+          数据源同步
         </button>
       </div>
       <div style="position:relative">
-        <button class="icon-btn" title="告警通知" onclick="toggleNotifDropdown(event)">
+        <button class="icon-btn" title="通知中心" onclick="toggleNotifDropdown(event)">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
             <path d="M8 1.5A5 5 0 0 0 3 6.5v2.5L2 11h12l-1-2V6.5A5 5 0 0 0 8 1.5z"/>
             <path d="M6.5 13a1.5 1.5 0 0 0 3 0" stroke-linecap="round"/>
           </svg>
-          <div class="notif-pip" id="notif-pip" style="display:none"></div>
+          <span class="bell-badge" id="bell-badge"></span>
         </button>
         <div class="notif-dropdown" id="notif-dropdown">
           <div class="notif-dropdown-hd">告警通知</div>
@@ -341,7 +342,6 @@
     <!-- ══════════════════════ VIEW 5 — LOGS ══════════════════════ -->
     <div class="view" id="view-logs">
       <div class="section-hd">
-        <div class="section-title">系统日志</div>
         <div class="section-acts" style="gap:8px">
           <div class="search-wrap" style="max-width:200px">
             <svg class="search-ico" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>
@@ -362,8 +362,7 @@
             <option value="500">500 条</option>
             <option value="1000">1000 条</option>
           </select>
-          <button class="btn" id="log-refresh-btn" onclick="toggleLogAutoRefresh()" style="font-size:11px;padding:4px 10px">停止刷新</button>
-          <button class="btn" onclick="fetchLogs()" style="font-size:11px;padding:4px 10px">立即刷新</button>
+          <button class="btn" id="log-refresh-btn" onclick="toggleLogAutoRefresh()" style="font-size:11px;padding:4px 10px;background:var(--accent-lt);color:var(--accent)">暂停</button>
           <span style="font-size:10.5px;color:var(--muted)" id="log-status"></span>
         </div>
       </div>

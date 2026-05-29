@@ -1,0 +1,214 @@
+# PMA 设计规范
+
+本文档汇总所有跨功能的 UI/UX 设计约定和共性需求，新增功能必须遵循。
+
+---
+
+## 1. 版本号规范
+
+- 正式发布：`vYYYY.MM.DD`（如 `v2026.05.29`）
+- 调试阶段：`vYYYY.MM.DD-betaN`（如 `v2026.05.29-beta20`）
+- N 为当天递增序号，第二天重置为 1
+- 版本号统一存放在 `frontend/index.html` 的 `<span id="app-version">` 和 `docs/dev-plan.md` 变更记录表中
+
+---
+
+## 2. 页面布局
+
+### 2.1 整体结构
+
+```
+┌──────────┬──────────────────────────────────────────┐
+│ Sidebar  │ Topbar (title | src-tags+sync | bell+user)│
+│          ├──────────────────────────────────────────┤
+│  nav     │                                          │
+│  items   │              Content Area                │
+│          │              (view active)               │
+│          │                                          │
+│  footer  │                                          │
+└──────────┴──────────────────────────────────────────┘
+```
+
+- Sidebar（固定宽度 228px）：Logo、导航菜单、主题切换、版本号
+- Topbar（sticky）：页面标题、数据源标签+同步按钮、通知铃铛、用户头像
+- Content：视图切换（dashboard / detail / mapping / reports / logs）
+
+### 2.2 侧边栏导航
+
+- 分组结构：工作台 / 报表 / 管理
+- 激活项高亮（蓝色背景）
+- 数字 badge 仅在 > 0 时显示
+- 底部：主题切换、版本号、退出登录
+
+### 2.3 数据源状态标签
+
+顶部栏右侧，3 个独立 pill 标签（禅道 / GitLab / NAS）：
+
+| 状态 | 样式 | 显示内容 | 示例 |
+|------|------|---------|------|
+| ok | 绿色背景+绿点+绿边框 | 仅名称 | `禅道` |
+| warn | 黄色背景+黄点+黄边框 | 名称 + 原因 | `GitLab 未配置` |
+| err | 红色背景+红点+红边框 | 名称 + 原因 | `禅道 同步失败` |
+| pending | 灰色背景+灰点+灰边框 | 名称 + 原因 | `NAS 未配置` |
+
+- 间距 12px，`border: 2px`，`font-weight: 600`
+- 所有颜色使用 `var(--xxx)` token
+- 同步按钮紧邻标签右侧：图标 + 文字「数据源同步」
+
+---
+
+## 3. 异步操作加载状态
+
+所有涉及数据查询、同步、提交的操作，**必须**显示执行状态。
+
+### 3.1 按钮操作
+
+- 点击后立即禁用（`disabled = true`），防止重复提交
+- 显示执行中状态（文字变更 或 opacity 降低）
+- 完成后恢复
+
+### 3.2 首次数据加载
+
+目标容器显示 `loading-spinner`，不能显示空白或过期占位数据。
+
+### 3.3 数据刷新
+
+对已有数据的刷新（甘特图缩放、日志自动刷新、KPI 更新），**保留旧内容**直到新数据就绪，不闪现空白。
+
+### 3.4 三种状态必须覆盖
+
+| 状态 | CSS class | 说明 |
+|------|----------|------|
+| Loading | `.loading-spinner` | 旋转动画 + 文字 |
+| Empty | `.empty-state` | 居中灰色文字 |
+| Error | `.error-state` | 红色文字 + 重试按钮 |
+
+---
+
+## 4. 通知系统
+
+### 4.1 Toast 通知
+
+- **位置**：页面顶部居中（`position: fixed; top: 16px; left: 50%; transform: translateX(-50%)`）
+- **入场动画**：从上往下滑入（`translateY(-12px)` → `translateY(0)`）
+- **自动关闭**：success / info / warn 类型 4 秒后自动消失
+- **手动关闭**：error 类型**不自动关闭**，显示 × 按钮供用户手动关闭，防止严重问题被忽视
+
+### 4.2 Toast 类型
+
+| 类型 | 样式 |
+|------|------|
+| success | 绿色背景 + 绿色边框 |
+| error | 红色背景 + 红色边框 |
+| warn | 黄色背景 + 黄色边框 |
+| info | 蓝色背景 + 蓝色边框 |
+
+### 4.3 铃铛通知中心
+
+- 所有 toast 通知自动存入队列（`_notifQueue`，最多 50 条）
+- 铃铛图标显示未读数字 badge（红底白字，> 0 显示，= 0 隐藏）
+- 点击铃铛展开下拉框：
+  - 先显示 toast 消息列表（标记时间）
+  - 再显示系统告警（从 `/api/dashboard/alerts` 获取）
+- 展开后自动清零未读计数
+- 点击下拉框外部自动关闭
+
+---
+
+## 5. 数字标记规则
+
+所有界面中的数字 badge，**只在数字 > 0 时显示**，= 0 时 `display: none`。
+
+| 位置 | 元素 | 数据来源 |
+|------|------|---------|
+| 侧边栏告警数 | `#alert-badge` | KPI API `pending_alerts` |
+| 铃铛未读数 | `#bell-badge` | `_notifUnread` 计数器 |
+| KPI 卡片数值 | KPI cards | KPI API |
+
+---
+
+## 6. 深浅主题兼容
+
+- **所有 CSS 颜色必须使用 `var(--xxx)` token**，禁止硬编码 `#xxxxxx`
+- Token 定义在 `frontend/css/tokens.css`
+- 新增颜色语义需同时在 `:root`（light）和 `[data-theme="dark"]` 块中定义
+- 修改 CSS 后必须在两种主题下验证效果
+
+---
+
+## 7. 日志系统
+
+### 7.1 后端
+
+- 双写：`data/pma.log`（RotatingFileHandler，5MB/3 备份）+ `log_entries` 数据库表
+- DatabaseLogHandler 在 `lifespan` 中延迟加载（确保表已创建）
+- 日志 API 仅管理员可访问
+
+### 7.2 前端日志查看器
+
+- 默认进入页面立即开始自动刷新（INFO 级别 15 秒间隔）
+- 单个「暂停/恢复」按钮控制自动刷新
+- 级别和行数使用 `<select>` 下拉选择
+- 智能滚动：
+  - 默认定位到最新日志（底部）
+  - 新日志到来时自动跟随到底部
+  - 用户手动上滚查看历史 → 暂停跟随
+  - 用户滚回底部 → 恢复跟随
+  - 切换级别/行数 → 重置到最新
+- 暂停后点「恢复」→ 重新拉取并定位底部
+
+---
+
+## 8. API 响应格式
+
+所有 API 响应统一为：
+
+```json
+{"code": 0, "data": {...}, "message": "ok"}
+```
+
+- `code: 0` 表示成功，非 0 表示失败
+- 前端 `API.get/post/put/del` 自动检查 `code !== 0` 并抛出 Error
+- **不要把纯文本作为 API 响应**（必须包裹在 `data` 字段中）
+
+---
+
+## 9. 前端 JS 模块加载
+
+JS 文件按依赖顺序加载（index.html 中 script 顺序）：
+
+```
+utils.js → api.js → auth.js → components.js → dashboard.js → detail.js → mapping.js → reports.js → logs.js → app.js
+```
+
+- 模块间通过全局变量/函数通信（Vanilla JS 模式）
+- 私有变量加 `_` 前缀约定
+- DOM 操作统一在对应的 view render 函数中
+
+---
+
+## 10. CSS 文件组织
+
+| 文件 | 内容 |
+|------|------|
+| `tokens.css` | CSS 变量（颜色、尺寸、阴影） |
+| `reset.css` | 基础重置 |
+| `layout.css` | Sidebar、Topbar、数据源标签 |
+| `components.css` | Card、Button、Badge、Pill、Toast、Spinner |
+| `gantt.css` | 甘特图专用 |
+| `detail.css` | 项目详情、映射视图、日志查看器、通知下拉框 |
+
+---
+
+## 11. 服务器管理
+
+`server.sh` 脚本提供：
+
+| 命令 | 功能 |
+|------|------|
+| `./server.sh start` | 后台启动 + 健康检查等待 |
+| `./server.sh stop` | 优雅关闭（20s 超时后强制） |
+| `./server.sh restart` | stop + start |
+| `./server.sh status` | PID、内存、运行时间、健康检查、DB 大小 |
+| `./server.sh logs` | 最近 50 行系统日志 |
+| `./server.sh tail` | 实时跟踪日志 |

@@ -111,3 +111,4 @@
 | 2026-05-29 | v2026.05.29-beta13 | 数据库日志存储：LogEntry+DatabaseLogHandler、前端下拉选择器+按级别自动刷新、deploy-guide更新日志诊断说明 |
 | 2026-05-29 | v2026.05.29-beta14 | DB路径绝对化+权限修复、日志API Depends冲突修复、数据源标签重构移到右上角、server.sh脚本 |
 | 2026-05-29 | v2026.05.29-beta17 | 数据源标签UI迭代（独立pill、彩色圆点+边框、深浅主题兼容）、规则完善（no-auto-commit/docs-sync/auto-restart/theme-compat） |
+| 2026-05-29 | v2026.05.29-beta20 | Toast通知顶部居中+error手动关闭、铃铛通知队列+未读badge、日志智能滚动、同步按钮文字、数据源标签简化、design-spec.md设计规范文档 |

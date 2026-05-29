@@ -4,12 +4,22 @@
 var curTypeFilter = 'all';
 var curSearchVal  = '';
 
+var _dashboardLoading = false;
+
 async function renderDashboard() {
+  if (_dashboardLoading) return;
+  _dashboardLoading = true;
+  // Show loading state on KPI cards
+  ['kpi-active','kpi-alerts','kpi-delivered','kpi-progress'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = '...';
+  });
   await Promise.all([
     loadKpiCards(),
     loadProjectTable(curTypeFilter),
     loadAlertList(),
   ]);
+  _dashboardLoading = false;
 }
 
 /* KPI Cards */
@@ -20,10 +30,11 @@ async function loadKpiCards() {
     document.getElementById('kpi-active').textContent = data.active_projects;
     document.getElementById('kpi-meta-types').innerHTML = '研发 <b>' + data.rd_count + '</b> &nbsp;·&nbsp; 生产 <b>' + data.sc_count + '</b>';
     document.getElementById('kpi-alerts').textContent = data.pending_alerts;
-    document.getElementById('alert-badge').textContent = data.pending_alerts;
-    var pip = document.getElementById('notif-pip');
-    if (pip) pip.style.display = data.pending_alerts > 0 ? 'block' : 'none';
-    // If KPI loads, sync data exists — mark Zentao as synced
+    var badge = document.getElementById('alert-badge');
+    if (badge) {
+      badge.textContent = data.pending_alerts;
+      badge.style.display = data.pending_alerts > 0 ? '' : 'none';
+    }
     if (_srcStates && _srcStates.zentao === 'pending') {
       _srcStates.zentao = 'ok';
       renderSourceTags();

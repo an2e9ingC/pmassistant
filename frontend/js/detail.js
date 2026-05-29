@@ -562,6 +562,10 @@ async function saveDeliveryRecord(recordId) {
 
   var body = { product_name: product, quantity: qty, delivery_date: date, receiver: receiver, note: note, serial_numbers: serials };
 
+  // Disable form buttons during save
+  var btns = document.querySelectorAll('#delivery-form-card button');
+  btns.forEach(function(b) { b.disabled = true; });
+
   try {
     if (recordId) {
       await API.put('/delivery/records/' + recordId, body);
@@ -570,11 +574,11 @@ async function saveDeliveryRecord(recordId) {
     }
     showToast(recordId ? '修改成功' : '添加成功', 'success');
     cancelDeliveryForm();
-    // Refresh delivery data
     var data = await API.get('/projects/' + _comboCurId + '/delivery');
     buildDelivery(data);
   } catch(e) {
     showToast('操作失败: ' + (e.message || '未知错误'), 'error');
+    btns.forEach(function(b) { b.disabled = false; });
   }
 }
 

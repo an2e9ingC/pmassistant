@@ -90,29 +90,24 @@ function updateLinkStatus() {
 }
 
 function renderSourceTags() {
-  var labels = {
-    zentao: { ok: '禅道 已同步', warn: '禅道 异常', err: '禅道 失败', pending: '禅道 待同步' },
-    gitlab: { ok: 'GitLab 正常', warn: 'GitLab 异常', err: 'GitLab 故障', pending: 'GitLab 未配置' },
-    nas:    { ok: 'NAS 正常',    warn: 'NAS 异常',    err: 'NAS 故障',    pending: 'NAS 未配置' },
+  var names = { zentao: '禅道', gitlab: 'GitLab', nas: 'NAS' };
+  var reasons = {
+    zentao: { warn: '未同步', err: '同步失败', pending: '待同步' },
+    gitlab: { warn: '异常',   err: '故障',     pending: '未配置' },
+    nas:    { warn: '异常',   err: '故障',     pending: '未配置' },
   };
   ['zentao', 'gitlab', 'nas'].forEach(function(key) {
     var el = document.getElementById('src-' + key);
     if (!el) return;
     var state = _srcStates[key] || 'pending';
     el.className = 'src-tag ' + state;
-    el.textContent = labels[key][state] || key;
-    // Tooltip with sync time for Zentao
-    if (key === 'zentao' && state === 'ok') {
-      el.title = '禅道：已同步';
-    } else if (key === 'zentao') {
-      el.title = '禅道：未同步，点击同步按钮获取数据';
-    }
+    // ok: just source name; others: source + reason
+    el.textContent = state === 'ok' ? names[key] : names[key] + ' ' + (reasons[key][state] || '');
+    el.title = state === 'ok' ? names[key] + '：已同步' : names[key] + '：' + (reasons[key][state] || '');
   });
 }
 
-/* Alert Notification Dropdown */
-
-var _notifLoading = false;
+/* Notification Dropdown — shows recent toasts + system alerts */
 
 async function toggleNotifDropdown(e) {
   if (e) e.stopPropagation();
@@ -125,31 +120,49 @@ async function toggleNotifDropdown(e) {
   }
   var listEl = document.getElementById('notif-dropdown-list');
   if (!listEl) return;
-  listEl.innerHTML = '<div class="loading-spinner" style="padding:20px">加载中...</div>';
   dd.classList.add('open');
-  if (_notifLoading) return;
-  _notifLoading = true;
+
+  // Clear unread count when user opens the dropdown
+  clearBellUnread();
+
+  // Show queued notifications first (from toasts)
+  var html = '';
+  var queue = _notifQueue || [];
+  if (queue.length) {
+    html += '<div style="font-size:10.5px;color:var(--muted);padding:8px 14px 4px">最近消息</div>';
+    queue.slice(0, 10).forEach(function(n) {
+      var dotColors = { error: 'var(--danger)', warn: 'var(--warn)', success: 'var(--success)', info: 'var(--accent)' };
+      var dot = dotColors[n.type] || 'var(--muted)';
+      html += '<div class="notif-item">' +
+        '<div style="width:6px;height:6px;border-radius:50%;background:' + dot + ';flex-shrink:0;margin-top:5px"></div>' +
+        '<div style="min-width:0"><div style="font-size:12px;line-height:1.4">' + escHtml(n.message) + '</div>' +
+        '<div style="font-size:10px;color:var(--muted)">' + (n.time || '') + '</div></div>' +
+      '</div>';
+    });
+  }
+
+  // Also fetch system alerts from API
   try {
     var data = await API.get('/dashboard/alerts?limit=5');
     var alerts = data.items || [];
-    var pip = document.getElementById('notif-pip');
-    if (pip) pip.style.display = alerts.length > 0 ? 'block' : 'none';
-    if (!alerts.length) {
-      listEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted);font-size:12px">暂无告警</div>';
-    } else {
-      listEl.innerHTML = alerts.map(function(a) {
+    if (alerts.length) {
+      html += '<div style="font-size:10.5px;color:var(--muted);padding:8px 14px 4px">系统告警</div>';
+      alerts.forEach(function(a) {
         var dotColor = a.severity === 'red' ? 'var(--danger)' : 'var(--warn)';
-        return '<div class="notif-item" onclick="openProject(\'' + a.project_id + '\');closeNotifDropdown()">' +
+        html += '<div class="notif-item" onclick="openProject(\'' + a.project_id + '\');closeNotifDropdown()">' +
           '<div style="width:6px;height:6px;border-radius:50%;background:' + dotColor + ';flex-shrink:0;margin-top:5px"></div>' +
           '<div style="min-width:0"><div style="font-size:12px;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(a.message) + '</div>' +
           '<div style="font-size:10.5px;color:var(--muted)">' + escHtml(a.project_code || '') + '</div></div>' +
         '</div>';
-      }).join('');
+      });
     }
-  } catch(e) {
-    listEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted);font-size:12px">加载失败</div>';
+  } catch(e) { /* non-critical */ }
+
+  if (!html) {
+    listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px">暂无通知</div>';
+  } else {
+    listEl.innerHTML = html;
   }
-  _notifLoading = false;
 }
 
 function closeNotifDropdown() {
