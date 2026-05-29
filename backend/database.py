@@ -36,7 +36,8 @@ def _migrate_sqlite():
         conn.close()
 
         # Use raw sqlite3 for PRAGMA (avoids SQLAlchemy reflection overhead)
-        sqlite_conn = sqlite3.connect(settings.DATABASE_URL.replace("sqlite:///", ""))
+        db_path = settings.DATABASE_URL.replace("sqlite:///", "")
+        sqlite_conn = sqlite3.connect(db_path)
         cursor = sqlite_conn.cursor()
 
         for table_name in table_names:
@@ -77,6 +78,13 @@ def init_db():
 
     Base.metadata.create_all(bind=engine)
     _migrate_sqlite()
+
+    # Ensure SQLite DB file is writable (umask / Docker mount may restrict)
+    if "sqlite" in settings.DATABASE_URL:
+        import os as _os
+        db_path = settings.DATABASE_URL.replace("sqlite:///", "")
+        if _os.path.exists(db_path):
+            _os.chmod(db_path, 0o666)
 
     # Seed default admin if no users exist
     db = SessionLocal()
