@@ -469,7 +469,7 @@ function buildDocs(docs) {
     items.forEach(function(d, i) {
       var cls = d.done ? 'completed' : (d.warn ? 'blocked' : 'pending');
       var lbl = d.done ? '已提交' : (d.warn ? '⚠ 告警缺失' : '未开始');
-      var lnk = d.done && d.location ? '<span class="doc-link">↗ ' + escHtml(d.location) + '</span>' : (d.done ? '<span style="font-size:12px;color:var(--muted)">禅道任务附件</span>' : '—');
+      var lnk = d.done && d.location ? '<span class="doc-link">↗ ' + escHtml(d.location) + '</span>' : (d.done ? '<span style="font-size:12px;color:var(--muted)">禅道任务附件</span>' : '<span style="font-size:11.5px;color:var(--muted);font-style:italic">请按照规范输出对应文档（TODO：后续要根据不同的阶段提示不同的信息）</span>');
       var statusCell = '<span class="pill ' + cls + '" style="font-size:11px">' + lbl + '</span>' + (d.completed_at ? '<div style="font-size:10.5px;color:var(--success);margin-top:3px;font-family:var(--mono)">' + d.completed_at + '</div>' : '');
       var completedDate = items[0].stage_completed_date;
       rows += '<tr style="background:' + bg + '">' +
