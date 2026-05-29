@@ -32,7 +32,7 @@ function renderComboOptions(q) {
     var cls = p.id == _comboCurId ? 'combo-opt selected' : 'combo-opt';
     var typeTxt = TYPE_TXT[p.project_type] || p.project_type || '研发';
     return '<div class="' + cls + '" onclick="selectComboProject(' + p.id + ')">' +
-      renderProjIcon(p.project_type) +
+      renderProjIcon(p.project_type, p.code) +
       '<div style="min-width:0">' +
         '<div class="combo-opt-name">' + escHtml(p.customer_name || p.name) + '</div>' +
         '<div class="combo-opt-meta">' + escHtml(p.code || p.name) + ' · ' + typeTxt + '项目 · ' + escHtml(p.status || '') + '</div>' +

@@ -1,9 +1,10 @@
 /* ═══════════════════════════════════════════════════
    REUSABLE RENDERING FUNCTIONS
 ═══════════════════════════════════════════════════ */
-function renderProjIcon(type) {
+function renderProjIcon(type, code) {
   var t = (type || 'RD').toLowerCase();
-  return '<div class="proj-icon ' + t + '">' + (t === 'sc' ? 'SC' : 'RD') + '</div>';
+  var label = code || (t === 'sc' ? 'SC' : 'RD');
+  return '<div class="proj-icon ' + t + '">' + escHtml(label) + '</div>';
 }
 
 function renderTypeBadge(type) {

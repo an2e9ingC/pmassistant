@@ -3,6 +3,7 @@ import re
 from datetime import date, datetime
 from typing import Optional
 
+from sqlalchemy import desc as _desc, asc as _asc, case
 from sqlalchemy.orm import Session, joinedload
 
 from backend.models.zentao import CachedProject, CachedExecution, CachedTask
@@ -45,6 +46,8 @@ def get_project_list(
     search: Optional[str] = None,
     type_filter: Optional[str] = None,
     status: Optional[str] = None,
+    sort_by: str = "end",
+    sort_order: str = "asc",
     page: int = 1,
     limit: int = 50,
 ) -> tuple[list[CachedProject], int]:
@@ -67,8 +70,13 @@ def get_project_list(
         q = q.filter(CachedProject.status == status)
 
     total = q.count()
+
+    # Default: sort by end ASC, NULLS LAST (long-term projects at bottom)
+    sort_col = CachedProject.end if sort_by == "end" else CachedProject.id
+    direction = _asc if sort_order == "asc" else _desc
     items = q.options(joinedload(CachedProject.executions)).order_by(
-        CachedProject.status, CachedProject.end
+        direction(case((sort_col.is_(None), 1), else_=0)),
+        direction(sort_col),
     ).offset((page - 1) * limit).limit(limit).all()
 
     return items, total

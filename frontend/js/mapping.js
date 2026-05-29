@@ -228,7 +228,7 @@ function renderProdTree(catId) {
             var custTag = (pjDetail && pjDetail.customer_from_desc) ? '<span style="font-size:10px;color:var(--accent);background:var(--accent-lt);padding:1px 5px;border-radius:3px;margin-left:4px">' + escHtml(pjDetail.customer_from_desc) + '</span>' : '';
             return '<div class="proj-tree-prod-item" onclick="openProject(\'' + pj.id + '\'); event.stopPropagation();" style="cursor:pointer">' +
               '<div class="proj-tree-prod-name">' +
-                renderProjIcon(pj.project_type) +
+                renderProjIcon(pj.project_type, pj.code) +
                 escHtml(pj.customer_name || pj.code || pj.name) +
                 custTag +
                 ' <span style="font-size:10px;color:var(--muted)">' + (pj.project_type === 'SC' ? '生产' : '研发') + '</span>' +
@@ -329,7 +329,7 @@ function renderProjTree(custId) {
       '<div class="proj-tree-proj" data-proj="' + pj.id + '" onclick="toggleProjTree(\'' + pj.id + '\')">' +
         '<div class="proj-tree-proj-header">' +
           '<div class="proj-tree-proj-title">' +
-            renderProjIcon(pj.project_type) +
+            renderProjIcon(pj.project_type, pj.code) +
             '<span class="map-card-code">' + escHtml(pj.code || '#' + pj.id) + '</span>' +
             '<span>' + escHtml(pj.customer_name || pj.name) + '</span>' +
             (detail.customer_from_desc ? '<span class="badge badge-rd" style="font-size:10px;padding:1px 5px">' + escHtml(detail.customer_from_desc) + '</span>' : '') +

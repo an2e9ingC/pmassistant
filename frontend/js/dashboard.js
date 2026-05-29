@@ -3,6 +3,7 @@
 ═══════════════════════════════════════════════════ */
 var curTypeFilter = 'all';
 var curSearchVal  = '';
+var _sortEndOrder = 'asc'; // 'asc' = nearest first, 'desc' = farthest first
 
 var _dashboardLoading = false;
 
@@ -67,7 +68,7 @@ function filterTable(f, el) {
 
 async function loadProjectTable(filter) {
   curTypeFilter = filter;
-  var params = { page: 1, limit: 50 };
+  var params = { page: 1, limit: 50, sort_by: 'end', sort_order: _sortEndOrder };
   if (curSearchVal) params.search = curSearchVal;
   if (filter && filter !== 'all') params.type = filter;
 
@@ -91,7 +92,7 @@ async function loadProjectTable(filter) {
       var custName = p.customer_name || p.name;
       return '<tr onclick="openProject(\'' + p.id + '\')">' +
         '<td><div class="proj-id-cell">' +
-          renderProjIcon(p.type) +
+          renderProjIcon(p.type, p.code) +
           '<div><div class="proj-name">' + escHtml(custName) + '</div><div class="proj-code">' + escHtml(p.code || p.name) + '</div></div>' +
         '</div></td>' +
         '<td>' + renderTypeBadge(p.type) + '</td>' +
@@ -99,7 +100,7 @@ async function loadProjectTable(filter) {
         '<td style="font-size:13px">' + escHtml(p.current_stage || '—') + '</td>' +
         '<td>' + renderPill(p.status) + '</td>' +
         '<td class="prog-cell">' + renderProgressBar(p.progress, p.status) + '</td>' +
-        '<td style="font-size:12.5px;color:var(--muted)">' + formatDate(p.end) + '</td>' +
+        '<td style="font-size:12.5px;color:' + (p.end ? 'var(--muted)' : 'var(--warn)') + '">' + (p.end ? formatDate(p.end) : '长期') + '</td>' +
       '</tr>';
     }).join('');
   } catch(e) {
@@ -140,6 +141,13 @@ async function loadAlertList() {
 }
 
 /* Navigation */
+
+function toggleSortEnd() {
+  _sortEndOrder = _sortEndOrder === 'asc' ? 'desc' : 'asc';
+  var ind = document.getElementById('sort-end-ind');
+  if (ind) ind.textContent = _sortEndOrder === 'asc' ? '▲' : '▼';
+  loadProjectTable(curTypeFilter);
+}
 
 function openProject(id) {
   selectComboProject(id);
