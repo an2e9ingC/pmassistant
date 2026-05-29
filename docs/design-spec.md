@@ -200,7 +200,43 @@ utils.js → api.js → auth.js → components.js → dashboard.js → detail.js
 
 ---
 
-## 11. 服务器管理
+## 11. TODO 占位符规范
+
+所有暂未实现的功能必须使用统一格式标记：
+
+### 11.1 前端（HTML/JS）
+```html
+<span style="font-style:italic;color:var(--muted)">TODO：具体待实现的内容说明</span>
+```
+
+### 11.2 后端（Python）
+```python
+# TODO: 具体待实现的内容说明
+```
+
+### 11.3 规则
+- 占位文本、未实现的逻辑分支、临时硬编码值，一律用 TODO 标记
+- 每个 TODO 应包含简短说明，指明后续需要做什么
+- 每次实现 TODO 后及时移除标记
+- `grep -rn "TODO"` 可快速定位所有未完成项
+
+### 11.4 当前 TODO 清单
+
+| 位置 | 说明 |
+|------|------|
+| `sync_service.py:full_sync()` | GitLab commit统计、release验证同步（Phase 3） |
+| `sync_service.py:full_sync()` | NAS 售前项目检测、交付文档扫描（Phase 3） |
+| `sync/sources` | GitLab/NAS 数据源未配置时的待集成提示 |
+| `dashboard_service.py:get_kpi()` | 本月交付数量从 DeliveryRecord 统计（Phase 2） |
+| `dashboard_service.py:_detect_alerts_internal()` | GitLab发布未同步告警、按阶段文档清单检查 |
+| `delivery_service.py:get_delivery_summary()` | 交付进度计算公式（对比应交付 vs 实际交付） |
+| `project_service.py:get_project_stages()` | 阶段→固定文档清单映射（非禅道任务名） |
+| `mapping.js` 思维导图 | SVG 节点布局渲染引擎 |
+| `detail.js` 文档位置/链接列 | 根据阶段提示不同的文档存放位置 |
+
+---
+
+## 12. 服务器管理
 
 `server.sh` 脚本提供：
 

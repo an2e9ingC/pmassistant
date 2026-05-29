@@ -12,6 +12,7 @@ def get_products(
     db: Session,
     search: Optional[str] = None,
     category: Optional[str] = None,
+    tags: Optional[str] = None,
     page: int = 1,
     limit: int = 50,
 ) -> tuple[list[dict], int]:
@@ -20,10 +21,16 @@ def get_products(
         pattern = f"%{search}%"
         q = q.filter(
             (CachedProduct.name.ilike(pattern)) |
-            (CachedProduct.code.ilike(pattern))
+            (CachedProduct.code.ilike(pattern)) |
+            (CachedProduct.tags.ilike(pattern))
         )
     if category:
         q = q.filter(CachedProduct.category == category)
+    if tags:
+        for tag in tags.split(","):
+            tag = tag.strip()
+            if tag:
+                q = q.filter(CachedProduct.tags.ilike(f"%{tag}%"))
     total = q.count()
     items = q.order_by(CachedProduct.id).offset((page - 1) * limit).limit(limit).all()
     return [_product_item(p, db) for p in items], total
@@ -141,12 +148,16 @@ def _product_item(p: CachedProduct, db: Session) -> dict:
     ).count()
     # Use program_name from Zentao product line, fallback to PMA-local category
     cat = p.program_name or p.category
+    tags_str = p.tags or ""
     return {
         "id": p.id, "code": p.code, "name": p.name,
         "type": p.type, "status": p.status,
         "category": cat,
         "program_name": p.program_name,
         "project_count": link_count,
+        "description": p.description or "",
+        "tags": tags_str,
+        "tags_list": tags_str.split(",") if tags_str else [],
     }
 
 
@@ -154,6 +165,7 @@ def _product_detail(p: CachedProduct, db: Session) -> dict:
     projects = get_product_projects(db, p.id)
     cat = p.program_name or p.category
     customers = _extract_customers_from_desc(p)
+    tags_str = p.tags or ""
     return {
         "id": p.id, "code": p.code, "name": p.name,
         "type": p.type, "status": p.status,
@@ -166,6 +178,9 @@ def _product_detail(p: CachedProduct, db: Session) -> dict:
         "nas_path": p.nas_path,
         "git_url": p.git_url,
         "pma_customer": p.pma_customer,
+        "description": p.description or "",
+        "tags": tags_str,
+        "tags_list": tags_str.split(",") if tags_str else [],
         "customers_from_desc": customers,
         "projects": projects,
         "project_count": len(projects),

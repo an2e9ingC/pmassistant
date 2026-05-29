@@ -116,6 +116,9 @@ class CachedProduct(Base):
     nas_path = Column(String(512), nullable=True)
     git_url = Column(String(512), nullable=True)
     pma_customer = Column(String(256), nullable=True)
+    # Extracted from Zentao product desc
+    description = Column(Text, nullable=True)
+    tags = Column(Text, nullable=True)  # comma-separated #tags extracted from desc
     raw_json = Column(Text)
     synced_at = Column(DateTime, default=func.now())
 

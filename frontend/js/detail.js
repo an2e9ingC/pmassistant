@@ -449,7 +449,7 @@ function buildStages(stages) {
 
 function buildDocs(docs) {
   if (!docs || !docs.length) {
-    document.getElementById('docs-tbody').innerHTML = '<tr><td colspan="4"><div class="empty-state">暂无文档数据</div></td></tr>';
+    document.getElementById('docs-tbody').innerHTML = '<tr><td colspan="4"><div style="text-align:center;padding:30px;font-style:italic;color:var(--muted)">TODO：各阶段文档清单尚未配置，当前显示为禅道任务名占位<br><span style="font-size:11px">后续根据阶段类型匹配固定文档模板（售前→技术需求书/可行性报告、硬件→原理图/PCB/BOM…）</span></div></td></tr>';
     return;
   }
 
@@ -525,6 +525,7 @@ function buildDelivery(data) {
         '</div>' +
         '<div class="progress-bar" style="height:8px;margin-bottom:6px"><div class="progress-fill ' + (dp === 100 ? 'green' : 'blue') + '" style="width:' + dp + '%"></div></div>' +
         '<div style="font-size:12px;color:var(--muted)">交付进度 ' + dp + '%</div>' +
+        '<div style="margin-top:8px;font-size:11px;font-style:italic;color:var(--muted)">TODO：进度计算逻辑待完善——应对比"项目计划交付量"与"实际交付汇总"，当前简化为记录统计</div>' +
         (done === 0 ? '<div style="margin-top:14px;padding:12px 14px;background:var(--warn-lt);border:1px solid var(--warn);border-radius:8px;font-size:13px;color:var(--warn)">暂无交付记录</div>' : '') +
       '</div>' +
       recHtml +

@@ -28,7 +28,10 @@ def get_kpi(db: Session) -> dict:
     alerts = _detect_alerts_internal(db)
     alert_count = len(alerts)
 
-    # Delivered this month (Phase 2 enhancement, placeholder = 0)
+    # Category counts
+    cat_counts = _get_category_counts(db, alerts)
+
+    # TODO: 本月交付数量 — 需统计DeliveryRecord表中本月交付记录的总数量（Phase 2）
     delivered_this_month = 0
 
     return {
@@ -38,6 +41,10 @@ def get_kpi(db: Session) -> dict:
         "pending_alerts": alert_count,
         "delivered_this_month": delivered_this_month,
         "avg_progress": round(avg_progress, 1),
+        "active_count": cat_counts["active"],
+        "completed_count": cat_counts["completed"],
+        "high_risk_count": cat_counts["high_risk"],
+        "incomplete_docs_count": cat_counts["incomplete_docs"],
     }
 
 
@@ -46,6 +53,7 @@ def get_project_list(
     search: Optional[str] = None,
     type_filter: Optional[str] = None,
     status: Optional[str] = None,
+    category: Optional[str] = None,
     sort_by: str = "end",
     sort_order: str = "asc",
     page: int = 1,
@@ -69,6 +77,23 @@ def get_project_list(
     if status:
         q = q.filter(CachedProject.status == status)
 
+    # Category filter: applies alert-based filtering
+    if category:
+        if category == "active":
+            q = q.filter(CachedProject.status.in_(["doing", "wait"]))
+        elif category == "completed":
+            q = q.filter(CachedProject.status.in_(["done", "closed"]))
+        elif category in ("high_risk", "incomplete_docs"):
+            # Compute alert project IDs for the requested severity
+            alerts = _detect_alerts_internal(db)
+            severity = "red" if category == "high_risk" else "yellow"
+            alert_pids = {a["project_id"] for a in alerts if a["severity"] == severity}
+            if alert_pids:
+                q = q.filter(CachedProject.id.in_(alert_pids))
+            else:
+                # No alerts of this severity → return empty
+                return [], 0
+
     total = q.count()
 
     # Default: sort by end ASC, NULLS LAST (long-term projects at bottom)
@@ -90,6 +115,21 @@ def get_alerts(db: Session, severity: Optional[str] = None,
     total = len(alerts)
     start = (page - 1) * limit
     return alerts[start:start + limit], total
+
+
+def _get_category_counts(db: Session, alerts: list[dict]) -> dict:
+    """Return project counts for each of the 4 dashboard categories."""
+    projects = db.query(CachedProject).all()
+    active_count = sum(1 for p in projects if p.status in ("doing", "wait"))
+    completed_count = sum(1 for p in projects if p.status in ("done", "closed"))
+    high_risk_count = len({a["project_id"] for a in alerts if a["severity"] == "red"})
+    incomplete_docs_count = len({a["project_id"] for a in alerts if a["severity"] == "yellow"})
+    return {
+        "active": active_count,
+        "completed": completed_count,
+        "high_risk": high_risk_count,
+        "incomplete_docs": incomplete_docs_count,
+    }
 
 
 def _detect_alerts_internal(db: Session) -> list[dict]:
@@ -149,4 +189,6 @@ def _detect_alerts_internal(db: Session) -> list[dict]:
                             "project_id": p.id, "project_code": p.code, "stage_name": e.name,
                         })
 
+    # TODO: GitLab发布未同步告警 — 检测GitLab release版本号与禅道版本号是否一致（Phase 3）
+    # TODO: 输出件缺失告警 — 按阶段预定义文档清单逐一检查是否存在对应文件（Phase 3）
     return alerts

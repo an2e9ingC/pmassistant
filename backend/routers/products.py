@@ -28,12 +28,13 @@ class ProductProjectLinkRequest(BaseModel):
 def list_products(
     search: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
+    tags: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
-    items, total = product_service.get_products(db, search, category, page, limit)
+    items, total = product_service.get_products(db, search, category, tags, page, limit)
     return {"code": 0, "data": {"page": page, "limit": limit, "total": total, "items": items}, "message": "ok"}
 
 
@@ -46,11 +47,13 @@ def mapping_overview(db: Session = Depends(get_db), _=Depends(get_current_user))
 @router.get("/categories", response_model=dict)
 def list_categories(db: Session = Depends(get_db), _=Depends(get_current_user)):
     from backend.models.zentao import CachedProduct
-    cats = db.query(CachedProduct.category).filter(
-        CachedProduct.category.isnot(None),
-        CachedProduct.category != "",
-    ).distinct().all()
-    return {"code": 0, "data": [c[0] for c in cats if c[0]], "message": "ok"}
+    # Collect distinct categories from both PMA-local category and Zentao program_name
+    cats = set()
+    for row in db.query(CachedProduct.program_name, CachedProduct.category).all():
+        for val in row:
+            if val:
+                cats.add(val)
+    return {"code": 0, "data": sorted(list(cats)), "message": "ok"}
 
 
 @router.get("/{product_id}", response_model=dict)

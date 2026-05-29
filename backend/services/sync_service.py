@@ -71,6 +71,15 @@ def _parse_datetime(val) -> Optional[datetime]:
         return None
 
 
+def _extract_tags_from_desc(desc: str) -> str:
+    """Extract #tag keywords from a product description string.
+    Returns comma-separated tags, e.g. '全国产,双V7,PCIe卡'."""
+    if not desc:
+        return ""
+    tags = re.findall(r'#([\w一-鿿]+)', desc)
+    return ",".join(tags) if tags else ""
+
+
 def _log_sync(db: Session, entity_type: str) -> SyncLog:
     log = SyncLog(
         started_at=datetime.now(timezone.utc),
@@ -99,7 +108,11 @@ class SyncService:
         self.client = ZentaoClient()
 
     async def full_sync(self) -> dict:
-        """Run a full sync from Zentao to local SQLite. Returns summary dict."""
+        """Run a full sync from Zentao to local SQLite. Returns summary dict.
+
+        TODO: GitLab sync — commit统计、release验证（Phase 2/3，需GITLAB_TOKEN配置）
+        TODO: NAS sync — 售前项目检测、交付文档扫描（Phase 2/3，需NAS路径配置）
+        """
         db = SessionLocal()
         results = {}
         try:
@@ -153,6 +166,7 @@ class SyncService:
                 existing = db.query(CachedProduct).filter(CachedProduct.id == p["id"]).first()
                 if existing:
                     # Update core fields but preserve PMA enrichments
+                    desc = p.get("desc", "") or ""
                     existing.code = p.get("code", "")
                     existing.name = p.get("name", "")
                     existing.type = p.get("type", "")
@@ -162,6 +176,8 @@ class SyncService:
                     existing.total_stories = p.get("totalStories", 0)
                     existing.total_bugs = p.get("totalBugs", 0)
                     existing.releases = p.get("releases", 0)
+                    existing.description = desc
+                    existing.tags = _extract_tags_from_desc(desc)
                     existing.raw_json = json.dumps(p, ensure_ascii=False)
                     existing.synced_at = datetime.now(timezone.utc)
                     updated += 1
@@ -376,12 +392,15 @@ class SyncService:
         return 1
 
     def _build_product(self, p: dict) -> CachedProduct:
+        desc = p.get("desc", "") or ""
         return CachedProduct(
             id=p["id"], code=p.get("code", ""),
             name=p.get("name", ""), type=p.get("type", ""),
             status=p.get("status", ""), program_id=p.get("program", 0),
             total_stories=p.get("totalStories", 0), total_bugs=p.get("totalBugs", 0),
             releases=p.get("releases", 0),
+            description=desc,
+            tags=_extract_tags_from_desc(desc),
             raw_json=json.dumps(p, ensure_ascii=False),
         )
 

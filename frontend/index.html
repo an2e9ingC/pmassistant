@@ -61,6 +61,26 @@
       </div>
     </div>
     <div class="nav-group">
+      <div class="nav-group-label">产品</div>
+      <div class="nav-item" id="nav-product-list" onclick="gotoView('product-list')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="1.5" y="1.5" width="13" height="13" rx="2"/>
+          <line x1="4" y1="5" x2="12" y2="5"/>
+          <line x1="4" y1="8" x2="10" y2="8"/>
+          <line x1="4" y1="11" x2="7" y2="11"/>
+        </svg>
+        产品列表
+      </div>
+      <div class="nav-item" id="nav-product-detail" onclick="gotoView('product-detail')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="1.5" y="1.5" width="13" height="13" rx="2"/>
+          <circle cx="11" cy="11" r="3"/>
+          <line x1="10" y1="10" x2="13" y2="13" stroke-linecap="round"/>
+        </svg>
+        产品详情
+      </div>
+    </div>
+    <div class="nav-group">
       <div class="nav-group-label">报表</div>
       <div class="nav-item" id="nav-reports" onclick="gotoView('reports')">
         <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -150,26 +170,26 @@
     <!-- ══════════════════════ VIEW 1 — DASHBOARD ══════════════════════ -->
     <div class="view active" id="view-dashboard">
 
-      <div class="kpi-grid">
-        <div class="kpi-card">
-          <div class="kpi-label">进行中项目</div>
-          <div class="kpi-value" style="color:var(--accent)" id="kpi-active">—</div>
+      <div class="kpi-grid" id="kpi-grid">
+        <div class="kpi-card active" data-category="active" onclick="filterByCategory('active', this)">
+          <div class="kpi-label">进行中</div>
+          <div class="kpi-value" style="color:var(--accent)" id="kpi-active-count">—</div>
           <div class="kpi-meta" id="kpi-meta-types">加载中...</div>
         </div>
-        <div class="kpi-card">
-          <div class="kpi-label">待处理告警</div>
-          <div class="kpi-value" style="color:var(--danger)" id="kpi-alerts">—</div>
-          <div class="kpi-meta">所有项目</div>
+        <div class="kpi-card" data-category="completed" onclick="filterByCategory('completed', this)">
+          <div class="kpi-label">已完成</div>
+          <div class="kpi-value" style="color:var(--success)" id="kpi-completed-count">—</div>
+          <div class="kpi-meta">已关闭/已完成</div>
         </div>
-        <div class="kpi-card">
-          <div class="kpi-label">本月已交付</div>
-          <div class="kpi-value" style="color:var(--success)" id="kpi-delivered">—</div>
-          <div class="kpi-meta">台/套</div>
+        <div class="kpi-card" data-category="high_risk" onclick="filterByCategory('high_risk', this)">
+          <div class="kpi-label">高风险</div>
+          <div class="kpi-value" style="color:var(--danger)" id="kpi-high-risk-count">—</div>
+          <div class="kpi-meta">阶段超期/阻塞</div>
         </div>
-        <div class="kpi-card">
-          <div class="kpi-label">整体进度达成率</div>
-          <div class="kpi-value" id="kpi-progress">—</div>
-          <div class="kpi-meta">活跃项目加权均值</div>
+        <div class="kpi-card" data-category="incomplete_docs" onclick="filterByCategory('incomplete_docs', this)">
+          <div class="kpi-label">资料不全</div>
+          <div class="kpi-value" style="color:var(--warn)" id="kpi-incomplete-docs-count">—</div>
+          <div class="kpi-meta">输出件缺失</div>
         </div>
       </div>
 
@@ -351,7 +371,9 @@
           </div>
         </div>
         <div class="mindmap-container" id="mm-product-container" style="display:none">
-          <div class="mindmap-canvas" id="mm-product-canvas"></div>
+          <div class="mindmap-canvas" id="mm-product-canvas">
+            <div style="padding:40px;text-align:center;font-style:italic;color:var(--muted)">TODO：思维导图视图（产品-项目关联拓扑图），需实现SVG节点布局渲染引擎</div>
+          </div>
         </div>
       </div>
 
@@ -377,7 +399,9 @@
           </div>
         </div>
         <div class="mindmap-container" id="mm-project-container" style="display:none">
-          <div class="mindmap-canvas" id="mm-project-canvas"></div>
+          <div class="mindmap-canvas" id="mm-project-canvas">
+            <div style="padding:40px;text-align:center;font-style:italic;color:var(--muted)">TODO：思维导图视图（项目-产品关联拓扑图），需实现SVG节点布局渲染引擎</div>
+          </div>
         </div>
       </div>
 
@@ -446,6 +470,86 @@
       </div>
     </div>
 
+    <!-- ══════════════════════ VIEW 6 — PRODUCT LIST ══════════════════════ -->
+    <div class="view" id="view-product-list">
+
+      <div class="section-hd">
+        <div class="section-title">产品列表</div>
+        <div class="section-acts">
+          <div class="search-wrap" style="max-width:280px">
+            <svg class="search-ico" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/>
+            </svg>
+            <input class="search-inp" id="prod-search" placeholder="搜索产品名、标签…" oninput="onProdSearch(this.value)">
+          </div>
+        </div>
+      </div>
+
+      <div class="prod-sidebar-layout">
+        <aside class="prod-sidebar" id="prod-line-sidebar">
+          <div class="prod-sidebar-header">产品线</div>
+          <div class="prod-cat-list" id="prod-line-cat-list">
+            <div class="loading-spinner" style="padding:12px">加载中...</div>
+          </div>
+        </aside>
+        <div class="prod-main" id="prod-grid-container">
+          <div class="loading-spinner">加载中...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════ VIEW 7 — PRODUCT DETAIL ══════════════════════ -->
+    <div class="view" id="view-product-detail">
+
+      <div class="proj-select-bar">
+        <div class="back-btn" onclick="gotoView('product-list')">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9,2 4,6.5 9,11"/>
+          </svg>
+        </div>
+        <label style="font-size:13px;color:var(--muted)">查看产品：</label>
+        <div class="proj-combo" id="prod-combo">
+          <input class="proj-combo-input" id="prod-combo-input" type="text"
+            autocomplete="off" placeholder="搜索或选择产品…"
+            onfocus="openProdCombo()" oninput="filterProdCombo(this.value)">
+          <svg class="proj-combo-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="2,5 7,10 12,5"/>
+          </svg>
+          <div class="proj-combo-dropdown" id="prod-combo-dropdown"></div>
+        </div>
+      </div>
+
+      <div class="detail-header" id="prod-detail-header">
+        <div class="loading-spinner">请选择产品</div>
+      </div>
+
+      <div class="card" style="margin-bottom:20px">
+        <div class="section-hd"><div class="section-title">基本信息</div></div>
+        <div class="prod-info-grid" id="prod-info-grid">
+          <div class="loading-spinner">请选择产品</div>
+        </div>
+      </div>
+
+      <div class="section-hd"><div class="section-title">关联项目</div></div>
+      <div class="card" style="overflow:hidden;margin-bottom:20px">
+        <table class="proj-table">
+          <thead>
+            <tr>
+              <th>项目</th><th>类型</th><th>状态</th><th>客户</th>
+            </tr>
+          </thead>
+          <tbody id="prod-projects-tbody">
+            <tr><td colspan="4"><div class="loading-spinner" style="padding:12px">请选择产品</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section-hd"><div class="section-title">交付资料</div></div>
+      <div class="card" id="prod-resources-card">
+        <div class="loading-spinner" style="padding:16px">请选择产品</div>
+      </div>
+    </div>
+
     <!-- Link Dialog -->
     <div class="link-dialog" id="link-dialog" onclick="if(event.target===this)closeLinkDialog()">
       <div class="link-dialog-panel">
@@ -469,6 +573,7 @@
 <script src="/js/mapping.js"></script>
 <script src="/js/reports.js"></script>
 <script src="/js/logs.js"></script>
+<script src="/js/product.js"></script>
 <script src="/js/app.js"></script>
 <script>
 async function triggerSync() {

@@ -23,9 +23,11 @@ def get_delivery_summary(db: Session, project_id: int) -> dict:
             except (json.JSONDecodeError, TypeError):
                 pass
 
+    # TODO: 交付进度计算 — 应对比"应交付总数"（项目计划交付量）与"实际已交付"（记录汇总），
+    # 而非简单统计记录数量。当前求逻辑 complete = total_qty，仅适用于演示。
     return {
         "total": total_qty,
-        "done": total_qty,  # All records are delivered by definition
+        "done": total_qty,
         "remaining": 0,
         "progress": 100 if records else 0,
         "records": [record_dict(r) for r in records],

@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════
    MAIN APP
 ═══════════════════════════════════════════════════ */
-var VIEW_TITLES = { dashboard: '项目总览', detail: '项目详情', mapping: '产品↔项目映射', reports: '统计报告', logs: '系统日志' };
+var VIEW_TITLES = { dashboard: '项目总览', detail: '项目详情', mapping: '产品↔项目映射', reports: '统计报告', logs: '系统日志', 'product-list': '产品列表', 'product-detail': '产品详情' };
 
 function gotoView(view) {
   // Check auth
@@ -49,6 +49,12 @@ function gotoView(view) {
     clearLogAutoRefresh();
     renderLogs();
   }
+  if (view === 'product-list') {
+    initProductList();
+  }
+  if (view === 'product-detail') {
+    initProductDetail();
+  }
 
   localStorage.setItem('pm_view', view);
 }
@@ -95,6 +101,10 @@ function renderSourceTags() {
     gitlab: { ok: '', warn: '未同步', err: '同步失败', pending: '未配置' },
     nas:    { ok: '', warn: '未同步', err: '同步失败', pending: '未配置' },
   };
+  var todoTitles = {
+    gitlab: 'TODO：GitLab集成待实现——commit统计、release版本验证（Phase 3，需GITLAB_TOKEN）',
+    nas: 'TODO：NAS集成待实现——售前项目检测、交付文档扫描（Phase 3，需NAS路径配置）',
+  };
   ['zentao', 'gitlab', 'nas'].forEach(function(key) {
     var el = document.getElementById('src-' + key);
     if (!el) return;
@@ -102,7 +112,7 @@ function renderSourceTags() {
     el.className = 'src-tag ' + state;
     var reason = reasons[key][state] || '';
     el.textContent = names[key] + (reason ? ' ' + reason : '');
-    el.title = names[key] + '：' + (reason || '已同步');
+    el.title = (state === 'pending' && todoTitles[key]) ? todoTitles[key] : (names[key] + '：' + (reason || '已同步'));
   });
 }
 

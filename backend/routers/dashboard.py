@@ -26,6 +26,7 @@ def get_projects(
     search: Optional[str] = Query(None),
     type: Optional[str] = Query(None),  # noqa: A002
     status: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
     sort_by: str = Query("end"),
     sort_order: str = Query("asc"),
     page: int = Query(1, ge=1),
@@ -33,7 +34,9 @@ def get_projects(
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
-    items, total = dashboard_service.get_project_list(db, search, type, status, sort_by, sort_order, page, limit)
+    items, total = dashboard_service.get_project_list(
+        db, search, type, status, category, sort_by, sort_order, page, limit,
+    )
     return {
         "code": 0,
         "data": {

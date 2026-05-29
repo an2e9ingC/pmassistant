@@ -89,10 +89,22 @@
 }
 .kpi-card {
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: var(--r-lg);
   padding: 20px 20px 16px;
   box-shadow: var(--sh);
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+  user-select: none;
+}
+.kpi-card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--sh-md);
+}
+.kpi-card.active {
+  border-color: var(--accent);
+  box-shadow: var(--sh-md);
+  background: var(--accent-lt);
 }
 .kpi-label { font-size: 11.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px; }
 .kpi-value { font-size: 30px; font-weight: 700; letter-spacing: -0.025em; line-height: 1; margin-bottom: 8px; font-variant-numeric: tabular-nums; }
@@ -209,5 +221,143 @@
   border-radius: 8px; text-align: center;
   border: 2px solid var(--surface);
   display: none;
+}
+
+/* ═══════════════════════════════════════════════════
+   PRODUCT LIST
+═══════════════════════════════════════════════════ */
+
+/* Product line sidebar — reuses .prod-sidebar-layout from detail.css */
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+  padding: 0;
+}
+
+.product-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 18px 20px;
+  box-shadow: var(--sh);
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.12s;
+}
+.product-card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--sh-md);
+  transform: translateY(-1px);
+}
+
+.product-card-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg);
+  margin-bottom: 4px;
+  line-height: 1.3;
+}
+.product-card-code {
+  font-size: 11.5px;
+  color: var(--muted);
+  font-family: var(--mono);
+  margin-bottom: 8px;
+}
+.product-card-desc {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.45;
+  margin-bottom: 10px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.product-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+.product-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+/* ═══════════════════════════════════════════════════
+   TAG BADGES (product tags from #keyword format)
+═══════════════════════════════════════════════════ */
+
+.tag-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 520;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+/* 5 color variants for tag badges — all use theme tokens */
+.tag-badge.tag-0 { background: var(--accent-lt);  color: var(--accent); }
+.tag-badge.tag-1 { background: var(--success-lt); color: var(--success); }
+.tag-badge.tag-2 { background: var(--warn-lt);    color: var(--warn); }
+.tag-badge.tag-3 { background: var(--danger-lt);  color: var(--danger); }
+.tag-badge.tag-4 { background: #EDE9FE; color: #7C3AED; }
+[data-theme="dark"] .tag-badge.tag-4 { background: #1E1446; color: #A78BFA; }
+
+/* ═══════════════════════════════════════════════════
+   PRODUCT DETAIL
+═══════════════════════════════════════════════════ */
+
+.prod-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+  padding: 0;
+}
+.prod-info-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--surface);
+  gap: 12px;
+}
+.prod-info-label {
+  font-size: 12.5px;
+  color: var(--muted);
+  font-weight: 510;
+  white-space: nowrap;
+}
+.prod-info-val {
+  font-size: 13px;
+  color: var(--fg);
+  font-weight: 500;
+  text-align: right;
+  min-width: 0;
+  word-break: break-all;
+}
+.prod-info-val code {
+  font-family: var(--mono);
+  font-size: 11px;
+  background: var(--bg);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+@media (max-width: 768px) {
+  .prod-info-grid {
+    grid-template-columns: 1fr;
+  }
+  .product-grid {
+    grid-template-columns: 1fr;
+  }
 }
 .bell-badge.show { display: block; }

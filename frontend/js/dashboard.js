@@ -3,6 +3,7 @@
 ═══════════════════════════════════════════════════ */
 var curTypeFilter = 'all';
 var curSearchVal  = '';
+var _curCategory = 'active';
 var _sortEndOrder = 'asc'; // 'asc' = nearest first, 'desc' = farthest first
 
 var _dashboardLoading = false;
@@ -11,7 +12,7 @@ async function renderDashboard() {
   if (_dashboardLoading) return;
   _dashboardLoading = true;
   // Show loading state on KPI cards
-  ['kpi-active','kpi-alerts','kpi-delivered','kpi-progress'].forEach(function(id) {
+  ['kpi-active-count','kpi-completed-count','kpi-high-risk-count','kpi-incomplete-docs-count'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) el.textContent = '...';
   });
@@ -23,14 +24,16 @@ async function renderDashboard() {
   _dashboardLoading = false;
 }
 
-/* KPI Cards */
+/* KPI Cards — now category filter cards */
 
 async function loadKpiCards() {
   try {
     var data = await API.get('/dashboard/kpi');
-    document.getElementById('kpi-active').textContent = data.active_projects;
+    document.getElementById('kpi-active-count').textContent = data.active_count;
     document.getElementById('kpi-meta-types').innerHTML = '研发 <b>' + data.rd_count + '</b> &nbsp;·&nbsp; 生产 <b>' + data.sc_count + '</b>';
-    document.getElementById('kpi-alerts').textContent = data.pending_alerts;
+    document.getElementById('kpi-completed-count').textContent = data.completed_count;
+    document.getElementById('kpi-high-risk-count').textContent = data.high_risk_count;
+    document.getElementById('kpi-incomplete-docs-count').textContent = data.incomplete_docs_count;
     var badge = document.getElementById('alert-badge');
     if (badge) {
       badge.textContent = data.pending_alerts;
@@ -40,11 +43,20 @@ async function loadKpiCards() {
       _srcStates.zentao = 'ok';
       renderSourceTags();
     }
-    document.getElementById('kpi-delivered').textContent = data.delivered_this_month;
-    document.getElementById('kpi-progress').innerHTML = data.avg_progress + '<span style="font-size:18px;font-weight:500">%</span>';
   } catch(e) {
     console.error('Failed to load KPI:', e);
   }
+}
+
+/* Category card click — filters project list */
+
+function filterByCategory(category, el) {
+  _curCategory = category;
+  // Toggle active class on cards
+  document.querySelectorAll('#kpi-grid .kpi-card').forEach(function(c) { c.classList.remove('active'); });
+  if (el) el.classList.add('active');
+  // Reload project list with category filter
+  loadProjectTable(curTypeFilter);
 }
 
 /* Project Table */
@@ -68,7 +80,7 @@ function filterTable(f, el) {
 
 async function loadProjectTable(filter) {
   curTypeFilter = filter;
-  var params = { page: 1, limit: 50, sort_by: 'end', sort_order: _sortEndOrder };
+  var params = { page: 1, limit: 50, sort_by: 'end', sort_order: _sortEndOrder, category: _curCategory };
   if (curSearchVal) params.search = curSearchVal;
   if (filter && filter !== 'all') params.type = filter;
 

@@ -38,16 +38,16 @@ def get_project_stages(db: Session, project_id: int) -> list[dict]:
             .order_by(CachedTask.id)
             .all()
         )
-        deliverables = []
-        for t in tasks:
-            dn = t.name or ""
-            deliverables.append({
-                "name": dn,
-                "done": t.status == "done",
-                "warn": (t.status == "done" and not t.has_files),
-                "completed_at": t.finished_date.strftime("%Y-%m-%d") if t.finished_date else None,
-                "location": "禅道任务附件" if t.has_files else None,
-            })
+        # TODO: 根据阶段类型返回固定的文档清单（非禅道任务名）
+        # 不同阶段对应不同的文档模板，例如：
+        #   售前 → 技术需求书、技术可行性报告、商务可行性报告、立项决议书、项目交付节点
+        #   硬件开发 → 硬件方案设计、原理图、PCB Layout、BOM、硬件测试报告
+        #   软件开发 → 软件需求规格、概要设计、详细设计、测试用例、测试报告
+        #   结构设计 → 结构设计报告、热设计报告
+        # 当前阶段名: e.stage_name or e.name
+        deliverables = [
+            {"name": "TODO: 根据阶段配置文档清单", "done": False, "warn": False, "completed_at": None, "location": None},
+        ]
         who = _get_who(tasks) or e.name
         stages.append({
             "id": e.id,

@@ -86,7 +86,7 @@
 - [x] 后端: product_service + products router (list/search/update/link)
 - [x] 前端: 映射视图（按产品查看 + 按项目查看）、分类筛选、关联弹窗
 - [x] Product PMA 扩展字段管理（category, nas_path, git_url, alias_name）
-- [ ] 关系图谱可视化（树形/思维导图模式 — 后续增强）
+- [ ] 关系图谱可视化（思维导图 SVG 渲染 — 后续增强）
 - [ ] 客户维度映射（Phase 2 后续）
 
 ## Phase 3: 交付管理 & 报表 (2026-05-29 完成)
@@ -115,3 +115,4 @@
 | 2026-05-29 | v2026.05.29-beta14 | DB路径绝对化+权限修复、日志API Depends冲突修复、数据源标签重构移到右上角、server.sh脚本 |
 | 2026-05-29 | v2026.05.29-beta17 | 数据源标签UI迭代（独立pill、彩色圆点+边框、深浅主题兼容）、规则完善（no-auto-commit/docs-sync/auto-restart/theme-compat） |
 | 2026-05-29 | v2026.05.29-beta20 | Toast通知顶部居中+error手动关闭、铃铛通知队列+未读badge、日志智能滚动、同步按钮文字、数据源标签简化、design-spec.md设计规范文档 |
+| 2026-05-29 | v2026.05.29-beta24 | 动态数据源检测(/sync/sources)、项目状态映射(doing→进行中)、产品线同步(/programs)、客户提取(【】标记)、映射页重构(4Tab+侧边栏+可展开树+矩阵+排序)、TODO占位规范 |
