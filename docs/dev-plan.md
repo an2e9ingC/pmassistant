@@ -102,13 +102,12 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
-| 2026-05-28 | 0.1.0 | Phase 1 主体完成：后端全功能 + 前端 Dashboard + 项目详情 |
-| 2026-05-29 | 0.1.1 | 甘特图优化：线性缩放(±1.05)、拖拽平移、固定宽度、双列布局、滚动防抖、版本号 |
-| 2026-05-29 | 0.1.2 | 拖拽修复：移除gantt-root overflow:hidden；sticky固定阶段/负责人列 |
-| 2026-05-29 | 0.1.3 | Bug修复：ProductProjectLink导入缺失、sync双次fetch任务、N+1查询、硬编码生产URL、sync状态接口权限、空集合清理、openProject重复调用、canceled样式缺失 |
-| 2026-05-29 | 0.2.0 | Phase 2+3 完成：产品-项目映射（link CRUD + 前端双模式视图）、交付管理（DeliveryRecord CRUD + 前端增删）、Bug统计（Zentao同步 + 统计面板）、项目报表（周报/月报）、同步进度历史 |
-| 2026-05-29 | 0.2.1 | 系统日志查看器：RotatingFileHandler持久化日志、日志API（level过滤/搜索/tail）、前端日志页面（实时刷新/级别筛选）；告警铃铛：点击弹出最近告警下拉框 |
-| 2026-05-29 | 0.2.2 | 数据库日志存储：LogEntry模型+DatabaseLogHandler、日志API从DB查询、前端改为下拉选择器+按级别自动刷新（ERROR=5s/CRITICAL=3s）、默认INFO级别、docs/deploy-guide更新日志诊断说明 |
-| 2026-05-29 | 0.2.3 | DB路径绝对化：_resolve_db_path()自动解析+创建data目录+chmod 777；日志文件路径与DB同目录；logs API移除Depends(get_db)冲突（改用SessionLocal） |
-| 2026-05-29 | 0.2.4 | 数据源状态重构：3个独立标签移到右上角（禅道/GitLab/NAS）、彩色圆点+边框区分状态、同步按钮迁移到标签旁；server.sh服务器管理脚本（start/stop/restart/status/logs/tail） |
-| 2026-05-29 | 0.2.5 | 项目规则完善：新增no-auto-commit/docs-sync/auto-restart/theme-compatibility规则、更新git-commit-rule scope列表 |
+| 2026-05-28 | v2026.05.28-beta1 | Phase 1 主体完成：后端全功能 + 前端 Dashboard + 项目详情 |
+| 2026-05-29 | v2026.05.29-beta1 | 甘特图优化：线性缩放(±1.05)、拖拽平移、固定宽度、双列布局、滚动防抖、版本号 |
+| 2026-05-29 | v2026.05.29-beta2 | 拖拽修复：移除gantt-root overflow:hidden；sticky固定阶段/负责人列 |
+| 2026-05-29 | v2026.05.29-beta8 | Bug修复：ProductProjectLink导入、sync双次fetch、N+1查询、硬编码URL、sync权限、空集合清理、openProject重复调用、canceled样式 |
+| 2026-05-29 | v2026.05.29-beta9 | Phase 2+3 完成：产品-项目映射、交付管理（DeliveryRecord CRUD）、Bug统计（Zentao同步）、项目报表（周报/月报）、同步进度历史 |
+| 2026-05-29 | v2026.05.29-beta11 | 系统日志查看器：RotatingFileHandler+DB双写、日志API（level过滤/搜索）、前端页面（实时刷新/级别筛选）；告警铃铛下拉框 |
+| 2026-05-29 | v2026.05.29-beta13 | 数据库日志存储：LogEntry+DatabaseLogHandler、前端下拉选择器+按级别自动刷新、deploy-guide更新日志诊断说明 |
+| 2026-05-29 | v2026.05.29-beta14 | DB路径绝对化+权限修复、日志API Depends冲突修复、数据源标签重构移到右上角、server.sh脚本 |
+| 2026-05-29 | v2026.05.29-beta17 | 数据源标签UI迭代（独立pill、彩色圆点+边框、深浅主题兼容）、规则完善（no-auto-commit/docs-sync/auto-restart/theme-compat） |
