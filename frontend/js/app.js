@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════
    MAIN APP
 ═══════════════════════════════════════════════════ */
-var VIEW_TITLES = { dashboard: '项目总览', detail: '项目详情', mapping: '产品↔项目映射', reports: '统计报告', logs: '系统日志', 'product-list': '产品列表', 'product-detail': '产品详情' };
+var VIEW_TITLES = { dashboard: '项目总览', detail: '项目详情', mapping: '产品↔项目映射', reports: '统计报告', logs: '系统日志', 'product-list': '产品列表', 'product-detail': '产品详情', 'project-products': '项目关联产品', 'product-projects': '产品关联项目', 'customer-projects': '客户关联项目' };
 
 function gotoView(view) {
   // Check auth
@@ -54,6 +54,15 @@ function gotoView(view) {
   }
   if (view === 'product-detail') {
     initProductDetail();
+  }
+  if (view === 'project-products') {
+    initProjectProducts();
+  }
+  if (view === 'product-projects') {
+    initProductProjects();
+  }
+  if (view === 'customer-projects') {
+    initCustomerProjects();
   }
 
   localStorage.setItem('pm_view', view);

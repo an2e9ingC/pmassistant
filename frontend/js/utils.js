@@ -97,6 +97,14 @@ function extractCoreName(name) {
   return parts.slice(1).join('-') || name;
 }
 
+// Strip HTML tags from a string, returning plain text
+function stripHtml(html) {
+  if (!html) return '';
+  var el = document.createElement('div');
+  el.innerHTML = html;
+  return el.textContent || el.innerText || '';
+}
+
 // Render customer badge: small icon-style abbreviation
 function renderCustomerBadge(customerName) {
   if (!customerName) return '<span style="font-size:12px;color:var(--muted)">—</span>';

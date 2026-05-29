@@ -68,7 +68,7 @@ function renderProductCards() {
     filtered = filtered.filter(function(p) {
       var nameMatch = (p.name || '').toLowerCase().indexOf(q) >= 0;
       var codeMatch = (p.code || '').toLowerCase().indexOf(q) >= 0;
-      var descMatch = (p.description || '').toLowerCase().indexOf(q) >= 0;
+      var descMatch = stripHtml(p.description || '').toLowerCase().indexOf(q) >= 0;
       var tagMatch = (p.tags || '').toLowerCase().indexOf(q) >= 0;
       return nameMatch || codeMatch || descMatch || tagMatch;
     });
@@ -81,7 +81,7 @@ function renderProductCards() {
   }
 
   container.innerHTML = '<div class="product-grid">' + filtered.map(function(p) {
-    var desc = p.description || '';
+    var desc = stripHtml(p.description || '');
     var descShort = desc.length > 80 ? desc.substring(0, 80) + '...' : desc;
     var tagsHtml = '';
     if (p.tags_list && p.tags_list.length > 0 && p.tags_list[0] !== '') {
@@ -204,7 +204,7 @@ function renderProdDetailHeader(p) {
     '<div class="detail-title">' + escHtml(p.name) + '</div>' +
     '<div class="detail-subtitle">' + escHtml(p.code || '') + '</div>' +
     (tagsHtml ? '<div style="margin-top:8px">' + tagsHtml + '</div>' : '') +
-    (p.description ? '<div style="margin-top:8px;font-size:13px;color:var(--muted);line-height:1.5">' + escHtml(p.description) + '</div>' : '');
+    (p.description ? '<div style="margin-top:8px;font-size:13px;color:var(--muted);line-height:1.5">' + escHtml(stripHtml(p.description)) + '</div>' : '');
 }
 
 function renderProdDetailInfo(p) {

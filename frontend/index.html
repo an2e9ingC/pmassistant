@@ -29,7 +29,7 @@
 
   <nav class="sidebar-nav">
     <div class="nav-group">
-      <div class="nav-group-label">工作台</div>
+      <div class="nav-group-label">项目</div>
       <div class="nav-item active" id="nav-dashboard" onclick="gotoView('dashboard')">
         <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor">
           <rect x="0" y="0" width="6.5" height="6.5" rx="1.5"/>
@@ -49,15 +49,12 @@
         </svg>
         项目详情
       </div>
-      <div class="nav-item" id="nav-mapping" onclick="gotoView('mapping')">
+      <div class="nav-item" id="nav-project-products" onclick="gotoView('project-products')">
         <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-          <circle cx="3" cy="8" r="2"/>
-          <circle cx="13" cy="3.5" r="2"/>
-          <circle cx="13" cy="12.5" r="2"/>
-          <line x1="4.8" y1="7.1" x2="11.2" y2="4.4"/>
-          <line x1="4.8" y1="8.9" x2="11.2" y2="11.6"/>
+          <circle cx="8" cy="8" r="6.5"/>
+          <polyline points="4.5,8 7,10.5 11.5,5.5"/>
         </svg>
-        产品↔项目映射
+        关联产品
       </div>
     </div>
     <div class="nav-group">
@@ -78,6 +75,26 @@
           <line x1="10" y1="10" x2="13" y2="13" stroke-linecap="round"/>
         </svg>
         产品详情
+      </div>
+      <div class="nav-item" id="nav-product-projects" onclick="gotoView('product-projects')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="3" cy="8" r="2"/>
+          <circle cx="13" cy="3.5" r="2"/>
+          <circle cx="13" cy="12.5" r="2"/>
+          <line x1="4.8" y1="7.1" x2="11.2" y2="4.4"/>
+          <line x1="4.8" y1="8.9" x2="11.2" y2="11.6"/>
+        </svg>
+        关联项目
+      </div>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-label">客户</div>
+      <div class="nav-item" id="nav-customer-projects" onclick="gotoView('customer-projects')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="8" cy="5" r="3"/>
+          <path d="M2 14c0-3 2.7-5 6-5s6 2 6 5"/>
+        </svg>
+        关联项目
       </div>
     </div>
     <div class="nav-group">
@@ -173,22 +190,22 @@
       <div class="kpi-grid" id="kpi-grid">
         <div class="kpi-card active" data-category="active" onclick="filterByCategory('active', this)">
           <div class="kpi-label">进行中</div>
-          <div class="kpi-value" style="color:var(--accent)" id="kpi-active-count">—</div>
+          <div class="kpi-value" id="kpi-active-count">—</div>
           <div class="kpi-meta" id="kpi-meta-types">加载中...</div>
         </div>
         <div class="kpi-card" data-category="completed" onclick="filterByCategory('completed', this)">
           <div class="kpi-label">已完成</div>
-          <div class="kpi-value" style="color:var(--success)" id="kpi-completed-count">—</div>
+          <div class="kpi-value" id="kpi-completed-count">—</div>
           <div class="kpi-meta">已关闭/已完成</div>
         </div>
         <div class="kpi-card" data-category="high_risk" onclick="filterByCategory('high_risk', this)">
           <div class="kpi-label">高风险</div>
-          <div class="kpi-value" style="color:var(--danger)" id="kpi-high-risk-count">—</div>
+          <div class="kpi-value" id="kpi-high-risk-count">—</div>
           <div class="kpi-meta">阶段超期/阻塞</div>
         </div>
         <div class="kpi-card" data-category="incomplete_docs" onclick="filterByCategory('incomplete_docs', this)">
           <div class="kpi-label">资料不全</div>
-          <div class="kpi-value" style="color:var(--warn)" id="kpi-incomplete-docs-count">—</div>
+          <div class="kpi-value" id="kpi-incomplete-docs-count">—</div>
           <div class="kpi-meta">输出件缺失</div>
         </div>
       </div>
@@ -549,6 +566,47 @@
       <div class="section-hd"><div class="section-title">交付资料</div></div>
       <div class="card" id="prod-resources-card">
         <div class="loading-spinner" style="padding:16px">请选择产品</div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════ VIEW 8 — PROJECT PRODUCTS (项目关联产品) ══════════════════════ -->
+    <div class="view" id="view-project-products">
+      <div class="section-hd"><div class="section-title">按项目查产品</div></div>
+      <div class="projid-search-section">
+        <div class="projid-input-wrap">
+          <input class="search-inp" id="pp-search-input" placeholder="输入项目编号搜索，如 PE0406…" oninput="searchProjectProducts(this.value)">
+        </div>
+        <div class="projid-result" id="pp-result">
+          <div class="projid-empty">请输入项目编号进行搜索</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════ VIEW 9 — PRODUCT PROJECTS (产品关联项目) ══════════════════════ -->
+    <div class="view" id="view-product-projects">
+      <div class="section-hd"><div class="section-title">从产品查项目</div></div>
+      <div class="prod-sidebar-layout" style="min-height:420px">
+        <aside class="prod-sidebar">
+          <div class="prod-sidebar-header">产品分类</div>
+          <div class="prod-cat-list" id="vp-cat-list"></div>
+        </aside>
+        <div class="prod-main" id="vp-tree-container">
+          <div class="prod-tree-empty">请选择左侧产品分类</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════ VIEW 10 — CUSTOMER PROJECTS (客户关联项目) ══════════════════════ -->
+    <div class="view" id="view-customer-projects">
+      <div class="section-hd"><div class="section-title">从客户查项目</div></div>
+      <div class="prod-sidebar-layout" style="min-height:420px">
+        <aside class="prod-sidebar">
+          <div class="prod-sidebar-header">客户</div>
+          <div class="prod-cat-list" id="vc-cat-list"></div>
+        </aside>
+        <div class="prod-main" id="vc-tree-container">
+          <div class="prod-tree-empty">请选择左侧客户</div>
+        </div>
       </div>
     </div>
 

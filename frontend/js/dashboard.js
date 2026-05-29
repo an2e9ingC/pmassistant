@@ -55,6 +55,11 @@ function filterByCategory(category, el) {
   // Toggle active class on cards
   document.querySelectorAll('#kpi-grid .kpi-card').forEach(function(c) { c.classList.remove('active'); });
   if (el) el.classList.add('active');
+  // Apply category color to project table
+  var table = document.querySelector('#view-dashboard .proj-table');
+  if (table) {
+    table.setAttribute('data-category', category);
+  }
   // Reload project list with category filter
   loadProjectTable(curTypeFilter);
 }

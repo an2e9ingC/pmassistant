@@ -90,6 +90,7 @@
 .kpi-card {
   background: var(--surface);
   border: 2px solid var(--border);
+  border-left: 4px solid var(--border);
   border-radius: var(--r-lg);
   padding: 16px 18px 14px;
   box-shadow: var(--sh);
@@ -97,14 +98,35 @@
   transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
   user-select: none;
 }
-.kpi-card:hover {
-  border-color: var(--accent);
+.kpi-card:hover { box-shadow: var(--sh-md); }
+
+/* Category-specific colors */
+.kpi-card[data-category="active"] { border-left-color: var(--accent); }
+.kpi-card[data-category="active"] .kpi-value { color: var(--accent); }
+.kpi-card[data-category="active"].active {
+  border-color: var(--accent); background: var(--accent-lt);
   box-shadow: var(--sh-md);
 }
-.kpi-card.active {
-  border-color: var(--accent);
+
+.kpi-card[data-category="completed"] { border-left-color: var(--success); }
+.kpi-card[data-category="completed"] .kpi-value { color: var(--success); }
+.kpi-card[data-category="completed"].active {
+  border-color: var(--success); background: var(--success-lt);
   box-shadow: var(--sh-md);
-  background: var(--accent-lt);
+}
+
+.kpi-card[data-category="high_risk"] { border-left-color: var(--danger); }
+.kpi-card[data-category="high_risk"] .kpi-value { color: var(--danger); }
+.kpi-card[data-category="high_risk"].active {
+  border-color: var(--danger); background: var(--danger-lt);
+  box-shadow: var(--sh-md);
+}
+
+.kpi-card[data-category="incomplete_docs"] { border-left-color: var(--warn); }
+.kpi-card[data-category="incomplete_docs"] .kpi-value { color: var(--warn); }
+.kpi-card[data-category="incomplete_docs"].active {
+  border-color: var(--warn); background: var(--warn-lt);
+  box-shadow: var(--sh-md);
 }
 .kpi-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
 .kpi-value { font-size: 28px; font-weight: 700; letter-spacing: -0.025em; line-height: 1; margin-bottom: 6px; font-variant-numeric: tabular-nums; }
@@ -127,6 +149,12 @@
 .proj-table tbody tr:nth-child(odd) td { background: var(--surface); }
 .proj-table tbody tr:nth-child(even) td { background: var(--bg); }
 .proj-table tbody tr:hover td { background: var(--surface2); }
+
+/* Category-colored left border on project list rows */
+.proj-table[data-category="active"] tbody tr td:first-child { border-left: 3px solid var(--accent); padding-left: 9px; }
+.proj-table[data-category="completed"] tbody tr td:first-child { border-left: 3px solid var(--success); padding-left: 9px; }
+.proj-table[data-category="high_risk"] tbody tr td:first-child { border-left: 3px solid var(--danger); padding-left: 9px; }
+.proj-table[data-category="incomplete_docs"] tbody tr td:first-child { border-left: 3px solid var(--warn); padding-left: 9px; }
 
 .proj-id-cell { display: flex; align-items: center; gap: 10px; }
 .proj-icon {

@@ -209,8 +209,9 @@ def _project_detail(p: CachedProject) -> dict:
             import re as _re
             data = _json.loads(p.raw_json)
             desc = data.get("desc", "") or ""
-            # Extract first 【...】 as customer name
-            m = _re.search(r"【(.+?)】", desc)
+            # Strip HTML tags before extracting customer
+            plain = _re.sub(r"<[^>]+>", "", desc)
+            m = _re.search(r"【([A-Z]{2,6})】", plain)
             if m:
                 customer_from_desc = m.group(1).strip()
         except Exception:
