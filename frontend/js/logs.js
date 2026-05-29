@@ -20,7 +20,12 @@ async function fetchLogs() {
   if (_logSearch) params += '&search=' + encodeURIComponent(_logSearch);
 
   try {
+    // API now returns JSON: {code:0, data:"<log text>", message:"ok"}
+    // API.get extracts the data field automatically
     var text = await API.get('/logs/view?' + params);
+    if (text && typeof text !== 'string') {
+      text = String(text);
+    }
     if (!text || !text.trim()) {
       container.innerHTML = '<div class="empty-state">暂无匹配日志</div>';
       return;

@@ -3,6 +3,7 @@ __pycache__/
 *.pyo
 .env
 data/pma.db
+data/pma.log*
 .venv/
 *.egg-info/
 dist/
