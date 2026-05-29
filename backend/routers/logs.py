@@ -4,22 +4,24 @@ import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
-from backend.database import get_db
+from backend.database import SessionLocal
 from backend.middleware.auth import require_admin
 from backend.models.log_entry import LogEntry
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
 
-LOG_FILE = "data/pma.log"
+# Resolve log file path (same directory as database)
+import backend.database as _db_module
+_db_dir = os.path.dirname(getattr(_db_module, "_db_path", "data/pma.db"))
+LOG_FILE = os.path.join(_db_dir, "pma.log")
 MAX_LINES = 2000
 
 LEVEL_ORDER = {"DEBUG": 10, "INFO": 20, "WARNING": 30, "ERROR": 40, "CRITICAL": 50}
 
 
-def _read_from_db(db: Session, level: Optional[str], search: Optional[str], tail: int) -> list[str]:
+def _read_from_db(db, level, search, tail):
     """Query log entries from database. Returns list of formatted lines."""
     q = db.query(LogEntry)
 
@@ -42,7 +44,7 @@ def _read_from_db(db: Session, level: Optional[str], search: Optional[str], tail
     return lines
 
 
-def _read_from_file(tail: int, level: Optional[str], search: Optional[str]) -> list[str]:
+def _read_from_file(tail, level, search):
     """Fallback: read log lines from file."""
     if not os.path.exists(LOG_FILE):
         return []
@@ -73,15 +75,17 @@ def view_logs(
     level: Optional[str] = Query(None),
     tail: int = Query(200, ge=10, le=MAX_LINES),
     search: Optional[str] = Query(None),
-    db: Session = Depends(get_db),
     _=Depends(require_admin),
 ):
     """Return recent log entries with optional filtering. Admin only."""
     lines = []
+    db = SessionLocal()
     try:
         lines = _read_from_db(db, level, search, tail)
     except Exception:
         pass  # DB table may not exist yet; fall through to file
+    finally:
+        db.close()
 
     if not lines:
         lines = _read_from_file(tail, level, search)
