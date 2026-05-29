@@ -28,7 +28,7 @@ def get_delivery_summary(db: Session, project_id: int) -> dict:
         "done": total_qty,  # All records are delivered by definition
         "remaining": 0,
         "progress": 100 if records else 0,
-        "records": [_record_dict(r) for r in records],
+        "records": [record_dict(r) for r in records],
     }
 
 
@@ -36,7 +36,7 @@ def list_delivery_records(db: Session, project_id: int) -> list[dict]:
     records = db.query(DeliveryRecord).filter(
         DeliveryRecord.project_id == project_id
     ).order_by(DeliveryRecord.delivery_date.desc()).all()
-    return [_record_dict(r) for r in records]
+    return [record_dict(r) for r in records]
 
 
 def create_delivery_record(db: Session, project_id: int, data: dict) -> DeliveryRecord:
@@ -80,7 +80,7 @@ def delete_delivery_record(db: Session, record_id: int) -> bool:
     return True
 
 
-def _record_dict(r: DeliveryRecord) -> dict:
+def record_dict(r: DeliveryRecord) -> dict:
     serials = []
     if r.serial_numbers:
         try:

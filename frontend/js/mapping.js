@@ -294,8 +294,9 @@ function closeLinkDialog() {
 }
 
 async function doLink(id1, id2, type) {
-  var productId = type === 'product' ? id2 : id1;
-  var projectId = type === 'project' ? id2 : id1;
+  // id1 = _linkDialogId (the subject), id2 = the selected item to link
+  var productId = type === 'product' ? id1 : id2;
+  var projectId = type === 'product' ? id2 : id1;
   try {
     await API.post('/products/link', { product_id: productId, project_id: projectId });
     showToast('关联成功', 'success');

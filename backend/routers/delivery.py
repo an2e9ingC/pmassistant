@@ -52,7 +52,7 @@ def create_record(
     data = body.model_dump()
     data["serial_numbers"] = body.serial_numbers or []
     record = delivery_service.create_delivery_record(db, project_id, data)
-    return {"code": 0, "data": delivery_service._record_dict(record), "message": "ok"}
+    return {"code": 0, "data": delivery_service.record_dict(record), "message": "ok"}
 
 
 @router.put("/records/{record_id}", response_model=dict)
@@ -68,7 +68,7 @@ def update_record(
     record = delivery_service.update_delivery_record(db, record_id, data)
     if not record:
         raise HTTPException(status_code=404, detail="Record not found")
-    return {"code": 0, "data": delivery_service._record_dict(record), "message": "ok"}
+    return {"code": 0, "data": delivery_service.record_dict(record), "message": "ok"}
 
 
 @router.delete("/records/{record_id}", response_model=dict)
