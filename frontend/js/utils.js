@@ -32,7 +32,7 @@ function escHtml(str) {
 var _notifQueue = [];
 var _notifUnread = 0;
 
-function showToast(msg, type) {
+function showToast(msg, type, duration) {
   type = type || 'info';
   // Add to notification queue for bell dropdown
   _notifQueue.unshift({ message: msg, type: type, time: new Date().toLocaleTimeString() });
@@ -42,12 +42,13 @@ function showToast(msg, type) {
 
   // Render toast at top-center
   var container = document.getElementById('toast-container');
-  if (!container) return;
+  if (!container) return null;
   var el = document.createElement('div');
   el.className = 'toast ' + type;
   var closeHtml = '';
-  // error/critical: no auto-close, require manual dismissal
-  var autoClose = type !== 'error';
+  // duration=0 means no auto-close; error also defaults to no auto-close
+  var autoClose = (duration !== 0) && (type !== 'error');
+  var ms = (typeof duration === 'number' && duration > 0) ? duration : 4000;
   if (!autoClose) {
     closeHtml = '<button class="toast-close" onclick="this.parentElement.remove()">&times;</button>';
   }
@@ -56,8 +57,9 @@ function showToast(msg, type) {
   if (autoClose) {
     setTimeout(function() {
       if (el.parentElement) el.remove();
-    }, 4000);
+    }, ms);
   }
+  return el;
 }
 
 function updateBellBadge() {

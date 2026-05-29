@@ -69,22 +69,21 @@ function toggleTheme() {
 var _srcStates = { zentao: 'pending', gitlab: 'pending', nas: 'pending' };
 
 function updateLinkStatus() {
-  API.get('/sync/status').then(function(statuses) {
-    if (!statuses || !statuses.length) return;
-
-    var zs = statuses.find(function(s) { return s.entity_type === 'projects'; });
-    if (zs && zs.status === 'success') {
-      _srcStates.zentao = 'ok';
-    } else if (zs && zs.status === 'failed') {
-      _srcStates.zentao = 'err';
-    } else {
-      _srcStates.zentao = 'warn';
-    }
-
-    // GitLab & NAS: not integrated yet
-    _srcStates.gitlab = 'pending';
-    _srcStates.nas = 'pending';
-
+  API.get('/sync/sources').then(function(sources) {
+    if (!sources || !sources.length) return;
+    sources.forEach(function(s) {
+      var key = s.key;
+      if (!_srcStates.hasOwnProperty(key)) return;
+      if (!s.configured) {
+        _srcStates[key] = 'pending'; // 未配置
+      } else if (s.sync_status === 'success') {
+        _srcStates[key] = 'ok';
+      } else if (s.sync_status === 'failed') {
+        _srcStates[key] = 'err';
+      } else {
+        _srcStates[key] = 'warn'; // configured but not synced yet
+      }
+    });
     renderSourceTags();
   }).catch(function() {});
 }
@@ -92,18 +91,18 @@ function updateLinkStatus() {
 function renderSourceTags() {
   var names = { zentao: '禅道', gitlab: 'GitLab', nas: 'NAS' };
   var reasons = {
-    zentao: { warn: '未同步', err: '同步失败', pending: '待同步' },
-    gitlab: { warn: '异常',   err: '故障',     pending: '未配置' },
-    nas:    { warn: '异常',   err: '故障',     pending: '未配置' },
+    zentao: { ok: '', warn: '未同步', err: '同步失败', pending: '待同步' },
+    gitlab: { ok: '', warn: '未同步', err: '同步失败', pending: '未配置' },
+    nas:    { ok: '', warn: '未同步', err: '同步失败', pending: '未配置' },
   };
   ['zentao', 'gitlab', 'nas'].forEach(function(key) {
     var el = document.getElementById('src-' + key);
     if (!el) return;
     var state = _srcStates[key] || 'pending';
     el.className = 'src-tag ' + state;
-    // ok: just source name; others: source + reason
-    el.textContent = state === 'ok' ? names[key] : names[key] + ' ' + (reasons[key][state] || '');
-    el.title = state === 'ok' ? names[key] + '：已同步' : names[key] + '：' + (reasons[key][state] || '');
+    var reason = reasons[key][state] || '';
+    el.textContent = names[key] + (reason ? ' ' + reason : '');
+    el.title = names[key] + '：' + (reason || '已同步');
   });
 }
 

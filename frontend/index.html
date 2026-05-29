@@ -96,7 +96,7 @@
     </div>
 
     <div style="margin-top:8px;text-align:center;font-size:10px;color:var(--muted)">
-      <span id="app-version">v2026.05.29-beta20</span>
+      <span id="app-version">v2026.05.29-beta22</span>
     </div>
     <div style="text-align:center">
       <button onclick="logout()" style="font-size:11px;color:var(--muted);cursor:pointer;background:none;border:none">退出登录</button>
@@ -399,15 +399,36 @@
 async function triggerSync() {
   var btn = document.querySelector('.src-sync-btn');
   if (btn) { btn.disabled = true; btn.style.opacity = '0.4'; }
+
+  // Update tag and show progress toast
+  var ztag = document.getElementById('src-zentao');
+  if (ztag) { ztag.textContent = '禅道 同步中...'; ztag.className = 'src-tag warn'; }
+  var progToast = showToast('正在同步数据，请稍候...', 'info', 0); // 0 = no auto-close
+
   try {
-    await API.post('/sync/trigger');
-    showToast('数据同步完成', 'success');
+    var result = await API.post('/sync/trigger');
+    // Remove progress toast
+    if (progToast && progToast.parentElement) progToast.remove();
+    // Build summary from result data
+    var parts = [];
+    var d = result || {};
+    if (d.users) parts.push('用户' + d.users.fetched);
+    if (d.products) parts.push('产品' + d.products.fetched);
+    if (d.projects) parts.push('项目' + d.projects.fetched);
+    if (d.executions_tasks) {
+      parts.push('执行' + (d.executions_tasks.executions_fetched || 0));
+      parts.push('任务' + (d.executions_tasks.tasks_fetched || 0));
+    }
+    showToast('数据同步完成（' + parts.join(' / ') + '）', 'success');
+    if (_srcStates) { _srcStates.zentao = 'ok'; renderSourceTags(); }
     updateLinkStatus();
     if (document.getElementById('view-dashboard').classList.contains('active')) {
       renderDashboard();
     }
   } catch(e) {
+    if (progToast && progToast.parentElement) progToast.remove();
     showToast('同步失败: ' + (e.message || '未知错误'), 'error');
+    if (_srcStates) { _srcStates.zentao = 'err'; renderSourceTags(); }
   }
   if (btn) { btn.disabled = false; btn.style.opacity = ''; }
 }

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
+from backend.config import settings
 from backend.database import get_db
 from backend.middleware.auth import get_current_user, require_admin
 from backend.models.local import SyncLog
@@ -75,3 +76,51 @@ def sync_history(
             "error_message": log.error_message,
         })
     return {"code": 0, "data": items, "message": "ok"}
+
+
+@router.get("/sources", response_model=dict)
+def sync_sources(db: Session = Depends(get_db), _=Depends(get_current_user)):
+    """Return configuration and sync status for all data sources."""
+    sources = []
+
+    # Zentao — always configured (required)
+    zentao_log = (
+        db.query(SyncLog)
+        .filter(SyncLog.entity_type == "projects")
+        .order_by(SyncLog.started_at.desc())
+        .first()
+    )
+    zentao_status = "pending"
+    if zentao_log:
+        zentao_status = zentao_log.status if zentao_log.status != "running" else "ok"
+    sources.append({
+        "key": "zentao",
+        "name": "禅道",
+        "configured": True,
+        "sync_status": zentao_status,
+        "last_sync": zentao_log.finished_at.isoformat() if (zentao_log and zentao_log.finished_at) else None,
+        "description": "项目管理（项目/迭代/任务/Bug）",
+    })
+
+    # GitLab — configured if token is set
+    gitlab_configured = bool(settings.GITLAB_TOKEN)
+    sources.append({
+        "key": "gitlab",
+        "name": "GitLab",
+        "configured": gitlab_configured,
+        "sync_status": "pending",
+        "last_sync": None,
+        "description": "代码仓库（commit统计、发布验证）" if gitlab_configured else "代码仓库（未配置Token）",
+    })
+
+    # NAS — not yet integrated
+    sources.append({
+        "key": "nas",
+        "name": "NAS",
+        "configured": False,
+        "sync_status": "pending",
+        "last_sync": None,
+        "description": "文件存储（售前项目检测、交付文档）",
+    })
+
+    return {"code": 0, "data": sources, "message": "ok"}
