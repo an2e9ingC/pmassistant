@@ -80,6 +80,20 @@
 - 项目风险自动提示
 - Trigger alerts based on task completion status and missing deliverables
 
+**FR-026**: Dashboard category filter cards (首页分类筛选卡片)
+- 顶部4个卡片作为项目分类入口: 进行中 (In Progress)、已完成 (Completed)、高风险 (High Risk)、资料不全 (Incomplete Docs)
+- 点击卡片后下方项目列表自动过滤出对应分类的项目
+- 当前选中的卡片突出显示（高亮边框或背景色），明确指示当前筛选类型
+- 卡片上显示各分类的项目数量统计
+
+**Category Definitions / 分类定义**:
+| 分类 | 筛选规则 | 卡片颜色 |
+|------|---------|---------|
+| 进行中 (In Progress) | 项目状态 != 已完成 (Completed) | 🟢 绿色/蓝色 |
+| 已完成 (Completed) | 项目状态 = 已完成 | ⚪ 灰色/绿色 |
+| 高风险 (High Risk) | 存在阶段超期或阻塞卡点 | 🔴 红色 |
+| 资料不全 (Incomplete Docs) | 存在输出件缺失或Gitlab未发布 | 🟡 黄色/橙色 |
+
 ### 3.2 Product-Project-Customer Mapping / 产品项目客户映射
 
 **FR-005**: Relationship view similar to Obsidian/Xmind graph
@@ -174,6 +188,26 @@
 3. 外协合同签署 (提供编号)
 4. 执行进度监控
 5. 外协验收 → 输出验收报告
+
+### 3.8 Product Management / 产品管理
+
+**FR-027**: Product list with category filtering and search (产品列表及分类筛选搜索)
+- 左侧按产品线分类（存储/频谱/航电/电磁/综合），点击分类快速过滤对应产品列表
+- 产品列表支持模糊搜索: 基于产品名、产品标签 (Product Tags) 等关键词搜索
+- 产品列表包含信息: 产品名 (Product Name)、产品描述 (Product Description)、产品标签 (Product Tags)
+- 点击产品列表中的具体产品，自动跳转到对应的产品详情页
+
+**FR-028**: Product tags extraction from Zentao (产品标签提取)
+- 产品标签从禅道产品描述字段中按关键词提取
+- 标签格式: `#关键词` (e.g., `#全国产`、`#双V7`、`#PCIe卡`、`#采集存储一体机`、`#采集回放`)
+- 常见标签关键词参考: 全国产、双V7、单V7、PCIe卡、PXIe卡、VPX卡、采集存储一体机、采集回放、信号处理、频谱监测、航电仿真、电磁兼容等
+- 系统自动解析禅道产品描述中的 `#标签` 并展示在产品列表和详情页中
+
+**FR-029**: Product detail page (产品详情页)
+- 展示从禅道获取的所有产品信息，按照统一风格呈现
+- 至少包含: 产品名称、产品描述、产品线分类、产品标签、关联项目列表、关联客户列表
+- 关联项目支持点击跳转到对应项目详情页
+- 产品详情页包含产品的软硬件交付资料汇总（关联自 FR-007/FR-008）
 
 ---
 
@@ -384,6 +418,8 @@ Phase → Deliverable: One-to-Many
 | 产品映射 (Product Mapping) | Product↔Project关系图谱, 4种视图 | view-mapping |
 | 交付管理 (Delivery Management) | 交付状态追踪 | 交付状态Tab |
 | 报表中心 (Reports) | 统计报告 | 统计报告(即将上线) |
+| 产品列表 (Product List) | 按产品线分类浏览，支持搜索和标签筛选 | (新增) |
+| 产品详情 (Product Detail) | 产品完整信息、关联项目、交付资料汇总 | (新增) |
 
 **页面公共组件** (参考Demo):
 - 左侧Sidebar: 品牌Logo + 导航菜单 + 数据源状态 + 主题切换
@@ -435,6 +471,18 @@ Phase → Deliverable: One-to-Many
 **FR-025**: Theme switching
 - 支持浅色/深色主题切换
 - Demo: 通过`data-theme="light/dark"`控制
+
+**FR-030**: Product sidebar navigation (产品侧边栏导航)
+- 左侧Sidebar增加与"工作台"、"报表"同级的"产品"分类
+- "产品"分类下至少包含"产品列表"、"产品详情"两个选项卡
+- 产品列表按产品线分类（存储/频谱/航电/电磁/综合），点击分类快速过滤
+- 当前选中的产品和产品线分类高亮显示
+
+**FR-031**: Product list card style (产品列表卡片样式)
+- 产品列表以卡片形式展示，每个卡片包含: 产品名、产品描述（截断显示）、产品标签（标签气泡样式）
+- 产品标签以 `#标签名` 气泡/badge 形式展示，颜色区分不同类别标签
+- 支持产品名和标签的模糊搜索，搜索框位于产品列表上方
+- 搜索结果实时过滤，高亮匹配关键词
 
 ---
 
