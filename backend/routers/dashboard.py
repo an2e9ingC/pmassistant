@@ -89,6 +89,17 @@ def _project_list_item(p) -> dict:
         active = [e for e in exc if e.status in ("doing",)]
         current_stage = (active[0].name if active else exc[-1].name) if exc else None
 
+    # Customer: prefer stored value, fallback to on-the-fly extraction
+    customer = p.customer_name or ""
+    if not customer:
+        customer = _extract_customer_fallback(p)
+
+    # Tags: prefer stored value, fallback to on-the-fly extraction from raw_json desc
+    tags_str = p.tags or ""
+    if not tags_str:
+        tags_str = _extract_tags_fallback(p)
+    tags_list = tags_str.split(",") if tags_str else []
+
     return {
         "id": p.id,
         "code": p.code,
@@ -100,5 +111,49 @@ def _project_list_item(p) -> dict:
         "end": str(p.end) if p.end else None,
         "pm_name": p.pm_name,
         "current_stage": current_stage,
-        "customer_name": p.customer_name,
+        "customer_name": customer,
+        "description": p.description or "",
+        "tags": tags_str,
+        "tags_list": tags_list,
     }
+
+
+def _extract_customer_fallback(p) -> str:
+    """Extract customer from project name or raw_json desc as fallback."""
+    import re as _re
+    # Try project name pattern: PE0406-CDLY-xxx -> CDLY
+    if p.name:
+        parts = p.name.split("-")
+        if len(parts) >= 2:
+            second = parts[1].strip()
+            if _re.match(r"^[A-Z]{2,6}$", second):
+                return second
+    # Fallback to 【...】 in raw_json desc (strip HTML tags first)
+    if p.raw_json:
+        try:
+            import json as _json
+            data = _json.loads(p.raw_json)
+            desc = data.get("desc", "") or ""
+            plain = _re.sub(r"<[^>]+>", "", desc)
+            m = _re.search(r"【([A-Z]{2,6})】", plain)
+            if m:
+                return m.group(1).strip()
+        except Exception:
+            pass
+    return ""
+
+
+def _extract_tags_fallback(p) -> str:
+    """Extract #tags from project raw_json desc as fallback."""
+    import re as _re
+    if p.raw_json:
+        try:
+            import json as _json
+            data = _json.loads(p.raw_json)
+            desc = data.get("desc", "") or ""
+            plain = _re.sub(r"<[^>]+>", "", desc)
+            tags = _re.findall(r"#([\w一-鿿]+)", plain)
+            return ",".join(tags) if tags else ""
+        except Exception:
+            pass
+    return ""

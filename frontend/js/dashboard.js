@@ -85,7 +85,7 @@ async function loadProjectTable(filter) {
   if (filter && filter !== 'all') params.type = filter;
 
   var tbody = document.getElementById('proj-tbody');
-  tbody.innerHTML = '<tr><td colspan="7"><div class="loading-spinner">加载中...</div></td></tr>';
+  tbody.innerHTML = '<tr><td colspan="9"><div class="loading-spinner">加载中...</div></td></tr>';
 
   try {
     var query = Object.keys(params).map(function(k) {
@@ -95,28 +95,38 @@ async function loadProjectTable(filter) {
     var list = data.items || [];
 
     if (!list.length) {
-      tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state">未找到匹配项目</div></td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state">未找到匹配项目</div></td></tr>';
       return;
     }
 
     tbody.innerHTML = list.map(function(p) {
       var fc = p.status === 'blocked' ? 'red' : (parseFloat(p.progress) >= 100 ? 'green' : 'blue');
-      var custName = p.customer_name || p.name;
+      var projCode = extractProjectCode(p.name);
+      var coreName = extractCoreName(p.name);
+      // Tags: show max 3, or "无" if none
+      var tagsList = p.tags_list || [];
+      var tagsHtml = '';
+      if (tagsList.length > 0 && tagsList[0] !== '') {
+        tagsHtml = tagsList.slice(0, 3).map(function(t) {
+          return '<span class="tag-badge tag-' + (t.length % 5) + '">#' + escHtml(t) + '</span>';
+        }).join(' ');
+      } else {
+        tagsHtml = '<span style="font-size:11.5px;color:var(--muted)">无</span>';
+      }
       return '<tr onclick="openProject(\'' + p.id + '\')">' +
-        '<td><div class="proj-id-cell">' +
-          renderProjIcon(p.type, p.code) +
-          '<div><div class="proj-name">' + escHtml(custName) + '</div><div class="proj-code">' + escHtml(p.code || p.name) + '</div></div>' +
-        '</div></td>' +
+        '<td>' + renderProjIcon(p.type, projCode) + '</td>' +
+        '<td><div class="proj-name">' + escHtml(coreName) + '</div><div class="proj-code">' + escHtml(projCode) + '</div></td>' +
+        '<td>' + renderCustomerBadge(p.customer_name) + '</td>' +
         '<td>' + renderTypeBadge(p.type) + '</td>' +
-        '<td style="font-size:13px">' + escHtml(p.pm_name || '—') + '</td>' +
         '<td style="font-size:13px">' + escHtml(p.current_stage || '—') + '</td>' +
         '<td>' + renderPill(p.status) + '</td>' +
         '<td class="prog-cell">' + renderProgressBar(p.progress, p.status) + '</td>' +
         '<td style="font-size:12.5px;color:' + (p.end ? 'var(--muted)' : 'var(--warn)') + '">' + (p.end ? formatDate(p.end) : '长期') + '</td>' +
+        '<td>' + tagsHtml + '</td>' +
       '</tr>';
     }).join('');
   } catch(e) {
-    tbody.innerHTML = '<tr><td colspan="7"><div class="error-state">加载失败: ' + escHtml(e.message) + '<br><button onclick="loadProjectTable(\'' + filter + '\')">重试</button></div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9"><div class="error-state">加载失败: ' + escHtml(e.message) + '<br><button onclick="loadProjectTable(\'' + filter + '\')">重试</button></div></td></tr>';
   }
 }
 

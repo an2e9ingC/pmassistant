@@ -80,6 +80,28 @@ def _extract_tags_from_desc(desc: str) -> str:
     return ",".join(tags) if tags else ""
 
 
+def _extract_customer(name: str, desc: str) -> str:
+    """Extract customer abbreviation from project name or description.
+    Project name format: PE0406-CDLY-xxx  ->  CDLY
+    Description format: 【CDLY】xxx       ->  CDLY
+    Returns the extracted customer name or empty string."""
+    # Try project name pattern: PE0406-CDLY-xxx -> CDLY
+    if name:
+        parts = name.split("-")
+        if len(parts) >= 2:
+            second = parts[1].strip()
+            # Customer abbreviations are typically 2-4 uppercase letters
+            if re.match(r"^[A-Z]{2,6}$", second):
+                return second
+    # Fallback to 【...】 in description (strip HTML tags first)
+    if desc:
+        plain = re.sub(r"<[^>]+>", "", desc)
+        m = re.search(r"【([A-Z]{2,6})】", plain)
+        if m:
+            return m.group(1).strip()
+    return ""
+
+
 def _log_sync(db: Session, entity_type: str) -> SyncLog:
     log = SyncLog(
         started_at=datetime.now(timezone.utc),
@@ -406,8 +428,10 @@ class SyncService:
 
     def _build_project(self, p: dict) -> CachedProject:
         pm = p.get("PM", {}) or {}
+        name = p.get("name", "")
+        desc = p.get("desc", "") or ""
         return CachedProject(
-            id=p["id"], code=p.get("code", ""), name=p.get("name", ""),
+            id=p["id"], code=p.get("code", ""), name=name,
             model=p.get("model", ""), status=p.get("status", ""),
             begin=_parse_date(p.get("begin")), end=_parse_date(p.get("end")),
             real_began=_parse_date(p.get("realBegan")),
@@ -416,13 +440,18 @@ class SyncService:
             consumed=_parse_float(p.get("consumed")) or 0.0,
             pm_name=pm.get("realname") or pm.get("account", ""),
             pm_account=pm.get("account", ""),
+            customer_name=_extract_customer(name, desc),
+            description=desc,
+            tags=_extract_tags_from_desc(desc),
             raw_json=json.dumps(p, ensure_ascii=False),
         )
 
     def _update_project(self, existing: CachedProject, p: dict) -> int:
         pm = p.get("PM", {}) or {}
+        name = p.get("name", existing.name)
+        desc = p.get("desc", "") or ""
         existing.code = p.get("code", existing.code)
-        existing.name = p.get("name", existing.name)
+        existing.name = name
         existing.model = p.get("model", existing.model)
         existing.status = p.get("status", existing.status)
         existing.begin = _parse_date(p.get("begin")) or existing.begin
@@ -434,6 +463,9 @@ class SyncService:
         existing.consumed = _parse_float(p.get("consumed")) or existing.consumed
         existing.pm_name = pm.get("realname") or pm.get("account", existing.pm_name)
         existing.pm_account = pm.get("account", existing.pm_account)
+        existing.customer_name = _extract_customer(name, desc) or existing.customer_name
+        existing.description = desc
+        existing.tags = _extract_tags_from_desc(desc)
         existing.raw_json = json.dumps(p, ensure_ascii=False)
         existing.synced_at = datetime.now(timezone.utc)
         return 1

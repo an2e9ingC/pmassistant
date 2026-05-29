@@ -31,11 +31,13 @@ function renderComboOptions(q) {
   return list.map(function(p) {
     var cls = p.id == _comboCurId ? 'combo-opt selected' : 'combo-opt';
     var typeTxt = TYPE_TXT[p.project_type] || p.project_type || '研发';
+    var projCode = extractProjectCode(p.name);
+    var coreName = extractCoreName(p.name);
     return '<div class="' + cls + '" onclick="selectComboProject(' + p.id + ')">' +
-      renderProjIcon(p.project_type, p.code) +
+      renderProjIcon(p.project_type, projCode) +
       '<div style="min-width:0">' +
-        '<div class="combo-opt-name">' + escHtml(p.customer_name || p.name) + '</div>' +
-        '<div class="combo-opt-meta">' + escHtml(p.code || p.name) + ' · ' + typeTxt + '项目 · ' + escHtml(p.status || '') + '</div>' +
+        '<div class="combo-opt-name">' + escHtml(coreName) + '</div>' +
+        '<div class="combo-opt-meta">' + escHtml(projCode) + ' · ' + typeTxt + '项目' + (p.customer_name ? ' · ' + escHtml(p.customer_name) : '') + '</div>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -135,19 +137,24 @@ function buildDetailHeader(p) {
     dateHtml = '计划时间待定';
   }
 
+  var projCode = extractProjectCode(p.name);
+  var coreName = extractCoreName(p.name);
   document.getElementById('detail-header').innerHTML =
     '<div class="detail-meta">' +
-      '<div class="detail-title">' + escHtml(p.alias_name || p.name) + '</div>' +
+      '<div class="detail-title">' +
+        '<span class="proj-code-tag">' + escHtml(projCode) + '</span> ' +
+        escHtml(coreName) +
+      '</div>' +
       '<div class="detail-sub">' +
         '<span class="meta-item">' +
           '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><polyline points="8,4.5 8,8 10.5,10"/></svg>' +
           dateHtml +
         '</span>' +
-        renderTypeBadge(p.project_type) +
         '<span class="meta-item">' +
-          '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3 2.7-5 6-5s6 2 6 5"/></svg>' +
-          (p.pm_name ? '项目经理：' + escHtml(p.pm_name) : '项目经理：<span style="color:var(--muted)">待指定</span>') +
+          '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1.5"/><line x1="5" y1="8" x2="11" y2="8"/><line x1="5" y1="11" x2="9" y2="11"/></svg>' +
+          (p.customer_name ? escHtml(p.customer_name) : '<span style="color:var(--muted)">—</span>') +
         '</span>' +
+        renderTypeBadge(p.project_type) +
         renderPill(p.status) +
       '</div>' +
     '</div>' +

@@ -167,9 +167,36 @@ def _project_brief(p: CachedProject) -> dict:
         "code": p.code,
         "name": p.name,
         "project_type": p.project_type,
-        "customer_name": p.customer_name,
+        "customer_name": _resolve_customer(p),
         "status": _map_status(p.status),
     }
+
+
+def _resolve_customer(p: CachedProject) -> str:
+    """Resolve customer from stored field, with on-the-fly fallback."""
+    if p.customer_name:
+        return p.customer_name
+    # Fallback: parse project name PE0406-CDLY-xxx -> CDLY
+    if p.name:
+        parts = p.name.split("-")
+        if len(parts) >= 2:
+            import re
+            second = parts[1].strip()
+            if re.match(r"^[A-Z]{2,6}$", second):
+                return second
+    # Fallback: parse 【...】 from raw_json desc (strip HTML tags first)
+    if p.raw_json:
+        try:
+            import re, json as _json
+            data = _json.loads(p.raw_json)
+            desc = data.get("desc", "") or ""
+            plain = re.sub(r"<[^>]+>", "", desc)
+            m = re.search(r"【([A-Z]{2,6})】", plain)
+            if m:
+                return m.group(1).strip()
+        except Exception:
+            pass
+    return ""
 
 
 def _project_detail(p: CachedProject) -> dict:

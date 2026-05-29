@@ -77,3 +77,28 @@ function clearBellUnread() {
   _notifUnread = 0;
   updateBellBadge();
 }
+
+// Extract project code from name: "PE0406-CDLY-xxx" -> "PE0406"
+function extractProjectCode(name) {
+  if (!name) return '';
+  return name.split('-')[0] || '';
+}
+
+// Extract core project name: "PE0406-CDLY-全国产存储板卡" -> "全国产存储板卡"
+// "PE9004-PMAssistant" -> "PMAssistant"
+function extractCoreName(name) {
+  if (!name) return '';
+  var parts = name.split('-');
+  // First segment is always project code (PE0406, PE9004, etc.)
+  // If second segment looks like customer abbreviation (2-6 uppercase), strip it too
+  if (parts.length >= 2 && /^[A-Z]{2,6}$/.test(parts[1])) {
+    return parts.slice(2).join('-') || parts[1]; // fallback to customer if nothing left
+  }
+  return parts.slice(1).join('-') || name;
+}
+
+// Render customer badge: small icon-style abbreviation
+function renderCustomerBadge(customerName) {
+  if (!customerName) return '<span style="font-size:12px;color:var(--muted)">—</span>';
+  return '<span class="cust-badge">' + escHtml(customerName) + '</span>';
+}

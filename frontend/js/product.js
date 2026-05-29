@@ -234,14 +234,16 @@ function renderProdDetailProjects(p) {
     return;
   }
   tbody.innerHTML = projects.map(function(proj) {
+    var projCode = extractProjectCode(proj.name);
+    var coreName = extractCoreName(proj.name);
     return '<tr onclick="openProject(\'' + proj.id + '\')" style="cursor:pointer">' +
       '<td><div class="proj-id-cell">' +
-        renderProjIcon(proj.project_type, proj.code) +
-        '<div><div class="proj-name">' + escHtml(proj.name) + '</div><div class="proj-code">' + escHtml(proj.code || '') + '</div></div>' +
+        renderProjIcon(proj.project_type, projCode) +
+        '<div><div class="proj-name">' + escHtml(coreName) + '</div><div class="proj-code">' + escHtml(projCode) + '</div></div>' +
       '</div></td>' +
+      '<td>' + renderCustomerBadge(proj.customer_name) + '</td>' +
       '<td>' + renderTypeBadge(proj.project_type) + '</td>' +
       '<td>' + renderPill(proj.status) + '</td>' +
-      '<td style="font-size:13px">' + escHtml(proj.customer_name || '—') + '</td>' +
     '</tr>';
   }).join('');
 }

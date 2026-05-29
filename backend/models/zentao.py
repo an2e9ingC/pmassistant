@@ -30,6 +30,9 @@ class CachedProject(Base):
     project_type = Column(String(16), default="RD")
     alias_name = Column(String(256), nullable=True)
     customer_name = Column(String(256), nullable=True)
+    # Extracted from Zentao project desc
+    description = Column(Text, nullable=True)
+    tags = Column(Text, nullable=True)  # comma-separated #tags extracted from desc
     raw_json = Column(Text)
     synced_at = Column(DateTime, default=func.now())
 
