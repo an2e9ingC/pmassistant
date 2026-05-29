@@ -23,6 +23,11 @@ async function loadKpiCards() {
     document.getElementById('alert-badge').textContent = data.pending_alerts;
     var pip = document.getElementById('notif-pip');
     if (pip) pip.style.display = data.pending_alerts > 0 ? 'block' : 'none';
+    // If KPI loads, sync data exists — mark Zentao as synced
+    if (_srcStates && _srcStates.zentao === 'pending') {
+      _srcStates.zentao = 'ok';
+      renderSourceTags();
+    }
     document.getElementById('kpi-delivered').textContent = data.delivered_this_month;
     document.getElementById('kpi-progress').innerHTML = data.avg_progress + '<span style="font-size:18px;font-weight:500">%</span>';
   } catch(e) {

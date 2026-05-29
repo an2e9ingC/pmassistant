@@ -64,49 +64,50 @@ function toggleTheme() {
   localStorage.setItem('pm_theme', next);
 }
 
-/* Data Source Status */
+/* Data Source Status — topbar tags */
+
+var _srcStates = { zentao: 'pending', gitlab: 'pending', nas: 'pending' };
 
 function updateLinkStatus() {
   API.get('/sync/status').then(function(statuses) {
     if (!statuses || !statuses.length) return;
 
-    // Zentao status
-    var zentaoStatus = statuses.find(function(s) { return s.entity_type === 'projects'; });
-    updateStatusBadge('status-zentao', zentaoStatus);
-
-    // Overall: check if all entities have recent successful syncs
-    var allOk = statuses.every(function(s) { return s.status === 'success'; });
-    var partialOk = statuses.some(function(s) { return s.status === 'success'; });
-    var nasBadge = document.getElementById('status-nas');
-    if (allOk) {
-      nasBadge.className = 'link-status-badge ok';
-      nasBadge.textContent = '✓ 已配置';
-    } else if (partialOk) {
-      nasBadge.className = 'link-status-badge warn';
-      nasBadge.textContent = '⚠ 部分配置';
+    var zs = statuses.find(function(s) { return s.entity_type === 'projects'; });
+    if (zs && zs.status === 'success') {
+      _srcStates.zentao = 'ok';
+    } else if (zs && zs.status === 'failed') {
+      _srcStates.zentao = 'err';
     } else {
-      nasBadge.className = 'link-status-badge err';
-      nasBadge.textContent = '✗ 未配置';
+      _srcStates.zentao = 'warn';
     }
 
-    // GitLab status
-    updateStatusBadge('status-gitlab', null);
+    // GitLab & NAS: not integrated yet
+    _srcStates.gitlab = 'pending';
+    _srcStates.nas = 'pending';
+
+    renderSourceTags();
   }).catch(function() {});
 }
 
-function updateStatusBadge(elId, status) {
-  var el = document.getElementById(elId);
-  if (!el) return;
-  if (status && status.status === 'success') {
-    el.className = 'link-status-badge ok';
-    el.textContent = '✓ 已同步';
-  } else if (status && status.status === 'failed') {
-    el.className = 'link-status-badge err';
-    el.textContent = '✗ 同步失败';
-  } else {
-    el.className = 'link-status-badge warn';
-    el.textContent = '⚠ 未同步';
-  }
+function renderSourceTags() {
+  var labels = {
+    zentao: { ok: '禅道 已同步', warn: '禅道 异常', err: '禅道 失败', pending: '禅道 待同步' },
+    gitlab: { ok: 'GitLab 正常', warn: 'GitLab 异常', err: 'GitLab 故障', pending: 'GitLab 未配置' },
+    nas:    { ok: 'NAS 正常',    warn: 'NAS 异常',    err: 'NAS 故障',    pending: 'NAS 未配置' },
+  };
+  ['zentao', 'gitlab', 'nas'].forEach(function(key) {
+    var el = document.getElementById('src-' + key);
+    if (!el) return;
+    var state = _srcStates[key] || 'pending';
+    el.className = 'src-tag ' + state;
+    el.textContent = labels[key][state] || key;
+    // Tooltip with sync time for Zentao
+    if (key === 'zentao' && state === 'ok') {
+      el.title = '禅道：已同步';
+    } else if (key === 'zentao') {
+      el.title = '禅道：未同步，点击同步按钮获取数据';
+    }
+  });
 }
 
 /* Alert Notification Dropdown */
@@ -188,7 +189,8 @@ function init() {
     document.getElementById('user-name').textContent = user.display_name + ' · ' + user.role;
   }
 
-  // Data source status
+  // Data source status — render defaults immediately, then update
+  renderSourceTags();
   updateLinkStatus();
 
   // Navigate to saved view or dashboard
