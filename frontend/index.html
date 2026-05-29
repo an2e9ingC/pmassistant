@@ -129,7 +129,7 @@
     </div>
 
     <div style="margin-top:8px;text-align:center;font-size:10px;color:var(--muted)">
-      <span id="app-version">v2026.05.29-beta12</span>
+      <span id="app-version">v2026.05.29-beta13</span>
     </div>
     <div style="text-align:center">
       <button onclick="logout()" style="font-size:11px;color:var(--muted);cursor:pointer;background:none;border:none">退出登录</button>
@@ -362,25 +362,29 @@
     <div class="view" id="view-logs">
       <div class="section-hd">
         <div class="section-title">系统日志</div>
-        <div class="section-acts" style="gap:6px">
+        <div class="section-acts" style="gap:8px">
           <div class="search-wrap" style="max-width:200px">
             <svg class="search-ico" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>
             <input class="search-inp" placeholder="搜索日志..." oninput="onLogSearch(this.value)">
           </div>
-          <div class="tabs" id="log-level-filter">
-            <div class="tab active log-lvl-btn" id="log-lvl-all" onclick="setLogLevel('')">全部</div>
-            <div class="tab log-lvl-btn" id="log-lvl-DEBUG" onclick="setLogLevel('DEBUG')">DEBUG</div>
-            <div class="tab log-lvl-btn" id="log-lvl-INFO" onclick="setLogLevel('INFO')">INFO</div>
-            <div class="tab log-lvl-btn" id="log-lvl-WARNING" onclick="setLogLevel('WARNING')">WARN</div>
-            <div class="tab log-lvl-btn" id="log-lvl-ERROR" onclick="setLogLevel('ERROR')">ERROR</div>
-          </div>
-          <div class="tabs" id="log-tail-filter">
-            <div class="tab log-tail-btn" id="log-tail-100" onclick="setLogTail(100)">100行</div>
-            <div class="tab active log-tail-btn" id="log-tail-200" onclick="setLogTail(200)">200行</div>
-            <div class="tab log-tail-btn" id="log-tail-500" onclick="setLogTail(500)">500行</div>
-          </div>
-          <button class="btn" id="log-refresh-btn" onclick="toggleLogAutoRefresh()" style="font-size:11px;padding:4px 10px">自动刷新</button>
-          <button class="btn" onclick="fetchLogs()" style="font-size:11px;padding:4px 10px">刷新</button>
+          <label style="font-size:11px;color:var(--muted)">级别</label>
+          <select class="log-select" id="log-level-select" onchange="setLogLevel()">
+            <option value="INFO" selected>INFO（默认）</option>
+            <option value="DEBUG">DEBUG</option>
+            <option value="WARNING">WARNING</option>
+            <option value="ERROR">ERROR</option>
+            <option value="CRITICAL">CRITICAL</option>
+          </select>
+          <label style="font-size:11px;color:var(--muted)">行数</label>
+          <select class="log-select" id="log-tail-select" onchange="setLogTail()">
+            <option value="100">100 条</option>
+            <option value="200" selected>200 条</option>
+            <option value="500">500 条</option>
+            <option value="1000">1000 条</option>
+          </select>
+          <button class="btn" id="log-refresh-btn" onclick="toggleLogAutoRefresh()" style="font-size:11px;padding:4px 10px">停止刷新</button>
+          <button class="btn" onclick="fetchLogs()" style="font-size:11px;padding:4px 10px">立即刷新</button>
+          <span style="font-size:10.5px;color:var(--muted)" id="log-status"></span>
         </div>
       </div>
       <div class="card log-container" id="log-content">

@@ -206,6 +206,27 @@ database is locked
 
 - 确保只有一个 uvicorn worker 在运行（不要在启动时用 `--workers > 1`）
 
+### 系统日志查看
+
+PMA 自动记录日志到两个位置：
+
+| 存储位置 | 路径/表 | 说明 |
+|---------|---------|------|
+| 文件日志 | `data/pma.log`（+ `pma.log.1/2/3` 滚动备份） | RotatingFileHandler，单文件 5MB |
+| 数据库日志 | `log_entries` 表 | 每次请求自动写入，按时间戳+级别索引，持久保留 |
+
+**前端日志查看器**（管理员专用）：
+1. 侧边栏「管理」→「系统日志」
+2. 下拉选择日志级别（INFO/DEBUG/WARNING/ERROR/CRITICAL）
+3. 下拉选择显示条数（100/200/500/1000）
+4. 支持关键词搜索
+5. 默认 15 秒自动刷新（错误级别越高刷新越快：ERROR=5s, CRITICAL=3s）
+
+**数据库直接查询**：
+```sql
+sqlite3 data/pma.db "SELECT timestamp, level, logger, message FROM log_entries ORDER BY timestamp DESC LIMIT 50;"
+```
+
 ### 端口被占用
 
 ```
@@ -236,6 +257,8 @@ pma/
 │   ├── css/          # 样式
 │   └── js/           # 脚本
 ├── data/             # SQLite 数据文件（自动生成）
+│   ├── pma.db        # 主数据库
+│   └── pma.log*      # 运行日志文件（滚动，.gitignore）
 ├── docker-compose.yml
 ├── Dockerfile
 ├── requirements.txt

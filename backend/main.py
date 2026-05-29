@@ -1,4 +1,5 @@
 import logging
+import os as _os
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 
@@ -10,6 +11,9 @@ from fastapi.responses import FileResponse
 from backend.config import settings
 from backend.database import init_db
 from backend.routers import auth, dashboard, projects, sync, products, delivery, reports, logs
+
+# Ensure data directory exists
+_os.makedirs("data", exist_ok=True)
 
 # File log handler (persistent, for log viewer page)
 _file_handler = RotatingFileHandler(
@@ -30,7 +34,13 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     logger.info("Starting PMA backend...")
     init_db()
-    logger.info("Database initialized")
+    # Add database log handler after tables are created
+    from backend.services.log_handler import DatabaseLogHandler
+    _db_handler = DatabaseLogHandler()
+    _db_handler.setFormatter(logging.Formatter("%(message)s"))
+    _db_handler.setLevel(logging.DEBUG)
+    logging.getLogger().addHandler(_db_handler)
+    logger.info("Database initialized + DB log handler attached")
     yield
     logger.info("Shutting down PMA backend...")
 
