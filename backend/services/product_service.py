@@ -120,31 +120,53 @@ def get_mapping_overview(db: Session) -> dict:
     }
 
 
+def _extract_customers_from_desc(p: CachedProduct) -> list[str]:
+    """Extract customer names from 【...】 markers in product description."""
+    import re
+    if not p.raw_json:
+        return []
+    try:
+        import json as _json
+        data = _json.loads(p.raw_json)
+        desc = data.get("desc", "") or ""
+    except Exception:
+        return []
+    # Find all 【...】 patterns and extract content inside
+    return re.findall(r"【(.+?)】", desc)
+
+
 def _product_item(p: CachedProduct, db: Session) -> dict:
     link_count = db.query(ProductProjectLink).filter(
         ProductProjectLink.product_id == p.id
     ).count()
+    # Use program_name from Zentao product line, fallback to PMA-local category
+    cat = p.program_name or p.category
     return {
         "id": p.id, "code": p.code, "name": p.name,
         "type": p.type, "status": p.status,
-        "category": p.category,
+        "category": cat,
+        "program_name": p.program_name,
         "project_count": link_count,
     }
 
 
 def _product_detail(p: CachedProduct, db: Session) -> dict:
     projects = get_product_projects(db, p.id)
+    cat = p.program_name or p.category
+    customers = _extract_customers_from_desc(p)
     return {
         "id": p.id, "code": p.code, "name": p.name,
         "type": p.type, "status": p.status,
         "program_id": p.program_id,
+        "program_name": p.program_name,
         "total_stories": p.total_stories,
         "total_bugs": p.total_bugs,
         "releases": p.releases,
-        "category": p.category,
+        "category": cat,
         "nas_path": p.nas_path,
         "git_url": p.git_url,
         "pma_customer": p.pma_customer,
+        "customers_from_desc": customers,
         "projects": projects,
         "project_count": len(projects),
     }

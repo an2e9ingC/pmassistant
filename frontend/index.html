@@ -315,16 +315,91 @@
 
     <!-- ══════════════════════ VIEW 3 — MAPPING ══════════════════════ -->
     <div class="view" id="view-mapping">
-      <div class="map-overview" id="map-overview">
-        <div class="loading-spinner">加载中...</div>
+
+      <div class="map-toolbar">
+        <div class="search-wrap">
+          <svg class="search-ico" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>
+          <input class="search-inp" id="map-search" placeholder="搜索产品/项目/客户（支持模糊匹配）…" oninput="filterMapCards(this.value)">
+        </div>
+        <div class="tabs" id="map-tabs">
+          <div class="tab active" onclick="switchMapTab('product',this)">从产品查项目</div>
+          <div class="tab" onclick="switchMapTab('customer',this)">从客户查项目</div>
+          <div class="tab" onclick="switchMapTab('projectid',this)">按项目查产品</div>
+          <div class="tab" onclick="switchMapTab('matrix',this)">关系矩阵</div>
+        </div>
       </div>
-      <div class="map-tabs">
-        <div class="map-tab active" id="maptab-product" onclick="switchMapMode('product')">按产品查看</div>
-        <div class="map-tab" id="maptab-project" onclick="switchMapMode('project')">按项目查看</div>
+
+      <!-- Tab 1: 从产品查项目 -->
+      <div id="map-view-product">
+        <div class="map-view-toggle" style="display:flex;justify-content:flex-end;margin-bottom:12px">
+          <button class="map-style-btn active" id="btn-prod-style-tree" onclick="switchProdViewStyle('tree',this)">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/><line x1="7" y1="4.5" x2="9" y2="4.5"/><line x1="7" y1="11.5" x2="9" y2="11.5"/><line x1="4.5" y1="7" x2="4.5" y2="9"/><line x1="11.5" y1="7" x2="11.5" y2="9"/></svg>
+            列表模式
+          </button>
+          <button class="map-style-btn" id="btn-prod-style-mindmap" onclick="switchProdViewStyle('mindmap',this)">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="3" cy="8" r="2"/><circle cx="13" cy="8" r="2"/><circle cx="8" cy="3" r="2"/><circle cx="8" cy="13" r="2"/><line x1="4.5" y1="8" x2="11" y2="8"/><line x1="8" y1="4.5" x2="8" y2="11"/></svg>
+            树形模式
+          </button>
+        </div>
+        <div id="prod-view-tree" class="prod-sidebar-layout">
+          <aside class="prod-sidebar" id="prod-category-sidebar">
+            <div class="prod-sidebar-header">产品分类</div>
+            <div class="prod-cat-list" id="prod-cat-list"></div>
+          </aside>
+          <div class="prod-main" id="prod-tree-container">
+            <div class="prod-tree-empty">请选择左侧产品分类</div>
+          </div>
+        </div>
+        <div class="mindmap-container" id="mm-product-container" style="display:none">
+          <div class="mindmap-canvas" id="mm-product-canvas"></div>
+        </div>
       </div>
-      <div class="map-container" id="map-content">
-        <div class="loading-spinner">加载中...</div>
+
+      <!-- Tab 2: 从客户查项目 -->
+      <div id="map-view-customer" style="display:none">
+        <div class="map-view-toggle" style="display:flex;justify-content:flex-end;margin-bottom:12px">
+          <button class="map-style-btn active" id="btn-style-tree" onclick="switchProjViewStyle('tree',this)">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/><line x1="7" y1="4.5" x2="9" y2="4.5"/><line x1="7" y1="11.5" x2="9" y2="11.5"/><line x1="4.5" y1="7" x2="4.5" y2="9"/><line x1="11.5" y1="7" x2="11.5" y2="9"/></svg>
+            列表模式
+          </button>
+          <button class="map-style-btn" id="btn-style-mindmap" onclick="switchProjViewStyle('mindmap',this)">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="3" cy="8" r="2"/><circle cx="13" cy="8" r="2"/><circle cx="8" cy="3" r="2"/><circle cx="8" cy="13" r="2"/><line x1="4.5" y1="8" x2="11" y2="8"/><line x1="8" y1="4.5" x2="8" y2="11"/></svg>
+            树形模式
+          </button>
+        </div>
+        <div id="proj-view-tree" class="prod-sidebar-layout">
+          <aside class="prod-sidebar" id="proj-category-sidebar">
+            <div class="prod-sidebar-header">客户</div>
+            <div class="prod-cat-list" id="proj-cat-list"></div>
+          </aside>
+          <div class="prod-main" id="proj-tree-container">
+            <div class="prod-tree-empty">请选择左侧客户</div>
+          </div>
+        </div>
+        <div class="mindmap-container" id="mm-project-container" style="display:none">
+          <div class="mindmap-canvas" id="mm-project-canvas"></div>
+        </div>
       </div>
+
+      <!-- Tab 3: 按项目查产品 -->
+      <div id="map-view-projectid" style="display:none">
+        <div class="projid-search-section">
+          <div class="projid-input-wrap">
+            <input class="search-inp" id="projid-search-input" placeholder="输入项目编号搜索，如 PE0444、YF2506…" oninput="searchProjectById(this.value)">
+          </div>
+          <div class="projid-result" id="projid-result">
+            <div class="projid-empty">请输入项目编号进行搜索</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 4: 关系矩阵 -->
+      <div id="map-view-matrix" style="display:none">
+        <div class="card" style="overflow:hidden">
+          <table class="matrix-tbl" id="matrix-tbl"></table>
+        </div>
+      </div>
+
     </div>
 
     <!-- ══════════════════════ VIEW 4 — REPORTS ══════════════════════ -->

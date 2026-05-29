@@ -52,7 +52,7 @@ def get_project_stages(db: Session, project_id: int) -> list[dict]:
         stages.append({
             "id": e.id,
             "name": e.stage_name or e.name,
-            "status": _map_exec_status(e.status),
+            "status": _map_status(e.status),
             "who": who,
             "start": str(e.begin) if e.begin else None,
             "end": str(e.end) if e.end else None,
@@ -101,7 +101,7 @@ def get_project_gantt(db: Session, project_id: int) -> list[dict]:
             "who": who,
             "start": str(e.begin) if e.begin else None,
             "end": str(e.end) if e.end else None,
-            "status": _map_exec_status(e.status),
+            "status": _map_status(e.status),
             "progress": e.progress,
             "completed_date": str(e.end) if e.status in ("done", "closed") else None,
             "blocker": _find_blocker(tasks),
@@ -151,7 +151,8 @@ def get_project_products(db: Session, project_id: int) -> list[dict]:
                 "id": prod.id,
                 "name": prod.name,
                 "code": prod.code,
-                "category": prod.category,
+                "category": prod.program_name or prod.category,
+                "program_name": prod.program_name,
                 "nas_path": prod.nas_path,
                 "git_url": prod.git_url,
             })
@@ -167,18 +168,34 @@ def _project_brief(p: CachedProject) -> dict:
         "name": p.name,
         "project_type": p.project_type,
         "customer_name": p.customer_name,
-        "status": p.status,
+        "status": _map_status(p.status),
     }
 
 
 def _project_detail(p: CachedProject) -> dict:
+    # Extract description and customer【...】from raw_json
+    desc = ""
+    customer_from_desc = ""
+    if p.raw_json:
+        try:
+            import json as _json
+            import re as _re
+            data = _json.loads(p.raw_json)
+            desc = data.get("desc", "") or ""
+            # Extract first 【...】 as customer name
+            m = _re.search(r"【(.+?)】", desc)
+            if m:
+                customer_from_desc = m.group(1).strip()
+        except Exception:
+            pass
+
     return {
         "id": p.id,
         "code": p.code,
         "name": p.name,
         "model": p.model,
         "project_type": p.project_type,
-        "status": p.status,
+        "status": _map_status(p.status),
         "begin": str(p.begin) if p.begin else None,
         "end": str(p.end) if p.end else None,
         "real_began": str(p.real_began) if p.real_began else None,
@@ -190,10 +207,13 @@ def _project_detail(p: CachedProject) -> dict:
         "pm_account": p.pm_account,
         "customer_name": p.customer_name,
         "alias_name": p.alias_name,
+        "description": desc,
+        "customer_from_desc": customer_from_desc,
     }
 
 
-def _map_exec_status(status: str) -> str:
+def _map_status(status: str) -> str:
+    """Map Zentao raw status (wait/doing/done/closed/suspended) to PMA display status."""
     mapping = {
         "wait": "pending",
         "doing": "active",

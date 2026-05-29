@@ -106,6 +106,7 @@ class CachedProduct(Base):
     type = Column(String(32))
     status = Column(String(32))
     program_id = Column(Integer, nullable=True)
+    program_name = Column(String(128), nullable=True)  # Zentao product line name
     total_stories = Column(Integer, default=0)
     total_bugs = Column(Integer, default=0)
     releases = Column(Integer, default=0)

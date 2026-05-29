@@ -126,18 +126,27 @@ function buildDetailHeader(p) {
   var gap = 138.2 - pctArc;
   var rc = p.status === 'blocked' ? 'var(--danger)' : progress > 75 ? 'var(--success)' : 'var(--accent)';
 
+  var dateHtml = '';
+  if (p.begin && p.end) {
+    dateHtml = formatDate(p.begin) + ' → ' + formatDate(p.end);
+  } else if (p.begin) {
+    dateHtml = formatDate(p.begin) + ' 起（长期项目）';
+  } else {
+    dateHtml = '计划时间待定';
+  }
+
   document.getElementById('detail-header').innerHTML =
     '<div class="detail-meta">' +
       '<div class="detail-title">' + escHtml(p.alias_name || p.name) + '</div>' +
       '<div class="detail-sub">' +
         '<span class="meta-item">' +
           '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><polyline points="8,4.5 8,8 10.5,10"/></svg>' +
-          formatDate(p.begin) + ' → ' + formatDate(p.end) +
+          dateHtml +
         '</span>' +
         renderTypeBadge(p.project_type) +
         '<span class="meta-item">' +
           '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3 2.7-5 6-5s6 2 6 5"/></svg>' +
-          '项目经理：' + escHtml(p.pm_name || '—') +
+          (p.pm_name ? '项目经理：' + escHtml(p.pm_name) : '项目经理：<span style="color:var(--muted)">待指定</span>') +
         '</span>' +
         renderPill(p.status) +
       '</div>' +

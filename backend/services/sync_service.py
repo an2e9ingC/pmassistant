@@ -141,9 +141,15 @@ class SyncService:
     async def _sync_products(self, db: Session) -> dict:
         log = _log_sync(db, "products")
         try:
+            # Fetch product lines (programs) for categorization
+            programs = await self.client.get_programs()
+            prog_names = {p["id"]: p.get("name", "") for p in programs}
+
             products = await self.client.get_products()
             created, updated = 0, 0
             for p in products:
+                pid = p.get("program", 0)
+                prog_name = prog_names.get(pid, "")
                 existing = db.query(CachedProduct).filter(CachedProduct.id == p["id"]).first()
                 if existing:
                     # Update core fields but preserve PMA enrichments
@@ -151,7 +157,8 @@ class SyncService:
                     existing.name = p.get("name", "")
                     existing.type = p.get("type", "")
                     existing.status = p.get("status", "")
-                    existing.program_id = p.get("program", 0)
+                    existing.program_id = pid
+                    existing.program_name = prog_name
                     existing.total_stories = p.get("totalStories", 0)
                     existing.total_bugs = p.get("totalBugs", 0)
                     existing.releases = p.get("releases", 0)
@@ -159,7 +166,9 @@ class SyncService:
                     existing.synced_at = datetime.now(timezone.utc)
                     updated += 1
                 else:
-                    db.add(self._build_product(p))
+                    obj = self._build_product(p)
+                    obj.program_name = prog_name
+                    db.add(obj)
                     created += 1
             db.commit()
             _finish_log(db, log, "success", len(products), created, updated)

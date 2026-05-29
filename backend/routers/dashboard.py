@@ -7,6 +7,11 @@ from backend.database import get_db
 from backend.middleware.auth import get_current_user
 from backend.services import dashboard_service, bug_service
 
+_STATUS_MAP = {
+    "wait": "pending", "doing": "active", "done": "completed",
+    "closed": "completed", "suspended": "blocked", "canceled": "canceled",
+}
+
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
 
@@ -84,7 +89,7 @@ def _project_list_item(p) -> dict:
         "code": p.code,
         "name": p.name,
         "type": p.project_type or "RD",
-        "status": p.status or "wait",
+        "status": _STATUS_MAP.get(p.status, p.status or "pending"),
         "progress": p.progress or "0",
         "begin": str(p.begin) if p.begin else None,
         "end": str(p.end) if p.end else None,

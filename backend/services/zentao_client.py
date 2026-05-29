@@ -116,6 +116,11 @@ class ZentaoClient:
     async def get_product(self, product_id: int) -> dict:
         return await self._request("GET", f"/products/{product_id}")
 
+    async def get_programs(self) -> list:
+        """Get all product lines (programs). Returns full list, no pagination."""
+        resp = await self._request("GET", "/programs")
+        return resp.get("programs", [])
+
     async def get_projects(self, status: Optional[str] = None) -> list:
         params = {}
         if status:
