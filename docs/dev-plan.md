@@ -109,3 +109,6 @@
 | 2026-05-29 | 0.2.0 | Phase 2+3 完成：产品-项目映射（link CRUD + 前端双模式视图）、交付管理（DeliveryRecord CRUD + 前端增删）、Bug统计（Zentao同步 + 统计面板）、项目报表（周报/月报）、同步进度历史 |
 | 2026-05-29 | 0.2.1 | 系统日志查看器：RotatingFileHandler持久化日志、日志API（level过滤/搜索/tail）、前端日志页面（实时刷新/级别筛选）；告警铃铛：点击弹出最近告警下拉框 |
 | 2026-05-29 | 0.2.2 | 数据库日志存储：LogEntry模型+DatabaseLogHandler、日志API从DB查询、前端改为下拉选择器+按级别自动刷新（ERROR=5s/CRITICAL=3s）、默认INFO级别、docs/deploy-guide更新日志诊断说明 |
+| 2026-05-29 | 0.2.3 | DB路径绝对化：_resolve_db_path()自动解析+创建data目录+chmod 777；日志文件路径与DB同目录；logs API移除Depends(get_db)冲突（改用SessionLocal） |
+| 2026-05-29 | 0.2.4 | 数据源状态重构：3个独立标签移到右上角（禅道/GitLab/NAS）、彩色圆点+边框区分状态、同步按钮迁移到标签旁；server.sh服务器管理脚本（start/stop/restart/status/logs/tail） |
+| 2026-05-29 | 0.2.5 | 项目规则完善：新增no-auto-commit/docs-sync/auto-restart/theme-compatibility规则、更新git-commit-rule scope列表 |

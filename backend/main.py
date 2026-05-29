@@ -12,12 +12,13 @@ from backend.config import settings
 from backend.database import init_db
 from backend.routers import auth, dashboard, projects, sync, products, delivery, reports, logs
 
-# Ensure data directory exists
-_os.makedirs("data", exist_ok=True)
-
-# File log handler (persistent, for log viewer page)
+# File log handler — use same directory as database
+import backend.database as _db_module
+_log_dir = _os.path.dirname(getattr(_db_module, "_db_path", "data/pma.db"))
+_log_file = _os.path.join(_log_dir, "pma.log")
+_os.makedirs(_log_dir, exist_ok=True)
 _file_handler = RotatingFileHandler(
-    "data/pma.log", maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"
+    _log_file, maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"
 )
 _file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
 _file_handler.setLevel(logging.DEBUG)

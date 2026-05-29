@@ -8,3 +8,5 @@ data/pma.log*
 *.egg-info/
 dist/
 .pytest_cache/
+.pma-server.pid
+data/

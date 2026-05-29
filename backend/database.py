@@ -1,10 +1,39 @@
+import os as _os
+import logging
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
 from backend.config import settings
 
+logger = logging.getLogger(__name__)
+
+
+def _resolve_db_path() -> str:
+    """Resolve the SQLite DB path to an absolute path, creating parent dir if needed."""
+    raw = settings.DATABASE_URL
+    if raw.startswith("sqlite:///"):
+        path = raw[len("sqlite:///"):]
+        # Resolve relative paths against the backend package directory
+        if not _os.path.isabs(path):
+            # Use the directory of this file (backend/) as the base
+            base_dir = _os.path.dirname(_os.path.abspath(__file__))
+            # Go up one level to project root
+            project_root = _os.path.dirname(base_dir)
+            path = _os.path.normpath(_os.path.join(project_root, path))
+        # Ensure parent directory exists with write permission
+        parent = _os.path.dirname(path)
+        _os.makedirs(parent, exist_ok=True)
+        _os.chmod(parent, 0o777)
+        return path
+    return raw
+
+
+_db_path = _resolve_db_path()
+_db_url = f"sqlite:///{_db_path}" if not _db_path.startswith("sqlite:///") else _db_path
+
 engine = create_engine(
-    settings.DATABASE_URL,
+    _db_url if _db_url.startswith("sqlite:///") else settings.DATABASE_URL,
     connect_args={"check_same_thread": False} if "sqlite" in settings.DATABASE_URL else {},
     echo=False,
 )
@@ -25,25 +54,21 @@ def get_db():
 
 
 def _migrate_sqlite():
-    """Add missing columns to existing SQLite tables (SQLite doesn't support ALTER ADD COLUMN IF NOT EXISTS)."""
+    """Add missing columns to existing SQLite tables."""
     import sqlite3
     from sqlalchemy import inspect
     try:
         conn = engine.connect()
-        # Map table name -> expected columns from model
         inspector = inspect(engine)
         table_names = inspector.get_table_names()
         conn.close()
 
-        # Use raw sqlite3 for PRAGMA (avoids SQLAlchemy reflection overhead)
-        db_path = settings.DATABASE_URL.replace("sqlite:///", "")
-        sqlite_conn = sqlite3.connect(db_path)
+        sqlite_conn = sqlite3.connect(_db_path)
         cursor = sqlite_conn.cursor()
 
         for table_name in table_names:
             cursor.execute(f"PRAGMA table_info(`{table_name}`)")
             existing_cols = {row[1] for row in cursor.fetchall()}
-            # Get expected columns from SQLAlchemy table metadata
             if table_name in Base.metadata.tables:
                 expected_cols = {c.name for c in Base.metadata.tables[table_name].columns}
                 missing = expected_cols - existing_cols
@@ -51,16 +76,12 @@ def _migrate_sqlite():
                     col = Base.metadata.tables[table_name].columns[col_name]
                     col_type = str(col.type).upper()
                     nullable = "" if col.nullable else " NOT NULL"
-                    default = ""
-                    if col.default:
-                        # Skip auto-generated defaults like func.now()
-                        pass
                     sql = f"ALTER TABLE `{table_name}` ADD COLUMN `{col_name}` {col_type}{nullable}"
                     cursor.execute(sql)
         sqlite_conn.commit()
         sqlite_conn.close()
     except Exception:
-        pass  # Migration is best-effort; create_all handles new tables
+        pass
 
 
 def init_db():
@@ -77,15 +98,14 @@ def init_db():
         ProductProjectLink,
     )
 
+    logger.info(f"Database path: {_db_path}")
     Base.metadata.create_all(bind=engine)
     _migrate_sqlite()
 
-    # Ensure SQLite DB file is writable (umask / Docker mount may restrict)
-    if "sqlite" in settings.DATABASE_URL:
-        import os as _os
-        db_path = settings.DATABASE_URL.replace("sqlite:///", "")
-        if _os.path.exists(db_path):
-            _os.chmod(db_path, 0o666)
+    # Ensure SQLite DB file is writable
+    if _os.path.exists(_db_path):
+        _os.chmod(_db_path, 0o666)
+        logger.debug(f"DB file permissions: {oct(_os.stat(_db_path).st_mode)[-3:]}")
 
     # Seed default admin if no users exist
     db = SessionLocal()
@@ -105,5 +125,6 @@ def init_db():
             )
             db.add(admin)
             db.commit()
+            logger.info("Default admin user created")
     finally:
         db.close()
