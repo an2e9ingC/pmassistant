@@ -26,6 +26,8 @@ def get_db():
 
 def init_db():
     from backend.models.local import LocalUser  # noqa: F401
+    from backend.models.bug import CachedBug  # noqa: F401
+    from backend.models.delivery import DeliveryRecord  # noqa: F401
     from backend.models.zentao import (  # noqa: F401
         CachedProject,
         CachedExecution,

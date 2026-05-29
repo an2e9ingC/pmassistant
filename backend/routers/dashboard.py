@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.middleware.auth import get_current_user
-from backend.services import dashboard_service
+from backend.services import dashboard_service, bug_service
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
@@ -58,6 +58,17 @@ def get_alerts(
         },
         "message": "ok",
     }
+
+
+@router.get("/bugs", response_model=dict)
+def get_bug_stats(
+    project_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    stats = bug_service.get_bug_stats(db, project_id)
+    bugs, total = bug_service.get_bug_list(db, project_id, page=1, limit=100)
+    return {"code": 0, "data": {"stats": stats, "bugs": bugs, "total": total}, "message": "ok"}
 
 
 def _project_list_item(p) -> dict:

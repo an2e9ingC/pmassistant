@@ -8,6 +8,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from backend.database import SessionLocal
+from backend.models.bug import CachedBug
 from backend.models.zentao import (
     CachedProject, CachedExecution, CachedTask,
     CachedUser, CachedProduct, ProductProjectLink,
@@ -108,6 +109,7 @@ class SyncService:
             results["products"] = await self._sync_products(db)
             results["projects"] = await self._sync_projects(db)
             results["executions_tasks"] = await self._sync_executions_and_tasks(db)
+            results["bugs"] = await self._sync_bugs(db)
 
             return {"code": 0, "data": results, "message": "sync completed"}
         except Exception as e:
@@ -281,6 +283,69 @@ class SyncService:
         except Exception as e:
             _finish_log(db, log, "failed", error=str(e))
             raise
+
+    async def _sync_bugs(self, db: Session) -> dict:
+        log = _log_sync(db, "bugs")
+        created, updated = 0, 0
+        try:
+            products = db.query(CachedProduct).all()
+            total_bugs = 0
+
+            for prod in products:
+                try:
+                    bugs = await self.client.get_product_bugs(prod.id)
+                except Exception:
+                    logger.warning(f"Failed to fetch bugs for product {prod.id}")
+                    continue
+
+                total_bugs += len(bugs)
+                for b in bugs:
+                    existing = db.query(CachedBug).filter(CachedBug.id == b["id"]).first()
+                    if existing:
+                        self._update_bug(existing, b)
+                        updated += 1
+                    else:
+                        db.add(self._build_bug(b, prod.id))
+                        created += 1
+                db.commit()
+
+            _finish_log(db, log, "success", total_bugs, created, updated)
+            return {"fetched": total_bugs, "created": created, "updated": updated}
+        except Exception as e:
+            _finish_log(db, log, "failed", error=str(e))
+            raise
+
+    def _build_bug(self, b: dict, product_id: int) -> CachedBug:
+        return CachedBug(
+            id=b["id"], product_id=product_id,
+            project_id=b.get("project", 0) or 0,
+            title=b.get("title", ""),
+            severity=b.get("severity", 3),
+            priority=b.get("pri", 3),
+            status=b.get("status", ""),
+            type=b.get("type", ""),
+            opened_by=b.get("openedBy", ""),
+            opened_date=_parse_date(b.get("openedDate")),
+            assigned_to=b.get("assignedTo", ""),
+            resolved_by=b.get("resolvedBy", ""),
+            resolved_date=_parse_datetime(b.get("resolvedDate")),
+            closed_date=_parse_datetime(b.get("closedDate")),
+            raw_json=json.dumps(b, ensure_ascii=False),
+        )
+
+    def _update_bug(self, existing: CachedBug, b: dict) -> int:
+        existing.title = b.get("title", existing.title)
+        existing.severity = b.get("severity", existing.severity)
+        existing.priority = b.get("pri", existing.priority)
+        existing.status = b.get("status", existing.status)
+        existing.type = b.get("type", existing.type)
+        existing.assigned_to = b.get("assignedTo", existing.assigned_to)
+        existing.resolved_by = b.get("resolvedBy", existing.resolved_by)
+        existing.resolved_date = _parse_datetime(b.get("resolvedDate")) or existing.resolved_date
+        existing.closed_date = _parse_datetime(b.get("closedDate")) or existing.closed_date
+        existing.raw_json = json.dumps(b, ensure_ascii=False)
+        existing.synced_at = datetime.now(timezone.utc)
+        return 1
 
     # --- Build helpers ---
 

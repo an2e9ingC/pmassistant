@@ -62,13 +62,12 @@
     </div>
     <div class="nav-group">
       <div class="nav-group-label">报表</div>
-      <div class="nav-item dim">
+      <div class="nav-item" id="nav-reports" onclick="gotoView('reports')">
         <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
           <polyline points="1,12 4.5,7.5 7.5,9.5 11,5 14.5,7"/>
           <line x1="1" y1="15" x2="15" y2="15"/>
         </svg>
         统计报告
-        <span class="nav-tag">即将上线</span>
       </div>
     </div>
     <div class="nav-group">
@@ -121,7 +120,7 @@
     </div>
 
     <div style="margin-top:8px;text-align:center;font-size:10px;color:var(--muted)">
-      <span id="app-version">v2026.05.29-beta8</span>
+      <span id="app-version">v2026.05.29-beta9</span>
     </div>
     <div style="text-align:center">
       <button onclick="logout()" style="font-size:11px;color:var(--muted);cursor:pointer;background:none;border:none">退出登录</button>
@@ -318,10 +317,38 @@
 
     <!-- ══════════════════════ VIEW 3 — MAPPING ══════════════════════ -->
     <div class="view" id="view-mapping">
-      <div style="text-align:center;padding:80px;color:var(--muted)">
-        <div style="font-size:48px;margin-bottom:16px">🗺</div>
-        <div style="font-size:16px;font-weight:600;margin-bottom:8px">产品↔项目映射</div>
-        <div style="font-size:13px">即将上线，敬请期待</div>
+      <div class="map-overview" id="map-overview">
+        <div class="loading-spinner">加载中...</div>
+      </div>
+      <div class="map-tabs">
+        <div class="map-tab active" id="maptab-product" onclick="switchMapMode('product')">按产品查看</div>
+        <div class="map-tab" id="maptab-project" onclick="switchMapMode('project')">按项目查看</div>
+      </div>
+      <div class="map-container" id="map-content">
+        <div class="loading-spinner">加载中...</div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════ VIEW 4 — REPORTS ══════════════════════ -->
+    <div class="view" id="view-reports">
+      <div class="map-tabs">
+        <div class="map-tab active" id="rpttab-weekly" onclick="switchReportTab('weekly')">周报</div>
+        <div class="map-tab" id="rpttab-monthly" onclick="switchReportTab('monthly')">月报</div>
+        <div class="map-tab" id="rpttab-bugs" onclick="switchReportTab('bugs')">Bug统计</div>
+      </div>
+      <div id="rpt-sec-weekly" style="display:block"><div class="loading-spinner">加载中...</div></div>
+      <div id="rpt-sec-monthly" style="display:none"><div class="loading-spinner">加载中...</div></div>
+      <div id="rpt-sec-bugs" style="display:none"><div class="loading-spinner">加载中...</div></div>
+    </div>
+
+    <!-- Link Dialog -->
+    <div class="link-dialog" id="link-dialog" onclick="if(event.target===this)closeLinkDialog()">
+      <div class="link-dialog-panel">
+        <div class="link-dialog-head">
+          <span class="link-dialog-title">关联</span>
+          <button class="link-dialog-close" onclick="closeLinkDialog()">&times;</button>
+        </div>
+        <div class="link-dialog-list"></div>
       </div>
     </div>
 
@@ -334,6 +361,8 @@
 <script src="/js/components.js"></script>
 <script src="/js/dashboard.js"></script>
 <script src="/js/detail.js"></script>
+<script src="/js/mapping.js"></script>
+<script src="/js/reports.js"></script>
 <script src="/js/app.js"></script>
 <script>
 async function triggerSync() {

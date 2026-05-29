@@ -110,13 +110,8 @@ def get_project_gantt(db: Session, project_id: int) -> list[dict]:
 
 
 def get_project_delivery(db: Session, project_id: int) -> dict:
-    return {
-        "total": 0,
-        "done": 0,
-        "remaining": 0,
-        "progress": 0,
-        "records": [],
-    }
+    from backend.services.delivery_service import get_delivery_summary
+    return get_delivery_summary(db, project_id)
 
 
 def get_project_resources(db: Session, project_id: int) -> list[dict]:

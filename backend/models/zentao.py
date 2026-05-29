@@ -111,6 +111,7 @@ class CachedProduct(Base):
     releases = Column(Integer, default=0)
     # PMA-local enrichments
     category = Column(String(32), nullable=True)
+    alias_name = Column(String(256), nullable=True)
     nas_path = Column(String(512), nullable=True)
     git_url = Column(String(512), nullable=True)
     pma_customer = Column(String(256), nullable=True)

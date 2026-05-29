@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════
    MAIN APP
 ═══════════════════════════════════════════════════ */
-var VIEW_TITLES = { dashboard: '项目总览', detail: '项目详情', mapping: '产品↔项目映射' };
+var VIEW_TITLES = { dashboard: '项目总览', detail: '项目详情', mapping: '产品↔项目映射', reports: '统计报告' };
 
 function gotoView(view) {
   // Check auth
@@ -35,15 +35,10 @@ function gotoView(view) {
     });
   }
   if (view === 'mapping') {
-    // Mapping view — Phase 2 (shows placeholder for now)
-    var container = document.getElementById('view-' + view);
-    if (container) {
-      container.innerHTML = '<div style="text-align:center;padding:80px;color:var(--muted)">' +
-        '<div style="font-size:48px;margin-bottom:16px">🗺</div>' +
-        '<div style="font-size:16px;font-weight:600;margin-bottom:8px">产品↔项目映射</div>' +
-        '<div style="font-size:13px">即将上线，敬请期待</div>' +
-      '</div>';
-    }
+    renderMapping();
+  }
+  if (view === 'reports') {
+    renderReports();
   }
 
   localStorage.setItem('pm_view', view);

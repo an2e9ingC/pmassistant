@@ -77,18 +77,24 @@
 
 ---
 
-## Phase 2: 产品↔项目映射 (计划中)
+## Phase 2: 产品↔项目映射 (2026-05-29 完成)
 
-- FR-005/006: 关系图谱（产品→项目、客户→项目、产品→客户）
-- 树形模式 / 思维导图模式 / 关系矩阵
-- 按项目查产品
+- [x] FR-005/006: 产品-项目关联管理（link/unlink CRUD）
+- [x] 后端: product_service + products router (list/search/update/link)
+- [x] 前端: 映射视图（按产品查看 + 按项目查看）、分类筛选、关联弹窗
+- [x] Product PMA 扩展字段管理（category, nas_path, git_url, alias_name）
+- [ ] 关系图谱可视化（树形/思维导图模式 — 后续增强）
+- [ ] 客户维度映射（Phase 2 后续）
 
-## Phase 3: 交付管理 & 报表 (计划中)
+## Phase 3: 交付管理 & 报表 (2026-05-29 完成)
 
-- FR-007-011: 软硬件交付资料管理、交付状态追踪
-- FR-013-015: Bug 统计、Gitlab 提交统计、项目报表
-- FR-016: 售前项目检测（NAS 监控）
-- FR-022: 外协进度跟踪
+- [x] FR-007-011: DeliveryRecord 模型 + CRUD API + 前端交付记录管理
+- [x] FR-013: Bug 统计（Zentao bug 同步 + 统计/列表 API + 前端展示）
+- [x] FR-015: 项目报表（周报/月报 API + 前端报表视图）
+- [x] 同步进度/历史 API（sync/history + 增强 status 含 duration）
+- [ ] FR-014: Gitlab 提交统计（需真实 GitLab API）
+- [ ] FR-016: 售前项目检测（NAS 监控，需 NAS 路径配置）
+- [ ] FR-022: 外协进度跟踪
 
 ---
 
@@ -100,3 +106,4 @@
 | 2026-05-29 | 0.1.1 | 甘特图优化：线性缩放(±1.05)、拖拽平移、固定宽度、双列布局、滚动防抖、版本号 |
 | 2026-05-29 | 0.1.2 | 拖拽修复：移除gantt-root overflow:hidden；sticky固定阶段/负责人列 |
 | 2026-05-29 | 0.1.3 | Bug修复：ProductProjectLink导入缺失、sync双次fetch任务、N+1查询、硬编码生产URL、sync状态接口权限、空集合清理、openProject重复调用、canceled样式缺失 |
+| 2026-05-29 | 0.2.0 | Phase 2+3 完成：产品-项目映射（link CRUD + 前端双模式视图）、交付管理（DeliveryRecord CRUD + 前端增删）、Bug统计（Zentao同步 + 统计面板）、项目报表（周报/月报）、同步进度历史 |

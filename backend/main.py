@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 
 from backend.config import settings
 from backend.database import init_db
-from backend.routers import auth, dashboard, projects, sync
+from backend.routers import auth, dashboard, projects, sync, products, delivery, reports
 
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
@@ -45,6 +45,9 @@ app.include_router(auth.router)
 app.include_router(dashboard.router)
 app.include_router(projects.router)
 app.include_router(sync.router)
+app.include_router(products.router)
+app.include_router(delivery.router)
+app.include_router(reports.router)
 
 # Static files (frontend)
 app.mount("/css", StaticFiles(directory="frontend/css"), name="css")

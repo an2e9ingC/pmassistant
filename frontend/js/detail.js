@@ -475,17 +475,23 @@ function buildDocs(docs) {
 
 /* Delivery */
 
+var _deliveryData = null;
+
 function buildDelivery(data) {
+  _deliveryData = data;
   var total = data.total || 0;
   var done = data.done || 0;
   var rem = total - done;
   var dp = total > 0 ? Math.round(done / total * 100) : 0;
   var records = data.records || [];
 
-  var recHtml = records.length ? '' +
+  var recHtml = '' +
     '<div class="card col-span" style="padding:20px;margin-top:16px">' +
-      '<div class="section-title" style="margin-bottom:14px">交付记录明细</div>' +
-      '<table class="stage-table"><thead><tr><th>交付日期</th><th>数量</th><th>产品编号</th><th>收货方</th><th>备注</th></tr></thead><tbody>' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">' +
+        '<div class="section-title">交付记录明细 (' + records.length + ' 条)</div>' +
+        '<button class="btn" style="font-size:11px;padding:4px 10px" onclick="showDeliveryForm()">+ 添加记录</button>' +
+      '</div>' +
+      (records.length ? '<table class="stage-table"><thead><tr><th>交付日期</th><th>数量</th><th>产品编号</th><th>收货方</th><th>备注</th><th style="width:60px"></th></tr></thead><tbody>' +
       records.map(function(r) {
         return '<tr>' +
           '<td style="font-family:var(--mono);font-size:12px;color:var(--success);font-weight:540">' + formatDate(r.date) + '</td>' +
@@ -493,10 +499,11 @@ function buildDelivery(data) {
           '<td style="font-family:var(--mono);font-size:11.5px">' + escHtml(r.items || '') + '</td>' +
           '<td style="font-size:12.5px">' + escHtml(r.receiver || '') + '</td>' +
           '<td style="font-size:12px;color:var(--muted)">' + escHtml(r.note || '') + '</td>' +
+          '<td><button class="btn" style="font-size:10px;padding:2px 8px;color:var(--danger)" onclick="deleteDeliveryRecord(' + r.id + ')">删除</button></td>' +
         '</tr>';
       }).join('') +
-      '</tbody></table>' +
-    '</div>' : '';
+      '</tbody></table>' : '<div class="empty-state" style="padding:20px">暂无交付记录，点击上方按钮添加</div>') +
+    '</div>';
 
   document.getElementById('delivery-content').innerHTML =
     '<div class="two-col">' +
@@ -512,7 +519,75 @@ function buildDelivery(data) {
         (done === 0 ? '<div style="margin-top:14px;padding:12px 14px;background:var(--warn-lt);border:1px solid var(--warn);border-radius:8px;font-size:13px;color:var(--warn)">暂无交付记录</div>' : '') +
       '</div>' +
       recHtml +
+    '</div>' +
+    '<div id="delivery-form-container"></div>';
+}
+
+function showDeliveryForm(record) {
+  var r = record || {};
+  var html =
+    '<div class="card" style="padding:20px;margin-top:12px" id="delivery-form-card">' +
+      '<div class="section-title" style="margin-bottom:14px">' + (record ? '编辑交付记录' : '添加交付记录') + '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">' +
+        '<div><label style="font-size:11px;color:var(--muted)">产品名称</label><input class="search-inp" id="df-product" value="' + escHtml(r.product_name || '') + '" style="margin-top:4px"></div>' +
+        '<div><label style="font-size:11px;color:var(--muted)">数量</label><input class="search-inp" id="df-qty" type="number" value="' + (r.qty || 1) + '" style="margin-top:4px"></div>' +
+        '<div><label style="font-size:11px;color:var(--muted)">交付日期</label><input class="search-inp" id="df-date" type="date" value="' + (r.date || new Date().toISOString().slice(0,10)) + '" style="margin-top:4px"></div>' +
+        '<div><label style="font-size:11px;color:var(--muted)">收货方</label><input class="search-inp" id="df-receiver" value="' + escHtml(r.receiver || '') + '" style="margin-top:4px"></div>' +
+      '</div>' +
+      '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--muted)">产品编号（逗号分隔）</label><input class="search-inp" id="df-items" value="' + escHtml(r.items || '') + '" style="margin-top:4px"></div>' +
+      '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--muted)">备注</label><input class="search-inp" id="df-note" value="' + escHtml(r.note || '') + '" style="margin-top:4px"></div>' +
+      '<div style="display:flex;gap:8px">' +
+        '<button class="btn btn-primary" onclick="saveDeliveryRecord(' + (r.id || 0) + ')">' + (record ? '保存修改' : '添加记录') + '</button>' +
+        '<button class="btn" onclick="cancelDeliveryForm()">取消</button>' +
+      '</div>' +
     '</div>';
+  document.getElementById('delivery-form-container').innerHTML = html;
+  document.getElementById('delivery-form-card').scrollIntoView({ behavior: 'smooth' });
+}
+
+function cancelDeliveryForm() {
+  document.getElementById('delivery-form-container').innerHTML = '';
+}
+
+async function saveDeliveryRecord(recordId) {
+  var product = document.getElementById('df-product').value.trim();
+  var qty = parseInt(document.getElementById('df-qty').value) || 0;
+  var date = document.getElementById('df-date').value;
+  var receiver = document.getElementById('df-receiver').value.trim();
+  var itemsStr = document.getElementById('df-items').value.trim();
+  var note = document.getElementById('df-note').value.trim();
+  var serials = itemsStr ? itemsStr.split(/[,，]/).map(function(s) { return s.trim(); }).filter(Boolean) : [];
+
+  if (!product) { showToast('请输入产品名称', 'error'); return; }
+
+  var body = { product_name: product, quantity: qty, delivery_date: date, receiver: receiver, note: note, serial_numbers: serials };
+
+  try {
+    if (recordId) {
+      await API.put('/delivery/records/' + recordId, body);
+    } else {
+      await API.post('/delivery/projects/' + _comboCurId + '/records', body);
+    }
+    showToast(recordId ? '修改成功' : '添加成功', 'success');
+    cancelDeliveryForm();
+    // Refresh delivery data
+    var data = await API.get('/projects/' + _comboCurId + '/delivery');
+    buildDelivery(data);
+  } catch(e) {
+    showToast('操作失败: ' + (e.message || '未知错误'), 'error');
+  }
+}
+
+async function deleteDeliveryRecord(id) {
+  if (!confirm('确认删除此交付记录？')) return;
+  try {
+    await API.del('/delivery/records/' + id);
+    showToast('删除成功', 'success');
+    var data = await API.get('/projects/' + _comboCurId + '/delivery');
+    buildDelivery(data);
+  } catch(e) {
+    showToast('删除失败: ' + (e.message || '未知错误'), 'error');
+  }
 }
 
 /* Resources */
