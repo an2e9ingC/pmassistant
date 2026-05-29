@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════
    MAIN APP
 ═══════════════════════════════════════════════════ */
-var VIEW_TITLES = { dashboard: '项目总览', detail: '项目详情', mapping: '产品↔项目映射', reports: '统计报告' };
+var VIEW_TITLES = { dashboard: '项目总览', detail: '项目详情', mapping: '产品↔项目映射', reports: '统计报告', logs: '系统日志' };
 
 function gotoView(view) {
   // Check auth
@@ -39,6 +39,10 @@ function gotoView(view) {
   }
   if (view === 'reports') {
     renderReports();
+  }
+  if (view === 'logs') {
+    clearLogAutoRefresh();
+    renderLogs();
   }
 
   localStorage.setItem('pm_view', view);
@@ -99,6 +103,52 @@ function updateStatusBadge(elId, status) {
     el.textContent = '⚠ 未同步';
   }
 }
+
+/* Alert Notification Dropdown */
+
+async function toggleNotifDropdown(e) {
+  e.stopPropagation();
+  var dd = document.getElementById('notif-dropdown');
+  var isOpen = dd.classList.contains('open');
+  if (isOpen) {
+    dd.classList.remove('open');
+    return;
+  }
+  // Load alerts for dropdown
+  var listEl = document.getElementById('notif-dropdown-list');
+  listEl.innerHTML = '<div class="loading-spinner" style="padding:20px">加载中...</div>';
+  dd.classList.add('open');
+  try {
+    var data = await API.get('/dashboard/alerts?limit=5');
+    var alerts = data.items || [];
+    document.getElementById('notif-pip').style.display = alerts.length > 0 ? 'block' : 'none';
+    if (!alerts.length) {
+      listEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted);font-size:12px">暂无告警</div>';
+    } else {
+      listEl.innerHTML = alerts.map(function(a) {
+        var dotColor = a.severity === 'red' ? 'var(--danger)' : 'var(--warn)';
+        return '<div class="notif-item" onclick="openProject(' + a.project_id + ');closeNotifDropdown()">' +
+          '<div style="width:6px;height:6px;border-radius:50%;background:' + dotColor + ';flex-shrink:0;margin-top:5px"></div>' +
+          '<div style="min-width:0"><div style="font-size:12px;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(a.message) + '</div>' +
+          '<div style="font-size:10.5px;color:var(--muted)">' + escHtml(a.project_code || '') + '</div></div>' +
+        '</div>';
+      }).join('');
+    }
+  } catch(e) {
+    listEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted);font-size:12px">加载失败</div>';
+  }
+}
+
+function closeNotifDropdown() {
+  document.getElementById('notif-dropdown').classList.remove('open');
+}
+
+document.addEventListener('click', function(e) {
+  var dd = document.getElementById('notif-dropdown');
+  if (dd && dd.classList.contains('open') && !e.target.closest('.icon-btn')) {
+    dd.classList.remove('open');
+  }
+});
 
 /* Init */
 

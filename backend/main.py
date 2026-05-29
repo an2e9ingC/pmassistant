@@ -1,5 +1,6 @@
 import logging
 from contextlib import asynccontextmanager
+from logging.handlers import RotatingFileHandler
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,11 +9,19 @@ from fastapi.responses import FileResponse
 
 from backend.config import settings
 from backend.database import init_db
-from backend.routers import auth, dashboard, projects, sync, products, delivery, reports
+from backend.routers import auth, dashboard, projects, sync, products, delivery, reports, logs
+
+# File log handler (persistent, for log viewer page)
+_file_handler = RotatingFileHandler(
+    "data/pma.log", maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"
+)
+_file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+_file_handler.setLevel(logging.DEBUG)
 
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    handlers=[logging.StreamHandler(), _file_handler],
 )
 logger = logging.getLogger(__name__)
 
@@ -48,6 +57,7 @@ app.include_router(sync.router)
 app.include_router(products.router)
 app.include_router(delivery.router)
 app.include_router(reports.router)
+app.include_router(logs.router)
 
 # Static files (frontend)
 app.mount("/css", StaticFiles(directory="frontend/css"), name="css")

@@ -21,6 +21,8 @@ async function loadKpiCards() {
     document.getElementById('kpi-meta-types').innerHTML = '研发 <b>' + data.rd_count + '</b> &nbsp;·&nbsp; 生产 <b>' + data.sc_count + '</b>';
     document.getElementById('kpi-alerts').textContent = data.pending_alerts;
     document.getElementById('alert-badge').textContent = data.pending_alerts;
+    var pip = document.getElementById('notif-pip');
+    if (pip) pip.style.display = data.pending_alerts > 0 ? 'block' : 'none';
     document.getElementById('kpi-delivered').textContent = data.delivered_this_month;
     document.getElementById('kpi-progress').innerHTML = data.avg_progress + '<span style="font-size:18px;font-weight:500">%</span>';
   } catch(e) {

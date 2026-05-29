@@ -279,6 +279,44 @@
 .link-dialog-item:hover { background: var(--bg); }
 .link-dialog-item:last-child { border-bottom: none; }
 
+/* ═══════════════════════════════════════════════════
+   LOG VIEWER
+═══════════════════════════════════════════════════ */
+.log-container {
+  padding: 14px 16px; overflow: hidden; max-height: calc(100vh - 220px); overflow-y: auto;
+}
+.log-pre {
+  font-family: var(--mono); font-size: 11px; line-height: 1.65; white-space: pre-wrap;
+  word-break: break-all; margin: 0; color: var(--fg);
+  display: flex; flex-direction: column; gap: 0;
+}
+.log-pre span { padding: 1px 0; }
+.log-error { color: var(--danger); background: var(--danger-lt); padding: 1px 4px; border-radius: 2px; }
+.log-warn  { color: var(--warn); }
+.log-debug { color: var(--muted); font-size: 10.5px; }
+
+/* ═══════════════════════════════════════════════════
+   NOTIFICATION DROPDOWN
+═══════════════════════════════════════════════════ */
+.notif-dropdown {
+  display: none; position: absolute; top: calc(100% + 8px); right: 0;
+  width: 340px; max-height: 360px; overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-lg); box-shadow: var(--sh-md); z-index: 500;
+}
+.notif-dropdown.open { display: block; }
+.notif-dropdown-hd {
+  padding: 10px 16px; font-size: 12.5px; font-weight: 600; color: var(--muted);
+  border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+}
+.notif-item {
+  display: flex; align-items: flex-start; gap: 8px; padding: 10px 16px;
+  border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.1s;
+}
+.notif-item:hover { background: var(--bg); }
+.notif-item:last-child { border-bottom: none; }
+
 /* Responsive */
 @media (max-width: 1100px) {
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }

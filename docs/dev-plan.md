@@ -107,3 +107,4 @@
 | 2026-05-29 | 0.1.2 | 拖拽修复：移除gantt-root overflow:hidden；sticky固定阶段/负责人列 |
 | 2026-05-29 | 0.1.3 | Bug修复：ProductProjectLink导入缺失、sync双次fetch任务、N+1查询、硬编码生产URL、sync状态接口权限、空集合清理、openProject重复调用、canceled样式缺失 |
 | 2026-05-29 | 0.2.0 | Phase 2+3 完成：产品-项目映射（link CRUD + 前端双模式视图）、交付管理（DeliveryRecord CRUD + 前端增删）、Bug统计（Zentao同步 + 统计面板）、项目报表（周报/月报）、同步进度历史 |
+| 2026-05-29 | 0.2.1 | 系统日志查看器：RotatingFileHandler持久化日志、日志API（level过滤/搜索/tail）、前端日志页面（实时刷新/级别筛选）；告警铃铛：点击弹出最近告警下拉框 |
