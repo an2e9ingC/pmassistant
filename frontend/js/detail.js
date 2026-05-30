@@ -37,7 +37,7 @@ function renderComboOptions(q) {
       renderProjIcon(p.project_type, projCode) +
       '<div style="min-width:0">' +
         '<div class="combo-opt-name">' + escHtml(coreName) + '</div>' +
-        '<div class="combo-opt-meta">' + escHtml(projCode) + ' · ' + typeTxt + '项目' + (p.customer_name ? ' · ' + escHtml(p.customer_name) : '') + '</div>' +
+        '<div class="combo-opt-meta">' + escHtml(projCode) + ' · ' + typeTxt + '项目' + (p.customer_name ? ' · ' + renderCustomerBadge(p.customer_name) : '') + '</div>' +
       '</div>' +
     '</div>';
   }).join('');

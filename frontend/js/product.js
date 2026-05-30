@@ -95,7 +95,7 @@ function renderProductCards() {
       (descShort ? '<div class="product-card-desc">' + escHtml(descShort) + '</div>' : '') +
       (tagsHtml ? '<div class="product-card-tags">' + tagsHtml + '</div>' : '') +
       '<div class="product-card-meta">' +
-        '<span class="pill ' + (p.status || 'normal') + '">' + (p.status || '—') + '</span>' +
+        renderPill(p.status) +
         '<span style="font-size:11px;color:var(--muted)">关联项目: ' + p.project_count + '</span>' +
       '</div>' +
     '</div>';
@@ -126,6 +126,7 @@ async function initProductDetail() {
 }
 
 function openProdCombo() {
+  var combo = document.getElementById('prod-combo');
   var dd = document.getElementById('prod-combo-dropdown');
   dd.innerHTML = _prodComboAll.map(function(p) {
     return '<div class="combo-opt" onclick="selectProdCombo(\'' + p.id + '\', \'' + escHtml(p.name).replace(/'/g, "\\'") + '\')">' +
@@ -133,7 +134,7 @@ function openProdCombo() {
       '<span class="combo-opt-name">' + escHtml(p.name) + '</span>' +
     '</div>';
   }).join('');
-  dd.classList.add('open');
+  combo.classList.add('open');
 }
 
 function filterProdCombo(v) {
@@ -155,7 +156,7 @@ function filterProdCombo(v) {
 function selectProdCombo(id, name) {
   _prodDetailCurId = id;
   document.getElementById('prod-combo-input').value = name;
-  document.getElementById('prod-combo-dropdown').classList.remove('open');
+  document.getElementById('prod-combo').classList.remove('open');
   loadProductDetail(id);
 }
 
@@ -163,8 +164,7 @@ function selectProdCombo(id, name) {
 document.addEventListener('click', function(e) {
   var combo = document.getElementById('prod-combo');
   if (combo && !combo.contains(e.target)) {
-    var dd = document.getElementById('prod-combo-dropdown');
-    if (dd) dd.classList.remove('open');
+    combo.classList.remove('open');
   }
 });
 
@@ -198,13 +198,15 @@ function renderProdDetailHeader(p) {
   if (p.tags_list && p.tags_list.length > 0 && p.tags_list[0] !== '') {
     tagsHtml = p.tags_list.map(function(t) {
       return '<span class="tag-badge tag-' + (t.length % 5) + '">#' + escHtml(t) + '</span>';
-    }).join('');
+    }).join(' ');
   }
   document.getElementById('prod-detail-header').innerHTML =
-    '<div class="detail-title">' + escHtml(p.name) + '</div>' +
-    '<div class="detail-subtitle">' + escHtml(p.code || '') + '</div>' +
-    (tagsHtml ? '<div style="margin-top:8px">' + tagsHtml + '</div>' : '') +
-    (p.description ? '<div style="margin-top:8px;font-size:13px;color:var(--muted);line-height:1.5">' + escHtml(stripHtml(p.description)) + '</div>' : '');
+    '<div class="detail-meta">' +
+      '<div class="detail-title">' + escHtml(p.name) + '</div>' +
+      (p.code ? '<div class="detail-subtitle" style="font-family:var(--mono);font-size:12px;color:var(--muted)">' + escHtml(p.code) + '</div>' : '') +
+      (tagsHtml ? '<div style="margin-top:6px">' + tagsHtml + '</div>' : '') +
+      (p.description ? '<div style="margin-top:6px;font-size:13px;color:var(--muted);line-height:1.5">' + escHtml(stripHtml(p.description)) + '</div>' : '') +
+    '</div>';
 }
 
 function renderProdDetailInfo(p) {

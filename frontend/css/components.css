@@ -343,7 +343,7 @@
 
 .prod-info-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 1px;
   background: var(--border);
   border-radius: var(--r);
@@ -401,6 +401,11 @@
   background: var(--accent-lt); color: var(--accent);
 }
 
+@media (max-width: 900px) {
+  .prod-info-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
 @media (max-width: 768px) {
   .prod-info-grid {
     grid-template-columns: 1fr;

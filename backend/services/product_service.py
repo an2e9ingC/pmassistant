@@ -138,8 +138,9 @@ def _extract_customers_from_desc(p: CachedProduct) -> list[str]:
         desc = data.get("desc", "") or ""
     except Exception:
         return []
-    # Find all 【...】 patterns and extract content inside
-    return re.findall(r"【(.+?)】", desc)
+    # Strip HTML tags, then find all 【...】 patterns
+    plain = re.sub(r"<[^>]+>", "", desc)
+    return re.findall(r"【(.+?)】", plain)
 
 
 def _product_item(p: CachedProduct, db: Session) -> dict:
@@ -164,7 +165,12 @@ def _product_item(p: CachedProduct, db: Session) -> dict:
 def _product_detail(p: CachedProduct, db: Session) -> dict:
     projects = get_product_projects(db, p.id)
     cat = p.program_name or p.category
-    customers = _extract_customers_from_desc(p)
+    # Derive customers from linked projects (primary) + product desc (supplementary)
+    customers = list(set(
+        [prj.get("customer_name", "") for prj in projects if prj.get("customer_name")] +
+        _extract_customers_from_desc(p)
+    ))
+    customers = [c for c in customers if c]  # filter empty
     tags_str = p.tags or ""
     return {
         "id": p.id, "code": p.code, "name": p.name,

@@ -337,7 +337,7 @@ function renderProjTree(custId) {
           '<div class="proj-tree-toggle" id="proj-toggle-' + pj.id + '">&#9654;</div>' +
         '</div>' +
         '<div class="proj-tree-proj-meta">' +
-          escHtml(pj.name) + ' · ' + (pj.project_type === 'SC' ? '生产' : '研发') + '项目 · ' +
+          escHtml(extractCoreName(pj.name)) + ' · ' + (pj.project_type === 'SC' ? '生产' : '研发') + '项目 · ' +
           '关联 ' + productCount + ' 个产品' +
         '</div>' +
         (descSnippet ? '<div style="font-size:11px;color:var(--muted);margin-top:4px;padding-left:26px;line-height:1.5">' + escHtml(descSnippet) + '</div>' : '') +
@@ -703,21 +703,31 @@ function selectVpCategory(cat, el) {
       var detail = _mapDetailCache[pj.id];
       return detail && detail.products && detail.products.some(function(pp) { return pp.id === p.id; });
     });
-    return '<div class="prod-tree-section">' +
-      '<div class="prod-tree-prod" onclick="this.classList.toggle(\'expanded\');this.nextElementSibling.classList.toggle(\'show\')">' +
-        '<div class="prod-tree-prod-header">' +
-          '<div class="prod-tree-prod-title">' + escHtml(p.name) + '</div>' +
-          '<div class="prod-tree-toggle" style="font-size:11px">▶</div>' +
-        '</div>' +
-        '<div class="prod-tree-prod-meta">' + escHtml(p.code || '') + ' · ' + links.length + ' 个项目</div>' +
-      '</div>' +
-      '<div class="prod-tree-projs">' + links.map(function(pj) {
-        var projCode = extractProjectCode(pj.name);
-        return '<div class="map-link-chip" onclick="openProject(\'' + pj.id + '\')">' +
-          '<span style="font-family:var(--mono);font-size:10.5px;color:var(--accent)">' + escHtml(projCode) + '</span> ' +
-          escHtml(extractCoreName(pj.name)) +
-        '</div>';
-      }).join('') + '</div>' +
+    var rowsHtml = '';
+    if (links.length) {
+      rowsHtml = '<table class="proj-table" style="margin-top:8px"><thead><tr>' +
+        '<th>项目编号</th><th>项目名</th><th>客户</th><th width="8%">类型</th><th>当前阶段</th><th width="7%">状态</th><th width="12%">进度</th><th width="10%">计划完成</th>' +
+        '</tr></thead><tbody>' +
+        links.map(function(pj) {
+          var projCode = extractProjectCode(pj.name);
+          return '<tr onclick="openProject(\'' + pj.id + '\')" style="cursor:pointer">' +
+            '<td>' + renderProjIcon(pj.project_type, projCode) + '</td>' +
+            '<td><div class="proj-name">' + escHtml(extractCoreName(pj.name)) + '</div><div class="proj-code">' + escHtml(projCode) + '</div></td>' +
+            '<td>' + renderCustomerBadge(pj.customer_name) + '</td>' +
+            '<td>' + renderTypeBadge(pj.project_type) + '</td>' +
+            '<td>' + renderPill(pj.status) + '</td>' +
+            '<td>' + renderPill(pj.status) + '</td>' +
+            '<td class="prog-cell">' + renderProgressBar(pj.progress, pj.status) + '</td>' +
+            '<td style="font-size:12px;color:' + (pj.end ? 'var(--muted)' : 'var(--warn)') + '">' + (pj.end ? formatDate(pj.end) : '长期') + '</td>' +
+          '</tr>';
+        }).join('') +
+        '</tbody></table>';
+    } else {
+      rowsHtml = '<div class="empty-state" style="padding:16px;font-size:12px">暂无关联项目</div>';
+    }
+    return '<div style="margin-bottom:18px">' +
+      '<div class="section-hd" style="margin-bottom:6px"><div class="section-title" style="font-size:13px">' + escHtml(p.name) + '</div><span style="font-size:11px;color:var(--muted)">' + links.length + ' 个项目</span></div>' +
+      rowsHtml +
     '</div>';
   }).join('');
 }
