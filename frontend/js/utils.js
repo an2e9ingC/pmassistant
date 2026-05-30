@@ -110,3 +110,14 @@ function renderCustomerBadge(customerName) {
   if (!customerName) return '<span style="font-size:12px;color:var(--muted)">—</span>';
   return '<span class="cust-badge">' + escHtml(customerName) + '</span>';
 }
+
+// Render unified project identity block: [PE0406] 核心名 · CDLY
+function renderProjectIdBlock(name, customerName) {
+  var code = extractProjectCode(name);
+  var core = extractCoreName(name);
+  var html = '<span class="proj-code-tag">' + escHtml(code) + '</span> ' + escHtml(core);
+  if (customerName) {
+    html += ' ' + renderCustomerBadge(customerName);
+  }
+  return html;
+}

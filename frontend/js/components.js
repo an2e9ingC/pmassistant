@@ -35,11 +35,11 @@ function renderDelIcon(item) {
 function renderDeliverablesList(dels) {
   if (!dels || !dels.length) return '<span style="font-size:12px;color:var(--muted)">—</span>';
   return '<div class="del-list">' + dels.map(function(d) {
-    var locHtml = d.location ? '<span class="doc-link" style="font-size:10.5px;padding:1px 6px">&#x2197; ' + d.location + '</span>' : '';
+    var locHtml = d.location ? '<span class="doc-link" style="font-size:10.5px;padding:1px 6px">&#x2197; ' + escHtml(d.location) + '</span>' : '';
     var warnStyle = d.warn ? 'color:var(--danger)' : '';
     return '<div class="del-item">' +
       renderDelIcon(d) +
-      '<span style="' + warnStyle + '">' + d.name + '</span>' +
+      '<span style="' + warnStyle + '">' + escHtml(d.name) + '</span>' +
       locHtml +
     '</div>';
   }).join('') + '</div>';

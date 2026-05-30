@@ -225,14 +225,11 @@ function renderProdTree(catId) {
         '<div class="prod-tree-projs" id="projs-' + prod.id + '">' +
           (projCount ? linkedProjects.map(function(pj) {
             var pjDetail = _mapDetailCache[pj.id];
-            var pjDesc = (pjDetail && pjDetail.description) ? pjDetail.description.replace(/<[^>]+>/g, '').trim() : '';
+            var pjDesc = (pjDetail && pjDetail.description) ? stripHtml(pjDetail.description) : '';
             var pjDescSnippet = pjDesc.length > 150 ? pjDesc.substring(0, 150) + '...' : pjDesc;
-            var custTag = (pjDetail && pjDetail.customer_from_desc) ? '<span style="font-size:10px;color:var(--accent);background:var(--accent-lt);padding:1px 5px;border-radius:3px;margin-left:4px">' + escHtml(pjDetail.customer_from_desc) + '</span>' : '';
             return '<div class="proj-tree-prod-item" onclick="openProject(\'' + pj.id + '\'); event.stopPropagation();" style="cursor:pointer">' +
               '<div class="proj-tree-prod-name">' +
-                renderProjIcon(pj.project_type, pj.code) +
-                escHtml(pj.customer_name || pj.code || pj.name) +
-                custTag +
+                renderProjectIdBlock(pj.name, pj.customer_name) +
                 ' <span style="font-size:10px;color:var(--muted)">' + (pj.project_type === 'SC' ? '生产' : '研发') + '</span>' +
               '</div>' +
               (pjDescSnippet ? '<div class="proj-tree-prod-meta">' + escHtml(pjDescSnippet) + '</div>' : '') +
@@ -323,7 +320,7 @@ function renderProjTree(custId) {
 
   container.innerHTML = projects.map(function(pj) {
     var detail = _mapDetailCache[pj.id] || { products: [], description: '', customer_from_desc: '' };
-    var descText = (detail.description || '').replace(/<[^>]+>/g, '').trim();
+    var descText = stripHtml(detail.description || '');
     var descSnippet = descText.length > 200 ? descText.substring(0, 200) + '...' : descText;
     var productCount = (detail.products || []).length;
 
@@ -331,10 +328,10 @@ function renderProjTree(custId) {
       '<div class="proj-tree-proj" data-proj="' + pj.id + '" onclick="toggleProjTree(\'' + pj.id + '\')">' +
         '<div class="proj-tree-proj-header">' +
           '<div class="proj-tree-proj-title">' +
-            renderProjIcon(pj.project_type, pj.code) +
-            '<span class="map-card-code">' + escHtml(pj.code || '#' + pj.id) + '</span>' +
-            '<span>' + escHtml(pj.customer_name || pj.name) + '</span>' +
-            (detail.customer_from_desc ? '<span class="badge badge-rd" style="font-size:10px;padding:1px 5px">' + escHtml(detail.customer_from_desc) + '</span>' : '') +
+            renderProjIcon(pj.project_type, extractProjectCode(pj.name)) +
+            '<span class="map-card-code">' + escHtml(extractProjectCode(pj.name)) + '</span>' +
+            '<span>' + escHtml(extractCoreName(pj.name)) + '</span>' +
+            (pj.customer_name ? ' ' + renderCustomerBadge(pj.customer_name) : '') +
             renderPill(pj.status) +
           '</div>' +
           '<div class="proj-tree-toggle" id="proj-toggle-' + pj.id + '">&#9654;</div>' +
@@ -418,12 +415,12 @@ function searchProjectById(q) {
 
     return '<div class="projid-item" onclick="openProject(\'' + p.id + '\')" style="cursor:pointer">' +
       '<div class="projid-item-header">' +
-        '<span class="projid-item-code">' + escHtml(p.code || '#' + p.id) + '</span>' +
+        '<span class="projid-item-code">' + escHtml(extractProjectCode(p.name)) + '</span>' +
         '<span class="projid-item-type ' + (p.project_type === 'SC' ? 'sc' : 'rd') + '">' + (p.project_type === 'SC' ? '生产' : '研发') + '</span>' +
-        '<span class="projid-item-cust">' + escHtml(p.customer_name || p.name) + '</span>' +
+        (p.customer_name ? '<span class="projid-item-cust">' + renderCustomerBadge(p.customer_name) + '</span>' : '') +
         renderPill(p.status) +
       '</div>' +
-      '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">' + escHtml(p.name) + '</div>' +
+      '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">' + escHtml(extractCoreName(p.name)) + '</div>' +
       '<div class="projid-item-prods">' + prodHtml + '</div>' +
     '</div>';
   }).join('');
@@ -442,8 +439,8 @@ function renderMatrix() {
 
   var headHtml = '<tr><th>产品 \\ 项目</th>' +
     _mapProjects.map(function(p) {
-      return '<th style="min-width:88px;font-size:10px">' + escHtml(p.code || '#' + p.id) +
-        '<br><span style="font-weight:400;text-transform:none;letter-spacing:0">' + escHtml(p.customer_name || '') + '</span></th>';
+      return '<th style="min-width:88px;font-size:10px">' + escHtml(extractProjectCode(p.name)) +
+        (p.customer_name ? '<br>' + renderCustomerBadge(p.customer_name) : '') + '</th>';
     }).join('') +
   '</tr>';
 
@@ -518,10 +515,11 @@ function showLinkDialog(type, id, name) {
 
 function renderLinkOptions(items, itemType, title) {
   var listHtml = items.map(function(item) {
-    var label = item.customer_name || item.code || item.name;
+    var label = itemType === 'product' ? item.name : extractCoreName(item.name);
+    var code = itemType === 'product' ? (item.code || '') : extractProjectCode(item.name);
     var sub = itemType === 'product' ? (item.category || item.type || '') : (item.project_type || 'RD');
     return '<div class="link-dialog-item" onclick="doLink(' + _linkDialogId + ',' + item.id + ',\'' + _linkDialogType + '\')">' +
-      '<div><div style="font-weight:510">' + escHtml(label) + '</div><div style="font-size:10.5px;color:var(--muted)">' + escHtml(sub) + '</div></div>' +
+      '<div><div style="font-weight:510">' + escHtml(code) + ' ' + escHtml(label) + '</div><div style="font-size:10.5px;color:var(--muted)">' + escHtml(sub) + '</div></div>' +
       '<span style="color:var(--accent);font-weight:600">+ 关联</span>' +
     '</div>';
   }).join('');
@@ -657,7 +655,7 @@ function searchProjectProducts(q) {
       '<div class="projid-item-header">' +
         '<span class="projid-item-code">' + escHtml(projCode) + '</span>' +
         '<span class="projid-item-type ' + (p.project_type === 'SC' ? 'sc' : 'rd') + '">' + (p.project_type === 'SC' ? '生产' : '研发') + '</span>' +
-        (p.customer_name ? '<span class="projid-item-cust">' + escHtml(p.customer_name) + '</span>' : '') +
+        (p.customer_name ? renderCustomerBadge(p.customer_name) : '') +
         renderPill(p.status) +
       '</div>' +
       '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">' + escHtml(coreName) + '</div>' +

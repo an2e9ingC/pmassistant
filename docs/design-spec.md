@@ -236,7 +236,59 @@ utils.js → api.js → auth.js → components.js → dashboard.js → detail.js
 
 ---
 
-## 12. 服务器管理
+## 12. UI 元素渲染一致性
+
+### 12.1 核心原则
+
+**同一类数据元素在全局范围内必须使用统一的渲染函数和样式风格。** 禁止在不同页面/组件中对相同语义的数据使用不同的渲染方式。这确保了：
+
+- **视觉一致性**：用户在任何页面看到同类型信息时，样式风格完全一致
+- **可维护性**：样式修改只需改一个函数，全局自动同步
+- **代码复用**：避免散落各处的重复渲染逻辑
+
+### 12.2 共享渲染函数（Single Source of Truth）
+
+所有渲染函数定义在 `frontend/js/utils.js`，全局可用：
+
+| 数据元素 | 共享函数 | 输出格式 | 示例 |
+|---------|---------|---------|------|
+| 项目编号 | `extractProjectCode(name)` | 纯文本，name 第一段 `-` 前 | `PE0406` |
+| 项目名称 | `extractCoreName(name)` | 纯文本，剥离编号和客户前缀 | `全国产存储板卡` |
+| 完整项目身份 | `renderProjectIdBlock(name, customerName)` | `[PE0406] 核心名 CDLY` | `[PE0406] 全国产存储板卡 CDLY` |
+| 项目编号图标 | `renderProjIcon(type, code)` | 34px 彩色圆角方块 | 蓝色 `PE0406` / 绿色 `YF2506` |
+| 客户名 | `renderCustomerBadge(name)` | 琥珀色 mono 字体 badge | `CDLY` |
+| 产品标签 | `<span class="tag-badge tag-N">#标签</span>` | tag-badge CSS class + 循环色 | `#全国产` `#双V7` |
+| HTML 剥离 | `stripHtml(html)` | 浏览器 DOM 解析后纯文本 | — |
+
+### 12.3 禁止的渲染方式
+
+以下做法**违反本规范**，code review 必须拦截：
+
+- ❌ 直接使用 `p.name` 作为显示文本（应使用 `extractCoreName()`）
+- ❌ 客户名用普通 `escHtml()` 或自定义 `<span>` 渲染（应使用 `renderCustomerBadge()`）
+- ❌ 项目编号用 `p.code` 或 `'#' + p.id` 显示（应使用 `extractProjectCode()`）
+- ❌ 手动正则 `.replace(/<[^>]+>/g, '')` 剥离 HTML（应使用 `stripHtml()`）
+- ❌ 同一元素在不同页面使用不同的 CSS class 或 inline style
+
+### 12.4 新增数据元素规范
+
+当需要渲染一种新的数据类型时：
+
+1. 在 `utils.js` 中创建对应的 `renderXxx()` 函数
+2. 确保函数返回值（HTML 字符串）在所有上下文（表格、卡片、弹窗、下拉框）中视觉效果一致
+3. 所有 CSS 颜色使用 `var(--xxx)` token，兼容浅色/深色主题
+4. 空值兜底：空数据统一显示灰色 `—`（`<span style="color:var(--muted)">—</span>`）
+
+### 12.5 检查清单
+
+- [ ] 全局搜索 `escHtml.*\.name` 确认无直接使用原始名称
+- [ ] 全局搜索 `\.customer_name` 确认无绕过 `renderCustomerBadge` 的渲染
+- [ ] 全局搜索 `.replace(/<[^>]+>/g` 确认无手动 HTML 剥离
+- [ ] 全局搜索 `font-size.*px` 确认无硬编码字号（应使用现有 CSS class）
+
+---
+
+## 13. 服务器管理
 
 `server.sh` 脚本提供：
 

@@ -63,7 +63,7 @@ async function loadReportMonthly() {
     var s = data.summary || {};
     var projRows = (data.projects || []).map(function(p) {
       return '<tr>' +
-        '<td><span style="font-family:var(--mono);font-size:11.5px;color:var(--accent)">' + escHtml(p.code || '#' + p.id) + '</span> ' + escHtml(p.name) + '</td>' +
+        '<td><span style="font-family:var(--mono);font-size:11.5px;color:var(--accent)">' + escHtml(extractProjectCode(p.name)) + '</span> ' + escHtml(extractCoreName(p.name)) + '</td>' +
         '<td>' + renderPill(p.status) + '</td>' +
         '<td style="font-variant-numeric:tabular-nums">' + p.progress + '%</td>' +
         '<td style="font-variant-numeric:tabular-nums">' + p.tasks_done + '/' + p.tasks_total + '</td>' +

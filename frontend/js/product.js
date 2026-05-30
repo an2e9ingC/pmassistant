@@ -208,7 +208,8 @@ function renderProdDetailHeader(p) {
 }
 
 function renderProdDetailInfo(p) {
-  var customers = (p.customers_from_desc || []).join(', ') || '—';
+  var customers = p.customers_from_desc || [];
+  var customersHtml = customers.length ? customers.map(function(c) { return renderCustomerBadge(c); }).join(' ') : '<span style="color:var(--muted)">—</span>';
   var html =
     '<div class="prod-info-item"><span class="prod-info-label">产品线</span><span class="prod-info-val">' + escHtml(p.category || p.program_name || '—') + '</span></div>' +
     '<div class="prod-info-item"><span class="prod-info-label">状态</span><span class="prod-info-val">' + renderPill(p.status) + '</span></div>' +
@@ -216,7 +217,7 @@ function renderProdDetailInfo(p) {
     '<div class="prod-info-item"><span class="prod-info-label">需求数</span><span class="prod-info-val">' + p.total_stories + '</span></div>' +
     '<div class="prod-info-item"><span class="prod-info-label">Bug数</span><span class="prod-info-val">' + p.total_bugs + '</span></div>' +
     '<div class="prod-info-item"><span class="prod-info-label">发布次数</span><span class="prod-info-val">' + p.releases + '</span></div>' +
-    '<div class="prod-info-item"><span class="prod-info-label">关联客户</span><span class="prod-info-val">' + escHtml(customers) + '</span></div>';
+    '<div class="prod-info-item"><span class="prod-info-label">关联客户</span><span class="prod-info-val">' + customersHtml + '</span></div>';
   if (p.nas_path) {
     html += '<div class="prod-info-item"><span class="prod-info-label">NAS路径</span><span class="prod-info-val"><code>' + escHtml(p.nas_path) + '</code></span></div>';
   }
