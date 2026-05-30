@@ -156,6 +156,7 @@ function buildDetailHeader(p) {
         '</span>' +
         renderTypeBadge(p.project_type) +
         renderPill(p.status) +
+        (p.zentao_url ? '<a href="' + p.zentao_url + '" target="_blank" class="zentao-link" title="在禅道中查看">&#x2197; 禅道</a>' : '') +
       '</div>' +
     '</div>' +
     '<div class="ring-wrap">' +

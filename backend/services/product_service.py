@@ -3,6 +3,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from backend.config import zentao_product_url
 from backend.models.zentao import (
     CachedProduct, CachedProject, ProductProjectLink,
 )
@@ -188,6 +189,7 @@ def _product_detail(p: CachedProduct, db: Session) -> dict:
         "tags": tags_str,
         "tags_list": tags_str.split(",") if tags_str else [],
         "customers_from_desc": customers,
+        "zentao_url": zentao_product_url(p.id),
         "projects": projects,
         "project_count": len(projects),
     }

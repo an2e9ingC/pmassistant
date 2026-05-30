@@ -202,7 +202,10 @@ function renderProdDetailHeader(p) {
   }
   document.getElementById('prod-detail-header').innerHTML =
     '<div class="detail-meta">' +
-      '<div class="detail-title">' + escHtml(p.name) + '</div>' +
+      '<div class="detail-title">' +
+        escHtml(p.name) +
+        (p.zentao_url ? '<a href="' + p.zentao_url + '" target="_blank" class="zentao-link" style="margin-left:10px;font-size:12px" title="在禅道中查看">&#x2197; 禅道</a>' : '') +
+      '</div>' +
       (p.code ? '<div class="detail-subtitle" style="font-family:var(--mono);font-size:12px;color:var(--muted)">' + escHtml(p.code) + '</div>' : '') +
       (tagsHtml ? '<div style="margin-top:6px">' + tagsHtml + '</div>' : '') +
       (p.description ? '<div style="margin-top:6px;font-size:13px;color:var(--muted);line-height:1.5">' + escHtml(stripHtml(p.description)) + '</div>' : '') +

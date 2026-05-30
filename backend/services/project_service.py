@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 import re
 
-from backend.config import settings
+from backend.config import settings, zentao_project_url, zentao_product_url
 from backend.models.zentao import (
     CachedProject, CachedExecution, CachedTask, CachedProduct, ProductProjectLink,
 )
@@ -237,6 +237,7 @@ def _project_detail(p: CachedProject) -> dict:
         "alias_name": p.alias_name,
         "description": desc,
         "customer_from_desc": customer_from_desc,
+        "zentao_url": _zentao_url("project", p.id),
     }
 
 
@@ -272,3 +273,9 @@ def _get_who(tasks: list[CachedTask]) -> str:
             names.append(name)
             seen.add(name)
     return "、".join(names) if names else ""
+
+
+def _zentao_url(entity_type: str, entity_id: int) -> str:
+    if entity_type == "project":
+        return zentao_project_url(entity_id)
+    return zentao_product_url(entity_id)

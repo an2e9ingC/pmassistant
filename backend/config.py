@@ -49,4 +49,19 @@ class Settings:
         }
 
 
+def get_zentao_web_base() -> str:
+    """Derive Zentao web UI base URL from the API base URL.
+    e.g. http://192.168.3.22/zentao/api.php/v1 -> http://192.168.3.22/zentao"""
+    api = settings.ZENTAO_BASE_URL.rstrip("/")
+    return api.rsplit("/api.php", 1)[0]
+
+
+def zentao_project_url(project_id: int) -> str:
+    return f"{get_zentao_web_base()}/project-view-{project_id}.html"
+
+
+def zentao_product_url(product_id: int) -> str:
+    return f"{get_zentao_web_base()}/product-view-{product_id}.html"
+
+
 settings = Settings()
