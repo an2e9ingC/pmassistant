@@ -66,10 +66,17 @@ def get_product_projects(db: Session, product_id: int) -> list[dict]:
     projects = db.query(CachedProject).filter(
         CachedProject.id.in_(project_ids)
     ).all()
+    _status_map = {"wait":"pending","doing":"active","done":"completed","closed":"completed","suspended":"blocked"}
     return [{
         "id": p.id, "code": p.code, "name": p.name,
-        "project_type": p.project_type, "status": p.status,
+        "project_type": p.project_type,
+        "status": _status_map.get(p.status, p.status or "pending"),
         "customer_name": p.customer_name,
+        "progress": p.progress or "0",
+        "begin": str(p.begin) if p.begin else None,
+        "end": str(p.end) if p.end else None,
+        "tags": p.tags or "",
+        "tags_list": (p.tags or "").split(",") if p.tags else [],
     } for p in projects]
 
 

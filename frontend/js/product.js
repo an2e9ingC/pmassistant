@@ -236,20 +236,31 @@ function renderProdDetailProjects(p) {
   var projects = p.projects || [];
   var tbody = document.getElementById('prod-projects-tbody');
   if (!projects.length) {
-    tbody.innerHTML = '<tr><td colspan="4"><div class="empty-state">暂无关联项目</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state">暂无关联项目</div></td></tr>';
     return;
   }
   tbody.innerHTML = projects.map(function(proj) {
     var projCode = extractProjectCode(proj.name);
     var coreName = extractCoreName(proj.name);
+    var tagsList = proj.tags_list || [];
+    var tagsHtml = '';
+    if (tagsList.length > 0 && tagsList[0] !== '') {
+      tagsHtml = tagsList.slice(0, 3).map(function(t) {
+        return '<span class="tag-badge tag-' + (t.length % 5) + '">#' + escHtml(t) + '</span>';
+      }).join(' ');
+    } else {
+      tagsHtml = '<span style="font-size:11.5px;color:var(--muted)">无</span>';
+    }
     return '<tr onclick="openProject(\'' + proj.id + '\')" style="cursor:pointer">' +
-      '<td><div class="proj-id-cell">' +
-        renderProjIcon(proj.project_type, projCode) +
-        '<div><div class="proj-name">' + escHtml(coreName) + '</div><div class="proj-code">' + escHtml(projCode) + '</div></div>' +
-      '</div></td>' +
+      '<td>' + renderProjIcon(proj.project_type, projCode) + '</td>' +
+      '<td><div class="proj-name">' + escHtml(coreName) + '</div><div class="proj-code">' + escHtml(projCode) + '</div></td>' +
       '<td>' + renderCustomerBadge(proj.customer_name) + '</td>' +
       '<td>' + renderTypeBadge(proj.project_type) + '</td>' +
+      '<td style="font-size:13px">' + escHtml(proj.status || '—') + '</td>' +
       '<td>' + renderPill(proj.status) + '</td>' +
+      '<td class="prog-cell">' + renderProgressBar(proj.progress, proj.status) + '</td>' +
+      '<td style="font-size:12px;color:' + (proj.end ? 'var(--muted)' : 'var(--warn)') + '">' + (proj.end ? formatDate(proj.end) : '长期') + '</td>' +
+      '<td>' + tagsHtml + '</td>' +
     '</tr>';
   }).join('');
 }
