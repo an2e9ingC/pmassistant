@@ -178,7 +178,7 @@ async function loadProductDetail(id) {
 
   // Show loading
   document.getElementById('prod-detail-header').innerHTML = '<div class="loading-spinner">加载中...</div>';
-  document.getElementById('prod-info-grid').innerHTML = '<div class="loading-spinner">加载中...</div>';
+  document.getElementById('prod-info-area').innerHTML = '<div class="loading-spinner">加载中...</div>';
   document.getElementById('prod-projects-tbody').innerHTML = '<tr><td colspan="4"><div class="loading-spinner">加载中...</div></td></tr>';
   document.getElementById('prod-resources-card').innerHTML = '<div class="loading-spinner">加载中...</div>';
 
@@ -214,22 +214,30 @@ function renderProdDetailHeader(p) {
 
 function renderProdDetailInfo(p) {
   var customers = p.customers_from_desc || [];
-  var customersHtml = customers.length ? customers.map(function(c) { return renderCustomerBadge(c); }).join(' ') : '<span style="color:var(--muted)">—</span>';
-  var html =
-    '<div class="prod-info-item"><span class="prod-info-label">产品线</span><span class="prod-info-val">' + escHtml(p.category || p.program_name || '—') + '</span></div>' +
-    '<div class="prod-info-item"><span class="prod-info-label">状态</span><span class="prod-info-val">' + renderPill(p.status) + '</span></div>' +
-    '<div class="prod-info-item"><span class="prod-info-label">类型</span><span class="prod-info-val">' + escHtml(p.type || '—') + '</span></div>' +
-    '<div class="prod-info-item"><span class="prod-info-label">需求数</span><span class="prod-info-val">' + p.total_stories + '</span></div>' +
-    '<div class="prod-info-item"><span class="prod-info-label">Bug数</span><span class="prod-info-val">' + p.total_bugs + '</span></div>' +
-    '<div class="prod-info-item"><span class="prod-info-label">发布次数</span><span class="prod-info-val">' + p.releases + '</span></div>' +
-    '<div class="prod-info-item"><span class="prod-info-label">关联客户</span><span class="prod-info-val">' + customersHtml + '</span></div>';
+  var customersHtml = customers.length ? customers.map(function(c) { return renderCustomerBadge(c); }).join(' ') : '<span style="color:var(--muted);font-size:12px">—</span>';
+  var linksHtml = '';
   if (p.nas_path) {
-    html += '<div class="prod-info-item"><span class="prod-info-label">NAS路径</span><span class="prod-info-val"><code>' + escHtml(p.nas_path) + '</code></span></div>';
+    linksHtml += '<a href="' + escHtml(p.nas_path) + '" target="_blank" class="prod-link-chip" title="NAS 路径">&#x1F4C1; NAS</a>';
   }
   if (p.git_url) {
-    html += '<div class="prod-info-item"><span class="prod-info-label">Git仓库</span><span class="prod-info-val"><code>' + escHtml(p.git_url) + '</code></span></div>';
+    linksHtml += '<a href="' + escHtml(p.git_url) + '" target="_blank" class="prod-link-chip" title="Git 仓库">&#x1F5C3; Git</a>';
   }
-  document.getElementById('prod-info-grid').innerHTML = html;
+  var html =
+    '<div class="section-hd"><div class="section-title">基本信息</div></div>' +
+    '<div class="prod-stats">' +
+      '<div class="prod-stat"><div class="prod-stat-val" style="color:var(--accent)">' + (p.total_stories || 0) + '</div><div class="prod-stat-lbl">需求数</div></div>' +
+      '<div class="prod-stat"><div class="prod-stat-val" style="color:' + (p.total_bugs > 0 ? 'var(--danger)' : 'var(--success)') + '">' + (p.total_bugs || 0) + '</div><div class="prod-stat-lbl">Bug 数</div></div>' +
+      '<div class="prod-stat"><div class="prod-stat-val" style="color:var(--warn)">' + (p.releases || 0) + '</div><div class="prod-stat-lbl">发布次数</div></div>' +
+      '<div class="prod-stat"><div class="prod-stat-val">' + (p.project_count || 0) + '</div><div class="prod-stat-lbl">关联项目</div></div>' +
+    '</div>' +
+    '<div class="prod-info-row">' +
+      '<span class="prod-info-row-label">产品线</span>' +
+      '<span class="tag-badge tag-0" style="font-size:12px;font-weight:520">' + escHtml(p.category || p.program_name || '未分类') + '</span>' +
+      '<span class="prod-info-row-label" style="margin-left:8px">状态</span>' + renderPill(p.status) +
+      '<span class="prod-info-row-label" style="margin-left:8px">客户</span>' + customersHtml +
+      (linksHtml ? '<span style="margin-left:auto">' + linksHtml + '</span>' : '') +
+    '</div>';
+  document.getElementById('prod-info-area').innerHTML = html;
 }
 
 function renderProdDetailProjects(p) {
