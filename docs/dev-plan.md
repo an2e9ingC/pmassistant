@@ -79,6 +79,8 @@
 - [x] FR-027~029: 产品管理模块（产品列表、标签提取#keyword、产品详情页）
 - [x] FR-030~031: 侧边栏"产品"导航 + 产品卡片样式
 - [x] 客户信息自动提取：项目名 PE0406-CDLY → CDLY，描述【CDLY】→ CDLY
+- [x] CachedCustomer + CustomerProjectLink：客户独立实体表 + 项目关联表
+- [x] Customer API：list/detail 端点，支持按客户查询关联项目
 - [x] 项目描述/标签提取：CachedProject.description/tags，同步时从禅道desc提取
 - [x] 项目列表拆分为 编号/项目名/客户/类型/阶段/状态/进度/计划完成/描述 9列
 - [x] 所有表格改为百分比宽度 + auto布局，协调统一

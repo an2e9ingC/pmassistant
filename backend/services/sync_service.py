@@ -12,6 +12,7 @@ from backend.models.bug import CachedBug
 from backend.models.zentao import (
     CachedProject, CachedExecution, CachedTask,
     CachedUser, CachedProduct, ProductProjectLink,
+    CachedCustomer, CustomerProjectLink,
 )
 from backend.models.local import SyncLog
 from backend.services.zentao_client import ZentaoClient
@@ -236,14 +237,41 @@ class SyncService:
                     db.query(CachedTask).filter(CachedTask.project_id == sp.id).delete()
                     db.query(CachedExecution).filter(CachedExecution.project_id == sp.id).delete()
                     db.query(ProductProjectLink).filter(ProductProjectLink.project_id == sp.id).delete()
+                    db.query(CustomerProjectLink).filter(CustomerProjectLink.project_id == sp.id).delete()
                     db.delete(sp)
                     deleted += 1
             db.commit()
+
+            # Sync customer links from project customer_name
+            self._sync_customer_links(db)
+
             _finish_log(db, log, "success", len(projects), created + deleted, updated)
             return {"fetched": len(projects), "created": created, "updated": updated, "deleted": deleted}
         except Exception as e:
             _finish_log(db, log, "failed", error=str(e))
             raise
+
+    def _sync_customer_links(self, db: Session):
+        """Ensure Customer records and CustomerProjectLinks exist for all cached projects."""
+        projects = db.query(CachedProject).all()
+        for p in projects:
+            cname = (p.customer_name or "").strip()
+            if not cname:
+                continue
+            # Find or create customer
+            cust = db.query(CachedCustomer).filter(CachedCustomer.name == cname).first()
+            if not cust:
+                cust = CachedCustomer(name=cname)
+                db.add(cust)
+                db.flush()
+            # Ensure link exists
+            link = db.query(CustomerProjectLink).filter(
+                CustomerProjectLink.customer_id == cust.id,
+                CustomerProjectLink.project_id == p.id,
+            ).first()
+            if not link:
+                db.add(CustomerProjectLink(customer_id=cust.id, project_id=p.id))
+        db.commit()
 
     async def _sync_executions_and_tasks(self, db: Session) -> dict:
         log = _log_sync(db, "executions_tasks")

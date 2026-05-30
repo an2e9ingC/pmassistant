@@ -26,13 +26,9 @@ async function renderMapping() {
   _mapDetailCache = {};
   await Promise.all(_mapProjects.map(function(pj) {
     return API.get('/projects/' + pj.id).then(function(detail) {
-      _mapDetailCache[pj.id] = {
-        products: (detail && detail.products) ? detail.products : [],
-        description: (detail && detail.description) ? detail.description : '',
-        customer_from_desc: (detail && detail.customer_from_desc) ? detail.customer_from_desc : '',
-      };
+      _mapDetailCache[pj.id] = detail || {};
     }).catch(function() {
-      _mapDetailCache[pj.id] = { products: [], description: '', customer_from_desc: '' };
+      _mapDetailCache[pj.id] = {};
     });
   }));
 
@@ -319,7 +315,7 @@ function renderProjTree(custId) {
   }
 
   container.innerHTML = projects.map(function(pj) {
-    var detail = _mapDetailCache[pj.id] || { products: [], description: '', customer_from_desc: '' };
+    var detail = _mapDetailCache[pj.id] || {};
     var descText = stripHtml(detail.description || '');
     var descSnippet = descText.length > 200 ? descText.substring(0, 200) + '...' : descText;
     var productCount = (detail.products || []).length;
@@ -403,7 +399,7 @@ function searchProjectById(q) {
   }
 
   container.innerHTML = results.map(function(p) {
-    var detail = _mapDetailCache[p.id] || { products: [] };
+    var detail = _mapDetailCache[p.id] || {};
     var prodHtml = '';
     if (detail.products && detail.products.length) {
       prodHtml = detail.products.map(function(prod) {
@@ -505,7 +501,7 @@ function showLinkDialog(type, id, name) {
       renderLinkOptions(available, 'project', title);
     });
   } else {
-    var detail = _mapDetailCache[id] || { products: [] };
+    var detail = _mapDetailCache[id] || {};
     var linkedIds = detail.products.map(function(p) { return p.id; });
     var available = _mapProducts.filter(function(p) { return linkedIds.indexOf(p.id) < 0; });
     if (!available.length) { showToast('所有产品已关联', 'info'); return; }
@@ -543,14 +539,10 @@ async function doLink(id1, id2, type) {
     closeLinkDialog();
 
     // Refresh cache for affected project
-    _mapDetailCache[projectId] = { products: [], description: '', customer_from_desc: '' };
+    _mapDetailCache[projectId] = {};
     try {
       var detail = await API.get('/projects/' + projectId);
-      _mapDetailCache[projectId] = {
-        products: (detail && detail.products) ? detail.products : [],
-        description: (detail && detail.description) ? detail.description : '',
-        customer_from_desc: (detail && detail.customer_from_desc) ? detail.customer_from_desc : '',
-      };
+      _mapDetailCache[projectId] = detail || {};
     } catch(e) {}
 
     // Refresh current view
@@ -566,14 +558,10 @@ async function unlinkProduct(productId, projectId) {
     await API.del('/products/link?product_id=' + productId + '&project_id=' + projectId);
     showToast('已取消关联', 'success');
 
-    _mapDetailCache[projectId] = { products: [], description: '', customer_from_desc: '' };
+    _mapDetailCache[projectId] = {};
     try {
       var detail = await API.get('/projects/' + projectId);
-      _mapDetailCache[projectId] = {
-        products: (detail && detail.products) ? detail.products : [],
-        description: (detail && detail.description) ? detail.description : '',
-        customer_from_desc: (detail && detail.customer_from_desc) ? detail.customer_from_desc : '',
-      };
+      _mapDetailCache[projectId] = detail || {};
     } catch(e) {}
 
     switchMapTab(_mapTab);
@@ -602,13 +590,9 @@ async function _loadMapData() {
   _mapDetailCache = {};
   await Promise.all(_mapProjects.map(function(pj) {
     return API.get('/projects/' + pj.id).then(function(detail) {
-      _mapDetailCache[pj.id] = {
-        products: (detail && detail.products) ? detail.products : [],
-        description: (detail && detail.description) ? detail.description : '',
-        customer_from_desc: (detail && detail.customer_from_desc) ? detail.customer_from_desc : '',
-      };
+      _mapDetailCache[pj.id] = detail || {};
     }).catch(function() {
-      _mapDetailCache[pj.id] = { products: [], description: '', customer_from_desc: '' };
+      _mapDetailCache[pj.id] = {};
     });
   }));
 }
@@ -640,7 +624,7 @@ function searchProjectProducts(q) {
     return;
   }
   container.innerHTML = results.map(function(p) {
-    var detail = _mapDetailCache[p.id] || { products: [] };
+    var detail = _mapDetailCache[p.id] || {};
     var projCode = extractProjectCode(p.name);
     var coreName = extractCoreName(p.name);
     var prodHtml = '';
@@ -706,19 +690,22 @@ function selectVpCategory(cat, el) {
     var rowsHtml = '';
     if (links.length) {
       rowsHtml = '<table class="proj-table" style="margin-top:8px"><thead><tr>' +
-        '<th>项目编号</th><th>项目名</th><th>客户</th><th width="8%">类型</th><th>当前阶段</th><th width="7%">状态</th><th width="12%">进度</th><th width="10%">计划完成</th>' +
+        '<th>项目编号</th><th>项目名</th><th>客户</th><th width="8%">类型</th><th width="7%">状态</th><th width="12%">进度</th><th width="10%">计划完成</th>' +
         '</tr></thead><tbody>' +
         links.map(function(pj) {
+          var detail = _mapDetailCache[pj.id] || {};
           var projCode = extractProjectCode(pj.name);
+          var dStatus = detail.status || pj.status || '';
+          var dProgress = detail.progress || pj.progress || '0';
+          var dEnd = detail.end || pj.end || null;
           return '<tr onclick="openProject(\'' + pj.id + '\')" style="cursor:pointer">' +
             '<td>' + renderProjIcon(pj.project_type, projCode) + '</td>' +
             '<td><div class="proj-name">' + escHtml(extractCoreName(pj.name)) + '</div><div class="proj-code">' + escHtml(projCode) + '</div></td>' +
             '<td>' + renderCustomerBadge(pj.customer_name) + '</td>' +
             '<td>' + renderTypeBadge(pj.project_type) + '</td>' +
-            '<td>' + renderPill(pj.status) + '</td>' +
-            '<td>' + renderPill(pj.status) + '</td>' +
-            '<td class="prog-cell">' + renderProgressBar(pj.progress, pj.status) + '</td>' +
-            '<td style="font-size:12px;color:' + (pj.end ? 'var(--muted)' : 'var(--warn)') + '">' + (pj.end ? formatDate(pj.end) : '长期') + '</td>' +
+            '<td>' + renderPill(dStatus) + '</td>' +
+            '<td class="prog-cell">' + renderProgressBar(dProgress, dStatus) + '</td>' +
+            '<td style="font-size:12px;color:' + (dEnd ? 'var(--muted)' : 'var(--warn)') + '">' + (dEnd ? formatDate(dEnd) : '长期') + '</td>' +
           '</tr>';
         }).join('') +
         '</tbody></table>';
@@ -735,36 +722,43 @@ function selectVpCategory(cat, el) {
 /* ── 客户关联项目 (从客户查项目) ── */
 
 async function initCustomerProjects() {
-  await _loadMapData();
   var catList = document.getElementById('vc-cat-list');
   var treeContainer = document.getElementById('vc-tree-container');
-
-  // Collect customers from project data
-  var custs = {};
-  _mapProjects.forEach(function(pj) {
-    var cust = _getProjectCustomer(pj) || '未分类';
-    if (!custs[cust]) custs[cust] = [];
-    custs[cust].push(pj);
-  });
-  var custNames = Object.keys(custs).sort();
-  catList.innerHTML = custNames.map(function(c) {
-    return '<div class="prod-cat-item" onclick="selectVcCustomer(\'' + escHtml(c).replace(/'/g, "\\'") + '\', this)">' + escHtml(c) + '<span class="cat-count">' + custs[c].length + '</span></div>';
-  }).join('');
   treeContainer.innerHTML = '<div class="prod-tree-empty">请选择左侧客户</div>';
-  _vcCusts = custs;
+
+  try {
+    var data = await API.get('/customers');
+    _vcCustomers = data.items || [];
+  } catch(e) {
+    _vcCustomers = [];
+  }
+  catList.innerHTML = _vcCustomers.map(function(c) {
+    return '<div class="prod-cat-item" onclick="selectVcCustomer(\'' + c.id + '\', this)">' + escHtml(c.name) + '<span class="cat-count">' + c.project_count + '</span></div>';
+  }).join('');
+  if (!_vcCustomers.length) {
+    catList.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:12px">暂无客户数据</div>';
+  }
 }
 
-var _vcCusts = {};
+var _vcCustomers = [];
 
-function selectVcCustomer(cust, el) {
+async function selectVcCustomer(custId, el) {
   document.querySelectorAll('#vc-cat-list .prod-cat-item').forEach(function(c) { c.classList.remove('active'); });
   if (el) el.classList.add('active');
-  var projects = _vcCusts[cust] || [];
   var container = document.getElementById('vc-tree-container');
+  container.innerHTML = '<div class="loading-spinner" style="padding:20px">加载中...</div>';
+  try {
+    var data = await API.get('/customers/' + custId);
+    var projects = data.projects || [];
+  } catch(e) {
+    projects = [];
+  }
   if (!projects.length) {
-    container.innerHTML = '<div class="prod-tree-empty">此客户暂无项目</div>';
+    container.innerHTML = '<div class="prod-tree-empty">此客户暂无关联项目</div>';
     return;
   }
+  // Also load product data for each project
+  await _loadMapData();
   container.innerHTML = projects.map(function(pj) {
     var detail = _mapDetailCache[pj.id];
     var products = (detail && detail.products) ? detail.products : [];
@@ -772,17 +766,20 @@ function selectVcCustomer(cust, el) {
     return '<div class="prod-tree-section">' +
       '<div class="proj-tree-proj" onclick="this.classList.toggle(\'expanded\');this.nextElementSibling.classList.toggle(\'show\')">' +
         '<div class="proj-tree-proj-header">' +
-          '<div class="proj-tree-proj-title">' + escHtml(projCode) + ' ' + escHtml(extractCoreName(pj.name)) + '</div>' +
+          '<div class="proj-tree-proj-title">' +
+            renderProjIcon(pj.project_type, projCode) + ' ' +
+            escHtml(extractCoreName(pj.name)) +
+          '</div>' +
           '<div class="prod-tree-toggle" style="font-size:11px">▶</div>' +
         '</div>' +
         '<div class="proj-tree-proj-meta">' + renderTypeBadge(pj.project_type) + ' · ' + renderPill(pj.status) + '</div>' +
       '</div>' +
-      '<div class="prod-tree-projs">' + products.map(function(pp) {
-        return '<div class="proj-tree-prod-item">' +
+      '<div class="prod-tree-projs">' + (products.length ? products.map(function(pp) {
+        return '<div class="proj-tree-prod-item" onclick="event.stopPropagation();openProductDetail(\'' + pp.id + '\')" style="cursor:pointer">' +
           '<div class="proj-tree-prod-name">' + escHtml(pp.name) + '</div>' +
           '<div class="proj-tree-prod-meta">' + escHtml(pp.code || '') + '</div>' +
         '</div>';
-      }).join('') + '</div>' +
+      }).join('') : '') + '</div>' +
     '</div>';
   }).join('');
 }

@@ -396,11 +396,16 @@ Deliverable (交付物)
 
 ```
 Product ↔ Project: Many-to-Many (一个产品应用到多个项目)
-Project ↔ Customer: Many-to-One (多个项目对应一个客户)
-Customer ↔ Product: Many-to-Many (一个客户购买多个产品)
+Project ↔ Customer: Many-to-Many (一个项目可服务多个客户，一个客户可有多个项目)
+Customer ↔ Product: Many-to-Many (一个客户购买多个产品，一个产品卖给多个客户)
 Project → Phase: One-to-Many (一个项目多个阶段)
 Phase → Deliverable: One-to-Many
 ```
+
+**实现**:
+- `product_project_links`: 产品-项目关联表
+- `customer_project_links`: 客户-项目关联表（客户从项目名/描述自动提取，同步时建立关联）
+- `zenta_customers`: 客户实体表（name 唯一）
 
 ---
 

@@ -135,3 +135,24 @@ class ProductProjectLink(Base):
     created_at = Column(DateTime, default=func.now())
 
     __table_args__ = (UniqueConstraint("product_id", "project_id"),)
+
+
+class CachedCustomer(Base):
+    __tablename__ = "zenta_customers"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(128), unique=True, nullable=False, index=True)
+    full_name = Column(String(256), nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class CustomerProjectLink(Base):
+    __tablename__ = "customer_project_links"
+
+    id = Column(Integer, primary_key=True)
+    customer_id = Column(Integer, ForeignKey("zenta_customers.id"), nullable=False, index=True)
+    project_id = Column(Integer, ForeignKey("zenta_projects.id"), nullable=False, index=True)
+    created_at = Column(DateTime, default=func.now())
+
+    __table_args__ = (UniqueConstraint("customer_id", "project_id"),)

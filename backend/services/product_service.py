@@ -173,12 +173,17 @@ def _product_item(p: CachedProduct, db: Session) -> dict:
 def _product_detail(p: CachedProduct, db: Session) -> dict:
     projects = get_product_projects(db, p.id)
     cat = p.program_name or p.category
-    # Derive customers from linked projects (primary) + product desc (supplementary)
-    customers = list(set(
-        [prj.get("customer_name", "") for prj in projects if prj.get("customer_name")] +
-        _extract_customers_from_desc(p)
-    ))
-    customers = [c for c in customers if c]  # filter empty
+    # Derive customers from CustomerProjectLink (SQL) + product desc (supplementary)
+    from backend.models.zentao import ProductProjectLink as PPL, CustomerProjectLink as CPL, CachedCustomer
+    prod_project_ids = [l.project_id for l in db.query(PPL).filter(PPL.product_id == p.id).all()]
+    customer_ids = set()
+    if prod_project_ids:
+        for row in db.query(CPL.customer_id).filter(CPL.project_id.in_(prod_project_ids)).distinct().all():
+            customer_ids.add(row[0])
+    customer_names = []
+    if customer_ids:
+        customer_names = [r[0] for r in db.query(CachedCustomer.name).filter(CachedCustomer.id.in_(customer_ids)).all()]
+    customers = list(set(customer_names + _extract_customers_from_desc(p)))
     tags_str = p.tags or ""
     return {
         "id": p.id, "code": p.code, "name": p.name,
