@@ -171,7 +171,8 @@ function buildDetailHeader(p) {
 
 /* Gantt Chart */
 
-var _ganttPpd = 3;        // pixels-per-day (1~30, default 3)
+var _ganttPpd = 16;        // pixels-per-day; presets: 6/16/24, default 16
+var _ganttPresets = [6, 16, 24];
 var _ganttDragInit = false;
 
 function ganttGranularity(ppd) {
@@ -255,10 +256,12 @@ function initGanttWheel() {
 
   wrap.addEventListener('wheel', function(e) {
     e.preventDefault();
-    if (e.deltaY < 0) {
-      _ganttPpd = Math.min(30, _ganttPpd * 1.5);
-    } else {
-      _ganttPpd = Math.max(1, _ganttPpd / 1.5);
+    var cur = snapToPreset(_ganttPpd);
+    var idx = _ganttPresets.indexOf(cur);
+    if (e.deltaY < 0 && idx < _ganttPresets.length - 1) {
+      _ganttPpd = _ganttPresets[idx + 1];
+    } else if (e.deltaY > 0 && idx > 0) {
+      _ganttPpd = _ganttPresets[idx - 1];
     }
     // Debounce refresh: only rebuild after scrolling stops
     clearTimeout(_ganttRefreshTimer);
@@ -274,6 +277,30 @@ function refreshGantt() {
       buildGantt(data);
     });
   }
+}
+
+function snapToPreset(ppd) {
+  var best = _ganttPresets[0];
+  var bestDist = Math.abs(ppd - best);
+  for (var i = 1; i < _ganttPresets.length; i++) {
+    var d = Math.abs(ppd - _ganttPresets[i]);
+    if (d < bestDist) { bestDist = d; best = _ganttPresets[i]; }
+  }
+  return best;
+}
+
+function ganttZoomIn() {
+  var cur = snapToPreset(_ganttPpd);
+  var idx = _ganttPresets.indexOf(cur);
+  if (idx < _ganttPresets.length - 1) _ganttPpd = _ganttPresets[idx + 1];
+  refreshGantt();
+}
+
+function ganttZoomOut() {
+  var cur = snapToPreset(_ganttPpd);
+  var idx = _ganttPresets.indexOf(cur);
+  if (idx > 0) _ganttPpd = _ganttPresets[idx - 1];
+  refreshGantt();
 }
 
 // ── Date range ──
@@ -315,7 +342,7 @@ function generateColumns(range, ppd) {
     while (cursor <= range.end) {
       var m = cursor.getMonth() + 1, d = cursor.getDate();
       var dow = cursor.getDay();
-      var label = (d === 1 || cols.length === 0) ? m + '/' + d : String(d);
+      var label = String(d);
       var mcIdx = m - 1;
       cols.push({
         label: label, isWeekend: dow === 0 || dow === 6,
@@ -547,16 +574,14 @@ function buildGantt(stages) {
 }
 
 function buildGanttToolbar() {
-  var gran = ganttGranularity(_ganttPpd);
-  var granLabels = { day: '日', week: '周', month: '月' };
   var container = document.getElementById('gantt-toolbar-container');
   if (container) {
     container.innerHTML = '<div class="gantt-toolbar">' +
       '<div style="font-size:10.5px;color:var(--muted)">滚轮缩放 · 拖拽平移</div>' +
       '<div class="gantt-toolbar-zoom">' +
-        '<button class="gantt-zoom-btn" onclick="_ganttPpd=Math.max(1,_ganttPpd/1.6);refreshGantt()" title="缩小">−</button>' +
-        '<span class="gantt-zoom-label">' + (granLabels[gran] || '月') + '</span>' +
-        '<button class="gantt-zoom-btn" onclick="_ganttPpd=Math.min(30,_ganttPpd*1.6);refreshGantt()" title="放大">+</button>' +
+        '<button class="gantt-zoom-btn" onclick="ganttZoomOut()" title="缩小">−</button>' +
+        '<span class="gantt-zoom-val">×' + _ganttPpd.toFixed(0) + '</span>' +
+        '<button class="gantt-zoom-btn" onclick="ganttZoomIn()" title="放大">+</button>' +
       '</div>' +
     '</div>';
   }
