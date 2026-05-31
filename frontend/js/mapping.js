@@ -597,189 +597,452 @@ async function _loadMapData() {
   }));
 }
 
-/* ── 项目关联产品 (按项目查产品) ── */
+/* ═══════════════════════════════════════════════════
+   SPLIT VIEWS — 6 association views (consistent pattern)
+   Each view: sidebar categories + main area with results
+═══════════════════════════════════════════════════ */
 
-async function initProjectProducts() {
-  await _loadMapData();
-  document.getElementById('pp-search-input').value = '';
-  document.getElementById('pp-result').innerHTML = '<div class="projid-empty">请输入项目编号进行搜索</div>';
+/* ── Shared: render project table with optional linked products ── */
+
+function _renderProjTable(projects, showProducts) {
+  return '<table class="proj-table"><thead><tr>' +
+    '<th>项目编号</th><th>项目名</th><th>客户</th><th>类型</th><th>状态</th><th>进度</th><th>计划完成</th>' +
+    (showProducts ? '<th>关联产品</th>' : '') +
+    '</tr></thead><tbody>' +
+    projects.map(function(pj) {
+      var projCode = extractProjectCode(pj.name);
+      var detail = _mapDetailCache[pj.id] || {};
+      var dStatus = detail.status || pj.status || '';
+      var dProgress = detail.progress || pj.progress || '0';
+      var dEnd = detail.end || pj.end || null;
+      var prodsHtml = '';
+      if (showProducts) {
+        var prods = detail.products || [];
+        prodsHtml = '<td>' + (prods.length ? prods.map(function(pp) {
+          return '<span class="projid-prod-chip" onclick="event.stopPropagation();openProductDetail(\'' + pp.id + '\')" title="查看产品详情">' + escHtml(pp.name) + '</span>';
+        }).join(' ') : '<span style="font-size:11px;color:var(--muted)">—</span>') + '</td>';
+      }
+      return '<tr onclick="openProject(\'' + pj.id + '\')" style="cursor:pointer">' +
+        '<td>' + renderProjIcon(pj.project_type, projCode) + '</td>' +
+        '<td><div class="proj-name">' + escHtml(extractCoreName(pj.name)) + '</div><div class="proj-code">' + escHtml(projCode) + '</div></td>' +
+        '<td>' + renderCustomerBadge(pj.customer_name) + '</td>' +
+        '<td>' + renderTypeBadge(pj.project_type) + '</td>' +
+        '<td>' + renderPill(dStatus) + '</td>' +
+        '<td class="prog-cell">' + renderProgressBar(dProgress, dStatus) + '</td>' +
+        '<td style="font-size:12px;color:' + (dEnd ? 'var(--muted)' : 'var(--warn)') + '">' + (dEnd ? formatDate(dEnd) : '长期') + '</td>' +
+        prodsHtml +
+      '</tr>';
+    }).join('') +
+    '</tbody></table>';
 }
 
-function searchProjectProducts(q) {
-  var container = document.getElementById('pp-result');
-  if (!container) return;
-  var term = (q || '').trim().toLowerCase();
-  if (!term || term.length < 2) {
-    container.innerHTML = '<div class="projid-empty">请输入项目编号进行搜索</div>';
-    return;
-  }
-  var results = _mapProjects.filter(function(p) {
-    return (p.code || '').toLowerCase().indexOf(term) >= 0 ||
-           (p.name || '').toLowerCase().indexOf(term) >= 0 ||
-           (p.customer_name || '').toLowerCase().indexOf(term) >= 0 ||
-           String(p.id).indexOf(term) >= 0;
+/* ── 1. 项目关联产品 ── */
+
+var _ppCats = {}, _ppSearchVal = '';
+async function initProjectProducts() {
+  await _loadMapData();
+  var cats = { '研发项目': [], '生产项目': [] };
+  _mapProjects.forEach(function(p) {
+    if (p.project_type === 'SC') cats['生产项目'].push(p);
+    else cats['研发项目'].push(p);
   });
-  if (!results.length) {
-    container.innerHTML = '<div class="projid-empty">未找到匹配的项目</div>';
-    return;
-  }
-  container.innerHTML = results.map(function(p) {
-    var detail = _mapDetailCache[p.id] || {};
-    var projCode = extractProjectCode(p.name);
-    var coreName = extractCoreName(p.name);
-    var prodHtml = '';
-    if (detail.products && detail.products.length) {
-      prodHtml = detail.products.map(function(prod) {
-        return '<span class="projid-prod-chip">' + escHtml(prod.name) + (prod.category ? '<span style="font-size:10px;color:var(--muted)"> · ' + escHtml(prod.category) + '</span>' : '') + '</span>';
-      }).join('');
-    } else {
-      prodHtml = '<span style="color:var(--muted);font-size:12px">无关联产品</span>';
-    }
-    return '<div class="projid-item" onclick="openProject(\'' + p.id + '\')" style="cursor:pointer">' +
+  document.getElementById('pp-cat-list').innerHTML = Object.keys(cats).map(function(c) {
+    return '<div class="prod-cat-item" onclick="selectPjProjCat(\'' + escHtml(c).replace(/'/g, "\\'") + '\', this)">' + escHtml(c) + '<span class="cat-count">' + cats[c].length + '</span></div>';
+  }).join('');
+  _ppCats = cats;
+  _ppSearchVal = '';
+  document.getElementById('pp-search').value = '';
+  document.getElementById('pp-container').innerHTML = '<div class="prod-tree-empty">请选择左侧分类</div>';
+}
+
+function doPpSearch(v) {
+  _ppSearchVal = v.trim().toLowerCase();
+  var active = document.querySelector('#pp-cat-list .prod-cat-item.active');
+  if (active) { selectPjProjCat(active.textContent.replace(/\d+$/, '').trim(), active); return; }
+  // No category selected: search across all
+  var all = [];
+  Object.keys(_ppCats).forEach(function(c) { all = all.concat(_ppCats[c]); });
+  var filtered = all.filter(function(pj) {
+    if (!_ppSearchVal) return true;
+    var code = extractProjectCode(pj.name).toLowerCase();
+    var core = extractCoreName(pj.name).toLowerCase();
+    return code.indexOf(_ppSearchVal) >= 0 || core.indexOf(_ppSearchVal) >= 0;
+  });
+  document.getElementById('pp-container').innerHTML = filtered.length ? _renderProjTable(filtered, true) : '<div class="empty-state" style="padding:20px">未找到匹配项目</div>';
+}
+
+function selectPjProjCat(cat, el) {
+  document.querySelectorAll('#pp-cat-list .prod-cat-item').forEach(function(c) { c.classList.remove('active'); });
+  if (el) el.classList.add('active');
+  var projects = (_ppCats[cat] || []).filter(function(pj) {
+    if (!_ppSearchVal) return true;
+    var code = extractProjectCode(pj.name).toLowerCase();
+    var core = extractCoreName(pj.name).toLowerCase();
+    var cust = (pj.customer_name || '').toLowerCase();
+    return code.indexOf(_ppSearchVal) >= 0 || core.indexOf(_ppSearchVal) >= 0 || cust.indexOf(_ppSearchVal) >= 0;
+  });
+  var c = document.getElementById('pp-container');
+  c.innerHTML = projects.length ? _renderProjTable(projects, true) : '<div class="prod-tree-empty">此分类暂无项目</div>';
+}
+
+/* ── 2. 项目关联客户 ── */
+
+async function initProjectCustomers() {
+  await _loadMapData();
+  var cats = { '研发项目': [], '生产项目': [] };
+  _mapProjects.forEach(function(p) {
+    if (p.project_type === 'SC') cats['生产项目'].push(p);
+    else cats['研发项目'].push(p);
+  });
+  document.getElementById('pc-cat-list').innerHTML = Object.keys(cats).map(function(c) {
+    return '<div class="prod-cat-item" onclick="selectPjCustCat(\'' + escHtml(c).replace(/'/g, "\\'") + '\', this)">' + escHtml(c) + '<span class="cat-count">' + cats[c].length + '</span></div>';
+  }).join('');
+  _pcCats = cats;
+  _pcSearchVal = '';
+  var si = document.getElementById('pc-search');
+  if (si) si.value = '';
+  document.getElementById('pc-tree-container').innerHTML = '<div class="prod-tree-empty">请选择左侧分类</div>';
+}
+
+var _pcCats = {}, _pcSearchVal = '';
+function doPcSearch(v) {
+  _pcSearchVal = v.trim().toLowerCase();
+  var active = document.querySelector('#pc-cat-list .prod-cat-item.active');
+  if (active) { selectPjCustCat(active.textContent.replace(/\d+$/, '').trim(), active); return; }
+  var all = [];
+  Object.keys(_pcCats).forEach(function(c) { all = all.concat(_pcCats[c]); });
+  var filtered = all.filter(function(pj) {
+    if (!_pcSearchVal) return true;
+    var code = extractProjectCode(pj.name).toLowerCase();
+    var core = extractCoreName(pj.name).toLowerCase();
+    return code.indexOf(_pcSearchVal) >= 0 || core.indexOf(_pcSearchVal) >= 0;
+  });
+  var c = document.getElementById('pc-tree-container');
+  c.innerHTML = filtered.length ? filtered.map(function(pj) {
+    return '<div class="projid-item" style="cursor:pointer" onclick="openProject(\'' + pj.id + '\')">' +
       '<div class="projid-item-header">' +
-        '<span class="projid-item-code">' + escHtml(projCode) + '</span>' +
-        '<span class="projid-item-type ' + (p.project_type === 'SC' ? 'sc' : 'rd') + '">' + (p.project_type === 'SC' ? '生产' : '研发') + '</span>' +
-        (p.customer_name ? renderCustomerBadge(p.customer_name) : '') +
-        renderPill(p.status) +
+        '<span class="projid-item-code">' + escHtml(extractProjectCode(pj.name)) + '</span>' +
+        '<span class="projid-item-type ' + (pj.project_type === 'SC' ? 'sc' : 'rd') + '">' + (pj.project_type === 'SC' ? '生产' : '研发') + '</span>' +
+        (pj.customer_name ? '<span onclick="event.stopPropagation();gotoCustomerProjects(\'' + escHtml(pj.customer_name) + '\')" style="cursor:pointer">' + renderCustomerBadge(pj.customer_name) + '</span>' : '') + renderPill(pj.status) +
       '</div>' +
-      '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">' + escHtml(coreName) + '</div>' +
-      '<div class="projid-item-prods">' + prodHtml + '</div>' +
+      '<div style="font-size:12px;color:var(--muted);margin-bottom:4px">' + escHtml(extractCoreName(pj.name)) + '</div>' +
+    '</div>';
+  }).join('') : '<div class="empty-state" style="padding:20px">未找到匹配项目</div>';
+}
+
+var _pendingCustSelect = null;
+function gotoCustomerProjects(custName) {
+  _pendingCustSelect = custName;
+  gotoView('customer-projects');
+}
+function selectPjCustCat(cat, el) {
+  document.querySelectorAll('#pc-cat-list .prod-cat-item').forEach(function(c) { c.classList.remove('active'); });
+  if (el) el.classList.add('active');
+  var projects = (_pcCats[cat] || []).filter(function(pj) {
+    if (!_pcSearchVal) return true;
+    var code = extractProjectCode(pj.name).toLowerCase();
+    var core = extractCoreName(pj.name).toLowerCase();
+    return code.indexOf(_pcSearchVal) >= 0 || core.indexOf(_pcSearchVal) >= 0;
+  });
+  var c = document.getElementById('pc-tree-container');
+  if (!projects.length) { c.innerHTML = '<div class="prod-tree-empty">此分类暂无项目</div>'; return; }
+  c.innerHTML = projects.map(function(pj) {
+    return '<div class="projid-item" style="cursor:pointer" onclick="openProject(\'' + pj.id + '\')">' +
+      '<div class="projid-item-header">' +
+        '<span class="projid-item-code">' + escHtml(extractProjectCode(pj.name)) + '</span>' +
+        '<span class="projid-item-type ' + (pj.project_type === 'SC' ? 'sc' : 'rd') + '">' + (pj.project_type === 'SC' ? '生产' : '研发') + '</span>' +
+        (pj.customer_name ? renderCustomerBadge(pj.customer_name) : '') +
+        renderPill(pj.status) +
+      '</div>' +
+      '<div style="font-size:12px;color:var(--muted);margin-bottom:4px">' + escHtml(extractCoreName(pj.name)) + '</div>' +
     '</div>';
   }).join('');
 }
 
-/* ── 产品关联项目 (从产品查项目) ── */
+/* ── 3. 产品关联项目 ── */
 
+var _vpCats = {}, _vpSearchVal = '';
 async function initProductProjects() {
-  // Reuse mapping.js product view render into vp-* elements
   await _loadMapData();
-  var catList = document.getElementById('vp-cat-list');
-  var treeContainer = document.getElementById('vp-tree-container');
-
-  // Build category list
   var cats = {};
   _mapProducts.forEach(function(p) {
     var cat = p.category || p.program_name || '其他';
     if (!cats[cat]) cats[cat] = [];
     cats[cat].push(p);
   });
-  var catNames = Object.keys(cats).sort();
-  catList.innerHTML = catNames.map(function(c) {
+  document.getElementById('vp-cat-list').innerHTML = Object.keys(cats).sort().map(function(c) {
     return '<div class="prod-cat-item" onclick="selectVpCategory(\'' + escHtml(c).replace(/'/g, "\\'") + '\', this)">' + escHtml(c) + '<span class="cat-count">' + cats[c].length + '</span></div>';
   }).join('');
-  treeContainer.innerHTML = '<div class="prod-tree-empty">请选择左侧产品分类</div>';
   _vpCats = cats;
+  _vpSearchVal = '';
+  var si = document.getElementById('vp-search');
+  if (si) si.value = '';
+  document.getElementById('vp-tree-container').innerHTML = '<div class="prod-tree-empty">请选择左侧产品分类</div>';
 }
 
-var _vpCats = {};
+function doVpSearch(v) {
+  _vpSearchVal = v.trim().toLowerCase();
+  var active = document.querySelector('#vp-cat-list .prod-cat-item.active');
+  if (active) { selectVpCategory(active.textContent.replace(/\d+$/, '').trim(), active); return; }
+  var all = [];
+  Object.keys(_vpCats).forEach(function(c) { all = all.concat(_vpCats[c]); });
+  var products = all.filter(function(p) {
+    if (!_vpSearchVal) return true;
+    return (p.name || '').toLowerCase().indexOf(_vpSearchVal) >= 0 || (p.code || '').toLowerCase().indexOf(_vpSearchVal) >= 0;
+  });
+  var c = document.getElementById('vp-tree-container');
+  if (!products.length) { c.innerHTML = '<div class="prod-tree-empty">未找到匹配产品</div>'; return; }
+  c.innerHTML = products.map(function(p) {
+    var links = _mapProjects.filter(function(pj) {
+      var detail = _mapDetailCache[pj.id] || {};
+      return (detail.products || []).some(function(pp) { return pp.id === p.id; });
+    });
+    return '<div style="margin-bottom:18px">' +
+      '<div class="section-hd" style="margin-bottom:6px"><div class="section-title" style="font-size:13px;cursor:pointer" onclick="openProductDetail(\'' + p.id + '\')">' + escHtml(p.name) + '</div><span style="font-size:11px;color:var(--muted)">' + links.length + ' 个项目</span></div>' +
+      (links.length ? _renderProjTable(links) : '<div class="empty-state" style="padding:12px;font-size:12px">暂无关联项目</div>') +
+    '</div>';
+  }).join('');
+}
 
 function selectVpCategory(cat, el) {
   document.querySelectorAll('#vp-cat-list .prod-cat-item').forEach(function(c) { c.classList.remove('active'); });
   if (el) el.classList.add('active');
-  var products = _vpCats[cat] || [];
-  var container = document.getElementById('vp-tree-container');
-  if (!products.length) {
-    container.innerHTML = '<div class="prod-tree-empty">此分类暂无产品</div>';
-    return;
-  }
-  container.innerHTML = products.map(function(p) {
+  var products = (_vpCats[cat] || []).filter(function(p) {
+    if (!_vpSearchVal) return true;
+    return (p.name || '').toLowerCase().indexOf(_vpSearchVal) >= 0 ||
+           (p.code || '').toLowerCase().indexOf(_vpSearchVal) >= 0;
+  });
+  var c = document.getElementById('vp-tree-container');
+  if (!products.length) { c.innerHTML = '<div class="prod-tree-empty">此分类暂无产品</div>'; return; }
+  c.innerHTML = products.map(function(p) {
     var links = _mapProjects.filter(function(pj) {
-      var detail = _mapDetailCache[pj.id];
-      return detail && detail.products && detail.products.some(function(pp) { return pp.id === p.id; });
+      var detail = _mapDetailCache[pj.id] || {};
+      return (detail.products || []).some(function(pp) { return pp.id === p.id; });
     });
-    var rowsHtml = '';
-    if (links.length) {
-      rowsHtml = '<table class="proj-table" style="margin-top:8px"><thead><tr>' +
-        '<th>项目编号</th><th>项目名</th><th>客户</th><th width="8%">类型</th><th width="7%">状态</th><th width="12%">进度</th><th width="10%">计划完成</th>' +
-        '</tr></thead><tbody>' +
-        links.map(function(pj) {
-          var detail = _mapDetailCache[pj.id] || {};
-          var projCode = extractProjectCode(pj.name);
-          var dStatus = detail.status || pj.status || '';
-          var dProgress = detail.progress || pj.progress || '0';
-          var dEnd = detail.end || pj.end || null;
-          return '<tr onclick="openProject(\'' + pj.id + '\')" style="cursor:pointer">' +
-            '<td>' + renderProjIcon(pj.project_type, projCode) + '</td>' +
-            '<td><div class="proj-name">' + escHtml(extractCoreName(pj.name)) + '</div><div class="proj-code">' + escHtml(projCode) + '</div></td>' +
-            '<td>' + renderCustomerBadge(pj.customer_name) + '</td>' +
-            '<td>' + renderTypeBadge(pj.project_type) + '</td>' +
-            '<td>' + renderPill(dStatus) + '</td>' +
-            '<td class="prog-cell">' + renderProgressBar(dProgress, dStatus) + '</td>' +
-            '<td style="font-size:12px;color:' + (dEnd ? 'var(--muted)' : 'var(--warn)') + '">' + (dEnd ? formatDate(dEnd) : '长期') + '</td>' +
-          '</tr>';
-        }).join('') +
-        '</tbody></table>';
-    } else {
-      rowsHtml = '<div class="empty-state" style="padding:16px;font-size:12px">暂无关联项目</div>';
-    }
     return '<div style="margin-bottom:18px">' +
-      '<div class="section-hd" style="margin-bottom:6px"><div class="section-title" style="font-size:13px">' + escHtml(p.name) + '</div><span style="font-size:11px;color:var(--muted)">' + links.length + ' 个项目</span></div>' +
-      rowsHtml +
+      '<div class="section-hd" style="margin-bottom:6px"><div class="section-title" style="font-size:13px;cursor:pointer" onclick="openProductDetail(\'' + p.id + '\')">' + escHtml(p.name) + '</div><span style="font-size:11px;color:var(--muted)">' + links.length + ' 个项目</span></div>' +
+      (links.length ? _renderProjTable(links) : '<div class="empty-state" style="padding:12px;font-size:12px">暂无关联项目</div>') +
     '</div>';
   }).join('');
 }
 
-/* ── 客户关联项目 (从客户查项目) ── */
+/* ── 4. 产品关联客户 ── */
 
+var _pdcCats = {}, _pdcSearchVal = '';
+async function initProductCustomers() {
+  await _loadMapData();
+  var cats = {};
+  _mapProducts.forEach(function(p) {
+    var cat = p.category || p.program_name || '其他';
+    if (!cats[cat]) cats[cat] = [];
+    cats[cat].push(p);
+  });
+  document.getElementById('pdc-cat-list').innerHTML = Object.keys(cats).sort().map(function(c) {
+    return '<div class="prod-cat-item" onclick="selectPdCustCat(\'' + escHtml(c).replace(/'/g, "\\'") + '\', this)">' + escHtml(c) + '<span class="cat-count">' + cats[c].length + '</span></div>';
+  }).join('');
+  _pdcCats = cats;
+  _pdcSearchVal = '';
+  var si = document.getElementById('pdc-search');
+  if (si) si.value = '';
+  document.getElementById('pdc-tree-container').innerHTML = '<div class="prod-tree-empty">请选择左侧产品分类</div>';
+}
+
+function doPdcSearch(v) {
+  _pdcSearchVal = v.trim().toLowerCase();
+  var active = document.querySelector('#pdc-cat-list .prod-cat-item.active');
+  if (active) { selectPdCustCat(active.textContent.replace(/\d+$/, '').trim(), active); return; }
+  var all = [];
+  Object.keys(_pdcCats).forEach(function(c) { all = all.concat(_pdcCats[c]); });
+  var products = all.filter(function(p) {
+    if (!_pdcSearchVal) return true;
+    return (p.name || '').toLowerCase().indexOf(_pdcSearchVal) >= 0 || (p.code || '').toLowerCase().indexOf(_pdcSearchVal) >= 0;
+  });
+  var c = document.getElementById('pdc-tree-container');
+  if (!products.length) { c.innerHTML = '<div class="prod-tree-empty">未找到匹配产品</div>'; return; }
+  c.innerHTML = products.map(function(p) {
+    var links = _mapProjects.filter(function(pj) {
+      var detail = _mapDetailCache[pj.id] || {};
+      return (detail.products || []).some(function(pp) { return pp.id === p.id; });
+    });
+    var custNames = [];
+    links.forEach(function(pj) { if (pj.customer_name && custNames.indexOf(pj.customer_name) < 0) custNames.push(pj.customer_name); });
+    return '<div style="margin-bottom:14px">' +
+      '<div class="section-hd" style="margin-bottom:4px"><div class="section-title" style="font-size:13px;cursor:pointer" onclick="openProductDetail(\'' + p.id + '\')">' + escHtml(p.name) + '</div></div>' +
+      (custNames.length ? custNames.map(function(cn) { return renderCustomerBadge(cn); }).join(' ') : '<span style="color:var(--muted);font-size:12px">—</span>') +
+    '</div>';
+  }).join('');
+}
+
+function selectPdCustCat(cat, el) {
+  document.querySelectorAll('#pdc-cat-list .prod-cat-item').forEach(function(c) { c.classList.remove('active'); });
+  if (el) el.classList.add('active');
+  var products = (_pdcCats[cat] || []).filter(function(p) {
+    if (!_pdcSearchVal) return true;
+    return (p.name || '').toLowerCase().indexOf(_pdcSearchVal) >= 0 ||
+           (p.code || '').toLowerCase().indexOf(_pdcSearchVal) >= 0;
+  });
+  var c = document.getElementById('pdc-tree-container');
+  if (!products.length) { c.innerHTML = '<div class="prod-tree-empty">此分类暂无产品</div>'; return; }
+  c.innerHTML = products.map(function(p) {
+    var links = _mapProjects.filter(function(pj) {
+      var detail = _mapDetailCache[pj.id] || {};
+      return (detail.products || []).some(function(pp) { return pp.id === p.id; });
+    });
+    var custNames = [];
+    links.forEach(function(pj) { if (pj.customer_name && custNames.indexOf(pj.customer_name) < 0) custNames.push(pj.customer_name); });
+    return '<div style="margin-bottom:14px">' +
+      '<div class="section-hd" style="margin-bottom:4px"><div class="section-title" style="font-size:13px;cursor:pointer" onclick="openProductDetail(\'' + p.id + '\')">' + escHtml(p.name) + '</div></div>' +
+      (custNames.length ? custNames.map(function(cn) { return renderCustomerBadge(cn); }).join(' ') : '<span style="color:var(--muted);font-size:12px">—</span>') +
+    '</div>';
+  }).join('');
+}
+
+/* ── 5. 客户关联项目 ── */
+
+var _vcCustomers = [], _vcSearchVal = '';
 async function initCustomerProjects() {
   var catList = document.getElementById('vc-cat-list');
-  var treeContainer = document.getElementById('vc-tree-container');
-  treeContainer.innerHTML = '<div class="prod-tree-empty">请选择左侧客户</div>';
-
-  try {
-    var data = await API.get('/customers');
-    _vcCustomers = data.items || [];
-  } catch(e) {
-    _vcCustomers = [];
-  }
+  document.getElementById('vc-tree-container').innerHTML = '<div class="prod-tree-empty">请选择左侧客户</div>';
+  try { var data = await API.get('/customers'); _vcCustomers = data.items || []; } catch(e) { _vcCustomers = []; }
+  _vcSearchVal = '';
+  var si = document.getElementById('vc-search');
+  if (si) si.value = '';
   catList.innerHTML = _vcCustomers.map(function(c) {
     return '<div class="prod-cat-item" onclick="selectVcCustomer(\'' + c.id + '\', this)">' + escHtml(c.name) + '<span class="cat-count">' + c.project_count + '</span></div>';
   }).join('');
-  if (!_vcCustomers.length) {
-    catList.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:12px">暂无客户数据</div>';
+  if (!_vcCustomers.length) catList.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:12px">暂无客户数据</div>';
+  // Auto-select pending customer
+  if (_pendingCustSelect) {
+    var target = _vcCustomers.find(function(c) { return c.name === _pendingCustSelect; });
+    if (target) {
+      _pendingCustSelect = null;
+      var el = document.querySelector('#vc-cat-list .prod-cat-item');
+      if (el && el.textContent.trim().indexOf(target.name) === 0) selectVcCustomer(target.id, el);
+    }
   }
 }
 
-var _vcCustomers = [];
+function doVcSearch(v) {
+  _vcSearchVal = v.trim().toLowerCase();
+  var active = document.querySelector('#vc-cat-list .prod-cat-item.active');
+  if (active) {
+    var cid = parseInt(active.onclick.toString().match(/selectVcCustomer\('(\d+)'/)[1]);
+    selectVcCustomer(cid, active); return;
+  }
+  // Search across all customers
+  var c = document.getElementById('vc-tree-container');
+  if (!_vcSearchVal) { c.innerHTML = '<div class="prod-tree-empty">请选择左侧客户</div>'; return; }
+  if (!_vcCustomers.length) { c.innerHTML = '<div class="prod-tree-empty">暂无客户数据，请刷新页面</div>'; return; }
+  c.innerHTML = '<div class="loading-spinner" style="padding:20px">搜索中...</div>';
+  // Try each customer
+  Promise.all(_vcCustomers.map(function(cu) {
+    return API.get('/customers/' + cu.id).then(function(d) { return {cust: cu, projects: d.projects || []}; }).catch(function() { return null; });
+  })).then(function(results) {
+    var html = '';
+    results.forEach(function(r) {
+      if (!r || !r.projects.length) return;
+      var filtered = r.projects.filter(function(pj) {
+        var code = extractProjectCode(pj.name).toLowerCase();
+        var core = extractCoreName(pj.name).toLowerCase();
+        return code.indexOf(_vcSearchVal) >= 0 || core.indexOf(_vcSearchVal) >= 0;
+      });
+      if (filtered.length) {
+        html += '<div class="section-hd" style="margin-bottom:6px"><div class="section-title" style="font-size:13px">' + escHtml(r.cust.name) + '</div></div>' + _renderProjTable(filtered);
+      }
+    });
+    c.innerHTML = html || '<div class="empty-state" style="padding:20px">未找到匹配项目</div>';
+  });
+}
 
 async function selectVcCustomer(custId, el) {
   document.querySelectorAll('#vc-cat-list .prod-cat-item').forEach(function(c) { c.classList.remove('active'); });
   if (el) el.classList.add('active');
-  var container = document.getElementById('vc-tree-container');
-  container.innerHTML = '<div class="loading-spinner" style="padding:20px">加载中...</div>';
-  try {
-    var data = await API.get('/customers/' + custId);
-    var projects = data.projects || [];
-  } catch(e) {
-    projects = [];
-  }
-  if (!projects.length) {
-    container.innerHTML = '<div class="prod-tree-empty">此客户暂无关联项目</div>';
-    return;
-  }
-  // Also load product data for each project
+  var c = document.getElementById('vc-tree-container');
+  c.innerHTML = '<div class="loading-spinner" style="padding:20px">加载中...</div>';
+  try { var data = await API.get('/customers/' + custId); var projects = data.projects || []; } catch(e) { projects = []; }
+  if (_vcSearchVal) projects = projects.filter(function(pj) {
+    var code = extractProjectCode(pj.name).toLowerCase();
+    var core = extractCoreName(pj.name).toLowerCase();
+    return code.indexOf(_vcSearchVal) >= 0 || core.indexOf(_vcSearchVal) >= 0;
+  });
+  if (!projects.length) { c.innerHTML = '<div class="prod-tree-empty">此客户暂无关联项目</div>'; return; }
   await _loadMapData();
-  container.innerHTML = projects.map(function(pj) {
-    var detail = _mapDetailCache[pj.id];
-    var products = (detail && detail.products) ? detail.products : [];
-    var projCode = extractProjectCode(pj.name);
-    return '<div class="prod-tree-section">' +
-      '<div class="proj-tree-proj" onclick="this.classList.toggle(\'expanded\');this.nextElementSibling.classList.toggle(\'show\')">' +
-        '<div class="proj-tree-proj-header">' +
-          '<div class="proj-tree-proj-title">' +
-            renderProjIcon(pj.project_type, projCode) + ' ' +
-            escHtml(extractCoreName(pj.name)) +
-          '</div>' +
-          '<div class="prod-tree-toggle" style="font-size:11px">▶</div>' +
-        '</div>' +
-        '<div class="proj-tree-proj-meta">' + renderTypeBadge(pj.project_type) + ' · ' + renderPill(pj.status) + '</div>' +
-      '</div>' +
-      '<div class="prod-tree-projs">' + (products.length ? products.map(function(pp) {
-        return '<div class="proj-tree-prod-item" onclick="event.stopPropagation();openProductDetail(\'' + pp.id + '\')" style="cursor:pointer">' +
-          '<div class="proj-tree-prod-name">' + escHtml(pp.name) + '</div>' +
-          '<div class="proj-tree-prod-meta">' + escHtml(pp.code || '') + '</div>' +
-        '</div>';
-      }).join('') : '') + '</div>' +
-    '</div>';
+  c.innerHTML = _renderProjTable(projects);
+}
+
+/* ── 6. 客户关联产品 ── */
+
+var _cpCustomers = [], _cpSearchVal = '';
+async function initCustomerProducts() {
+  var catList = document.getElementById('cp-cat-list');
+  document.getElementById('cp-tree-container').innerHTML = '<div class="prod-tree-empty">请选择左侧客户</div>';
+  try { var data = await API.get('/customers'); _cpCustomers = data.items || []; } catch(e) { _cpCustomers = []; }
+  _cpSearchVal = '';
+  var si = document.getElementById('cp-search');
+  if (si) si.value = '';
+  catList.innerHTML = _cpCustomers.map(function(c) {
+    return '<div class="prod-cat-item" onclick="selectCpCustomer(\'' + c.id + '\', this)">' + escHtml(c.name) + '<span class="cat-count">' + c.project_count + '</span></div>';
   }).join('');
+  if (!_cpCustomers.length) catList.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:12px">暂无客户数据</div>';
+}
+
+function doCpSearch(v) {
+  _cpSearchVal = v.trim().toLowerCase();
+  var active = document.querySelector('#cp-cat-list .prod-cat-item.active');
+  if (active) {
+    var cid = parseInt(active.onclick.toString().match(/selectCpCustomer\('(\d+)'/)[1]);
+    selectCpCustomer(cid, active); return;
+  }
+  var c = document.getElementById('cp-tree-container');
+  if (!_cpSearchVal) { c.innerHTML = '<div class="prod-tree-empty">请选择左侧客户</div>'; return; }
+  if (!_cpCustomers.length) { c.innerHTML = '<div class="prod-tree-empty">暂无客户数据，请刷新页面</div>'; return; }
+  c.innerHTML = '<div class="loading-spinner" style="padding:20px">搜索中...</div>';
+  Promise.all(_cpCustomers.map(function(cu) {
+    return API.get('/customers/' + cu.id + '/products').then(function(d) { return {cust: cu, products: d || []}; }).catch(function() { return null; });
+  })).then(function(results) {
+    var html = '';
+    results.forEach(function(r) {
+      if (!r || !r.products.length) return;
+      var filtered = r.products.filter(function(p) {
+        return (p.name || '').toLowerCase().indexOf(_cpSearchVal) >= 0 || (p.code || '').toLowerCase().indexOf(_cpSearchVal) >= 0;
+      });
+      if (filtered.length) {
+        html += '<div class="section-hd" style="margin-bottom:6px"><div class="section-title" style="font-size:13px">' + escHtml(r.cust.name) + '</div></div>' +
+          '<div class="product-grid">' + filtered.map(function(p) {
+            var desc = stripHtml(p.description || '');
+            var descShort = desc.length > 60 ? desc.substring(0, 60) + '...' : desc;
+            return '<div class="product-card" onclick="openProductDetail(\'' + p.id + '\')">' +
+              '<div class="product-card-name">' + escHtml(p.name) + '</div>' +
+              '<div class="product-card-code">' + escHtml(p.code || '') + '</div>' +
+              (descShort ? '<div class="product-card-desc">' + escHtml(descShort) + '</div>' : '') +
+              '<div class="product-card-meta"><span class="pill normal">' + escHtml(p.status || 'normal') + '</span></div>' +
+            '</div>';
+          }).join('') + '</div>';
+      }
+    });
+    c.innerHTML = html || '<div class="empty-state" style="padding:20px">未找到匹配产品</div>';
+  });
+}
+
+async function selectCpCustomer(custId, el) {
+  document.querySelectorAll('#cp-cat-list .prod-cat-item').forEach(function(c) { c.classList.remove('active'); });
+  if (el) el.classList.add('active');
+  var c = document.getElementById('cp-tree-container');
+  c.innerHTML = '<div class="loading-spinner" style="padding:20px">加载中...</div>';
+  try { var data = await API.get('/customers/' + custId + '/products'); var products = data || []; } catch(e) { products = []; }
+  if (_cpSearchVal) products = products.filter(function(p) {
+    return (p.name || '').toLowerCase().indexOf(_cpSearchVal) >= 0 ||
+           (p.code || '').toLowerCase().indexOf(_cpSearchVal) >= 0;
+  });
+  if (!products.length) { c.innerHTML = '<div class="prod-tree-empty">此客户暂无关联产品</div>'; return; }
+  c.innerHTML = '<div class="product-grid">' + products.map(function(p) {
+    var desc = stripHtml(p.description || '');
+    var descShort = desc.length > 60 ? desc.substring(0, 60) + '...' : desc;
+    return '<div class="product-card" onclick="openProductDetail(\'' + p.id + '\')">' +
+      '<div class="product-card-name">' + escHtml(p.name) + '</div>' +
+      '<div class="product-card-code">' + escHtml(p.code || '') + '</div>' +
+      (descShort ? '<div class="product-card-desc">' + escHtml(descShort) + '</div>' : '') +
+      '<div class="product-card-meta"><span class="pill normal">' + escHtml(p.status || 'normal') + '</span></div>' +
+    '</div>';
+  }).join('') + '</div>';
 }

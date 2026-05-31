@@ -282,6 +282,18 @@
   border-bottom: 1px solid var(--border);
   position: sticky; top: 0; background: var(--bg); z-index: 1;
 }
+.sidebar-search { padding: 8px 10px; position: relative; }
+.sidebar-search .search-inp { font-size: 12px; padding: 5px 22px 5px 8px; width: 100%; box-sizing: border-box; }
+.sidebar-search .search-clear {
+  position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--border); color: var(--muted);
+  border: none; cursor: pointer; font-size: 10px; line-height: 16px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0; transition: background 0.12s, color 0.12s;
+}
+.sidebar-search .search-clear:hover { background: var(--muted); color: var(--surface); }
+
 .prod-cat-list { padding: 6px 0; }
 .prod-cat-item {
   padding: 8px 14px; font-size: 12.5px; cursor: pointer;

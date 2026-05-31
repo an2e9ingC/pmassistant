@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.middleware.auth import get_current_user
-from backend.models.zentao import CachedCustomer, CustomerProjectLink, CachedProject
+from backend.models.zentao import CachedCustomer, CustomerProjectLink, CachedProject, CachedProduct
 
 router = APIRouter(prefix="/api/customers", tags=["customers"])
 
@@ -62,5 +62,37 @@ def get_customer(
             } for p in projects],
             "project_count": len(projects),
         },
+        "message": "ok",
+    }
+
+
+@router.get("/{customer_id}/products", response_model=dict)
+def get_customer_products(
+    customer_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    from backend.models.zentao import ProductProjectLink as PPL
+    links = db.query(CustomerProjectLink).filter(
+        CustomerProjectLink.customer_id == customer_id
+    ).all()
+    project_ids = [l.project_id for l in links]
+    if not project_ids:
+        return {"code": 0, "data": [], "message": "ok"}
+    # Find products linked to these projects
+    prod_links = db.query(PPL).filter(PPL.project_id.in_(project_ids)).all()
+    product_ids = list(set(l.product_id for l in prod_links))
+    if not product_ids:
+        return {"code": 0, "data": [], "message": "ok"}
+    products = db.query(CachedProduct).filter(CachedProduct.id.in_(product_ids)).all()
+    return {
+        "code": 0,
+        "data": [{
+            "id": p.id, "code": p.code, "name": p.name,
+            "type": p.type, "status": p.status,
+            "category": p.program_name or p.category,
+            "description": p.description or "",
+            "tags": p.tags or "",
+        } for p in products],
         "message": "ok",
     }

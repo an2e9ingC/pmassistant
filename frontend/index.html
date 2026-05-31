@@ -56,6 +56,13 @@
         </svg>
         关联产品
       </div>
+      <div class="nav-item" id="nav-project-customers" onclick="gotoView('project-customers')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="8" cy="5" r="3"/>
+          <path d="M2 14c0-3 2.7-5 6-5s6 2 6 5"/>
+        </svg>
+        关联客户
+      </div>
     </div>
     <div class="nav-group">
       <div class="nav-group-label">产品</div>
@@ -86,6 +93,13 @@
         </svg>
         关联项目
       </div>
+      <div class="nav-item" id="nav-product-customers" onclick="gotoView('product-customers')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="8" cy="5" r="3"/>
+          <path d="M2 14c0-3 2.7-5 6-5s6 2 6 5"/>
+        </svg>
+        关联客户
+      </div>
     </div>
     <div class="nav-group">
       <div class="nav-group-label">客户</div>
@@ -95,6 +109,15 @@
           <path d="M2 14c0-3 2.7-5 6-5s6 2 6 5"/>
         </svg>
         关联项目
+      </div>
+      <div class="nav-item" id="nav-customer-products" onclick="gotoView('customer-products')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="1.5" y="1.5" width="13" height="13" rx="2"/>
+          <line x1="4" y1="5" x2="12" y2="5"/>
+          <line x1="4" y1="8" x2="10" y2="8"/>
+          <line x1="4" y1="11" x2="7" y2="11"/>
+        </svg>
+        关联产品
       </div>
     </div>
     <div class="nav-group">
@@ -568,23 +591,26 @@
 
     <!-- ══════════════════════ VIEW 8 — PROJECT PRODUCTS (项目关联产品) ══════════════════════ -->
     <div class="view" id="view-project-products">
-      <div class="section-hd"><div class="section-title">按项目查产品</div></div>
-      <div class="projid-search-section">
-        <div class="projid-input-wrap">
-          <input class="search-inp" id="pp-search-input" placeholder="输入项目编号搜索，如 PE0406…" oninput="searchProjectProducts(this.value)">
-        </div>
-        <div class="projid-result" id="pp-result">
-          <div class="projid-empty">请输入项目编号进行搜索</div>
+      <div class="section-hd"><div class="section-title">项目关联产品</div></div>
+      <div class="prod-sidebar-layout" style="min-height:420px">
+        <aside class="prod-sidebar">
+          <div class="prod-sidebar-header">项目分类</div>
+          <div class="sidebar-search"><input class="search-inp" id="pp-search" placeholder="搜索…" oninput="doPpSearch(this.value)"><button class="search-clear" onclick="var i=document.getElementById('pp-search');i.value='';doPpSearch('')" title="清除">×</button></div>
+          <div class="prod-cat-list" id="pp-cat-list"></div>
+        </aside>
+        <div class="prod-main" id="pp-container">
+          <div class="prod-tree-empty">请选择左侧分类</div>
         </div>
       </div>
     </div>
 
     <!-- ══════════════════════ VIEW 9 — PRODUCT PROJECTS (产品关联项目) ══════════════════════ -->
     <div class="view" id="view-product-projects">
-      <div class="section-hd"><div class="section-title">从产品查项目</div></div>
+      <div class="section-hd"><div class="section-title">产品关联项目</div></div>
       <div class="prod-sidebar-layout" style="min-height:420px">
         <aside class="prod-sidebar">
           <div class="prod-sidebar-header">产品分类</div>
+          <div class="sidebar-search"><input class="search-inp" id="vp-search" placeholder="搜索…" oninput="doVpSearch(this.value)"><button class="search-clear" onclick="var i=document.getElementById('vp-search');i.value='';doVpSearch('')" title="清除">×</button></div>
           <div class="prod-cat-list" id="vp-cat-list"></div>
         </aside>
         <div class="prod-main" id="vp-tree-container">
@@ -595,13 +621,59 @@
 
     <!-- ══════════════════════ VIEW 10 — CUSTOMER PROJECTS (客户关联项目) ══════════════════════ -->
     <div class="view" id="view-customer-projects">
-      <div class="section-hd"><div class="section-title">从客户查项目</div></div>
+      <div class="section-hd"><div class="section-title">客户关联项目</div></div>
       <div class="prod-sidebar-layout" style="min-height:420px">
         <aside class="prod-sidebar">
           <div class="prod-sidebar-header">客户</div>
+          <div class="sidebar-search"><input class="search-inp" id="vc-search" placeholder="搜索…" oninput="doVcSearch(this.value)"><button class="search-clear" onclick="var i=document.getElementById('vc-search');i.value='';doVcSearch('')" title="清除">×</button></div>
           <div class="prod-cat-list" id="vc-cat-list"></div>
         </aside>
         <div class="prod-main" id="vc-tree-container">
+          <div class="prod-tree-empty">请选择左侧客户</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════ VIEW 11 — PROJECT CUSTOMERS (项目关联客户) ══════════════════════ -->
+    <div class="view" id="view-project-customers">
+      <div class="section-hd"><div class="section-title">项目关联客户</div></div>
+      <div class="prod-sidebar-layout" style="min-height:420px">
+        <aside class="prod-sidebar">
+          <div class="prod-sidebar-header">项目分类</div>
+          <div class="sidebar-search"><input class="search-inp" id="pc-search" placeholder="搜索…" oninput="doPcSearch(this.value)"><button class="search-clear" onclick="var i=document.getElementById('pc-search');i.value='';doPcSearch('')" title="清除">×</button></div>
+          <div class="prod-cat-list" id="pc-cat-list"></div>
+        </aside>
+        <div class="prod-main" id="pc-tree-container">
+          <div class="prod-tree-empty">请选择左侧分类</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════ VIEW 12 — PRODUCT CUSTOMERS (产品关联客户) ══════════════════════ -->
+    <div class="view" id="view-product-customers">
+      <div class="section-hd"><div class="section-title">产品关联客户</div></div>
+      <div class="prod-sidebar-layout" style="min-height:420px">
+        <aside class="prod-sidebar">
+          <div class="prod-sidebar-header">产品分类</div>
+          <div class="sidebar-search"><input class="search-inp" id="pdc-search" placeholder="搜索…" oninput="doPdcSearch(this.value)"><button class="search-clear" onclick="var i=document.getElementById('pdc-search');i.value='';doPdcSearch('')" title="清除">×</button></div>
+          <div class="prod-cat-list" id="pdc-cat-list"></div>
+        </aside>
+        <div class="prod-main" id="pdc-tree-container">
+          <div class="prod-tree-empty">请选择左侧分类</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════ VIEW 13 — CUSTOMER PRODUCTS (客户关联产品) ══════════════════════ -->
+    <div class="view" id="view-customer-products">
+      <div class="section-hd"><div class="section-title">客户关联产品</div></div>
+      <div class="prod-sidebar-layout" style="min-height:420px">
+        <aside class="prod-sidebar">
+          <div class="prod-sidebar-header">客户</div>
+          <div class="sidebar-search"><input class="search-inp" id="cp-search" placeholder="搜索…" oninput="doCpSearch(this.value)"><button class="search-clear" onclick="var i=document.getElementById('cp-search');i.value='';doCpSearch('')" title="清除">×</button></div>
+          <div class="prod-cat-list" id="cp-cat-list"></div>
+        </aside>
+        <div class="prod-main" id="cp-tree-container">
           <div class="prod-tree-empty">请选择左侧客户</div>
         </div>
       </div>
