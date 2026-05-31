@@ -327,7 +327,7 @@ function renderProjTree(custId) {
             renderProjIcon(pj.project_type, extractProjectCode(pj.name)) +
             '<span class="map-card-code">' + escHtml(extractProjectCode(pj.name)) + '</span>' +
             '<span>' + escHtml(extractCoreName(pj.name)) + '</span>' +
-            (pj.customer_name ? ' ' + renderCustomerBadge(pj.customer_name) : '') +
+            (pj.customer_name ? ' <span onclick="event.stopPropagation();gotoCustomerProjects(\'' + escHtml(pj.customer_name) + '\')" style="cursor:pointer">' + renderCustomerBadge(pj.customer_name) + '</span>' : '') +
             renderPill(pj.status) +
           '</div>' +
           '<div class="proj-tree-toggle" id="proj-toggle-' + pj.id + '">&#9654;</div>' +
@@ -413,7 +413,7 @@ function searchProjectById(q) {
       '<div class="projid-item-header">' +
         '<span class="projid-item-code">' + escHtml(extractProjectCode(p.name)) + '</span>' +
         '<span class="projid-item-type ' + (p.project_type === 'SC' ? 'sc' : 'rd') + '">' + (p.project_type === 'SC' ? '生产' : '研发') + '</span>' +
-        (p.customer_name ? '<span class="projid-item-cust">' + renderCustomerBadge(p.customer_name) + '</span>' : '') +
+        (p.customer_name ? '<span class="projid-item-cust" onclick="event.stopPropagation();gotoCustomerProjects(\'' + escHtml(p.customer_name) + '\')" style="cursor:pointer">' + renderCustomerBadge(p.customer_name) + '</span>' : '') +
         renderPill(p.status) +
       '</div>' +
       '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">' + escHtml(extractCoreName(p.name)) + '</div>' +
@@ -625,7 +625,7 @@ function _renderProjTable(projects, showProducts) {
       return '<tr onclick="openProject(\'' + pj.id + '\')" style="cursor:pointer">' +
         '<td>' + renderProjIcon(pj.project_type, projCode) + '</td>' +
         '<td><div class="proj-name">' + escHtml(extractCoreName(pj.name)) + '</div><div class="proj-code">' + escHtml(projCode) + '</div></td>' +
-        '<td>' + renderCustomerBadge(pj.customer_name) + '</td>' +
+        '<td><span onclick="event.stopPropagation();gotoCustomerProjects(\'' + escHtml(pj.customer_name || '') + '\')" style="cursor:pointer">' + renderCustomerBadge(pj.customer_name) + '</span></td>' +
         '<td>' + renderTypeBadge(pj.project_type) + '</td>' +
         '<td>' + renderPill(dStatus) + '</td>' +
         '<td class="prog-cell">' + renderProgressBar(dProgress, dStatus) + '</td>' +
@@ -730,11 +730,6 @@ function doPcSearch(v) {
   }).join('') : '<div class="empty-state" style="padding:20px">未找到匹配项目</div>';
 }
 
-var _pendingCustSelect = null;
-function gotoCustomerProjects(custName) {
-  _pendingCustSelect = custName;
-  gotoView('customer-projects');
-}
 function selectPjCustCat(cat, el) {
   document.querySelectorAll('#pc-cat-list .prod-cat-item').forEach(function(c) { c.classList.remove('active'); });
   if (el) el.classList.add('active');
@@ -868,7 +863,7 @@ function doPdcSearch(v) {
     links.forEach(function(pj) { if (pj.customer_name && custNames.indexOf(pj.customer_name) < 0) custNames.push(pj.customer_name); });
     return '<div style="margin-bottom:14px">' +
       '<div class="section-hd" style="margin-bottom:4px"><div class="section-title" style="font-size:13px;cursor:pointer" onclick="openProductDetail(\'' + p.id + '\')">' + escHtml(p.name) + '</div></div>' +
-      (custNames.length ? custNames.map(function(cn) { return renderCustomerBadge(cn); }).join(' ') : '<span style="color:var(--muted);font-size:12px">—</span>') +
+      (custNames.length ? custNames.map(function(cn) { return '<span onclick="event.stopPropagation();gotoCustomerProjects(\'' + escHtml(cn) + '\')" style="cursor:pointer">' + renderCustomerBadge(cn) + '</span>'; }).join(' ') : '<span style="color:var(--muted);font-size:12px">—</span>') +
     '</div>';
   }).join('');
 }
@@ -892,7 +887,7 @@ function selectPdCustCat(cat, el) {
     links.forEach(function(pj) { if (pj.customer_name && custNames.indexOf(pj.customer_name) < 0) custNames.push(pj.customer_name); });
     return '<div style="margin-bottom:14px">' +
       '<div class="section-hd" style="margin-bottom:4px"><div class="section-title" style="font-size:13px;cursor:pointer" onclick="openProductDetail(\'' + p.id + '\')">' + escHtml(p.name) + '</div></div>' +
-      (custNames.length ? custNames.map(function(cn) { return renderCustomerBadge(cn); }).join(' ') : '<span style="color:var(--muted);font-size:12px">—</span>') +
+      (custNames.length ? custNames.map(function(cn) { return '<span onclick="event.stopPropagation();gotoCustomerProjects(\'' + escHtml(cn) + '\')" style="cursor:pointer">' + renderCustomerBadge(cn) + '</span>'; }).join(' ') : '<span style="color:var(--muted);font-size:12px">—</span>') +
     '</div>';
   }).join('');
 }

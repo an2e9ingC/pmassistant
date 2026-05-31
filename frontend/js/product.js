@@ -214,7 +214,7 @@ function renderProdDetailHeader(p) {
 
 function renderProdDetailInfo(p) {
   var customers = p.customers_from_desc || [];
-  var customersHtml = customers.length ? customers.map(function(c) { return renderCustomerBadge(c); }).join(' ') : '<span style="color:var(--muted);font-size:12px">—</span>';
+  var customersHtml = customers.length ? customers.map(function(c) { return '<span onclick="gotoCustomerProjects(\'' + escHtml(c) + '\')" style="cursor:pointer">' + renderCustomerBadge(c) + '</span>'; }).join(' ') : '<span style="color:var(--muted);font-size:12px">—</span>';
   var linksHtml = '';
   if (p.nas_path) {
     linksHtml += '<a href="' + escHtml(p.nas_path) + '" target="_blank" class="prod-link-chip" title="NAS 路径">&#x1F4C1; NAS</a>';
@@ -262,7 +262,7 @@ function renderProdDetailProjects(p) {
     return '<tr onclick="openProject(\'' + proj.id + '\')" style="cursor:pointer">' +
       '<td>' + renderProjIcon(proj.project_type, projCode) + '</td>' +
       '<td><div class="proj-name">' + escHtml(coreName) + '</div><div class="proj-code">' + escHtml(projCode) + '</div></td>' +
-      '<td>' + renderCustomerBadge(proj.customer_name) + '</td>' +
+      '<td><span onclick="event.stopPropagation();gotoCustomerProjects(\'' + escHtml(proj.customer_name || '') + '\')" style="cursor:pointer">' + renderCustomerBadge(proj.customer_name) + '</span></td>' +
       '<td>' + renderTypeBadge(proj.project_type) + '</td>' +
       '<td style="font-size:13px">' + escHtml(proj.status || '—') + '</td>' +
       '<td>' + renderPill(proj.status) + '</td>' +

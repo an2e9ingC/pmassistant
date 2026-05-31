@@ -286,6 +286,25 @@ utils.js → api.js → auth.js → components.js → dashboard.js → detail.js
 - [ ] 全局搜索 `.replace(/<[^>]+>/g` 确认无手动 HTML 剥离
 - [ ] 全局搜索 `font-size.*px` 确认无硬编码字号（应使用现有 CSS class）
 
+### 12.6 可点击跳转规范
+
+**所有涉及项目、产品、客户的 UI 元素必须支持点击跳转到对应详情页。** 禁止展示实体信息但不提供导航入口。
+
+| 实体 | 跳转目标 | 实现方式 |
+|------|---------|---------|
+| 项目 | `openProject(id)` → 项目详情页 | 表格行、卡片、芯片均可点击 |
+| 产品 | `openProductDetail(id)` → 产品详情页 | 产品名、卡片、芯片均可点击 |
+| 客户 | `gotoCustomerProjects(name)` → 客户关联项目页（自动选中） | 客户 badge、列表项均可点击 |
+
+**规则**：
+- 表格行：点击整行跳转主实体，行内子元素（产品芯片、客户badge）用 `event.stopPropagation()` 阻止冒泡后跳转各自目标
+- 卡片/芯片：直接绑定 onclick 跳转
+- 搜索结果：每条结果必须可点击跳转
+
+**检查命令**：
+- [ ] `grep -rn "renderProjIcon\|proj-name\|proj-code" frontend/js/` 确认所有项目渲染都有跳转入口
+- [ ] `grep -rn "renderCustomerBadge" frontend/js/` 确认客户 badge 可点击（项目关联客户/产品关联客户视图）
+
 ---
 
 ## 13. 服务器管理
