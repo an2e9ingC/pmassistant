@@ -59,12 +59,78 @@
 .gantt-head-row {
   display: flex; background: var(--surface2);
   border-bottom: 1px solid var(--border);
+  position: relative; z-index: 3;
 }
+.gantt-head-row.gantt-head-top {
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  z-index: 5;
+}
+.gantt-head-top .gantt-label-col {
+  background: var(--bg);
+}
+.gantt-head-row.gantt-head-mid {
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  z-index: 4;
+}
+.gantt-head-mid .gantt-label-col {
+  background: var(--surface2);
+}
+.gantt-group-hd {
+  text-align: center; font-size: 11px; font-weight: 600;
+  color: var(--fg); border-right: 1px solid var(--border);
+  padding: 5px 0; flex-shrink: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.gantt-group-hd:last-child { border-right: none; }
+.gantt-mid-hd {
+  font-size: 10.5px; font-weight: 550;
+  color: var(--muted);
+}
+
+/* Month colors — seasonal palette (0=Jan .. 11=Dec) */
+.gantt-mc-0  { background: #dde5ed; }  /*  1月 冰灰蓝 */
+.gantt-mc-1  { background: #e9e1ee; }  /*  2月 浅紫灰 */
+.gantt-mc-2  { background: #e0efe0; }  /*  3月 嫩绿 */
+.gantt-mc-3  { background: #f3e5ec; }  /*  4月 樱粉 */
+.gantt-mc-4  { background: #d8eed8; }  /*  5月 翠绿 */
+.gantt-mc-5  { background: #faf8dc; }  /*  6月 柠檬黄 */
+.gantt-mc-6  { background: #fde8d4; }  /*  7月 蜜橙 */
+.gantt-mc-7  { background: #d8f0e8; }  /*  8月 薄荷绿 */
+.gantt-mc-8  { background: #f3e8cc; }  /*  9月 麦浪金 */
+.gantt-mc-9  { background: #f9dcc4; }  /* 10月 枫叶橙 */
+.gantt-mc-10 { background: #ebdfd2; }  /* 11月 暖驼 */
+.gantt-mc-11 { background: #d9e2f2; }  /* 12月 霜蓝 */
+.gantt-col-hd.gantt-mc-0,
+.gantt-col-hd.gantt-mc-1,
+.gantt-col-hd.gantt-mc-2,
+.gantt-col-hd.gantt-mc-3,
+.gantt-col-hd.gantt-mc-4,
+.gantt-col-hd.gantt-mc-5,
+.gantt-col-hd.gantt-mc-6,
+.gantt-col-hd.gantt-mc-7,
+.gantt-col-hd.gantt-mc-8,
+.gantt-col-hd.gantt-mc-9,
+.gantt-col-hd.gantt-mc-10,
+.gantt-col-hd.gantt-mc-11 { opacity: 0.7; }
+.gantt-grid-col.gantt-mc-0,
+.gantt-grid-col.gantt-mc-1,
+.gantt-grid-col.gantt-mc-2,
+.gantt-grid-col.gantt-mc-3,
+.gantt-grid-col.gantt-mc-4,
+.gantt-grid-col.gantt-mc-5,
+.gantt-grid-col.gantt-mc-6,
+.gantt-grid-col.gantt-mc-7,
+.gantt-grid-col.gantt-mc-8,
+.gantt-grid-col.gantt-mc-9,
+.gantt-grid-col.gantt-mc-10,
+.gantt-grid-col.gantt-mc-11 { opacity: 0.25; }
 .gantt-label-col {
   width: 160px; min-width: 160px; flex-shrink: 0;
   padding: 9px 12px; display: flex; gap: 1px;
   border-right: 1px solid var(--border);
-  position: sticky; left: 0; z-index: 3;
+  position: sticky; left: 0; z-index: 20;
   background: var(--surface2);
 }
 .gantt-label-col > div {
@@ -93,6 +159,7 @@
 .gantt-row {
   display: flex; border-bottom: 1px solid var(--border);
   transition: background 0.1s;
+  position: relative; z-index: 1;
 }
 .gantt-row:last-child { border-bottom: none; }
 .gantt-row:hover { background: var(--surface2); }
@@ -102,7 +169,7 @@
   width: 160px; min-width: 160px; flex-shrink: 0;
   padding: 8px 12px; border-right: 1px solid var(--border);
   display: flex; gap: 1px; align-items: center;
-  position: sticky; left: 0; z-index: 2;
+  position: sticky; left: 0; z-index: 10;
   background: var(--surface);
 }
 .gantt-row:nth-child(even) .gantt-stage-cell { background: var(--bg); }
@@ -139,7 +206,7 @@
   display: flex; align-items: center;
   padding: 0 8px; font-size: 11px; font-weight: 510;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  cursor: pointer; z-index: 2; min-width: 4px;
+  cursor: pointer; z-index: 1; min-width: 4px;
   transition: filter 0.15s, opacity 0.15s;
 }
 .gantt-bar:hover { filter: brightness(0.9); }

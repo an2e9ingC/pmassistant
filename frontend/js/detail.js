@@ -230,9 +230,9 @@ function initGanttWheel() {
   wrap.addEventListener('wheel', function(e) {
     e.preventDefault();
     if (e.deltaY < 0) {
-      _ganttPpd = Math.min(30, _ganttPpd * 1.05);
+      _ganttPpd = Math.min(30, _ganttPpd * 1.5);
     } else {
-      _ganttPpd = Math.max(1, _ganttPpd / 1.05);
+      _ganttPpd = Math.max(1, _ganttPpd / 1.5);
     }
     // Debounce refresh: only rebuild after scrolling stops
     clearTimeout(_ganttRefreshTimer);
@@ -277,51 +277,96 @@ function isSameDay(a, b) {
 
 function generateColumns(range, ppd) {
   var cols = [];
+  var topGroups = [];
+  var midGroups = [];
   var cursor = new Date(range.start);
   var gran = ganttGranularity(ppd);
 
   if (gran === 'day') {
+    // 3 tiers: 月 / 周 / 日
     cursor.setHours(0, 0, 0, 0);
+    var curTop = null, curMid = null;
     while (cursor <= range.end) {
       var m = cursor.getMonth() + 1, d = cursor.getDate();
       var dow = cursor.getDay();
       var label = (d === 1 || cols.length === 0) ? m + '/' + d : String(d);
+      var mcIdx = m - 1;
       cols.push({
         label: label, isWeekend: dow === 0 || dow === 6,
         isToday: isSameDay(cursor, new Date()),
-        isMonthStart: d === 1, w: ppd
+        isMonthStart: d === 1, w: ppd, monthColor: mcIdx
       });
+      // Top: month
+      var tKey = cursor.getFullYear() + '-' + m;
+      if (!curTop || curTop.key !== tKey) {
+        curTop = { key: tKey, label: m + '月', w: 0, colorIdx: mcIdx };
+        topGroups.push(curTop);
+      }
+      curTop.w += ppd;
+      // Mid: week-of-month (W1~W5)
+      var wkOfMonth = Math.ceil(d / 7);
+      var mKey = tKey + '-W' + wkOfMonth;
+      if (!curMid || curMid.key !== mKey) {
+        curMid = { key: mKey, label: 'W' + wkOfMonth, w: 0 };
+        midGroups.push(curMid);
+      }
+      curMid.w += ppd;
       cursor.setDate(cursor.getDate() + 1);
     }
   } else if (gran === 'week') {
-    // Align to Monday
+    // 3 tiers: 年 / 月 / 周
     cursor.setDate(cursor.getDate() - cursor.getDay() + 1);
     if (cursor.getDay() === 0) cursor.setDate(cursor.getDate() - 6);
+    var curTop = null, curMid = null;
     while (cursor <= range.end) {
       var wm = cursor.getMonth() + 1, wd = cursor.getDate();
+      var mcIdx = wm - 1;
       cols.push({
         label: wm + '/' + wd, isWeekend: false,
         isToday: false, isMonthStart: wd <= 7,
-        w: ppd * 7
+        w: ppd * 7, monthColor: mcIdx
       });
+      // Top: year
+      var tKey = String(cursor.getFullYear());
+      if (!curTop || curTop.key !== tKey) {
+        curTop = { key: tKey, label: cursor.getFullYear() + '年', w: 0 };
+        topGroups.push(curTop);
+      }
+      curTop.w += ppd * 7;
+      // Mid: month
+      var mKey = cursor.getFullYear() + '-' + wm;
+      if (!curMid || curMid.key !== mKey) {
+        curMid = { key: mKey, label: wm + '月', w: 0, colorIdx: mcIdx };
+        midGroups.push(curMid);
+      }
+      curMid.w += ppd * 7;
       cursor.setDate(cursor.getDate() + 7);
     }
   } else {
-    // Month
+    // 2 tiers: 年 / 月 (no mid tier needed)
     cursor.setDate(1);
+    var curTop = null;
     while (cursor <= range.end) {
       var y = cursor.getFullYear(), mo = cursor.getMonth() + 1;
       var today = new Date();
+      var mcIdx = mo - 1;
       cols.push({
         label: mo === 1 ? y + '/' + mo : mo + '月',
         isWeekend: false, isMonthStart: true,
         isToday: today.getFullYear() === y && today.getMonth() + 1 === mo,
-        w: ppd * new Date(y, mo, 0).getDate()
+        w: ppd * new Date(y, mo, 0).getDate(), monthColor: mcIdx
       });
+      // Top: year
+      var tKey = String(y);
+      if (!curTop || curTop.key !== tKey) {
+        curTop = { key: tKey, label: y + '年', w: 0 };
+        topGroups.push(curTop);
+      }
+      curTop.w += ppd * new Date(y, mo, 0).getDate();
       cursor.setMonth(cursor.getMonth() + 1);
     }
   }
-  return cols;
+  return { cols: cols, topGroups: topGroups, midGroups: midGroups };
 }
 
 // ── Pixel position ──
@@ -337,7 +382,10 @@ function ganttPx(ds, range, totalWidth) {
 function buildGantt(stages) {
   var range = ganttRange(stages);
   var ppd = _ganttPpd;
-  var cols = generateColumns(range, ppd);
+  var result = generateColumns(range, ppd);
+  var cols = result.cols;
+  var topGroups = result.topGroups;
+  var midGroups = result.midGroups;
   var totalWidth = cols.reduce(function(s, c) { return s + c.w; }, 0);
 
   // Ensure content always overflows so drag-to-pan works at any zoom level
@@ -347,12 +395,33 @@ function buildGantt(stages) {
 
   buildGanttToolbar();
 
+  // Top-level group headers (年 / 月)
+  var topHdrs = topGroups.map(function(g) {
+    var mcCls = g.colorIdx !== undefined ? ' gantt-mc-' + g.colorIdx : '';
+    return '<div class="gantt-group-hd gantt-top-hd' + mcCls + '" style="width:' + g.w + 'px">' + g.label + '</div>';
+  }).join('');
+
+  // Mid-level group headers (月 / 周), only when present
+  var midHdrs = '';
+  var midRowHtml = '';
+  if (midGroups.length) {
+    midHdrs = midGroups.map(function(g) {
+      var mcCls = g.colorIdx !== undefined ? ' gantt-mc-' + g.colorIdx : '';
+      return '<div class="gantt-group-hd gantt-mid-hd' + mcCls + '" style="width:' + g.w + 'px">' + g.label + '</div>';
+    }).join('');
+    midRowHtml = '<div class="gantt-head-row gantt-head-mid">' +
+      '<div class="gantt-label-col"></div>' +
+      '<div class="gantt-timeline-head" style="min-width:' + displayWidth + 'px;width:' + displayWidth + 'px">' + midHdrs + '</div>' +
+    '</div>';
+  }
+
   // Column headers
   var mHdrs = cols.map(function(c) {
     var cls = 'gantt-col-hd';
     if (c.isToday) cls += ' today-col';
     if (c.isWeekend) cls += ' weekend';
     if (c.isMonthStart && !c.isToday && ganttGranularity(ppd) === 'day') cls += ' q-end';
+    if (c.monthColor !== undefined) cls += ' gantt-mc-' + c.monthColor;
     return '<div class="' + cls + '" style="width:' + c.w + 'px">' + c.label + '</div>';
   }).join('');
 
@@ -360,6 +429,7 @@ function buildGantt(stages) {
   var gCols = cols.map(function(c) {
     var cls = 'gantt-grid-col';
     if (c.isToday) cls += ' today-bg';
+    if (c.monthColor !== undefined) cls += ' gantt-mc-' + c.monthColor;
     return '<div class="' + cls + '" style="width:' + c.w + 'px"></div>';
   }).join('');
 
@@ -368,6 +438,11 @@ function buildGantt(stages) {
 
   if (!stages || !stages.length) {
     document.getElementById('gantt-root').innerHTML =
+      '<div class="gantt-head-row gantt-head-top">' +
+        '<div class="gantt-label-col"></div>' +
+        '<div class="gantt-timeline-head" style="min-width:' + displayWidth + 'px;width:' + displayWidth + 'px">' + topHdrs + '</div>' +
+      '</div>' +
+      midRowHtml +
       '<div class="gantt-head-row">' +
         '<div class="gantt-label-col"><div class="gl-stage">阶段</div><div class="gl-who">负责人</div></div>' +
         '<div class="gantt-timeline-head" style="min-width:' + displayWidth + 'px;width:' + displayWidth + 'px">' + mHdrs + '</div>' +
@@ -399,6 +474,11 @@ function buildGantt(stages) {
   }).join('');
 
   document.getElementById('gantt-root').innerHTML =
+    '<div class="gantt-head-row gantt-head-top">' +
+      '<div class="gantt-label-col"></div>' +
+      '<div class="gantt-timeline-head" style="min-width:' + displayWidth + 'px;width:' + displayWidth + 'px">' + topHdrs + '</div>' +
+    '</div>' +
+    midRowHtml +
     '<div class="gantt-head-row">' +
       '<div class="gantt-label-col"><div class="gl-stage">阶段</div><div class="gl-who">负责人</div></div>' +
       '<div class="gantt-timeline-head" style="min-width:' + displayWidth + 'px;width:' + displayWidth + 'px">' + mHdrs + '</div>' +
@@ -427,9 +507,9 @@ function buildGanttToolbar() {
     container.innerHTML = '<div class="gantt-toolbar">' +
       '<div style="font-size:10.5px;color:var(--muted)">滚轮缩放 · 拖拽平移</div>' +
       '<div class="gantt-toolbar-zoom">' +
-        '<button class="gantt-zoom-btn" onclick="_ganttPpd=Math.max(1,_ganttPpd/1.3);refreshGantt()" title="缩小">−</button>' +
+        '<button class="gantt-zoom-btn" onclick="_ganttPpd=Math.max(1,_ganttPpd/1.6);refreshGantt()" title="缩小">−</button>' +
         '<span class="gantt-zoom-label">' + (granLabels[gran] || '月') + '</span>' +
-        '<button class="gantt-zoom-btn" onclick="_ganttPpd=Math.min(30,_ganttPpd*1.3);refreshGantt()" title="放大">+</button>' +
+        '<button class="gantt-zoom-btn" onclick="_ganttPpd=Math.min(30,_ganttPpd*1.6);refreshGantt()" title="放大">+</button>' +
       '</div>' +
     '</div>';
   }
