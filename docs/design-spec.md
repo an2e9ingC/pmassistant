@@ -305,6 +305,26 @@ utils.js → api.js → auth.js → components.js → dashboard.js → detail.js
 - [ ] `grep -rn "renderProjIcon\|proj-name\|proj-code" frontend/js/` 确认所有项目渲染都有跳转入口
 - [ ] `grep -rn "renderCustomerBadge" frontend/js/` 确认客户 badge 可点击（项目关联客户/产品关联客户视图）
 
+### 12.7 可点击组件视觉规范
+
+**所有可点击的小组件（badge、chip、tag、行内链接等）统一采用 `.cust-badge` 的设计模式**，方便用户通过视觉线索识别可交互内容。
+
+**参考实现** (`.cust-badge`)：
+- `border: 1px solid var(--border)` — 可见边框，明确组件边界
+- `cursor: pointer` — 鼠标悬停时显示手型
+- `border-radius: 5px` — 圆角，与纯文本区分
+- `transition: border-color 0.12s, background 0.12s` — 平滑过渡
+- hover 时 `border-color` 变为组件主题色 — 提供即时交互反馈
+
+**适用场景**：
+- 表格行内的可点击实体（阶段名、产品芯片、客户badge）
+- 卡片内的跳转入口
+- 甘特图、列表等密集信息区域的可点击元素
+
+**反模式**：
+- 禁止仅依赖 `color` 或 `text-decoration` 区分可点击元素
+- 禁止无边框、无 hover 反馈的裸文本链接
+
 ---
 
 ## 13. 服务器管理

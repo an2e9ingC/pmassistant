@@ -85,7 +85,7 @@ async function loadProjectDetail(id) {
   // Show loading state
   document.getElementById('detail-header').innerHTML = '<div class="loading-spinner">加载项目详情...</div>';
   document.getElementById('gantt-root').innerHTML = '<div class="loading-spinner">加载甘特图...</div>';
-  document.getElementById('stages-tbody').innerHTML = '<tr><td colspan="6"><div class="loading-spinner">加载阶段数据...</div></td></tr>';
+  document.getElementById('stages-tbody').innerHTML = '<tr><td colspan="8"><div class="loading-spinner">加载阶段数据...</div></td></tr>';
   document.getElementById('docs-tbody').innerHTML = '<tr><td colspan="4"><div class="loading-spinner">加载文档数据...</div></td></tr>';
   document.getElementById('delivery-content').innerHTML = '<div class="loading-spinner">加载交付数据...</div>';
   document.getElementById('resources-content').innerHTML = '<div class="loading-spinner">加载资料链接...</div>';
@@ -188,7 +188,7 @@ var _ganttResizeState = null;
 
 function ganttLeftW() {
   var v = getComputedStyle(document.documentElement).getPropertyValue('--gantt-left-w').trim();
-  return v ? parseInt(v) : 240;
+  return v ? parseInt(v) : 280;
 }
 function setGanttLeftW(w) {
   document.documentElement.style.setProperty('--gantt-left-w', w + 'px');
@@ -406,17 +406,18 @@ function ganttPx(ds, range, totalWidth) {
 // ── Progress ring ──
 
 function renderProgressRing(pct) {
-  pct = Math.max(0, Math.min(100, pct || 0));
-  var r = 8, size = 22;
+  pct = Math.round(Math.max(0, Math.min(100, pct || 0)));
+  var size = 36, cx = 18, r = 13;
   var circ = 2 * Math.PI * r;
   var offset = circ * (1 - pct / 100);
   var color = pct >= 100 ? 'var(--success)' : pct > 0 ? 'var(--accent)' : 'var(--border)';
   return '<svg class="gs-ring" width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '">' +
-    '<circle cx="11" cy="11" r="' + r + '" fill="none" stroke="var(--border)" stroke-width="2"/>' +
-    '<circle cx="11" cy="11" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="2" ' +
+    '<circle cx="' + cx + '" cy="' + cx + '" r="' + r + '" fill="none" stroke="var(--border)" stroke-width="3"/>' +
+    '<circle cx="' + cx + '" cy="' + cx + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="3" ' +
       'stroke-dasharray="' + circ.toFixed(1) + '" stroke-dashoffset="' + offset.toFixed(1) + '" ' +
-      'stroke-linecap="round" transform="rotate(-90 11 11)"/>' +
-    '</svg><span class="gs-pct">' + pct + '%</span>';
+      'stroke-linecap="round" transform="rotate(-90 ' + cx + ' ' + cx + ')"/>' +
+    '<text x="' + cx + '" y="' + cx + '" text-anchor="middle" dy="0.35em" font-size="12" font-weight="600" fill="var(--muted)">' + pct + '</text>' +
+    '</svg>';
 }
 
 // ── Main render ──
@@ -486,7 +487,7 @@ function buildGantt(stages) {
       '</div>' +
       midRowHtml +
       '<div class="gantt-head-row">' +
-        '<div class="gantt-label-col"><div class="gl-stage">阶段</div><div class="gl-prog">进度</div><div class="gl-who">负责人</div><div class="gantt-resize-handle"></div></div>' +
+        '<div class="gantt-label-col"><div class="gl-stage">阶段</div><div class="gl-risk">风险</div><div class="gl-prog">进度</div><div class="gl-who">负责人</div><div class="gantt-resize-handle"></div></div>' +
         '<div class="gantt-timeline-head" style="min-width:' + displayWidth + 'px;width:' + displayWidth + 'px">' + mHdrs + '</div>' +
       '</div>' +
       '<div class="gantt-row"><div class="gantt-stage-cell" style="width:100%;text-align:center;color:var(--muted);padding:20px">暂无阶段数据</div></div>';
@@ -501,11 +502,13 @@ function buildGantt(stages) {
     var ep = ganttPx(s.end, range, totalWidth);
     var wp = Math.max(4, ep - lp);
     var whoShort = (s.who || '').split('（')[0].split('、')[0] || '—';
-    var barLabel = wp > 30 ? (s.progress || 0) + '%' : '';
+    var barLabel = wp > 30 ? String(Math.round(s.progress || 0)) : '';
     var prog = s.progress || 0;
+    var risk = getStageRisk(s);
     return '<div class="gantt-row' + alt + '">' +
       '<div class="gantt-stage-cell">' +
-        '<div class="gs-name" title="' + escHtml(s.name) + '">' + escHtml(s.name) + '</div>' +
+        '<div class="gs-name" title="' + escHtml(s.name) + '" onclick="switchDTab(\'stages\');event.stopPropagation()">' + escHtml(s.name) + '</div>' +
+        '<div class="gs-risk"><span class="risk-tag" style="--risk-color:' + risk.color + '" title="' + escHtml(risk.tip) + '"><span class="risk-dot" style="background:' + risk.color + '"></span>' + escHtml(risk.label) + '</span></div>' +
         '<div class="gs-prog">' + renderProgressRing(prog) + '</div>' +
         '<div class="gs-who" title="' + escHtml(s.who || '') + '">' + escHtml(whoShort) + '</div>' +
       '</div>' +
@@ -524,7 +527,7 @@ function buildGantt(stages) {
     '</div>' +
     midRowHtml +
     '<div class="gantt-head-row">' +
-      '<div class="gantt-label-col"><div class="gl-stage">阶段</div><div class="gl-prog">进度</div><div class="gl-who">负责人</div><div class="gantt-resize-handle"></div></div>' +
+      '<div class="gantt-label-col"><div class="gl-stage">阶段</div><div class="gl-risk">风险</div><div class="gl-prog">进度</div><div class="gl-who">负责人</div><div class="gantt-resize-handle"></div></div>' +
       '<div class="gantt-timeline-head" style="min-width:' + displayWidth + 'px;width:' + displayWidth + 'px">' + mHdrs + '</div>' +
     '</div>' + rows;
 
@@ -561,17 +564,56 @@ function buildGanttToolbar() {
 
 /* Stages Table */
 
+function getStageRisk(s) {
+  // Returns { level, label, color, tip }
+  if (s.status === 'completed') return { level: 'none', label: '已完成', color: 'var(--success)', tip: '阶段已完成' };
+  if (s.status === 'blocked') return { level: 'high', label: '已阻塞', color: 'var(--danger)', tip: '阶段被挂起/阻塞' };
+
+  var today = new Date(); today.setHours(0, 0, 0, 0);
+  var start = s.start ? new Date(s.start) : null;
+  var end = s.end ? new Date(s.end) : null;
+  var prog = s.progress || 0;
+
+  if (!start || !end) return { level: 'low', label: '无计划', color: 'var(--muted)', tip: '缺少计划日期' };
+
+  var totalDays = Math.max(1, Math.round((end - start) / 86400000));
+  var elapsedDays = Math.round((today - start) / 86400000);
+
+  // Overdue
+  if (today > end && prog < 100) {
+    var overdueDays = Math.round((today - end) / 86400000);
+    return { level: 'high', label: '已超期' + overdueDays + '天', color: 'var(--danger)', tip: '应于 ' + formatDate(s.end) + ' 完成，已超期' };
+  }
+  // Not started yet
+  if (today < start) return { level: 'none', label: '未开始', color: 'var(--muted)', tip: '计划 ' + formatDate(s.start) + ' 开始' };
+
+  // On-track analysis
+  var expectedProg = Math.min(100, Math.round((elapsedDays / totalDays) * 100));
+  var gap = expectedProg - prog;
+
+  if (gap <= 5) return { level: 'none', label: '正常', color: 'var(--success)', tip: '进度正常，预期 ' + expectedProg + '%，实际 ' + prog + '%' };
+  if (gap <= 20) return { level: 'low', label: '轻微滞后', color: 'var(--warn)', tip: '预期 ' + expectedProg + '%，实际 ' + prog + '%，差 ' + gap + '%' };
+  if (gap <= 40) return { level: 'medium', label: '进度滞后', color: '#e67e22', tip: '预期 ' + expectedProg + '%，实际 ' + prog + '%，差 ' + gap + '%' };
+  return { level: 'high', label: '严重滞后', color: 'var(--danger)', tip: '预期 ' + expectedProg + '%，实际 ' + prog + '%，差 ' + gap + '%' };
+}
+
 function buildStages(stages) {
   if (!stages || !stages.length) {
-    document.getElementById('stages-tbody').innerHTML = '<tr><td colspan="6"><div class="empty-state">暂无阶段数据</div></td></tr>';
+    document.getElementById('stages-tbody').innerHTML = '<tr><td colspan="8"><div class="empty-state">暂无阶段数据</div></td></tr>';
     return;
   }
 
   document.getElementById('stages-tbody').innerHTML = stages.map(function(s, i) {
     var bg = i % 2 === 0 ? 'var(--surface)' : 'var(--bg)';
     var dels = s.deliverables || [];
+    var risk = getStageRisk(s);
+    var prog = s.progress || 0;
     return '<tr style="background:' + bg + '">' +
       '<td><strong>' + escHtml(s.name) + '</strong></td>' +
+      '<td><span class="risk-tag" style="--risk-color:' + risk.color + '" title="' + escHtml(risk.tip) + '">' +
+        '<span class="risk-dot" style="background:' + risk.color + '"></span>' + escHtml(risk.label) +
+      '</span></td>' +
+      '<td>' + renderProgressRing(prog) + '</td>' +
       '<td style="font-size:12px;white-space:nowrap">' + escHtml(s.who || '—') + '</td>' +
       '<td style="font-size:11.5px;color:var(--muted);white-space:nowrap;line-height:1.8">' + formatDate(s.start) + '<br>' + formatDate(s.end) + '</td>' +
       '<td>' + renderPill(s.status) + (s.completed_date ? '<div style="font-size:10.5px;color:var(--success);margin-top:4px;font-family:var(--mono)">&#10003; ' + s.completed_date + '</div>' : '') + '</td>' +
@@ -770,5 +812,9 @@ function switchDTab(id, el) {
   document.querySelectorAll('.dtab').forEach(function(t) { t.classList.remove('active'); });
   var sec = document.getElementById('dsec-' + id);
   if (sec) sec.classList.add('active');
-  if (el) el.classList.add('active');
+  if (el) { el.classList.add('active'); }
+  else {
+    var tab = document.querySelector('.dtab[onclick*="' + id + '"]');
+    if (tab) tab.classList.add('active');
+  }
 }

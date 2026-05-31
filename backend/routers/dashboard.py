@@ -52,12 +52,13 @@ def get_projects(
 @router.get("/alerts", response_model=dict)
 def get_alerts(
     severity: Optional[str] = Query(None),
+    project_id: Optional[int] = Query(None),
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
-    items, total = dashboard_service.get_alerts(db, severity, page, limit)
+    items, total = dashboard_service.get_alerts(db, severity, project_id, page, limit)
     return {
         "code": 0,
         "data": {

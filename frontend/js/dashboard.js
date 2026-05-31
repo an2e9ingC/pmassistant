@@ -118,8 +118,15 @@ async function loadProjectTable(filter) {
       } else {
         tagsHtml = '<span style="font-size:11.5px;color:var(--muted)">无</span>';
       }
-      return '<tr onclick="openProject(\'' + p.id + '\')">' +
-        '<td>' + renderProjIcon(p.type, projCode) + '</td>' +
+      var isHighRisk = _curCategory === 'high_risk';
+      var rowClick = isHighRisk
+        ? 'onclick="filterAlertsByProject(\'' + p.id + '\', \'' + escHtml(projCode + ' ' + coreName).replace(/'/g, "\\'") + '\')"'
+        : 'onclick="openProject(\'' + p.id + '\')"';
+      var projIconHtml = isHighRisk
+        ? renderProjIcon(p.type, projCode).replace('<div class=', '<div onclick="event.stopPropagation();openProject(\'' + p.id + '\')" class=')
+        : renderProjIcon(p.type, projCode);
+      return '<tr ' + rowClick + '>' +
+        '<td>' + projIconHtml + '</td>' +
         '<td><div class="proj-name">' + escHtml(coreName) + '</div><div class="proj-code">' + escHtml(projCode) + '</div></td>' +
         '<td><span onclick="event.stopPropagation();gotoCustomerProjects(\'' + escHtml(p.customer_name || '') + '\')" style="cursor:pointer">' + renderCustomerBadge(p.customer_name) + '</span></td>' +
         '<td>' + renderTypeBadge(p.type) + '</td>' +
@@ -137,17 +144,25 @@ async function loadProjectTable(filter) {
 
 /* Alert List */
 
-async function loadAlertList() {
+var _alertProjectFilter = null; // { id, label } when filtered by project
+
+async function loadAlertList(projectId) {
   var container = document.getElementById('alert-list');
   container.innerHTML = '<div class="loading-spinner">加载告警...</div>';
 
   try {
-    var data = await API.get('/dashboard/alerts?limit=50');
+    var url = '/dashboard/alerts?limit=50';
+    if (projectId) url += '&project_id=' + projectId;
+    var data = await API.get(url);
     var alerts = data.items || [];
-    document.getElementById('alert-count').textContent = '共 ' + data.total + ' 条';
+    var countEl = document.getElementById('alert-count');
+    countEl.innerHTML = '共 ' + data.total + ' 条';
+    if (_alertProjectFilter) {
+      countEl.innerHTML += ' <span style="font-size:11px;color:var(--accent);cursor:pointer" onclick="clearAlertFilter()">(已筛选: ' + escHtml(_alertProjectFilter.label) + ' ✕)</span>';
+    }
 
     if (!alerts.length) {
-      container.innerHTML = '<div class="empty-state">暂无告警</div>';
+      container.innerHTML = '<div class="empty-state">' + (_alertProjectFilter ? '该项目暂无告警' : '暂无告警') + '</div>';
       return;
     }
 
@@ -155,16 +170,26 @@ async function loadAlertList() {
       var dot = a.severity === 'red' ? 'r' : 'y';
       return '<div class="alert-row">' +
         '<div class="alert-dot ' + dot + '"></div>' +
+        (a.project_code ? '<span class="alert-proj" onclick="event.stopPropagation();openProject(\'' + a.project_id + '\')" title="跳转到项目详情">' + escHtml(a.project_code) + '</span>' : '') +
         '<div class="alert-body">' +
           '<div class="alert-msg">' + escHtml(a.message) + '</div>' +
           (a.sub_message ? '<div class="alert-sub">' + escHtml(a.sub_message) + '</div>' : '') +
-          (a.project_id ? '<div class="alert-proj" onclick="openProject(\'' + a.project_id + '\')">' + escHtml(a.project_code || '') + ' →</div>' : '') +
         '</div>' +
       '</div>';
     }).join('');
   } catch(e) {
     container.innerHTML = '<div class="error-state">告警加载失败<button onclick="loadAlertList()">重试</button></div>';
   }
+}
+
+function filterAlertsByProject(projectId, label) {
+  _alertProjectFilter = { id: projectId, label: label };
+  loadAlertList(projectId);
+}
+
+function clearAlertFilter() {
+  _alertProjectFilter = null;
+  loadAlertList();
 }
 
 /* Navigation */

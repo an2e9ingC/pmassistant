@@ -108,10 +108,13 @@ def get_project_list(
 
 
 def get_alerts(db: Session, severity: Optional[str] = None,
+               project_id: Optional[int] = None,
                page: int = 1, limit: int = 50) -> tuple[list[dict], int]:
     alerts = _detect_alerts_internal(db)
     if severity:
         alerts = [a for a in alerts if a["severity"] == severity]
+    if project_id is not None:
+        alerts = [a for a in alerts if a["project_id"] == project_id]
     total = len(alerts)
     start = (page - 1) * limit
     return alerts[start:start + limit], total
@@ -141,6 +144,7 @@ def _detect_alerts_internal(db: Session) -> list[dict]:
     projects = db.query(CachedProject).all()
 
     for p in projects:
+        proj_code = p.code or (p.name.split('-')[0] if p.name and '-' in p.name else None)
         executions = db.query(CachedExecution).filter(
             CachedExecution.project_id == p.id
         ).all()
@@ -155,7 +159,7 @@ def _detect_alerts_internal(db: Session) -> list[dict]:
                         "id": alert_id, "severity": "red",
                         "message": f"阶段「{e.name}」计划结束日期已过，状态未完成",
                         "sub_message": f"计划结束: {e.end}，当前状态: {e.status}",
-                        "project_id": p.id, "project_code": p.code, "stage_name": e.name,
+                        "project_id": p.id, "project_code": proj_code, "stage_name": e.name,
                     })
 
             # Check tasks in each execution
@@ -173,7 +177,7 @@ def _detect_alerts_internal(db: Session) -> list[dict]:
                             "id": alert_id, "severity": "yellow",
                             "message": f"任务「{t.name}」已完成但无附件/输出件",
                             "sub_message": f"任务状态=done, 类型={t.type}, 无文件附件",
-                            "project_id": p.id, "project_code": p.code, "stage_name": e.name,
+                            "project_id": p.id, "project_code": proj_code, "stage_name": e.name,
                         })
 
                 # Yellow: review task missing approval keyword
@@ -186,7 +190,7 @@ def _detect_alerts_internal(db: Session) -> list[dict]:
                             "id": alert_id, "severity": "yellow",
                             "message": f"审核任务「{t.name}」描述中缺少【同意】关键字",
                             "sub_message": "任务名称包含评审/确认/审核关键字，但描述中无同意标记",
-                            "project_id": p.id, "project_code": p.code, "stage_name": e.name,
+                            "project_id": p.id, "project_code": proj_code, "stage_name": e.name,
                         })
 
     # TODO: GitLab发布未同步告警 — 检测GitLab release版本号与禅道版本号是否一致（Phase 3）

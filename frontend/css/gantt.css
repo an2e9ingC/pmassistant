@@ -127,8 +127,10 @@
 .gantt-grid-col.gantt-mc-10,
 .gantt-grid-col.gantt-mc-11 { opacity: 0.25; }
 .gantt-label-col {
-  width: var(--gantt-left-w, 240px); min-width: 160px; flex-shrink: 0;
-  padding: 8px 10px; display: flex; gap: 4px; align-items: center;
+  width: var(--gantt-left-w, 280px); min-width: 160px; flex-shrink: 0;
+  padding: 8px 10px;
+  display: grid; grid-template-columns: 1fr 56px 60px 56px; gap: 4px;
+  align-items: center;
   border-right: 1px solid var(--border);
   position: sticky; left: 0; z-index: 20;
   background: var(--surface2);
@@ -138,9 +140,10 @@
   font-size: 10.5px; font-weight: 600; color: var(--muted);
   text-transform: uppercase; letter-spacing: 0.05em;
 }
-.gantt-label-col .gl-stage { flex: 1; min-width: 0; }
-.gantt-label-col .gl-prog  { width: 50px; flex-shrink: 0; text-align: center; }
-.gantt-label-col .gl-who   { width: 56px; flex-shrink: 0; }
+.gantt-label-col .gl-stage { min-width: 0; }
+.gantt-label-col .gl-risk  { text-align: center; }
+.gantt-label-col .gl-prog  { text-align: center; }
+.gantt-label-col .gl-who   { }
 .gantt-timeline-head {
   flex: 1; display: flex; overflow: hidden;
 }
@@ -180,32 +183,42 @@
 .gantt-row.stage-alt { background: var(--bg); }
 .gantt-row.stage-alt:hover { background: var(--surface2); }
 .gantt-stage-cell {
-  width: var(--gantt-left-w, 240px); min-width: 160px; flex-shrink: 0;
+  width: var(--gantt-left-w, 280px); min-width: 160px; flex-shrink: 0;
   padding: 8px 10px; border-right: 1px solid var(--border);
-  display: flex; gap: 4px; align-items: center;
+  display: grid; grid-template-columns: 1fr 56px 60px 56px; gap: 4px;
+  align-items: center;
   position: sticky; left: 0; z-index: 10;
   background: var(--surface);
 }
 .gantt-row:nth-child(even) .gantt-stage-cell { background: var(--bg); }
 .gantt-row:hover .gantt-stage-cell { background: var(--surface2); }
 .gantt-stage-cell .gs-name {
-  flex: 1; min-width: 0; font-size: 12px; font-weight: 540;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  min-width: 0; font-size: 12px; font-weight: 540;
+  word-break: break-all; line-height: 1.4;
+  cursor: pointer;
+  transition: color 0.12s;
+}
+.gantt-stage-cell .gs-name:hover {
+  color: var(--accent);
+}
+.gantt-stage-cell .gs-risk {
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.gantt-stage-cell .gs-risk .risk-tag {
+  font-size: 10px; gap: 3px;
+}
+.gantt-stage-cell .gs-risk .risk-dot {
+  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
 }
 .gantt-stage-cell .gs-prog {
-  width: 50px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  gap: 1px;
 }
 .gs-ring {
-  flex-shrink: 0;
-}
-.gs-pct {
-  font-size: 9px; font-weight: 600;
-  color: var(--muted); white-space: nowrap;
+  flex-shrink: 0; display: block;
 }
 .gantt-stage-cell .gs-who {
-  width: 56px; flex-shrink: 0; font-size: 10.5px; color: var(--muted);
+  font-size: 10.5px; color: var(--muted);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
