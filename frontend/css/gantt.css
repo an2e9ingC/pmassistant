@@ -19,11 +19,15 @@
 .gantt-root {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--r-lg);
+  border-top: none;
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
   box-shadow: var(--sh);
 }
 
 /* ── Toolbar ── */
+#gantt-toolbar-container {
+  flex-shrink: 0;
+}
 .gantt-toolbar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 8px 14px; border-bottom: 1px solid var(--border);

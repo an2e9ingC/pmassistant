@@ -194,8 +194,7 @@ function initGanttDrag() {
 
   wrap.addEventListener('mousedown', function(e) {
     if (e.button !== 0) return;
-    if (e.target.closest('.gantt-bar') || e.target.closest('.gantt-toolbar') ||
-        e.target.closest('input') || e.target.closest('button')) return;
+    if (e.target.closest('.gantt-bar') || e.target.closest('input') || e.target.closest('button')) return;
 
     _ganttDragWrap = wrap;
     _ganttDragState = { startX: e.pageX, scrollLeft: wrap.scrollLeft };
@@ -231,9 +230,9 @@ function initGanttWheel() {
   wrap.addEventListener('wheel', function(e) {
     e.preventDefault();
     if (e.deltaY < 0) {
-      _ganttPpd = Math.min(30, _ganttPpd + 1.05);
+      _ganttPpd = Math.min(30, _ganttPpd * 1.05);
     } else {
-      _ganttPpd = Math.max(1, _ganttPpd - 1.05);
+      _ganttPpd = Math.max(1, _ganttPpd / 1.05);
     }
     // Debounce refresh: only rebuild after scrolling stops
     clearTimeout(_ganttRefreshTimer);
@@ -263,15 +262,9 @@ function ganttRange(stages) {
       if (s.end)   { var ed = new Date(s.end);   if (ed > maxDate) maxDate = ed; }
     });
   }
-  minDate.setDate(1);
-  minDate.setMonth(minDate.getMonth() - 1);
+  // Start from earliest stage date, end 2 months after latest stage end
   maxDate.setDate(1);
-  maxDate.setMonth(maxDate.getMonth() + 1);
-
-  var minSpan = new Date(today); minSpan.setMonth(today.getMonth() - 3);
-  var maxSpan = new Date(today); maxSpan.setMonth(today.getMonth() + 3);
-  if (minDate > minSpan) minDate = minSpan;
-  if (maxDate < maxSpan) maxDate = maxSpan;
+  maxDate.setMonth(maxDate.getMonth() + 2);
 
   return { start: minDate, end: maxDate, span: maxDate - minDate };
 }
@@ -347,6 +340,13 @@ function buildGantt(stages) {
   var cols = generateColumns(range, ppd);
   var totalWidth = cols.reduce(function(s, c) { return s + c.w; }, 0);
 
+  // Ensure content always overflows so drag-to-pan works at any zoom level
+  var wrap = document.querySelector('.gantt-wrap');
+  var minTotalWidth = (wrap ? wrap.clientWidth : 800) + 400;
+  var displayWidth = Math.max(totalWidth, minTotalWidth);
+
+  buildGanttToolbar();
+
   // Column headers
   var mHdrs = cols.map(function(c) {
     var cls = 'gantt-col-hd';
@@ -368,10 +368,9 @@ function buildGantt(stages) {
 
   if (!stages || !stages.length) {
     document.getElementById('gantt-root').innerHTML =
-      buildGanttToolbar() +
       '<div class="gantt-head-row">' +
         '<div class="gantt-label-col"><div class="gl-stage">阶段</div><div class="gl-who">负责人</div></div>' +
-        '<div class="gantt-timeline-head" style="min-width:' + totalWidth + 'px;width:' + totalWidth + 'px">' + mHdrs + '</div>' +
+        '<div class="gantt-timeline-head" style="min-width:' + displayWidth + 'px;width:' + displayWidth + 'px">' + mHdrs + '</div>' +
       '</div>' +
       '<div class="gantt-row"><div class="gantt-stage-cell" style="width:100%;text-align:center;color:var(--muted);padding:20px">暂无阶段数据</div></div>';
     initGanttDrag();
@@ -391,7 +390,7 @@ function buildGantt(stages) {
         '<div class="gs-name" title="' + escHtml(s.name) + '">' + escHtml(s.name) + '</div>' +
         '<div class="gs-who" title="' + escHtml(s.who || '') + '">' + escHtml(whoShort) + '</div>' +
       '</div>' +
-      '<div class="gantt-bar-cell" style="min-width:' + totalWidth + 'px;width:' + totalWidth + 'px">' +
+      '<div class="gantt-bar-cell" style="min-width:' + displayWidth + 'px;width:' + displayWidth + 'px">' +
         '<div class="gantt-grid">' + gCols + '</div>' +
         '<div class="gantt-today-line" style="left:' + todayPx + 'px"><div class="gantt-today-pip"></div></div>' +
         '<div class="gantt-bar ' + s.status + '" style="left:' + lp + 'px;width:' + wp + 'px" title="' + escHtml(s.name) + '  ' + (s.start || '') + ' → ' + (s.end || '') + '">' + escHtml(barLabel) + '</div>' +
@@ -400,18 +399,20 @@ function buildGantt(stages) {
   }).join('');
 
   document.getElementById('gantt-root').innerHTML =
-    buildGanttToolbar() +
     '<div class="gantt-head-row">' +
       '<div class="gantt-label-col"><div class="gl-stage">阶段</div><div class="gl-who">负责人</div></div>' +
-      '<div class="gantt-timeline-head" style="min-width:' + totalWidth + 'px;width:' + totalWidth + 'px">' + mHdrs + '</div>' +
+      '<div class="gantt-timeline-head" style="min-width:' + displayWidth + 'px;width:' + displayWidth + 'px">' + mHdrs + '</div>' +
     '</div>' + rows;
 
-  // Center today on first render
+  // Start scroll at first stage
   setTimeout(function() {
     var wrap = document.querySelector('.gantt-wrap');
-    if (wrap && todayPx > 0) {
-      wrap.scrollLeft = todayPx - wrap.clientWidth / 2;
+    if (!wrap) return;
+    var firstStartPx = 0;
+    if (stages && stages.length) {
+      firstStartPx = ganttPx(stages[0].start, range, totalWidth);
     }
+    wrap.scrollLeft = Math.max(0, firstStartPx - 40);
   }, 50);
 
   initGanttDrag();
@@ -421,14 +422,17 @@ function buildGantt(stages) {
 function buildGanttToolbar() {
   var gran = ganttGranularity(_ganttPpd);
   var granLabels = { day: '日', week: '周', month: '月' };
-  return '<div class="gantt-toolbar">' +
-    '<div style="font-size:10.5px;color:var(--muted)">滚轮缩放 · 拖拽平移</div>' +
-    '<div class="gantt-toolbar-zoom">' +
-      '<button class="gantt-zoom-btn" onclick="_ganttPpd=Math.max(1,_ganttPpd/1.3);refreshGantt()" title="缩小">−</button>' +
-      '<span class="gantt-zoom-label">' + (granLabels[gran] || '月') + '</span>' +
-      '<button class="gantt-zoom-btn" onclick="_ganttPpd=Math.min(30,_ganttPpd*1.3);refreshGantt()" title="放大">+</button>' +
-    '</div>' +
-  '</div>';
+  var container = document.getElementById('gantt-toolbar-container');
+  if (container) {
+    container.innerHTML = '<div class="gantt-toolbar">' +
+      '<div style="font-size:10.5px;color:var(--muted)">滚轮缩放 · 拖拽平移</div>' +
+      '<div class="gantt-toolbar-zoom">' +
+        '<button class="gantt-zoom-btn" onclick="_ganttPpd=Math.max(1,_ganttPpd/1.3);refreshGantt()" title="缩小">−</button>' +
+        '<span class="gantt-zoom-label">' + (granLabels[gran] || '月') + '</span>' +
+        '<button class="gantt-zoom-btn" onclick="_ganttPpd=Math.min(30,_ganttPpd*1.3);refreshGantt()" title="放大">+</button>' +
+      '</div>' +
+    '</div>';
+  }
 }
 
 /* Stages Table */
