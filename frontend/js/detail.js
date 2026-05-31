@@ -184,16 +184,23 @@ function ganttGranularity(ppd) {
 
 var _ganttDragWrap = null;
 var _ganttDragState = null;
+var _ganttResizeState = null;
+
+function ganttLeftW() {
+  var v = getComputedStyle(document.documentElement).getPropertyValue('--gantt-left-w').trim();
+  return v ? parseInt(v) : 240;
+}
+function setGanttLeftW(w) {
+  document.documentElement.style.setProperty('--gantt-left-w', w + 'px');
+}
 
 function initGanttDrag() {
   var wrap = document.querySelector('.gantt-wrap');
   if (!wrap) return;
 
-  // Remove old listeners (simplest: replace element clone pattern not needed, just rebind)
-  wrap.onmousedown = null;
-
   wrap.addEventListener('mousedown', function(e) {
     if (e.button !== 0) return;
+    if (e.target.closest('.gantt-resize-handle')) return; // handled globally
     if (e.target.closest('.gantt-bar') || e.target.closest('input') || e.target.closest('button')) return;
 
     _ganttDragWrap = wrap;
@@ -203,13 +210,32 @@ function initGanttDrag() {
   });
 }
 
-// Global move/up handlers (registered once)
+// Global handlers
+document.addEventListener('mousedown', function(e) {
+  if (e.button !== 0) return;
+  var h = e.target.closest('.gantt-resize-handle');
+  if (!h) return;
+  _ganttResizeState = { startX: e.pageX, startW: ganttLeftW() };
+  document.querySelectorAll('.gantt-resize-handle').forEach(function(el) { el.classList.add('active'); });
+  e.preventDefault();
+});
+
 document.addEventListener('mousemove', function(e) {
+  if (_ganttResizeState) {
+    var newW = Math.max(160, _ganttResizeState.startW + (e.pageX - _ganttResizeState.startX));
+    setGanttLeftW(newW);
+    return;
+  }
   if (!_ganttDragWrap) return;
   _ganttDragWrap.scrollLeft = _ganttDragState.scrollLeft - (e.pageX - _ganttDragState.startX);
 });
 
 document.addEventListener('mouseup', function() {
+  if (_ganttResizeState) {
+    document.querySelectorAll('.gantt-resize-handle').forEach(function(el) { el.classList.remove('active'); });
+    _ganttResizeState = null;
+    return;
+  }
   if (_ganttDragWrap) {
     _ganttDragWrap.classList.remove('dragging');
     _ganttDragWrap = null;
@@ -377,6 +403,22 @@ function ganttPx(ds, range, totalWidth) {
   return Math.max(0, Math.min(totalWidth, (t / range.span) * totalWidth));
 }
 
+// ── Progress ring ──
+
+function renderProgressRing(pct) {
+  pct = Math.max(0, Math.min(100, pct || 0));
+  var r = 8, size = 22;
+  var circ = 2 * Math.PI * r;
+  var offset = circ * (1 - pct / 100);
+  var color = pct >= 100 ? 'var(--success)' : pct > 0 ? 'var(--accent)' : 'var(--border)';
+  return '<svg class="gs-ring" width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '">' +
+    '<circle cx="11" cy="11" r="' + r + '" fill="none" stroke="var(--border)" stroke-width="2"/>' +
+    '<circle cx="11" cy="11" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="2" ' +
+      'stroke-dasharray="' + circ.toFixed(1) + '" stroke-dashoffset="' + offset.toFixed(1) + '" ' +
+      'stroke-linecap="round" transform="rotate(-90 11 11)"/>' +
+    '</svg><span class="gs-pct">' + pct + '%</span>';
+}
+
 // ── Main render ──
 
 function buildGantt(stages) {
@@ -444,7 +486,7 @@ function buildGantt(stages) {
       '</div>' +
       midRowHtml +
       '<div class="gantt-head-row">' +
-        '<div class="gantt-label-col"><div class="gl-stage">阶段</div><div class="gl-who">负责人</div></div>' +
+        '<div class="gantt-label-col"><div class="gl-stage">阶段</div><div class="gl-prog">进度</div><div class="gl-who">负责人</div><div class="gantt-resize-handle"></div></div>' +
         '<div class="gantt-timeline-head" style="min-width:' + displayWidth + 'px;width:' + displayWidth + 'px">' + mHdrs + '</div>' +
       '</div>' +
       '<div class="gantt-row"><div class="gantt-stage-cell" style="width:100%;text-align:center;color:var(--muted);padding:20px">暂无阶段数据</div></div>';
@@ -459,10 +501,12 @@ function buildGantt(stages) {
     var ep = ganttPx(s.end, range, totalWidth);
     var wp = Math.max(4, ep - lp);
     var whoShort = (s.who || '').split('（')[0].split('、')[0] || '—';
-    var barLabel = wp > 50 ? s.name : '';
+    var barLabel = wp > 30 ? (s.progress || 0) + '%' : '';
+    var prog = s.progress || 0;
     return '<div class="gantt-row' + alt + '">' +
       '<div class="gantt-stage-cell">' +
         '<div class="gs-name" title="' + escHtml(s.name) + '">' + escHtml(s.name) + '</div>' +
+        '<div class="gs-prog">' + renderProgressRing(prog) + '</div>' +
         '<div class="gs-who" title="' + escHtml(s.who || '') + '">' + escHtml(whoShort) + '</div>' +
       '</div>' +
       '<div class="gantt-bar-cell" style="min-width:' + displayWidth + 'px;width:' + displayWidth + 'px">' +
@@ -480,7 +524,7 @@ function buildGantt(stages) {
     '</div>' +
     midRowHtml +
     '<div class="gantt-head-row">' +
-      '<div class="gantt-label-col"><div class="gl-stage">阶段</div><div class="gl-who">负责人</div></div>' +
+      '<div class="gantt-label-col"><div class="gl-stage">阶段</div><div class="gl-prog">进度</div><div class="gl-who">负责人</div><div class="gantt-resize-handle"></div></div>' +
       '<div class="gantt-timeline-head" style="min-width:' + displayWidth + 'px;width:' + displayWidth + 'px">' + mHdrs + '</div>' +
     '</div>' + rows;
 
