@@ -1,5 +1,6 @@
 from __future__ import annotations
 import asyncio
+import hashlib
 import json
 import logging
 import re
@@ -26,30 +27,38 @@ class ZentaoClient:
     async def authenticate(self) -> str:
         client = await self._get_client()
         url = f"{self.base_url}/tokens"
-        logger.info(f"Zentao auth request: POST {url}")
-        resp = await client.post(
-            url,
-            json={"account": settings.ZENTAO_AUTH_ACCOUNT, "password": "***"},
-        )
-        logger.info(f"Zentao auth response: HTTP {resp.status_code}, content-type={resp.headers.get('content-type','?')}")
-        try:
-            data = resp.json()
-        except Exception:
-            raw = resp.content
-            ct = resp.headers.get("content-type", "")
-            m = re.search(r"charset=([^\s;]+)", ct)
-            enc = m.group(1) if m else "gbk"
-            decoded = raw.decode(enc, errors="replace")
-            logger.error(f"Zentao auth returned non-JSON (HTTP {resp.status_code}, {len(raw)} bytes): {decoded[:300]}")
-            if not decoded.strip():
-                raise RuntimeError(f"Zentao auth returned empty response (HTTP {resp.status_code}). Check ZENTAO_BASE_URL: {self.base_url}")
-            data = json.loads(decoded)
-        if "token" not in data:
+        account = settings.ZENTAO_AUTH_ACCOUNT
+        password = settings.ZENTAO_AUTH_PASSWORD
+        pw_md5 = hashlib.md5(password.encode()).hexdigest()
+
+        # Try MD5 first (some Zentao versions require it), then raw password
+        for attempt, pw in enumerate([pw_md5, password]):
+            logger.info(f"Zentao auth request: POST {url} account={account} pw_method={'md5' if attempt==0 else 'raw'}")
+            resp = await client.post(url, json={"account": account, "password": pw})
+            logger.info(f"Zentao auth response: HTTP {resp.status_code}")
+            try:
+                data = resp.json()
+            except Exception:
+                raw = resp.content
+                ct = resp.headers.get("content-type", "")
+                m = re.search(r"charset=([^\s;]+)", ct)
+                enc = m.group(1) if m else "gbk"
+                decoded = raw.decode(enc, errors="replace")
+                if not decoded.strip():
+                    continue
+                data = json.loads(decoded)
+            if "token" in data:
+                self._token = data["token"]
+                logger.info(f"Zentao auth successful (method={'md5' if attempt==0 else 'raw'})")
+                return self._token
             error_msg = data.get("error", str(data))
-            raise RuntimeError(f"Zentao auth failed: {error_msg}")
-        self._token = data["token"]
-        logger.info("Zentao token obtained successfully")
-        return self._token
+            logger.warning(f"Zentao auth attempt {attempt+1} failed: {error_msg}")
+
+        raise RuntimeError(
+            f"Zentao auth failed after trying both MD5 and raw password\n"
+            f"URL: {url}\n"
+            f"Account: {account}"
+        )
 
     async def _request(self, method: str, path: str, **kwargs) -> dict:
         client = await self._get_client()
