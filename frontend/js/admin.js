@@ -51,11 +51,7 @@ function renderConfigForm(cfg) {
             '" data-section="' + sec.key + '" data-field="' + f.key + '"' +
             ' value="' + escHtml(val) + '" placeholder="' + escHtml(f.ph) + '"' +
             (isPw ? ' autocomplete="new-password" onkeyup="checkCapsLock(event,\'' + uid + '-caps\')"' : '') + '>' +
-          (isPw ? '<button type="button" class="config-pw-toggle" onclick="togglePwVis(\'' + uid + '\',this)" title="显示/隐藏密码">' +
-            '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">' +
-              '<path d="M1 8s3-5.5 7-5.5S15 8 15 8s-3 5.5-7 5.5S1 8 1 8z"/>' +
-              '<circle cx="8" cy="8" r="2.5"/>' +
-            '</svg></button>' : '') +
+          (isPw ? '<button type="button" class="config-pw-toggle" onclick="togglePwVis(\'' + uid + '\',this)" title="显示/隐藏密码">隐</button>' : '') +
           (isPw ? '<span id="' + uid + '-caps" class="config-caps-warn" style="display:none">&#x21E7; 大写锁定已开</span>' : '') +
         '</span>' +
       '</label>';
@@ -74,11 +70,10 @@ function renderConfigForm(cfg) {
 
 function togglePwVis(id, btn) {
   var inp = document.getElementById(id);
+  if (!inp) return;
   var isPw = inp.type === 'password';
   inp.type = isPw ? 'text' : 'password';
-  btn.innerHTML = isPw
-    ? '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6.5 3.5c1.5-.3 3-.3 4.5 0M3.5 5c-1 .6-2 1.5-2.8 2.5.3.4.6.8 1 1.2M12.5 5c.8.6 1.5 1.2 2 2-.3.4-.6.7-.9 1M8 5.5c-.8 0-1.5.7-1.5 1.5s.7 1.5 1.5 1.5M3 2l11 12"/></svg>'
-    : '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 8s3-5.5 7-5.5S15 8 15 8s-3 5.5-7 5.5S1 8 1 8z"/><circle cx="8" cy="8" r="2.5"/></svg>';
+  btn.textContent = isPw ? '显' : '隐';
   btn.title = isPw ? '显示密码' : '隐藏密码';
 }
 
