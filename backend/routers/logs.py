@@ -6,9 +6,10 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import desc
 
-from backend.database import SessionLocal
+from backend.database import SessionLocal, get_db
 from backend.middleware.auth import require_admin
 from backend.models.log_entry import LogEntry
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
 
@@ -107,3 +108,15 @@ def log_levels(_=Depends(require_admin)):
         ],
         "message": "ok",
     }
+
+
+@router.post("/clear", response_model=dict)
+def clear_logs(db: Session = Depends(get_db), _=Depends(require_admin)):
+    """Truncate the log file and clear DB log entries."""
+    try:
+        open(LOG_FILE, "w").close()
+        db.query(LogEntry).delete()
+        db.commit()
+        return {"code": 0, "message": "日志已清除"}
+    except Exception as e:
+        return {"code": 1, "message": f"清除失败: {e}"}

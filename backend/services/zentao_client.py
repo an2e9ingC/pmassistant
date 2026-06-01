@@ -95,7 +95,9 @@ class ZentaoClient:
                     continue
 
                 if "error" in data and data.get("error"):
-                    if "not found" in str(data["error"]).lower():
+                    err = str(data["error"]).lower()
+                    if "not found" in err or "no priv" in err or "no .* priv" in str(data["error"]):
+                        logger.warning(f"Zentao API skipped (no permission): {data['error']}")
                         return {}
                     raise RuntimeError(f"Zentao API error: {data['error']}")
 

@@ -9,22 +9,21 @@ var _logLevel = 'INFO';
 var _logTail = 200;
 var _logSearch = '';
 var _logAutoRefresh = null;
-var _logRefreshInterval = 15000; // default 15s for INFO
+var _logRefreshInterval = 2000; // default 2s
 var _logUserScrolled = false;    // true when user manually scrolls away from bottom
 
 // Refresh intervals by level
-var _logIntervals = { 'DEBUG': 30000, 'INFO': 15000, 'WARNING': 10000, 'ERROR': 5000, 'CRITICAL': 3000 };
+var _logIntervals = { 'DEBUG': 5000, 'INFO': 2000, 'WARNING': 2000, 'ERROR': 2000, 'CRITICAL': 2000 };
 
 function isLogAtBottom() {
-  var pre = document.querySelector('.log-pre');
-  if (!pre) return true;
-  // Within 40px of bottom = "at bottom"
-  return pre.scrollHeight - pre.scrollTop - pre.clientHeight < 40;
+  var el = document.querySelector('.log-container');
+  if (!el) return true;
+  return el.scrollHeight - el.scrollTop - el.clientHeight < 40;
 }
 
 function scrollLogToBottom() {
-  var pre = document.querySelector('.log-pre');
-  if (pre) pre.scrollTop = pre.scrollHeight;
+  var el = document.querySelector('.log-container');
+  if (el) el.scrollTop = el.scrollHeight;
 }
 
 async function renderLogs() {
@@ -59,10 +58,9 @@ async function fetchLogs() {
     var wasAtBottom = isLogAtBottom();
     container.innerHTML = '<pre class="log-pre">' + html + '</pre>';
 
-    // Re-bind scroll listener
-    var pre = container.querySelector('.log-pre');
-    if (pre) {
-      pre.addEventListener('scroll', function() {
+    // Re-bind scroll listener on the scrollable container
+    if (container) {
+      container.addEventListener('scroll', function() {
         _logUserScrolled = !isLogAtBottom();
       });
       // Auto-scroll to bottom only if: initial load, or user was already at bottom
@@ -140,5 +138,15 @@ function clearLogAutoRefresh() {
   if (_logAutoRefresh) {
     clearInterval(_logAutoRefresh);
     _logAutoRefresh = null;
+  }
+}
+
+async function clearLogs() {
+  if (!confirm('确定清空所有日志？此操作不可撤销。')) return;
+  try {
+    await API.post('/logs/clear');
+    document.getElementById('log-content').innerHTML = '<div class="empty-state" style="padding:20px">日志已清除</div>';
+  } catch(e) {
+    showToast('清除失败: ' + e.message, 'error');
   }
 }

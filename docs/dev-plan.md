@@ -140,3 +140,4 @@
 | 2026-06-01 | v2026.06.01-beta7 | Logo系统：logo-mark-light/dark深浅主题自适应、favicon更新、侧边栏品牌区+登录页logo替换、删除旧临时PMA方块 |
 | 2026-06-01 | v2026.06.01-beta8 | 项目笔记：project_notes表+CRUD API、弹窗添加(阶段关联下拉)、表格展示(时间/阶段/记录人/内容)；产品详情关联项目移到底部、删除客户信息 |
 | 2026-06-01 | v2026.06.01-beta9 | 用户管理：admin_users CRUD API、用户列表表格(添加/编辑/禁用/删除)、角色管理、弹窗表单；display_name废弃统一用username；管理菜单仅admin可见；退出登录移到用户头像 |
+| 2026-06-01 | v2026.06.01-beta10 | 禅道MD5认证+权限不足容错跳过、数据源密码明文+眼睛图标、Settings.reload+SyncService重建client、系统日志2s实时刷新+清除(DB+文件)+sticky工具栏 |

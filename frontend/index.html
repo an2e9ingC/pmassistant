@@ -125,7 +125,7 @@
     </div>
 
     <div style="margin-top:8px;text-align:center;font-size:10px;color:var(--muted)">
-      <span id="app-version">v2026.06.01-beta9</span>
+      <span id="app-version">v2026.06.01-beta10</span>
     </div>
   </div>
 </aside>
@@ -370,30 +370,29 @@
 
     <!-- ══════════════════════ VIEW 5 — LOGS ══════════════════════ -->
     <div class="view" id="view-logs">
-      <div class="section-hd">
-        <div class="section-acts" style="gap:8px">
-          <div class="search-wrap" style="max-width:200px">
-            <svg class="search-ico" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>
-            <input class="search-inp" placeholder="搜索日志..." oninput="onLogSearch(this.value)">
-          </div>
-          <label style="font-size:11px;color:var(--muted)">级别</label>
-          <select class="log-select" id="log-level-select" onchange="setLogLevel()">
-            <option value="INFO" selected>INFO（默认）</option>
-            <option value="DEBUG">DEBUG</option>
-            <option value="WARNING">WARNING</option>
-            <option value="ERROR">ERROR</option>
-            <option value="CRITICAL">CRITICAL</option>
-          </select>
-          <label style="font-size:11px;color:var(--muted)">行数</label>
-          <select class="log-select" id="log-tail-select" onchange="setLogTail()">
-            <option value="100">100 条</option>
-            <option value="200" selected>200 条</option>
-            <option value="500">500 条</option>
-            <option value="1000">1000 条</option>
-          </select>
-          <button class="btn" id="log-refresh-btn" onclick="toggleLogAutoRefresh()" style="font-size:11px;padding:4px 10px;background:var(--accent-lt);color:var(--accent)">暂停</button>
-          <span style="font-size:10.5px;color:var(--muted)" id="log-status"></span>
+      <div class="log-toolbar">
+        <div class="search-wrap" style="max-width:200px">
+          <svg class="search-ico" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>
+          <input class="search-inp" placeholder="搜索日志..." oninput="onLogSearch(this.value)">
         </div>
+        <label style="font-size:11px;color:var(--muted)">级别</label>
+        <select class="log-select" id="log-level-select" onchange="setLogLevel()">
+          <option value="INFO" selected>INFO</option>
+          <option value="DEBUG">DEBUG</option>
+          <option value="WARNING">WARNING</option>
+          <option value="ERROR">ERROR</option>
+          <option value="CRITICAL">CRITICAL</option>
+        </select>
+        <label style="font-size:11px;color:var(--muted)">行数</label>
+        <select class="log-select" id="log-tail-select" onchange="setLogTail()">
+          <option value="100">100</option>
+          <option value="200" selected>200</option>
+          <option value="500">500</option>
+          <option value="1000">1000</option>
+        </select>
+        <button class="btn" id="log-refresh-btn" onclick="toggleLogAutoRefresh()" style="font-size:11px;padding:4px 10px;background:var(--accent-lt);color:var(--accent)">暂停</button>
+        <button class="btn" onclick="clearLogs()" style="font-size:11px;padding:4px 10px;color:var(--danger)" title="清空日志文件">清除日志</button>
+        <span style="font-size:10.5px;color:var(--muted)" id="log-status"></span>
       </div>
       <div class="card log-container" id="log-content">
         <div class="loading-spinner">加载日志...</div>
