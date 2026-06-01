@@ -136,9 +136,9 @@
     <div class="topbar-title" id="topbar-title">项目总览</div>
     <div class="topbar-right">
       <div class="src-tags" id="topbar-sources">
-        <span class="src-tag pending" id="src-zentao" title="禅道项目管理" style="background:var(--bg);color:var(--muted);border:2px solid var(--border);padding:5px 13px;border-radius:6px;font-size:12px;font-weight:600">禅道 待同步</span>
-        <span class="src-tag pending" id="src-gitlab" title="GitLab 代码仓库" style="background:var(--bg);color:var(--muted);border:2px solid var(--border);padding:5px 13px;border-radius:6px;font-size:12px;font-weight:600">GitLab 未配置</span>
-        <span class="src-tag pending" id="src-nas" title="NAS 文件存储" style="background:var(--bg);color:var(--muted);border:2px solid var(--border);padding:5px 13px;border-radius:6px;font-size:12px;font-weight:600">NAS 未配置</span>
+        <span class="src-tag pending" id="src-zentao" onclick="toggleSrcTip('zentao',event)" style="background:var(--bg);color:var(--muted);border:2px solid var(--border);padding:5px 13px;border-radius:6px;font-size:12px;font-weight:600"><span class="src-tag-label">禅道 待同步</span><span class="src-tag-tip" id="src-zentao-tip">API: 192.168.3.22/zentao&#10;账号: PM_Assistant</span></span>
+        <span class="src-tag pending" id="src-gitlab" onclick="toggleSrcTip('gitlab',event)" style="background:var(--bg);color:var(--muted);border:2px solid var(--border);padding:5px 13px;border-radius:6px;font-size:12px;font-weight:600"><span class="src-tag-label">GitLab 未配置</span><span class="src-tag-tip" id="src-gitlab-tip">API: 192.168.0.128/api/v4&#10;Token: 未配置</span></span>
+        <span class="src-tag pending" id="src-nas" onclick="toggleSrcTip('nas',event)" style="background:var(--bg);color:var(--muted);border:2px solid var(--border);padding:5px 13px;border-radius:6px;font-size:12px;font-weight:600"><span class="src-tag-label">NAS 未配置</span><span class="src-tag-tip" id="src-nas-tip">主机: 未配置&#10;路径: 未配置</span></span>
         <button class="src-sync-btn" onclick="triggerSync()" title="从禅道同步最新数据">
           <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="1.5,5.5 3.5,2.5 1.5,2.5"/>
@@ -574,7 +574,7 @@ async function triggerSync() {
 
   // Update tag and show progress toast
   var ztag = document.getElementById('src-zentao');
-  if (ztag) { ztag.textContent = '禅道 同步中...'; ztag.className = 'src-tag warn'; }
+  if (ztag) { var zlbl = ztag.querySelector('.src-tag-label'); if (zlbl) zlbl.textContent = '禅道 同步中...'; ztag.className = 'src-tag warn'; }
   var progToast = showToast('正在同步数据，请稍候...', 'info', 0); // 0 = no auto-close
 
   try {

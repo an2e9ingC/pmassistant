@@ -1,3 +1,5 @@
+import os
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -100,6 +102,7 @@ def sync_sources(db: Session = Depends(get_db), _=Depends(get_current_user)):
         "sync_status": zentao_status,
         "last_sync": zentao_log.finished_at.isoformat() if (zentao_log and zentao_log.finished_at) else None,
         "description": "项目管理（项目/迭代/任务/Bug）",
+        "detail": f"API: {settings.ZENTAO_BASE_URL}\n账号: {settings.ZENTAO_AUTH_ACCOUNT}",
     })
 
     # GitLab — configured if token is set
@@ -111,16 +114,20 @@ def sync_sources(db: Session = Depends(get_db), _=Depends(get_current_user)):
         "sync_status": "pending",
         "last_sync": None,
         "description": "代码仓库（commit统计、发布验证）" if gitlab_configured else "代码仓库（未配置Token）",
+        "detail": f"API: {settings.GITLAB_BASE_URL}\nToken: {'已配置' if gitlab_configured else '未配置'}",
     })
 
     # NAS — not yet integrated
+    nas_host = os.environ.get("NAS_HOST", "")
+    nas_path = os.environ.get("NAS_PATH", "")
     sources.append({
         "key": "nas",
         "name": "NAS",
-        "configured": False,
+        "configured": bool(nas_host),
         "sync_status": "pending",
         "last_sync": None,
         "description": "文件存储（售前项目检测、交付文档）",
+        "detail": f"主机: {nas_host or '未配置'}\n路径: {nas_path or '未配置'}",
     })
 
     return {"code": 0, "data": sources, "message": "ok"}

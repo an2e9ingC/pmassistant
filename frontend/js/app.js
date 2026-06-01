@@ -95,19 +95,47 @@ function updateLinkStatus() {
     sources.forEach(function(s) {
       var key = s.key;
       if (!_srcStates.hasOwnProperty(key)) return;
+      _srcDetails[key] = s.detail || '';
       if (!s.configured) {
-        _srcStates[key] = 'pending'; // 未配置
+        _srcStates[key] = 'pending';
       } else if (s.sync_status === 'success') {
         _srcStates[key] = 'ok';
       } else if (s.sync_status === 'failed') {
         _srcStates[key] = 'err';
       } else {
-        _srcStates[key] = 'warn'; // configured but not synced yet
+        _srcStates[key] = 'warn';
       }
     });
     renderSourceTags();
-  }).catch(function() {});
+    // Populate tooltip content for each source tag
+    sources.forEach(function(s) {
+      var tip = document.getElementById('src-' + s.key + '-tip');
+      if (tip && s.detail) tip.textContent = s.detail;
+    });
+  }).catch(function(e) {
+    console.error('updateLinkStatus failed:', e);
+  });
 }
+
+function toggleSrcTip(key, e) {
+  e.stopPropagation();
+  var tip = document.getElementById('src-' + key + '-tip');
+  if (!tip) return;
+  // Close all other open tips
+  document.querySelectorAll('.src-tag-tip.show').forEach(function(t) {
+    if (t !== tip) t.classList.remove('show');
+  });
+  tip.classList.toggle('show');
+}
+
+// Close tips when clicking elsewhere
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.src-tag')) {
+    document.querySelectorAll('.src-tag-tip.show').forEach(function(t) {
+      t.classList.remove('show');
+    });
+  }
+});
 
 function renderSourceTags() {
   var names = { zentao: '禅道', gitlab: 'GitLab', nas: 'NAS' };
@@ -116,18 +144,15 @@ function renderSourceTags() {
     gitlab: { ok: '', warn: '未同步', err: '同步失败', pending: '未配置' },
     nas:    { ok: '', warn: '未同步', err: '同步失败', pending: '未配置' },
   };
-  var todoTitles = {
-    gitlab: 'TODO：GitLab集成待实现——commit统计、release版本验证（Phase 3，需GITLAB_TOKEN）',
-    nas: 'TODO：NAS集成待实现——售前项目检测、交付文档扫描（Phase 3，需NAS路径配置）',
-  };
+
   ['zentao', 'gitlab', 'nas'].forEach(function(key) {
     var el = document.getElementById('src-' + key);
     if (!el) return;
     var state = _srcStates[key] || 'pending';
     el.className = 'src-tag ' + state;
     var reason = reasons[key][state] || '';
-    el.textContent = names[key] + (reason ? ' ' + reason : '');
-    el.title = (state === 'pending' && todoTitles[key]) ? todoTitles[key] : (names[key] + '：' + (reason || '已同步'));
+    var label = el.querySelector('.src-tag-label');
+    if (label) label.textContent = names[key] + (reason ? ' ' + reason : '');
   });
 }
 

@@ -1,6 +1,8 @@
 from __future__ import annotations
 import asyncio
+import json
 import logging
+import re
 from typing import Optional
 
 import httpx
@@ -46,7 +48,15 @@ class ZentaoClient:
                 resp = await client.request(
                     method, f"{self.base_url}{path}", headers=headers, **kwargs
                 )
-                data = resp.json()
+                # Handle non-UTF-8 responses (e.g. GBK from Chinese Zentao)
+                try:
+                    data = resp.json()
+                except Exception:
+                    raw = resp.content
+                    ct = resp.headers.get("content-type", "")
+                    m = re.search(r"charset=([^\s;]+)", ct)
+                    enc = m.group(1) if m else "gbk"
+                    data = json.loads(raw.decode(enc, errors="replace"))
 
                 # v1 quirk: 401 returns HTTP 200 + {"load": "..."}
                 if isinstance(data, dict) and "load" in data and data.get("load"):

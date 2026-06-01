@@ -212,6 +212,18 @@
 .alert-row:last-child { border-bottom: none; }
 .alert-row:hover { background: var(--surface2); }
 .alert-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; }
+.topbar .src-tag {
+  position: relative; cursor: pointer;
+}
+.src-tag-tip {
+  display: none; position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+  background: #333; color: #f5f5f5; font-size: 12px; font-weight: 400;
+  padding: 10px 14px; border-radius: 6px; white-space: pre; line-height: 1.7;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.35); z-index: 999;
+  min-width: 220px; text-align: left;
+}
+.src-tag-tip.show { display: block; }
+
 .alert-dot.r { background: var(--danger); }
 .alert-dot.y { background: var(--warn); }
 .alert-body { flex: 1; }
