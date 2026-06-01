@@ -122,3 +122,140 @@ async function saveConfig() {
   btn.disabled = false;
   btn.textContent = '保存配置';
 }
+
+/* ── User Management ── */
+
+var _userList = [];
+
+async function initUserManagement() {
+  _userList = [];
+  document.getElementById('users-tbody').innerHTML = '<tr><td colspan="6"><div class="loading-spinner">加载中...</div></td></tr>';
+  try {
+    var data = await API.get('/admin/users');
+    _userList = data || [];
+    renderUserTable();
+  } catch(e) {
+    document.getElementById('users-tbody').innerHTML = '<tr><td colspan="6"><div class="error-state">加载失败: ' + escHtml(e.message) + '</div></td></tr>';
+  }
+}
+
+function renderUserTable() {
+  var tbody = document.getElementById('users-tbody');
+  if (!_userList.length) {
+    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state" style="padding:16px">暂无用户</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = _userList.map(function(u) {
+    var statusHtml = u.is_active
+      ? '<span class="pill" style="background:var(--success-lt);color:var(--success)">正常</span>'
+      : '<span class="pill" style="background:var(--danger-lt);color:var(--danger)">已禁用</span>';
+    var toggleLabel = u.is_active ? '禁用' : '启用';
+    return '<tr>' +
+      '<td style="font-family:var(--mono);font-size:13px">' + escHtml(u.username) + '</td>' +
+      '<td>' + escHtml(u.role) + '</td>' +
+      '<td>' + statusHtml + '</td>' +
+      '<td style="font-size:12px;color:var(--muted)">' + escHtml(u.created_at || '') + '</td>' +
+      '<td style="white-space:nowrap">' +
+        '<button class="btn" onclick="openUserEditDialog(' + u.id + ')" style="font-size:11px;padding:3px 10px;margin-right:4px">编辑</button>' +
+        '<button class="btn" onclick="toggleUserActive(' + u.id + ',' + u.is_active + ')" style="font-size:11px;padding:3px 10px;margin-right:4px">' + toggleLabel + '</button>' +
+        '<button class="btn" onclick="deleteUser(' + u.id + ',\'' + escHtml(u.username) + '\')" style="font-size:11px;padding:3px 10px;color:var(--danger)">删除</button>' +
+      '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+function openUserCreateDialog() {
+  var html = '<div class="note-dialog-overlay" onclick="if(event.target===this)closeUserDialog()">' +
+    '<div class="note-dialog">' +
+      '<div class="note-dialog-head"><span class="note-dialog-title">添加用户</span>' +
+        '<button class="note-dialog-close" onclick="closeUserDialog()">&times;</button></div>' +
+      '<div class="user-form">' +
+        '<div class="user-form-field"><label>用户名</label><input class="config-input" id="ud-username"></div>' +
+        '<div class="user-form-field"><label>密码</label><input class="config-input" id="ud-password" type="password"></div>' +
+        '<div class="user-form-field"><label>角色</label><select class="config-input" id="ud-role"><option value="viewer">viewer</option><option value="manager">manager</option><option value="admin">admin</option></select></div>' +
+      '</div>' +
+      '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:14px">' +
+        '<span id="ud-msg" style="font-size:11px"></span>' +
+        '<button class="btn" onclick="closeUserDialog()">取消</button>' +
+        '<button class="btn btn-primary" onclick="submitUserCreate()">创建</button></div>' +
+    '</div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function closeUserDialog() {
+  var overlay = document.querySelector('.note-dialog-overlay');
+  if (overlay) overlay.remove();
+}
+
+async function submitUserCreate() {
+  var username = document.getElementById('ud-username').value.trim();
+  var password = document.getElementById('ud-password').value;
+  var role = document.getElementById('ud-role').value;
+  var msg = document.getElementById('ud-msg');
+  if (!username || !password) { msg.innerHTML = '<span style="color:var(--danger)">请填写所有字段</span>'; return; }
+  try {
+    msg.innerHTML = '<span style="color:var(--muted)">创建中...</span>';
+    await API.post('/admin/users', { username: username, password: password, role: role });
+    closeUserDialog();
+    initUserManagement();
+  } catch(e) {
+    msg.innerHTML = '<span style="color:var(--danger)">' + escHtml(e.message) + '</span>';
+  }
+}
+
+function openUserEditDialog(id) {
+  var u = _userList.find(function(x) { return x.id === id; });
+  if (!u) return;
+  var roles = ['viewer', 'manager', 'admin'];
+  var roleOpts = roles.map(function(r) { return '<option value="' + r + '"' + (u.role === r ? ' selected' : '') + '>' + r + '</option>'; }).join('');
+  var html = '<div class="note-dialog-overlay" onclick="if(event.target===this)closeUserDialog()">' +
+    '<div class="note-dialog">' +
+      '<div class="note-dialog-head"><span class="note-dialog-title">编辑用户: ' + escHtml(u.username) + '</span>' +
+        '<button class="note-dialog-close" onclick="closeUserDialog()">&times;</button></div>' +
+      '<div class="user-form">' +
+        '<div class="user-form-field"><label>角色</label><select class="config-input" id="ue-role">' + roleOpts + '</select></div>' +
+        '<div class="user-form-field"><label>新密码（留空不修改）</label><input class="config-input" id="ue-password" type="password" placeholder="留空则不修改密码"></div>' +
+      '</div>' +
+      '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:14px">' +
+        '<span id="ue-msg" style="font-size:11px"></span>' +
+        '<button class="btn" onclick="closeUserDialog()">取消</button>' +
+        '<button class="btn btn-primary" onclick="submitUserEdit(' + id + ')">保存</button></div>' +
+    '</div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+async function submitUserEdit(id) {
+  var role = document.getElementById('ue-role').value;
+  var password = document.getElementById('ue-password').value;
+  var msg = document.getElementById('ue-msg');
+  var payload = { role: role };
+  if (password) payload.password = password;
+  try {
+    msg.innerHTML = '<span style="color:var(--muted)">保存中...</span>';
+    await API.put('/admin/users/' + id, payload);
+    closeUserDialog();
+    initUserManagement();
+  } catch(e) {
+    msg.innerHTML = '<span style="color:var(--danger)">' + escHtml(e.message) + '</span>';
+  }
+}
+
+async function toggleUserActive(id, currentActive) {
+  try {
+    await API.put('/admin/users/' + id, { is_active: !currentActive });
+    initUserManagement();
+  } catch(e) {
+    showToast('操作失败: ' + e.message, 'error');
+  }
+}
+
+async function deleteUser(id, username) {
+  if (!confirm('确定删除用户 "' + username + '"？此操作不可撤销。')) return;
+  try {
+    await API.del('/admin/users/' + id);
+    initUserManagement();
+    showToast('用户已删除', 'success');
+  } catch(e) {
+    showToast('删除失败: ' + e.message, 'error');
+  }
+}

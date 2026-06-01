@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.middleware.auth import get_current_user
 from backend.models.local import LocalUser
 from backend.schemas.auth import LoginRequest, LoginResponse, UserInfo
-from backend.services.auth_service import authenticate_user, create_access_token
+from backend.services.auth_service import authenticate_user, create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -35,3 +36,21 @@ def me(user: LocalUser = Depends(get_current_user)):
         "data": UserInfo.model_validate(user).model_dump(),
         "message": "ok",
     }
+
+
+class PasswordUpdate(BaseModel):
+    old_password: str
+    new_password: str
+
+
+@router.put("/password", response_model=dict)
+def update_password(
+    payload: PasswordUpdate,
+    db: Session = Depends(get_db),
+    user: LocalUser = Depends(get_current_user),
+):
+    if not verify_password(payload.old_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="原密码错误")
+    user.password_hash = hash_password(payload.new_password)
+    db.commit()
+    return {"code": 0, "message": "密码已更新"}

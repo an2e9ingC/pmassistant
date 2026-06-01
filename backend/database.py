@@ -120,7 +120,6 @@ def init_db():
             admin = LocalUser(
                 username="admin",
                 password_hash=pwd_context.hash("admin123"),
-                display_name="管理员",
                 role="admin",
                 zentao_account=None,
                 is_active=True,

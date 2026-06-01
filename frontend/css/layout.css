@@ -272,6 +272,20 @@
   cursor: pointer; transition: background 0.12s;
 }
 .user-pill:hover { background: var(--bg); }
+.user-menu {
+  display: none; position: absolute; top: calc(100% + 6px); right: 0;
+  min-width: 140px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-lg); box-shadow: var(--sh-md); z-index: 500;
+  padding: 4px; overflow: hidden;
+}
+.user-menu.open { display: block; }
+.user-menu-item {
+  padding: 8px 12px; font-size: 13px; cursor: pointer;
+  border-radius: 6px; transition: background 0.1s;
+}
+.user-menu-item:hover { background: var(--bg); }
+.user-menu-divider { height: 1px; background: var(--border); margin: 4px 8px; }
+
 .avatar {
   width: 26px; height: 26px; border-radius: 50%;
   background: var(--accent); color: #fff;

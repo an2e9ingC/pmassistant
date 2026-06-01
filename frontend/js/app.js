@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════
    MAIN APP
 ═══════════════════════════════════════════════════ */
-var VIEW_TITLES = { dashboard: '项目总览', detail: '项目详情', topology: '快速检索', reports: '统计报告', logs: '系统日志', config: '数据源配置', 'product-list': '产品总览', 'product-detail': '产品详情' };
+var VIEW_TITLES = { dashboard: '项目总览', detail: '项目详情', topology: '快速检索', reports: '统计报告', logs: '系统日志', users: '用户管理', config: '数据源配置', 'product-list': '产品总览', 'product-detail': '产品详情' };
 
 function gotoView(view) {
   // Check auth
@@ -56,6 +56,14 @@ function gotoView(view) {
       return;
     }
     initAdmin();
+  }
+  if (view === 'users') {
+    var user = getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      showToast('用户管理仅限管理员访问', 'error');
+      return;
+    }
+    initUserManagement();
   }
   if (view === 'product-list') {
     initProductList();
@@ -213,9 +221,14 @@ function init() {
   // User display
   var user = getCurrentUser();
   if (user) {
-    var initials = (user.display_name || user.username).substring(0, 2);
+    var initials = (user.username || '').substring(0, 2).toUpperCase();
     document.getElementById('user-avatar').textContent = initials;
-    document.getElementById('user-name').textContent = user.display_name + ' · ' + user.role;
+    document.getElementById('user-name').textContent = user.username + ' · ' + user.role;
+    // Show admin-only nav items
+    if (user.role === 'admin') {
+      var adminGroup = document.getElementById('nav-group-admin');
+      if (adminGroup) adminGroup.style.display = '';
+    }
   }
 
   // Data source status — render defaults immediately, then update
@@ -225,6 +238,62 @@ function init() {
   // Navigate to saved view or dashboard
   var lastView = localStorage.getItem('pm_view') || 'dashboard';
   gotoView(lastView);
+}
+
+/* User menu */
+
+function toggleUserMenu(e) {
+  e.stopPropagation();
+  var menu = document.getElementById('user-menu');
+  menu.classList.toggle('open');
+}
+
+function closeUserMenu() {
+  var menu = document.getElementById('user-menu');
+  if (menu) menu.classList.remove('open');
+}
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.user-pill') && !e.target.closest('.user-menu')) {
+    closeUserMenu();
+  }
+});
+
+function changePassword() {
+  var html = '<div class="note-dialog-overlay" onclick="if(event.target===this)closePwDialog()">' +
+    '<div class="note-dialog">' +
+      '<div class="note-dialog-head"><span class="note-dialog-title">修改密码</span>' +
+        '<button class="note-dialog-close" onclick="closePwDialog()">&times;</button></div>' +
+      '<div style="margin-bottom:10px"><label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">原密码</label>' +
+        '<input class="config-input" id="pw-old" type="password" style="width:100%;box-sizing:border-box"></div>' +
+      '<div style="margin-bottom:10px"><label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">新密码</label>' +
+        '<input class="config-input" id="pw-new" type="password" style="width:100%;box-sizing:border-box"></div>' +
+      '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:12px">' +
+        '<span id="pw-msg" style="font-size:11px"></span>' +
+        '<button class="btn" onclick="closePwDialog()">取消</button>' +
+        '<button class="btn btn-primary" onclick="submitPassword()">保存</button></div>' +
+    '</div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function closePwDialog() {
+  var overlay = document.querySelector('.note-dialog-overlay');
+  if (overlay) overlay.remove();
+}
+
+async function submitPassword() {
+  var oldPw = document.getElementById('pw-old').value;
+  var newPw = document.getElementById('pw-new').value;
+  if (!oldPw || !newPw) return;
+  var msg = document.getElementById('pw-msg');
+  try {
+    msg.innerHTML = '<span style="color:var(--muted)">保存中...</span>';
+    await API.put('/auth/password', { old_password: oldPw, new_password: newPw });
+    closePwDialog();
+    showToast('密码已更新', 'success');
+  } catch(e) {
+    msg.innerHTML = '<span style="color:var(--danger)">' + escHtml(e.message) + '</span>';
+  }
 }
 
 document.addEventListener('DOMContentLoaded', init);

@@ -431,3 +431,9 @@
   transition: background 0.12s;
 }
 .note-dialog-close:hover { background: var(--bg); color: var(--fg); }
+
+/* User form */
+.user-form { display: flex; flex-direction: column; gap: 10px; }
+.user-form-field { display: flex; flex-direction: column; gap: 4px; }
+.user-form-field label { font-size: 12px; color: var(--muted); font-weight: 540; }
+.user-form-field .config-input { width: 100%; box-sizing: border-box; }

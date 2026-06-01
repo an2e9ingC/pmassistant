@@ -11,7 +11,7 @@ class LocalUser(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(64), unique=True, nullable=False, index=True)
     password_hash = Column(String(256), nullable=False)
-    display_name = Column(String(128), nullable=False)
+    display_name = Column(String(128), nullable=True)  # deprecated, use username
     role = Column(String(32), default="viewer")  # admin, manager, viewer
     zentao_account = Column(String(64), nullable=True)
     is_active = Column(Boolean, default=True)

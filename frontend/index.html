@@ -85,8 +85,15 @@
         统计报告
       </div>
     </div>
-    <div class="nav-group">
+    <div class="nav-group" id="nav-group-admin" style="display:none">
       <div class="nav-group-label">管理</div>
+      <div class="nav-item" id="nav-users" onclick="gotoView('users')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="8" cy="5" r="3"/>
+          <path d="M2 14c0-3 2.7-5 6-5s6 2 6 5"/>
+        </svg>
+        用户管理
+      </div>
       <div class="nav-item" id="nav-config" onclick="gotoView('config')">
         <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
           <circle cx="8" cy="8" r="2.5"/>
@@ -118,10 +125,7 @@
     </div>
 
     <div style="margin-top:8px;text-align:center;font-size:10px;color:var(--muted)">
-      <span id="app-version">v2026.05.29-beta22</span>
-    </div>
-    <div style="text-align:center">
-      <button onclick="logout()" style="font-size:11px;color:var(--muted);cursor:pointer;background:none;border:none">退出登录</button>
+      <span id="app-version">v2026.06.01-beta9</span>
     </div>
   </div>
 </aside>
@@ -160,9 +164,16 @@
           </div>
         </div>
       </div>
-      <div class="user-pill">
-        <div class="avatar" id="user-avatar">--</div>
-        <span class="user-label" id="user-name">用户</span>
+      <div style="position:relative">
+        <div class="user-pill" onclick="toggleUserMenu(event)" title="用户菜单">
+          <div class="avatar" id="user-avatar">--</div>
+          <span class="user-label" id="user-name">用户</span>
+        </div>
+        <div class="user-menu" id="user-menu">
+          <div class="user-menu-item" onclick="changePassword();closeUserMenu()">修改密码</div>
+          <div class="user-menu-divider"></div>
+          <div class="user-menu-item" onclick="logout()">退出登录</div>
+        </div>
       </div>
     </div>
   </header>
@@ -389,6 +400,25 @@
       </div>
     </div>
 
+    <!-- ══════════════════════ VIEW — USERS ══════════════════════ -->
+    <div class="view" id="view-users">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+        <button class="btn btn-primary" onclick="openUserCreateDialog()" style="font-size:12px;padding:5px 16px">+ 添加用户</button>
+      </div>
+      <div class="card" style="overflow:hidden">
+        <table class="proj-table">
+          <thead>
+            <tr>
+              <th>用户名</th><th width="12%">角色</th><th width="10%">状态</th><th width="18%">创建时间</th><th width="20%">操作</th>
+            </tr>
+          </thead>
+          <tbody id="users-tbody">
+            <tr><td colspan="5"><div class="loading-spinner">加载中...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- ══════════════════════ VIEW — CONFIG ══════════════════════ -->
     <div class="view" id="view-config">
       <div class="section-hd">
@@ -466,7 +496,7 @@
             </tr>
           </thead>
           <tbody id="prod-tbody">
-            <tr><td colspan="6"><div class="loading-spinner">加载中...</div></td></tr>
+            <tr><td colspan="5"><div class="loading-spinner">加载中...</div></td></tr>
           </tbody>
         </table>
       </div>

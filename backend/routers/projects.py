@@ -97,7 +97,7 @@ def add_note(
         project_id=project_id,
         content=payload.content,
         stage_name=payload.stage_name,
-        recorded_by=user.display_name or user.username,
+        recorded_by=user.username,
     )
     db.add(note)
     db.commit()
