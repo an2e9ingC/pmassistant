@@ -125,31 +125,49 @@ def _finish_log(db: Session, log: SyncLog, status: str, items_fetched: int = 0,
     db.commit()
 
 
+# Global sync progress state
+_sync_progress = {
+    "running": False, "phase": "", "current": 0, "total": 0,
+    "projects_total": 0, "execs_total": 0, "tasks_total": 0,
+    "projects_done": 0, "execs_done": 0, "tasks_done": 0,
+    "current_item": "",
+}
+
+
+def get_sync_progress() -> dict:
+    return dict(_sync_progress)
+
+
 class SyncService:
 
     async def full_sync(self) -> dict:
-        """Run a full sync from Zentao to local SQLite. Returns summary dict.
-
-        TODO: GitLab sync — commit统计、release验证（Phase 2/3，需GITLAB_TOKEN配置）
-        TODO: NAS sync — 售前项目检测、交付文档扫描（Phase 2/3，需NAS路径配置）
-        """
+        """Run a full sync from Zentao to local SQLite. Returns summary dict."""
+        global _sync_progress
+        _sync_progress = {
+            "running": True, "phase": "认证", "current": 0, "total": 0,
+            "projects_total": 0, "execs_total": 0, "tasks_total": 0,
+            "projects_done": 0, "execs_done": 0, "tasks_done": 0,
+            "current_item": "",
+        }
         db = SessionLocal()
         results = {}
-        self.client = ZentaoClient()  # Recreate to pick up latest settings
+        self.client = ZentaoClient()
         try:
             await self.client.authenticate()
 
-            results["users"] = await self._sync_users(db)
-            results["products"] = await self._sync_products(db)
-            results["projects"] = await self._sync_projects(db)
-            results["executions_tasks"] = await self._sync_executions_and_tasks(db)
-            results["bugs"] = await self._sync_bugs(db)
+            _sync_progress["phase"] = "用户"; results["users"] = await self._sync_users(db)
+            _sync_progress["phase"] = "产品"; results["products"] = await self._sync_products(db)
+            _sync_progress["phase"] = "项目"; results["projects"] = await self._sync_projects(db)
+            _sync_progress["phase"] = "执行与任务"; results["executions_tasks"] = await self._sync_executions_and_tasks(db)
+            _sync_progress["phase"] = "Bug"; results["bugs"] = await self._sync_bugs(db)
 
             return {"code": 0, "data": results, "message": "sync completed"}
         except Exception as e:
             logger.exception("Full sync failed")
             return {"code": 1, "data": results, "message": f"sync failed: {e}"}
         finally:
+            _sync_progress["running"] = False
+            _sync_progress["phase"] = "完成" if not _sync_progress.get("error") else "失败"
             db.close()
             await self.client.close()
 
@@ -218,9 +236,13 @@ class SyncService:
         log = _log_sync(db, "projects")
         try:
             projects = await self.client.get_projects()
+            _sync_progress["projects_total"] = len(projects)
+            _sync_progress["total"] = len(projects)
             api_ids = {p["id"] for p in projects}
             created, updated, deleted = 0, 0, 0
-            for p in projects:
+            for idx, p in enumerate(projects):
+                _sync_progress["current"] = idx + 1
+                _sync_progress["current_item"] = p.get("name", str(p["id"]))
                 existing = db.query(CachedProject).filter(CachedProject.id == p["id"]).first()
                 if existing:
                     updated += self._update_project(existing, p)
@@ -278,55 +300,77 @@ class SyncService:
         created_t, updated_t, deleted_t = 0, 0, 0
         try:
             projects = db.query(CachedProject).all()
+            _sync_progress["total"] = len(projects)
 
-            for proj in projects:
+            # Phase 1: fetch and save all executions (count total)
+            all_executions = []  # [(exec_data, project_id), ...]
+            _sync_progress["phase"] = "获取执行列表"
+            for idx, proj in enumerate(projects):
+                _sync_progress["current"] = idx + 1
                 try:
                     executions = await self.client.get_executions(project_id=proj.id)
                 except Exception:
                     logger.warning(f"Failed to fetch executions for project {proj.id}")
                     continue
-
-                exec_api_ids = {e["id"] for e in executions}
-                total_execs += len(executions)
-                # Cache task IDs per execution to avoid double-fetching
-                exec_task_ids = {}
-
                 for e in executions:
-                    existing = db.query(CachedExecution).filter(
-                        CachedExecution.id == e["id"]
+                    all_executions.append((e, proj.id))
+
+            # Phase 2: save executions and fetch tasks
+            total = len(all_executions)
+            _sync_progress["execs_total"] = total
+            _sync_progress["total"] = total
+            _sync_progress["execs_done"] = 0
+            _sync_progress["tasks_total"] = 0
+            _sync_progress["tasks_done"] = 0
+            exec_task_ids = {}
+
+            for idx, (e, proj_id) in enumerate(all_executions):
+                _sync_progress["current"] = idx + 1
+                _sync_progress["execs_done"] = idx + 1
+                _sync_progress["current_item"] = e.get("name", str(e["id"]))
+                _sync_progress["phase"] = f"执行与任务"
+
+                existing = db.query(CachedExecution).filter(
+                    CachedExecution.id == e["id"]
+                ).first()
+                if existing:
+                    updated_e += self._update_execution(existing, e)
+                else:
+                    db.add(self._build_execution(e, proj_id))
+                    created_e += 1
+                total_execs += 1
+
+                try:
+                    tasks = await self.client.get_tasks(e["id"])
+                except Exception:
+                    logger.warning(f"Failed to fetch tasks for execution {e['id']}")
+                    continue
+
+                total_tasks += len(tasks)
+                _sync_progress["tasks_total"] = total_tasks
+                _sync_progress["tasks_done"] += len(tasks)
+                if idx % 50 == 0:
+                    logger.info(f"Sync progress: 执行 {idx+1}/{total} | 项目 {_sync_progress['projects_total']} | 任务 {total_tasks} | 当前: {e.get('name', e['id'])}")
+                task_ids = set()
+                for t in tasks:
+                    task_ids.add(t["id"])
+                    texisting = db.query(CachedTask).filter(
+                        CachedTask.id == t["id"]
                     ).first()
-                    if existing:
-                        updated_e += self._update_execution(existing, e)
+                    if texisting:
+                        updated_t += self._update_task(texisting, t)
                     else:
-                        db.add(self._build_execution(e, proj.id))
-                        created_e += 1
+                        db.add(self._build_task(t, proj_id, e["id"]))
+                        created_t += 1
+                exec_task_ids[e["id"]] = task_ids
 
-                    # Sync tasks for this execution
-                    try:
-                        tasks = await self.client.get_tasks(e["id"])
-                    except Exception:
-                        logger.warning(f"Failed to fetch tasks for execution {e['id']}")
-                        continue
-
-                    total_tasks += len(tasks)
-                    task_ids = set()
-                    for t in tasks:
-                        task_ids.add(t["id"])
-                        texisting = db.query(CachedTask).filter(
-                            CachedTask.id == t["id"]
-                        ).first()
-                        if texisting:
-                            updated_t += self._update_task(texisting, t)
-                        else:
-                            db.add(self._build_task(t, proj.id, e["id"]))
-                            created_t += 1
-                    exec_task_ids[e["id"]] = task_ids
-
-                # Cleanup stale executions for this project (skip if API returned none)
-                if exec_api_ids:
+            # Cleanup stale executions per project
+            for proj in projects:
+                proj_exec_ids = {e[0]["id"] for e in all_executions if e[1] == proj.id}
+                if proj_exec_ids:
                     stale_execs = db.query(CachedExecution).filter(
                         CachedExecution.project_id == proj.id,
-                        ~CachedExecution.id.in_(exec_api_ids)
+                        ~CachedExecution.id.in_(proj_exec_ids)
                     ).all()
                     for se in stale_execs:
                         db.query(CachedTask).filter(CachedTask.execution_id == se.id).delete()

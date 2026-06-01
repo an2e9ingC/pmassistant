@@ -125,7 +125,7 @@
     </div>
 
     <div style="margin-top:8px;text-align:center;font-size:10px;color:var(--muted)">
-      <span id="app-version">v2026.06.01-beta10</span>
+      <span id="app-version">v2026.06.01-beta11</span>
     </div>
   </div>
 </aside>
@@ -568,16 +568,50 @@ async function triggerSync() {
   var btn = document.querySelector('.src-sync-btn');
   if (btn) { btn.disabled = true; btn.style.opacity = '0.4'; }
 
-  // Update tag and show progress toast
   var ztag = document.getElementById('src-zentao');
   if (ztag) { var zlbl = ztag.querySelector('.src-tag-label'); if (zlbl) zlbl.textContent = '禅道 同步中...'; ztag.className = 'src-tag warn'; }
-  var progToast = showToast('正在同步数据，请稍候...', 'info', 0); // 0 = no auto-close
+
+  // Show progress bar in toast container
+  var progEl = document.createElement('div');
+  progEl.className = 'toast info';
+  progEl.style.minWidth = '320px';
+  progEl.style.maxWidth = '400px';
+  progEl.innerHTML =
+    '<div style="font-size:12px;line-height:1.6">' +
+      '<div>阶段: <b id="sync-prog-phase">...</b></div>' +
+      '<div style="font-size:10.5px;color:var(--muted)" id="sync-prog-stats"></div>' +
+    '</div>' +
+    '<div style="margin-top:6px;height:4px;background:var(--border);border-radius:2px;overflow:hidden">' +
+      '<div id="sync-prog-fill" style="height:100%;width:0%;background:var(--accent);transition:width 0.3s;border-radius:2px"></div>' +
+    '</div>' +
+    '<div style="font-size:10px;color:var(--muted);margin-top:2px" id="sync-prog-item"></div>';
+  document.getElementById('toast-container').appendChild(progEl);
+
+  var progTimer = setInterval(async function() {
+    try {
+      var p = await API.get('/sync/progress');
+      var phaseEl = document.getElementById('sync-prog-phase');
+      var statsEl = document.getElementById('sync-prog-stats');
+      var fillEl = document.getElementById('sync-prog-fill');
+      var itemEl = document.getElementById('sync-prog-item');
+      if (phaseEl) phaseEl.textContent = p.phase || '...';
+      if (fillEl && p.total > 0) fillEl.style.width = Math.round(p.current / p.total * 100) + '%';
+      if (statsEl) {
+        var parts = [];
+        if (p.projects_total) parts.push('项目 ' + (p.projects_done||0) + '/' + p.projects_total);
+        if (p.execs_total) parts.push('执行 ' + (p.execs_done||0) + '/' + p.execs_total);
+        if (p.tasks_total) parts.push('任务 ' + p.tasks_total);
+        statsEl.textContent = parts.join(' · ') || '';
+      }
+      if (itemEl && p.current_item) itemEl.textContent = p.current_item;
+      if (!p.running) { clearInterval(progTimer); }
+    } catch(ignore) {}
+  }, 500);
 
   try {
     var result = await API.post('/sync/trigger');
-    // Remove progress toast
-    if (progToast && progToast.parentElement) progToast.remove();
-    // Build summary from result data
+    clearInterval(progTimer);
+    if (progEl.parentElement) progEl.remove();
     var parts = [];
     var d = result || {};
     if (d.users) parts.push('用户' + d.users.fetched);
@@ -590,11 +624,10 @@ async function triggerSync() {
     showToast('数据同步完成（' + parts.join(' / ') + '）', 'success');
     if (_srcStates) { _srcStates.zentao = 'ok'; renderSourceTags(); }
     updateLinkStatus();
-    if (document.getElementById('view-dashboard').classList.contains('active')) {
-      renderDashboard();
-    }
+    if (document.getElementById('view-dashboard').classList.contains('active')) { renderDashboard(); }
   } catch(e) {
-    if (progToast && progToast.parentElement) progToast.remove();
+    clearInterval(progTimer);
+    if (progEl.parentElement) progEl.remove();
     showToast('同步失败: ' + (e.message || '未知错误'), 'error');
     if (_srcStates) { _srcStates.zentao = 'err'; renderSourceTags(); }
   }

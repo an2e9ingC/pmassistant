@@ -80,6 +80,12 @@ def sync_history(
     return {"code": 0, "data": items, "message": "ok"}
 
 
+@router.get("/progress", response_model=dict)
+def sync_progress(_=Depends(get_current_user)):
+    from backend.services.sync_service import get_sync_progress
+    return {"code": 0, "data": get_sync_progress(), "message": "ok"}
+
+
 @router.get("/sources", response_model=dict)
 def sync_sources(db: Session = Depends(get_db), _=Depends(get_current_user)):
     """Return configuration and sync status for all data sources."""
