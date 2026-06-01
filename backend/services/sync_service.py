@@ -209,7 +209,8 @@ class SyncService:
             prog_names = {p["id"]: p.get("name", "") for p in programs}
 
             products = await self.client.get_products()
-            created, updated = 0, 0
+            api_ids = {p["id"] for p in products}
+            created, updated, deleted = 0, 0, 0
             for p in products:
                 pid = p.get("program", 0)
                 prog_name = prog_names.get(pid, "")
@@ -236,9 +237,16 @@ class SyncService:
                     obj.program_name = prog_name
                     db.add(obj)
                     created += 1
+            # Cleanup stale products
+            if api_ids:
+                stale = db.query(CachedProduct).filter(~CachedProduct.id.in_(api_ids)).all()
+                for sp in stale:
+                    db.query(ProductProjectLink).filter(ProductProjectLink.product_id == sp.id).delete()
+                    db.delete(sp)
+                    deleted += 1
             db.commit()
-            _finish_log(db, log, "success", len(products), created, updated)
-            return {"fetched": len(products), "created": created, "updated": updated}
+            _finish_log(db, log, "success", len(products), created + deleted, updated)
+            return {"fetched": len(products), "created": created, "updated": updated, "deleted": deleted}
         except Exception as e:
             _finish_log(db, log, "failed", error=str(e))
             raise
