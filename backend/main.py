@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 
 from backend.config import settings
 from backend.database import init_db
-from backend.routers import auth, config, dashboard, projects, sync, products, delivery, reports, logs, customers
+from backend.routers import auth, config, dashboard, projects, sync, products, delivery, reports, logs, topology
 
 # File log handler — use same directory as database
 import backend.database as _db_module
@@ -69,7 +69,7 @@ app.include_router(products.router)
 app.include_router(delivery.router)
 app.include_router(reports.router)
 app.include_router(logs.router)
-app.include_router(customers.router)
+app.include_router(topology.router)
 app.include_router(config.router)
 
 # Static files (frontend)
