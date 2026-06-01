@@ -29,17 +29,14 @@ body {
   max-width: 400px;
 }
 .login-logo {
-  text-align: center; margin-bottom: 28px;
+  text-align: center; margin-bottom: 24px;
 }
-.login-logo-mark {
-  width: 48px; height: 48px;
-  background: var(--accent); color: #fff;
-  border-radius: 12px;
-  display: inline-flex; align-items: center; justify-content: center;
-  font-size: 18px; font-weight: 700; letter-spacing: -0.02em;
-  margin-bottom: 12px;
+.login-logo-img {
+  display: block; margin: 0 auto 8px;
 }
-.login-logo h1 { font-size: 18px; font-weight: 650; letter-spacing: -0.02em; }
+.login-logo-dark { display: none; }
+[data-theme="dark"] .login-logo-light { display: none; }
+[data-theme="dark"] .login-logo-dark { display: block; }
 .login-logo p { font-size: 12px; color: var(--muted); margin-top: 4px; }
 .form-group { margin-bottom: 16px; }
 .form-group label {
@@ -75,8 +72,8 @@ body {
 
 <div class="login-card">
   <div class="login-logo">
-    <div class="login-logo-mark">PMA</div>
-    <h1>PM Assistant</h1>
+    <img src="/logo/logo-mark-light.svg" alt="PMAssistant" class="login-logo-img login-logo-light" width="160" height="140">
+    <img src="/logo/logo-mark-dark.svg" alt="PMAssistant" class="login-logo-img login-logo-dark" width="160" height="140">
     <p>项目管理助手 · 集成禅道 &amp; GitLab</p>
   </div>
   <form onsubmit="onLogin(event)">

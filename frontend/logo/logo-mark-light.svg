@@ -1,0 +1,14 @@
+<svg width="160" height="140" viewBox="0 0 160 140" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Icon: favicon-style blue bg + white bars -->
+  <rect x="44" y="12" width="72" height="72" rx="18" fill="#1677FF"/>
+  <line x1="57" y1="20" x2="57" y2="76" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+  <rect x="61" y="24" width="32" height="10" rx="4" fill="rgba(255,255,255,0.85)"/>
+  <rect x="68" y="40" width="30" height="10" rx="4" fill="rgba(255,255,255,0.65)"/>
+  <rect x="61" y="56" width="26" height="10" rx="4" fill="rgba(255,255,255,0.45)"/>
+  <polygon points="94,41 98,38 102,41 98,44" fill="white" opacity="0.8"/>
+
+  <!-- Text -->
+  <text x="80" y="110" text-anchor="middle" font-family="'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif" font-size="20" font-weight="700" letter-spacing="-0.015em" fill="#1f1f1f">
+    <tspan fill="#1677FF">PMA</tspan>ssistant
+  </text>
+</svg>

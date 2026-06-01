@@ -75,6 +75,7 @@ app.include_router(config.router)
 # Static files (frontend)
 app.mount("/css", StaticFiles(directory="frontend/css"), name="css")
 app.mount("/js", StaticFiles(directory="frontend/js"), name="js")
+app.mount("/logo", StaticFiles(directory="frontend/logo"), name="logo")
 
 
 @app.get("/favicon.svg")
