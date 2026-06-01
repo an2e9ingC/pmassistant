@@ -128,6 +128,9 @@ def _finish_log(db: Session, log: SyncLog, status: str, items_fetched: int = 0,
     db.commit()
 
 
+# Auto-sync notification state
+_auto_sync_notify = {"completed": False, "time": ""}
+
 # Global sync progress state
 _sync_progress = {
     "running": False, "paused": False, "cancelled": False,

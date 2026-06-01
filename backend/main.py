@@ -1,5 +1,6 @@
 import logging
 import os as _os
+import time
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 
@@ -35,14 +36,34 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     logger.info("Starting PMA backend...")
     init_db()
-    # Add database log handler after tables are created
     from backend.services.log_handler import DatabaseLogHandler
     _db_handler = DatabaseLogHandler()
     _db_handler.setFormatter(logging.Formatter("%(message)s"))
     _db_handler.setLevel(logging.DEBUG)
     logging.getLogger().addHandler(_db_handler)
     logger.info("Database initialized + DB log handler attached")
+
+    # Start background auto-sync task
+    import asyncio
+    from backend.services.sync_service import SyncService, _auto_sync_notify
+    async def auto_sync_loop():
+        await asyncio.sleep(10)  # wait for startup
+        while True:
+            interval = getattr(settings, "SYNC_INTERVAL_MINUTES", 30) or 30
+            await asyncio.sleep(interval * 60)
+            try:
+                logger.info(f"Auto-sync triggered (interval={interval}min)")
+                svc = SyncService()
+                await svc.full_sync()
+                _auto_sync_notify["completed"] = True
+                _auto_sync_notify["time"] = time.strftime("%H:%M:%S")
+                logger.info("Auto-sync completed")
+            except Exception as e:
+                logger.error(f"Auto-sync failed: {e}")
+
+    _auto_sync_task = asyncio.create_task(auto_sync_loop())
     yield
+    _auto_sync_task.cancel()
     logger.info("Shutting down PMA backend...")
 
 

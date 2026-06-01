@@ -108,6 +108,14 @@ def sync_cancel(_=Depends(require_admin)):
     return {"code": 0, "message": "同步已取消"}
 
 
+@router.get("/auto-notify", response_model=dict)
+def auto_sync_notify(_=Depends(get_current_user)):
+    from backend.services.sync_service import _auto_sync_notify
+    result = dict(_auto_sync_notify)
+    _auto_sync_notify["completed"] = False  # consume the notification
+    return {"code": 0, "data": result, "message": "ok"}
+
+
 @router.get("/sources", response_model=dict)
 def sync_sources(db: Session = Depends(get_db), _=Depends(get_current_user)):
     """Return configuration and sync status for all data sources."""

@@ -57,6 +57,7 @@ def _load_config() -> dict:
             "account": os.environ.get("ZENTAO_AUTH_ACCOUNT", ""),
             "password": os.environ.get("ZENTAO_AUTH_PASSWORD", ""),
             "project_filter": os.environ.get("ZENTAO_PROJECT_FILTER", ""),
+            "sync_interval": os.environ.get("SYNC_INTERVAL_MINUTES", "30"),
         },
         "gitlab": {
             "base_url": os.environ.get("GITLAB_BASE_URL", ""),
@@ -93,6 +94,7 @@ def _save_config(cfg: dict) -> None:
         "zentao.account": "ZENTAO_AUTH_ACCOUNT",
         "zentao.password": "ZENTAO_AUTH_PASSWORD",
         "zentao.project_filter": "ZENTAO_PROJECT_FILTER",
+        "zentao.sync_interval": "SYNC_INTERVAL_MINUTES",
         "gitlab.base_url": "GITLAB_BASE_URL",
         "gitlab.token": "GITLAB_TOKEN",
         "nas.host": "NAS_HOST",

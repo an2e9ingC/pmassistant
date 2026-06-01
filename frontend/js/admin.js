@@ -23,6 +23,7 @@ function renderConfigForm(cfg) {
       { key: 'account', label: '账号', type: 'text', ph: 'PM_Assistant' },
       { key: 'password', label: '密码', type: 'password', ph: '' },
       { key: 'project_filter', label: '项目筛选', type: 'text', ph: '如 PE04,PE05（逗号分隔前缀，留空=全部）' },
+      { key: 'sync_interval', label: '自动同步(分)', type: 'number', ph: '30（0=关闭）' },
     ]},
     { key: 'gitlab', title: 'GitLab', fields: [
       { key: 'base_url', label: 'API 地址', type: 'url', ph: 'http://192.168.0.128/api/v4' },

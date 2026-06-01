@@ -90,6 +90,13 @@ function toggleTheme() {
 var _srcStates = { zentao: 'pending', gitlab: 'pending', nas: 'pending' };
 
 function updateLinkStatus() {
+  // Check for auto-sync completion notification
+  API.get('/sync/auto-notify').then(function(n) {
+    if (n && n.completed) {
+      showToast('数据已自动更新（' + n.time + '）', 'success', 5000);
+    }
+  }).catch(function() {});
+
   API.get('/sync/sources').then(function(sources) {
     if (!sources || !sources.length) return;
     sources.forEach(function(s) {
