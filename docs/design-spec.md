@@ -339,3 +339,23 @@ utils.js → api.js → auth.js → components.js → dashboard.js → detail.js
 | `./server.sh status` | PID、内存、运行时间、健康检查、DB 大小 |
 | `./server.sh logs` | 最近 50 行系统日志 |
 | `./server.sh tail` | 实时跟踪日志 |
+
+---
+
+## 14. 品牌资源
+
+**Favicon**：`frontend/favicon.svg` — 蓝色圆角方块+白色P字母
+
+- `index.html` 和 `login.html` 的 `<head>` 中通过 `<link rel="icon">` 引用
+- `backend/main.py` 中通过 `/favicon.svg` 路由提供静态服务
+- 后续可替换为正式 logo 图片（替换 `frontend/favicon.svg` 并更新 SVG 内容即可）
+
+---
+
+## 15. 开发流程规则
+
+**每次代码修改后必须检查：**
+1. `docs/dev-plan.md` — 版本历史表格是否需要追加新版本条目
+2. `docs/design-spec.md` — 设计规范是否需要新增/更新章节
+3. `docs/deploy-guide.md` — 部署运维是否需要更新（新增路由/文件/配置项等）
+4. `.claude/memory/` — 项目记忆是否需要新增/修改（新规则、新发现等）
