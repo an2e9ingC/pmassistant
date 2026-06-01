@@ -125,7 +125,7 @@
     </div>
 
     <div style="margin-top:8px;text-align:center;font-size:10px;color:var(--muted)">
-      <span id="app-version">v2026.06.01-beta13</span>
+      <span id="app-version">v2026.06.01-beta14</span>
     </div>
   </div>
 </aside>
@@ -226,14 +226,14 @@
         <table class="proj-table">
           <thead>
             <tr>
-              <th width="6%">项目编号</th>
+              <th width="6%" style="cursor:pointer;user-select:none" onclick="toggleSortCode()">项目编号 <span id="sort-code-ind" style="color:var(--muted)">⇅</span></th>
               <th width="16%">项目名</th>
               <th width="8%">客户</th>
               <th width="8%">类型</th>
               <th width="12%">当前阶段</th>
               <th width="7%">状态</th>
               <th width="14%">进度</th>
-              <th width="10%" style="cursor:pointer;user-select:none" id="sort-end-hdr" onclick="toggleSortEnd()">计划完成 <span id="sort-end-ind">▲</span></th>
+              <th width="10%" style="cursor:pointer;user-select:none" id="sort-end-hdr" onclick="toggleSortEnd()">计划完成 <span id="sort-end-ind" style="color:var(--muted)">⇅</span></th>
               <th width="19%">项目标签</th>
             </tr>
           </thead>

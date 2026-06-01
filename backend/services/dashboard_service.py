@@ -97,7 +97,10 @@ def get_project_list(
     total = q.count()
 
     # Default: sort by end ASC, NULLS LAST (long-term projects at bottom)
-    sort_col = CachedProject.end if sort_by == "end" else CachedProject.id
+    sort_col = {
+        "end": CachedProject.end,
+        "code": CachedProject.code,
+    }.get(sort_by, CachedProject.id)
     direction = _asc if sort_order == "asc" else _desc
     items = q.options(joinedload(CachedProject.executions)).order_by(
         direction(case((sort_col.is_(None), 1), else_=0)),

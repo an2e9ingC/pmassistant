@@ -4,7 +4,8 @@
 var curTypeFilter = 'all';
 var curSearchVal  = '';
 var _curCategory = 'active';
-var _sortEndOrder = 'asc'; // 'asc' = nearest first, 'desc' = farthest first
+var _sortEndOrder = 'asc';
+var _sortCodeOrder = '';  // '' = no sort, 'asc', 'desc'
 
 var _dashboardLoading = false;
 
@@ -85,7 +86,14 @@ function filterTable(f, el) {
 
 async function loadProjectTable(filter) {
   curTypeFilter = filter;
-  var params = { page: 1, limit: 50, sort_by: 'end', sort_order: _sortEndOrder, category: _curCategory };
+  var params = { page: 1, limit: 50, category: _curCategory };
+  if (_sortCodeOrder) {
+    params.sort_by = 'code'; params.sort_order = _sortCodeOrder;
+  } else if (_sortEndOrder) {
+    params.sort_by = 'end'; params.sort_order = _sortEndOrder;
+  } else {
+    params.sort_by = 'id'; params.sort_order = 'asc';
+  }
   if (curSearchVal) params.search = curSearchVal;
   if (filter && filter !== 'all') params.type = filter;
 
@@ -194,11 +202,31 @@ function clearAlertFilter() {
 
 /* Navigation */
 
+function _updateSortIndicators() {
+  var ei = document.getElementById('sort-end-ind');
+  var ci = document.getElementById('sort-code-ind');
+  // End date indicator
+  if (_sortEndOrder === 'asc') { ei.textContent = '▲'; ei.style.color = ''; }
+  else if (_sortEndOrder === 'desc') { ei.textContent = '▼'; ei.style.color = ''; }
+  else { ei.textContent = '⇅'; ei.style.color = 'var(--muted)'; }
+  // Code indicator
+  if (_sortCodeOrder === 'asc') { ci.textContent = '▲'; ci.style.color = ''; }
+  else if (_sortCodeOrder === 'desc') { ci.textContent = '▼'; ci.style.color = ''; }
+  else { ci.textContent = '⇅'; ci.style.color = 'var(--muted)'; }
+}
+
 function toggleSortEnd() {
-  _sortEndOrder = _sortEndOrder === 'asc' ? 'desc' : 'asc';
-  var ind = document.getElementById('sort-end-ind');
-  if (ind) ind.textContent = _sortEndOrder === 'asc' ? '▲' : '▼';
-  loadProjectTable(curTypeFilter);
+  _sortCodeOrder = '';
+  _sortEndOrder = _sortEndOrder === 'asc' ? 'desc' : _sortEndOrder === 'desc' ? '' : 'asc';
+  if (_sortEndOrder) { _updateSortIndicators(); loadProjectTable(curTypeFilter); }
+  else _updateSortIndicators();
+}
+
+function toggleSortCode() {
+  _sortEndOrder = '';
+  _sortCodeOrder = _sortCodeOrder === 'asc' ? 'desc' : _sortCodeOrder === 'desc' ? '' : 'asc';
+  if (_sortCodeOrder) { _updateSortIndicators(); loadProjectTable(curTypeFilter); }
+  else _updateSortIndicators();
 }
 
 function openProject(id) {
