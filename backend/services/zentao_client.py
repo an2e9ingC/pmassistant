@@ -25,11 +25,25 @@ class ZentaoClient:
 
     async def authenticate(self) -> str:
         client = await self._get_client()
+        url = f"{self.base_url}/tokens"
+        logger.info(f"Zentao auth request: POST {url}")
         resp = await client.post(
-            f"{self.base_url}/tokens",
-            json={"account": settings.ZENTAO_AUTH_ACCOUNT, "password": settings.ZENTAO_AUTH_PASSWORD},
+            url,
+            json={"account": settings.ZENTAO_AUTH_ACCOUNT, "password": "***"},
         )
-        data = resp.json()
+        logger.info(f"Zentao auth response: HTTP {resp.status_code}, content-type={resp.headers.get('content-type','?')}")
+        try:
+            data = resp.json()
+        except Exception:
+            raw = resp.content
+            ct = resp.headers.get("content-type", "")
+            m = re.search(r"charset=([^\s;]+)", ct)
+            enc = m.group(1) if m else "gbk"
+            decoded = raw.decode(enc, errors="replace")
+            logger.error(f"Zentao auth returned non-JSON (HTTP {resp.status_code}, {len(raw)} bytes): {decoded[:300]}")
+            if not decoded.strip():
+                raise RuntimeError(f"Zentao auth returned empty response (HTTP {resp.status_code}). Check ZENTAO_BASE_URL: {self.base_url}")
+            data = json.loads(decoded)
         if "token" not in data:
             error_msg = data.get("error", str(data))
             raise RuntimeError(f"Zentao auth failed: {error_msg}")
@@ -45,9 +59,8 @@ class ZentaoClient:
 
         for attempt in range(3):
             try:
-                resp = await client.request(
-                    method, f"{self.base_url}{path}", headers=headers, **kwargs
-                )
+                url = f"{self.base_url}{path}"
+                resp = await client.request(method, url, headers=headers, **kwargs)
                 # Handle non-UTF-8 responses (e.g. GBK from Chinese Zentao)
                 try:
                     data = resp.json()
@@ -56,7 +69,14 @@ class ZentaoClient:
                     ct = resp.headers.get("content-type", "")
                     m = re.search(r"charset=([^\s;]+)", ct)
                     enc = m.group(1) if m else "gbk"
-                    data = json.loads(raw.decode(enc, errors="replace"))
+                    try:
+                        data = json.loads(raw.decode(enc, errors="replace"))
+                    except json.JSONDecodeError:
+                        preview = raw[:300].decode(enc, errors="replace")
+                        logger.error(f"Zentao non-JSON response: {method} {url} -> HTTP {resp.status_code}, body: {preview}")
+                        if not preview.strip():
+                            raise RuntimeError(f"Zentao returned empty response (HTTP {resp.status_code}) from {url}. Check ZENTAO_BASE_URL config.")
+                        raise RuntimeError(f"Zentao returned non-JSON response (HTTP {resp.status_code}) from {url}: {preview}")
 
                 # v1 quirk: 401 returns HTTP 200 + {"load": "..."}
                 if isinstance(data, dict) and "load" in data and data.get("load"):

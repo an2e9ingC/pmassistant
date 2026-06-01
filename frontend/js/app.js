@@ -107,8 +107,7 @@ function updateLinkStatus() {
       }
     });
     renderSourceTags();
-    // Populate tooltip content for each source tag
-    sources.forEach(function(s) {
+      sources.forEach(function(s) {
       var tip = document.getElementById('src-' + s.key + '-tip');
       if (tip && s.detail) tip.textContent = s.detail;
     });
@@ -121,20 +120,20 @@ function toggleSrcTip(key, e) {
   e.stopPropagation();
   var tip = document.getElementById('src-' + key + '-tip');
   if (!tip) return;
-  // Close all other open tips
-  document.querySelectorAll('.src-tag-tip.show').forEach(function(t) {
-    if (t !== tip) t.classList.remove('show');
-  });
+  // Fetch detail on demand if not yet populated
+  if (!tip.textContent) {
+    tip.textContent = '加载中...';
+    API.get('/sync/sources').then(function(sources) {
+      var s = sources.find(function(x) { return x.key === key; });
+      if (s && s.detail) tip.textContent = s.detail;
+      else tip.textContent = '暂无信息';
+    }).catch(function() { tip.textContent = '获取失败'; });
+  }
+  document.querySelectorAll('.src-tag-tip.show').forEach(function(t) { if (t !== tip) t.classList.remove('show'); });
   tip.classList.toggle('show');
 }
-
-// Close tips when clicking elsewhere
 document.addEventListener('click', function(e) {
-  if (!e.target.closest('.src-tag')) {
-    document.querySelectorAll('.src-tag-tip.show').forEach(function(t) {
-      t.classList.remove('show');
-    });
-  }
+  if (!e.target.closest('.src-tag')) document.querySelectorAll('.src-tag-tip.show').forEach(function(t) { t.classList.remove('show'); });
 });
 
 function renderSourceTags() {

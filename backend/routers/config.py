@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
+from backend.config import settings
 from backend.middleware.auth import require_admin
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -166,6 +167,7 @@ def update_config(payload: DataSourceConfig, _=Depends(require_admin)):
                     cfg[section][field] = new_val
 
     _save_config(cfg)
+    settings.reload()  # Reload in-memory settings from updated os.environ
     # Return config with masked passwords
     result = json.loads(json.dumps(cfg))
     for section in result:

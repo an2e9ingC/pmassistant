@@ -35,6 +35,10 @@ class Settings:
     LOG_LEVEL: str = "INFO"
 
     def __init__(self):
+        self.reload()
+
+    def reload(self):
+        """Re-read settings from os.environ (called after config changes)."""
         for key, default in self._defaults().items():
             val = os.environ.get(key, default)
             if isinstance(default, int):

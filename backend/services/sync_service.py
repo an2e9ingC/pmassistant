@@ -127,9 +127,6 @@ def _finish_log(db: Session, log: SyncLog, status: str, items_fetched: int = 0,
 
 class SyncService:
 
-    def __init__(self):
-        self.client = ZentaoClient()
-
     async def full_sync(self) -> dict:
         """Run a full sync from Zentao to local SQLite. Returns summary dict.
 
@@ -138,6 +135,7 @@ class SyncService:
         """
         db = SessionLocal()
         results = {}
+        self.client = ZentaoClient()  # Recreate to pick up latest settings
         try:
             await self.client.authenticate()
 
