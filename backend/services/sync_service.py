@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 import json
 import logging
 import os
@@ -377,7 +378,17 @@ class SyncService:
                 code = proj_info.code if proj_info else f"id={pid}"
                 logger.info(f"  {code}: {cnt} executions")
 
-            # Phase 2: save executions and fetch tasks
+            # Phase 2: save all executions first, then fetch tasks concurrently
+            _sync_progress["phase"] = "保存执行"
+            for e, proj_id in all_executions:
+                existing = db.query(CachedExecution).filter(CachedExecution.id == e["id"]).first()
+                if existing: updated_e += self._update_execution(existing, e)
+                else: db.add(self._build_execution(e, proj_id)); created_e += 1
+                total_execs += 1
+            db.commit()
+
+            # Phase 3: fetch tasks concurrently (20 at a time)
+            import asyncio
             total = len(all_executions)
             _sync_progress["execs_total"] = total
             _sync_progress["total"] = total
@@ -385,47 +396,44 @@ class SyncService:
             _sync_progress["tasks_total"] = 0
             _sync_progress["tasks_done"] = 0
             exec_task_ids = {}
+            _sync_progress["phase"] = "执行与任务"
+            sem = asyncio.Semaphore(20)
 
-            for idx, (e, proj_id) in enumerate(all_executions):
-                await _check_pause_cancel()
-                _sync_progress["current"] = idx + 1
-                _sync_progress["execs_done"] = idx + 1
-                _sync_progress["current_item"] = e.get("name", str(e["id"]))
-                _sync_progress["phase"] = f"执行与任务"
+            async def _sync_one_exec(idx, e, proj_id):
+                async with sem:
+                    await _check_pause_cancel()
+                    try:
+                        tasks = await self.client.get_tasks(e["id"])
+                        return tasks
+                    except Exception:
+                        return []
 
-                existing = db.query(CachedExecution).filter(
-                    CachedExecution.id == e["id"]
-                ).first()
-                if existing:
-                    updated_e += self._update_execution(existing, e)
-                else:
-                    db.add(self._build_execution(e, proj_id))
-                    created_e += 1
-                total_execs += 1
+            # Process in batches for progress
+            batch_size = 20
+            for batch_start in range(0, total, batch_size):
+                batch_end = min(batch_start + batch_size, total)
+                batch = [(idx, all_executions[idx][0], all_executions[idx][1]) for idx in range(batch_start, batch_end)]
+                results = await asyncio.gather(*[_sync_one_exec(idx, e, pid) for idx, e, pid in batch])
 
-                try:
-                    tasks = await self.client.get_tasks(e["id"])
-                except Exception:
-                    logger.warning(f"Failed to fetch tasks for execution {e['id']}")
-                    continue
+                for (idx, e, proj_id), tasks in zip(batch, results):
+                    _sync_progress["execs_done"] = idx + 1
+                    _sync_progress["current"] = idx + 1
+                    _sync_progress["current_item"] = e.get("name", str(e["id"]))
+                    total_tasks += len(tasks)
+                    _sync_progress["tasks_total"] = total_tasks
+                    _sync_progress["tasks_done"] += len(tasks)
+                    task_ids = set()
+                    for t in tasks:
+                        task_ids.add(t["id"])
+                        texisting = db.query(CachedTask).filter(CachedTask.id == t["id"]).first()
+                        if texisting: updated_t += self._update_task(texisting, t)
+                        else: db.add(self._build_task(t, proj_id, e["id"])); created_t += 1
+                    exec_task_ids[e["id"]] = task_ids
+                db.commit()
 
-                total_tasks += len(tasks)
-                _sync_progress["tasks_total"] = total_tasks
-                _sync_progress["tasks_done"] += len(tasks)
-                if idx % 50 == 0:
-                    logger.info(f"Sync progress: 执行 {idx+1}/{total} | 项目 {_sync_progress['projects_total']} | 任务 {total_tasks} | 当前: {e.get('name', e['id'])}")
-                task_ids = set()
-                for t in tasks:
-                    task_ids.add(t["id"])
-                    texisting = db.query(CachedTask).filter(
-                        CachedTask.id == t["id"]
-                    ).first()
-                    if texisting:
-                        updated_t += self._update_task(texisting, t)
-                    else:
-                        db.add(self._build_task(t, proj_id, e["id"]))
-                        created_t += 1
-                exec_task_ids[e["id"]] = task_ids
+                if total_tasks:
+                    pct = round(_sync_progress["execs_done"] / total * 100)
+                    logger.info(f"Sync: {_sync_progress['execs_done']}/{total} ({pct}%) | 任务 {total_tasks}")
 
             # Cleanup stale executions per project
             for proj in projects:
