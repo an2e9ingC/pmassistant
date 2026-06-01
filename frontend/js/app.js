@@ -274,29 +274,23 @@ function init() {
           _autoSyncStart = Date.now();
           _autoSyncEl = document.createElement('div');
           _autoSyncEl.className = 'toast info';
-          _autoSyncEl.style.minWidth = '340px';
-          _autoSyncEl.style.maxWidth = '420px';
+          _autoSyncEl.style.padding = '6px 14px';
+          _autoSyncEl.style.maxWidth = '480px';
           _autoSyncEl.innerHTML =
-            '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">' +
-              '<div class="sync-spinner" style="width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:sync-spin 0.8s linear infinite;flex-shrink:0"></div>' +
-              '<div style="font-size:12px;line-height:1.5;flex:1">' +
-                '<span>自动同步中: <b id="auto-sync-phase">...</b></span>' +
-                '<div style="font-size:10.5px;color:var(--muted)" id="auto-sync-stats"></div>' +
-                '<div style="margin-top:4px;height:4px;background:var(--border);border-radius:2px;overflow:hidden">' +
-                  '<div id="auto-sync-fill" style="height:100%;width:0%;background:var(--accent);transition:width 0.3s;border-radius:2px"></div>' +
-                '</div>' +
-              '</div>' +
-            '</div>' +
-            '<div style="text-align:center;font-size:11px;color:var(--muted)">已用时 <b id="auto-sync-elapsed">0s</b></div>';
+            '<div style="display:flex;align-items:center;gap:8px">' +
+              '<div class="sync-spinner" style="width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:sync-spin 0.8s linear infinite;flex-shrink:0"></div>' +
+              '<span style="font-size:12px;font-weight:540;white-space:nowrap">自动同步</span>' +
+              '<span style="font-size:11px;color:var(--muted);white-space:nowrap" id="auto-sync-phase">...</span>' +
+              '<span style="font-size:10.5px;color:var(--muted);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="auto-sync-stats"></span>' +
+              '<span style="font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap" id="auto-sync-elapsed">0s</span>' +
+            '</div>';
           document.getElementById('toast-container').appendChild(_autoSyncEl);
         }
         // Update progress
         var phaseEl = document.getElementById('auto-sync-phase');
         var statsEl = document.getElementById('auto-sync-stats');
-        var fillEl = document.getElementById('auto-sync-fill');
         var et = document.getElementById('auto-sync-elapsed');
         if (phaseEl) phaseEl.textContent = p.phase || '...';
-        if (fillEl && p.total > 0) fillEl.style.width = Math.round(p.current / p.total * 100) + '%';
         if (statsEl) {
           var parts = [];
           if (p.projects_total) parts.push('项目 ' + (p.projects_done||0) + '/' + p.projects_total);

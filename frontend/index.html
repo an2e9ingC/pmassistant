@@ -125,7 +125,7 @@
     </div>
 
     <div style="margin-top:8px;text-align:center;font-size:10px;color:var(--muted)">
-      <span id="app-version">v2026.06.02-beta4</span>
+      <span id="app-version">v2026.06.02-beta5</span>
     </div>
   </div>
 </aside>
@@ -572,31 +572,22 @@ async function triggerSync() {
   var ztag = document.getElementById('src-zentao');
   if (ztag) { var zlbl = ztag.querySelector('.src-tag-label'); if (zlbl) zlbl.textContent = '禅道 同步中...'; ztag.className = 'src-tag warn'; }
 
-  // Show sync progress with spinner + timer
+  // Show sync progress with compact inline toast
   var _syncStartTime = Date.now();
   var progEl = document.createElement('div');
   progEl.className = 'toast info';
-  progEl.style.minWidth = '340px';
-  progEl.style.maxWidth = '420px';
+  progEl.style.padding = '6px 14px';
+  progEl.style.maxWidth = '520px';
   progEl.innerHTML =
-    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">' +
-      '<div class="sync-spinner" style="width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:sync-spin 0.8s linear infinite;flex-shrink:0"></div>' +
-      '<div style="font-size:12px;line-height:1.5;flex:1">' +
-        '<div style="display:flex;justify-content:space-between;align-items:center">' +
-          '<span>阶段: <b id="sync-prog-phase">...</b></span>' +
-          '<span style="font-size:10px">' +
-            '<button onclick="syncPauseResume()" id="sync-pause-btn" style="font-size:10px;padding:2px 8px;margin-right:4px;border:1px solid var(--border);border-radius:3px;background:var(--bg);color:var(--fg);cursor:pointer">暂停</button>' +
-            '<button onclick="syncCancel()" style="font-size:10px;padding:2px 8px;border:1px solid var(--border);border-radius:3px;background:var(--bg);color:var(--danger);cursor:pointer">取消</button>' +
-          '</span>' +
-        '</div>' +
-        '<div style="font-size:10.5px;color:var(--muted)" id="sync-prog-stats"></div>' +
-        '<div style="margin-top:4px;height:4px;background:var(--border);border-radius:2px;overflow:hidden">' +
-          '<div id="sync-prog-fill" style="height:100%;width:0%;background:var(--accent);transition:width 0.3s;border-radius:2px"></div>' +
-        '</div>' +
-        '<div style="font-size:10px;color:var(--muted);margin-top:2px" id="sync-prog-item"></div>' +
-      '</div>' +
-    '</div>' +
-    '<div style="text-align:center;font-size:11px;color:var(--muted)">已用时 <b id="sync-elapsed">0s</b></div>';
+    '<div style="display:flex;align-items:center;gap:8px">' +
+      '<div class="sync-spinner" style="width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:sync-spin 0.8s linear infinite;flex-shrink:0"></div>' +
+      '<span style="font-size:12px;font-weight:540;white-space:nowrap">同步中</span>' +
+      '<span style="font-size:11px;color:var(--muted);white-space:nowrap" id="sync-prog-phase">...</span>' +
+      '<span style="font-size:10.5px;color:var(--muted);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="sync-prog-stats"></span>' +
+      '<span style="font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap" id="sync-elapsed">0s</span>' +
+      '<button onclick="syncPauseResume()" id="sync-pause-btn" style="font-size:10px;padding:2px 8px;border:1px solid var(--border);border-radius:3px;background:var(--bg);color:var(--fg);cursor:pointer;white-space:nowrap;flex-shrink:0">暂停</button>' +
+      '<button onclick="syncCancel()" style="font-size:10px;padding:2px 8px;border:1px solid var(--border);border-radius:3px;background:var(--bg);color:var(--danger);cursor:pointer;white-space:nowrap;flex-shrink:0">取消</button>' +
+    '</div>';
   document.getElementById('toast-container').appendChild(progEl);
 
   var _syncPaused = false;
@@ -618,10 +609,7 @@ async function triggerSync() {
       var p = await API.get('/sync/progress');
       var phaseEl = document.getElementById('sync-prog-phase');
       var statsEl = document.getElementById('sync-prog-stats');
-      var fillEl = document.getElementById('sync-prog-fill');
-      var itemEl = document.getElementById('sync-prog-item');
       if (phaseEl) phaseEl.textContent = p.phase || '...';
-      if (fillEl && p.total > 0) fillEl.style.width = Math.round(p.current / p.total * 100) + '%';
       if (statsEl) {
         var parts = [];
         if (p.projects_total) parts.push('项目 ' + (p.projects_done||0) + '/' + p.projects_total);
@@ -629,7 +617,6 @@ async function triggerSync() {
         if (p.tasks_total) parts.push('任务 ' + p.tasks_total);
         statsEl.textContent = parts.join(' · ') || '';
       }
-      if (itemEl && p.current_item) itemEl.textContent = p.current_item;
       var elapsed = Math.round((Date.now() - _syncStartTime) / 1000);
       var et = document.getElementById('sync-elapsed');
       if (et) et.textContent = elapsed + 's';
