@@ -47,7 +47,7 @@ async def lifespan(app: FastAPI):
     import asyncio
     from backend.services.sync_service import SyncService, _auto_sync_notify
     async def auto_sync_loop():
-        last_sync = 0  # sync immediately on first interval
+        last_sync = 0  # sync immediately on first start
         while True:
             await asyncio.sleep(30)  # check every 30s
             interval = int(getattr(settings, "SYNC_INTERVAL_MINUTES", 30) or 30)
@@ -56,15 +56,17 @@ async def lifespan(app: FastAPI):
                 continue
             if time.time() - last_sync >= interval * 60:
                 last_sync = time.time()
-            try:
-                logger.info(f"Auto-sync triggered (interval={interval}min)")
-                svc = SyncService()
-                await svc.full_sync()
-                _auto_sync_notify["completed"] = True
-                _auto_sync_notify["time"] = time.strftime("%H:%M:%S")
-                logger.info("Auto-sync completed")
-            except Exception as e:
-                logger.error(f"Auto-sync failed: {e}")
+                try:
+                    logger.info(f"Auto-sync triggered (interval={interval}min)")
+                    svc = SyncService()
+                    await svc.full_sync()
+                    _auto_sync_notify["completed"] = True
+                    _auto_sync_notify["time"] = time.strftime("%H:%M:%S")
+                    next_time = time.strftime("%H:%M:%S", time.localtime(time.time() + interval * 60))
+                    logger.info(f"Auto-sync completed, next sync in {interval} minutes (at {next_time})")
+                except Exception as e:
+                    next_time = time.strftime("%H:%M:%S", time.localtime(time.time() + interval * 60))
+                    logger.error(f"Auto-sync failed: {e}, next retry in {interval} minutes (at {next_time})")
 
     _auto_sync_task = asyncio.create_task(auto_sync_loop())
     yield
