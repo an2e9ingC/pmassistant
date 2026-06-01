@@ -140,14 +140,6 @@ def _set_env_line(lines: list, key: str, value: str) -> None:
 @router.get("/config", response_model=dict)
 def get_config(_=Depends(require_admin)):
     cfg = _load_config()
-    # Mask passwords for display
-    for section in cfg:
-        if "password" in cfg[section]:
-            pw = cfg[section]["password"]
-            cfg[section]["password"] = "••••••" if pw else ""
-        if section == "gitlab" and "token" in cfg[section]:
-            tk = cfg[section]["token"]
-            cfg[section]["token"] = tk[:4] + "••••" if tk else ""
     return {"code": 0, "data": cfg, "message": "ok"}
 
 
@@ -168,13 +160,4 @@ def update_config(payload: DataSourceConfig, _=Depends(require_admin)):
 
     _save_config(cfg)
     settings.reload()  # Reload in-memory settings from updated os.environ
-    # Return config with masked passwords
-    result = json.loads(json.dumps(cfg))
-    for section in result:
-        if "password" in result[section]:
-            pw = result[section]["password"]
-            result[section]["password"] = "••••••" if pw else ""
-        if section == "gitlab" and "token" in result[section]:
-            tk = result[section]["token"]
-            result[section]["token"] = tk[:4] + "••••" if tk else ""
-    return {"code": 0, "data": result, "message": "配置已保存"}
+    return {"code": 0, "data": cfg, "message": "配置已保存"}

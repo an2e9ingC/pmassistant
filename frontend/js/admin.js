@@ -51,7 +51,11 @@ function renderConfigForm(cfg) {
             '" data-section="' + sec.key + '" data-field="' + f.key + '"' +
             ' value="' + escHtml(val) + '" placeholder="' + escHtml(f.ph) + '"' +
             (isPw ? ' autocomplete="new-password" onkeyup="checkCapsLock(event,\'' + uid + '-caps\')"' : '') + '>' +
-          (isPw ? '<button type="button" class="config-pw-toggle" onclick="togglePwVis(\'' + uid + '\',this)" title="显示/隐藏密码">隐</button>' : '') +
+          (isPw ? '<button type="button" class="config-pw-toggle" onclick="togglePwVis(\'' + uid + '\',this)" title="显示密码">' +
+            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+              '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>' +
+              '<circle cx="12" cy="12" r="3"/>' +
+            '</svg></button>' : '') +
           (isPw ? '<span id="' + uid + '-caps" class="config-caps-warn" style="display:none">&#x21E7; 大写锁定已开</span>' : '') +
         '</span>' +
       '</label>';
@@ -71,10 +75,15 @@ function renderConfigForm(cfg) {
 function togglePwVis(id, btn) {
   var inp = document.getElementById(id);
   if (!inp) return;
-  var isPw = inp.type === 'password';
-  inp.type = isPw ? 'text' : 'password';
-  btn.textContent = isPw ? '显' : '隐';
-  btn.title = isPw ? '显示密码' : '隐藏密码';
+  var show = inp.type === 'password';
+  inp.type = show ? 'text' : 'password';
+  if (show) {
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+    btn.title = '隐藏密码';
+  } else {
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+    btn.title = '显示密码';
+  }
 }
 
 function checkCapsLock(e, warnId) {
