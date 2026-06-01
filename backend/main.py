@@ -47,10 +47,15 @@ async def lifespan(app: FastAPI):
     import asyncio
     from backend.services.sync_service import SyncService, _auto_sync_notify
     async def auto_sync_loop():
-        await asyncio.sleep(10)  # wait for startup
+        last_sync = 0  # sync immediately on first interval
         while True:
-            interval = getattr(settings, "SYNC_INTERVAL_MINUTES", 30) or 30
-            await asyncio.sleep(interval * 60)
+            await asyncio.sleep(30)  # check every 30s
+            interval = int(getattr(settings, "SYNC_INTERVAL_MINUTES", 30) or 30)
+            if interval <= 0:
+                last_sync = time.time()  # reset timer when disabled
+                continue
+            if time.time() - last_sync >= interval * 60:
+                last_sync = time.time()
             try:
                 logger.info(f"Auto-sync triggered (interval={interval}min)")
                 svc = SyncService()

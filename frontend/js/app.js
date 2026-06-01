@@ -90,13 +90,6 @@ function toggleTheme() {
 var _srcStates = { zentao: 'pending', gitlab: 'pending', nas: 'pending' };
 
 function updateLinkStatus() {
-  // Check for auto-sync completion notification
-  API.get('/sync/auto-notify').then(function(n) {
-    if (n && n.completed) {
-      showToast('数据已自动更新（' + n.time + '）', 'success', 5000);
-    }
-  }).catch(function() {});
-
   API.get('/sync/sources').then(function(sources) {
     if (!sources || !sources.length) return;
     sources.forEach(function(s) {
@@ -265,6 +258,66 @@ function init() {
   // Data source status — render defaults immediately, then update
   renderSourceTags();
   updateLinkStatus();
+  // Poll for auto-sync — show progress if running, notify when done
+  var _autoSyncEl = null;
+  var _autoSyncStart = 0;
+  var _autoSyncKnownRunning = false;
+  setInterval(async function() {
+    try {
+      var p = await API.get('/sync/progress');
+      if (p.running) {
+        // Don't show auto progress if manual sync UI is already visible
+        if (document.getElementById('sync-prog-phase')) return;
+        _autoSyncKnownRunning = true;
+        if (!_autoSyncEl) {
+          // Create progress element (reuse the same pattern as manual sync)
+          _autoSyncStart = Date.now();
+          _autoSyncEl = document.createElement('div');
+          _autoSyncEl.className = 'toast info';
+          _autoSyncEl.style.minWidth = '340px';
+          _autoSyncEl.style.maxWidth = '420px';
+          _autoSyncEl.innerHTML =
+            '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">' +
+              '<div class="sync-spinner" style="width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:sync-spin 0.8s linear infinite;flex-shrink:0"></div>' +
+              '<div style="font-size:12px;line-height:1.5;flex:1">' +
+                '<span>自动同步中: <b id="auto-sync-phase">...</b></span>' +
+                '<div style="font-size:10.5px;color:var(--muted)" id="auto-sync-stats"></div>' +
+                '<div style="margin-top:4px;height:4px;background:var(--border);border-radius:2px;overflow:hidden">' +
+                  '<div id="auto-sync-fill" style="height:100%;width:0%;background:var(--accent);transition:width 0.3s;border-radius:2px"></div>' +
+                '</div>' +
+              '</div>' +
+            '</div>' +
+            '<div style="text-align:center;font-size:11px;color:var(--muted)">已用时 <b id="auto-sync-elapsed">0s</b></div>';
+          document.getElementById('toast-container').appendChild(_autoSyncEl);
+        }
+        // Update progress
+        var phaseEl = document.getElementById('auto-sync-phase');
+        var statsEl = document.getElementById('auto-sync-stats');
+        var fillEl = document.getElementById('auto-sync-fill');
+        var et = document.getElementById('auto-sync-elapsed');
+        if (phaseEl) phaseEl.textContent = p.phase || '...';
+        if (fillEl && p.total > 0) fillEl.style.width = Math.round(p.current / p.total * 100) + '%';
+        if (statsEl) {
+          var parts = [];
+          if (p.projects_total) parts.push('项目 ' + (p.projects_done||0) + '/' + p.projects_total);
+          if (p.execs_total) parts.push('执行 ' + (p.execs_done||0) + '/' + p.execs_total);
+          if (p.tasks_total) parts.push('任务 ' + p.tasks_total);
+          statsEl.textContent = parts.join(' · ') || '';
+        }
+        if (et) et.textContent = Math.round((Date.now() - _autoSyncStart) / 1000) + 's';
+      } else if (_autoSyncKnownRunning && _autoSyncEl) {
+        // Sync just finished
+        var elapsed = Math.round((Date.now() - _autoSyncStart) / 1000);
+        _autoSyncEl.remove();
+        _autoSyncEl = null;
+        _autoSyncKnownRunning = false;
+        // Show completion notification
+        API.get('/sync/auto-notify').then(function(n) {
+          if (n && n.completed) showToast('数据已自动更新（' + n.time + '，耗时' + elapsed + 's）', 'success', 5000);
+        }).catch(function() {});
+      }
+    } catch(ignore) {}
+  }, 3000);
 
   // Navigate to saved view or dashboard
   var lastView = localStorage.getItem('pm_view') || 'dashboard';

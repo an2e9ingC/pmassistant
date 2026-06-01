@@ -26,7 +26,8 @@ class ZentaoConfig(BaseModel):
     base_url: str = ""
     account: str = ""
     password: str = ""
-    project_filter: str = ""  # comma-separated project code prefixes, e.g. "PE04,PE05"
+    project_filter: str = ""  # comma-separated project code prefixes
+    sync_interval: str = "30"  # auto-sync interval in minutes, 0=disabled
 
 
 class GitLabConfig(BaseModel):
