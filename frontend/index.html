@@ -125,7 +125,7 @@
     </div>
 
     <div style="margin-top:8px;text-align:center;font-size:10px;color:var(--muted)">
-      <span id="app-version">v2026.06.01-beta14</span>
+      <span id="app-version">v2026.06.01-beta15</span>
     </div>
   </div>
 </aside>
@@ -207,18 +207,19 @@
       </div>
 
       <div class="section-hd">
-        <div class="section-title">项目列表</div>
+        <div class="section-title">项目列表
+          <span class="tabs" id="type-filter" style="margin-left:12px;display:inline-flex;vertical-align:middle">
+            <span class="tab active" id="tab-all" onclick="filterTable('all',this)">全部</span>
+            <span class="tab" id="tab-rd" onclick="filterTable('RD',this)">研发项目</span>
+            <span class="tab" id="tab-sc" onclick="filterTable('SC',this)">生产项目</span>
+          </span>
+        </div>
         <div class="section-acts">
           <div class="search-wrap" style="max-width:240px">
             <svg class="search-ico" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
               <circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/>
             </svg>
             <input class="search-inp" id="proj-search" placeholder="搜索代号、名称、客户…" oninput="onProjSearch(this.value)">
-          </div>
-          <div class="tabs" id="type-filter">
-            <div class="tab active" onclick="filterTable('all',this)">全部</div>
-            <div class="tab" onclick="filterTable('RD',this)">研发项目</div>
-            <div class="tab" onclick="filterTable('SC',this)">生产项目</div>
           </div>
         </div>
       </div>

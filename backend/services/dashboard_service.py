@@ -36,6 +36,7 @@ def get_kpi(db: Session) -> dict:
 
     return {
         "active_projects": len(active),
+        "total_projects": len(projects),
         "rd_count": rd_count,
         "sc_count": sc_count,
         "pending_alerts": alert_count,

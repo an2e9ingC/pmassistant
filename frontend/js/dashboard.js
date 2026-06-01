@@ -32,6 +32,10 @@ async function loadKpiCards() {
     var data = await API.get('/dashboard/kpi');
     document.getElementById('kpi-active-count').textContent = data.active_count;
     document.getElementById('kpi-meta-types').innerHTML = '研发 <b>' + data.rd_count + '</b> &nbsp;·&nbsp; 生产 <b>' + data.sc_count + '</b>';
+    // Update filter tabs with counts
+    document.getElementById('tab-all').textContent = '全部 ' + data.total_projects;
+    document.getElementById('tab-rd').textContent = '研发项目 ' + data.rd_count;
+    document.getElementById('tab-sc').textContent = '生产项目 ' + data.sc_count;
     document.getElementById('kpi-completed-count').textContent = data.completed_count;
     document.getElementById('kpi-high-risk-count').textContent = data.high_risk_count;
     document.getElementById('kpi-incomplete-docs-count').textContent = data.incomplete_docs_count;
