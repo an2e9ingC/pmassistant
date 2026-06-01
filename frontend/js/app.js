@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════
    MAIN APP
 ═══════════════════════════════════════════════════ */
-var VIEW_TITLES = { dashboard: '项目总览', detail: '项目详情', topology: '产品拓扑', reports: '统计报告', logs: '系统日志', config: '数据源配置', 'product-list': '产品列表', 'product-detail': '产品详情' };
+var VIEW_TITLES = { dashboard: '项目总览', detail: '项目详情', topology: '产品拓扑', reports: '统计报告', logs: '系统日志', config: '数据源配置', 'product-list': '产品总览', 'product-detail': '产品详情' };
 
 function gotoView(view) {
   // Check auth

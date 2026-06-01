@@ -100,6 +100,23 @@
 }
 .kpi-card:hover { box-shadow: var(--sh-md); }
 
+/* Product line KPI cards — dynamic border color */
+#prod-kpi-grid .kpi-card[data-prod-cat] {
+  border-left-color: var(--cat-color, var(--accent));
+}
+#prod-kpi-grid .kpi-card[data-prod-cat] .kpi-value { color: var(--cat-color, var(--accent)); }
+#prod-kpi-grid .kpi-card[data-prod-cat].active {
+  border-color: var(--cat-color, var(--accent));
+  background: var(--surface2);
+  box-shadow: var(--sh-md);
+}
+#prod-kpi-grid .kpi-card[data-prod-cat=""] { border-left-color: var(--accent); }
+#prod-kpi-grid .kpi-card[data-prod-cat=""] .kpi-value { color: var(--accent); }
+#prod-kpi-grid .kpi-card[data-prod-cat=""].active {
+  border-color: var(--accent); background: var(--accent-lt);
+  box-shadow: var(--sh-md);
+}
+
 /* Category-specific colors */
 .kpi-card[data-category="active"] { border-left-color: var(--accent); }
 .kpi-card[data-category="active"] .kpi-value { color: var(--accent); }

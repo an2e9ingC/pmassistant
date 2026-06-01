@@ -2,27 +2,24 @@
    PRODUCT LIST & PRODUCT DETAIL VIEWS
 ═══════════════════════════════════════════════════ */
 
-/* ---- Product List ---- */
+/* ---- Product List (Overview) ---- */
 
 var _prodCurCategory = '';
 var _prodSearchVal = '';
 var _prodSearchTimer = null;
 var _allProducts = [];
+var _prodLines = [];  // [{ name, count }]
 
 async function initProductList() {
   _allProducts = [];
+  _prodLines = [];
   try {
     var data = await API.get('/products?limit=200');
     _allProducts = data.items || [];
   } catch(e) {
     console.error('Failed to load products:', e);
   }
-  renderProdCategories();
-  filterByProductLine('', null);
-}
-
-function renderProdCategories() {
-  // Build category list from products
+  // Build product line stats
   var cats = {};
   _allProducts.forEach(function(p) {
     var cat = p.category || p.program_name || '其他';
@@ -30,76 +27,90 @@ function renderProdCategories() {
     cats[cat]++;
   });
   var catNames = Object.keys(cats).sort();
-  var container = document.getElementById('prod-line-cat-list');
-  var html = '<div class="prod-cat-item' + (_prodCurCategory === '' ? ' active' : '') + '" onclick="filterByProductLine(\'\', this)">全部<span class="prod-cat-count">' + _allProducts.length + '</span></div>';
-  catNames.forEach(function(c) {
-    html += '<div class="prod-cat-item' + (_prodCurCategory === c ? ' active' : '') + '" onclick="filterByProductLine(\'' + escHtml(c).replace(/'/g, "\\'") + '\', this)">' + escHtml(c) + '<span class="prod-cat-count">' + cats[c] + '</span></div>';
+  _prodLines = catNames.map(function(c) { return { name: c, count: cats[c] }; });
+
+  renderProdKpiCards();
+  filterByProductLine('', null);
+}
+
+function renderProdKpiCards() {
+  var grid = document.getElementById('prod-kpi-grid');
+  var html = '<div class="kpi-card' + (_prodCurCategory === '' ? ' active' : '') + '" data-prod-cat="" onclick="filterByProductLine(\'\', this)">' +
+    '<div class="kpi-label">全部产品</div>' +
+    '<div class="kpi-value" id="prod-kpi-all">' + _allProducts.length + '</div>' +
+    '<div class="kpi-meta">所有产品线</div>' +
+  '</div>';
+  _prodLines.forEach(function(pl, i) {
+    var colors = ['accent', 'success', 'warn', 'danger'];
+    var c = colors[i % colors.length];
+    html += '<div class="kpi-card" data-prod-cat="' + escHtml(pl.name) + '" data-color="' + c + '" onclick="filterByProductLine(\'' + escHtml(pl.name).replace(/'/g, "\\'") + '\', this)"' +
+      ' style="--cat-color: var(--' + c + ')">' +
+      '<div class="kpi-label">' + escHtml(pl.name) + '</div>' +
+      '<div class="kpi-value">' + pl.count + '</div>' +
+      '<div class="kpi-meta">个产品</div>' +
+    '</div>';
   });
-  container.innerHTML = html;
+  grid.innerHTML = html;
 }
 
 function filterByProductLine(cat, el) {
   _prodCurCategory = cat;
-  // Update active state
-  document.querySelectorAll('#prod-line-cat-list .prod-cat-item').forEach(function(c) { c.classList.remove('active'); });
+  document.querySelectorAll('#prod-kpi-grid .kpi-card').forEach(function(c) { c.classList.remove('active'); });
   if (el) el.classList.add('active');
-  renderProductCards();
+  renderProductTable();
 }
 
 function onProdSearch(v) {
   _prodSearchVal = v;
   clearTimeout(_prodSearchTimer);
   _prodSearchTimer = setTimeout(function() {
-    renderProductCards();
+    renderProductTable();
   }, 300);
 }
 
-function renderProductCards() {
+function renderProductTable() {
   var filtered = _allProducts;
-  // Filter by category
   if (_prodCurCategory) {
     filtered = filtered.filter(function(p) {
       return (p.category || p.program_name || '其他') === _prodCurCategory;
     });
   }
-  // Filter by search
   if (_prodSearchVal) {
     var q = _prodSearchVal.toLowerCase();
     filtered = filtered.filter(function(p) {
-      var nameMatch = (p.name || '').toLowerCase().indexOf(q) >= 0;
-      var codeMatch = (p.code || '').toLowerCase().indexOf(q) >= 0;
-      var descMatch = stripHtml(p.description || '').toLowerCase().indexOf(q) >= 0;
-      var tagMatch = (p.tags || '').toLowerCase().indexOf(q) >= 0;
-      return nameMatch || codeMatch || descMatch || tagMatch;
+      return (p.name || '').toLowerCase().indexOf(q) >= 0 ||
+        (p.code || '').toLowerCase().indexOf(q) >= 0 ||
+        stripHtml(p.description || '').toLowerCase().indexOf(q) >= 0 ||
+        (p.tags || '').toLowerCase().indexOf(q) >= 0;
     });
   }
 
-  var container = document.getElementById('prod-grid-container');
+  var tbody = document.getElementById('prod-tbody');
   if (!filtered.length) {
-    container.innerHTML = '<div class="empty-state" style="padding:40px">未找到匹配产品</div>';
+    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state" style="padding:20px">未找到匹配产品</div></td></tr>';
     return;
   }
 
-  container.innerHTML = '<div class="product-grid">' + filtered.map(function(p) {
-    var desc = stripHtml(p.description || '');
-    var descShort = desc.length > 80 ? desc.substring(0, 80) + '...' : desc;
+  tbody.innerHTML = filtered.map(function(p) {
+    var codeLabel = p.code || '#' + p.id;
+    var tagsList = p.tags_list || [];
     var tagsHtml = '';
-    if (p.tags_list && p.tags_list.length > 0 && p.tags_list[0] !== '') {
-      tagsHtml = p.tags_list.map(function(t) {
+    if (tagsList.length > 0 && tagsList[0] !== '') {
+      tagsHtml = tagsList.slice(0, 3).map(function(t) {
         return '<span class="tag-badge tag-' + (t.length % 5) + '">#' + escHtml(t) + '</span>';
-      }).join('');
+      }).join(' ');
+    } else {
+      tagsHtml = '<span style="font-size:11.5px;color:var(--muted)">无</span>';
     }
-    return '<div class="product-card" onclick="openProductDetail(\'' + p.id + '\')">' +
-      '<div class="product-card-name">' + escHtml(p.name) + '</div>' +
-      '<div class="product-card-code">' + escHtml(p.code || '') + '</div>' +
-      (descShort ? '<div class="product-card-desc">' + escHtml(descShort) + '</div>' : '') +
-      (tagsHtml ? '<div class="product-card-tags">' + tagsHtml + '</div>' : '') +
-      '<div class="product-card-meta">' +
-        renderPill(p.status) +
-        '<span style="font-size:11px;color:var(--muted)">关联项目: ' + p.project_count + '</span>' +
-      '</div>' +
-    '</div>';
-  }).join('') + '</div>';
+    return '<tr onclick="openProductDetail(\'' + p.id + '\')" style="cursor:pointer">' +
+      '<td><div class="proj-icon rd" style="font-size:11px">' + escHtml(codeLabel) + '</div></td>' +
+      '<td><div class="proj-name">' + escHtml(p.name) + '</div></td>' +
+      '<td style="font-size:12.5px">' + escHtml(p.category || p.program_name || '—') + '</td>' +
+      '<td>' + renderPill(p.status) + '</td>' +
+      '<td style="font-size:13px;font-weight:550">' + (p.project_count || 0) + '</td>' +
+      '<td>' + tagsHtml + '</td>' +
+    '</tr>';
+  }).join('');
 }
 
 function openProductDetail(id) {
