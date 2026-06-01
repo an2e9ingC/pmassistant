@@ -406,3 +406,28 @@
 .topo-search-bar .search-wrap {
   flex: 1; max-width: none;
 }
+
+/* Note dialog */
+.note-dialog-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000;
+}
+.note-dialog {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-lg); box-shadow: var(--sh-md);
+  width: 520px; max-width: 90vw; padding: 24px;
+}
+.note-dialog-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px;
+}
+.note-dialog-title { font-size: 15px; font-weight: 620; }
+.note-dialog-close {
+  width: 28px; height: 28px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--surface);
+  font-size: 16px; cursor: pointer; color: var(--muted);
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.12s;
+}
+.note-dialog-close:hover { background: var(--bg); color: var(--fg); }

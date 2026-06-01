@@ -19,6 +19,17 @@ class LocalUser(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
 
+class ProjectNote(Base):
+    __tablename__ = "project_notes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, nullable=False, index=True)
+    stage_name = Column(String(256), nullable=True, default="")
+    content = Column(Text, nullable=False)
+    recorded_by = Column(String(64), nullable=False, default="")
+    created_at = Column(DateTime, default=func.now())
+
+
 class SyncLog(Base):
     __tablename__ = "sync_logs"
 

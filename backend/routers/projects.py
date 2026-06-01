@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.middleware.auth import get_current_user
+from backend.models.local import ProjectNote
 from backend.services import project_service
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -52,3 +54,62 @@ def get_delivery(project_id: int, db: Session = Depends(get_db), _=Depends(get_c
 def get_resources(project_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
     resources = project_service.get_project_resources(db, project_id)
     return {"code": 0, "data": resources, "message": "ok"}
+
+
+class NoteCreate(BaseModel):
+    content: str
+    stage_name: str = ""
+
+
+@router.get("/{project_id}/notes", response_model=dict)
+def get_notes(project_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    notes = (
+        db.query(ProjectNote)
+        .filter(ProjectNote.project_id == project_id)
+        .order_by(ProjectNote.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    return {
+        "code": 0,
+        "data": [
+            {
+                "id": n.id,
+                "content": n.content,
+                "stage_name": n.stage_name or "",
+                "recorded_by": n.recorded_by,
+                "created_at": str(n.created_at)[:19] if n.created_at else "",
+            }
+            for n in notes
+        ],
+        "message": "ok",
+    }
+
+
+@router.post("/{project_id}/notes", response_model=dict)
+def add_note(
+    project_id: int,
+    payload: NoteCreate,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    note = ProjectNote(
+        project_id=project_id,
+        content=payload.content,
+        stage_name=payload.stage_name,
+        recorded_by=user.display_name or user.username,
+    )
+    db.add(note)
+    db.commit()
+    db.refresh(note)
+    return {
+        "code": 0,
+        "data": {
+            "id": note.id,
+            "content": note.content,
+            "stage_name": note.stage_name or "",
+            "recorded_by": note.recorded_by,
+            "created_at": str(note.created_at)[:19] if note.created_at else "",
+        },
+        "message": "ok",
+    }

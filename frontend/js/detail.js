@@ -89,6 +89,7 @@ async function loadProjectDetail(id) {
   document.getElementById('docs-tbody').innerHTML = '<tr><td colspan="4"><div class="loading-spinner">加载文档数据...</div></td></tr>';
   document.getElementById('delivery-content').innerHTML = '<div class="loading-spinner">加载交付数据...</div>';
   document.getElementById('resources-content').innerHTML = '<div class="loading-spinner">加载资料链接...</div>';
+  document.getElementById('notes-content').innerHTML = '<div class="loading-spinner">加载笔记...</div>';
 
   try {
     // Fetch all data in parallel
@@ -99,6 +100,7 @@ async function loadProjectDetail(id) {
       API.get('/projects/' + id + '/documents'),
       API.get('/projects/' + id + '/delivery'),
       API.get('/projects/' + id + '/resources'),
+      API.get('/projects/' + id + '/notes'),
     ]);
 
     var detail = results[0];
@@ -107,6 +109,7 @@ async function loadProjectDetail(id) {
     var docs = results[3];
     var delivery = results[4];
     var resources = results[5];
+    var notes = results[6];
 
     buildDetailHeader(detail);
     buildGantt(ganttData);
@@ -114,6 +117,7 @@ async function loadProjectDetail(id) {
     buildDocs(docs);
     buildDelivery(delivery);
     buildResources(resources, detail);
+    buildNotes(notes);
   } catch(e) {
     document.getElementById('detail-header').innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '</div>';
   }
@@ -828,6 +832,98 @@ function buildResources(resources, detail) {
         '关联产品：<b>' + escHtml(productNames) + '</b>' +
       '</div>' +
     '</div>';
+}
+
+/* Notes */
+
+function buildNotes(notes) {
+  var container = document.getElementById('notes-content');
+  var btnHtml = '<div style="margin-bottom:12px">' +
+    '<button class="btn btn-primary" onclick="openNoteDialog()" style="font-size:12px;padding:5px 16px">+ 添加笔记</button>' +
+  '</div>';
+
+  var tableHtml;
+  if (notes && notes.length) {
+    tableHtml = '<table class="stage-table"><thead><tr>' +
+      '<th style="width:140px">记录时间</th><th style="width:90px">涉及阶段</th><th style="width:70px">记录人</th><th>内容</th>' +
+    '</tr></thead><tbody>';
+    notes.forEach(function(n) {
+      tableHtml += '<tr>' +
+        '<td style="font-size:12px;font-family:var(--mono);color:var(--muted);white-space:nowrap">' + escHtml(n.created_at || '') + '</td>' +
+        '<td style="font-size:12px">' + escHtml(n.stage_name || '项目整体') + '</td>' +
+        '<td style="font-size:12.5px;font-weight:540">' + escHtml(n.recorded_by || '') + '</td>' +
+        '<td style="font-size:13px;line-height:1.5;white-space:pre-wrap">' + escHtml(n.content) + '</td>' +
+      '</tr>';
+    });
+    tableHtml += '</tbody></table>';
+  } else {
+    tableHtml = '<div class="empty-state" style="padding:12px">暂无笔记，点击上方按钮添加</div>';
+  }
+
+  container.innerHTML = btnHtml + tableHtml;
+}
+
+async function openNoteDialog() {
+  if (!_comboCurId) return;
+
+  // Fetch stages for the selector
+  var stagesHtml = '<option value="">项目整体</option>';
+  try {
+    var stages = await API.get('/projects/' + _comboCurId + '/stages');
+    if (stages && stages.length) {
+      stages.forEach(function(s) {
+        stagesHtml += '<option value="' + escHtml(s.name) + '">' + escHtml(s.name) + '</option>';
+      });
+    }
+  } catch(e) { /* ignore, just show project-level option */ }
+
+  var overlay = document.createElement('div');
+  overlay.className = 'note-dialog-overlay';
+  overlay.innerHTML = '<div class="note-dialog">' +
+    '<div class="note-dialog-head">' +
+      '<span class="note-dialog-title">添加项目笔记</span>' +
+      '<button class="note-dialog-close" onclick="closeNoteDialog()">&times;</button>' +
+    '</div>' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">涉及阶段</label>' +
+      '<select id="note-dialog-stage" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;box-sizing:border-box">' + stagesHtml + '</select>' +
+    '</div>' +
+    '<textarea id="note-dialog-input" style="width:100%;min-height:100px;box-sizing:border-box;padding:10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;resize:vertical;font-family:var(--font)" placeholder="记录项目关键信息：会议纪要、采购问题、交付调整等..."></textarea>' +
+    '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:12px">' +
+      '<span id="note-dialog-msg" style="font-size:11px"></span>' +
+      '<button class="btn" onclick="closeNoteDialog()" style="font-size:12px">取消</button>' +
+      '<button class="btn btn-primary" onclick="submitNote()" style="font-size:12px">保存</button>' +
+    '</div>' +
+  '</div>';
+  document.body.appendChild(overlay);
+  setTimeout(function() {
+    var inp = document.getElementById('note-dialog-input');
+    if (inp) inp.focus();
+  }, 100);
+}
+
+function closeNoteDialog() {
+  var overlay = document.querySelector('.note-dialog-overlay');
+  if (overlay) overlay.remove();
+}
+
+async function submitNote() {
+  var inp = document.getElementById('note-dialog-input');
+  var sel = document.getElementById('note-dialog-stage');
+  var msg = document.getElementById('note-dialog-msg');
+  var content = inp.value.trim();
+  if (!content) return;
+  if (!_comboCurId) return;
+
+  try {
+    msg.innerHTML = '<span style="color:var(--muted)">保存中...</span>';
+    await API.post('/projects/' + _comboCurId + '/notes', { content: content, stage_name: sel ? sel.value : '' });
+    closeNoteDialog();
+    var notes = await API.get('/projects/' + _comboCurId + '/notes');
+    buildNotes(notes);
+  } catch(e) {
+    msg.innerHTML = '<span style="color:var(--danger)">失败: ' + escHtml(e.message) + '</span>';
+  }
 }
 
 /* Tab Switching */

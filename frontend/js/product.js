@@ -224,8 +224,6 @@ function renderProdDetailHeader(p) {
 }
 
 function renderProdDetailInfo(p) {
-  var customers = p.customers_from_desc || [];
-  var customersHtml = customers.length ? customers.map(function(c) { return '<span onclick="gotoCustomerProjects(\'' + escHtml(c) + '\')" style="cursor:pointer">' + renderCustomerBadge(c) + '</span>'; }).join(' ') : '<span style="color:var(--muted);font-size:12px">—</span>';
   var linksHtml = '';
   if (p.nas_path) {
     linksHtml += '<a href="' + escHtml(p.nas_path) + '" target="_blank" class="prod-link-chip" title="NAS 路径">&#x1F4C1; NAS</a>';
@@ -245,7 +243,6 @@ function renderProdDetailInfo(p) {
       '<span class="prod-info-row-label">产品线</span>' +
       '<span class="tag-badge tag-0" style="font-size:12px;font-weight:520">' + escHtml(p.category || p.program_name || '未分类') + '</span>' +
       '<span class="prod-info-row-label" style="margin-left:8px">状态</span>' + renderPill(p.status) +
-      '<span class="prod-info-row-label" style="margin-left:8px">客户</span>' + customersHtml +
       (linksHtml ? '<span style="margin-left:auto">' + linksHtml + '</span>' : '') +
     '</div>';
   document.getElementById('prod-info-area').innerHTML = html;
