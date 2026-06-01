@@ -101,6 +101,8 @@ class ZentaoClient:
                         return {}
                     raise RuntimeError(f"Zentao API error: {data['error']}")
 
+                # DEBUG: log raw response sample (first 500 chars)
+                logger.info(f"Zentao response sample ({path}): {str(data)[:500]}")
                 return data
 
             except httpx.RequestError as e:

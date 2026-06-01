@@ -26,6 +26,7 @@ class ZentaoConfig(BaseModel):
     base_url: str = ""
     account: str = ""
     password: str = ""
+    project_filter: str = ""  # comma-separated project code prefixes, e.g. "PE04,PE05"
 
 
 class GitLabConfig(BaseModel):
@@ -55,6 +56,7 @@ def _load_config() -> dict:
             "base_url": os.environ.get("ZENTAO_BASE_URL", ""),
             "account": os.environ.get("ZENTAO_AUTH_ACCOUNT", ""),
             "password": os.environ.get("ZENTAO_AUTH_PASSWORD", ""),
+            "project_filter": os.environ.get("ZENTAO_PROJECT_FILTER", ""),
         },
         "gitlab": {
             "base_url": os.environ.get("GITLAB_BASE_URL", ""),
@@ -90,6 +92,7 @@ def _save_config(cfg: dict) -> None:
         "zentao.base_url": "ZENTAO_BASE_URL",
         "zentao.account": "ZENTAO_AUTH_ACCOUNT",
         "zentao.password": "ZENTAO_AUTH_PASSWORD",
+        "zentao.project_filter": "ZENTAO_PROJECT_FILTER",
         "gitlab.base_url": "GITLAB_BASE_URL",
         "gitlab.token": "GITLAB_TOKEN",
         "nas.host": "NAS_HOST",

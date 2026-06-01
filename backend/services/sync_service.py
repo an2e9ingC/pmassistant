@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 import logging
+import os
 import re
 from datetime import datetime, timezone, date
 from typing import Optional
@@ -127,7 +128,8 @@ def _finish_log(db: Session, log: SyncLog, status: str, items_fetched: int = 0,
 
 # Global sync progress state
 _sync_progress = {
-    "running": False, "phase": "", "current": 0, "total": 0,
+    "running": False, "paused": False, "cancelled": False,
+    "phase": "", "current": 0, "total": 0,
     "projects_total": 0, "execs_total": 0, "tasks_total": 0,
     "projects_done": 0, "execs_done": 0, "tasks_done": 0,
     "current_item": "",
@@ -136,6 +138,15 @@ _sync_progress = {
 
 def get_sync_progress() -> dict:
     return dict(_sync_progress)
+
+
+async def _check_pause_cancel():
+    """Wait if paused; raise if cancelled. Call at safe points in sync loops."""
+    import asyncio
+    while _sync_progress.get("paused") and not _sync_progress.get("cancelled"):
+        await asyncio.sleep(0.5)
+    if _sync_progress.get("cancelled"):
+        raise RuntimeError("Sync cancelled by user")
 
 
 class SyncService:
@@ -236,6 +247,13 @@ class SyncService:
         log = _log_sync(db, "projects")
         try:
             projects = await self.client.get_projects()
+            # Filter by code prefix if configured
+            from backend.config import settings
+            pf = getattr(settings, "ZENTAO_PROJECT_FILTER", "") or os.environ.get("ZENTAO_PROJECT_FILTER", "")
+            if pf:
+                prefixes = [x.strip() for x in pf.split(",") if x.strip()]
+                projects = [p for p in projects if any(p.get("code", "").startswith(px) for px in prefixes)]
+                logger.info(f"Project filter applied: {pf} -> {len(projects)} projects matched")
             _sync_progress["projects_total"] = len(projects)
             _sync_progress["total"] = len(projects)
             api_ids = {p["id"] for p in projects}
@@ -300,20 +318,56 @@ class SyncService:
         created_t, updated_t, deleted_t = 0, 0, 0
         try:
             projects = db.query(CachedProject).all()
+            # Apply project filter
+            from backend.config import settings
+            pf = getattr(settings, "ZENTAO_PROJECT_FILTER", "") or os.environ.get("ZENTAO_PROJECT_FILTER", "")
+            if pf:
+                prefixes = [x.strip() for x in pf.split(",") if x.strip()]
+                projects = [p for p in projects if p.code and any(p.code.startswith(px) for px in prefixes)]
             _sync_progress["total"] = len(projects)
 
-            # Phase 1: fetch and save all executions (count total)
+            # Phase 1: fetch all executions
             all_executions = []  # [(exec_data, project_id), ...]
             _sync_progress["phase"] = "获取执行列表"
-            for idx, proj in enumerate(projects):
-                _sync_progress["current"] = idx + 1
-                try:
-                    executions = await self.client.get_executions(project_id=proj.id)
-                except Exception:
-                    logger.warning(f"Failed to fetch executions for project {proj.id}")
-                    continue
-                for e in executions:
-                    all_executions.append((e, proj.id))
+            filtered_project_ids = {p.id for p in projects}
+
+            # Try fetching all executions at once (much faster if API supports it)
+            try:
+                all_execs_raw = await self.client.get_executions()
+                # Filter to only keep executions belonging to synced projects
+                kept = 0; skipped = 0
+                for e in all_execs_raw:
+                    proj_id = e.get("project", 0)
+                    if proj_id and proj_id in filtered_project_ids:
+                        all_executions.append((e, proj_id))
+                        kept += 1
+                    else:
+                        skipped += 1
+                logger.info(f"Fetched {len(all_execs_raw)} execs total, kept {kept} (filtered), skipped {skipped}")
+            except Exception:
+                logger.warning("Failed to fetch all executions, falling back to per-project")
+                # Fallback: per-project fetching
+                for idx, proj in enumerate(projects):
+                    _sync_progress["current"] = idx + 1
+                    try:
+                        executions = await self.client.get_executions(project_id=proj.id)
+                    except Exception:
+                        logger.warning(f"Failed to fetch executions for project {proj.id}")
+                        continue
+                    if len(executions) > 10:
+                        logger.info(f"Project {proj.code or proj.id}: {len(executions)} executions")
+                    for e in executions:
+                        all_executions.append((e, proj.id))
+
+            # Log execution distribution
+            proj_exec_counts = {}
+            for e, pid in all_executions:
+                proj_exec_counts[pid] = proj_exec_counts.get(pid, 0) + 1
+            logger.info(f"Execution distribution: {len(all_executions)} total across {len(proj_exec_counts)} projects")
+            for pid, cnt in sorted(proj_exec_counts.items(), key=lambda x: -x[1])[:10]:
+                proj_info = next((p for p in projects if p.id == pid), None)
+                code = proj_info.code if proj_info else f"id={pid}"
+                logger.info(f"  {code}: {cnt} executions")
 
             # Phase 2: save executions and fetch tasks
             total = len(all_executions)
@@ -325,6 +379,7 @@ class SyncService:
             exec_task_ids = {}
 
             for idx, (e, proj_id) in enumerate(all_executions):
+                await _check_pause_cancel()
                 _sync_progress["current"] = idx + 1
                 _sync_progress["execs_done"] = idx + 1
                 _sync_progress["current_item"] = e.get("name", str(e["id"]))
@@ -405,7 +460,22 @@ class SyncService:
         log = _log_sync(db, "bugs")
         created, updated = 0, 0
         try:
+            # Only sync bugs for products linked to filtered projects
+            from backend.config import settings
+            pf = getattr(settings, "ZENTAO_PROJECT_FILTER", "") or os.environ.get("ZENTAO_PROJECT_FILTER", "")
             products = db.query(CachedProduct).all()
+            if pf:
+                prefixes = [x.strip() for x in pf.split(",") if x.strip()]
+                filtered_project_ids = {
+                    p.id for p in db.query(CachedProject).all()
+                    if p.code and any(p.code.startswith(px) for px in prefixes)
+                }
+                linked_product_ids = {
+                    l.product_id for l in db.query(ProductProjectLink).filter(
+                        ProductProjectLink.project_id.in_(filtered_project_ids)
+                    ).all()
+                }
+                products = [p for p in products if p.id in linked_product_ids]
             total_bugs = 0
 
             for prod in products:

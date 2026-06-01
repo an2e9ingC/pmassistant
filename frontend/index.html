@@ -125,7 +125,7 @@
     </div>
 
     <div style="margin-top:8px;text-align:center;font-size:10px;color:var(--muted)">
-      <span id="app-version">v2026.06.01-beta11</span>
+      <span id="app-version">v2026.06.01-beta12</span>
     </div>
   </div>
 </aside>
@@ -574,11 +574,17 @@ async function triggerSync() {
   // Show progress bar in toast container
   var progEl = document.createElement('div');
   progEl.className = 'toast info';
-  progEl.style.minWidth = '320px';
-  progEl.style.maxWidth = '400px';
+  progEl.style.minWidth = '340px';
+  progEl.style.maxWidth = '420px';
   progEl.innerHTML =
     '<div style="font-size:12px;line-height:1.6">' +
-      '<div>阶段: <b id="sync-prog-phase">...</b></div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center">' +
+        '<span>阶段: <b id="sync-prog-phase">...</b></span>' +
+        '<span style="font-size:10px">' +
+          '<button onclick="syncPauseResume()" id="sync-pause-btn" style="font-size:10px;padding:2px 8px;margin-right:4px;border:1px solid var(--border);border-radius:3px;background:var(--bg);color:var(--fg);cursor:pointer">暂停</button>' +
+          '<button onclick="syncCancel()" style="font-size:10px;padding:2px 8px;border:1px solid var(--border);border-radius:3px;background:var(--bg);color:var(--danger);cursor:pointer">取消</button>' +
+        '</span>' +
+      '</div>' +
       '<div style="font-size:10.5px;color:var(--muted)" id="sync-prog-stats"></div>' +
     '</div>' +
     '<div style="margin-top:6px;height:4px;background:var(--border);border-radius:2px;overflow:hidden">' +
@@ -586,6 +592,20 @@ async function triggerSync() {
     '</div>' +
     '<div style="font-size:10px;color:var(--muted);margin-top:2px" id="sync-prog-item"></div>';
   document.getElementById('toast-container').appendChild(progEl);
+
+  var _syncPaused = false;
+  window.syncPauseResume = async function() {
+    _syncPaused = !_syncPaused;
+    var btn = document.getElementById('sync-pause-btn');
+    try {
+      if (_syncPaused) { await API.post('/sync/pause'); btn.textContent = '继续'; }
+      else { await API.post('/sync/resume'); btn.textContent = '暂停'; }
+    } catch(e) {}
+  };
+  window.syncCancel = async function() {
+    if (!confirm('确定取消同步？已同步的数据会保留。')) return;
+    try { await API.post('/sync/cancel'); } catch(e) {}
+  };
 
   var progTimer = setInterval(async function() {
     try {

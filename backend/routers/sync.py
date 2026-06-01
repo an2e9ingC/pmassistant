@@ -86,6 +86,28 @@ def sync_progress(_=Depends(get_current_user)):
     return {"code": 0, "data": get_sync_progress(), "message": "ok"}
 
 
+@router.post("/pause", response_model=dict)
+def sync_pause(_=Depends(require_admin)):
+    from backend.services.sync_service import _sync_progress
+    _sync_progress["paused"] = True
+    return {"code": 0, "message": "同步已暂停"}
+
+
+@router.post("/resume", response_model=dict)
+def sync_resume(_=Depends(require_admin)):
+    from backend.services.sync_service import _sync_progress
+    _sync_progress["paused"] = False
+    return {"code": 0, "message": "同步已恢复"}
+
+
+@router.post("/cancel", response_model=dict)
+def sync_cancel(_=Depends(require_admin)):
+    from backend.services.sync_service import _sync_progress
+    _sync_progress["cancelled"] = True
+    _sync_progress["paused"] = False  # unpause to allow cancellation to take effect
+    return {"code": 0, "message": "同步已取消"}
+
+
 @router.get("/sources", response_model=dict)
 def sync_sources(db: Session = Depends(get_db), _=Depends(get_current_user)):
     """Return configuration and sync status for all data sources."""
