@@ -498,3 +498,75 @@
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
   .two-col   { grid-template-columns: 1fr; }
 }
+
+/* Admin — Data Source Config */
+.config-grid {
+  display: flex; flex-direction: column; gap: 16px;
+}
+.config-section {
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.config-section.zentao  { border-left: 4px solid var(--accent); }
+.config-section.gitlab  { border-left: 4px solid var(--warn); }
+.config-section.nas     { border-left: 4px solid var(--success); }
+.config-section:last-of-type { margin-bottom: 0; }
+.config-section-title {
+  font-size: 13px; font-weight: 600;
+  padding: 10px 20px;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+}
+.config-section.zentao  .config-section-title { background: var(--accent-lt); }
+.config-section.gitlab  .config-section-title { background: var(--warn-lt); }
+.config-section.nas     .config-section-title { background: var(--success-lt); }
+.config-fields {
+  display: flex; flex-direction: column;
+}
+.config-field {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.config-field:last-child { border-bottom: none; }
+.config-field-label {
+  font-size: 12px; font-weight: 540;
+  color: var(--muted); white-space: nowrap;
+  width: 90px; flex-shrink: 0;
+}
+.config-input {
+  flex: 1; max-width: 420px;
+  padding: 7px 10px; border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--bg); color: var(--fg);
+  font-size: 13px; font-family: var(--mono);
+  transition: border-color 0.12s;
+}
+.config-input:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-lt);
+}
+.config-actions {
+  margin-top: 8px; display: flex; align-items: center;
+}
+.config-input-wrap {
+  position: relative; flex: 1; max-width: 420px; display: flex; align-items: center;
+}
+.config-input-wrap .config-input { flex: 1; max-width: none; }
+.config-pw-toggle {
+  position: absolute; right: 6px;
+  width: 26px; height: 26px; border-radius: 4px;
+  border: none; background: transparent;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--muted);
+  transition: color 0.12s;
+}
+.config-pw-toggle:hover { color: var(--fg); }
+.config-caps-warn {
+  position: absolute; right: 36px;
+  font-size: 10px; font-weight: 600;
+  color: var(--warn); white-space: nowrap;
+  pointer-events: none;
+}

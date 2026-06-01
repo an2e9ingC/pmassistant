@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════
    MAIN APP
 ═══════════════════════════════════════════════════ */
-var VIEW_TITLES = { dashboard: '项目总览', detail: '项目详情', mapping: '产品↔项目映射', reports: '统计报告', logs: '系统日志', 'product-list': '产品列表', 'product-detail': '产品详情', 'project-products': '项目关联产品', 'project-customers': '项目关联客户', 'product-projects': '产品关联项目', 'product-customers': '产品关联客户', 'customer-projects': '客户关联项目', 'customer-products': '客户关联产品' };
+var VIEW_TITLES = { dashboard: '项目总览', detail: '项目详情', mapping: '产品↔项目映射', reports: '统计报告', logs: '系统日志', config: '数据源配置', 'product-list': '产品列表', 'product-detail': '产品详情', 'project-products': '项目关联产品', 'project-customers': '项目关联客户', 'product-projects': '产品关联项目', 'product-customers': '产品关联客户', 'customer-projects': '客户关联项目', 'customer-products': '客户关联产品' };
 
 function gotoView(view) {
   // Check auth
@@ -48,6 +48,14 @@ function gotoView(view) {
     }
     clearLogAutoRefresh();
     renderLogs();
+  }
+  if (view === 'config') {
+    var user = getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      showToast('数据源配置仅限管理员访问', 'error');
+      return;
+    }
+    initAdmin();
   }
   if (view === 'product-list') {
     initProductList();

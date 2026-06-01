@@ -132,6 +132,13 @@
     </div>
     <div class="nav-group">
       <div class="nav-group-label">管理</div>
+      <div class="nav-item" id="nav-config" onclick="gotoView('config')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="8" cy="8" r="2.5"/>
+          <path d="M8 1.5v2M8 12.5v2M2.5 8h2M11.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/>
+        </svg>
+        数据源配置
+      </div>
       <div class="nav-item" id="nav-logs" onclick="gotoView('logs')">
         <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
           <rect x="1.5" y="1.5" width="13" height="13" rx="2"/>
@@ -515,6 +522,16 @@
       </div>
     </div>
 
+    <!-- ══════════════════════ VIEW — CONFIG ══════════════════════ -->
+    <div class="view" id="view-config">
+      <div class="section-hd">
+        <div class="section-title">数据源配置</div>
+      </div>
+      <div class="card" style="padding:24px" id="admin-config-form">
+        <div class="loading-spinner">加载中...</div>
+      </div>
+    </div>
+
     <!-- ══════════════════════ VIEW 6 — PRODUCT LIST ══════════════════════ -->
     <div class="view" id="view-product-list">
 
@@ -706,6 +723,7 @@
 <script src="/js/reports.js"></script>
 <script src="/js/logs.js"></script>
 <script src="/js/product.js"></script>
+<script src="/js/admin.js"></script>
 <script src="/js/app.js"></script>
 <script>
 async function triggerSync() {
