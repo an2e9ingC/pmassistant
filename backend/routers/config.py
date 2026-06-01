@@ -164,3 +164,33 @@ def update_config(payload: DataSourceConfig, _=Depends(require_admin)):
     _save_config(cfg)
     settings.reload()  # Reload in-memory settings from updated os.environ
     return {"code": 0, "data": cfg, "message": "配置已保存"}
+
+
+@router.post("/clear-db", response_model=dict)
+def clear_database(_=Depends(require_admin)):
+    """Clear all cached Zentao data (keep config and users)."""
+    from backend.database import SessionLocal
+    from backend.models.zentao import (
+        CachedProject, CachedExecution, CachedTask, CachedUser,
+        CachedProduct, ProductProjectLink, CachedCustomer, CustomerProjectLink,
+    )
+    from backend.models.bug import CachedBug
+    from backend.models.delivery import DeliveryRecord
+
+    db = SessionLocal()
+    try:
+        tables = [
+            CachedTask, CachedExecution, CachedProject, CachedUser,
+            ProductProjectLink, CachedCustomer, CustomerProjectLink,
+            CachedBug, DeliveryRecord, CachedProduct,
+        ]
+        count = 0
+        for t in tables:
+            count += db.query(t).delete()
+        db.commit()
+        return {"code": 0, "data": {"deleted": count}, "message": f"已清除 {count} 条缓存数据"}
+    except Exception as e:
+        db.rollback()
+        return {"code": 1, "message": f"清除失败: {e}"}
+    finally:
+        db.close()

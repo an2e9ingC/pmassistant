@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import time
 from datetime import datetime, timezone, date
 from typing import Optional
 
@@ -163,17 +164,21 @@ class SyncService:
         }
         db = SessionLocal()
         results = {}
+        timings = {}
+        t_start = time.time()
         self.client = ZentaoClient()
         try:
-            await self.client.authenticate()
+            t0 = time.time(); await self.client.authenticate(); timings["auth"] = round(time.time() - t0, 1)
+            _sync_progress["phase"] = "用户"; t0 = time.time(); results["users"] = await self._sync_users(db); timings["users"] = round(time.time() - t0, 1)
+            _sync_progress["phase"] = "产品"; t0 = time.time(); results["products"] = await self._sync_products(db); timings["products"] = round(time.time() - t0, 1)
+            _sync_progress["phase"] = "项目"; t0 = time.time(); results["projects"] = await self._sync_projects(db); timings["projects"] = round(time.time() - t0, 1)
+            _sync_progress["phase"] = "执行与任务"; t0 = time.time(); results["executions_tasks"] = await self._sync_executions_and_tasks(db); timings["execs_tasks"] = round(time.time() - t0, 1)
+            _sync_progress["phase"] = "Bug"; t0 = time.time(); results["bugs"] = await self._sync_bugs(db); timings["bugs"] = round(time.time() - t0, 1)
+            timings["total"] = round(time.time() - t_start, 1)
 
-            _sync_progress["phase"] = "用户"; results["users"] = await self._sync_users(db)
-            _sync_progress["phase"] = "产品"; results["products"] = await self._sync_products(db)
-            _sync_progress["phase"] = "项目"; results["projects"] = await self._sync_projects(db)
-            _sync_progress["phase"] = "执行与任务"; results["executions_tasks"] = await self._sync_executions_and_tasks(db)
-            _sync_progress["phase"] = "Bug"; results["bugs"] = await self._sync_bugs(db)
-
-            return {"code": 0, "data": results, "message": "sync completed"}
+            logger.info(f"Sync completed in {timings['total']}s: {timings}")
+            results["timings"] = timings
+            return {"code": 0, "data": results, "message": f"sync completed in {timings['total']}s"}
         except Exception as e:
             logger.exception("Full sync failed")
             return {"code": 1, "data": results, "message": f"sync failed: {e}"}
@@ -387,7 +392,7 @@ class SyncService:
                 total_execs += 1
             db.commit()
 
-            # Phase 3: fetch tasks concurrently (20 at a time)
+            # Phase 3: fetch tasks concurrently (20 at a time), skip unchanged
             import asyncio
             total = len(all_executions)
             _sync_progress["execs_total"] = total
@@ -397,11 +402,27 @@ class SyncService:
             _sync_progress["tasks_done"] = 0
             exec_task_ids = {}
             _sync_progress["phase"] = "执行与任务"
+
+            # Pre-load existing executions for change detection
+            all_exec_ids = [e[0]["id"] for e in all_executions]
+            existing_execs = {
+                ex.id: ex for ex in db.query(CachedExecution).filter(
+                    CachedExecution.id.in_(all_exec_ids)
+                ).all()
+            }
+
             sem = asyncio.Semaphore(20)
+            skipped_count = 0
 
             async def _sync_one_exec(idx, e, proj_id):
+                nonlocal skipped_count
                 async with sem:
                     await _check_pause_cancel()
+                    existing = existing_execs.get(e["id"])
+                    # Skip if execution unchanged (same raw data) and already synced
+                    if existing and existing.raw_json == json.dumps(e, ensure_ascii=False) and existing.synced_at:
+                        skipped_count += 1
+                        return None  # signal to skip
                     try:
                         tasks = await self.client.get_tasks(e["id"])
                         return tasks
@@ -419,6 +440,8 @@ class SyncService:
                     _sync_progress["execs_done"] = idx + 1
                     _sync_progress["current"] = idx + 1
                     _sync_progress["current_item"] = e.get("name", str(e["id"]))
+                    if tasks is None:
+                        continue  # skip unchanged execution
                     total_tasks += len(tasks)
                     _sync_progress["tasks_total"] = total_tasks
                     _sync_progress["tasks_done"] += len(tasks)
@@ -433,7 +456,7 @@ class SyncService:
 
                 if total_tasks:
                     pct = round(_sync_progress["execs_done"] / total * 100)
-                    logger.info(f"Sync: {_sync_progress['execs_done']}/{total} ({pct}%) | 任务 {total_tasks}")
+                    logger.info(f"Sync: {_sync_progress['execs_done']}/{total} ({pct}%) | 任务 {total_tasks} | 跳过 {skipped_count}")
 
             # Cleanup stale executions per project
             for proj in projects:
@@ -493,23 +516,23 @@ class SyncService:
                 }
                 products = [p for p in products if p.id in linked_product_ids]
             total_bugs = 0
+            sem = asyncio.Semaphore(10)
 
-            for prod in products:
+            async def _sync_one_bug_prod(prod):
                 try:
-                    bugs = await self.client.get_product_bugs(prod.id)
+                    return await self.client.get_product_bugs(prod.id)
                 except Exception:
                     logger.warning(f"Failed to fetch bugs for product {prod.id}")
-                    continue
+                    return []
 
+            results = await asyncio.gather(*[_sync_one_bug_prod(p) for p in products])
+
+            for prod, bugs in zip(products, results):
                 total_bugs += len(bugs)
                 for b in bugs:
                     existing = db.query(CachedBug).filter(CachedBug.id == b["id"]).first()
-                    if existing:
-                        self._update_bug(existing, b)
-                        updated += 1
-                    else:
-                        db.add(self._build_bug(b, prod.id))
-                        created += 1
+                    if existing: self._update_bug(existing, b); updated += 1
+                    else: db.add(self._build_bug(b, prod.id)); created += 1
                 db.commit()
 
             _finish_log(db, log, "success", total_bugs, created, updated)
@@ -519,6 +542,9 @@ class SyncService:
             raise
 
     def _build_bug(self, b: dict, product_id: int) -> CachedBug:
+        opened = b.get("openedBy", {}) or {}
+        assigned = b.get("assignedTo", {}) or {}
+        resolved = b.get("resolvedBy", {}) or {}
         return CachedBug(
             id=b["id"], product_id=product_id,
             project_id=b.get("project", 0) or 0,
@@ -527,23 +553,25 @@ class SyncService:
             priority=b.get("pri", 3),
             status=b.get("status", ""),
             type=b.get("type", ""),
-            opened_by=b.get("openedBy", ""),
+            opened_by=opened.get("account", "") if isinstance(opened, dict) else str(opened),
             opened_date=_parse_date(b.get("openedDate")),
-            assigned_to=b.get("assignedTo", ""),
-            resolved_by=b.get("resolvedBy", ""),
+            assigned_to=assigned.get("account", "") if isinstance(assigned, dict) else str(assigned),
+            resolved_by=resolved.get("account", "") if isinstance(resolved, dict) else str(resolved),
             resolved_date=_parse_datetime(b.get("resolvedDate")),
             closed_date=_parse_datetime(b.get("closedDate")),
             raw_json=json.dumps(b, ensure_ascii=False),
         )
 
     def _update_bug(self, existing: CachedBug, b: dict) -> int:
+        assigned = b.get("assignedTo", {}) or {}
+        resolved = b.get("resolvedBy", {}) or {}
         existing.title = b.get("title", existing.title)
         existing.severity = b.get("severity", existing.severity)
         existing.priority = b.get("pri", existing.priority)
         existing.status = b.get("status", existing.status)
         existing.type = b.get("type", existing.type)
-        existing.assigned_to = b.get("assignedTo", existing.assigned_to)
-        existing.resolved_by = b.get("resolvedBy", existing.resolved_by)
+        existing.assigned_to = assigned.get("account", "") if isinstance(assigned, dict) else str(assigned)
+        existing.resolved_by = resolved.get("account", "") if isinstance(resolved, dict) else str(resolved)
         existing.resolved_date = _parse_datetime(b.get("resolvedDate")) or existing.resolved_date
         existing.closed_date = _parse_datetime(b.get("closedDate")) or existing.closed_date
         existing.raw_json = json.dumps(b, ensure_ascii=False)

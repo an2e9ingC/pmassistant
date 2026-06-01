@@ -449,3 +449,5 @@
 .log-container {
   max-height: calc(100vh - 200px); overflow-y: auto;
 }
+
+@keyframes sync-spin { to { transform: rotate(360deg); } }

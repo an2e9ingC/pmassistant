@@ -125,7 +125,7 @@
     </div>
 
     <div style="margin-top:8px;text-align:center;font-size:10px;color:var(--muted)">
-      <span id="app-version">v2026.06.01-beta16</span>
+      <span id="app-version">v2026.06.02-beta1</span>
     </div>
   </div>
 </aside>
@@ -572,26 +572,31 @@ async function triggerSync() {
   var ztag = document.getElementById('src-zentao');
   if (ztag) { var zlbl = ztag.querySelector('.src-tag-label'); if (zlbl) zlbl.textContent = '禅道 同步中...'; ztag.className = 'src-tag warn'; }
 
-  // Show progress bar in toast container
+  // Show sync progress with spinner + timer
+  var _syncStartTime = Date.now();
   var progEl = document.createElement('div');
   progEl.className = 'toast info';
   progEl.style.minWidth = '340px';
   progEl.style.maxWidth = '420px';
   progEl.innerHTML =
-    '<div style="font-size:12px;line-height:1.6">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center">' +
-        '<span>阶段: <b id="sync-prog-phase">...</b></span>' +
-        '<span style="font-size:10px">' +
-          '<button onclick="syncPauseResume()" id="sync-pause-btn" style="font-size:10px;padding:2px 8px;margin-right:4px;border:1px solid var(--border);border-radius:3px;background:var(--bg);color:var(--fg);cursor:pointer">暂停</button>' +
-          '<button onclick="syncCancel()" style="font-size:10px;padding:2px 8px;border:1px solid var(--border);border-radius:3px;background:var(--bg);color:var(--danger);cursor:pointer">取消</button>' +
-        '</span>' +
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">' +
+      '<div class="sync-spinner" style="width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:sync-spin 0.8s linear infinite;flex-shrink:0"></div>' +
+      '<div style="font-size:12px;line-height:1.5;flex:1">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center">' +
+          '<span>阶段: <b id="sync-prog-phase">...</b></span>' +
+          '<span style="font-size:10px">' +
+            '<button onclick="syncPauseResume()" id="sync-pause-btn" style="font-size:10px;padding:2px 8px;margin-right:4px;border:1px solid var(--border);border-radius:3px;background:var(--bg);color:var(--fg);cursor:pointer">暂停</button>' +
+            '<button onclick="syncCancel()" style="font-size:10px;padding:2px 8px;border:1px solid var(--border);border-radius:3px;background:var(--bg);color:var(--danger);cursor:pointer">取消</button>' +
+          '</span>' +
+        '</div>' +
+        '<div style="font-size:10.5px;color:var(--muted)" id="sync-prog-stats"></div>' +
+        '<div style="margin-top:4px;height:4px;background:var(--border);border-radius:2px;overflow:hidden">' +
+          '<div id="sync-prog-fill" style="height:100%;width:0%;background:var(--accent);transition:width 0.3s;border-radius:2px"></div>' +
+        '</div>' +
+        '<div style="font-size:10px;color:var(--muted);margin-top:2px" id="sync-prog-item"></div>' +
       '</div>' +
-      '<div style="font-size:10.5px;color:var(--muted)" id="sync-prog-stats"></div>' +
     '</div>' +
-    '<div style="margin-top:6px;height:4px;background:var(--border);border-radius:2px;overflow:hidden">' +
-      '<div id="sync-prog-fill" style="height:100%;width:0%;background:var(--accent);transition:width 0.3s;border-radius:2px"></div>' +
-    '</div>' +
-    '<div style="font-size:10px;color:var(--muted);margin-top:2px" id="sync-prog-item"></div>';
+    '<div style="text-align:center;font-size:11px;color:var(--muted)">已用时 <b id="sync-elapsed">0s</b></div>';
   document.getElementById('toast-container').appendChild(progEl);
 
   var _syncPaused = false;
@@ -625,9 +630,13 @@ async function triggerSync() {
         statsEl.textContent = parts.join(' · ') || '';
       }
       if (itemEl && p.current_item) itemEl.textContent = p.current_item;
-      if (!p.running) { clearInterval(progTimer); }
+      var elapsed = Math.round((Date.now() - _syncStartTime) / 1000);
+      var et = document.getElementById('sync-elapsed');
+      if (et) et.textContent = elapsed + 's';
+      if (!p.running) { clearInterval(progTimer);
+        if (et) et.textContent = elapsed + 's（完成）'; }
     } catch(ignore) {}
-  }, 500);
+  }, 1000);
 
   try {
     var result = await API.post('/sync/trigger');
@@ -642,7 +651,8 @@ async function triggerSync() {
       parts.push('执行' + (d.executions_tasks.executions_fetched || 0));
       parts.push('任务' + (d.executions_tasks.tasks_fetched || 0));
     }
-    showToast('数据同步完成（' + parts.join(' / ') + '）', 'success');
+    var timingMsg = result.timings ? '（' + result.timings.total + 's）' : '';
+    showToast('数据同步完成 ' + timingMsg + '（' + parts.join(' / ') + '）', 'success');
     if (_srcStates) { _srcStates.zentao = 'ok'; renderSourceTags(); }
     updateLinkStatus();
     if (document.getElementById('view-dashboard').classList.contains('active')) { renderDashboard(); }

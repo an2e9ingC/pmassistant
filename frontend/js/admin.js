@@ -68,6 +68,7 @@ function renderConfigForm(cfg) {
   html += '<div class="config-actions">' +
     '<button class="btn btn-primary" onclick="saveConfig()">保存配置</button>' +
     '<span id="config-save-msg" style="font-size:12px;margin-left:12px"></span>' +
+    '<button class="btn" onclick="clearDatabase()" style="margin-left:auto;font-size:12px;color:var(--danger);padding:5px 16px">清除数据库缓存</button>' +
   '</div>';
 
   document.getElementById('admin-config-form').innerHTML = html;
@@ -126,6 +127,17 @@ async function saveConfig() {
   }
   btn.disabled = false;
   btn.textContent = '保存配置';
+}
+
+async function clearDatabase() {
+  if (!confirm('确定清除所有缓存数据？（项目/产品/执行/任务/Bug等）\n注意：此操作不可撤销，清除后需重新同步。')) return;
+  if (!confirm('再次确认：清除后需从禅道重新同步全部数据，可能耗时较长。确定继续？')) return;
+  try {
+    var result = await API.post('/admin/clear-db');
+    showToast(result.message || '已清除', 'success');
+  } catch(e) {
+    showToast('清除失败: ' + e.message, 'error');
+  }
 }
 
 /* ── User Management ── */
