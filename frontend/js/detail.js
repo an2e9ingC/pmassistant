@@ -676,11 +676,10 @@ function buildStages(stages) {
   }
 
   document.getElementById('stages-tbody').innerHTML = stages.map(function(s, i) {
-    var bg = i % 2 === 0 ? 'var(--surface)' : 'var(--bg)';
     var dels = s.deliverables || [];
     var risk = getStageRisk(s);
     var prog = s.progress || 0;
-    return '<tr id="stage-row-' + i + '" style="background:' + bg + '">' +
+    return '<tr id="stage-row-' + i + '">' +
       '<td><strong>' + escHtml(s.name) + '</strong></td>' +
       '<td><span class="risk-tag" style="--risk-color:' + risk.color + '" title="' + escHtml(risk.tip) + '">' + escHtml(risk.label) +
       '</span></td>' +
@@ -880,10 +879,6 @@ function buildResources(resources, detail) {
 
 function buildNotes(notes) {
   var container = document.getElementById('notes-content');
-  var btnHtml = '<div style="margin-bottom:12px">' +
-    '<button class="btn btn-primary" onclick="openNoteDialog()" style="font-size:12px;padding:5px 16px">+ 添加笔记</button>' +
-  '</div>';
-
   var tableHtml;
   if (notes && notes.length) {
     tableHtml = '<table class="stage-table"><thead><tr>' +
@@ -899,10 +894,10 @@ function buildNotes(notes) {
     });
     tableHtml += '</tbody></table>';
   } else {
-    tableHtml = '<div class="empty-state" style="padding:12px">暂无笔记，点击上方按钮添加</div>';
+    tableHtml = '<div class="empty-state" style="padding:12px">暂无笔记</div>';
   }
 
-  container.innerHTML = btnHtml + tableHtml;
+  container.innerHTML = tableHtml;
 }
 
 async function openNoteDialog() {

@@ -87,6 +87,8 @@
 }
 .stage-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; vertical-align: top; }
 .stage-table tr:last-child td { border-bottom: none; }
+.stage-table tbody tr:nth-child(odd) td { background: var(--surface); }
+.stage-table tbody tr:nth-child(even) td { background: var(--bg); }
 .stage-table td .gs-ring { vertical-align: middle; }
 
 .risk-tag {
@@ -450,13 +452,18 @@
   max-height: calc(100vh - 200px); overflow-y: auto;
 }
 
-/* Stage row flash highlight */
-.stage-row-flash {
-  animation: stage-flash 0.6s ease-in-out 3;
+/* Stage row flash highlight — breathing effect */
+.stage-row-flash td {
+  animation: stage-flash 1.4s ease-in-out 6;
 }
 @keyframes stage-flash {
-  0%, 100% { background: var(--accent-lt) !important; }
-  50% { background: var(--surface) !important; }
+  0%, 100% { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  50% { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+}
+
+/* Stage table row hover */
+.stage-table tbody tr:hover td {
+  background: var(--surface2) !important;
 }
 
 @keyframes sync-spin { to { transform: rotate(360deg); } }
