@@ -130,13 +130,8 @@ async function loadProjectTable(filter) {
       } else {
         tagsHtml = '<span style="font-size:11.5px;color:var(--muted)">无</span>';
       }
-      var isHighRisk = _curCategory === 'high_risk';
-      var rowClick = isHighRisk
-        ? 'onclick="filterAlertsByProject(\'' + p.id + '\', \'' + escHtml(projCode + ' ' + coreName).replace(/'/g, "\\'") + '\')"'
-        : 'onclick="openProject(\'' + p.id + '\')"';
-      var projIconHtml = isHighRisk
-        ? renderProjIcon(p.type, projCode).replace('<div class=', '<div onclick="event.stopPropagation();openProject(\'' + p.id + '\')" class=')
-        : renderProjIcon(p.type, projCode);
+      var rowClick = 'onclick="filterAlertsByProject(\'' + p.id + '\', \'' + escHtml(projCode + ' ' + coreName).replace(/'/g, "\\'") + '\')"';
+      var projIconHtml = renderProjIcon(p.type, projCode).replace('<div class=', '<div onclick="event.stopPropagation();openProject(\'' + p.id + '\')" class=');
       return '<tr ' + rowClick + '>' +
         '<td>' + projIconHtml + '</td>' +
         '<td><div class="proj-name">' + escHtml(coreName) + '</div><div class="proj-code">' + escHtml(projCode) + '</div></td>' +
