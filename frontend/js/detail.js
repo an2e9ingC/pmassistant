@@ -536,10 +536,10 @@ function buildGantt(data) {
   var projEndPx = projEnd ? ganttPx(projEnd, range, totalWidth) : 0;
   var projLinesHtml = '';
   if (projBegin) {
-    projLinesHtml += '<div class="gantt-proj-start-line" style="left:' + projBeginPx + 'px" title="项目开始: ' + projBegin + '"><div class="gantt-proj-start-pip"></div></div>';
+    projLinesHtml += '<div class="gantt-proj-start-line" style="left:' + projBeginPx + 'px" title="项目开始: ' + projBegin + '"></div>';
   }
   if (projEnd) {
-    projLinesHtml += '<div class="gantt-proj-end-line" style="left:' + projEndPx + 'px" title="项目结束: ' + projEnd + '"><div class="gantt-proj-end-pip"></div></div>';
+    projLinesHtml += '<div class="gantt-proj-end-line" style="left:' + projEndPx + 'px" title="项目结束: ' + projEnd + '"></div>';
   }
 
   var rows = stages.map(function(s, i) {
@@ -562,7 +562,7 @@ function buildGantt(data) {
       '<div class="gantt-bar-cell" style="min-width:' + displayWidth + 'px;width:' + displayWidth + 'px">' +
         '<div class="gantt-grid">' + gCols + '</div>' +
         projLinesHtml +
-        '<div class="gantt-today-line" style="left:' + todayPx + 'px"><div class="gantt-today-pip"></div></div>' +
+        '<div class="gantt-today-line" style="left:' + todayPx + 'px"></div>' +
         '<div class="gantt-bar ' + s.status + '" style="left:' + lp + 'px;width:' + wp + 'px" data-tip="' + compactDate(s.start) + '→' + compactDate(s.end) + '　任务:' + tasksDone + '/' + tasksTotal + '">' +
           '<div class="gantt-bar-fill" style="width:' + prog + '%"></div>' +
         '</div>' +

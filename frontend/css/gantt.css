@@ -269,21 +269,11 @@
   opacity: 0.6; z-index: 4;
   pointer-events: none;
 }
-.gantt-proj-start-pip {
-  position: absolute; top: 0; width: 9px; height: 9px;
-  background: var(--success); border-radius: 50%;
-  transform: translate(-3.5px, -3px);
-}
 .gantt-proj-end-line {
   position: absolute; top: 0; bottom: 0; width: 2px;
   background: repeating-linear-gradient(to bottom, var(--danger) 0, var(--danger) 6px, transparent 6px, transparent 10px);
   opacity: 0.6; z-index: 4;
   pointer-events: none;
-}
-.gantt-proj-end-pip {
-  position: absolute; top: 0; width: 9px; height: 9px;
-  background: var(--danger); border-radius: 50%;
-  transform: translate(-3.5px, -3px);
 }
 
 /* ── Bars ── */
@@ -317,11 +307,6 @@
   position: absolute; top: 0; bottom: 0; width: 2px;
   background: var(--accent); opacity: 0.8; z-index: 5;
   pointer-events: none;
-}
-.gantt-today-pip {
-  position: absolute; top: 0; width: 10px; height: 10px;
-  background: var(--accent); border-radius: 50%;
-  transform: translate(-4px, -3px);
 }
 
 /* ── Legend ── */
