@@ -49,9 +49,12 @@ def get_project_stages(db: Session, project_id: int) -> list[dict]:
             {"name": "TODO: 根据阶段配置文档清单", "done": False, "warn": False, "completed_at": None, "location": None},
         ]
         who = _get_who(tasks) or e.name
+        from backend.config import get_zentao_web_base
+        web_base = get_zentao_web_base()
         stages.append({
             "id": e.id,
             "name": e.stage_name or e.name,
+            "execution_url": f"{web_base}/index.php?m=execution&f=task&executionID={e.id}&status=all&param=0&orderBy=status,id_desc&recTotal=10&recPerPage=100",
             "status": _map_status(e.status),
             "who": who,
             "start": str(e.begin) if e.begin else None,

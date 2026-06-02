@@ -79,7 +79,7 @@ async function loadReportMonthly() {
         '<div class="kpi-card"><div class="kpi-label">新增/解决Bug</div><div class="kpi-value" style="font-size:26px;color:var(--warn)">' + data.new_bugs_this_month + '<span style="font-size:16px;color:var(--muted)">/' + data.resolved_bugs_this_month + '</span></div></div>' +
         '<div class="kpi-card"><div class="kpi-label">本月交付</div><div class="kpi-value" style="font-size:26px;color:var(--success)">' + data.delivery_quantity_this_month + ' 台</div></div>' +
       '</div>' +
-      '<div class="card" style="overflow:hidden;margin-bottom:16px">' +
+      '<div class="card table-scroll" style="margin-bottom:16px">' +
         '<table class="proj-table"><thead><tr><th>项目</th><th>状态</th><th>进度</th><th>任务(完成/总数)</th></tr></thead><tbody>' + projRows + '</tbody></table>' +
       '</div>' +
       '<div style="font-size:11px;color:var(--muted)">生成时间: ' + data.generated_at + '</div>';
@@ -122,7 +122,7 @@ async function loadBugStats() {
         '<div class="kpi-card"><div class="kpi-label">近30天新增</div><div class="kpi-value" style="font-size:26px;color:var(--warn)">' + (stats.recent_30d || 0) + '</div></div>' +
       '</div>' +
       '<div class="kpi-grid" style="grid-template-columns:repeat(' + Object.keys(stats.by_severity || {}).length + ',1fr);margin-bottom:16px">' + sevHtml + '</div>' +
-      '<div class="card" style="overflow:hidden">' +
+      '<div class="card table-scroll">' +
         '<table class="proj-table"><thead><tr><th style="width:60px">严重度</th><th>标题</th><th style="width:80px">状态</th><th style="width:90px">指派</th><th style="width:100px">创建日期</th></tr></thead><tbody>' + (bugRows || '<tr><td colspan="5"><div class="empty-state">暂无Bug数据</div></td></tr>') + '</tbody></table>' +
       '</div>';
   } catch(e) {

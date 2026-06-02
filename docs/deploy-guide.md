@@ -242,25 +242,65 @@ Address already in use
 
 ```
 pma/
-├── backend/          # Python 后端
-│   ├── main.py       # FastAPI 入口
-│   ├── config.py     # 配置
-│   ├── database.py   # 数据库连接
-│   ├── models/       # 数据模型
-│   ├── schemas/      # 请求/响应模型
-│   ├── routers/      # API 路由
-│   ├── services/     # 业务逻辑
-│   └── middleware/   # JWT 认证
-├── frontend/         # 前端静态文件
-│   ├── index.html    # 主页面
-│   ├── login.html    # 登录页
-│   ├── css/          # 样式
-│   └── js/           # 脚本
-├── data/             # SQLite 数据文件（自动生成）
-│   ├── pma.db        # 主数据库
-│   └── pma.log*      # 运行日志文件（滚动，.gitignore）
+├── backend/              # Python 后端
+│   ├── main.py           # FastAPI 入口 + 自动同步后台任务
+│   ├── config.py         # 配置管理（.env + Settings.reload）
+│   ├── database.py       # 数据库连接 + 表创建 + seed 用户
+│   ├── models/           # 数据模型（zentao.py / local.py / bug.py / delivery.py）
+│   ├── schemas/          # Pydantic 请求/响应模型
+│   ├── routers/          # API 路由（14 个模块）
+│   │   ├── auth.py       # 登录/修改密码
+│   │   ├── admin_users.py # 用户管理 CRUD
+│   │   ├── config.py     # 数据源配置
+│   │   ├── dashboard.py  # KPI + 项目列表 + 告警
+│   │   ├── projects.py   # 项目详情 + 甘特图 + 阶段 + 笔记
+│   │   ├── products.py   # 产品管理
+│   │   ├── topology.py   # 产品拓扑（快速检索）
+│   │   ├── sync.py       # 同步触发/暂停/取消/进度
+│   │   ├── delivery.py   # 交付记录
+│   │   ├── reports.py    # 项目报表
+│   │   ├── logs.py       # 系统日志
+│   │   └── ...
+│   ├── services/         # 业务逻辑
+│   │   ├── sync_service.py    # 同步引擎（并发 + 增量 + 自动）
+│   │   ├── zentao_client.py   # 禅道 REST API 客户端
+│   │   ├── project_service.py # 项目/甘特图/阶段/笔记
+│   │   ├── product_service.py # 产品管理
+│   │   ├── dashboard_service.py # Dashboard + 告警检测
+│   │   └── ...
+│   └── middleware/       # JWT 认证中间件
+├── frontend/             # 前端静态文件
+│   ├── index.html        # SPA 主页面（所有视图）
+│   ├── login.html        # 登录页
+│   ├── favicon.svg       # 网站图标
+│   ├── logo/             # Logo 资源（light/dark）
+│   ├── css/              # 样式（6 个文件）
+│   │   ├── tokens.css    # CSS 变量（深浅主题）
+│   │   ├── reset.css     # 重置样式
+│   │   ├── layout.css    # 侧边栏 + 顶栏
+│   │   ├── components.css # 通用组件 + Dashboard + 产品
+│   │   ├── gantt.css     # 甘特图
+│   │   └── detail.css    # 项目详情 + 日志 + 弹窗
+│   └── js/               # 脚本（13 个模块）
+│       ├── app.js        # 主入口 + 视图路由 + 自动同步 UI
+│       ├── api.js        # API 封装
+│       ├── auth.js       # 登录/认证
+│       ├── utils.js      # 工具函数
+│       ├── dashboard.js  # Dashboard 渲染
+│       ├── detail.js     # 项目详情 + 甘特图
+│       ├── product.js    # 产品管理
+│       ├── topology.js   # 快速检索
+│       ├── reports.js    # 报表
+│       ├── logs.js       # 系统日志
+│       ├── admin.js      # 管理（配置 + 用户）
+│       └── components.js # 通用组件
+├── data/                 # SQLite 数据文件（自动生成）
+│   ├── pma.db            # 主数据库
+│   ├── pma.log*          # 运行日志（滚动，.gitignore）
+│   └── source_config.json # 数据源配置持久化
+├── server.sh             # 运维脚本（start/stop/restart/logs）
 ├── docker-compose.yml
 ├── Dockerfile
 ├── requirements.txt
-└── .env              # 配置文件（不提交 git）
+└── .env                  # 环境变量配置（不提交 git）
 ```

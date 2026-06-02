@@ -680,7 +680,9 @@ function buildStages(stages) {
     var risk = getStageRisk(s);
     var prog = s.progress || 0;
     return '<tr id="stage-row-' + i + '">' +
-      '<td><strong>' + escHtml(s.name) + '</strong></td>' +
+      '<td>' + (s.execution_url ?
+        '<a href="' + escHtml(s.execution_url) + '" target="_blank" class="gs-btn" title="在禅道中查看此阶段" onclick="event.stopPropagation()" style="text-decoration:none">' + escHtml(s.name) + '</a>' :
+        '<strong>' + escHtml(s.name) + '</strong>') + '</td>' +
       '<td><span class="risk-tag" style="--risk-color:' + risk.color + '" title="' + escHtml(risk.tip) + '">' + escHtml(risk.label) +
       '</span></td>' +
       '<td>' + renderProgressRing(prog) + '</td>' +
@@ -748,7 +750,7 @@ function buildDelivery(data) {
         '<div class="section-title">交付记录明细 (' + records.length + ' 条)</div>' +
         '<button class="btn" style="font-size:11px;padding:4px 10px" onclick="showDeliveryForm()">+ 添加记录</button>' +
       '</div>' +
-      (records.length ? '<table class="stage-table"><thead><tr><th>交付日期</th><th>数量</th><th>产品编号</th><th>收货方</th><th>备注</th><th style="width:60px"></th></tr></thead><tbody>' +
+      (records.length ? '<div class="table-scroll"><table class="stage-table"><thead><tr><th>交付日期</th><th>数量</th><th>产品编号</th><th>收货方</th><th>备注</th><th style="width:60px"></th></tr></thead><tbody>' +
       records.map(function(r) {
         return '<tr>' +
           '<td style="font-family:var(--mono);font-size:12px;color:var(--success);font-weight:540">' + formatDate(r.date) + '</td>' +
@@ -759,7 +761,7 @@ function buildDelivery(data) {
           '<td><button class="btn" style="font-size:10px;padding:2px 8px;color:var(--danger)" onclick="deleteDeliveryRecord(' + r.id + ')">删除</button></td>' +
         '</tr>';
       }).join('') +
-      '</tbody></table>' : '<div class="empty-state" style="padding:20px">暂无交付记录，点击上方按钮添加</div>') +
+      '</tbody></table></div>' : '<div class="empty-state" style="padding:20px">暂无交付记录，点击上方按钮添加</div>') +
     '</div>';
 
   document.getElementById('delivery-content').innerHTML =
@@ -881,7 +883,7 @@ function buildNotes(notes) {
   var container = document.getElementById('notes-content');
   var tableHtml;
   if (notes && notes.length) {
-    tableHtml = '<table class="stage-table"><thead><tr>' +
+    tableHtml = '<div class="table-scroll"><table class="stage-table"><thead><tr>' +
       '<th style="width:140px">记录时间</th><th style="width:90px">涉及阶段</th><th style="width:70px">记录人</th><th>内容</th>' +
     '</tr></thead><tbody>';
     notes.forEach(function(n) {
@@ -892,7 +894,7 @@ function buildNotes(notes) {
         '<td style="font-size:13px;line-height:1.5;white-space:pre-wrap">' + escHtml(n.content) + '</td>' +
       '</tr>';
     });
-    tableHtml += '</tbody></table>';
+    tableHtml += '</tbody></table></div>';
   } else {
     tableHtml = '<div class="empty-state" style="padding:12px">暂无笔记</div>';
   }
