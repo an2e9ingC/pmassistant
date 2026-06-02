@@ -245,6 +245,21 @@
 .gantt-grid-col:last-child { border-right: none; }
 .gantt-grid-col.today-bg { background: var(--accent-lt); opacity: 0.3; }
 
+/* ── Project timeline bar ── */
+.gantt-project-bar {
+  position: absolute; top: 6px; bottom: 6px; border-radius: 12px;
+  background: var(--accent-lt);
+  border: 2px solid var(--accent);
+  opacity: 0.45;
+  z-index: 0; pointer-events: none;
+  min-width: 2px;
+  display: flex; align-items: center;
+  padding: 0 8px;
+  font-size: 10px; font-weight: 600; color: var(--accent);
+  white-space: nowrap; overflow: hidden;
+  letter-spacing: 0.02em;
+}
+
 /* ── Bars ── */
 .gantt-bar {
   position: absolute; height: 24px; border-radius: 5px;

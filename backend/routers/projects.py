@@ -40,8 +40,18 @@ def get_documents(project_id: int, db: Session = Depends(get_db), _=Depends(get_
 
 @router.get("/{project_id}/gantt", response_model=dict)
 def get_gantt(project_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    from backend.models.zentao import CachedProject
+    project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
     stages = project_service.get_project_gantt(db, project_id)
-    return {"code": 0, "data": stages, "message": "ok"}
+    return {
+        "code": 0,
+        "data": {
+            "project_begin": str(project.begin) if project and project.begin else None,
+            "project_end": str(project.end) if project and project.end else None,
+            "stages": stages,
+        },
+        "message": "ok",
+    }
 
 
 @router.get("/{project_id}/delivery", response_model=dict)

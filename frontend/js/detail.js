@@ -453,7 +453,10 @@ function renderProgressRing(pct) {
 
 // ── Main render ──
 
-function buildGantt(stages) {
+function buildGantt(data) {
+  var stages = (data && data.stages) ? data.stages : (Array.isArray(data) ? data : []);
+  var projBegin = data && data.project_begin ? data.project_begin : null;
+  var projEnd   = data && data.project_end   ? data.project_end   : null;
   var range = ganttRange(stages);
   var ppd = _ganttPpd;
   var result = generateColumns(range, ppd);
@@ -527,6 +530,13 @@ function buildGantt(stages) {
     return;
   }
 
+  // Project timeline bar (full project span)
+  var projBeginPx = projBegin ? ganttPx(projBegin, range, totalWidth) : 0;
+  var projEndPx = projEnd ? ganttPx(projEnd, range, totalWidth) : 0;
+  var projWidth = Math.max(2, projEndPx - projBeginPx);
+  var projBarHtml = (projBegin && projEnd) ?
+    '<div class="gantt-project-bar" style="left:' + projBeginPx + 'px;width:' + projWidth + 'px" data-proj-begin="' + projBegin + '" data-proj-end="' + projEnd + '">' + projBegin + ' → ' + projEnd + '</div>' : '';
+
   var rows = stages.map(function(s, i) {
     var alt = i % 2 === 1 ? ' stage-alt' : '';
     var lp = ganttPx(s.start, range, totalWidth);
@@ -545,6 +555,7 @@ function buildGantt(stages) {
       '</div>' +
       '<div class="gantt-bar-cell" style="min-width:' + displayWidth + 'px;width:' + displayWidth + 'px">' +
         '<div class="gantt-grid">' + gCols + '</div>' +
+        projBarHtml +
         '<div class="gantt-today-line" style="left:' + todayPx + 'px"><div class="gantt-today-pip"></div></div>' +
         '<div class="gantt-bar ' + s.status + '" style="left:' + lp + 'px;width:' + wp + 'px" title="' + escHtml(s.name) + '  ' + (s.start || '') + ' → ' + (s.end || '') + '">' + escHtml(barLabel) + '</div>' +
       '</div>' +
@@ -575,6 +586,46 @@ function buildGantt(stages) {
 
   initGanttDrag();
   initGanttWheel();
+  initProjBarTooltip();
+}
+
+var _projTipEl = null;
+
+function initProjBarTooltip() {
+  var root = document.getElementById('gantt-root');
+  if (!root) return;
+
+  // Create tooltip element once
+  if (!_projTipEl) {
+    _projTipEl = document.createElement('div');
+    _projTipEl.className = 'gantt-proj-tip';
+    _projTipEl.style.cssText = 'display:none;position:fixed;background:#333;color:#fff;font-size:11px;padding:6px 12px;border-radius:6px;z-index:9999;pointer-events:none;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.3);font-family:var(--mono)';
+    document.body.appendChild(_projTipEl);
+  }
+
+  root.addEventListener('mousemove', function(e) {
+    // Check if mouse is over a project bar by testing bounds
+    var bars = root.querySelectorAll('.gantt-project-bar');
+    var found = null;
+    for (var i = 0; i < bars.length; i++) {
+      var r = bars[i].getBoundingClientRect();
+      if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+        found = bars[i];
+        break;
+      }
+    }
+    if (!found) { _projTipEl.style.display = 'none'; return; }
+    var b = found.dataset.projBegin || '';
+    var ed = found.dataset.projEnd || '';
+    _projTipEl.textContent = '项目周期: ' + b + ' → ' + ed;
+    _projTipEl.style.display = 'block';
+    _projTipEl.style.left = (e.clientX + 14) + 'px';
+    _projTipEl.style.top = (e.clientY - 36) + 'px';
+  });
+
+  root.addEventListener('mouseleave', function() {
+    _projTipEl.style.display = 'none';
+  });
 }
 
 function buildGanttToolbar() {
