@@ -245,19 +245,28 @@
 .gantt-grid-col:last-child { border-right: none; }
 .gantt-grid-col.today-bg { background: var(--accent-lt); opacity: 0.3; }
 
-/* ── Project timeline bar ── */
-.gantt-project-bar {
-  position: absolute; top: 6px; bottom: 6px; border-radius: 12px;
-  background: var(--accent-lt);
-  border: 2px solid var(--accent);
-  opacity: 0.45;
-  z-index: 0; pointer-events: none;
-  min-width: 2px;
-  display: flex; align-items: center;
-  padding: 0 8px;
-  font-size: 10px; font-weight: 600; color: var(--accent);
-  white-space: nowrap; overflow: hidden;
-  letter-spacing: 0.02em;
+/* ── Project start/end vertical lines ── */
+.gantt-proj-start-line {
+  position: absolute; top: 0; bottom: 0; width: 2px;
+  background: repeating-linear-gradient(to bottom, var(--success) 0, var(--success) 6px, transparent 6px, transparent 10px);
+  opacity: 0.6; z-index: 4;
+  pointer-events: none;
+}
+.gantt-proj-start-pip {
+  position: absolute; top: 0; width: 9px; height: 9px;
+  background: var(--success); border-radius: 50%;
+  transform: translate(-3.5px, -3px);
+}
+.gantt-proj-end-line {
+  position: absolute; top: 0; bottom: 0; width: 2px;
+  background: repeating-linear-gradient(to bottom, var(--danger) 0, var(--danger) 6px, transparent 6px, transparent 10px);
+  opacity: 0.6; z-index: 4;
+  pointer-events: none;
+}
+.gantt-proj-end-pip {
+  position: absolute; top: 0; width: 9px; height: 9px;
+  background: var(--danger); border-radius: 50%;
+  transform: translate(-3.5px, -3px);
 }
 
 /* ── Bars ── */
@@ -280,12 +289,12 @@
 /* ── Today line ── */
 .gantt-today-line {
   position: absolute; top: 0; bottom: 0; width: 2px;
-  background: var(--danger); opacity: 0.7; z-index: 5;
+  background: var(--accent); opacity: 0.8; z-index: 5;
   pointer-events: none;
 }
 .gantt-today-pip {
   position: absolute; top: 0; width: 10px; height: 10px;
-  background: var(--danger); border-radius: 50%;
+  background: var(--accent); border-radius: 50%;
   transform: translate(-4px, -3px);
 }
 

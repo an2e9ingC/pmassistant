@@ -530,12 +530,16 @@ function buildGantt(data) {
     return;
   }
 
-  // Project timeline bar (full project span)
+  // Project timeline — vertical start/end lines
   var projBeginPx = projBegin ? ganttPx(projBegin, range, totalWidth) : 0;
   var projEndPx = projEnd ? ganttPx(projEnd, range, totalWidth) : 0;
-  var projWidth = Math.max(2, projEndPx - projBeginPx);
-  var projBarHtml = (projBegin && projEnd) ?
-    '<div class="gantt-project-bar" style="left:' + projBeginPx + 'px;width:' + projWidth + 'px" data-proj-begin="' + projBegin + '" data-proj-end="' + projEnd + '">' + projBegin + ' → ' + projEnd + '</div>' : '';
+  var projLinesHtml = '';
+  if (projBegin) {
+    projLinesHtml += '<div class="gantt-proj-start-line" style="left:' + projBeginPx + 'px" title="项目开始: ' + projBegin + '"><div class="gantt-proj-start-pip"></div></div>';
+  }
+  if (projEnd) {
+    projLinesHtml += '<div class="gantt-proj-end-line" style="left:' + projEndPx + 'px" title="项目结束: ' + projEnd + '"><div class="gantt-proj-end-pip"></div></div>';
+  }
 
   var rows = stages.map(function(s, i) {
     var alt = i % 2 === 1 ? ' stage-alt' : '';
@@ -543,7 +547,12 @@ function buildGantt(data) {
     var ep = ganttPx(s.end, range, totalWidth);
     var wp = Math.max(4, ep - lp);
     var whoShort = (s.who || '').split('（')[0].split('、')[0] || '—';
-    var barLabel = wp > 30 ? String(Math.round(s.progress || 0)) : '';
+    var barLabel = '';
+    if (wp > 120 && s.start && s.end) {
+      barLabel = s.start + ' → ' + s.end;
+    } else if (wp > 40) {
+      barLabel = String(Math.round(s.progress || 0)) + '%';
+    }
     var prog = s.progress || 0;
     var risk = getStageRisk(s);
     return '<div class="gantt-row' + alt + '">' +
@@ -555,7 +564,7 @@ function buildGantt(data) {
       '</div>' +
       '<div class="gantt-bar-cell" style="min-width:' + displayWidth + 'px;width:' + displayWidth + 'px">' +
         '<div class="gantt-grid">' + gCols + '</div>' +
-        projBarHtml +
+        projLinesHtml +
         '<div class="gantt-today-line" style="left:' + todayPx + 'px"><div class="gantt-today-pip"></div></div>' +
         '<div class="gantt-bar ' + s.status + '" style="left:' + lp + 'px;width:' + wp + 'px" title="' + escHtml(s.name) + '  ' + (s.start || '') + ' → ' + (s.end || '') + '">' + escHtml(barLabel) + '</div>' +
       '</div>' +
@@ -586,46 +595,6 @@ function buildGantt(data) {
 
   initGanttDrag();
   initGanttWheel();
-  initProjBarTooltip();
-}
-
-var _projTipEl = null;
-
-function initProjBarTooltip() {
-  var root = document.getElementById('gantt-root');
-  if (!root) return;
-
-  // Create tooltip element once
-  if (!_projTipEl) {
-    _projTipEl = document.createElement('div');
-    _projTipEl.className = 'gantt-proj-tip';
-    _projTipEl.style.cssText = 'display:none;position:fixed;background:#333;color:#fff;font-size:11px;padding:6px 12px;border-radius:6px;z-index:9999;pointer-events:none;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.3);font-family:var(--mono)';
-    document.body.appendChild(_projTipEl);
-  }
-
-  root.addEventListener('mousemove', function(e) {
-    // Check if mouse is over a project bar by testing bounds
-    var bars = root.querySelectorAll('.gantt-project-bar');
-    var found = null;
-    for (var i = 0; i < bars.length; i++) {
-      var r = bars[i].getBoundingClientRect();
-      if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
-        found = bars[i];
-        break;
-      }
-    }
-    if (!found) { _projTipEl.style.display = 'none'; return; }
-    var b = found.dataset.projBegin || '';
-    var ed = found.dataset.projEnd || '';
-    _projTipEl.textContent = '项目周期: ' + b + ' → ' + ed;
-    _projTipEl.style.display = 'block';
-    _projTipEl.style.left = (e.clientX + 14) + 'px';
-    _projTipEl.style.top = (e.clientY - 36) + 'px';
-  });
-
-  root.addEventListener('mouseleave', function() {
-    _projTipEl.style.display = 'none';
-  });
 }
 
 function buildGanttToolbar() {
