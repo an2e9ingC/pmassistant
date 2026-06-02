@@ -548,10 +548,12 @@ function buildGantt(data) {
     var wp = Math.max(4, ep - lp);
     var whoShort = (s.who || '').split('（')[0].split('、')[0] || '—';
     var prog = s.progress || 0;
+    var tasksDone = s.tasks_done || 0;
+    var tasksTotal = s.tasks_total || 0;
     var risk = getStageRisk(s);
-    return '<div class="gantt-row' + alt + '">' +
+    return '<div class="gantt-row' + alt + '" id="gantt-row-' + i + '">' +
       '<div class="gantt-stage-cell">' +
-        '<div class="gs-name" title="' + escHtml(s.name) + '" onclick="switchDTab(\'stages\');event.stopPropagation()">' + escHtml(s.name) + '</div>' +
+        '<button class="gs-btn" title="跳转到阶段详情" onclick="gotoStageDetail(' + i + ');event.stopPropagation()">' + escHtml(s.name) + '</button>' +
         '<div class="gs-risk"><span class="risk-tag" style="--risk-color:' + risk.color + '" title="' + escHtml(risk.tip) + '"><span class="risk-dot" style="background:' + risk.color + '"></span>' + escHtml(risk.label) + '</span></div>' +
         '<div class="gs-prog">' + renderProgressRing(prog) + '</div>' +
         '<div class="gs-who" title="' + escHtml(s.who || '') + '">' + escHtml(whoShort) + '</div>' +
@@ -560,7 +562,7 @@ function buildGantt(data) {
         '<div class="gantt-grid">' + gCols + '</div>' +
         projLinesHtml +
         '<div class="gantt-today-line" style="left:' + todayPx + 'px"><div class="gantt-today-pip"></div></div>' +
-        '<div class="gantt-bar ' + s.status + '" style="left:' + lp + 'px;width:' + wp + 'px" title="' + escHtml(s.name) + '  ' + (s.start || '') + ' → ' + (s.end || '') + ' | 进度 ' + prog + '%">' +
+        '<div class="gantt-bar ' + s.status + '" style="left:' + lp + 'px;width:' + wp + 'px" title="' + escHtml(s.name) + '  ' + (s.start || '') + ' → ' + (s.end || '') + ' | 已完成任务 ' + tasksDone + '/' + tasksTotal + '">' +
           '<div class="gantt-bar-fill" style="width:' + prog + '%"></div>' +
         '</div>' +
       '</div>' +
@@ -653,7 +655,7 @@ function buildStages(stages) {
     var dels = s.deliverables || [];
     var risk = getStageRisk(s);
     var prog = s.progress || 0;
-    return '<tr style="background:' + bg + '">' +
+    return '<tr id="stage-row-' + i + '" style="background:' + bg + '">' +
       '<td><strong>' + escHtml(s.name) + '</strong></td>' +
       '<td><span class="risk-tag" style="--risk-color:' + risk.color + '" title="' + escHtml(risk.tip) + '">' +
         '<span class="risk-dot" style="background:' + risk.color + '"></span>' + escHtml(risk.label) +
@@ -954,4 +956,20 @@ function switchDTab(id, el) {
     var tab = document.querySelector('.dtab[onclick*="' + id + '"]');
     if (tab) tab.classList.add('active');
   }
+}
+
+function gotoStageDetail(idx) {
+  // Switch to stages tab
+  switchDTab('stages');
+  // Scroll to and highlight the matching stage row
+  setTimeout(function() {
+    var row = document.getElementById('stage-row-' + idx);
+    if (!row) return;
+    // Remove any existing highlights
+    document.querySelectorAll('.stage-row-flash').forEach(function(r) { r.classList.remove('stage-row-flash'); });
+    row.classList.add('stage-row-flash');
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // Auto-remove highlight after 2s
+    setTimeout(function() { row.classList.remove('stage-row-flash'); }, 2000);
+  }, 100);
 }

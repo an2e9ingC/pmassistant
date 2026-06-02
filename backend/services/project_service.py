@@ -96,6 +96,7 @@ def get_project_gantt(db: Session, project_id: int) -> list[dict]:
             .all()
         )
         who = _get_who(tasks) or e.name
+        tasks_done = sum(1 for t in tasks if t.status in ("done", "closed"))
         gantt_stages.append({
             "name": e.stage_name or e.name,
             "who": who,
@@ -105,6 +106,8 @@ def get_project_gantt(db: Session, project_id: int) -> list[dict]:
             "progress": e.progress,
             "completed_date": str(e.end) if e.status in ("done", "closed") else None,
             "blocker": _find_blocker(tasks),
+            "tasks_done": tasks_done,
+            "tasks_total": len(tasks),
         })
     return gantt_stages
 

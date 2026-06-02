@@ -413,6 +413,15 @@ class SyncService:
                     CachedExecution.id.in_(all_exec_ids)
                 ).all()
             }
+            # Pre-count existing tasks per execution (skip unchanged only if already has tasks)
+            from backend.models.zentao import CachedTask as CT
+            from sqlalchemy import func as sa_func
+            task_counts = dict(
+                db.query(CT.execution_id, sa_func.count(CT.id))
+                .filter(CT.execution_id.in_(all_exec_ids))
+                .group_by(CT.execution_id)
+                .all()
+            )
 
             sem = asyncio.Semaphore(20)
             skipped_count = 0
@@ -422,8 +431,9 @@ class SyncService:
                 async with sem:
                     await _check_pause_cancel()
                     existing = existing_execs.get(e["id"])
-                    # Skip if execution unchanged (same raw data) and already synced
-                    if existing and existing.raw_json == json.dumps(e, ensure_ascii=False) and existing.synced_at:
+                    has_tasks = task_counts.get(e["id"], 0) > 0
+                    # Skip only if execution unchanged AND already has tasks cached
+                    if existing and existing.raw_json == json.dumps(e, ensure_ascii=False) and existing.synced_at and has_tasks:
                         skipped_count += 1
                         return None  # signal to skip
                     try:

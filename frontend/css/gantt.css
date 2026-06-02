@@ -207,6 +207,23 @@
 .gantt-stage-cell .gs-name:hover {
   color: var(--accent);
 }
+/* Stage button — unified button style for jumping to stage detail */
+.gs-btn {
+  min-width: 0; font-size: 12px; font-weight: 540;
+  text-align: left; word-break: break-all; line-height: 1.4;
+  padding: 3px 8px; border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--fg);
+  cursor: pointer;
+  transition: all 0.12s;
+  font-family: inherit;
+}
+.gs-btn:hover {
+  border-color: var(--accent);
+  background: var(--accent-lt);
+  color: var(--accent);
+}
 .gantt-stage-cell .gs-risk {
   display: flex; align-items: center; justify-content: center;
   overflow: hidden;
@@ -273,7 +290,7 @@
 .gantt-bar {
   position: absolute; height: 24px; border-radius: 5px;
   overflow: hidden; box-sizing: border-box;
-  cursor: pointer; z-index: 1; min-width: 4px;
+  z-index: 1; min-width: 4px;
 }
 .gantt-bar:hover { filter: brightness(0.92); }
 /* Track — lighter background + subtle border = full planned period */

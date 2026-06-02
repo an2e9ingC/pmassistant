@@ -450,4 +450,13 @@
   max-height: calc(100vh - 200px); overflow-y: auto;
 }
 
+/* Stage row flash highlight */
+.stage-row-flash {
+  animation: stage-flash 0.6s ease-in-out 3;
+}
+@keyframes stage-flash {
+  0%, 100% { background: var(--accent-lt) !important; }
+  50% { background: var(--surface) !important; }
+}
+
 @keyframes sync-spin { to { transform: rotate(360deg); } }
