@@ -272,19 +272,28 @@
 /* ── Bars ── */
 .gantt-bar {
   position: absolute; height: 24px; border-radius: 5px;
-  display: flex; align-items: center;
-  padding: 0 8px; font-size: 11px; font-weight: 510;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  overflow: hidden; box-sizing: border-box;
   cursor: pointer; z-index: 1; min-width: 4px;
-  transition: filter 0.15s, opacity 0.15s;
 }
-.gantt-bar:hover { filter: brightness(0.9); }
-.gantt-bar.completed { background: var(--success); color: #fff; }
-.gantt-bar.active    { background: var(--accent);  color: #fff; }
-.gantt-bar.blocked   { background: var(--danger);  color: #fff; }
-.gantt-bar.planning  { background: var(--warn);    color: #fff; }
-.gantt-bar.pending   { background: #B0B8C9; color: #fff; }
-.gantt-bar.canceled  { background: #9CA3AF; color: #fff; opacity: 0.6; }
+.gantt-bar:hover { filter: brightness(0.92); }
+/* Track — lighter background + subtle border = full planned period */
+.gantt-bar.completed { background: var(--success-lt); border: 1px solid color-mix(in srgb, var(--success) 30%, transparent); }
+.gantt-bar.active    { background: var(--accent-lt);  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); }
+.gantt-bar.blocked   { background: var(--danger-lt);  border: 1px solid color-mix(in srgb, var(--danger) 25%, transparent); }
+.gantt-bar.planning  { background: var(--warn-lt);    border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent); }
+.gantt-bar.pending   { background: #D6DAE4;           border: 1px solid color-mix(in srgb, #8B93A8 40%, transparent); }
+.gantt-bar.canceled  { background: #C7CBD3;           border: 1px solid color-mix(in srgb, #7B8291 40%, transparent); opacity: 0.55; }
+/* Fill — solid color = % complete */
+.gantt-bar-fill {
+  height: 100%; border-radius: 5px;
+  min-width: 0;
+}
+.gantt-bar.completed .gantt-bar-fill { background: var(--success); }
+.gantt-bar.active    .gantt-bar-fill { background: var(--accent); }
+.gantt-bar.blocked   .gantt-bar-fill { background: var(--danger); }
+.gantt-bar.planning  .gantt-bar-fill { background: var(--warn); }
+.gantt-bar.pending   .gantt-bar-fill { background: #8B93A8; }
+.gantt-bar.canceled  .gantt-bar-fill { background: #7B8291; }
 
 /* ── Today line ── */
 .gantt-today-line {

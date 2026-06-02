@@ -547,12 +547,6 @@ function buildGantt(data) {
     var ep = ganttPx(s.end, range, totalWidth);
     var wp = Math.max(4, ep - lp);
     var whoShort = (s.who || '').split('（')[0].split('、')[0] || '—';
-    var barLabel = '';
-    if (wp > 120 && s.start && s.end) {
-      barLabel = s.start + ' → ' + s.end;
-    } else if (wp > 40) {
-      barLabel = String(Math.round(s.progress || 0)) + '%';
-    }
     var prog = s.progress || 0;
     var risk = getStageRisk(s);
     return '<div class="gantt-row' + alt + '">' +
@@ -566,7 +560,9 @@ function buildGantt(data) {
         '<div class="gantt-grid">' + gCols + '</div>' +
         projLinesHtml +
         '<div class="gantt-today-line" style="left:' + todayPx + 'px"><div class="gantt-today-pip"></div></div>' +
-        '<div class="gantt-bar ' + s.status + '" style="left:' + lp + 'px;width:' + wp + 'px" title="' + escHtml(s.name) + '  ' + (s.start || '') + ' → ' + (s.end || '') + '">' + escHtml(barLabel) + '</div>' +
+        '<div class="gantt-bar ' + s.status + '" style="left:' + lp + 'px;width:' + wp + 'px" title="' + escHtml(s.name) + '  ' + (s.start || '') + ' → ' + (s.end || '') + ' | 进度 ' + prog + '%">' +
+          '<div class="gantt-bar-fill" style="width:' + prog + '%"></div>' +
+        '</div>' +
       '</div>' +
     '</div>';
   }).join('');
