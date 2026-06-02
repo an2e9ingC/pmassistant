@@ -554,7 +554,7 @@ function buildGantt(data) {
     return '<div class="gantt-row' + alt + '" id="gantt-row-' + i + '">' +
       '<div class="gantt-stage-cell">' +
         '<button class="gs-btn" title="跳转到阶段详情" onclick="gotoStageDetail(' + i + ');event.stopPropagation()">' + escHtml(s.name) + '</button>' +
-        '<div class="gs-risk"><span class="risk-tag" style="--risk-color:' + risk.color + '" title="' + escHtml(risk.tip) + '"><span class="risk-dot" style="background:' + risk.color + '"></span>' + escHtml(risk.label) + '</span></div>' +
+        '<div class="gs-risk"><span class="risk-tag" style="--risk-color:' + risk.color + '" title="' + escHtml(risk.tip) + '">' + escHtml(risk.label) + '</span></div>' +
         '<div class="gs-prog">' + renderProgressRing(prog) + '</div>' +
         '<div class="gs-who" title="' + escHtml(s.who || '') + '">' + escHtml(whoShort) + '</div>' +
       '</div>' +
@@ -562,7 +562,7 @@ function buildGantt(data) {
         '<div class="gantt-grid">' + gCols + '</div>' +
         projLinesHtml +
         '<div class="gantt-today-line" style="left:' + todayPx + 'px"><div class="gantt-today-pip"></div></div>' +
-        '<div class="gantt-bar ' + s.status + '" style="left:' + lp + 'px;width:' + wp + 'px" title="' + escHtml(s.name) + '  ' + (s.start || '') + ' → ' + (s.end || '') + ' | 已完成任务 ' + tasksDone + '/' + tasksTotal + '">' +
+        '<div class="gantt-bar ' + s.status + '" style="left:' + lp + 'px;width:' + wp + 'px" data-tip="' + compactDate(s.start) + '→' + compactDate(s.end) + '　任务:' + tasksDone + '/' + tasksTotal + '">' +
           '<div class="gantt-bar-fill" style="width:' + prog + '%"></div>' +
         '</div>' +
       '</div>' +
@@ -593,6 +593,30 @@ function buildGantt(data) {
 
   initGanttDrag();
   initGanttWheel();
+  initBarTooltip();
+}
+
+var _barTipEl = null;
+
+function initBarTooltip() {
+  var root = document.getElementById('gantt-root');
+  if (!root) return;
+  if (!_barTipEl) {
+    _barTipEl = document.createElement('div');
+    _barTipEl.style.cssText = 'display:none;position:fixed;background:#333;color:#fff;font-size:11px;padding:5px 10px;border-radius:5px;z-index:9999;pointer-events:none;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.3);font-family:var(--mono)';
+    document.body.appendChild(_barTipEl);
+  }
+  root.addEventListener('mousemove', function(e) {
+    var bar = e.target.closest('.gantt-bar');
+    if (!bar || !bar.dataset.tip) { _barTipEl.style.display = 'none'; return; }
+    _barTipEl.textContent = bar.dataset.tip;
+    _barTipEl.style.display = 'block';
+    _barTipEl.style.left = (e.clientX + 12) + 'px';
+    _barTipEl.style.top = (e.clientY - 30) + 'px';
+  });
+  root.addEventListener('mouseleave', function() {
+    _barTipEl.style.display = 'none';
+  });
 }
 
 function buildGanttToolbar() {
@@ -614,7 +638,7 @@ function buildGanttToolbar() {
 function getStageRisk(s) {
   // Returns { level, label, color, tip }
   if (s.status === 'completed') return { level: 'none', label: '已完成', color: 'var(--success)', tip: '阶段已完成' };
-  if (s.status === 'blocked') return { level: 'high', label: '已阻塞', color: 'var(--danger)', tip: '阶段被挂起/阻塞' };
+  if (s.status === 'blocked') return { level: 'high', label: '阻塞', color: 'var(--danger)', tip: '阶段被挂起/阻塞' };
 
   var today = new Date(); today.setHours(0, 0, 0, 0);
   var start = s.start ? new Date(s.start) : null;
@@ -629,7 +653,7 @@ function getStageRisk(s) {
   // Overdue
   if (today > end && prog < 100) {
     var overdueDays = Math.round((today - end) / 86400000);
-    return { level: 'high', label: '已超期' + overdueDays + '天', color: 'var(--danger)', tip: '应于 ' + formatDate(s.end) + ' 完成，已超期' };
+    return { level: 'high', label: '超期' + overdueDays + '天', color: 'var(--danger)', tip: '应于 ' + formatDate(s.end) + ' 完成' };
   }
   // Not started yet
   if (today < start) return { level: 'none', label: '未开始', color: 'var(--muted)', tip: '计划 ' + formatDate(s.start) + ' 开始' };
@@ -638,10 +662,10 @@ function getStageRisk(s) {
   var expectedProg = Math.min(100, Math.round((elapsedDays / totalDays) * 100));
   var gap = expectedProg - prog;
 
-  if (gap <= 5) return { level: 'none', label: '正常', color: 'var(--success)', tip: '进度正常，预期 ' + expectedProg + '%，实际 ' + prog + '%' };
-  if (gap <= 20) return { level: 'low', label: '轻微滞后', color: 'var(--warn)', tip: '预期 ' + expectedProg + '%，实际 ' + prog + '%，差 ' + gap + '%' };
-  if (gap <= 40) return { level: 'medium', label: '进度滞后', color: '#e67e22', tip: '预期 ' + expectedProg + '%，实际 ' + prog + '%，差 ' + gap + '%' };
-  return { level: 'high', label: '严重滞后', color: 'var(--danger)', tip: '预期 ' + expectedProg + '%，实际 ' + prog + '%，差 ' + gap + '%' };
+  if (gap <= 5) return { level: 'none', label: '正常', color: 'var(--success)', tip: '预期' + expectedProg + '% 实际' + prog + '%' };
+  if (gap <= 20) return { level: 'low', label: '滞后', color: 'var(--warn)', tip: '预期' + expectedProg + '% 实际' + prog + '%' };
+  if (gap <= 40) return { level: 'medium', label: '滞后', color: '#e67e22', tip: '预期' + expectedProg + '% 实际' + prog + '%' };
+  return { level: 'high', label: '严重', color: 'var(--danger)', tip: '预期' + expectedProg + '% 实际' + prog + '%' };
 }
 
 function buildStages(stages) {
@@ -657,8 +681,7 @@ function buildStages(stages) {
     var prog = s.progress || 0;
     return '<tr id="stage-row-' + i + '" style="background:' + bg + '">' +
       '<td><strong>' + escHtml(s.name) + '</strong></td>' +
-      '<td><span class="risk-tag" style="--risk-color:' + risk.color + '" title="' + escHtml(risk.tip) + '">' +
-        '<span class="risk-dot" style="background:' + risk.color + '"></span>' + escHtml(risk.label) +
+      '<td><span class="risk-tag" style="--risk-color:' + risk.color + '" title="' + escHtml(risk.tip) + '">' + escHtml(risk.label) +
       '</span></td>' +
       '<td>' + renderProgressRing(prog) + '</td>' +
       '<td style="font-size:12px;white-space:nowrap">' + escHtml(s.who || '—') + '</td>' +

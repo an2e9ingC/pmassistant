@@ -23,6 +23,28 @@ function formatDate(d) {
   return s.length >= 10 ? s.substring(0, 10) : s;
 }
 
+function formatShortDate(d) {
+  if (!d) return '';
+  var s = String(d);
+  if (s.length < 10) return s;
+  // YYYY-MM-DD → M月D日
+  var parts = s.substring(0, 10).split('-');
+  var m = parseInt(parts[1], 10);
+  var day = parseInt(parts[2], 10);
+  return m + '月' + day + '日';
+}
+
+function compactDate(d) {
+  if (!d) return '';
+  var s = String(d);
+  if (s.length < 10) return s;
+  // YYYY-MM-DD → M/D
+  var parts = s.substring(0, 10).split('-');
+  var m = parseInt(parts[1], 10);
+  var day = parseInt(parts[2], 10);
+  return m + '/' + day;
+}
+
 function escHtml(str) {
   if (!str) return '';
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
