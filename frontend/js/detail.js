@@ -259,6 +259,7 @@ function initGanttWheel() {
   wrap._wheelInited = true;
 
   wrap.addEventListener('wheel', function(e) {
+    if (!e.ctrlKey && !e.metaKey) return; // only zoom with Ctrl held
     e.preventDefault();
     var cur = snapToPreset(_ganttPpd);
     var idx = _ganttPresets.indexOf(cur);
@@ -623,7 +624,7 @@ function buildGanttToolbar() {
   var container = document.getElementById('gantt-toolbar-container');
   if (container) {
     container.innerHTML = '<div class="gantt-toolbar">' +
-      '<div style="font-size:10.5px;color:var(--muted)">滚轮缩放 · 拖拽平移</div>' +
+      '<div style="font-size:10.5px;color:var(--muted)">Ctrl+滚轮缩放 · 拖拽平移</div>' +
       '<div class="gantt-toolbar-zoom">' +
         '<button class="gantt-zoom-btn" onclick="ganttZoomOut()" title="缩小">−</button>' +
         '<span class="gantt-zoom-val">×' + _ganttPpd.toFixed(0) + '</span>' +
