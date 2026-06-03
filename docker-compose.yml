@@ -10,10 +10,11 @@ services:
       - ./frontend:/app/frontend
     environment:
       - DATABASE_URL=sqlite:///./data/pma.db
-      - ZENTAO_BASE_URL=http://192.168.3.22/zentao/api.php/v1
+      - ZENTAO_BASE_URL=${ZENTAO_BASE_URL:-}
       - ZENTAO_AUTH_ACCOUNT=${ZENTAO_AUTH_ACCOUNT:-}
       - ZENTAO_AUTH_PASSWORD=${ZENTAO_AUTH_PASSWORD:-}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-secret-change-in-production}
-      - LOG_LEVEL=INFO
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - SYNC_INTERVAL_MINUTES=${SYNC_INTERVAL_MINUTES:-60}
     restart: unless-stopped
-    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000
