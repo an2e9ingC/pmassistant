@@ -31,6 +31,7 @@ async function renderDashboard() {
 async function loadKpiCards() {
   try {
     var data = await API.get('/dashboard/kpi');
+    document.getElementById('kpi-all-count').textContent = data.total_projects;
     document.getElementById('kpi-active-count').textContent = data.active_count;
     document.getElementById('kpi-meta-types').innerHTML = '研发 <b>' + data.rd_count + '</b> &nbsp;·&nbsp; 生产 <b>' + data.sc_count + '</b>';
     // Update filter tabs with counts
@@ -72,21 +73,17 @@ function filterByProgram(pid, el) {
 /* Category card click — filters project list */
 
 function filterByCategory(category, el) {
-  // Toggle: click active card again to deselect (show all)
-  if (_curCategory === category) {
-    _curCategory = '';
-    document.querySelectorAll('#kpi-grid .kpi-card').forEach(function(c) { c.classList.remove('active'); });
-    var table = document.querySelector('#view-dashboard .proj-table');
-    if (table) table.removeAttribute('data-category');
-    loadProjectTable(curTypeFilter);
-    return;
+  // Toggle: click active card again to deselect, or click "全部"
+  if (_curCategory === category && category !== '') {
+    category = '';
   }
   _curCategory = category;
   document.querySelectorAll('#kpi-grid .kpi-card').forEach(function(c) { c.classList.remove('active'); });
   if (el) el.classList.add('active');
   var table = document.querySelector('#view-dashboard .proj-table');
   if (table) {
-    table.setAttribute('data-category', category);
+    if (category) table.setAttribute('data-category', category);
+    else table.removeAttribute('data-category');
   }
   loadProjectTable(curTypeFilter);
 }

@@ -5,6 +5,7 @@
 /* ---- Product List (Overview) ---- */
 
 var _prodCurCategory = '';
+var _prodCurStatus = '';  // '' = all, 'normal', 'closed'
 var _prodSearchVal = '';
 var _prodSearchTimer = null;
 var _allProducts = [];
@@ -60,6 +61,13 @@ function filterByProductLine(cat, el) {
   renderProductTable();
 }
 
+function filterByProdStatus(st, el) {
+  _prodCurStatus = st;
+  document.querySelectorAll('#prod-status-filter .tab').forEach(function(t) { t.classList.remove('active'); });
+  if (el) el.classList.add('active');
+  renderProductTable();
+}
+
 function onProdSearch(v) {
   _prodSearchVal = v;
   clearTimeout(_prodSearchTimer);
@@ -73,6 +81,11 @@ function renderProductTable() {
   if (_prodCurCategory) {
     filtered = filtered.filter(function(p) {
       return (p.category || p.program_name || '其他') === _prodCurCategory;
+    });
+  }
+  if (_prodCurStatus) {
+    filtered = filtered.filter(function(p) {
+      return p.status === _prodCurStatus;
     });
   }
   if (_prodSearchVal) {

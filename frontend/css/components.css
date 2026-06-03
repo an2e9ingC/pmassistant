@@ -85,7 +85,11 @@
    DASHBOARD
 ═══════════════════════════════════════════════════ */
 .kpi-grid {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px;
+  display: grid; grid-template-columns: 4fr 3fr 3fr 3fr 3fr; gap: 14px; margin-bottom: 22px;
+}
+/* Product overview KPI grid — dynamic columns based on product line count */
+#prod-kpi-grid {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
 }
 .kpi-card {
   background: var(--surface);
@@ -118,6 +122,13 @@
 }
 
 /* Category-specific colors */
+.kpi-card[data-category=""] { border-left-color: var(--muted); }
+.kpi-card[data-category=""] .kpi-value { color: var(--fg); }
+.kpi-card[data-category=""].active {
+  border-color: var(--fg); background: var(--surface2);
+  box-shadow: var(--sh-md);
+}
+
 .kpi-card[data-category="active"] { border-left-color: var(--accent); }
 .kpi-card[data-category="active"] .kpi-value { color: var(--accent); }
 .kpi-card[data-category="active"].active {

@@ -125,7 +125,7 @@
     </div>
 
     <div style="margin-top:8px;text-align:center;font-size:10px;color:var(--muted)">
-      <span id="app-version">v2026.06.03-beta2</span>
+      <span id="app-version">v2026.06.03-beta3</span>
     </div>
   </div>
 </aside>
@@ -184,6 +184,11 @@
     <div class="view active" id="view-dashboard">
 
       <div class="kpi-grid" id="kpi-grid">
+        <div class="kpi-card" data-category="" onclick="filterByCategory('', this)" style="border-left-color:var(--muted)">
+          <div class="kpi-label">全部</div>
+          <div class="kpi-value" id="kpi-all-count" style="color:var(--fg)">—</div>
+          <div class="kpi-meta">所有项目</div>
+        </div>
         <div class="kpi-card active" data-category="active" onclick="filterByCategory('active', this)">
           <div class="kpi-label">进行中</div>
           <div class="kpi-value" id="kpi-active-count">—</div>
@@ -481,6 +486,15 @@
           <div class="kpi-value" id="prod-kpi-all">—</div>
           <div class="kpi-meta">所有产品线</div>
         </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+        <span style="font-size:11px;color:var(--muted);font-weight:600;white-space:nowrap">状态:</span>
+        <span class="tabs" id="prod-status-filter" style="display:inline-flex">
+          <span class="tab active" data-st="" onclick="filterByProdStatus('',this)">全部</span>
+          <span class="tab" data-st="normal" onclick="filterByProdStatus('normal',this)">正常</span>
+          <span class="tab" data-st="closed" onclick="filterByProdStatus('closed',this)">已关闭</span>
+        </span>
       </div>
 
       <div class="section-hd">
