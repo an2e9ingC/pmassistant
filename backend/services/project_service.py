@@ -24,6 +24,7 @@ def get_project_detail(db: Session, project_id: int) -> Optional[dict]:
 
 
 def get_project_stages(db: Session, project_id: int) -> list[dict]:
+    project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
     executions = (
         db.query(CachedExecution)
         .filter(CachedExecution.project_id == project_id)
@@ -48,7 +49,7 @@ def get_project_stages(db: Session, project_id: int) -> list[dict]:
         deliverables = [
             {"name": "TODO: 根据阶段配置文档清单", "done": False, "warn": False, "completed_at": None, "location": None},
         ]
-        who = _get_who(tasks) or e.name
+        who = _get_who(tasks, e, project) or "未指派"
         from backend.config import get_zentao_web_base
         web_base = get_zentao_web_base()
         stages.append({
@@ -85,6 +86,7 @@ def get_project_documents(db: Session, project_id: int) -> list[dict]:
 
 
 def get_project_gantt(db: Session, project_id: int) -> list[dict]:
+    project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
     executions = (
         db.query(CachedExecution)
         .filter(CachedExecution.project_id == project_id)
@@ -98,7 +100,7 @@ def get_project_gantt(db: Session, project_id: int) -> list[dict]:
             .filter(CachedTask.execution_id == e.id)
             .all()
         )
-        who = _get_who(tasks) or e.name
+        who = _get_who(tasks, e, project) or "未指派"
         tasks_done = sum(1 for t in tasks if t.status in ("done", "closed"))
         gantt_stages.append({
             "name": e.stage_name or e.name,
@@ -269,8 +271,9 @@ def _find_blocker(tasks: list[CachedTask]) -> Optional[str]:
     return None
 
 
-def _get_who(tasks: list[CachedTask]) -> str:
-    """Get responsible persons from task assignees, deduplicated."""
+def _get_who(tasks: list[CachedTask], execution: CachedExecution = None, project: CachedProject = None) -> str:
+    """Get responsible persons from task assignees, deduplicated.
+    Falls back: task assignees → execution openedBy → project PM → ''"""
     names = []
     seen = set()
     for t in tasks:
@@ -278,7 +281,22 @@ def _get_who(tasks: list[CachedTask]) -> str:
         if name and name not in seen:
             names.append(name)
             seen.add(name)
-    return "、".join(names) if names else ""
+    if names:
+        return "、".join(names)
+    # Fallback 1: execution's openedBy
+    if execution and execution.raw_json:
+        try:
+            import json as _json
+            data = _json.loads(execution.raw_json)
+            ob = data.get("openedBy", {})
+            if isinstance(ob, dict) and ob.get("realname"):
+                return ob["realname"].strip()
+        except Exception:
+            pass
+    # Fallback 2: project PM
+    if project and project.pm_name:
+        return project.pm_name.strip()
+    return ""
 
 
 def _zentao_url(entity_type: str, entity_id: int) -> str:

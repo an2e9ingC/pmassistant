@@ -244,6 +244,9 @@
   font-size: 10.5px; color: var(--muted);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.gantt-stage-cell .gs-who-una {
+  color: var(--danger); font-weight: 550;
+}
 
 /* ── Bar area ── */
 .gantt-bar-cell {

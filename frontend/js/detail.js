@@ -251,6 +251,7 @@ document.addEventListener('mouseup', function() {
 // ── Wheel zoom ──
 
 var _ganttRefreshTimer = null;
+var _ganttTodayPx = 0;
 
 function initGanttWheel() {
   var wrap = document.querySelector('.gantt-wrap');
@@ -306,6 +307,12 @@ function ganttZoomOut() {
   var idx = _ganttPresets.indexOf(cur);
   if (idx > 0) _ganttPpd = _ganttPresets[idx - 1];
   refreshGantt();
+}
+
+function ganttScrollToToday() {
+  var wrap = document.querySelector('.gantt-wrap');
+  if (!wrap) return;
+  wrap.scrollTo({ left: Math.max(0, _ganttTodayPx - 80), behavior: 'smooth' });
 }
 
 // ── Date range ──
@@ -513,6 +520,7 @@ function buildGantt(data) {
 
   var today = new Date().toISOString().slice(0, 10);
   var todayPx = ganttPx(today, range, totalWidth);
+  _ganttTodayPx = todayPx;
 
   if (!stages || !stages.length) {
     document.getElementById('gantt-root').innerHTML =
@@ -548,6 +556,8 @@ function buildGantt(data) {
     var ep = ganttPx(s.end, range, totalWidth);
     var wp = Math.max(4, ep - lp);
     var whoShort = (s.who || '').split('（')[0].split('、')[0] || '—';
+    var isUnassigned = !s.who || s.who === '未指派';
+    if (isUnassigned) whoShort = '未指派';
     var prog = s.progress || 0;
     var tasksDone = s.tasks_done || 0;
     var tasksTotal = s.tasks_total || 0;
@@ -557,7 +567,7 @@ function buildGantt(data) {
         '<button class="gs-btn" title="跳转到阶段详情" onclick="gotoStageDetail(' + i + ');event.stopPropagation()">' + escHtml(s.name) + '</button>' +
         '<div class="gs-risk"><span class="risk-tag" style="--risk-color:' + risk.color + '" title="' + escHtml(risk.tip) + '">' + escHtml(risk.label) + '</span></div>' +
         '<div class="gs-prog">' + renderProgressRing(prog) + '</div>' +
-        '<div class="gs-who" title="' + escHtml(s.who || '') + '">' + escHtml(whoShort) + '</div>' +
+        '<div class="gs-who' + (isUnassigned ? ' gs-who-una' : '') + '" title="' + escHtml(s.who || '') + '">' + escHtml(whoShort) + '</div>' +
       '</div>' +
       '<div class="gantt-bar-cell" style="min-width:' + displayWidth + 'px;width:' + displayWidth + 'px">' +
         '<div class="gantt-grid">' + gCols + '</div>' +
@@ -629,6 +639,7 @@ function buildGanttToolbar() {
         '<button class="gantt-zoom-btn" onclick="ganttZoomOut()" title="缩小">−</button>' +
         '<span class="gantt-zoom-val">×' + _ganttPpd.toFixed(0) + '</span>' +
         '<button class="gantt-zoom-btn" onclick="ganttZoomIn()" title="放大">+</button>' +
+        '<button class="gantt-zoom-btn" onclick="ganttScrollToToday()" title="定位到今日" style="margin-left:8px;font-size:11px">●今</button>' +
       '</div>' +
     '</div>';
   }
@@ -686,7 +697,7 @@ function buildStages(stages) {
       '<td><span class="risk-tag" style="--risk-color:' + risk.color + '" title="' + escHtml(risk.tip) + '">' + escHtml(risk.label) +
       '</span></td>' +
       '<td>' + renderProgressRing(prog) + '</td>' +
-      '<td style="font-size:12px;white-space:nowrap">' + escHtml(s.who || '—') + '</td>' +
+      '<td style="font-size:12px;white-space:nowrap;' + (!s.who || s.who === '未指派' ? 'color:var(--danger);font-weight:540' : '') + '">' + escHtml(s.who || '未指派') + '</td>' +
       '<td style="font-size:11.5px;color:var(--muted);white-space:nowrap;line-height:1.8">' + formatDate(s.start) + '<br>' + formatDate(s.end) + '</td>' +
       '<td>' + renderPill(s.status) + (s.completed_date ? '<div style="font-size:10.5px;color:var(--success);margin-top:4px;font-family:var(--mono)">&#10003; ' + s.completed_date + '</div>' : '') + '</td>' +
       '<td style="font-size:12px;color:' + (s.blocker ? 'var(--danger)' : 'var(--muted)') + ';max-width:200px">' + escHtml(s.blocker || '—') + '</td>' +

@@ -279,10 +279,11 @@ class SyncService:
                 _sync_progress["current"] = idx + 1
                 _sync_progress["current_item"] = p.get("name", str(p["id"]))
                 existing = db.query(CachedProject).filter(CachedProject.id == p["id"]).first()
+                pm = self._resolve_pm(db, p)
                 if existing:
-                    updated += self._update_project(existing, p)
+                    updated += self._update_project(existing, p, pm)
                 else:
-                    db.add(self._build_project(p))
+                    db.add(self._build_project(p, pm))
                     created += 1
             # Cleanup: delete projects no longer in Zentao (skip if API returned none)
             if api_ids:
@@ -623,8 +624,20 @@ class SyncService:
             raw_json=json.dumps(p, ensure_ascii=False),
         )
 
-    def _build_project(self, p: dict) -> CachedProject:
+    def _resolve_pm(self, db: Session, p: dict) -> dict:
+        """Resolve PM info from PM field or PMUserID via cached users."""
         pm = p.get("PM", {}) or {}
+        if not pm:
+            pm_uid = p.get("PMUserID")
+            if pm_uid:
+                pm_user = db.query(CachedUser).filter(CachedUser.id == pm_uid).first()
+                if pm_user:
+                    pm = {"account": pm_user.account, "realname": pm_user.realname}
+        return pm
+
+    def _build_project(self, p: dict, pm: dict = None) -> CachedProject:
+        if pm is None:
+            pm = p.get("PM", {}) or {}
         name = p.get("name", "")
         desc = p.get("desc", "") or ""
         return CachedProject(
@@ -643,8 +656,9 @@ class SyncService:
             raw_json=json.dumps(p, ensure_ascii=False),
         )
 
-    def _update_project(self, existing: CachedProject, p: dict) -> int:
-        pm = p.get("PM", {}) or {}
+    def _update_project(self, existing: CachedProject, p: dict, pm: dict = None) -> int:
+        if pm is None:
+            pm = p.get("PM", {}) or {}
         name = p.get("name", existing.name)
         desc = p.get("desc", "") or ""
         existing.code = p.get("code", existing.code)
