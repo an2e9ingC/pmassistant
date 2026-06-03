@@ -34,6 +34,18 @@ def get_kpi(db: Session) -> dict:
     # TODO: 本月交付数量 — 需统计DeliveryRecord表中本月交付记录的总数量（Phase 2）
     delivered_this_month = 0
 
+    # Unique programs (project sets) for filtering
+    programs = []
+    seen_pids = set()
+    for p in projects:
+        if p.program_id and p.program_id not in seen_pids:
+            seen_pids.add(p.program_id)
+            programs.append({
+                "id": p.program_id,
+                "name": p.program_name or f"项目集#{p.program_id}",
+            })
+    programs.sort(key=lambda x: x["name"])
+
     return {
         "active_projects": len(active),
         "total_projects": len(projects),
@@ -46,6 +58,7 @@ def get_kpi(db: Session) -> dict:
         "completed_count": cat_counts["completed"],
         "high_risk_count": cat_counts["high_risk"],
         "incomplete_docs_count": cat_counts["incomplete_docs"],
+        "programs": programs,
     }
 
 
@@ -55,6 +68,7 @@ def get_project_list(
     type_filter: Optional[str] = None,
     status: Optional[str] = None,
     category: Optional[str] = None,
+    program_id: Optional[int] = None,
     sort_by: str = "end",
     sort_order: str = "asc",
     page: int = 1,
@@ -77,6 +91,9 @@ def get_project_list(
 
     if status:
         q = q.filter(CachedProject.status == status)
+
+    if program_id is not None:
+        q = q.filter(CachedProject.program_id == program_id)
 
     # Category filter: applies alert-based filtering
     if category:

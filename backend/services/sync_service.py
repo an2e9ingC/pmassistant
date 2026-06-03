@@ -264,6 +264,9 @@ class SyncService:
         log = _log_sync(db, "projects")
         try:
             projects = await self.client.get_projects()
+            # Fetch all programs to resolve parent→program name
+            programs = await self.client.get_programs()
+            prog_map = {pr["id"]: pr.get("name", "") for pr in programs}
             # Filter by code prefix if configured
             from backend.config import settings
             pf = getattr(settings, "ZENTAO_PROJECT_FILTER", "") or os.environ.get("ZENTAO_PROJECT_FILTER", "")
@@ -280,10 +283,12 @@ class SyncService:
                 _sync_progress["current_item"] = p.get("name", str(p["id"]))
                 existing = db.query(CachedProject).filter(CachedProject.id == p["id"]).first()
                 pm = self._resolve_pm(db, p)
+                parent_id = p.get("parent")
+                prog_name = prog_map.get(parent_id, "") if parent_id else ""
                 if existing:
-                    updated += self._update_project(existing, p, pm)
+                    updated += self._update_project(existing, p, pm, prog_name)
                 else:
-                    db.add(self._build_project(p, pm))
+                    db.add(self._build_project(p, pm, prog_name))
                     created += 1
             # Cleanup: delete projects no longer in Zentao (skip if API returned none)
             if api_ids:
@@ -635,11 +640,12 @@ class SyncService:
                     pm = {"account": pm_user.account, "realname": pm_user.realname}
         return pm
 
-    def _build_project(self, p: dict, pm: dict = None) -> CachedProject:
+    def _build_project(self, p: dict, pm: dict = None, prog_name: str = "") -> CachedProject:
         if pm is None:
             pm = p.get("PM", {}) or {}
         name = p.get("name", "")
         desc = p.get("desc", "") or ""
+        parent_id = p.get("parent")
         return CachedProject(
             id=p["id"], code=p.get("code", ""), name=name,
             model=p.get("model", ""), status=p.get("status", ""),
@@ -648,6 +654,8 @@ class SyncService:
             real_end=_parse_date(p.get("realEnd")),
             progress=p.get("progress", "0"), estimate=_parse_float(p.get("estimate")) or 0.0,
             consumed=_parse_float(p.get("consumed")) or 0.0,
+            program_id=parent_id if parent_id else None,
+            program_name=prog_name or None,
             pm_name=pm.get("realname") or pm.get("account", ""),
             pm_account=pm.get("account", ""),
             customer_name=_extract_customer(name, desc),
@@ -656,7 +664,7 @@ class SyncService:
             raw_json=json.dumps(p, ensure_ascii=False),
         )
 
-    def _update_project(self, existing: CachedProject, p: dict, pm: dict = None) -> int:
+    def _update_project(self, existing: CachedProject, p: dict, pm: dict = None, prog_name: str = "") -> int:
         if pm is None:
             pm = p.get("PM", {}) or {}
         name = p.get("name", existing.name)
@@ -667,6 +675,9 @@ class SyncService:
         existing.status = p.get("status", existing.status)
         existing.begin = _parse_date(p.get("begin")) or existing.begin
         existing.end = _parse_date(p.get("end")) or existing.end
+        parent_id = p.get("parent")
+        existing.program_id = parent_id if parent_id else None
+        existing.program_name = prog_name or None
         existing.real_began = _parse_date(p.get("realBegan")) or existing.real_began
         existing.real_end = _parse_date(p.get("realEnd")) or existing.real_end
         existing.progress = p.get("progress", existing.progress)

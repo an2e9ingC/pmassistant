@@ -24,6 +24,8 @@ class CachedProject(Base):
     progress = Column(String(16))
     estimate = Column(Float, default=0.0)
     consumed = Column(Float, default=0.0)
+    program_id = Column(Integer, nullable=True, index=True)
+    program_name = Column(String(128), nullable=True)
     pm_name = Column(String(128), nullable=True)
     pm_account = Column(String(64), nullable=True)
     # PMA-local enrichments (not overwritten by sync)

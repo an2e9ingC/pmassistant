@@ -4,6 +4,7 @@
 var curTypeFilter = 'all';
 var curSearchVal  = '';
 var _curCategory = 'active';
+var _curProgramId = '';  // '' = all
 var _sortEndOrder = 'asc';
 var _sortCodeOrder = '';  // '' = no sort, 'asc', 'desc'
 
@@ -48,24 +49,45 @@ async function loadKpiCards() {
       _srcStates.zentao = 'ok';
       renderSourceTags();
     }
+    // Render program chips
+    if (data.programs && data.programs.length) {
+      var chips = data.programs.map(function(pr) {
+        return '<span class="tab" data-pid="' + pr.id + '" onclick="filterByProgram(' + pr.id + ',this)">' + escHtml(pr.name) + '</span>';
+      }).join('');
+      document.getElementById('program-filter').innerHTML = '<span class="tab' + (_curProgramId ? '' : ' active') + '" data-pid="" onclick="filterByProgram(\'\',this)">全部</span>' + chips;
+    }
   } catch(e) {
     console.error('Failed to load KPI:', e);
   }
 }
 
+/* Program filter */
+function filterByProgram(pid, el) {
+  _curProgramId = pid;
+  document.querySelectorAll('#program-filter .tab').forEach(function(t) { t.classList.remove('active'); });
+  if (el) el.classList.add('active');
+  loadProjectTable(curTypeFilter);
+}
+
 /* Category card click — filters project list */
 
 function filterByCategory(category, el) {
+  // Toggle: click active card again to deselect (show all)
+  if (_curCategory === category) {
+    _curCategory = '';
+    document.querySelectorAll('#kpi-grid .kpi-card').forEach(function(c) { c.classList.remove('active'); });
+    var table = document.querySelector('#view-dashboard .proj-table');
+    if (table) table.removeAttribute('data-category');
+    loadProjectTable(curTypeFilter);
+    return;
+  }
   _curCategory = category;
-  // Toggle active class on cards
   document.querySelectorAll('#kpi-grid .kpi-card').forEach(function(c) { c.classList.remove('active'); });
   if (el) el.classList.add('active');
-  // Apply category color to project table
   var table = document.querySelector('#view-dashboard .proj-table');
   if (table) {
     table.setAttribute('data-category', category);
   }
-  // Reload project list with category filter
   loadProjectTable(curTypeFilter);
 }
 
@@ -90,7 +112,8 @@ function filterTable(f, el) {
 
 async function loadProjectTable(filter) {
   curTypeFilter = filter;
-  var params = { page: 1, limit: 50, category: _curCategory };
+  var params = { page: 1, limit: 50 };
+  if (_curCategory) params.category = _curCategory;
   if (_sortCodeOrder) {
     params.sort_by = 'code'; params.sort_order = _sortCodeOrder;
   } else if (_sortEndOrder) {
@@ -100,6 +123,7 @@ async function loadProjectTable(filter) {
   }
   if (curSearchVal) params.search = curSearchVal;
   if (filter && filter !== 'all') params.type = filter;
+  if (_curProgramId) params.program_id = _curProgramId;
 
   var tbody = document.getElementById('proj-tbody');
   tbody.innerHTML = '<tr><td colspan="9"><div class="loading-spinner">加载中...</div></td></tr>';

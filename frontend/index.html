@@ -125,7 +125,7 @@
     </div>
 
     <div style="margin-top:8px;text-align:center;font-size:10px;color:var(--muted)">
-      <span id="app-version">v2026.06.03-beta1</span>
+      <span id="app-version">v2026.06.03-beta2</span>
     </div>
   </div>
 </aside>
@@ -204,6 +204,13 @@
           <div class="kpi-value" id="kpi-incomplete-docs-count">—</div>
           <div class="kpi-meta">输出件缺失</div>
         </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+        <span style="font-size:11px;color:var(--muted);font-weight:600;white-space:nowrap">项目集:</span>
+        <span class="tabs" id="program-filter" style="display:inline-flex">
+          <span class="tab active" data-pid="" onclick="filterByProgram('',this)">全部</span>
+        </span>
       </div>
 
       <div class="section-hd">
