@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-> 当前版本：v2026.06.03-beta6 | 最后更新：2026-06-03
+> 当前版本：v2026.06.03-beta7 | 最后更新：2026-06-03
 
 ---
 
@@ -215,3 +215,4 @@
 | 2026-06-03 | v2026.06.03-beta4 | 所有搜索框增加×清除按钮+clearSearch通用函数+设计规范§15 |
 | 2026-06-03 | v2026.06.03-beta5 | 待办：项目研发/生产分类待确定来源 |
 | 2026-06-03 | v2026.06.03-beta6 | 上线准备：README+清理.env.example硬编码+移除pm-platform.html+docker-compose生产化 |
+| 2026-06-03 | v2026.06.03-beta7 | GitLab Issue/MR模板(.gitlab/issue_templates+Bug/Feature+MR Checklist) |
