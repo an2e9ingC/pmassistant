@@ -17,6 +17,15 @@ function todayPct() {
   return d2pct(new Date().toISOString().slice(0, 10));
 }
 
+function clearSearch(inputId, callback) {
+  var inp = document.getElementById(inputId);
+  if (!inp) return;
+  inp.value = '';
+  inp.focus();
+  if (typeof callback === 'function') callback('');
+  else if (inp.oninput) inp.oninput();
+}
+
 function formatDate(d) {
   if (!d) return '';
   const s = String(d);

@@ -352,7 +352,29 @@ utils.js → api.js → auth.js → components.js → dashboard.js → detail.js
 
 ---
 
-## 15. 开发流程规则
+## 15. 搜索框设计规范
+
+**所有搜索框必须包含快捷清除按钮。**
+
+- 搜索框容器 `.search-wrap`，输入框 `.search-inp`
+- 清除按钮 `.search-clear`：绝对定位在输入框右侧，`&times;` 图标
+- 按钮在输入框有内容时显示（`:placeholder-shown ~ .search-clear { display: none }`）
+- 点击清除按钮 → 清空输入框 + 触发搜索/过滤回调
+- 使用通用函数 `clearSearch(inputId, callback)` 处理清除逻辑
+- 输入框 `padding` 右侧预留 34px 清除按钮空间
+
+**示例：**
+```html
+<div class="search-wrap">
+  <svg class="search-ico">...</svg>
+  <input class="search-inp" id="xxx-search" placeholder="搜索..." oninput="onSearch(this.value)">
+  <button class="search-clear" onclick="clearSearch('xxx-search', onSearch)" title="清除">&times;</button>
+</div>
+```
+
+---
+
+## 16. 开发流程规则
 
 **每次代码修改后必须检查：**
 1. `docs/dev-plan.md` — 版本历史表格是否需要追加新版本条目

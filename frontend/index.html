@@ -125,7 +125,7 @@
     </div>
 
     <div style="margin-top:8px;text-align:center;font-size:10px;color:var(--muted)">
-      <span id="app-version">v2026.06.03-beta3</span>
+      <span id="app-version">v2026.06.03-beta4</span>
     </div>
   </div>
 </aside>
@@ -232,6 +232,7 @@
               <circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/>
             </svg>
             <input class="search-inp" id="proj-search" placeholder="搜索代号、名称、客户…" oninput="onProjSearch(this.value)">
+            <button class="search-clear" onclick="clearSearch('proj-search',onProjSearch)" title="清除">&times;</button>
           </div>
         </div>
       </div>
@@ -393,7 +394,8 @@
       <div class="log-toolbar">
         <div class="search-wrap" style="max-width:200px">
           <svg class="search-ico" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>
-          <input class="search-inp" placeholder="搜索日志..." oninput="onLogSearch(this.value)">
+          <input class="search-inp" id="log-search" placeholder="搜索日志..." oninput="onLogSearch(this.value)">
+          <button class="search-clear" onclick="clearSearch('log-search',onLogSearch)" title="清除">&times;</button>
         </div>
         <label style="font-size:11px;color:var(--muted)">级别</label>
         <select class="log-select" id="log-level-select" onchange="setLogLevel()">
@@ -451,14 +453,17 @@
         <div class="search-wrap">
           <svg class="search-ico" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>
           <input class="search-inp" id="topo-proj" placeholder="项目编号/名称..." oninput="onTopoSearch()">
+          <button class="search-clear" onclick="clearSearch('topo-proj',onTopoSearch)" title="清除">&times;</button>
         </div>
         <div class="search-wrap">
           <svg class="search-ico" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>
           <input class="search-inp" id="topo-prod" placeholder="产品名称..." oninput="onTopoSearch()">
+          <button class="search-clear" onclick="clearSearch('topo-prod',onTopoSearch)" title="清除">&times;</button>
         </div>
         <div class="search-wrap">
           <svg class="search-ico" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>
           <input class="search-inp" id="topo-cust" placeholder="客户名称..." oninput="onTopoSearch()">
+          <button class="search-clear" onclick="clearSearch('topo-cust',onTopoSearch)" title="清除">&times;</button>
         </div>
       </div>
       <div class="card table-scroll" style="margin-top:12px">
@@ -505,6 +510,7 @@
               <circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/>
             </svg>
             <input class="search-inp" id="prod-search" placeholder="搜索产品名、标签…" oninput="onProdSearch(this.value)">
+            <button class="search-clear" onclick="clearSearch('prod-search',onProdSearch)" title="清除">&times;</button>
           </div>
         </div>
       </div>
