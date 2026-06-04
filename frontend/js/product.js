@@ -247,10 +247,13 @@ function renderProdDetailInfo(p) {
   var html =
     '<div class="section-hd"><div class="section-title">基本信息</div></div>' +
     '<div class="prod-stats">' +
-      '<div class="prod-stat"><div class="prod-stat-val" style="color:var(--accent)">' + (p.total_stories || 0) + '</div><div class="prod-stat-lbl">需求数</div></div>' +
-      '<div class="prod-stat"><div class="prod-stat-val" style="color:' + (p.total_bugs > 0 ? 'var(--danger)' : 'var(--success)') + '">' + (p.total_bugs || 0) + '</div><div class="prod-stat-lbl">Bug 数</div></div>' +
-      '<div class="prod-stat"><div class="prod-stat-val" style="color:var(--warn)">' + (p.releases || 0) + '</div><div class="prod-stat-lbl">发布次数</div></div>' +
-      '<div class="prod-stat"><div class="prod-stat-val">' + (p.project_count || 0) + '</div><div class="prod-stat-lbl">关联项目</div></div>' +
+      (p.zentao_url ? '<a href="' + p.zentao_url + '" target="_blank" class="prod-stat-link"><div class="prod-stat"><div class="prod-stat-val" style="color:var(--accent)">' + (p.total_stories || 0) + '</div><div class="prod-stat-lbl">需求数</div></div></a>' :
+        '<div class="prod-stat"><div class="prod-stat-val" style="color:var(--accent)">' + (p.total_stories || 0) + '</div><div class="prod-stat-lbl">需求数</div></div>') +
+      (p.zentao_bugs_url ? '<a href="' + p.zentao_bugs_url + '" target="_blank" class="prod-stat-link"><div class="prod-stat"><div class="prod-stat-val" style="color:' + (p.total_bugs > 0 ? 'var(--danger)' : 'var(--success)') + '">' + (p.total_bugs || 0) + '</div><div class="prod-stat-lbl">Bug 数</div></div></a>' :
+        '<div class="prod-stat"><div class="prod-stat-val" style="color:' + (p.total_bugs > 0 ? 'var(--danger)' : 'var(--success)') + '">' + (p.total_bugs || 0) + '</div><div class="prod-stat-lbl">Bug 数</div></div>') +
+      (p.zentao_releases_url ? '<a href="' + p.zentao_releases_url + '" target="_blank" class="prod-stat-link"><div class="prod-stat"><div class="prod-stat-val" style="color:var(--warn)">' + (p.releases || 0) + '</div><div class="prod-stat-lbl">发布次数</div></div></a>' :
+        '<div class="prod-stat"><div class="prod-stat-val" style="color:var(--warn)">' + (p.releases || 0) + '</div><div class="prod-stat-lbl">发布次数</div></div>') +
+      '<div class="prod-stat" onclick="document.querySelector(\'#prod-projects-tbody\').scrollIntoView({behavior:\'smooth\',block:\'center\'})" style="cursor:pointer"><div class="prod-stat-val">' + (p.project_count || 0) + '</div><div class="prod-stat-lbl">关联项目 &#x2193;</div></div>' +
     '</div>' +
     '<div class="prod-info-row">' +
       '<span class="prod-info-row-label">产品线</span>' +

@@ -430,6 +430,8 @@
 }
 .prod-stat-val { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; }
 .prod-stat-lbl { font-size: 11px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+.prod-stat-link { text-decoration: none; color: inherit; display: block; }
+.prod-stat-link:hover .prod-stat { border-color: var(--accent); box-shadow: var(--sh); }
 
 /* Product detail info row */
 .prod-info-row {
