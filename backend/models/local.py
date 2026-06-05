@@ -1,5 +1,6 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from backend.database import Base
@@ -12,11 +13,39 @@ class LocalUser(Base):
     username = Column(String(64), unique=True, nullable=False, index=True)
     password_hash = Column(String(256), nullable=False)
     display_name = Column(String(128), nullable=True)  # deprecated, use username
-    role = Column(String(32), default="viewer")  # admin, manager, viewer
+    role = Column(String(32), default="viewer")  # primary role (legacy)
     zentao_account = Column(String(64), nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    # Relationship to roles via UserRole link table
+    user_roles = relationship("UserRole", back_populates="user", lazy="selectin")
+
+
+class Role(Base):
+    __tablename__ = "local_roles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String(32), unique=True, nullable=False, index=True)
+    label = Column(String(64), nullable=False)
+    permissions = Column(String(256), default="")  # comma-separated
+    description = Column(String(256), nullable=True)
+    created_at = Column(DateTime, default=func.now())
+
+    # Relationship
+    user_roles = relationship("UserRole", back_populates="role", lazy="selectin")
+
+
+class UserRole(Base):
+    __tablename__ = "user_roles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("local_users.id"), nullable=False, index=True)
+    role_id = Column(Integer, ForeignKey("local_roles.id"), nullable=False, index=True)
+
+    user = relationship("LocalUser", back_populates="user_roles")
+    role = relationship("Role", back_populates="user_roles")
 
 
 class ProjectNote(Base):

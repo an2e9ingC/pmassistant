@@ -141,6 +141,14 @@ async function clearDatabase() {
   }
 }
 
+var _roleLabels = {admin:'管理员',manager:'管理者',ceo:'CEO',cto:'CTO',pm:'项目经理',sales:'销售及售前',hw_dev:'硬件开发',structure:'结构设计及装配',hw_test:'硬件测试',bsp_dev:'BSP开发',sw_dev:'业务软件开发',test_delivery:'测试交付',procurement:'采购',quality:'质检',warehouse:'库房管理',viewer:'只读用户'};
+
+function _roleOptions(selected) {
+  return Object.keys(_roleLabels).map(function(k) {
+    return '<option value="' + k + '"' + (k === selected ? ' selected' : '') + '>' + _roleLabels[k] + '</option>';
+  }).join('');
+}
+
 /* ── User Management ── */
 
 var _userList = [];
@@ -149,6 +157,10 @@ async function initUserManagement() {
   _userList = [];
   document.getElementById('users-tbody').innerHTML = '<tr><td colspan="6"><div class="loading-spinner">加载中...</div></td></tr>';
   try {
+    // Also load roles for badge display
+    if (!_permRoles.length) {
+      try { _permRoles = await API.get('/admin/users/roles'); } catch(e) {}
+    }
     var data = await API.get('/admin/users');
     _userList = data || [];
     renderUserTable();
@@ -168,9 +180,16 @@ function renderUserTable() {
       ? '<span class="pill" style="background:var(--success-lt);color:var(--success)">正常</span>'
       : '<span class="pill" style="background:var(--danger-lt);color:var(--danger)">已禁用</span>';
     var toggleLabel = u.is_active ? '禁用' : '启用';
+    // Role group badges from user_roles
+    var roleIds = u.role_ids || [];
+    var roleBadges = roleIds.map(function(rid) {
+      var r = _permRoles.find(function(x) { return x.id === rid; });
+      return r ? '<span style="display:inline-block;margin:1px 2px;padding:1px 6px;border-radius:3px;font-size:10.5px;background:var(--accent-lt);color:var(--accent)">' + escHtml(r.label) + '</span>' : '';
+    }).join('');
     return '<tr>' +
       '<td style="font-family:var(--mono);font-size:13px">' + escHtml(u.username) + '</td>' +
-      '<td>' + escHtml(u.role) + '</td>' +
+      '<td>' + escHtml(_roleLabels[u.role] || u.role) + '</td>' +
+      '<td>' + (roleBadges || '<span style="font-size:11px;color:var(--muted)">未分配</span>') + '</td>' +
       '<td>' + statusHtml + '</td>' +
       '<td style="font-size:12px;color:var(--muted)">' + escHtml(u.created_at || '') + '</td>' +
       '<td style="white-space:nowrap">' +
@@ -190,7 +209,8 @@ function openUserCreateDialog() {
       '<div class="user-form">' +
         '<div class="user-form-field"><label>用户名</label><input class="config-input" id="ud-username"></div>' +
         '<div class="user-form-field"><label>密码</label><input class="config-input" id="ud-password" type="password"></div>' +
-        '<div class="user-form-field"><label>角色</label><select class="config-input" id="ud-role"><option value="viewer">viewer</option><option value="manager">manager</option><option value="admin">admin</option></select></div>' +
+        '<div class="user-form-field"><label>角色</label><select class="config-input" id="ud-role">' +
+        _roleOptions('viewer') + '</select></div>' +
       '</div>' +
       '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:14px">' +
         '<span id="ud-msg" style="font-size:11px"></span>' +
@@ -224,14 +244,12 @@ async function submitUserCreate() {
 function openUserEditDialog(id) {
   var u = _userList.find(function(x) { return x.id === id; });
   if (!u) return;
-  var roles = ['viewer', 'manager', 'admin'];
-  var roleOpts = roles.map(function(r) { return '<option value="' + r + '"' + (u.role === r ? ' selected' : '') + '>' + r + '</option>'; }).join('');
   var html = '<div class="note-dialog-overlay" onclick="if(event.target===this)closeUserDialog()">' +
     '<div class="note-dialog">' +
       '<div class="note-dialog-head"><span class="note-dialog-title">编辑用户: ' + escHtml(u.username) + '</span>' +
         '<button class="note-dialog-close" onclick="closeUserDialog()">&times;</button></div>' +
       '<div class="user-form">' +
-        '<div class="user-form-field"><label>角色</label><select class="config-input" id="ue-role">' + roleOpts + '</select></div>' +
+        '<div class="user-form-field"><label>角色</label><select class="config-input" id="ue-role">' + _roleOptions(u.role) + '</select></div>' +
         '<div class="user-form-field"><label>新密码（留空不修改）</label><input class="config-input" id="ue-password" type="password" placeholder="留空则不修改密码"></div>' +
       '</div>' +
       '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:14px">' +
@@ -276,4 +294,62 @@ async function deleteUser(id, username) {
   } catch(e) {
     showToast('删除失败: ' + e.message, 'error');
   }
+}
+
+/* ═══════════════════════════════════════════════════
+   PERMISSION MANAGEMENT (Role-based)
+═══════════════════════════════════════════════════ */
+
+var _permRoles = [];
+var _permUsers = [];
+var _allPerms = [];
+
+async function initPermissions() {
+  try {
+    var meta = await API.get('/admin/users/permissions');
+    _allPerms = meta.permissions || [];
+    var data = await API.get('/admin/users');
+    _permUsers = data || [];
+    var roles = await API.get('/admin/users/roles');
+    _permRoles = roles || [];
+    renderPermTable();
+  } catch(e) {
+    document.getElementById('perm-tbody').innerHTML = '<tr><td colspan="4"><div class="error-state">加载失败: ' + escHtml(e.message) + '</div></td></tr>';
+  }
+}
+
+function renderPermTable() {
+  var tbody = document.getElementById('perm-tbody');
+  if (!_permRoles.length) {
+    tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">暂无角色</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = _permRoles.map(function(r) {
+    var perms = r.permissions || [];
+    var usersInRole = _permUsers.filter(function(u) { return (u.role_ids || []).indexOf(r.id) >= 0; });
+    return '<tr>' +
+      '<td><strong>' + escHtml(r.label) + '</strong><div style="font-size:10.5px;color:var(--muted);font-family:var(--mono)">' + escHtml(r.key) + '</div></td>' +
+      '<td style="font-size:11.5px">' + _allPerms.map(function(p) {
+        var checked = perms.indexOf(p.key) >= 0;
+        return '<label style="cursor:pointer;display:inline-flex;align-items:center;gap:3px;margin-right:8px;font-size:11px">' +
+          '<input type="checkbox" ' + (checked ? 'checked' : '') + ' onchange="toggleRolePerm(' + r.id + ',\'' + p.key + '\',this.checked)">' +
+          escHtml(p.label) + '</label>';
+      }).join('') + '</td>' +
+      '<td style="font-size:11.5px">' + (usersInRole.length ? usersInRole.map(function(u) {
+        return '<span style="display:inline-block;margin:1px 3px;padding:1px 6px;border-radius:3px;background:var(--accent-lt);color:var(--accent);font-size:11px">' + escHtml(u.username) + '</span>';
+      }).join('') : '<span style="color:var(--muted)">—</span>') + '</td>' +
+      '<td style="font-size:11px;color:var(--muted)">' + escHtml(r.description || '') + '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+async function toggleRolePerm(roleId, permKey, checked) {
+  var role = _permRoles.find(function(r) { return r.id === roleId; });
+  if (!role) return;
+  var perms = role.permissions || [];
+  if (checked) { if (perms.indexOf(permKey) < 0) perms.push(permKey); }
+  else { perms = perms.filter(function(p) { return p !== permKey; }); }
+  await API.put('/admin/users/roles/' + roleId, { permissions: perms });
+  role.permissions = perms;
+  renderPermTable();
 }

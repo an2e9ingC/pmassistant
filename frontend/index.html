@@ -94,6 +94,12 @@
         </svg>
         用户管理
       </div>
+      <div class="nav-item" id="nav-permissions" onclick="gotoView('permissions')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M8 1.5L10.5 6 15 6.5 11.5 10l1 5L8 12.5 3.5 15l1-5L1 6.5 5.5 6z"/>
+        </svg>
+        权限管理
+      </div>
       <div class="nav-item" id="nav-config" onclick="gotoView('config')">
         <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
           <circle cx="8" cy="8" r="2.5"/>
@@ -125,7 +131,7 @@
     </div>
 
     <div style="margin-top:8px;text-align:center;font-size:10px;color:var(--muted)">
-      <span id="app-version">v2026.06.04-beta1</span>
+      <span id="app-version">v2026.06.04-beta2</span>
     </div>
   </div>
 </aside>
@@ -426,15 +432,33 @@
       <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
         <button class="btn btn-primary" onclick="openUserCreateDialog()" style="font-size:12px;padding:5px 16px">+ 添加用户</button>
       </div>
-      <div class="card table-scroll">
+      <div class="card table-scroll" style="max-height:calc(100vh - 200px)">
         <table class="proj-table">
           <thead>
             <tr>
-              <th>用户名</th><th width="12%">角色</th><th width="10%">状态</th><th width="18%">创建时间</th><th width="20%">操作</th>
+              <th>用户名</th><th width="10%">角色</th><th width="14%">角色组</th><th width="8%">状态</th><th width="14%">创建时间</th><th width="18%">操作</th>
             </tr>
           </thead>
           <tbody id="users-tbody">
-            <tr><td colspan="5"><div class="loading-spinner">加载中...</div></td></tr>
+            <tr><td colspan="6"><div class="loading-spinner">加载中...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ══════════════════════ VIEW — PERMISSIONS ══════════════════════ -->
+    <div class="view" id="view-permissions">
+      <div class="section-hd"><div class="section-title">权限管理（按角色组）</div></div>
+      <div class="card table-scroll" style="max-height:calc(100vh - 200px)">
+        <table class="proj-table" id="perm-table">
+          <thead><tr>
+            <th width="16%">角色组</th>
+            <th>权限</th>
+            <th width="16%">成员</th>
+            <th width="20%">说明</th>
+          </tr></thead>
+          <tbody id="perm-tbody">
+            <tr><td colspan="4"><div class="loading-spinner">加载中...</div></td></tr>
           </tbody>
         </table>
       </div>
@@ -466,7 +490,7 @@
           <button class="search-clear" onclick="clearSearch('topo-cust',onTopoSearch)" title="清除">&times;</button>
         </div>
       </div>
-      <div class="card table-scroll" style="margin-top:12px">
+      <div class="card table-scroll" style="max-height:calc(100vh - 260px);margin-top:12px">
         <table class="proj-table">
           <thead><tr>
             <th width="10%">项目编号</th>

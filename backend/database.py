@@ -85,7 +85,7 @@ def _migrate_sqlite():
 
 
 def init_db():
-    from backend.models.local import LocalUser, ProjectNote  # noqa: F401
+    from backend.models.local import LocalUser, Role, UserRole, ProjectNote  # noqa: F401
     from backend.models.bug import CachedBug  # noqa: F401
     from backend.models.delivery import DeliveryRecord  # noqa: F401
     from backend.models.log_entry import LogEntry  # noqa: F401
@@ -109,11 +109,34 @@ def init_db():
         _os.chmod(_db_path, 0o666)
         logger.debug(f"DB file permissions: {oct(_os.stat(_db_path).st_mode)[-3:]}")
 
-    # Seed default admin if no users exist
+    # Seed default roles + admin if no users exist
     db = SessionLocal()
     try:
-        from backend.models.local import LocalUser
+        from backend.models.local import LocalUser, Role, UserRole
         from passlib.context import CryptContext
+
+        # Seed default roles if not exist
+        default_roles = [
+            ("admin", "管理员", "admin", "系统完整管理权限"),
+            ("manager", "管理者", "sync,project_edit", "管理+同步权限"),
+            ("ceo", "CEO", "", "查看所有项目数据"),
+            ("cto", "CTO", "", "查看所有项目数据"),
+            ("pm", "项目经理", "sync,project_edit,product_link,customer_link", "项目管理+同步+产客关系维护"),
+            ("sales", "销售及售前", "", "查看售前+分配项目"),
+            ("hw_dev", "硬件开发", "", "查看分配项目"),
+            ("structure", "结构设计及装配", "", "查看分配项目"),
+            ("hw_test", "硬件测试", "", "查看分配项目"),
+            ("bsp_dev", "BSP开发", "", "查看分配项目"),
+            ("sw_dev", "业务软件开发", "", "查看分配项目"),
+            ("test_delivery", "测试交付", "project_edit", "查看分配项目+交付管理"),
+            ("procurement", "采购", "", "查看分配项目"),
+            ("quality", "质检", "", "查看分配项目"),
+            ("warehouse", "库房管理", "", "查看分配项目"),
+        ]
+        for key, label, perms, desc in default_roles:
+            if not db.query(Role).filter(Role.key == key).first():
+                db.add(Role(key=key, label=label, permissions=perms, description=desc))
+        db.commit()
 
         if db.query(LocalUser).count() == 0:
             pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -127,5 +150,16 @@ def init_db():
             db.add(admin)
             db.commit()
             logger.info("Default admin user created")
+
+        # Ensure all users have role assignments: map role→Role
+        admin_role = db.query(Role).filter(Role.key == "admin").first()
+        for u in db.query(LocalUser).all():
+            existing_ur = db.query(UserRole).filter(UserRole.user_id == u.id).first()
+            if not existing_ur:
+                role = db.query(Role).filter(Role.key == u.role).first()
+                if role:
+                    db.add(UserRole(user_id=u.id, role_id=role.id))
+        db.commit()
+        logger.info("User role assignments synced")
     finally:
         db.close()

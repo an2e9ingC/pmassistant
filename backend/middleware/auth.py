@@ -30,6 +30,39 @@ def get_current_user(
 
 
 def require_admin(user: LocalUser = Depends(get_current_user)) -> LocalUser:
-    if user.role != "admin":
+    if not has_perm(user, "admin"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return user
+
+
+def has_perm(user: LocalUser, perm: str) -> bool:
+    """Check if user has a specific permission. 'admin' permission grants all."""
+    perms = _get_perms(user)
+    return "admin" in perms or perm in perms
+
+
+def require_perm(perm: str):
+    """Dependency factory: check specific permission."""
+    def checker(user: LocalUser = Depends(get_current_user)) -> LocalUser:
+        if not has_perm(user, perm):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Permission '{perm}' required")
+        return user
+    return checker
+
+
+def _get_perms(user: LocalUser) -> set:
+    """Aggregate permissions from all user's roles."""
+    perms = set()
+    for ur in getattr(user, "user_roles", []) or []:
+        role = ur.role
+        if role and role.permissions:
+            for p in role.permissions.split(","):
+                p = p.strip()
+                if p:
+                    perms.add(p)
+    return perms
+
+
+def get_user_perms(user: LocalUser) -> list:
+    """Get user's effective permissions as a sorted list."""
+    return sorted(_get_perms(user))
