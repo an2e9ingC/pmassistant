@@ -579,9 +579,10 @@ function buildGantt(data) {
     if (isMissing) {
       riskHtml = '<span class="risk-tag" style="--risk-color:var(--warn);font-size:10px">⚠ 阶段缺失</span>';
     } else if (isUnmatched || isFuzzy) {
+      var suggested = isFuzzy ? (s.standard_stage || '') : '';
       riskHtml = '<span class="risk-tag" style="--risk-color:var(--warn);font-size:10px;cursor:pointer" ' +
-        'onclick="showStageMismatchDialog(' + (s.id || 0) + ',\'' + escHtml(s.name || '') + '\',event)" ' +
-        'title="请修改禅道阶段名为标准名字">⚠ 请修改禅道阶段名</span>';
+        'onclick="showStageMismatchDialog(' + (s.id || 0) + ',\'' + escHtml(s.name || '') + '\',\'' + escHtml(suggested) + '\',event)" ' +
+        'title="' + (isFuzzy ? '请修改为: ' + escHtml(s.standard_stage || '') : '请修改禅道阶段名为标准名字') + '">⚠ 请修改禅道阶段名</span>';
     } else {
       var risk = getStageRisk(s);
       riskHtml = '<span class="risk-tag" style="--risk-color:' + risk.color + '" title="' + escHtml(risk.tip) + '">' + escHtml(risk.label) + '</span>';
@@ -771,14 +772,12 @@ function buildStages(stages) {
       riskHtml = '<span class="risk-tag" style="--risk-color:var(--warn)">⚠ 阶段缺失</span>';
     } else if (isUnmatched) {
       riskHtml = '<span class="risk-tag" style="--risk-color:var(--warn);cursor:pointer" ' +
-        'onclick="showStageMismatchDialog(' + (s.id || 0) + ',\'' + escHtml(s.name || '') + '\',event)" ' +
+        'onclick="showStageMismatchDialog(' + (s.id || 0) + ',\'' + escHtml(s.name || '') + '\',\'\',event)" ' +
         'title="点击查看详情">⚠ 请修改禅道阶段名</span>';
     } else if (matchKind === 'fuzzy') {
-      riskHtml = '<span style="display:flex;align-items:center;gap:4px">' +
-        '<span class="risk-tag" style="--risk-color:var(--warn);cursor:pointer;font-size:11px" ' +
-          'onclick="showStageMismatchDialog(' + s.id + ',\'' + escHtml(s.name || '') + '\',event)" ' +
-          'title="已模糊匹配到 ' + escHtml(s.standard_stage || '') + '，建议修改为精确名">⚠ 请修改禅道阶段名</span>' +
-      '</span>';
+      riskHtml = '<span class="risk-tag" style="--risk-color:var(--warn);cursor:pointer;font-size:11px" ' +
+        'onclick="showStageMismatchDialog(' + s.id + ',\'' + escHtml(s.name || '') + '\',\'' + escHtml(s.standard_stage || '') + '\',event)" ' +
+        'title="请修改为: ' + escHtml(s.standard_stage || '') + '">⚠ 请修改禅道阶段名</span>';
     } else {
       var risk = getStageRisk(s);
       riskHtml = '<span class="risk-tag" style="--risk-color:' + risk.color + '" title="' + escHtml(risk.tip) + '">' + escHtml(risk.label) + '</span>';
@@ -1257,48 +1256,60 @@ function gotoStageDetail(idx) {
 var STAGE_OPTIONS = ['售前', '项目立项', '需求分解', '硬件开发', '结构设计', 'BSP开发', '软件开发', '测试', '产品发货', '项目总结'];
 var _mismatchExecId = null;
 
-function showStageMismatchDialog(execId, stageName, event) {
+function showStageMismatchDialog(execId, stageName, suggestedName, event) {
   _mismatchExecId = execId;
   if (event) event.stopPropagation();
 
   var existing = document.querySelector('.stage-name-dialog-overlay');
   if (existing) existing.remove();
 
-  var standards = (typeof _standardStages !== 'undefined' && _standardStages.length)
-    ? _standardStages : STAGE_OPTIONS;
-  var stageListHtml = standards.map(function(st) {
-    return '<li style="padding:2px 0;font-weight:500">' + escHtml(st) + '</li>';
-  }).join('');
+  var bodyHtml = '';
+  if (suggestedName) {
+    // Fuzzy match — show exact name to change to
+    bodyHtml =
+      '<p style="margin-bottom:10px">当前阶段名 <b style="color:var(--warn)">"' + escHtml(stageName) + '"</b> 与标准名不一致。</p>' +
+      '<p style="margin-bottom:6px">请在禅道中将阶段名修改为：</p>' +
+      '<p style="padding:12px 16px;background:var(--accent-lt);border:1px solid var(--accent);border-radius:8px;font-size:16px;font-weight:700;color:var(--accent);text-align:center;margin:10px 0">' + escHtml(suggestedName) + '</p>';
+  } else {
+    // Unmatched — show all standard stage names
+    var standards = (typeof _standardStages !== 'undefined' && _standardStages.length)
+      ? _standardStages : STAGE_OPTIONS;
+    var stageListHtml = standards.map(function(st) {
+      return '<li style="padding:2px 0;font-weight:500">' + escHtml(st) + '</li>';
+    }).join('');
+    bodyHtml =
+      '<p style="margin-bottom:10px">当前阶段名 <b style="color:var(--warn)">"' + escHtml(stageName) + '"</b> 不在标准阶段列表中。</p>' +
+      '<p style="margin-bottom:6px;color:var(--muted)">请修改禅道阶段名为以下标准名称之一：</p>' +
+      '<ul style="margin:0;padding-left:20px;color:var(--fg);font-size:13px">' +
+        stageListHtml +
+      '</ul>';
+  }
 
   var html = '<div class="note-dialog-overlay stage-name-dialog-overlay" onclick="if(event.target===this)this.remove()">' +
     '<div class="note-dialog" style="max-width:440px" onclick="event.stopPropagation()">' +
       '<div class="note-dialog-head"><span class="note-dialog-title">⚠ 请修改禅道阶段名为标准名字</span>' +
         '<button class="note-dialog-close" onclick="this.closest(\'.stage-name-dialog-overlay\').remove()">&times;</button></div>' +
       '<div style="padding:8px 0;line-height:1.8">' +
-        '<p style="margin-bottom:10px">当前阶段名 <b style="color:var(--warn)">"' + escHtml(stageName) + '"</b> 不在标准阶段列表中。</p>' +
-        '<p style="margin-bottom:6px;color:var(--muted)">请修改禅道阶段名为以下标准名称之一：</p>' +
-        '<ul style="margin:0;padding-left:20px;color:var(--fg);font-size:13px">' +
-          stageListHtml +
-        '</ul>' +
+        bodyHtml +
         '<p style="margin-top:12px;font-size:11px;color:var(--muted);font-style:italic">修改后下次禅道同步生效，系统将自动匹配并显示正常数据。</p>' +
       '</div>' +
       '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">' +
-        (execId ? '<button class="btn btn-primary" onclick="showStageNameEdit(\'' + escHtml(stageName) + '\')">在 PMA 中临时映射</button>' : '') +
+        (execId ? '<button class="btn btn-primary" onclick="showStageNameEdit(\'' + escHtml(stageName) + '\',\'' + escHtml(suggestedName || '') + '\')">在 PMA 中临时映射</button>' : '') +
         '<button class="btn" onclick="this.closest(\'.stage-name-dialog-overlay\').remove()">关闭</button>' +
       '</div>' +
     '</div></div>';
   document.body.insertAdjacentHTML('beforeend', html);
 }
 
-function showStageNameEdit(currentName) {
-  // Close mismatch dialog
+function showStageNameEdit(currentName, suggestedName) {
   var dlg = document.querySelector('.stage-name-dialog-overlay');
   if (dlg) dlg.remove();
 
   var standards = (typeof _standardStages !== 'undefined' && _standardStages.length)
     ? _standardStages : STAGE_OPTIONS;
   var optionsHtml = standards.map(function(st) {
-    return '<option value="' + st + '">' + st + '</option>';
+    var sel = (st === suggestedName) ? ' selected' : '';
+    return '<option value="' + st + '"' + sel + '>' + st + '</option>';
   }).join('');
 
   var html = '<div class="note-dialog-overlay stage-name-dialog-overlay" onclick="if(event.target===this)this.remove()">' +
