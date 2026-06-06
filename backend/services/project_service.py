@@ -10,6 +10,7 @@ from backend.models.zentao import (
     CachedProject, CachedExecution, CachedTask, CachedProduct, ProductProjectLink,
 )
 from backend.models.document import ProjectDocument
+from backend.services.document_service import _match_stage_type, get_stage_types_for_project
 
 
 def get_projects(db: Session) -> list[dict]:
@@ -24,45 +25,99 @@ def get_project_detail(db: Session, project_id: int) -> Optional[dict]:
     return _project_detail(p)
 
 
-def get_project_stages(db: Session, project_id: int) -> list[dict]:
+def get_project_stages(db: Session, project_id: int) -> dict:
+    """Return all standard stages as a template, with matched execution data.
+
+    Each standard stage is rendered as a row. If a matching Zentao execution
+    exists (fuzzy match), its data is filled in. Otherwise a placeholder with
+    "阶段缺失" is shown.  Unmatched Zentao executions are appended at the end
+    with a warning marker.
+    """
     project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
+    standard_stages = get_stage_types_for_project(project.project_type or "RD")
+
     executions = (
         db.query(CachedExecution)
         .filter(CachedExecution.project_id == project_id)
         .order_by(CachedExecution.id)
         .all()
     )
-    stages = []
+
+    # Phase 1: map each execution to a standard stage (fuzzy match)
+    # An execution can match at most one standard stage (best match).
+    matched_execs: dict[str, list] = {}  # standard_stage -> [executions]
+    unmatched_execs = []
+
     for e in executions:
+        actual_name = (e.stage_name or e.name or "").strip()
+        result = _match_stage_type(actual_name, standard_stages) if actual_name else None
+        if result:
+            st = result[0]
+            matched_execs.setdefault(st, []).append((e, result[1]))
+        else:
+            unmatched_execs.append(e)
+
+    from backend.config import get_zentao_web_base
+    web_base = get_zentao_web_base()
+    stages = []
+
+    # Phase 2: render standard stages in order
+    for st in standard_stages:
+        group = matched_execs.get(st, [])
+        if group:
+            for e, match_kind in group:
+                tasks = (
+                    db.query(CachedTask)
+                    .filter(CachedTask.execution_id == e.id)
+                    .order_by(CachedTask.id)
+                    .all()
+                )
+                deliverables = _build_deliverables(db, e)
+                who = _get_who(tasks, e, project) or "未指派"
+                stages.append({
+                    "id": e.id,
+                    "name": e.stage_name or e.name,
+                    "execution_url": f"{web_base}/index.php?m=execution&f=task&executionID={e.id}&status=all&param=0&orderBy=status,id_desc&recTotal=10&recPerPage=100",
+                    "status": _map_status(e.status),
+                    "who": who,
+                    "start": str(e.begin) if e.begin else None,
+                    "end": str(e.end) if e.end else None,
+                    "completed_date": str(e.end) if e.status in ("done", "closed") else None,
+                    "progress": e.progress,
+                    "blocker": _find_blocker(tasks),
+                    "match_status": "matched",
+                    "match_kind": match_kind,  # "exact" or "fuzzy"
+                    "standard_stage": st,
+                    "deliverables": deliverables,
+                })
+        else:
+            # Standard stage with no matching execution
+            stages.append({
+                "id": None,
+                "name": st,
+                "execution_url": None,
+                "status": "missing",
+                "who": None,
+                "start": None,
+                "end": None,
+                "completed_date": None,
+                "progress": None,
+                "blocker": None,
+                "match_status": "missing",
+                "match_kind": None,
+                "standard_stage": st,
+                "deliverables": [],
+            })
+
+    # Phase 3: append unmatched Zentao executions at the end
+    for e in unmatched_execs:
         tasks = (
             db.query(CachedTask)
             .filter(CachedTask.execution_id == e.id)
             .order_by(CachedTask.id)
             .all()
         )
-        # Query real document status from ProjectDocument table
-        pd_rows = (
-            db.query(ProjectDocument)
-            .filter(ProjectDocument.execution_id == e.id)
-            .order_by(ProjectDocument.sort_order)
-            .all()
-        )
-        deliverables = []
-        for pd in pd_rows:
-            is_done = e.status in ("done", "closed")
-            is_pending = pd.status == "pending"
-            deliverables.append({
-                "id": pd.id,
-                "name": pd.doc_name,
-                "done": pd.status == "submitted",
-                "warn": is_done and is_pending,
-                "completed_at": str(pd.completed_at)[:10] if pd.completed_at else None,
-                "location": pd.location,
-                "responsible_role": pd.responsible_role,
-            })
         who = _get_who(tasks, e, project) or "未指派"
-        from backend.config import get_zentao_web_base
-        web_base = get_zentao_web_base()
         stages.append({
             "id": e.id,
             "name": e.stage_name or e.name,
@@ -74,14 +129,77 @@ def get_project_stages(db: Session, project_id: int) -> list[dict]:
             "completed_date": str(e.end) if e.status in ("done", "closed") else None,
             "progress": e.progress,
             "blocker": _find_blocker(tasks),
-            "deliverables": deliverables,
+            "match_status": "unmatched",
+            "match_kind": None,
+            "standard_stage": None,
+            "deliverables": [],
         })
-    return stages
+
+    return {"stages": stages, "standard_stages": standard_stages}
 
 
-def get_project_documents(db: Session, project_id: int) -> list[dict]:
-    from backend.services.document_service import get_or_init_project_documents
-    return get_or_init_project_documents(db, project_id)
+def _build_deliverables(db: Session, e: CachedExecution) -> list[dict]:
+    """Build deliverables list for an execution from ProjectDocument table."""
+    pd_rows = (
+        db.query(ProjectDocument)
+        .filter(ProjectDocument.execution_id == e.id)
+        .order_by(ProjectDocument.sort_order)
+        .all()
+    )
+    deliverables = []
+    for pd in pd_rows:
+        is_done = e.status in ("done", "closed")
+        is_pending = pd.status == "pending"
+        deliverables.append({
+            "id": pd.id,
+            "name": pd.doc_name,
+            "done": pd.status == "submitted",
+            "warn": is_done and is_pending,
+            "completed_at": str(pd.completed_at)[:10] if pd.completed_at else None,
+            "location": pd.location,
+            "responsible_role": pd.responsible_role,
+        })
+    return deliverables
+
+
+def get_project_documents(db: Session, project_id: int) -> dict:
+    """Return documents grouped by standard stage, showing all standard stages.
+
+    Standard stages with no documents are shown as empty placeholders
+    so the frontend can render the complete template.
+    """
+    from backend.services.document_service import get_or_init_project_documents, get_stage_types_for_project
+
+    project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
+    project_type = project.project_type if project else "RD"
+    standard_stages = get_stage_types_for_project(project_type)
+
+    # Init documents for matched stages (incremental)
+    docs_list = get_or_init_project_documents(db, project_id, project_type)
+
+    # Group existing docs by stage_name
+    grouped: dict[str, list[dict]] = {}
+    for d in docs_list:
+        st = d.get("stage_name") or "未分类"
+        grouped.setdefault(st, []).append(d)
+
+    # Build result: one entry per standard stage (in order)
+    result = []
+    for st in standard_stages:
+        items = grouped.get(st, [])
+        if items:
+            # Use the stage_completed_date from the first item
+            scd = items[0].get("stage_completed_date") if items else None
+        else:
+            scd = None
+        result.append({
+            "stage_name": st,
+            "stage_completed_date": scd,
+            "has_documents": len(items) > 0,
+            "documents": items,
+        })
+
+    return {"documents": result, "standard_stages": standard_stages}
 
 
 def get_project_gantt(db: Session, project_id: int) -> list[dict]:

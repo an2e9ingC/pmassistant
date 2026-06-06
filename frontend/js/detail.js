@@ -682,83 +682,149 @@ function getStageRisk(s) {
 }
 
 function buildStages(stages) {
-  if (!stages || !stages.length) {
+  // Support both old array format and new {stages, standard_stages} format
+  var _standardStages = (stages && stages.standard_stages) ? stages.standard_stages : [];
+  var stageList = (stages && stages.stages) ? stages.stages : stages;
+
+  if (!stageList || !stageList.length) {
     document.getElementById('stages-tbody').innerHTML = '<tr><td colspan="8"><div class="empty-state">暂无阶段数据</div></td></tr>';
     return;
   }
 
-  document.getElementById('stages-tbody').innerHTML = stages.map(function(s, i) {
+  document.getElementById('stages-tbody').innerHTML = stageList.map(function(s, i) {
     var dels = s.deliverables || [];
-    var risk = getStageRisk(s);
-    var prog = s.progress || 0;
-    return '<tr id="stage-row-' + i + '">' +
-      '<td>' + (s.execution_url ?
-        '<a href="' + escHtml(s.execution_url) + '" target="_blank" class="gs-btn" title="在禅道中查看此阶段" onclick="event.stopPropagation()" style="text-decoration:none">' + escHtml(s.name) + '</a>' :
-        '<strong>' + escHtml(s.name) + '</strong>') + '</td>' +
-      '<td><span class="risk-tag" style="--risk-color:' + risk.color + '" title="' + escHtml(risk.tip) + '">' + escHtml(risk.label) +
-      '</span></td>' +
-      '<td>' + renderProgressRing(prog) + '</td>' +
-      '<td style="font-size:12px;white-space:nowrap;' + (!s.who || s.who === '未指派' ? 'color:var(--danger);font-weight:540' : '') + '">' + escHtml(s.who || '未指派') + '</td>' +
-      '<td style="font-size:11.5px;color:var(--muted);white-space:nowrap;line-height:1.8">' + formatDate(s.start) + '<br>' + formatDate(s.end) + '</td>' +
-      '<td>' + renderPill(s.status) + (s.completed_date ? '<div style="font-size:10.5px;color:var(--success);margin-top:4px;font-family:var(--mono)">&#10003; ' + s.completed_date + '</div>' : '') + '</td>' +
-      '<td style="font-size:12px;color:' + (s.blocker ? 'var(--danger)' : 'var(--muted)') + ';max-width:200px">' + escHtml(s.blocker || '—') + '</td>' +
-      '<td>' + renderDeliverablesList(dels) + '</td>' +
+    var matchStatus = s.match_status || 'matched';
+    var matchKind = s.match_kind || '';
+
+    // --- Row styling ---
+    var rowStyle = '';
+    var isMissing = matchStatus === 'missing';
+    var isUnmatched = matchStatus === 'unmatched';
+
+    if (isMissing) {
+      rowStyle = 'opacity:0.5;background:var(--warn-lt)';
+    } else if (isUnmatched) {
+      rowStyle = 'background:var(--warn-lt)';
+    }
+
+    // --- Name column ---
+    var nameHtml = '';
+    if (isMissing) {
+      nameHtml = '<strong style="color:var(--warn)">' + escHtml(s.name) + '</strong>' +
+        '<span class="pill" style="background:var(--warn-lt);color:var(--warn);font-size:10px;margin-left:4px">阶段缺失</span>';
+    } else if (isUnmatched) {
+      nameHtml = (s.execution_url
+        ? '<a href="' + escHtml(s.execution_url) + '" target="_blank" class="gs-btn" onclick="event.stopPropagation()" style="text-decoration:none">' + escHtml(s.name) + '</a>'
+        : '<strong>' + escHtml(s.name) + '</strong>') +
+        '<span class="pill" style="background:var(--warn-lt);color:var(--warn);font-size:10px;margin-left:4px;cursor:pointer" ' +
+          'onclick="showStageMismatchDialog(' + (s.id || 0) + ',\'' + escHtml(s.name || '') + '\',event)" ' +
+          'title="请修改禅道阶段名为标准名字">⚠ 非标准</span>';
+    } else if (matchKind === 'fuzzy') {
+      nameHtml = (s.execution_url
+        ? '<a href="' + escHtml(s.execution_url) + '" target="_blank" class="gs-btn" onclick="event.stopPropagation()" style="text-decoration:none">' + escHtml(s.name) + '</a>'
+        : '<strong>' + escHtml(s.name) + '</strong>') +
+        '<span class="pill" style="background:var(--info-lt,var(--accent-lt));font-size:10px;margin-left:4px;cursor:pointer" ' +
+          'onclick="showStageMismatchDialog(' + s.id + ',\'' + escHtml(s.name || '') + '\',event)" ' +
+          'title="已模糊匹配到 ' + escHtml(s.standard_stage || '') + '，建议修改禅道阶段名为标准名">~' + escHtml(s.standard_stage || '') + '</span>';
+    } else {
+      nameHtml = s.execution_url
+        ? '<a href="' + escHtml(s.execution_url) + '" target="_blank" class="gs-btn" onclick="event.stopPropagation()" style="text-decoration:none">' + escHtml(s.name) + '</a>'
+        : '<strong>' + escHtml(s.name) + '</strong>';
+    }
+
+    // --- Risk column ---
+    var riskHtml = '';
+    if (isMissing) {
+      riskHtml = '<span class="risk-tag" style="--risk-color:var(--warn)">⚠ 阶段缺失</span>';
+    } else if (isUnmatched) {
+      riskHtml = '<span class="risk-tag" style="--risk-color:var(--warn)">请修改禅道阶段名</span>';
+    } else {
+      var risk = getStageRisk(s);
+      riskHtml = '<span class="risk-tag" style="--risk-color:' + risk.color + '" title="' + escHtml(risk.tip) + '">' + escHtml(risk.label) + '</span>';
+    }
+
+    // --- Progress, Who, Dates, Status, Blocker ---
+    var prog = parseFloat(s.progress) || 0;
+    var progHtml = isMissing ? '<span style="color:var(--muted)">—</span>' : renderProgressRing(prog);
+    var whoHtml = isMissing ? '<span style="color:var(--muted)">—</span>' :
+      '<span style="font-size:12px;white-space:nowrap;' + (!s.who || s.who === '未指派' ? 'color:var(--danger);font-weight:540' : '') + '">' + escHtml(s.who || '未指派') + '</span>';
+    var dateHtml = isMissing ? '<span style="color:var(--muted)">—</span>' :
+      '<span style="font-size:11.5px;color:var(--muted);white-space:nowrap;line-height:1.8">' + formatDate(s.start) + '<br>' + formatDate(s.end) + '</span>';
+    var statusHtml = isMissing ? '<span class="pill" style="background:var(--warn-lt);color:var(--warn)">阶段缺失</span>' :
+      renderPill(s.status) + (s.completed_date ? '<div style="font-size:10.5px;color:var(--success);margin-top:4px;font-family:var(--mono)">&#10003; ' + s.completed_date + '</div>' : '');
+    var blockerHtml = isMissing ? '<span style="color:var(--muted)">—</span>' :
+      '<span style="font-size:12px;color:' + (s.blocker ? 'var(--danger)' : 'var(--muted)') + ';max-width:200px">' + escHtml(s.blocker || '—') + '</span>';
+    var delsHtml = isMissing ? '<span style="font-size:11px;color:var(--muted);font-style:italic">暂无</span>' : renderDeliverablesList(dels);
+
+    return '<tr style="' + rowStyle + '" id="stage-row-' + i + '">' +
+      '<td>' + nameHtml + '</td>' +
+      '<td>' + riskHtml + '</td>' +
+      '<td>' + progHtml + '</td>' +
+      '<td>' + whoHtml + '</td>' +
+      '<td>' + dateHtml + '</td>' +
+      '<td>' + statusHtml + '</td>' +
+      '<td>' + blockerHtml + '</td>' +
+      '<td>' + delsHtml + '</td>' +
     '</tr>';
   }).join('');
 }
 
 /* Documents Table */
 
-function buildDocs(docs) {
+function buildDocs(data) {
   var user = getCurrentUser();
   var canEdit = user && (user.role === 'admin' || user.role === 'pm' || user.role === 'test_delivery');
 
-  if (!docs || !docs.length) {
+  // New format: { documents: [...], standard_stages: [...] }
+  var stageList = (data && data.documents) ? data.documents : data;
+  if (!stageList || !stageList.length) {
     document.getElementById('docs-tbody').innerHTML = '<tr><td colspan="5"><div style="text-align:center;padding:30px;font-style:italic;color:var(--muted)">暂无文档清单<br><span style="font-size:11px">项目阶段尚未匹配到文档模板，请先配置文档模板</span></div></td></tr>';
     return;
   }
 
-  // Group by stage
-  var grouped = {};
-  docs.forEach(function(d) {
-    var key = d.stage_name || '未分类';
-    if (!grouped[key]) grouped[key] = [];
-    grouped[key].push(d);
-  });
-
   var stageIdx = 0;
   var rows = '';
-  Object.keys(grouped).forEach(function(stageName) {
-    var items = grouped[stageName];
+  stageList.forEach(function(stage) {
+    var stageName = stage.stage_name || '未分类';
+    var items = stage.documents || [];
+    var hasDocs = stage.has_documents;
     var bg = stageIdx % 2 === 0 ? 'var(--surface)' : 'var(--bg)';
-    items.forEach(function(d, i) {
-      var rowCls = d.warn ? 'doc-row-warn' : (d.done ? 'doc-row-submitted' : '');
-      var cls = d.done ? 'completed' : (d.warn ? 'blocked' : 'pending');
-      var lbl = d.done ? '已提交' : (d.warn ? '⚠ 告警缺失' : '未开始');
-      var statusCell = '<span class="pill ' + cls + '" style="font-size:11px;cursor:' + (canEdit ? 'pointer' : 'default') + '"' +
-        (canEdit ? ' onclick="toggleDocEdit(' + d.id + ')" title="点击切换状态"' : '') + '>' + lbl + '</span>' +
-        (d.completed_at ? '<div style="font-size:10.5px;color:var(--success);margin-top:3px;font-family:var(--mono)">' + d.completed_at + '</div>' : '');
+    var completedDate = stage.stage_completed_date || null;
 
-      // Location link or hint
-      var locHtml = '';
-      if (d.done && d.location) {
-        locHtml = '<a class="doc-link" href="' + escHtml(d.location) + '" target="_blank">↗ ' + escHtml(d.location) + '</a>';
-      } else if (d.done) {
-        locHtml = '<span style="font-size:12px;color:var(--muted)">已提交</span>';
-      } else if (d.warn) {
-        locHtml = '<span style="font-size:11.5px;color:var(--warn);font-style:italic">缺失文档，请及时提交</span>';
-      } else {
-        locHtml = '<span style="font-size:11.5px;color:var(--muted);font-style:italic">待提交</span>';
-      }
-
-      var completedDate = items[0].stage_completed_date || null;
-      rows += '<tr class="' + rowCls + '" style="background:' + bg + '" id="doc-row-' + d.id + '">' +
-        (i === 0 ? '<td rowspan="' + items.length + '" style="vertical-align:middle;font-weight:540;border-right:1px solid var(--border)">' + escHtml(stageName) + (completedDate ? '<br><span style="font-size:10.5px;color:var(--success);font-weight:400">&#10003; ' + completedDate + '</span>' : '') + '</td>' : '') +
-        '<td>' + escHtml(d.doc_name) + '</td>' +
-        '<td style="font-size:12px;color:' + (d.responsible_role ? 'var(--fg)' : 'var(--muted)') + '">' + escHtml(d.responsible_role || '—') + '</td>' +
-        '<td>' + statusCell + '</td><td id="doc-loc-cell-' + d.id + '">' + locHtml + '</td>' +
+    if (!hasDocs) {
+      // Standard stage with no documents — show placeholder row
+      rows += '<tr style="background:' + bg + ';opacity:0.5">' +
+        '<td style="vertical-align:middle;font-weight:540;border-right:1px solid var(--border);color:var(--muted)">' + escHtml(stageName) + '</td>' +
+        '<td colspan="4" style="color:var(--muted);font-style:italic;font-size:12px">暂无文档（阶段未匹配到禅道数据或文档模板）</td>' +
       '</tr>';
-    });
+    } else {
+      items.forEach(function(d, i) {
+        var rowCls = d.warn ? 'doc-row-warn' : (d.done ? 'doc-row-submitted' : '');
+        var cls = d.done ? 'completed' : (d.warn ? 'blocked' : 'pending');
+        var lbl = d.done ? '已提交' : (d.warn ? '⚠ 告警缺失' : '未开始');
+        var statusCell = '<span class="pill ' + cls + '" style="font-size:11px;cursor:' + (canEdit ? 'pointer' : 'default') + '"' +
+          (canEdit ? ' onclick="toggleDocEdit(' + d.id + ')" title="点击切换状态"' : '') + '>' + lbl + '</span>' +
+          (d.completed_at ? '<div style="font-size:10.5px;color:var(--success);margin-top:3px;font-family:var(--mono)">' + d.completed_at + '</div>' : '');
+
+        var locHtml = '';
+        if (d.done && d.location) {
+          locHtml = '<a class="doc-link" href="' + escHtml(d.location) + '" target="_blank">↗ ' + escHtml(d.location) + '</a>';
+        } else if (d.done) {
+          locHtml = '<span style="font-size:12px;color:var(--muted)">已提交</span>';
+        } else if (d.warn) {
+          locHtml = '<span style="font-size:11.5px;color:var(--warn);font-style:italic">缺失文档，请及时提交</span>';
+        } else {
+          locHtml = '<span style="font-size:11.5px;color:var(--muted);font-style:italic">待提交</span>';
+        }
+
+        rows += '<tr class="' + rowCls + '" style="background:' + bg + '" id="doc-row-' + d.id + '">' +
+          (i === 0 ? '<td rowspan="' + items.length + '" style="vertical-align:middle;font-weight:540;border-right:1px solid var(--border)">' + escHtml(stageName) + (completedDate ? '<br><span style="font-size:10.5px;color:var(--success);font-weight:400">&#10003; ' + completedDate + '</span>' : '') + '</td>' : '') +
+          '<td>' + escHtml(d.doc_name) + '</td>' +
+          '<td style="font-size:12px;color:' + (d.responsible_role ? 'var(--fg)' : 'var(--muted)') + '">' + escHtml(d.responsible_role || '—') + '</td>' +
+          '<td>' + statusCell + '</td><td id="doc-loc-cell-' + d.id + '">' + locHtml + '</td>' +
+        '</tr>';
+      });
+    }
     stageIdx++;
   });
   document.getElementById('docs-tbody').innerHTML = rows;
@@ -1140,6 +1206,96 @@ function gotoStageDetail(idx) {
     row.scrollIntoView({ behavior: 'smooth', block: 'center' });
     setTimeout(function() { row.classList.remove('stage-row-flash'); }, 2000);
   }, 100);
+}
+
+/* ── Stage Mismatch Alert Dialog ── */
+
+var STAGE_OPTIONS = ['售前', '项目立项', '需求分解', '硬件开发', '结构设计', 'BSP开发', '软件开发', '测试', '产品发货', '项目总结'];
+var _mismatchExecId = null;
+
+function showStageMismatchDialog(execId, stageName, event) {
+  _mismatchExecId = execId;
+  if (event) event.stopPropagation();
+
+  var existing = document.querySelector('.stage-name-dialog-overlay');
+  if (existing) existing.remove();
+
+  var standards = (typeof _standardStages !== 'undefined' && _standardStages.length)
+    ? _standardStages : STAGE_OPTIONS;
+  var stageListHtml = standards.map(function(st) {
+    return '<li style="padding:2px 0;font-weight:500">' + escHtml(st) + '</li>';
+  }).join('');
+
+  var html = '<div class="note-dialog-overlay stage-name-dialog-overlay" onclick="if(event.target===this)this.remove()">' +
+    '<div class="note-dialog" style="max-width:440px" onclick="event.stopPropagation()">' +
+      '<div class="note-dialog-head"><span class="note-dialog-title">⚠ 请修改禅道阶段名为标准名字</span>' +
+        '<button class="note-dialog-close" onclick="this.closest(\'.stage-name-dialog-overlay\').remove()">&times;</button></div>' +
+      '<div style="padding:8px 0;line-height:1.8">' +
+        '<p style="margin-bottom:10px">当前阶段名 <b style="color:var(--warn)">"' + escHtml(stageName) + '"</b> 不在标准阶段列表中。</p>' +
+        '<p style="margin-bottom:6px;color:var(--muted)">请修改禅道阶段名为以下标准名称之一：</p>' +
+        '<ul style="margin:0;padding-left:20px;color:var(--fg);font-size:13px">' +
+          stageListHtml +
+        '</ul>' +
+        '<p style="margin-top:12px;font-size:11px;color:var(--muted);font-style:italic">修改后下次禅道同步生效，系统将自动匹配并显示正常数据。</p>' +
+      '</div>' +
+      '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">' +
+        (execId ? '<button class="btn btn-primary" onclick="showStageNameEdit(\'' + escHtml(stageName) + '\')">在 PMA 中临时映射</button>' : '') +
+        '<button class="btn" onclick="this.closest(\'.stage-name-dialog-overlay\').remove()">关闭</button>' +
+      '</div>' +
+    '</div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function showStageNameEdit(currentName) {
+  // Close mismatch dialog
+  var dlg = document.querySelector('.stage-name-dialog-overlay');
+  if (dlg) dlg.remove();
+
+  var standards = (typeof _standardStages !== 'undefined' && _standardStages.length)
+    ? _standardStages : STAGE_OPTIONS;
+  var optionsHtml = standards.map(function(st) {
+    return '<option value="' + st + '">' + st + '</option>';
+  }).join('');
+
+  var html = '<div class="note-dialog-overlay stage-name-dialog-overlay" onclick="if(event.target===this)this.remove()">' +
+    '<div class="note-dialog" style="max-width:420px" onclick="event.stopPropagation()">' +
+      '<div class="note-dialog-head"><span class="note-dialog-title">设置 PMA 阶段映射</span>' +
+        '<button class="note-dialog-close" onclick="this.closest(\'.stage-name-dialog-overlay\').remove()">&times;</button></div>' +
+      '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">当前禅道名称: <b>' + escHtml(currentName) + '</b></div>' +
+      '<div style="margin-bottom:12px">' +
+        '<label style="font-size:11px;color:var(--muted)">映射到标准阶段</label>' +
+        '<select class="search-inp" id="stage-name-select" style="margin-top:4px;padding:7px 10px;width:100%">' +
+          '<option value="">— 请选择 —</option>' + optionsHtml +
+        '</select>' +
+      '</div>' +
+      '<div style="display:flex;justify-content:flex-end;gap:8px">' +
+        '<button class="btn" onclick="this.closest(\'.stage-name-dialog-overlay\').remove()">取消</button>' +
+        '<button class="btn btn-primary" onclick="saveStageNameMapping()">保存映射</button>' +
+      '</div>' +
+    '</div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+async function saveStageNameMapping() {
+  if (!_mismatchExecId) { showToast('请重新点击告警标记', 'error'); return; }
+  var sel = document.getElementById('stage-name-select');
+  var name = sel.value.trim();
+  if (!name) { showToast('请选择标准阶段名', 'error'); return; }
+  try {
+    await API.put('/projects/' + _comboCurId + '/stages/' + _mismatchExecId + '/stage-name', { stage_name: name });
+    showToast('映射已保存', 'success');
+    document.querySelector('.stage-name-dialog-overlay').remove();
+    _mismatchExecId = null;
+    // Reload
+    var p = await Promise.all([
+      API.get('/projects/' + _comboCurId + '/stages'),
+      API.get('/projects/' + _comboCurId + '/documents'),
+    ]);
+    buildStages(p[0]);
+    buildDocs(p[1]);
+  } catch(e) {
+    showToast('保存失败: ' + (e.message || '未知错误'), 'error');
+  }
 }
 
 /* ── Project Maintenance ── */

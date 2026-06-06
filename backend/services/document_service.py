@@ -8,18 +8,56 @@ from sqlalchemy.orm import Session
 from backend.models.document import DocumentTemplate, ProjectDocument
 from backend.models.zentao import CachedExecution
 
-# Fixed stage types corresponding to the project lifecycle.
-# These are the known stage types; document templates are configured per type.
-STAGE_TYPES = [
+# Standard stage names from requirements spec (Section 4.1 Project Lifecycle).
+# These are the authoritative stage definitions; Zentao execution names must
+# match one of these exactly (or have stage_name set to one of these).
+#
+# R&D project stages (10 stages):
+RD_STAGE_TYPES = [
     "售前",
+    "项目立项",
+    "需求分解",
     "硬件开发",
-    "软件开发",
     "结构设计",
     "BSP开发",
+    "软件开发",
     "测试",
     "产品发货",
     "项目总结",
 ]
+
+# Production project stages (8 stages) — no BSP开发 or 软件开发:
+SC_STAGE_TYPES = [
+    "售前",
+    "项目立项",
+    "需求分解",
+    "硬件开发",
+    "结构设计",
+    "测试",
+    "产品发货",
+    "项目总结",
+]
+
+# Legacy — kept for template config page (ordered list of all unique stage types)
+STAGE_TYPES = [
+    "售前",
+    "项目立项",
+    "需求分解",
+    "硬件开发",
+    "结构设计",
+    "BSP开发",
+    "软件开发",
+    "测试",
+    "产品发货",
+    "项目总结",
+]
+
+
+def get_stage_types_for_project(project_type: str) -> list[str]:
+    """Return the standard stage list for a given project type."""
+    if project_type == "SC":
+        return SC_STAGE_TYPES
+    return RD_STAGE_TYPES  # default: R&D
 
 # Seed data: default document templates per stage type.
 # These are inserted on first startup if the document_templates table is empty.
@@ -31,6 +69,11 @@ SEED_TEMPLATES: list[dict] = [
     {"stage_type": "售前", "doc_name": "商务可行性报告", "sort_order": 3, "responsible_role": "CEO", "description": "评估项目投入产出比，判断是否具备商业可行性"},
     {"stage_type": "售前", "doc_name": "立项决议书", "sort_order": 4, "responsible_role": "销售及售前", "description": "综合结论及原因，明确是否立项，确定项目交付节点和项目类型（研发/生产）"},
     {"stage_type": "售前", "doc_name": "项目交付节点", "sort_order": 5, "responsible_role": "项目经理", "description": "明确各阶段交付时间节点，转研发项目或转生产项目的决策依据"},
+    # 项目立项 — 创建项目、实施方案、启动会
+    {"stage_type": "项目立项", "doc_name": "实施方案草案", "sort_order": 1, "responsible_role": "CTO", "description": "项目实施方案草案，包含技术路线、资源需求、风险评估"},
+    {"stage_type": "项目立项", "doc_name": "项目启动会纪要", "sort_order": 2, "responsible_role": "项目经理", "description": "项目启动会决议，确认人力资源排布、项目周期计划"},
+    # 需求分解 — 需求分解任务跟踪
+    {"stage_type": "需求分解", "doc_name": "需求分解结果", "sort_order": 1, "responsible_role": "项目经理", "description": "各方向需求分解结果，对应禅道开发任务，用于跟踪执行进度"},
     # 硬件开发
     {"stage_type": "硬件开发", "doc_name": "硬件方案设计", "sort_order": 1, "responsible_role": "硬件开发", "description": "硬件整体方案设计文档，包含架构框图、关键器件选型说明"},
     {"stage_type": "硬件开发", "doc_name": "原理图", "sort_order": 2, "responsible_role": "硬件开发", "description": "电路原理图设计文件，需通过评审"},
@@ -159,26 +202,28 @@ def _template_dict(t: DocumentTemplate) -> dict:
 # Project document lifecycle
 # ---------------------------------------------------------------------------
 
-def get_or_init_project_documents(db: Session, project_id: int) -> list[dict]:
+def get_or_init_project_documents(db: Session, project_id: int, project_type: str = "RD") -> list[dict]:
     """Get project documents, initializing from templates on first access.
 
-    For each execution (stage) in the project, match its name against known
-    stage types and copy the corresponding DocumentTemplate rows into
-    ProjectDocument rows.  Subsequent calls return the existing rows.
+    Uses strict exact matching against standard stage names (per project type).
+    Executions that don't match any standard stage are left without documents
+    — they will be flagged as "阶段信息缺失" in the dashboard.
+
+    Initialization is incremental: each execution is checked individually,
+    so fixing a stage_name for a previously unmatched execution will
+    immediately generate documents for it.
     """
-    # Check if already initialized
-    existing_count = db.query(ProjectDocument).filter(
-        ProjectDocument.project_id == project_id
-    ).count()
-
-    if existing_count == 0:
-        _init_from_templates(db, project_id)
-
+    _init_from_templates(db, project_id, project_type)
     return _query_project_documents(db, project_id)
 
 
-def _init_from_templates(db: Session, project_id: int) -> None:
-    """Create ProjectDocument rows from templates for all matching executions."""
+def _init_from_templates(db: Session, project_id: int, project_type: str = "RD") -> None:
+    """Create ProjectDocument rows from templates for matched executions.
+
+    Incremental: skips executions that already have documents.
+    """
+    standard_stages = get_stage_types_for_project(project_type)
+
     executions = (
         db.query(CachedExecution)
         .filter(CachedExecution.project_id == project_id)
@@ -186,12 +231,22 @@ def _init_from_templates(db: Session, project_id: int) -> None:
         .all()
     )
 
+    new_count = 0
     for e in executions:
+        # Priority: PMA-local stage_name > Zentao name
         stage_name = (e.stage_name or e.name or "").strip()
         if not stage_name:
             continue
-        matched_type = _match_stage_type(stage_name)
-        if not matched_type:
+        result = _match_stage_type(stage_name, standard_stages)
+        if not result:
+            continue
+        matched_type = result[0]  # stage type name
+
+        # Skip if this execution already has documents
+        already = db.query(ProjectDocument).filter(
+            ProjectDocument.execution_id == e.id
+        ).count()
+        if already > 0:
             continue
 
         # Copy templates for this stage type
@@ -212,22 +267,38 @@ def _init_from_templates(db: Session, project_id: int) -> None:
                 responsible_role=tpl.responsible_role,
             )
             db.add(pd)
-    db.commit()
+            new_count += 1
+    if new_count > 0:
+        db.commit()
 
 
-def _match_stage_type(stage_name: str) -> Optional[str]:
-    """Match an execution stage_name against known stage types.
+def _match_stage_type(stage_name: str, standard_stages: list[str]) -> Optional[tuple[str, str]]:
+    """Match an execution stage_name against standard stages.
 
-    Tries exact match first, then substring match.
+    Returns (matched_stage_type, match_kind) where match_kind is:
+      - "exact": exact match (name is a standard stage)
+      - "fuzzy": substring match (name contains or is contained by a standard stage)
+    Returns None if no match at all.
     """
-    name_lower = stage_name.lower()
-    for st in STAGE_TYPES:
-        if st in stage_name or name_lower == st.lower():
-            return st
-    # Try substring the other way (stage_name contained in known type)
-    for st in STAGE_TYPES:
-        if name_lower in st.lower():
-            return st
+    if not stage_name:
+        return None
+    name = stage_name.strip()
+
+    # 1. Exact match
+    for st in standard_stages:
+        if name == st:
+            return (st, "exact")
+
+    # 2. Substring match: standard stage is contained in the execution name
+    for st in standard_stages:
+        if st in name:
+            return (st, "fuzzy")
+
+    # 3. Substring match: execution name is contained in standard stage
+    for st in standard_stages:
+        if name in st:
+            return (st, "fuzzy")
+
     return None
 
 

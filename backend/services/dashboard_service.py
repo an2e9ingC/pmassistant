@@ -220,6 +220,25 @@ def _detect_alerts_internal(db: Session) -> list[dict]:
                             "project_id": p.id, "project_code": proj_code, "stage_name": e.name,
                         })
 
+    # Stage info missing: check for executions that don't match standard stages
+    from backend.services.document_service import _match_stage_type, get_stage_types_for_project
+    for p in projects:
+        proj_code = p.code or (p.name.split('-')[0] if p.name and '-' in p.name else None)
+        standard_stages = get_stage_types_for_project(p.project_type or "RD")
+        executions = db.query(CachedExecution).filter(
+            CachedExecution.project_id == p.id
+        ).all()
+        for e in executions:
+            actual_name = (e.stage_name or e.name or "").strip()
+            if actual_name and not _match_stage_type(actual_name, standard_stages):
+                alert_id += 1
+                alerts.append({
+                    "id": alert_id, "severity": "yellow",
+                    "message": f"阶段名不匹配: 「{e.name}」",
+                    "sub_message": f"请修改禅道阶段名为标准名字: {', '.join(standard_stages)}",
+                    "project_id": p.id, "project_code": proj_code, "stage_name": e.name,
+                })
+
     # Doc completeness: check ProjectDocument status for completed stages
     from backend.models.document import ProjectDocument
     for p in projects:

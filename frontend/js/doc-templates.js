@@ -7,8 +7,9 @@ var _selectedStage = null;   // currently selected stage_type
 
 // Fixed stage order matching the project lifecycle
 var STAGE_ORDER = [
-  '售前', '硬件开发', '软件开发', '结构设计',
-  'BSP开发', '测试', '产品发货', '项目总结',
+  '售前', '项目立项', '需求分解',
+  '硬件开发', '结构设计', 'BSP开发', '软件开发',
+  '测试', '产品发货', '项目总结',
 ];
 
 function _sortStageTypes(types) {

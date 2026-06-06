@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.middleware.auth import get_current_user, require_perm
 from backend.models.local import ProjectNote
-from backend.models.zentao import CachedProject
+from backend.models.zentao import CachedProject, CachedExecution
 from backend.services import project_service
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -31,8 +31,31 @@ def get_project(project_id: int, db: Session = Depends(get_db), _=Depends(get_cu
 
 @router.get("/{project_id}/stages", response_model=dict)
 def get_stages(project_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
-    stages = project_service.get_project_stages(db, project_id)
-    return {"code": 0, "data": stages, "message": "ok"}
+    result = project_service.get_project_stages(db, project_id)
+    return {"code": 0, "data": result, "message": "ok"}
+
+
+class StageNameUpdate(BaseModel):
+    stage_name: str
+
+
+@router.put("/{project_id}/stages/{execution_id}/stage-name", response_model=dict)
+def update_stage_name(
+    project_id: int,
+    execution_id: int,
+    body: StageNameUpdate,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("project_edit")),
+):
+    e = db.query(CachedExecution).filter(
+        CachedExecution.id == execution_id,
+        CachedExecution.project_id == project_id,
+    ).first()
+    if not e:
+        raise HTTPException(status_code=404, detail="Execution not found")
+    e.stage_name = body.stage_name.strip()
+    db.commit()
+    return {"code": 0, "data": {"id": e.id, "stage_name": e.stage_name}, "message": "ok"}
 
 
 @router.get("/{project_id}/documents", response_model=dict)
