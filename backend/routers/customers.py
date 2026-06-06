@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.middleware.auth import get_current_user, require_perm
-from backend.models.zentao import CachedCustomer, CustomerProjectLink, CustomerProductLink
+from backend.models.zentao import CachedCustomer, CachedProject, CachedProduct, CustomerProjectLink, CustomerProductLink, ProductProjectLink
 
 router = APIRouter(prefix="/api/customers", tags=["customers"])
 
@@ -86,3 +86,27 @@ def delete_customer(customer_id: int, db: Session = Depends(get_db), _=Depends(r
     db.delete(c)
     db.commit()
     return {"code": 0, "message": "客户已删除"}
+
+
+@router.get("/{customer_id}", response_model=dict)
+def get_customer_detail(customer_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    c = db.query(CachedCustomer).filter(CachedCustomer.id == customer_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="客户不存在")
+    # Associated projects
+    proj_links = db.query(CustomerProjectLink).filter(CustomerProjectLink.customer_id == customer_id).all()
+    project_ids = [l.project_id for l in proj_links]
+    projects = db.query(CachedProject).filter(CachedProject.id.in_(project_ids)).all() if project_ids else []
+    # Associated products
+    prod_links = db.query(CustomerProductLink).filter(CustomerProductLink.customer_id == customer_id).all()
+    product_ids = [l.product_id for l in prod_links]
+    products = db.query(CachedProduct).filter(CachedProduct.id.in_(product_ids)).all() if product_ids else []
+    return {
+        "code": 0,
+        "data": {
+            "id": c.id, "name": c.name, "full_name": c.full_name or "",
+            "projects": [{"id": p.id, "name": p.name, "code": p.code, "status": p.status} for p in projects],
+            "products": [{"id": p.id, "name": p.name, "code": p.code, "status": p.status} for p in products],
+        },
+        "message": "ok",
+    }

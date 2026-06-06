@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-> 当前版本：v2026.06.06-beta5 | 最后更新：2026-06-06
+> 当前版本：v2026.06.06-beta6 | 最后更新：2026-06-06
 
 ---
 
@@ -238,3 +238,4 @@
 | 2026-06-06 | v2026.06.06-beta3 | 文档全面更新：dev-plan重组+design-spec新增§17-18+deploy-guide API端点补充+requirements-spec版本1.2 |
 | 2026-06-06 | v2026.06.06-beta4 | Dashboard全部卡片显示项目筛选配置(ZENTAO_PROJECT_FILTER) |
 | 2026-06-06 | v2026.06.06-beta5 | 客户管理CRUD+项目维护Tab(关联产品/客户+搜索多选+密码确认)+CustomerProductLink |
+| 2026-06-06 | v2026.06.06-beta6 | 客户详情页+双栏布局+实体颜色一致性(.gs-cust/proj/prod)+设计规范§19+快速检索客户链路修复 |

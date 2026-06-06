@@ -224,6 +224,15 @@
   background: var(--accent-lt);
   color: var(--accent);
 }
+/* Customer variant — yellow/amber theme */
+.gs-cust { border-color: var(--warn); color: var(--warn); background: var(--warn-lt); }
+.gs-cust:hover { border-color: var(--warn); background: var(--warn); color: #fff; }
+/* Project variant — blue theme */
+.gs-proj { border-color: var(--accent); color: var(--accent); background: var(--accent-lt); }
+.gs-proj:hover { border-color: var(--accent); background: var(--accent); color: #fff; }
+/* Product variant — green theme */
+.gs-prod { border-color: var(--success); color: var(--success); background: var(--success-lt); }
+.gs-prod:hover { border-color: var(--success); background: var(--success); color: #fff; }
 .gantt-stage-cell .gs-risk {
   display: flex; align-items: center; justify-content: center;
   overflow: hidden;

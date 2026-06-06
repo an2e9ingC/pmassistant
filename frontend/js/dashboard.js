@@ -162,7 +162,7 @@ async function loadProjectTable(filter) {
       return '<tr ' + rowClick + '>' +
         '<td>' + projIconHtml + '</td>' +
         '<td><div class="proj-name">' + escHtml(coreName) + '</div><div class="proj-code">' + escHtml(projCode) + '</div></td>' +
-        '<td><span onclick="event.stopPropagation();gotoCustomerProjects(\'' + escHtml(p.customer_name || '') + '\')" style="cursor:pointer">' + renderCustomerBadge(p.customer_name) + '</span></td>' +
+        '<td><span onclick="event.stopPropagation();openCustomerByName(\'' + escHtml(p.customer_name || '') + '\')" style="cursor:pointer">' + renderCustomerBadge(p.customer_name) + '</span></td>' +
         '<td>' + renderTypeBadge(p.type) + '</td>' +
         '<td style="font-size:13px">' + escHtml(p.current_stage || '—') + '</td>' +
         '<td>' + renderPill(p.status) + '</td>' +
@@ -204,7 +204,7 @@ async function loadAlertList(projectId) {
       var dot = a.severity === 'red' ? 'r' : 'y';
       return '<div class="alert-row">' +
         '<div class="alert-dot ' + dot + '"></div>' +
-        (a.project_code ? '<span class="alert-proj" onclick="event.stopPropagation();openProject(\'' + a.project_id + '\')" title="跳转到项目详情">' + escHtml(a.project_code) + '</span>' : '') +
+        (a.project_code ? '<button class="gs-btn" onclick="event.stopPropagation();openProject(\'' + a.project_id + '\')" title="跳转到项目详情">' + escHtml(a.project_code) + '</button>' : '') +
         '<div class="alert-body">' +
           '<div class="alert-msg">' + escHtml(a.message) + '</div>' +
           (a.sub_message ? '<div class="alert-sub">' + escHtml(a.sub_message) + '</div>' : '') +

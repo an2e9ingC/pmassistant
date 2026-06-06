@@ -142,7 +142,7 @@
     </div>
 
     <div style="margin-top:8px;text-align:center;font-size:10px;color:var(--muted)">
-      <span id="app-version">v2026.06.06-beta5</span>
+      <span id="app-version">v2026.06.06-beta6</span>
     </div>
   </div>
 </aside>
@@ -637,12 +637,45 @@
       <div class="card table-scroll" style="max-height:calc(100vh - 200px)">
         <table class="proj-table">
           <thead><tr>
-            <th>客户名称</th><th width="20%">全称</th><th width="10%">关联项目</th><th width="10%">关联产品</th><th width="16%">操作</th>
+            <th>客户名称</th><th width="18%">全称</th><th width="10%">关联项目</th><th width="10%">关联产品</th><th width="18%">操作</th>
           </tr></thead>
           <tbody id="cust-tbody">
             <tr><td colspan="5"><div class="loading-spinner">加载中...</div></td></tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- ══════════════════════ VIEW — CUSTOMER DETAIL ══════════════════════ -->
+    <div class="view" id="view-customer-detail">
+      <div style="margin-bottom:14px">
+        <button class="btn" onclick="gotoView('customers')" style="font-size:12px;padding:4px 12px">← 返回客户列表</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:22px;padding:16px 20px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg)">
+        <div>
+          <div style="font-size:20px;font-weight:620" id="cust-det-name-head">—</div>
+          <div style="font-size:13px;color:var(--muted);margin-top:4px" id="cust-det-fullname"></div>
+        </div>
+      </div>
+      <div class="two-col" style="grid-template-columns:1fr 1fr;gap:18px">
+        <div>
+          <div class="section-hd"><div class="section-title">关联项目</div></div>
+          <div class="card table-scroll" style="max-height:400px">
+            <table class="proj-table">
+              <thead><tr><th>项目</th><th width="12%">状态</th></tr></thead>
+              <tbody id="cust-det-proj-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div>
+          <div class="section-hd"><div class="section-title">关联产品</div></div>
+          <div class="card table-scroll" style="max-height:400px">
+            <table class="proj-table">
+              <thead><tr><th>产品</th><th width="12%">状态</th></tr></thead>
+              <tbody id="cust-det-prod-tbody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
 

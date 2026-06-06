@@ -43,6 +43,21 @@ function formatShortDate(d) {
   return m + '月' + day + '日';
 }
 
+async function openCustomerByName(name) {
+  if (!name) return;
+  try {
+    var customers = await API.get('/customers?search=' + encodeURIComponent(name));
+    if (customers && customers.length) {
+      localStorage.setItem('pm_cust_id', customers[0].id);
+      gotoView('customer-detail');
+    } else {
+      showToast('未找到客户: ' + name, 'warn');
+    }
+  } catch(e) {
+    showToast('查找客户失败', 'error');
+  }
+}
+
 function compactDate(d) {
   if (!d) return '';
   var s = String(d);

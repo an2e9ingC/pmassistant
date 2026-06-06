@@ -416,10 +416,31 @@ utils.js → api.js → auth.js → components.js → dashboard.js → detail.js
 
 ---
 
-## 19. 开发流程规则
+## 19. 实体颜色一致性规范
+
+**不同实体类型必须使用统一的主题色，全局保持视觉一致性。**
+
+| 实体 | 主色 | CSS 变量 | 按钮 class | 徽章/图标 |
+|------|------|---------|-----------|----------|
+| 客户 | 黄色/琥珀 | `--warn` / `--warn-lt` | `.gs-cust` | `.cust-badge` |
+| 项目（研发） | 蓝色 | `--accent` / `--accent-lt` | `.gs-proj` | `.proj-icon.rd` |
+| 项目（生产） | 绿色 | `--success` / `--success-lt` | — | `.proj-icon.sc` |
+| 产品 | 绿色 | `--success` / `--success-lt` | `.gs-prod` | `.tag-badge.tag-1` |
+| 删除/危险操作 | 红色 | `--danger` / `--danger-lt` | `.btn` + `color:var(--danger)` | — |
+
+**按钮变体规则：**
+- `.gs-btn`：中性默认（`--surface` + `--fg` + `--border`），用于一般阶段/项目名
+- `.gs-cust`：客户专用黄色按钮
+- `.gs-proj`：项目专用蓝色按钮
+- `.gs-prod`：产品专用绿色按钮
+- 每个变体有对应的 `hover` 状态（实心填充 + 白色文字）
+
+---
+
+## 20. 开发流程规则
 
 **每次代码修改后必须检查：**
 1. `docs/dev-plan.md` — 版本历史表格是否需要追加新版本条目
 2. `docs/design-spec.md` — 设计规范是否需要新增/更新章节
-3. `docs/deploy-guide.md` — 部署运维是否需要更新（新增路由/文件/配置项等）
-4. `.claude/memory/` — 项目记忆是否需要新增/修改（新规则、新发现等）
+3. `docs/deploy-guide.md` — 部署运维是否需要更新
+4. 实体颜色一致性（§19）：新实体类型必须分配统一主题色并在全局保持一致
