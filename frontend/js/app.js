@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════
    MAIN APP
 ═══════════════════════════════════════════════════ */
-var VIEW_TITLES = { dashboard: '项目总览', detail: '项目详情', topology: '快速检索', reports: '统计报告', logs: '系统日志', users: '用户管理', permissions: '权限管理', config: '数据源配置', 'product-list': '产品总览', 'product-detail': '产品详情' };
+var VIEW_TITLES = { dashboard: '项目总览', detail: '项目详情', topology: '快速检索', reports: '统计报告', logs: '系统日志', users: '用户管理', permissions: '权限管理', config: '数据源配置', 'product-list': '产品总览', 'product-detail': '产品详情', customers: '客户管理' };
 
 function gotoView(view) {
   // Check auth
@@ -78,6 +78,9 @@ function gotoView(view) {
   }
   if (view === 'product-detail') {
     initProductDetail();
+  }
+  if (view === 'customers') {
+    initCustomerManagement();
   }
   localStorage.setItem('pm_view', view);
 }

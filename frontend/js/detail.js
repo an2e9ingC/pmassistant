@@ -118,6 +118,7 @@ async function loadProjectDetail(id) {
     buildDelivery(delivery);
     buildResources(resources, detail);
     buildNotes(notes);
+    buildMaintenance();
   } catch(e) {
     document.getElementById('detail-header').innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '</div>';
   }
@@ -988,6 +989,8 @@ function switchDTab(id, el) {
     var tab = document.querySelector('.dtab[onclick*="' + id + '"]');
     if (tab) tab.classList.add('active');
   }
+  // Refresh maintenance tab content when switching to it
+  if (id === 'maintenance') buildMaintenance();
 }
 
 function gotoStageDetail(idx) {
@@ -1001,7 +1004,139 @@ function gotoStageDetail(idx) {
     document.querySelectorAll('.stage-row-flash').forEach(function(r) { r.classList.remove('stage-row-flash'); });
     row.classList.add('stage-row-flash');
     row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    // Auto-remove highlight after 2s
     setTimeout(function() { row.classList.remove('stage-row-flash'); }, 2000);
   }, 100);
 }
+
+/* ── Project Maintenance ── */
+
+function buildMaintenance() {
+  if (!_comboCurId) return;
+  var user = getCurrentUser();
+  var hasPerm = user && (user.role === 'admin' || user.role === 'pm' || user.role === 'manager');
+  var dt = document.getElementById('dt-maintenance');
+  if (dt) dt.style.display = hasPerm ? '' : 'none';
+  if (!hasPerm) return;
+  loadMaintProjectProducts();
+  loadMaintProjectCustomers();
+}
+
+// ── Shared multi-select helper ──
+
+function _renderMaintSection(containerId, linked, allItems, idKey, labelKey, type) {
+  var linkedIds = (linked || []).map(function(x) { return x[idKey]; });
+  var container = document.getElementById(containerId);
+  var tagsHtml = linked.length ? linked.map(function(x) {
+    return '<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:12px;background:var(--accent-lt);color:var(--accent)">' +
+      escHtml(x[labelKey]) + ' <span onclick="maintRemove_' + type + '(' + x[idKey] + ')" style="cursor:pointer;opacity:0.5;font-size:14px" title="移除">&times;</span></span>';
+  }).join('') : '<span style="font-size:12px;color:var(--muted)">暂无关联</span>';
+
+  var cbHtml = allItems.map(function(item) {
+    var lid = item[idKey];
+    return '<label style="display:flex;align-items:center;gap:6px;padding:3px 6px;font-size:12px;cursor:pointer" class="maint-cb-' + type + '" data-filter="' + escHtml((item[labelKey] || '').toLowerCase()) + '">' +
+      '<input type="checkbox" value="' + lid + '" ' + (linkedIds.indexOf(lid) >= 0 ? 'checked' : '') + '>' +
+      escHtml(item[labelKey]) + '</label>';
+  }).join('');
+
+  container.innerHTML =
+    '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">' + tagsHtml + '</div>' +
+    '<div style="position:relative">' +
+      '<input class="search-inp" placeholder="搜索并多选..." oninput="maintFilter_' + type + '(this.value)" style="width:100%;padding:6px 8px;font-size:12px;margin-bottom:6px;box-sizing:border-box">' +
+      '<div class="maint-dd" style="max-height:180px;overflow-y:auto;overscroll-behavior:contain;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px;display:none" id="maint-dd-' + type + '">' + cbHtml + '</div>' +
+    '</div>' +
+    '<button class="btn btn-primary" onclick="maintSave_' + type + '()" style="font-size:11px;margin-top:4px">保存关联</button>';
+}
+
+var _maintLinkedProds = [];
+
+// ── Products ──
+
+async function loadMaintProjectProducts() {
+  try {
+    var linked = await API.get('/maintenance/projects/' + _comboCurId + '/products');
+    var all = await API.get('/products?limit=200');
+    var allList = all.items || [];
+    _renderMaintSection('maint-proj-products', linked, allList, 'id', 'name', 'prod');
+    _maintLinkedProds = linked || [];
+  } catch(e) {
+    document.getElementById('maint-proj-products').innerHTML = '<div class="error-state">加载失败</div>';
+  }
+}
+
+function maintFilter_prod(v) {
+  var q = (v || '').toLowerCase();
+  var dd = document.getElementById('maint-dd-prod');
+  dd.style.display = 'block';
+  document.querySelectorAll('.maint-cb-prod').forEach(function(cb) {
+    cb.style.display = q ? (cb.dataset.filter.indexOf(q) >= 0 ? '' : 'none') : '';
+  });
+}
+
+async function maintSave_prod() {
+  var ids = [];
+  document.querySelectorAll('.maint-cb-prod input:checked').forEach(function(cb) { ids.push(parseInt(cb.value)); });
+  await API.put('/maintenance/projects/' + _comboCurId + '/products', { ids: ids });
+  loadMaintProjectProducts();
+}
+
+function maintRemove_prod(pid) {
+  var pw = prompt('⚠ 确认移除产品关联，请输入登录密码确认：');
+  if (!pw) return;
+  var user = getCurrentUser();
+  API.post('/auth/login', { username: user.username, password: pw }).then(function() {
+    var ids = _maintLinkedProds.map(function(p) { return p.id; }).filter(function(id) { return id !== pid; });
+    return API.put('/maintenance/projects/' + _comboCurId + '/products', { ids: ids });
+  }).then(function() { loadMaintProjectProducts(); }).catch(function(e) {
+    showToast('密码验证失败或操作被拒绝', 'error');
+  });
+}
+
+// ── Customers ──
+
+var _maintLinkedCustomers = [];
+
+async function loadMaintProjectCustomers() {
+  try {
+    var linked = await API.get('/maintenance/projects/' + _comboCurId + '/customers');
+    _maintLinkedCustomers = linked || [];
+    var all = await API.get('/customers');
+    _renderMaintSection('maint-proj-customers', linked, all, 'id', 'name', 'cust');
+  } catch(e) {
+    document.getElementById('maint-proj-customers').innerHTML = '<div class="error-state">加载失败</div>';
+  }
+}
+
+function maintFilter_cust(v) {
+  var q = (v || '').toLowerCase();
+  var dd = document.getElementById('maint-dd-cust');
+  dd.style.display = 'block';
+  document.querySelectorAll('.maint-cb-cust').forEach(function(cb) {
+    cb.style.display = q ? (cb.dataset.filter.indexOf(q) >= 0 ? '' : 'none') : '';
+  });
+}
+
+async function maintSave_cust() {
+  var ids = [];
+  document.querySelectorAll('.maint-cb-cust input:checked').forEach(function(cb) { ids.push(parseInt(cb.value)); });
+  await API.put('/maintenance/projects/' + _comboCurId + '/customers', { ids: ids });
+  loadMaintProjectCustomers();
+}
+
+function maintRemove_cust(cid) {
+  var pw = prompt('⚠ 确认移除客户关联，请输入登录密码确认：');
+  if (!pw) return;
+  var user = getCurrentUser();
+  API.post('/auth/login', { username: user.username, password: pw }).then(function() {
+    var ids = _maintLinkedCustomers.map(function(c) { return c.id; }).filter(function(id) { return id !== cid; });
+    return API.put('/maintenance/projects/' + _comboCurId + '/customers', { ids: ids });
+  }).then(function() { loadMaintProjectCustomers(); }).catch(function(e) {
+    showToast('密码验证失败或操作被拒绝', 'error');
+  });
+}
+
+// Close dropdown on outside click
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.maint-dd') && !e.target.closest('.search-inp[oninput*="maintFilter"]')) {
+    document.querySelectorAll('.maint-dd').forEach(function(d) { d.style.display = 'none'; });
+  }
+});

@@ -69,6 +69,17 @@
       </div>
     </div>
     <div class="nav-group">
+      <div class="nav-group-label">客户</div>
+      <div class="nav-item" id="nav-customers" onclick="gotoView('customers')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="5.5" cy="4" r="2.5"/>
+          <circle cx="10.5" cy="4" r="2.5"/>
+          <path d="M1.5 13c0-2.5 1.8-4 4-4h4.5c2.2 0 4 1.5 4 4"/>
+        </svg>
+        客户管理
+      </div>
+    </div>
+    <div class="nav-group">
       <div class="nav-group-label">工具</div>
       <div class="nav-item" id="nav-topology" onclick="gotoView('topology')">
         <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -131,7 +142,7 @@
     </div>
 
     <div style="margin-top:8px;text-align:center;font-size:10px;color:var(--muted)">
-      <span id="app-version">v2026.06.06-beta4</span>
+      <span id="app-version">v2026.06.06-beta5</span>
     </div>
   </div>
 </aside>
@@ -303,6 +314,7 @@
         <div class="dtab" onclick="switchDTab('docs',this)">文档齐套</div>
         <div class="dtab" onclick="switchDTab('delivery',this)">交付状态</div>
         <div class="dtab" onclick="switchDTab('resources',this)">软硬件资料</div>
+        <div class="dtab" id="dt-maintenance" onclick="switchDTab('maintenance',this)">项目维护</div>
       </div>
 
       <div class="dsec active" id="dsec-gantt">
@@ -369,6 +381,16 @@
       <div class="dsec" id="dsec-resources">
         <div id="resources-content">
           <div class="empty-state" style="padding:20px">请选择项目</div>
+        </div>
+      </div>
+      <div class="dsec" id="dsec-maintenance">
+        <div class="section-hd"><div class="section-title">关联产品</div></div>
+        <div id="maint-proj-products" class="card" style="padding:16px;margin-bottom:18px">
+          <div class="empty-state" style="padding:12px">请选择项目</div>
+        </div>
+        <div class="section-hd"><div class="section-title">关联客户</div></div>
+        <div id="maint-proj-customers" class="card" style="padding:16px">
+          <div class="empty-state" style="padding:12px">请选择项目</div>
         </div>
       </div>
 
@@ -607,6 +629,22 @@
       </div>
     </div>
 
+    <!-- ══════════════════════ VIEW — CUSTOMERS ══════════════════════ -->
+    <div class="view" id="view-customers">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+        <button class="btn btn-primary" onclick="openCustCreateDialog()" style="font-size:12px;padding:5px 16px">+ 添加客户</button>
+      </div>
+      <div class="card table-scroll" style="max-height:calc(100vh - 200px)">
+        <table class="proj-table">
+          <thead><tr>
+            <th>客户名称</th><th width="20%">全称</th><th width="10%">关联项目</th><th width="10%">关联产品</th><th width="16%">操作</th>
+          </tr></thead>
+          <tbody id="cust-tbody">
+            <tr><td colspan="5"><div class="loading-spinner">加载中...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
 
   </div>
 </main>
@@ -622,6 +660,7 @@
 <script src="/js/product.js"></script>
 <script src="/js/topology.js"></script>
 <script src="/js/admin.js"></script>
+<script src="/js/customers.js"></script>
 <script src="/js/app.js"></script>
 <script>
 async function triggerSync() {

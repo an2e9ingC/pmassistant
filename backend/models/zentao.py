@@ -158,3 +158,14 @@ class CustomerProjectLink(Base):
     created_at = Column(DateTime, default=func.now())
 
     __table_args__ = (UniqueConstraint("customer_id", "project_id"),)
+
+
+class CustomerProductLink(Base):
+    __tablename__ = "customer_product_links"
+
+    id = Column(Integer, primary_key=True)
+    customer_id = Column(Integer, ForeignKey("zenta_customers.id"), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("zenta_products.id"), nullable=False, index=True)
+    created_at = Column(DateTime, default=func.now())
+
+    __table_args__ = (UniqueConstraint("customer_id", "product_id"),)

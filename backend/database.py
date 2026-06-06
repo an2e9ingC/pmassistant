@@ -98,6 +98,7 @@ def init_db():
         ProductProjectLink,
         CachedCustomer,
         CustomerProjectLink,
+        CustomerProductLink,
     )
 
     logger.info(f"Database path: {_db_path}")
