@@ -45,7 +45,7 @@ def update_stage_name(
     execution_id: int,
     body: StageNameUpdate,
     db: Session = Depends(get_db),
-    user=Depends(require_perm("project_edit")),
+    user=Depends(require_perm("stage_mapping")),
 ):
     e = db.query(CachedExecution).filter(
         CachedExecution.id == execution_id,

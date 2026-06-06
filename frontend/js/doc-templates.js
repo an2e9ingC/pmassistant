@@ -60,7 +60,7 @@ async function initDocTemplates() {
 
 function renderTemplatesPage() {
   var user = getCurrentUser();
-  var canEdit = user && user.role === 'admin';
+  var canEdit = user && (user.role === 'admin' || user.role === 'pm' || user.role === 'test_delivery');
 
   var stageTypes = _sortStageTypes(Object.keys(_templatesGrouped));
   if (!stageTypes.length) {
