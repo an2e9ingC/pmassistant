@@ -202,16 +202,79 @@ def get_project_documents(db: Session, project_id: int) -> dict:
     return {"documents": result, "standard_stages": standard_stages}
 
 
-def get_project_gantt(db: Session, project_id: int) -> list[dict]:
+def get_project_gantt(db: Session, project_id: int) -> dict:
+    """Return gantt data with standard stages as the template.
+
+    Matched executions fill in real data; missing stages show placeholders.
+    """
     project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
+    standard_stages = get_stage_types_for_project(project.project_type or "RD")
+
     executions = (
         db.query(CachedExecution)
         .filter(CachedExecution.project_id == project_id)
         .order_by(CachedExecution.id)
         .all()
     )
-    gantt_stages = []
+
+    # Map executions to standard stages (fuzzy match)
+    matched_execs: dict[str, list] = {}
+    unmatched_execs = []
     for e in executions:
+        actual_name = (e.stage_name or e.name or "").strip()
+        result = _match_stage_type(actual_name, standard_stages) if actual_name else None
+        if result:
+            matched_execs.setdefault(result[0], []).append((e, result[1]))
+        else:
+            unmatched_execs.append(e)
+
+    gantt_stages = []
+    # Standard stages in order
+    for st in standard_stages:
+        group = matched_execs.get(st, [])
+        if group:
+            for e, match_kind in group:
+                tasks = (
+                    db.query(CachedTask)
+                    .filter(CachedTask.execution_id == e.id)
+                    .all()
+                )
+                who = _get_who(tasks, e, project) or "未指派"
+                tasks_done = sum(1 for t in tasks if t.status in ("done", "closed"))
+                gantt_stages.append({
+                    "name": e.stage_name or e.name,
+                    "standard_stage": st,
+                    "who": who,
+                    "start": str(e.begin) if e.begin else None,
+                    "end": str(e.end) if e.end else None,
+                    "status": _map_status(e.status),
+                    "progress": e.progress,
+                    "completed_date": str(e.end) if e.status in ("done", "closed") else None,
+                    "blocker": _find_blocker(tasks),
+                    "tasks_done": tasks_done,
+                    "tasks_total": len(tasks),
+                    "match_status": "matched",
+                    "match_kind": match_kind,
+                })
+        else:
+            gantt_stages.append({
+                "name": st,
+                "standard_stage": st,
+                "who": None,
+                "start": None,
+                "end": None,
+                "status": "missing",
+                "progress": "0",
+                "completed_date": None,
+                "blocker": None,
+                "tasks_done": 0,
+                "tasks_total": 0,
+                "match_status": "missing",
+                "match_kind": None,
+            })
+
+    # Append unmatched executions
+    for e in unmatched_execs:
         tasks = (
             db.query(CachedTask)
             .filter(CachedTask.execution_id == e.id)
@@ -221,6 +284,7 @@ def get_project_gantt(db: Session, project_id: int) -> list[dict]:
         tasks_done = sum(1 for t in tasks if t.status in ("done", "closed"))
         gantt_stages.append({
             "name": e.stage_name or e.name,
+            "standard_stage": None,
             "who": who,
             "start": str(e.begin) if e.begin else None,
             "end": str(e.end) if e.end else None,
@@ -230,8 +294,15 @@ def get_project_gantt(db: Session, project_id: int) -> list[dict]:
             "blocker": _find_blocker(tasks),
             "tasks_done": tasks_done,
             "tasks_total": len(tasks),
+            "match_status": "unmatched",
+            "match_kind": None,
         })
-    return gantt_stages
+
+    return {
+        "project_begin": str(project.begin) if project and project.begin else None,
+        "project_end": str(project.end) if project and project.end else None,
+        "stages": gantt_stages,
+    }
 
 
 def get_project_delivery(db: Session, project_id: int) -> dict:

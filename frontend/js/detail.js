@@ -553,30 +553,67 @@ function buildGantt(data) {
 
   var rows = stages.map(function(s, i) {
     var alt = i % 2 === 1 ? ' stage-alt' : '';
-    var lp = ganttPx(s.start, range, totalWidth);
-    var ep = ganttPx(s.end, range, totalWidth);
+    var ms = s.match_status || 'matched';
+    var mk = s.match_kind || '';
+    var isMissing = ms === 'missing';
+    var isUnmatched = ms === 'unmatched';
+    var isFuzzy = mk === 'fuzzy';
+
+    var lp = isMissing ? 0 : ganttPx(s.start, range, totalWidth);
+    var ep = isMissing ? 0 : ganttPx(s.end, range, totalWidth);
     var wp = Math.max(4, ep - lp);
     var whoShort = (s.who || '').split('（')[0].split('、')[0] || '—';
     var isUnassigned = !s.who || s.who === '未指派';
-    if (isUnassigned) whoShort = '未指派';
-    var prog = s.progress || 0;
+    if (isUnassigned || isMissing) whoShort = isMissing ? '—' : '未指派';
+    var prog = parseFloat(s.progress) || 0;
     var tasksDone = s.tasks_done || 0;
     var tasksTotal = s.tasks_total || 0;
-    var risk = getStageRisk(s);
-    return '<div class="gantt-row' + alt + '" id="gantt-row-' + i + '">' +
+
+    // Stage name
+    var nameEl = isMissing
+      ? '<span style="color:var(--muted);font-weight:500;font-size:12px">' + escHtml(s.name) + '</span>'
+      : '<button class="gs-btn" title="跳转到阶段详情" onclick="gotoStageDetail(' + i + ');event.stopPropagation()">' + escHtml(s.name) + '</button>';
+
+    // Risk tag
+    var riskHtml = '';
+    if (isMissing) {
+      riskHtml = '<span class="risk-tag" style="--risk-color:var(--warn);font-size:10px">⚠ 阶段缺失</span>';
+    } else if (isUnmatched || isFuzzy) {
+      riskHtml = '<span class="risk-tag" style="--risk-color:var(--warn);font-size:10px;cursor:pointer" ' +
+        'onclick="showStageMismatchDialog(' + (s.id || 0) + ',\'' + escHtml(s.name || '') + '\',event)" ' +
+        'title="请修改禅道阶段名为标准名字">⚠ 请修改禅道阶段名</span>';
+    } else {
+      var risk = getStageRisk(s);
+      riskHtml = '<span class="risk-tag" style="--risk-color:' + risk.color + '" title="' + escHtml(risk.tip) + '">' + escHtml(risk.label) + '</span>';
+    }
+
+    // Row style
+    var rowStyle = '';
+    if (isMissing) rowStyle = 'opacity:0.4;';
+    else if (isUnmatched) rowStyle = 'background:var(--warn-lt);';
+
+    // Bar
+    var barHtml = '';
+    if (isMissing) {
+      barHtml = '';
+    } else {
+      barHtml = '<div class="gantt-bar ' + s.status + '" style="left:' + lp + 'px;width:' + wp + 'px" data-tip="' + compactDate(s.start) + '→' + compactDate(s.end) + '　任务:' + tasksDone + '/' + tasksTotal + '">' +
+        '<div class="gantt-bar-fill" style="width:' + prog + '%"></div>' +
+      '</div>';
+    }
+
+    return '<div class="gantt-row' + alt + '" id="gantt-row-' + i + '" style="' + rowStyle + '">' +
       '<div class="gantt-stage-cell">' +
-        '<button class="gs-btn" title="跳转到阶段详情" onclick="gotoStageDetail(' + i + ');event.stopPropagation()">' + escHtml(s.name) + '</button>' +
-        '<div class="gs-risk"><span class="risk-tag" style="--risk-color:' + risk.color + '" title="' + escHtml(risk.tip) + '">' + escHtml(risk.label) + '</span></div>' +
-        '<div class="gs-prog">' + renderProgressRing(prog) + '</div>' +
+        nameEl +
+        '<div class="gs-risk">' + riskHtml + '</div>' +
+        '<div class="gs-prog">' + (isMissing ? '<span style="color:var(--muted);font-size:10px">—</span>' : renderProgressRing(prog)) + '</div>' +
         '<div class="gs-who' + (isUnassigned ? ' gs-who-una' : '') + '" title="' + escHtml(s.who || '') + '">' + escHtml(whoShort) + '</div>' +
       '</div>' +
       '<div class="gantt-bar-cell" style="min-width:' + displayWidth + 'px;width:' + displayWidth + 'px">' +
         '<div class="gantt-grid">' + gCols + '</div>' +
         projLinesHtml +
         '<div class="gantt-today-line" style="left:' + todayPx + 'px"></div>' +
-        '<div class="gantt-bar ' + s.status + '" style="left:' + lp + 'px;width:' + wp + 'px" data-tip="' + compactDate(s.start) + '→' + compactDate(s.end) + '　任务:' + tasksDone + '/' + tasksTotal + '">' +
-          '<div class="gantt-bar-fill" style="width:' + prog + '%"></div>' +
-        '</div>' +
+        barHtml +
       '</div>' +
     '</div>';
   }).join('');
@@ -707,25 +744,10 @@ function buildStages(stages) {
       rowStyle = 'background:var(--warn-lt)';
     }
 
-    // --- Name column ---
+    // --- Name column (clean, warnings only in risk column) ---
     var nameHtml = '';
     if (isMissing) {
-      nameHtml = '<strong style="color:var(--warn)">' + escHtml(s.name) + '</strong>' +
-        '<span class="pill" style="background:var(--warn-lt);color:var(--warn);font-size:10px;margin-left:4px">阶段缺失</span>';
-    } else if (isUnmatched) {
-      nameHtml = (s.execution_url
-        ? '<a href="' + escHtml(s.execution_url) + '" target="_blank" class="gs-btn" onclick="event.stopPropagation()" style="text-decoration:none">' + escHtml(s.name) + '</a>'
-        : '<strong>' + escHtml(s.name) + '</strong>') +
-        '<span class="pill" style="background:var(--warn-lt);color:var(--warn);font-size:10px;margin-left:4px;cursor:pointer" ' +
-          'onclick="showStageMismatchDialog(' + (s.id || 0) + ',\'' + escHtml(s.name || '') + '\',event)" ' +
-          'title="请修改禅道阶段名为标准名字">⚠ 非标准</span>';
-    } else if (matchKind === 'fuzzy') {
-      nameHtml = (s.execution_url
-        ? '<a href="' + escHtml(s.execution_url) + '" target="_blank" class="gs-btn" onclick="event.stopPropagation()" style="text-decoration:none">' + escHtml(s.name) + '</a>'
-        : '<strong>' + escHtml(s.name) + '</strong>') +
-        '<span class="pill" style="background:var(--info-lt,var(--accent-lt));font-size:10px;margin-left:4px;cursor:pointer" ' +
-          'onclick="showStageMismatchDialog(' + s.id + ',\'' + escHtml(s.name || '') + '\',event)" ' +
-          'title="已模糊匹配到 ' + escHtml(s.standard_stage || '') + '，建议修改禅道阶段名为标准名">~' + escHtml(s.standard_stage || '') + '</span>';
+      nameHtml = '<span style="color:var(--muted);font-weight:500">' + escHtml(s.name) + '</span>';
     } else {
       nameHtml = s.execution_url
         ? '<a href="' + escHtml(s.execution_url) + '" target="_blank" class="gs-btn" onclick="event.stopPropagation()" style="text-decoration:none">' + escHtml(s.name) + '</a>'
