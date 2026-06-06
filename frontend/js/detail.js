@@ -737,7 +737,15 @@ function buildStages(stages) {
     if (isMissing) {
       riskHtml = '<span class="risk-tag" style="--risk-color:var(--warn)">⚠ 阶段缺失</span>';
     } else if (isUnmatched) {
-      riskHtml = '<span class="risk-tag" style="--risk-color:var(--warn)">请修改禅道阶段名</span>';
+      riskHtml = '<span class="risk-tag" style="--risk-color:var(--warn);cursor:pointer" ' +
+        'onclick="showStageMismatchDialog(' + (s.id || 0) + ',\'' + escHtml(s.name || '') + '\',event)" ' +
+        'title="点击查看详情">⚠ 请修改禅道阶段名</span>';
+    } else if (matchKind === 'fuzzy') {
+      riskHtml = '<span style="display:flex;align-items:center;gap:4px">' +
+        '<span class="risk-tag" style="--risk-color:var(--warn);cursor:pointer;font-size:11px" ' +
+          'onclick="showStageMismatchDialog(' + s.id + ',\'' + escHtml(s.name || '') + '\',event)" ' +
+          'title="已模糊匹配到 ' + escHtml(s.standard_stage || '') + '，建议修改为精确名">⚠ 请修改禅道阶段名</span>' +
+      '</span>';
     } else {
       var risk = getStageRisk(s);
       riskHtml = '<span class="risk-tag" style="--risk-color:' + risk.color + '" title="' + escHtml(risk.tip) + '">' + escHtml(risk.label) + '</span>';
