@@ -22,6 +22,23 @@ function _sortStageTypes(types) {
   });
 }
 
+// Role options for responsible_role dropdown
+var ROLE_OPTIONS = [
+  '销售及售前', 'CTO', 'CEO', '项目经理',
+  '硬件开发', '硬件测试', '结构设计及装配',
+  'BSP开发', '业务软件开发', '测试交付',
+  '采购', '质检', '库房管理',
+];
+
+function _roleSelect(selected) {
+  return '<select class="search-inp" id="dt-role" style="margin-top:4px;padding:7px 8px">' +
+    '<option value="">— 请选择 —</option>' +
+    ROLE_OPTIONS.map(function(r) {
+      return '<option value="' + r + '"' + (r === selected ? ' selected' : '') + '>' + r + '</option>';
+    }).join('') +
+  '</select>';
+}
+
 async function initDocTemplates() {
   var container = document.getElementById('view-doc-templates');
   container.innerHTML = '<div class="loading-spinner">加载模板配置...</div>';
@@ -58,15 +75,20 @@ function renderTemplatesPage() {
 
   var docs = _templatesGrouped[_selectedStage] || [];
 
-  // Left panel: stage type list
+  // Left panel: stage type list with edit/delete
   var leftHtml = stageTypes.map(function(st) {
     var count = (_templatesGrouped[st] || []).length;
     var sel = st === _selectedStage ? ' selected' : '';
-    return '<div class="dt-stage-item' + sel + '" onclick="selectDocTemplateStage(\'' + escHtml(st) + '\')">' +
-      '<span>' + escHtml(st) + '</span>' +
+    return '<div class="dt-stage-item' + sel + '">' +
+      '<span onclick="selectDocTemplateStage(\'' + escHtml(st) + '\')" style="flex:1;cursor:pointer">' + escHtml(st) + '</span>' +
       '<span class="dt-stage-count">' + count + '</span>' +
+      (canEdit ? '<span class="dt-stage-acts">' +
+        '<button class="btn" style="font-size:10px;padding:1px 5px" onclick="event.stopPropagation();showRenameStageDialog(\'' + escHtml(st) + '\')" title="重命名">✎</button>' +
+        '<button class="btn" style="font-size:10px;padding:1px 5px;color:var(--danger)" onclick="event.stopPropagation();deleteStageType(\'' + escHtml(st) + '\')" title="删除">✕</button>' +
+      '</span>' : '') +
     '</div>';
-  }).join('');
+  }).join('') +
+  (canEdit ? '<div class="dt-stage-item" style="justify-content:center;color:var(--accent);font-size:12px;cursor:pointer;border:1px dashed var(--border)" onclick="showAddStageDialog()">+ 新增阶段类型</div>' : '');
 
   // Right panel: document list for selected stage
   var rightHtml = '<div class="dt-right">' +
@@ -128,8 +150,8 @@ function showAddTemplateForm() {
       '<div class="section-title" style="margin-bottom:10px">添加文档模板 — ' + escHtml(_selectedStage) + '</div>' +
       '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">' +
         '<div style="flex:1;min-width:180px"><label style="font-size:11px;color:var(--muted)">文档名称</label><input class="search-inp" id="dt-doc-name" style="margin-top:4px"></div>' +
-        '<div style="width:80px"><label style="font-size:11px;color:var(--muted)">序号</label><input class="search-inp" id="dt-sort" type="number" value="' + ((_templatesGrouped[_selectedStage] || []).length + 1) + '" style="margin-top:4px"></div>' +
-        '<div style="width:140px"><label style="font-size:11px;color:var(--muted)">责任人（岗位）</label><input class="search-inp" id="dt-role" style="margin-top:4px" placeholder="如：硬件开发"></div>' +
+        '<div style="width:70px"><label style="font-size:11px;color:var(--muted)">序号</label><input class="search-inp" id="dt-sort" type="number" min="1" value="' + ((_templatesGrouped[_selectedStage] || []).length + 1) + '" style="margin-top:4px"></div>' +
+        '<div style="width:150px"><label style="font-size:11px;color:var(--muted)">责任人（岗位）</label>' + _roleSelect('') + '</div>' +
         '<div style="flex:1;min-width:180px"><label style="font-size:11px;color:var(--muted)">说明（可选）</label><input class="search-inp" id="dt-desc" style="margin-top:4px"></div>' +
         '<button class="btn btn-primary" onclick="saveTemplate()" style="height:34px;font-size:12px">添加</button>' +
         '<button class="btn" onclick="cancelTemplateForm()" style="height:34px;font-size:12px">取消</button>' +
@@ -148,8 +170,8 @@ function showEditTemplateForm(id) {
       '<div class="section-title" style="margin-bottom:10px">编辑文档模板</div>' +
       '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">' +
         '<div style="flex:1;min-width:180px"><label style="font-size:11px;color:var(--muted)">文档名称</label><input class="search-inp" id="dt-doc-name" value="' + escHtml(d.doc_name) + '" style="margin-top:4px"></div>' +
-        '<div style="width:80px"><label style="font-size:11px;color:var(--muted)">序号</label><input class="search-inp" id="dt-sort" type="number" value="' + (d.sort_order || 0) + '" style="margin-top:4px"></div>' +
-        '<div style="width:140px"><label style="font-size:11px;color:var(--muted)">责任人（岗位）</label><input class="search-inp" id="dt-role" value="' + escHtml(d.responsible_role || '') + '" style="margin-top:4px" placeholder="如：硬件开发"></div>' +
+        '<div style="width:70px"><label style="font-size:11px;color:var(--muted)">序号</label><input class="search-inp" id="dt-sort" type="number" min="1" value="' + (d.sort_order || 1) + '" style="margin-top:4px"></div>' +
+        '<div style="width:150px"><label style="font-size:11px;color:var(--muted)">责任人（岗位）</label>' + _roleSelect(d.responsible_role || '') + '</div>' +
         '<div style="flex:1;min-width:180px"><label style="font-size:11px;color:var(--muted)">说明（可选）</label><input class="search-inp" id="dt-desc" value="' + escHtml(d.description || '') + '" style="margin-top:4px"></div>' +
         '<button class="btn btn-primary" onclick="saveTemplate(' + id + ')" style="height:34px;font-size:12px">保存</button>' +
         '<button class="btn" onclick="cancelTemplateForm()" style="height:34px;font-size:12px">取消</button>' +
@@ -165,17 +187,22 @@ function cancelTemplateForm() {
 
 async function saveTemplate(id) {
   var name = document.getElementById('dt-doc-name').value.trim();
-  var sort = parseInt(document.getElementById('dt-sort').value) || 0;
-  var role = document.getElementById('dt-role').value.trim();
+  var sortVal = document.getElementById('dt-sort').value;
+  var sort = (sortVal !== '' && sortVal !== null) ? parseInt(sortVal) : 0;
+  var roleEl = document.getElementById('dt-role');
+  var role = roleEl.value.trim();
   var desc = document.getElementById('dt-desc').value.trim();
   if (!name) { showToast('请输入文档名称', 'error'); return; }
+  if (isNaN(sort) || sort < 0) sort = 0;
 
   try {
+    var body = { doc_name: name, sort_order: sort, responsible_role: role || '', description: desc };
     if (id) {
-      await API.put('/doc-templates/' + id, { doc_name: name, sort_order: sort, responsible_role: role, description: desc });
+      await API.put('/doc-templates/' + id, body);
       showToast('修改成功', 'success');
     } else {
-      await API.post('/doc-templates', { stage_type: _selectedStage, doc_name: name, sort_order: sort, responsible_role: role, description: desc });
+      body.stage_type = _selectedStage;
+      await API.post('/doc-templates', body);
       showToast('添加成功', 'success');
     }
     cancelTemplateForm();
@@ -193,6 +220,91 @@ async function deleteTemplate(id) {
     await API.del('/doc-templates/' + id);
     showToast('删除成功', 'success');
     _templatesGrouped = await API.get('/doc-templates');
+    renderTemplatesPage();
+  } catch(e) {
+    showToast('删除失败: ' + (e.message || '未知错误'), 'error');
+  }
+}
+
+/* ── Stage Type Management (rename / add / delete) ── */
+
+function showRenameStageDialog(oldName) {
+  var html = '<div class="note-dialog-overlay" onclick="if(event.target===this)this.remove()">' +
+    '<div class="note-dialog" style="max-width:380px" onclick="event.stopPropagation()">' +
+      '<div class="note-dialog-head"><span class="note-dialog-title">重命名阶段类型</span>' +
+        '<button class="note-dialog-close" onclick="this.closest(\'.note-dialog-overlay\').remove()">&times;</button></div>' +
+      '<div style="margin-bottom:10px;font-size:12px;color:var(--muted)">当前名称: <b>' + escHtml(oldName) + '</b></div>' +
+      '<input class="search-inp" id="dt-rename-input" value="' + escHtml(oldName) + '" style="margin-bottom:12px">' +
+      '<div style="display:flex;justify-content:flex-end;gap:8px">' +
+        '<button class="btn" onclick="this.closest(\'.note-dialog-overlay\').remove()">取消</button>' +
+        '<button class="btn btn-primary" onclick="renameStageType(\'' + escHtml(oldName) + '\')">保存</button>' +
+      '</div>' +
+    '</div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+  document.getElementById('dt-rename-input').focus();
+  document.getElementById('dt-rename-input').select();
+}
+
+async function renameStageType(oldName) {
+  var newName = document.getElementById('dt-rename-input').value.trim();
+  if (!newName) { showToast('请输入新名称', 'error'); return; }
+  if (newName === oldName) { document.querySelector('.note-dialog-overlay').remove(); return; }
+  try {
+    var result = await API.put('/doc-templates/stage-types/rename', { old_name: oldName, new_name: newName });
+    showToast('已更新 ' + result.updated + ' 个模板', 'success');
+    if (_selectedStage === oldName) _selectedStage = newName;
+    document.querySelector('.note-dialog-overlay').remove();
+    _templatesGrouped = await API.get('/doc-templates');
+    renderTemplatesPage();
+  } catch(e) {
+    showToast('重命名失败: ' + (e.message || '未知错误'), 'error');
+  }
+}
+
+function showAddStageDialog() {
+  var html = '<div class="note-dialog-overlay" onclick="if(event.target===this)this.remove()">' +
+    '<div class="note-dialog" style="max-width:380px" onclick="event.stopPropagation()">' +
+      '<div class="note-dialog-head"><span class="note-dialog-title">新增阶段类型</span>' +
+        '<button class="note-dialog-close" onclick="this.closest(\'.note-dialog-overlay\').remove()">&times;</button></div>' +
+      '<div style="margin-bottom:10px;font-size:12px;color:var(--muted)">输入新阶段类型名称（新增后需手动添加文档模板）</div>' +
+      '<input class="search-inp" id="dt-new-stage-input" placeholder="输入阶段名称" style="margin-bottom:12px">' +
+      '<div style="display:flex;justify-content:flex-end;gap:8px">' +
+        '<button class="btn" onclick="this.closest(\'.note-dialog-overlay\').remove()">取消</button>' +
+        '<button class="btn btn-primary" onclick="addStageType()">创建</button>' +
+      '</div>' +
+    '</div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+  document.getElementById('dt-new-stage-input').focus();
+}
+
+async function addStageType() {
+  var name = document.getElementById('dt-new-stage-input').value.trim();
+  if (!name) { showToast('请输入阶段名称', 'error'); return; }
+  try {
+    // Create a placeholder template to establish the stage type
+    await API.post('/doc-templates', { stage_type: name, doc_name: '（待配置）', sort_order: 1, responsible_role: '', description: '请修改或删除此占位模板' });
+    showToast('阶段类型已创建', 'success');
+    document.querySelector('.note-dialog-overlay').remove();
+    _selectedStage = name;
+    _templatesGrouped = await API.get('/doc-templates');
+    renderTemplatesPage();
+  } catch(e) {
+    showToast('创建失败: ' + (e.message || '未知错误'), 'error');
+  }
+}
+
+async function deleteStageType(stageType) {
+  var count = (_templatesGrouped[stageType] || []).length;
+  if (!confirm('确认删除阶段类型 "' + stageType + '"？\n将同时删除其下的 ' + count + ' 个文档模板。此操作不可撤销。')) return;
+  try {
+    await API.del('/doc-templates/stage-types/' + encodeURIComponent(stageType));
+    showToast('已删除', 'success');
+    if (_selectedStage === stageType) _selectedStage = null;
+    _templatesGrouped = await API.get('/doc-templates');
+    if (!Object.keys(_templatesGrouped).length) {
+      document.getElementById('view-doc-templates').innerHTML = '<div class="empty-state" style="padding:40px">暂无文档模板，请联系管理员初始化</div>';
+      return;
+    }
     renderTemplatesPage();
   } catch(e) {
     showToast('删除失败: ' + (e.message || '未知错误'), 'error');

@@ -74,3 +74,28 @@ def delete_template(
     if not ok:
         raise HTTPException(status_code=404, detail="Template not found")
     return {"code": 0, "data": None, "message": "ok"}
+
+
+class StageTypeRename(BaseModel):
+    old_name: str
+    new_name: str
+
+
+@router.put("/stage-types/rename", response_model=dict)
+def rename_stage_type(
+    body: StageTypeRename,
+    db: Session = Depends(get_db),
+    _=Depends(require_admin),
+):
+    count = document_service.rename_stage_type(db, body.old_name, body.new_name)
+    return {"code": 0, "data": {"updated": count}, "message": "ok"}
+
+
+@router.delete("/stage-types/{stage_type}", response_model=dict)
+def delete_stage_type(
+    stage_type: str,
+    db: Session = Depends(get_db),
+    _=Depends(require_admin),
+):
+    count = document_service.delete_stage_type(db, stage_type)
+    return {"code": 0, "data": {"deleted": count}, "message": "ok"}

@@ -187,6 +187,26 @@ def delete_template(db: Session, template_id: int) -> bool:
     return True
 
 
+def rename_stage_type(db: Session, old_name: str, new_name: str) -> int:
+    """Rename a stage type — update all templates with the old name."""
+    if not new_name.strip():
+        return 0
+    count = db.query(DocumentTemplate).filter(
+        DocumentTemplate.stage_type == old_name
+    ).update({"stage_type": new_name.strip()})
+    db.commit()
+    return count
+
+
+def delete_stage_type(db: Session, stage_type: str) -> int:
+    """Delete all templates for a stage type."""
+    count = db.query(DocumentTemplate).filter(
+        DocumentTemplate.stage_type == stage_type
+    ).delete()
+    db.commit()
+    return count
+
+
 def _template_dict(t: DocumentTemplate) -> dict:
     return {
         "id": t.id,

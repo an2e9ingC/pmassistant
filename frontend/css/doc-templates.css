@@ -59,6 +59,15 @@
   margin-bottom: 14px;
 }
 
+.dt-stage-acts {
+  display: none;
+  gap: 2px;
+  margin-left: 4px;
+}
+.dt-stage-item:hover .dt-stage-acts {
+  display: flex;
+}
+
 @media (max-width: 768px) {
   .dt-layout {
     grid-template-columns: 1fr;
