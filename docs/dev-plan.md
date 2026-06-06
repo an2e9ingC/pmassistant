@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-> 当前版本：v2026.06.06-beta2 | 最后更新：2026-06-06
+> 当前版本：v2026.06.06-beta3 | 最后更新：2026-06-06
 
 ---
 
@@ -9,22 +9,23 @@
 | 模块 | 状态 | 说明 |
 |------|------|------|
 | 项目脚手架 | ✅ 完成 | FastAPI + SQLite + Docker Compose |
-| 数据库层 | ✅ 完成 | 15 张缓存表 + 3 张本地表 |
-| 禅道同步 | ✅ 完成 | 全量/增量同步 + 并发优化 + 暂停/取消 |
-| 认证系统 | ✅ 完成 | JWT + bcrypt + 角色管理 |
-| Dashboard | ✅ 完成 | KPI 卡片 + 4 分类筛选 + 项目列表 + 告警 |
-| 项目详情 | ✅ 完成 | 甘特图 + 阶段详情 + 文档齐套 + 交付 + 资料 + 笔记 |
-| 产品管理 | ✅ 完成 | 产品总览 + 产品详情 + 产品线 KPI |
-| 产品拓扑 | ✅ 完成 | 三维度 AND 搜索（项目/产品/客户） |
+| 数据库层 | ✅ 完成 | 17 张表（4 本地 + 13 缓存） |
+| 禅道同步 | ✅ 完成 | 全量/增量 + 并发优化 + 暂停/取消 |
+| 认证系统 | ✅ 完成 | JWT + bcrypt + 角色组权限体系 |
+| Dashboard | ✅ 完成 | KPI 卡片 + 4 分类 + 项目集过滤 + 告警联动 |
+| 项目详情 | ✅ 完成 | 甘特图 + 阶段详情 + 文档 + 交付 + 资料 + 笔记 |
+| 产品管理 | ✅ 完成 | 产品总览 + 产品详情 + 状态过滤 |
+| 产品拓扑 | ✅ 完成 | 三维度 AND 搜索 |
 | 交付管理 | ✅ 完成 | DeliveryRecord CRUD |
-| Bug 统计 | ✅ 完成 | Zentao bug 同步 + 统计 API |
-| 项目报表 | ✅ 完成 | 周报/月报 API |
-| 用户管理 | ✅ 完成 | admin_users CRUD + 角色管理 |
-| 数据源配置 | ✅ 完成 | 禅道/GitLab/NAS 三卡片 + .env 持久化 |
-| 系统日志 | ✅ 完成 | DB + 文件双写 + 前端实时查看 |
-| 自动同步 | ✅ 完成 | 后台 asyncio 定时任务 + 前端进度显示 |
-| 主题切换 | ✅ 完成 | 浅色/深色 + CSS var(--xxx) 令牌体系 |
-| 部署 | ⚠️ 待验证 | Docker Compose 就绪，生产环境未部署 |
+| Bug 统计 | ✅ 完成 | Zentao bug 同步 + 统计 |
+| 项目报表 | ✅ 完成 | 周报/月报 + Bug 统计 |
+| 用户管理 | ✅ 完成 | CRUD + 批量添加 + 角色组多选 |
+| 权限管理 | ✅ 完成 | Role/UserRole 多对多 + 权限管理页 |
+| 数据源配置 | ✅ 完成 | 禅道/GitLab/NAS + .env 持久化 |
+| 系统日志 | ✅ 完成 | DB + 文件双写 + 实时查看 + 全局异常捕获 |
+| 自动同步 | ✅ 完成 | 后台 asyncio + 前端进度 + 气泡通知 |
+| 主题切换 | ✅ 完成 | 浅色/深色 + CSS var(--xxx) |
+| 部署 | ⚠️ 待验证 | Docker Compose 就绪 |
 | GitLab 集成 | ❌ Phase 2 | commit 统计、发布验证 |
 | NAS 监控 | ❌ Phase 2 | 售前项目检测 |
 
@@ -36,15 +37,15 @@
 
 ### 1.1 项目脚手架
 - [x] 目录结构、requirements.txt、Dockerfile、docker-compose.yml
-- [x] FastAPI 入口 + CORS + 静态文件挂载
+- [x] FastAPI 入口 + CORS + 静态文件挂载 + 全局异常处理
 - [x] 配置管理（`.env` 自动加载 + `Settings.reload()` 热重载）
 - [x] `server.sh` 运维脚本（start/stop/restart/logs）
 
 ### 1.2 数据库层
-- [x] SQLAlchemy 引擎 + Session + Base
-- [x] 本地模型：`LocalUser`、`SyncLog`、`DeliveryRecord`、`ProjectNote`、`LogEntry`
+- [x] SQLAlchemy 引擎 + Session + Base + 自动列迁移
+- [x] 本地模型：`LocalUser`、`Role`、`UserRole`、`SyncLog`、`DeliveryRecord`、`ProjectNote`、`LogEntry`
 - [x] 禅道缓存模型：`CachedProject`、`CachedExecution`、`CachedTask`、`CachedUser`、`CachedProduct`、`CachedCustomer`、`CachedBug`、`ProductProjectLink`、`CustomerProjectLink`
-- [x] 启动时自动建表 + seed 默认 admin 用户
+- [x] 启动时自动建表 + 迁移 + seed 默认角色（14 个）+ admin 用户
 
 ### 1.3 禅道 Client + 同步服务
 - [x] `ZentaoClient`：MD5 认证、分页、重试、token 过期自动刷新、GBK 编码容错
@@ -52,93 +53,107 @@
 - [x] 并发优化：asyncio.gather + Semaphore(20)，耗时 7.5min → 1min
 - [x] 增量跳过：raw_json 对比未变更执行跳过任务拉取（无任务缓存时重新拉取）
 - [x] Upsert 逻辑：PMA 扩展字段不被同步覆盖
-- [x] 手动触发同步（`POST /api/sync/trigger`）+ 暂停/恢复/取消
-- [x] 同步进度实时反馈（projects/execs/tasks 统计 + 进度条 + 当前项）
-- [x] 后台自动同步（可配置间隔）+ 完成后气泡通知
-- [x] 容错处理：日期字段非标准值、权限不足跳过
+- [x] 手动触发同步 + 暂停/恢复/取消 + 进度实时反馈
+- [x] 后台自动同步（可配置间隔）+ 完成后气泡通知 + 下次同步时间日志
+- [x] 容错处理：日期字段非标准值、权限不足跳过、GBK 编码
 - [x] 过期数据清理：同步后清理禅道中已删除的项目/执行/任务/产品
-- [x] 项目筛选（config.project_filter 按 code 前缀过滤）
+- [x] 项目筛选（config.project_filter）+ 项目集（program）解析
 
-### 1.4 认证
-- [x] JWT 签发/验证（`/api/auth/login`、`/api/auth/me`）
-- [x] bcrypt 密码哈希 + 修改密码
-- [x] 登录页面（`login.html`）
-- [x] 前端 API client（fetch 封装，JWT header，401 跳转登录页）
-- [x] 角色管理：admin / manager / viewer
+### 1.4 认证与权限
+- [x] JWT 签发/验证（`/api/auth/login`、`/api/auth/me`）+ bcrypt 密码哈希
+- [x] 登录页面 + 前端 API client（401 自动跳转）
+- [x] **角色组权限系统**：
+  - `Role` 表（14 个角色）+ `UserRole` 多对多关联
+  - 权限聚合：用户权限 = 所属所有角色权限并集
+  - 4 种权限：admin（系统管理）、sync（数据同步）、project_edit（项目维护）、product_link（产品维护）、customer_link（客户维护）
+  - `has_perm(user, perm)` 检查 + `require_perm(perm)` 依赖工厂
+  - 权限管理页：角色组 → 权限 checkbox + 成员管理 + 快捷搜索
+- [x] 批量添加用户：5 行默认 + 用户名/密码/角色多选下拉 + 标签删除 + 失败回滚
 
 ### 1.5 Dashboard 前后端
-- [x] KPI 接口（进行中项目、告警数、交付数、整体进度、total_projects）
-- [x] 项目列表接口（搜索 `?search=`、类型 `?type=RD|SC`、分类 `?category=`、排序 `?sort_by=code|end`、分页）
+- [x] KPI 接口（进行中项目、告警数、交付数、整体进度、total_projects）+ "全部"卡片
+- [x] 项目列表接口（搜索、类型、分类、项目集 program_id、排序 sort_by=code|end、分页）
 - [x] 告警列表接口（超期、输出件缺失、审核关键字缺失）+ 按项目过滤
-- [x] 前端 KPI 卡片渲染 + 4 分类筛选（进行中/已完成/高风险/资料不全）+ 颜色联动
-- [x] 前端项目表格（搜索框 300ms 防抖 + 全部/研发/生产 Tab + 排序切换 ⇅▲▼）
-- [x] 前端告警列表渲染（项目编号 chip、高风险页过滤）
+- [x] KPI 卡片 5 列同行（4:3:3:3:3 比例）+ 点击切换/取消过滤
+- [x] 项目集分类 chips + 与状态 AND 逻辑组合过滤
+- [x] 项目表格（搜索框 300ms 防抖 + 清除按钮 + 全部/研发/生产 Tab + 排序切换）
+- [x] 四分类统一点击行为：行点击过滤告警，编号按钮跳转详情
 - [x] Loading / Empty / Error 状态处理
 
 ### 1.6 项目详情前后端
 - [x] 项目详情接口（`/api/projects/{id}`）+ 进度圆环 SVG
 - [x] **甘特图**：
   - 多层时间轴（年/月/周/日）+ 12 月季节配色
-  - Ctrl+滚轮缩放（×6/×16/×24 三档）+ 滚轮默认滚动
+  - Ctrl+滚轮缩放（×6/×16/×24 三档）+ 滚轮默认滚动 + 定位今日按钮
   - 拖拽平移 + 列宽拖拽
-  - 双层进度条：浅色 track（完整周期）+ 实色 fill（完成 %）+ color-mix 边框
-  - 项目起止竖线：开始绿色虚线 + 结束红色虚线 + 今日蓝色实线
-  - 图例 8 项：已完成/进行中/已阻塞/规划中/未开始/今日/项目开始/项目结束
-  - 阶段按钮（统一 .gs-btn 风格）→ 点击跳转阶段详情 + 呼吸高亮动画
-  - 进度圆环列（SVG）+ 风险列（getStageRisk 7 级判断）
-  - 悬浮提示：精简日期（7/16→9/30）+ 任务计数（任务:n/m，即时显示）
-- [x] 阶段详情表格（斑马纹 + 行悬停 + 7 级风险评估）
-- [x] 文档齐套接口 + 表格
+  - 双层进度条：浅色 track + 实色 fill + color-mix 边框
+  - 项目起止竖线：开始绿色虚线 + 结束红色虚线 + 今日蓝色实线（无 pip）
+  - 图例 8 项
+  - 阶段按钮（.gs-btn）→ 跳转阶段详情 + 呼吸高亮动画（1.4s × 6 次）
+  - 进度圆环 + 风险列（7 级判断，去圆点简化文字）
+  - 悬浮提示：精简日期（7/16→9/30）+ 任务计数（任务:n/m，即时自定义 tooltip）
+- [x] 阶段详情表格（斑马纹 CSS + 行悬停 + 表头 sticky + 阶段名按钮跳转禅道执行页）
+- [x] 文档齐套表格（表头 sticky + 按阶段分组）
 - [x] 交付状态接口 + 概要 KPI + 记录 CRUD
-- [x] 资料链接接口 + 快捷跳转
-- [x] 项目笔记（CRUD + 弹窗 + 阶段关联下拉）
+- [x] 资料链接接口 + 快捷跳转 + 禅道项目链接（index.php?m=project 格式）
+- [x] 项目笔记（CRUD + 弹窗 + 添加按钮在标题右侧）
 - [x] 项目下拉选择器（可搜索 combobox）
-- [x] 责任人显示：从任务指派人聚合去重
-- [x] 6 个 Tab 切换（甘特图/阶段详情/文档齐套/交付状态/软硬件资料 + 项目笔记固定区域）
+- [x] 责任人获取：任务指派人 → execution.openedBy → 项目 PM（PMUserID 解析）→ "未指派"（红色标注）
+- [x] 6 个 Tab + 项目笔记固定区域
 
 ### 1.7 产品管理
-- [x] 产品总览：产品线 KPI 卡片 + 表格（编号/品名/产品线/状态/项目数/标签）
-- [x] 产品详情：扩展字段（category/nas_path/git_url/alias_name）+ 关联项目列表
+- [x] 产品总览：产品线 KPI 卡片 + 状态过滤 chips（全部/正常/已关闭）+ 表格
+- [x] 产品详情：4 卡片点击跳转禅道（需求/Bug/发布/关联项目）+ 基本信息 + 交付资料 + 关联项目表格
 - [x] 产品-项目关联 CRUD（link/unlink）
 
 ### 1.8 产品拓扑
 - [x] 快速检索页：三维度 AND 搜索（项目编号/产品名称/客户名称）
-- [x] 5 列结果表：项目编号 + 项目名 + 客户 + 关联产品 + 状态
-- [x] 300ms 防抖 + Empty/Loading/Error 状态
+- [x] 5 列结果表 + 300ms 防抖 + Empty/Loading/Error 状态 + 清除按钮
 
 ### 1.9 用户管理
 - [x] admin_users CRUD API（list/create/update/password/delete/toggle-active）
-- [x] 前端表格 + 弹窗表单（添加/编辑/修改密码）
-- [x] 角色管理（admin/manager/viewer），管理菜单仅 admin 可见
+- [x] 前端表格 + 弹窗表单（角色组多选 checkbox 替代单选下拉）
+- [x] 批量添加用户对话框：5 行默认 + 用户名/密码/角色多选下拉 + 标签删除
+- [x] 角色分配失败自动回滚删除已创建用户
+- [x] 用户列表显示角色组标签 + 角色组列
 
-### 1.10 数据源配置
+### 1.10 权限管理
+- [x] Role/UserRole 多对多模型 + 14 个默认角色 + 5 种权限
+- [x] 权限管理页面：角色组 → 权限 checkbox + 成员展示 + 管理成员对话框（快捷搜索）+ 操作列
+- [x] `has_perm()` / `require_perm()` 权限检查
+- [x] 用户权限 = 所属所有角色组权限并集
+
+### 1.11 数据源配置
 - [x] GET/PUT `/api/admin/config` + JSON + .env 双写
-- [x] 禅道/GitLab/NAS 三卡片（蓝/琥珀/绿）+ 密码显隐切换 + CapsLock 提醒
+- [x] 禅道/GitLab/NAS 三卡片 + 密码显隐切换 + CapsLock 提醒
 - [x] 同步间隔配置 + 清除数据库缓存（双确认）
 - [x] `Settings.reload()` 热重载 + `SyncService` 重建 client
 
-### 1.11 系统日志
+### 1.12 系统日志
 - [x] RotatingFileHandler + DatabaseLogHandler 双写
-- [x] 日志 API（level 过滤 + 搜索）+ 前端实时刷新（2s）
-- [x] 清除日志（DB + 文件）+ sticky 工具栏 + 智能滚动
+- [x] 日志 API（level 过滤 + 搜索）+ 前端实时刷新（2s）+ 清除功能
+- [x] 全局 `exception_handler` 捕获所有未处理异常并写入日志
 
-### 1.12 前端模块化
+### 1.13 前端模块化
 - [x] CSS 拆分：tokens / reset / layout / components / gantt / detail
 - [x] JS 拆分：utils / api / auth / components / dashboard / detail / product / reports / logs / topology / admin / app
 - [x] 主题切换（浅色/深色）+ CSS var(--xxx) 令牌体系
-- [x] 侧边栏：项目 / 产品 / 工具（快速检索 + 统计报告）/ 管理（用户管理 + 数据源配置 + 系统日志）
-- [x] 数据源状态标签（右上角禅道/GitLab/NAS）+ 点击显式详情
-- [x] Toast 通知队列 + 铃铛下拉框（未读 badge）
-- [x] Logo 系统（logo-mark-light/dark 深浅主题自适应）
-
-### 1.13 部署
-- [x] Docker Compose 配置
-- [x] 部署文档（`docs/deploy-guide.md`）
-- [ ] 生产环境部署验证
+- [x] 侧边栏：项目 / 产品 / 工具 / 管理（用户管理 + 权限管理 + 数据源配置 + 系统日志）
+- [x] 数据源状态标签 + Toast 通知队列 + 铃铛下拉框
+- [x] Logo 系统 + favicon
+- [x] 所有搜索框统一清除按钮 + `clearSearch()` 通用函数
 
 ### 1.14 设计规范
-- [x] 设计规范文档（`docs/design-spec.md`）
-- [x] 需求规格文档（`docs/requirements-spec.md`）：FR-001~FR-031
+- [x] 搜索框清除按钮规范（§15）
+- [x] 单表格页面高度自适应 `calc(100vh-Npx)`（§16）
+- [x] 所有表格统一 `.table-scroll` + sticky 表头
+- [x] 需求规格、部署指南、设计规范文档
+
+### 1.15 文档与模板
+- [x] README.md（特性/技术栈/快速开始/项目结构）
+- [x] `.gitlab/issue_templates`（Bug 报告 + 功能请求）
+- [x] `.gitlab/merge_request_templates`（MR Checklist）
+- [x] `.env.example` 清理硬编码 + `docker-compose.yml` 生产化
 
 ---
 
@@ -154,7 +169,7 @@
 ### 技术债务
 - [ ] 生产环境部署验证
 - [ ] 自动化测试覆盖
-- [ ] 项目研发/生产分类：`project_type` 字段默认为 RD，同步时未写入，需确定分类来源（手动配置 or 自动推断规则）
+- [ ] 项目研发/生产分类：`project_type` 字段默认为 RD，同步时未写入，需确定分类来源
 
 ---
 
@@ -218,5 +233,6 @@
 | 2026-06-03 | v2026.06.03-beta7 | GitLab Issue/MR模板(.gitlab/issue_templates+Bug/Feature+MR Checklist) |
 | 2026-06-04 | v2026.06.04-beta1 | 产品详情4卡片点击跳转禅道+Bug/Release专用URL+产品链接格式统一 |
 | 2026-06-04 | v2026.06.04-beta2 | 角色组权限系统：Role/UserRole表+15角色+4权限+多对多关联+权限管理页+单表格calc(100vh-Npx)规范 |
-| 2026-06-06 | v2026.06.06-beta1 | 批量添加用户+角色组搜索+passlib→bcrypt修复+前端catch without try+_srcDetails修复 |
-| 2026-06-06 | v2026.06.06-beta2 | 批量添加用户重构：5行默认+下拉多选+标签删除+路由修复+回滚+全局异常日志 |
+| 2026-06-06 | v2026.06.06-beta1 | 批量添加用户+角色组搜索+passlib→bcrypt修复+前端bug修复 |
+| 2026-06-06 | v2026.06.06-beta2 | 批量用户重构：5行默认+下拉多选+标签删除+回滚+路由修复+全局异常日志 |
+| 2026-06-06 | v2026.06.06-beta3 | 文档全面更新：dev-plan重组+design-spec新增§17-18+deploy-guide API端点补充+requirements-spec版本1.2 |

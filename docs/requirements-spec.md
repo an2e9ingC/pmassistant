@@ -1,16 +1,19 @@
 # Project Management Assistant - Software Requirements Specification
 # 项目管理助手 - 软件需求规格说明书
 
-> Version: 1.1
-> Date: 2026-05-21 | Updated: 2026-06-02
+> Version: 1.2
+> Date: 2026-05-21 | Updated: 2026-06-06
 > Language: Chinese (Main) / English (Technical Terms)
 >
-> **Implementation Status** (as of v2026.06.02-beta14):
+> **Implementation Status** (as of v2026.06.06-beta2):
 > ✅ FR-001~003 (进展/阶段/阻塞), ✅ FR-004 (风险通知), ✅ FR-005~006 (产品项目映射),
 > ✅ FR-007~011 (交付管理), ✅ FR-012 (研发/生产区分), ✅ FR-013 (Bug统计),
 > ✅ FR-015 (项目报表), ✅ FR-020 (code回退), ✅ FR-026 (Dashboard分类卡片),
 > ✅ FR-027~031 (产品管理+侧边栏+客户提取)
 > ❌ FR-014 (Gitlab统计), ❌ FR-016 (售前检测), ❌ FR-022 (外协跟踪)
+>
+> **新增（超出原 FR 范围）**:
+> ✅ 权限系统 (Role/UserRole 多对多 + 5 种权限), ✅ 全局异常日志, ✅ GitLab Issue/MR 模板
 
 ---
 

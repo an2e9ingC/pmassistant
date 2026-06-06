@@ -167,6 +167,24 @@ curl -s -X POST http://localhost:8000/api/sync/trigger \
 |------|------|------|
 | POST | `/api/sync/trigger` | 手动触发全量同步（需 admin） |
 | GET | `/api/sync/status` | 各实体最后同步状态（需 admin） |
+| GET | `/api/sync/progress` | 同步进度（需登录） |
+| POST | `/api/sync/pause` | 暂停同步 |
+| POST | `/api/sync/resume` | 恢复同步 |
+| POST | `/api/sync/cancel` | 取消同步 |
+
+### 管理
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET/PUT | `/api/admin/config` | 数据源配置（需 admin） |
+| GET/POST | `/api/admin/users` | 用户列表/创建（需 admin） |
+| PUT/DELETE | `/api/admin/users/{id}` | 更新/删除用户（需 admin） |
+| GET/PUT | `/api/admin/users/{id}/roles` | 用户角色组（需 admin） |
+| GET | `/api/admin/users/roles` | 角色组列表（需 admin） |
+| PUT | `/api/admin/users/roles/{id}` | 更新角色权限（需 admin） |
+| GET | `/api/admin/users/permissions` | 权限元数据（需 admin） |
+| POST | `/api/admin/clear-db` | 清除缓存数据（需 admin） |
+| GET | `/api/logs` | 系统日志（需 admin） |
+| POST | `/api/logs/clear` | 清除日志（需 admin） |
 
 ---
 
