@@ -88,6 +88,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    logger.error(f"Unhandled error on {request.method} {request.url.path}: {exc}", exc_info=True)
+    from fastapi.responses import JSONResponse
+    return JSONResponse(status_code=500, content={"code": 1, "message": str(exc)})
+
 # API routes
 app.include_router(auth.router)
 app.include_router(dashboard.router)

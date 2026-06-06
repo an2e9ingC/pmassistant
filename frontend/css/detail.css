@@ -448,6 +448,22 @@
 .user-form-field { display: flex; flex-direction: column; gap: 4px; }
 .user-form-field label { font-size: 12px; color: var(--muted); font-weight: 540; }
 .user-form-field .config-input { width: 100%; box-sizing: border-box; }
+/* Role chips in batch add user */
+.ud-role-chip {
+  display: inline-block; margin: 1px 2px; padding: 1px 6px; border-radius: 8px;
+  font-size: 10.5px; cursor: pointer; user-select: none; line-height: 1.4;
+  transition: all 0.12s; border: 1px solid var(--border);
+}
+.ud-role-on { background: var(--accent-lt); color: var(--accent); border-color: var(--accent); }
+.ud-role-off { background: var(--bg); color: var(--muted); border-color: var(--border); }
+.ud-role-off:hover { border-color: var(--accent); color: var(--fg); }
+/* Multi-select dropdown styles */
+.ud-ms-dd option {
+  display: block; padding: 5px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;
+  transition: background 0.1s;
+}
+.ud-ms-dd option:hover { background: var(--bg); }
+.ud-ms-dd option[selected] { background: var(--accent-lt); color: var(--accent); font-weight: 540; }
 
 /* Log viewer */
 .log-toolbar {

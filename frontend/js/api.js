@@ -26,9 +26,15 @@ const API = {
       return;
     }
 
-    const json = await res.json();
+    var json;
+    try {
+      json = await res.json();
+    } catch (parseErr) {
+      var text = await res.text().catch(function() { return ''; });
+      throw new Error('服务器返回异常 (HTTP ' + res.status + '): ' + (text || '').substring(0, 200));
+    }
     if (json.code !== 0) {
-      throw new Error(json.message || 'Request failed');
+      throw new Error(json.message || json.detail || 'Request failed (code=' + json.code + ')');
     }
     return json.data;
   },

@@ -213,45 +213,124 @@ function renderUserTable() {
   }).join('');
 }
 
+var _udRowCount = 0;
+
 function openUserCreateDialog() {
-  var roles = _permRoles.length ? _permRoles : [];
+  _udRowCount = 0;
   var html = '<div class="note-dialog-overlay" onclick="if(event.target===this)closeUserDialog()">' +
-    '<div class="note-dialog" style="max-width:620px">' +
+    '<div class="note-dialog" style="width:820px;max-width:none;max-height:80vh;display:flex;flex-direction:column">' +
       '<div class="note-dialog-head"><span class="note-dialog-title">批量添加用户</span>' +
         '<button class="note-dialog-close" onclick="closeUserDialog()">&times;</button></div>' +
-      '<div class="user-form">' +
-        '<div class="user-form-field"><label>用户名（每行一个）</label>' +
-        '<textarea class="search-inp" id="ud-usernames" placeholder="user1&#10;user2&#10;user3" style="min-height:80px;resize:vertical;padding:8px 12px;font-family:var(--mono);width:100%;box-sizing:border-box">admin</textarea></div>' +
-        '<div class="user-form-field"><label>默认密码</label><input class="config-input" id="ud-password" type="text" value="123456"></div>' +
+      '<div style="margin-bottom:10px;font-size:12px;color:var(--muted)">每行填写一个用户，密码留空默认为 123456</div>' +
+      '<div id="ud-rows" style="flex:1;overflow-y:auto;min-height:240px"></div>' +
+      '<div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-shrink:0">' +
+        '<button class="btn" onclick="addUdRow()" style="font-size:11px;padding:4px 12px">+ 添加行</button>' +
       '</div>' +
-      '<div id="ud-role-areas"></div>' +
-      '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:14px">' +
+      '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:14px;flex-shrink:0">' +
         '<span id="ud-msg" style="font-size:11px"></span>' +
         '<button class="btn" onclick="closeUserDialog()">取消</button>' +
         '<button class="btn btn-primary" onclick="submitUserCreate()">批量创建</button></div>' +
     '</div></div>';
   document.body.insertAdjacentHTML('beforeend', html);
-  // Generate role selectors for each username
-  var ta = document.getElementById('ud-usernames');
-  ta.addEventListener('input', renderUdRoleAreas);
-  renderUdRoleAreas();
+  // Add default 3 rows
+  for (var i = 0; i < 5; i++) addUdRow();
 }
 
-function renderUdRoleAreas() {
-  var ta = document.getElementById('ud-usernames');
-  if (!ta) return;
-  var names = ta.value.split('\n').map(function(s) { return s.trim(); }).filter(Boolean);
-  var container = document.getElementById('ud-role-areas');
-  container.innerHTML = names.map(function(n, i) {
-    return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
-      '<span style="font-family:var(--mono);font-size:12px;min-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(n) + '</span>' +
-      '<select class="search-inp" data-ud-user="' + i + '" style="flex:1;padding:5px 8px;font-size:11px">' +
-        (_permRoles.map(function(r) {
-          return '<option value="' + r.id + '">' + escHtml(r.label) + '</option>';
-        }).join('')) +
-      '</select>' +
-    '</div>';
+function addUdRow() {
+  var container = document.getElementById('ud-rows');
+  if (!container) return;
+  var idx = _udRowCount++;
+  var roleOpts = (_permRoles.length ? _permRoles : []).map(function(r) {
+    var sel = r.key === 'test_delivery' ? 'selected' : '';
+    return '<option value="' + r.id + '" ' + sel + '>' + escHtml(r.label) + '</option>';
   }).join('');
+  var div = document.createElement('div');
+  div.className = 'ud-row';
+  div.id = 'ud-row-' + idx;
+  div.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:8px 10px;background:var(--bg);border-radius:8px';
+  div.innerHTML =
+    '<div style="flex:0 0 140px">' +
+      '<input class="search-inp ud-uname" placeholder="用户名" style="width:100%;padding:6px 8px;font-size:12px;font-family:var(--mono);box-sizing:border-box">' +
+    '</div>' +
+    '<div style="flex:0 0 110px">' +
+      '<input class="search-inp ud-pw" type="text" value="123456" placeholder="密码" style="width:100%;padding:6px 8px;font-size:12px;box-sizing:border-box">' +
+    '</div>' +
+    '<div style="flex:3;min-width:280px;position:relative">' +
+      '<div class="ud-ms-trigger" onclick="toggleUdMs(this)" style="cursor:pointer;border:1px solid var(--border);border-radius:6px;padding:3px 6px;min-height:28px;background:var(--surface);display:flex;align-items:center;gap:4px" title="点击选择角色">' +
+        '<span class="ud-ms-tags" style="flex:1;word-break:break-all;line-height:1.6"></span>' +
+        '<span style="font-size:9px;color:var(--muted);flex-shrink:0">&#x25BC;</span>' +
+      '</div>' +
+      '<select class="ud-ms-select" multiple style="display:none">' + roleOpts + '</select>' +
+      '<div class="ud-ms-dd" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:6px;box-shadow:var(--sh-md);padding:4px;max-height:200px;overflow-y:auto;overscroll-behavior:contain">' +
+        roleOpts.split('</option>').join('</option>') +
+      '</div>' +
+    '</div>' +
+    '<button class="btn" onclick="removeUdRow(' + idx + ')" style="font-size:16px;padding:2px 8px;line-height:1;color:var(--danger);flex-shrink:0">&times;</button>';
+  container.appendChild(div);
+  // Sync select ↔ dropdown visual state
+  var dd = div.querySelector('.ud-ms-dd');
+  var sel = div.querySelector('.ud-ms-select');
+  // Stop wheel on dropdown from reaching parent list
+  dd.addEventListener('wheel', function(e) { e.stopPropagation(); });
+  // Initialize dropdown option selected states to match hidden select
+  for (var si = 0; si < sel.options.length; si++) {
+    if (dd.children[si]) dd.children[si].selected = sel.options[si].selected;
+  }
+  dd.addEventListener('click', function(e) {
+    var opt = e.target.closest('option');
+    if (!opt) return;
+    e.stopPropagation();
+    var idx = Array.prototype.indexOf.call(dd.children, opt);
+    if (idx >= 0 && idx < sel.options.length) {
+      sel.options[idx].selected = !sel.options[idx].selected;
+      opt.selected = sel.options[idx].selected;
+      updateUdMsTags(div.querySelector('.ud-ms-trigger'));
+    }
+  });
+  updateUdMsTags(div.querySelector('.ud-ms-trigger'));
+}
+
+function toggleUdMs(trigger) {
+  var dd = trigger.parentElement.querySelector('.ud-ms-dd');
+  if (!dd) return;
+  var isOpen = dd.style.display === 'block';
+  document.querySelectorAll('.ud-ms-dd').forEach(function(d) { d.style.display = 'none'; });
+  dd.style.display = isOpen ? 'none' : 'block';
+}
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.ud-ms-trigger') && !e.target.closest('.ud-ms-dd')) {
+    document.querySelectorAll('.ud-ms-dd').forEach(function(d) { d.style.display = 'none'; });
+  }
+});
+
+function updateUdMsTags(trigger) {
+  var sel = trigger.parentElement.querySelector('.ud-ms-select');
+  var tags = trigger.querySelector('.ud-ms-tags');
+  if (!sel || !tags) return;
+  var selected = [];
+  for (var i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].selected) selected.push({ idx: i, label: sel.options[i].textContent });
+  }
+  tags.innerHTML = selected.length
+    ? selected.map(function(s) {
+        return '<span class="ud-ms-tag" data-idx="' + s.idx + '" onclick="removeUdMsTag(this, event)" style="display:inline-block;margin:1px;padding:0 5px;border-radius:4px;font-size:10.5px;background:var(--accent-lt);color:var(--accent);white-space:nowrap;cursor:pointer" title="点击移除">' + escHtml(s.label) + ' &times;</span>';
+      }).join('')
+    : '<span style="font-size:10.5px;color:var(--muted)">选择角色...</span>';
+}
+
+function removeUdMsTag(el, ev) {
+  ev.stopPropagation();
+  var trigger = el.closest('.ud-ms-trigger');
+  if (!trigger) return;
+  var sel = trigger.parentElement.querySelector('.ud-ms-select');
+  var dd = trigger.parentElement.querySelector('.ud-ms-dd');
+  var idx = parseInt(el.dataset.idx, 10);
+  if (sel && idx >= 0 && idx < sel.options.length) {
+    sel.options[idx].selected = false;
+    if (dd && dd.children[idx]) dd.children[idx].selected = false;
+    updateUdMsTags(trigger);
+  }
 }
 
 function closeUserDialog() {
@@ -259,39 +338,62 @@ function closeUserDialog() {
   if (overlay) overlay.remove();
 }
 
+function removeUdRow(idx) {
+  var row = document.getElementById('ud-row-' + idx);
+  if (row) row.remove();
+}
+
 async function submitUserCreate() {
-  var ta = document.getElementById('ud-usernames');
-  var usernames = ta.value.split('\n').map(function(s) { return s.trim(); }).filter(Boolean);
-  var password = document.getElementById('ud-password').value || '123456';
+  var rows = document.querySelectorAll('.ud-row');
+  var users = [];
+  rows.forEach(function(row) {
+    var uname = (row.querySelector('.ud-uname').value || '').trim();
+    if (!uname) return;
+    var pw = row.querySelector('.ud-pw').value || '123456';
+    var roleIds = [];
+    var sel = row.querySelector('.ud-ms-select');
+    if (sel) {
+      for (var j = 0; j < sel.options.length; j++) {
+        if (sel.options[j].selected) roleIds.push(parseInt(sel.options[j].value));
+      }
+    }
+    var primaryRole = roleIds.length > 0 ? (_permRoles.find(function(r) { return r.id === roleIds[0]; }) || {}).key || 'viewer' : 'viewer';
+    users.push({ username: uname, password: pw, primaryRole: primaryRole, roleIds: roleIds });
+  });
   var msg = document.getElementById('ud-msg');
-  if (!usernames.length) { msg.innerHTML = '<span style="color:var(--danger)">请至少输入一个用户名</span>'; return; }
+  if (!users.length) { msg.innerHTML = '<span style="color:var(--danger)">请至少填写一个用户名</span>'; return; }
   var success = 0, fail = 0;
+  var errors = [];
   msg.innerHTML = '<span style="color:var(--muted)">创建中...</span>';
   msg.style.color = 'var(--muted)';
-  for (var i = 0; i < usernames.length; i++) {
-    var uname = usernames[i];
-    // Get role selector for this user
-    var sel = document.querySelector('[data-ud-user="' + i + '"]');
-    var roleId = sel ? parseInt(sel.value) : null;
-    var roleKey = roleId ? (_permRoles.find(function(r) { return r.id === roleId; }) || {}).key || 'viewer' : 'viewer';
+  for (var i = 0; i < users.length; i++) {
+    var u = users[i];
     try {
-      var resp = await API.post('/admin/users', { username: uname, password: password, role: roleKey });
-      if (resp && resp.id && roleId) {
-        await API.put('/admin/users/' + resp.id + '/roles', { role_ids: [roleId] });
+      var resp = await API.post('/admin/users', { username: u.username, password: u.password, role: u.primaryRole });
+      if (resp && resp.id && u.roleIds.length) {
+        try {
+          await API.put('/admin/users/' + resp.id + '/roles', { role_ids: u.roleIds });
+        } catch(roleErr) {
+          // Rollback: delete the created user since role assignment failed
+          try { await API.del('/admin/users/' + resp.id); } catch(ignore) {}
+          throw new Error('角色分配失败: ' + roleErr.message);
+        }
       }
       success++;
-      msg.innerHTML = '<span>已创建 ' + success + ' / ' + usernames.length + '...<span>';
+      msg.innerHTML = '<span style="color:var(--muted)">已创建 ' + success + ' / ' + users.length + '...<span>';
     } catch(e) {
       fail++;
-      msg.innerHTML = '<span style="color:var(--danger)">用户 ' + escHtml(uname) + ' 失败: ' + escHtml(e.message) + '</span>';
-      // Continue with next user
+      errors.push(u.username + ': ' + e.message);
+      showToast('创建 ' + u.username + ' 失败: ' + e.message, 'error');
     }
   }
   if (fail === 0) {
     closeUserDialog();
     showToast('成功创建 ' + success + ' 个用户', 'success');
   } else {
-    msg.innerHTML = '<span style="color:var(--warn)">完成: 成功 ' + success + ' 个, 失败 ' + fail + ' 个</span>';
+    var errSummary = errors.slice(0, 3).join('; ');
+    if (errors.length > 3) errSummary += ' ...等' + errors.length + '个错误';
+    msg.innerHTML = '<span style="color:var(--danger)">成功 ' + success + ' 个, 失败 ' + fail + ' 个: ' + escHtml(errSummary) + '</span>';
   }
   initUserManagement();
 }

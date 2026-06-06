@@ -1,5 +1,8 @@
 """Admin user management — list/create/update/delete users (admin only)."""
 
+import logging
+logger = logging.getLogger(__name__)
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -105,7 +108,7 @@ def update_role(role_id: int, payload: dict, db: Session = Depends(get_db), _=De
 
 # ── User-Role Assignment ──
 
-@router.get("/users/{user_id}/roles", response_model=dict)
+@router.get("/{user_id}/roles", response_model=dict)
 def get_user_roles(user_id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
     user_roles = db.query(UserRole).filter(UserRole.user_id == user_id).all()
     return {
@@ -115,7 +118,7 @@ def get_user_roles(user_id: int, db: Session = Depends(get_db), _=Depends(requir
     }
 
 
-@router.put("/users/{user_id}/roles", response_model=dict)
+@router.put("/{user_id}/roles", response_model=dict)
 def set_user_roles(user_id: int, payload: dict, db: Session = Depends(get_db), _=Depends(require_admin)):
     """Set user's role memberships. payload: { role_ids: [1, 2, 3] }"""
     user = db.query(LocalUser).filter(LocalUser.id == user_id).first()
@@ -124,15 +127,21 @@ def set_user_roles(user_id: int, payload: dict, db: Session = Depends(get_db), _
     role_ids = payload.get("role_ids", [])
     if not isinstance(role_ids, list):
         raise HTTPException(status_code=400, detail="role_ids must be a list")
-    # Remove existing
-    db.query(UserRole).filter(UserRole.user_id == user_id).delete()
-    # Add new
-    for rid in role_ids:
-        role = db.query(Role).filter(Role.id == rid).first()
-        if role:
-            db.add(UserRole(user_id=user_id, role_id=rid))
-    db.commit()
-    return {"code": 0, "data": role_ids, "message": "用户角色已更新"}
+    try:
+        # Remove existing
+        db.query(UserRole).filter(UserRole.user_id == user_id).delete()
+        # Add new
+        for rid in role_ids:
+            role = db.query(Role).filter(Role.id == rid).first()
+            if role:
+                db.add(UserRole(user_id=user_id, role_id=rid))
+        db.commit()
+        logger.info(f"User roles updated: user_id={user_id} roles={role_ids}")
+        return {"code": 0, "data": role_ids, "message": "用户角色已更新"}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to update user roles: user_id={user_id} roles={role_ids}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/roles/{role_id}/users", response_model=dict)
@@ -177,18 +186,23 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db), _=Depends(re
     existing = db.query(LocalUser).filter(LocalUser.username == payload.username).first()
     if existing:
         raise HTTPException(status_code=400, detail="用户名已存在")
-    user = LocalUser(
-        username=payload.username,
-        display_name=payload.username,
-        password_hash=hash_password(payload.password),
-        role=payload.role,
-        permissions=payload.permissions,
-        is_active=True,
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return {"code": 0, "data": {"id": user.id, "username": user.username}, "message": "用户已创建"}
+    try:
+        user = LocalUser(
+            username=payload.username,
+            display_name=payload.username,
+            password_hash=hash_password(payload.password),
+            role=payload.role,
+            is_active=True,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        logger.info(f"User created: id={user.id} username={user.username!r} role={user.role}")
+        return {"code": 0, "data": {"id": user.id, "username": user.username}, "message": "用户已创建"}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to create user {payload.username!r}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.put("/{user_id}", response_model=dict)
@@ -240,6 +254,14 @@ def delete_user(user_id: int, db: Session = Depends(get_db), _=Depends(require_a
     user = db.query(LocalUser).filter(LocalUser.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
-    db.delete(user)
-    db.commit()
-    return {"code": 0, "message": "用户已删除"}
+    try:
+        # Delete related user_roles first (FK constraint)
+        db.query(UserRole).filter(UserRole.user_id == user_id).delete()
+        db.delete(user)
+        db.commit()
+        logger.info(f"User deleted: id={user_id} username={user.username!r}")
+        return {"code": 0, "message": "用户已删除"}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to delete user id={user_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
