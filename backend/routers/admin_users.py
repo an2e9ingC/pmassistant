@@ -32,7 +32,7 @@ class PasswordReset(BaseModel):
 
 # All company roles
 ROLES = [
-    "admin", "manager", "ceo", "cto", "pm",
+    "admin", "ceo", "cto", "pm",
     "sales", "hw_dev", "structure", "hw_test",
     "bsp_dev", "sw_dev", "test_delivery",
     "procurement", "quality", "warehouse", "viewer",
@@ -42,7 +42,7 @@ ROLES = [
 ALL_PERMISSIONS = ["admin", "sync", "project_edit", "product_link", "customer_link"]
 
 ROLE_LABELS = {
-    "admin": "管理员", "manager": "管理者", "ceo": "CEO", "cto": "CTO", "pm": "项目经理",
+    "admin": "管理员", "ceo": "CEO", "cto": "CTO", "pm": "项目经理",
     "sales": "销售及售前", "hw_dev": "硬件开发", "structure": "结构设计及装配",
     "hw_test": "硬件测试", "bsp_dev": "BSP开发", "sw_dev": "业务软件开发",
     "test_delivery": "测试交付", "procurement": "采购", "quality": "质检",

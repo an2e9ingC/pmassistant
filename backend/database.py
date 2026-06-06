@@ -113,12 +113,10 @@ def init_db():
     db = SessionLocal()
     try:
         from backend.models.local import LocalUser, Role, UserRole
-        from passlib.context import CryptContext
 
         # Seed default roles if not exist
         default_roles = [
             ("admin", "管理员", "admin", "系统完整管理权限"),
-            ("manager", "管理者", "sync,project_edit", "管理+同步权限"),
             ("ceo", "CEO", "", "查看所有项目数据"),
             ("cto", "CTO", "", "查看所有项目数据"),
             ("pm", "项目经理", "sync,project_edit,product_link,customer_link", "项目管理+同步+产客关系维护"),
@@ -139,10 +137,10 @@ def init_db():
         db.commit()
 
         if db.query(LocalUser).count() == 0:
-            pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+            import bcrypt as _bcrypt
             admin = LocalUser(
                 username="admin",
-                password_hash=pwd_context.hash("admin123"),
+                password_hash=_bcrypt.hashpw(b"admin123", _bcrypt.gensalt(rounds=12)).decode(),
                 role="admin",
                 zentao_account=None,
                 is_active=True,

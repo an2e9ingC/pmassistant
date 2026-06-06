@@ -96,6 +96,7 @@ function toggleTheme() {
 /* Data Source Status — topbar tags */
 
 var _srcStates = { zentao: 'pending', gitlab: 'pending', nas: 'pending' };
+var _srcDetails = { zentao: '', gitlab: '', nas: '' };
 
 function updateLinkStatus() {
   API.get('/sync/sources').then(function(sources) {

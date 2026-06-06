@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-> 当前版本：v2026.06.04-beta2 | 最后更新：2026-06-04
+> 当前版本：v2026.06.06-beta1 | 最后更新：2026-06-06
 
 ---
 
@@ -218,3 +218,4 @@
 | 2026-06-03 | v2026.06.03-beta7 | GitLab Issue/MR模板(.gitlab/issue_templates+Bug/Feature+MR Checklist) |
 | 2026-06-04 | v2026.06.04-beta1 | 产品详情4卡片点击跳转禅道+Bug/Release专用URL+产品链接格式统一 |
 | 2026-06-04 | v2026.06.04-beta2 | 角色组权限系统：Role/UserRole表+15角色+4权限+多对多关联+权限管理页+单表格calc(100vh-Npx)规范 |
+| 2026-06-06 | v2026.06.06-beta1 | 批量添加用户+角色组搜索+passlib→bcrypt修复+前端catch without try+_srcDetails修复 |
