@@ -592,12 +592,14 @@ function buildGantt(data) {
     if (isMissing) rowStyle = 'opacity:0.4;';
     else if (isUnmatched) rowStyle = 'background:var(--warn-lt);';
 
-    // Bar
+    // Bar — add red bottom border for overdue stages
+    var ganttOverdue = !isMissing && !isUnmatched && isStageOverdue(s);
+    var barCls = 'gantt-bar ' + s.status + (ganttOverdue ? ' gantt-overdue' : '');
     var barHtml = '';
     if (isMissing) {
       barHtml = '';
     } else {
-      barHtml = '<div class="gantt-bar ' + s.status + '" style="left:' + lp + 'px;width:' + wp + 'px" data-tip="' + compactDate(s.start) + '→' + compactDate(s.end) + '　任务:' + tasksDone + '/' + tasksTotal + '">' +
+      barHtml = '<div class="' + barCls + '" style="left:' + lp + 'px;width:' + wp + 'px" data-tip="' + compactDate(s.start) + '→' + compactDate(s.end) + '　任务:' + tasksDone + '/' + tasksTotal + '">' +
         '<div class="gantt-bar-fill" style="width:' + prog + '%"></div>' +
       '</div>';
     }
@@ -684,6 +686,15 @@ function buildGanttToolbar() {
 }
 
 /* Stages Table */
+
+function isStageOverdue(s) {
+  if (s.status === 'completed' || s.status === 'blocked') return false;
+  if (!s.end) return false;
+  var today = new Date(); today.setHours(0, 0, 0, 0);
+  var end = new Date(s.end);
+  var prog = parseFloat(s.progress) || 0;
+  return today > end && prog < 100;
+}
 
 function getStageRisk(s) {
   // Returns { level, label, color, tip }
@@ -780,8 +791,11 @@ function buildStages(stages) {
       '<span style="font-size:12px;white-space:nowrap;' + (!s.who || s.who === '未指派' ? 'color:var(--danger);font-weight:540' : '') + '">' + escHtml(s.who || '未指派') + '</span>';
     var dateHtml = isMissing ? '<span style="color:var(--muted)">—</span>' :
       '<span style="font-size:11.5px;color:var(--muted);white-space:nowrap;line-height:1.8">' + formatDate(s.start) + '<br>' + formatDate(s.end) + '</span>';
+    var overdue = !isMissing && !isUnmatched && isStageOverdue(s);
     var statusHtml = isMissing ? '<span class="pill" style="background:var(--warn-lt);color:var(--warn)">阶段缺失</span>' :
-      renderPill(s.status) + (s.completed_date ? '<div style="font-size:10.5px;color:var(--success);margin-top:4px;font-family:var(--mono)">&#10003; ' + s.completed_date + '</div>' : '');
+      renderPill(s.status) +
+      (overdue ? '<div style="font-size:10.5px;color:var(--danger);margin-top:4px;font-family:var(--mono);font-weight:600">⚠ 超期</div>' : '') +
+      (s.completed_date ? '<div style="font-size:10.5px;color:var(--success);margin-top:4px;font-family:var(--mono)">&#10003; ' + s.completed_date + '</div>' : '');
     var blockerHtml = isMissing ? '<span style="color:var(--muted)">—</span>' :
       '<span style="font-size:12px;color:' + (s.blocker ? 'var(--danger)' : 'var(--muted)') + ';max-width:200px">' + escHtml(s.blocker || '—') + '</span>';
     var delsHtml = isMissing ? '<span style="font-size:11px;color:var(--muted);font-style:italic">暂无</span>' : renderDeliverablesList(dels);

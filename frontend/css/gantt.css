@@ -314,6 +314,11 @@
 .gantt-bar.pending   .gantt-bar-fill { background: #8B93A8; }
 .gantt-bar.canceled  .gantt-bar-fill { background: #7B8291; }
 
+/* Overdue indicator — red bottom border on both layers */
+.gantt-bar.gantt-overdue {
+  border-bottom: 3px solid var(--danger) !important;
+}
+
 /* ── Today line ── */
 .gantt-today-line {
   position: absolute; top: 0; bottom: 0; width: 2px;
