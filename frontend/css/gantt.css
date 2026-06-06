@@ -178,6 +178,44 @@
 .gantt-col-hd.weekend { background: var(--bg); }
 .gantt-col-hd.q-end { border-right: 2px solid var(--border); }
 
+/* Dark mode — darken month background colors for text readability */
+[data-theme="dark"] .gantt-mc-0  { background: #2a3340; }
+[data-theme="dark"] .gantt-mc-1  { background: #2e2835; }
+[data-theme="dark"] .gantt-mc-2  { background: #283528; }
+[data-theme="dark"] .gantt-mc-3  { background: #352830; }
+[data-theme="dark"] .gantt-mc-4  { background: #253825; }
+[data-theme="dark"] .gantt-mc-5  { background: #353828; }
+[data-theme="dark"] .gantt-mc-6  { background: #382a20; }
+[data-theme="dark"] .gantt-mc-7  { background: #22382e; }
+[data-theme="dark"] .gantt-mc-8  { background: #353020; }
+[data-theme="dark"] .gantt-mc-9  { background: #382420; }
+[data-theme="dark"] .gantt-mc-10 { background: #2e2822; }
+[data-theme="dark"] .gantt-mc-11 { background: #242c38; }
+[data-theme="dark"] .gantt-col-hd.gantt-mc-0,
+[data-theme="dark"] .gantt-col-hd.gantt-mc-1,
+[data-theme="dark"] .gantt-col-hd.gantt-mc-2,
+[data-theme="dark"] .gantt-col-hd.gantt-mc-3,
+[data-theme="dark"] .gantt-col-hd.gantt-mc-4,
+[data-theme="dark"] .gantt-col-hd.gantt-mc-5,
+[data-theme="dark"] .gantt-col-hd.gantt-mc-6,
+[data-theme="dark"] .gantt-col-hd.gantt-mc-7,
+[data-theme="dark"] .gantt-col-hd.gantt-mc-8,
+[data-theme="dark"] .gantt-col-hd.gantt-mc-9,
+[data-theme="dark"] .gantt-col-hd.gantt-mc-10,
+[data-theme="dark"] .gantt-col-hd.gantt-mc-11 { opacity: 0.85; }
+[data-theme="dark"] .gantt-grid-col.gantt-mc-0,
+[data-theme="dark"] .gantt-grid-col.gantt-mc-1,
+[data-theme="dark"] .gantt-grid-col.gantt-mc-2,
+[data-theme="dark"] .gantt-grid-col.gantt-mc-3,
+[data-theme="dark"] .gantt-grid-col.gantt-mc-4,
+[data-theme="dark"] .gantt-grid-col.gantt-mc-5,
+[data-theme="dark"] .gantt-grid-col.gantt-mc-6,
+[data-theme="dark"] .gantt-grid-col.gantt-mc-7,
+[data-theme="dark"] .gantt-grid-col.gantt-mc-8,
+[data-theme="dark"] .gantt-grid-col.gantt-mc-9,
+[data-theme="dark"] .gantt-grid-col.gantt-mc-10,
+[data-theme="dark"] .gantt-grid-col.gantt-mc-11 { opacity: 0.25; }
+
 /* ── Stage rows ── */
 .gantt-row {
   display: flex; border-bottom: 1px solid var(--border);
