@@ -32,6 +32,12 @@ async function loadKpiCards() {
   try {
     var data = await API.get('/dashboard/kpi');
     document.getElementById('kpi-all-count').textContent = data.total_projects;
+    var filterInfo = document.getElementById('kpi-all-filter');
+    if (filterInfo) {
+      var pf = data.project_filter || '';
+      filterInfo.textContent = pf ? '筛选: ' + pf : '所有项目';
+      filterInfo.title = pf ? '数据源配置中设定的项目编号前缀过滤' : '未设置项目编号前缀过滤';
+    }
     document.getElementById('kpi-active-count').textContent = data.active_count;
     document.getElementById('kpi-meta-types').innerHTML = '研发 <b>' + data.rd_count + '</b> &nbsp;·&nbsp; 生产 <b>' + data.sc_count + '</b>';
     // Update filter tabs with counts

@@ -46,7 +46,13 @@ def get_kpi(db: Session) -> dict:
             })
     programs.sort(key=lambda x: x["name"])
 
+    # Project filter config
+    import os
+    from backend.config import settings
+    pf = getattr(settings, "ZENTAO_PROJECT_FILTER", "") or os.environ.get("ZENTAO_PROJECT_FILTER", "")
+
     return {
+        "project_filter": pf,
         "active_projects": len(active),
         "total_projects": len(projects),
         "rd_count": rd_count,
