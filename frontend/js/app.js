@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════
    MAIN APP
 ═══════════════════════════════════════════════════ */
-var VIEW_TITLES = { dashboard: '项目总览', detail: '项目详情', topology: '快速检索', reports: '统计报告', logs: '系统日志', users: '用户管理', permissions: '权限管理', config: '数据源配置', 'product-list': '产品总览', 'product-detail': '产品详情', customers: '客户管理', 'customer-detail': '客户详情' };
+var VIEW_TITLES = { dashboard: '项目总览', detail: '项目详情', topology: '快速检索', reports: '统计报告', logs: '系统日志', users: '用户管理', permissions: '权限管理', config: '数据源配置', 'doc-templates': '文档模板配置', 'product-list': '产品总览', 'product-detail': '产品详情', customers: '客户管理', 'customer-detail': '客户详情' };
 
 function gotoView(view) {
   // Check auth
@@ -56,6 +56,14 @@ function gotoView(view) {
       return;
     }
     initAdmin();
+  }
+  if (view === 'doc-templates') {
+    var user = getCurrentUser();
+    if (!user || (user.role !== 'admin' && user.role !== 'pm')) {
+      showToast('文档模板配置仅限管理员和项目经理访问', 'error');
+      return;
+    }
+    initDocTemplates();
   }
   if (view === 'users') {
     var user = getCurrentUser();
@@ -263,8 +271,8 @@ function init() {
     var initials = (user.username || '').substring(0, 2).toUpperCase();
     document.getElementById('user-avatar').textContent = initials;
     document.getElementById('user-name').textContent = user.username + ' · ' + user.role;
-    // Show admin-only nav items
-    if (user.role === 'admin') {
+    // Show admin/PM nav items
+    if (user.role === 'admin' || user.role === 'pm') {
       var adminGroup = document.getElementById('nav-group-admin');
       if (adminGroup) adminGroup.style.display = '';
     }

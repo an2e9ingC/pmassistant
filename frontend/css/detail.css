@@ -498,3 +498,73 @@
 }
 
 @keyframes sync-spin { to { transform: rotate(360deg); } }
+
+/* ── Inline Document Editing ── */
+
+.doc-edit-row td {
+  padding: 4px 12px;
+  background: var(--accent-lt);
+}
+
+.doc-edit-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.doc-edit-inline input {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 12px;
+  font-family: var(--font);
+}
+
+.doc-edit-inline input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.doc-status-btn {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  transition: all 0.12s;
+}
+
+.doc-status-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.doc-status-btn.done {
+  background: var(--success-lt);
+  color: var(--success);
+  border-color: var(--success);
+}
+
+.doc-row-submitted td {
+  opacity: 0.85;
+}
+
+.doc-row-warn td {
+  background: var(--warn-lt) !important;
+}
+
+.doc-link {
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.doc-link:hover {
+  text-decoration: underline;
+}

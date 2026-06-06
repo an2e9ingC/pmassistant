@@ -32,6 +32,9 @@ class CachedProject(Base):
     project_type = Column(String(16), default="RD")
     alias_name = Column(String(256), nullable=True)
     customer_name = Column(String(256), nullable=True)
+    # Delivery plan (PMA-local, not overwritten by sync)
+    planned_delivery_qty = Column(Integer, default=0)
+    delivery_note = Column(Text, nullable=True)
     # Extracted from Zentao project desc
     description = Column(Text, nullable=True)
     tags = Column(Text, nullable=True)  # comma-separated #tags extracted from desc

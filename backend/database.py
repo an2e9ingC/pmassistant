@@ -88,6 +88,7 @@ def init_db():
     from backend.models.local import LocalUser, Role, UserRole, ProjectNote, PmaSetting, AuditLog  # noqa: F401
     from backend.models.bug import CachedBug  # noqa: F401
     from backend.models.delivery import DeliveryRecord  # noqa: F401
+    from backend.models.document import DocumentTemplate, ProjectDocument  # noqa: F401
     from backend.models.log_entry import LogEntry  # noqa: F401
     from backend.models.zentao import (  # noqa: F401
         CachedProject,
@@ -104,6 +105,16 @@ def init_db():
     logger.info(f"Database path: {_db_path}")
     Base.metadata.create_all(bind=engine)
     _migrate_sqlite()
+
+    # Seed document templates on first startup
+    from backend.services.document_service import seed_document_templates
+    db = SessionLocal()
+    try:
+        count = seed_document_templates(db)
+        if count:
+            logger.info(f"Seeded {count} document templates")
+    finally:
+        db.close()
 
     # Ensure SQLite DB file is writable
     if _os.path.exists(_db_path):

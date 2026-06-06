@@ -1,0 +1,66 @@
+/* ═══════════════════════════════════════════════════
+   DOCUMENT TEMPLATE CONFIGURATION PAGE
+═══════════════════════════════════════════════════ */
+
+.dt-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.dt-left {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.dt-stage-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.12s;
+  margin-bottom: 2px;
+}
+.dt-stage-item:hover {
+  background: var(--accent-lt);
+}
+.dt-stage-item.selected {
+  background: var(--accent-lt);
+  color: var(--accent);
+  font-weight: 540;
+}
+
+.dt-stage-count {
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--bg);
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dt-right {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.dt-right-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+@media (max-width: 768px) {
+  .dt-layout {
+    grid-template-columns: 1fr;
+  }
+}

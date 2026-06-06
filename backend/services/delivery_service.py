@@ -9,12 +9,21 @@ from backend.models.delivery import DeliveryRecord
 
 
 def get_delivery_summary(db: Session, project_id: int) -> dict:
-    """Get delivery summary for a project (FR-011)."""
+    """Get delivery summary for a project (FR-011).
+
+    Compares planned delivery quantity (set by PM) against actual
+    delivery records to compute progress and remaining count.
+    """
+    from backend.models.zentao import CachedProject
+
+    project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
+    planned = (project.planned_delivery_qty or 0) if project else 0
+
     records = db.query(DeliveryRecord).filter(
         DeliveryRecord.project_id == project_id
     ).order_by(DeliveryRecord.delivery_date.desc()).all()
 
-    total_qty = sum(r.quantity or 0 for r in records)
+    delivered_qty = sum(r.quantity or 0 for r in records)
     serials = []
     for r in records:
         if r.serial_numbers:
@@ -23,13 +32,16 @@ def get_delivery_summary(db: Session, project_id: int) -> dict:
             except (json.JSONDecodeError, TypeError):
                 pass
 
-    # TODO: 交付进度计算 — 应对比"应交付总数"（项目计划交付量）与"实际已交付"（记录汇总），
-    # 而非简单统计记录数量。当前求逻辑 complete = total_qty，仅适用于演示。
+    remaining = max(0, planned - delivered_qty) if planned > 0 else 0
+    progress = round(delivered_qty / planned * 100) if planned > 0 else 0
+
     return {
-        "total": total_qty,
-        "done": total_qty,
-        "remaining": 0,
-        "progress": 100 if records else 0,
+        "planned": planned,
+        "total": delivered_qty,
+        "done": delivered_qty,
+        "remaining": remaining,
+        "progress": progress,
+        "delivery_note": project.delivery_note if project else None,
         "records": [record_dict(r) for r in records],
     }
 

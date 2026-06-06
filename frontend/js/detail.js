@@ -710,8 +710,11 @@ function buildStages(stages) {
 /* Documents Table */
 
 function buildDocs(docs) {
+  var user = getCurrentUser();
+  var canEdit = user && (user.role === 'admin' || user.role === 'pm' || user.role === 'test_delivery');
+
   if (!docs || !docs.length) {
-    document.getElementById('docs-tbody').innerHTML = '<tr><td colspan="4"><div style="text-align:center;padding:30px;font-style:italic;color:var(--muted)">TODO：各阶段文档清单尚未配置，当前显示为禅道任务名占位<br><span style="font-size:11px">后续根据阶段类型匹配固定文档模板（售前→技术需求书/可行性报告、硬件→原理图/PCB/BOM…）</span></div></td></tr>';
+    document.getElementById('docs-tbody').innerHTML = '<tr><td colspan="5"><div style="text-align:center;padding:30px;font-style:italic;color:var(--muted)">暂无文档清单<br><span style="font-size:11px">项目阶段尚未匹配到文档模板，请先配置文档模板</span></div></td></tr>';
     return;
   }
 
@@ -729,19 +732,98 @@ function buildDocs(docs) {
     var items = grouped[stageName];
     var bg = stageIdx % 2 === 0 ? 'var(--surface)' : 'var(--bg)';
     items.forEach(function(d, i) {
+      var rowCls = d.warn ? 'doc-row-warn' : (d.done ? 'doc-row-submitted' : '');
       var cls = d.done ? 'completed' : (d.warn ? 'blocked' : 'pending');
       var lbl = d.done ? '已提交' : (d.warn ? '⚠ 告警缺失' : '未开始');
-      var lnk = d.done && d.location ? '<span class="doc-link">↗ ' + escHtml(d.location) + '</span>' : (d.done ? '<span style="font-size:12px;color:var(--muted)">禅道任务附件</span>' : '<span style="font-size:11.5px;color:var(--muted);font-style:italic">请按照规范输出对应文档（TODO：后续要根据不同的阶段提示不同的信息）</span>');
-      var statusCell = '<span class="pill ' + cls + '" style="font-size:11px">' + lbl + '</span>' + (d.completed_at ? '<div style="font-size:10.5px;color:var(--success);margin-top:3px;font-family:var(--mono)">' + d.completed_at + '</div>' : '');
-      var completedDate = items[0].stage_completed_date;
-      rows += '<tr style="background:' + bg + '">' +
+      var statusCell = '<span class="pill ' + cls + '" style="font-size:11px;cursor:' + (canEdit ? 'pointer' : 'default') + '"' +
+        (canEdit ? ' onclick="toggleDocEdit(' + d.id + ')" title="点击切换状态"' : '') + '>' + lbl + '</span>' +
+        (d.completed_at ? '<div style="font-size:10.5px;color:var(--success);margin-top:3px;font-family:var(--mono)">' + d.completed_at + '</div>' : '');
+
+      // Location link or hint
+      var locHtml = '';
+      if (d.done && d.location) {
+        locHtml = '<a class="doc-link" href="' + escHtml(d.location) + '" target="_blank">↗ ' + escHtml(d.location) + '</a>';
+      } else if (d.done) {
+        locHtml = '<span style="font-size:12px;color:var(--muted)">已提交</span>';
+      } else if (d.warn) {
+        locHtml = '<span style="font-size:11.5px;color:var(--warn);font-style:italic">缺失文档，请及时提交</span>';
+      } else {
+        locHtml = '<span style="font-size:11.5px;color:var(--muted);font-style:italic">待提交</span>';
+      }
+
+      var completedDate = items[0].stage_completed_date || null;
+      rows += '<tr class="' + rowCls + '" style="background:' + bg + '" id="doc-row-' + d.id + '">' +
         (i === 0 ? '<td rowspan="' + items.length + '" style="vertical-align:middle;font-weight:540;border-right:1px solid var(--border)">' + escHtml(stageName) + (completedDate ? '<br><span style="font-size:10.5px;color:var(--success);font-weight:400">&#10003; ' + completedDate + '</span>' : '') + '</td>' : '') +
-        '<td>' + escHtml(d.name) + '</td><td>' + statusCell + '</td><td>' + lnk + '</td>' +
+        '<td>' + escHtml(d.doc_name) + '</td>' +
+        '<td style="font-size:12px;color:' + (d.responsible_role ? 'var(--fg)' : 'var(--muted)') + '">' + escHtml(d.responsible_role || '—') + '</td>' +
+        '<td>' + statusCell + '</td><td id="doc-loc-cell-' + d.id + '">' + locHtml + '</td>' +
       '</tr>';
     });
     stageIdx++;
   });
   document.getElementById('docs-tbody').innerHTML = rows;
+}
+
+/* ── Document Status Toggle (inline edit) ── */
+
+var _editingDocId = null;
+
+function toggleDocEdit(docId) {
+  // If already editing, cancel
+  if (_editingDocId === docId) {
+    cancelDocEdit();
+    return;
+  }
+  // Close any existing edit
+  cancelDocEdit();
+
+  // Find the row and insert an edit row after it
+  var row = document.getElementById('doc-row-' + docId);
+  if (!row) return;
+
+  _editingDocId = docId;
+
+  var editRow = document.createElement('tr');
+  editRow.id = 'doc-edit-row-' + docId;
+  editRow.className = 'doc-edit-row';
+  // Determine colspan: if first row in stage group, stage cell occupies 1 col
+  var hasStageCell = row.querySelector('td[rowspan]') !== null;
+  var colspan = hasStageCell ? 4 : 5;
+  editRow.innerHTML =
+    '<td colspan="' + colspan + '" style="padding:8px 12px">' +
+      '<div class="doc-edit-inline">' +
+        '<input id="doc-edit-loc" placeholder="输入文档链接/路径" style="font-size:12px">' +
+        '<button class="doc-status-btn done" onclick="saveDocStatus(' + docId + ',\'submitted\')">标记已提交</button>' +
+        (hasStageCell ? '' : '') +
+        '<button class="doc-status-btn" onclick="cancelDocEdit()">取消</button>' +
+      '</div>' +
+    '</td>';
+
+  // Insert after the current row
+  row.parentNode.insertBefore(editRow, row.nextSibling);
+  document.getElementById('doc-edit-loc').focus();
+}
+
+function cancelDocEdit() {
+  var editRow = document.getElementById('doc-edit-row-' + _editingDocId);
+  if (editRow) editRow.remove();
+  _editingDocId = null;
+}
+
+async function saveDocStatus(docId, status) {
+  var loc = document.getElementById('doc-edit-loc').value.trim();
+  var body = { status: status };
+  if (loc) body.location = loc;
+  try {
+    await API.put('/projects/' + _comboCurId + '/documents/' + docId, body);
+    showToast(status === 'submitted' ? '已标记为提交' : '状态已更新', 'success');
+    cancelDocEdit();
+    // Refresh documents tab
+    var docs = await API.get('/projects/' + _comboCurId + '/documents');
+    buildDocs(docs);
+  } catch(e) {
+    showToast('操作失败: ' + (e.message || '未知错误'), 'error');
+  }
 }
 
 /* Delivery */
@@ -750,11 +832,46 @@ var _deliveryData = null;
 
 function buildDelivery(data) {
   _deliveryData = data;
-  var total = data.total || 0;
-  var done = data.done || 0;
-  var rem = total - done;
-  var dp = total > 0 ? Math.round(done / total * 100) : 0;
+  var planned = data.planned || 0;
+  var delivered = data.total || 0;  // total = delivered qty sum from records
+  var remaining = data.remaining || 0;
+  var progress = data.progress || 0;
+  var note = data.delivery_note || '';
   var records = data.records || [];
+  var hasPlan = planned > 0;
+  var user = getCurrentUser();
+  var canEdit = user && (user.role === 'admin' || user.role === 'pm' || user.role === 'test_delivery');
+
+  var kpiHtml =
+    '<div class="delivery-kpi">' +
+      '<div class="dkpi"><div class="dkpi-lbl">应交付总数</div><div class="dkpi-val">' + (hasPlan ? planned : '—') + '</div></div>' +
+      '<div class="dkpi"><div class="dkpi-lbl">已交付数量</div><div class="dkpi-val" style="color:var(--success)">' + delivered + '</div></div>' +
+      '<div class="dkpi"><div class="dkpi-lbl">剩余未交付</div><div class="dkpi-val" style="color:' + (remaining > 0 ? 'var(--warn)' : 'var(--muted)') + '">' + remaining + '</div></div>' +
+    '</div>' +
+    (hasPlan
+      ? '<div class="progress-bar" style="height:8px;margin-bottom:6px"><div class="progress-fill ' + (progress >= 100 ? 'green' : 'blue') + '" style="width:' + Math.min(100, progress) + '%"></div></div>' +
+        '<div style="font-size:12px;color:var(--muted)">交付进度 ' + progress + '%（' + delivered + ' / ' + planned + '）</div>'
+      : '<div style="font-size:11px;color:var(--muted);font-style:italic">提示：尚未设置应交付总数，请通过下方设置</div>') +
+    (note ? '<div style="margin-top:8px;padding:8px 12px;background:var(--warn-lt);border:1px solid var(--warn);border-radius:7px;font-size:12px;color:var(--warn)">备注：' + escHtml(note) + '</div>' : '') +
+    (delivered === 0 ? '<div style="margin-top:14px;padding:12px 14px;background:var(--warn-lt);border:1px solid var(--warn);border-radius:8px;font-size:13px;color:var(--warn)">暂无交付记录</div>' : '');
+
+  // Delivery plan settings (collapsible, for PM/admin/test_delivery)
+  var planFormHtml = '';
+  if (canEdit) {
+    planFormHtml =
+      '<div class="card" style="padding:16px;margin-top:12px">' +
+        '<div class="section-title" style="margin-bottom:10px;cursor:pointer" onclick="toggleDeliveryPlanForm()">' +
+          '交付计划设置 <span style="font-size:10px;color:var(--muted)">（点击展开/收起）</span>' +
+        '</div>' +
+        '<div id="delivery-plan-form" style="display:none">' +
+          '<div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">' +
+            '<div><label style="font-size:11px;color:var(--muted)">应交付总数</label><input class="search-inp" id="del-plan-qty" type="number" min="0" value="' + planned + '" style="width:120px;margin-top:4px"></div>' +
+            '<div style="flex:1;min-width:200px"><label style="font-size:11px;color:var(--muted)">备注/延迟原因</label><input class="search-inp" id="del-plan-note" value="' + escHtml(note) + '" style="margin-top:4px"></div>' +
+            '<button class="btn btn-primary" onclick="saveDeliveryPlan()" style="height:34px;font-size:12px;white-space:nowrap">保存计划</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+  }
 
   var recHtml = '' +
     '<div class="card col-span" style="padding:20px;margin-top:16px">' +
@@ -780,19 +897,34 @@ function buildDelivery(data) {
     '<div class="two-col">' +
       '<div class="card" style="padding:20px">' +
         '<div class="section-title" style="margin-bottom:14px">交付概要</div>' +
-        '<div class="delivery-kpi">' +
-          '<div class="dkpi"><div class="dkpi-lbl">应交付总数</div><div class="dkpi-val">' + total + '</div></div>' +
-          '<div class="dkpi"><div class="dkpi-lbl">已交付数量</div><div class="dkpi-val" style="color:var(--success)">' + done + '</div></div>' +
-          '<div class="dkpi"><div class="dkpi-lbl">剩余未交付</div><div class="dkpi-val" style="color:' + (rem > 0 ? 'var(--warn)' : 'var(--muted)') + '">' + rem + '</div></div>' +
-        '</div>' +
-        '<div class="progress-bar" style="height:8px;margin-bottom:6px"><div class="progress-fill ' + (dp === 100 ? 'green' : 'blue') + '" style="width:' + dp + '%"></div></div>' +
-        '<div style="font-size:12px;color:var(--muted)">交付进度 ' + dp + '%</div>' +
-        '<div style="margin-top:8px;font-size:11px;font-style:italic;color:var(--muted)">TODO：进度计算逻辑待完善——应对比"项目计划交付量"与"实际交付汇总"，当前简化为记录统计</div>' +
-        (done === 0 ? '<div style="margin-top:14px;padding:12px 14px;background:var(--warn-lt);border:1px solid var(--warn);border-radius:8px;font-size:13px;color:var(--warn)">暂无交付记录</div>' : '') +
+        kpiHtml +
       '</div>' +
       recHtml +
     '</div>' +
+    planFormHtml +
     '<div id="delivery-form-container"></div>';
+}
+
+function toggleDeliveryPlanForm() {
+  var el = document.getElementById('delivery-plan-form');
+  if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+
+async function saveDeliveryPlan() {
+  var qty = parseInt(document.getElementById('del-plan-qty').value) || 0;
+  var note = document.getElementById('del-plan-note').value.trim();
+  try {
+    await API.put('/projects/' + _comboCurId + '/delivery-plan', {
+      planned_delivery_qty: qty,
+      delivery_note: note
+    });
+    showToast('交付计划已保存', 'success');
+    // Refresh delivery data
+    var data = await API.get('/projects/' + _comboCurId + '/delivery');
+    buildDelivery(data);
+  } catch(e) {
+    showToast('保存失败: ' + (e.message || '未知错误'), 'error');
+  }
 }
 
 function showDeliveryForm(record) {

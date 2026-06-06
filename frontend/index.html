@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="/css/components.css">
 <link rel="stylesheet" href="/css/gantt.css">
 <link rel="stylesheet" href="/css/detail.css">
+<link rel="stylesheet" href="/css/doc-templates.css">
 </head>
 <body>
 
@@ -118,6 +119,15 @@
         </svg>
         数据源配置
       </div>
+      <div class="nav-item" id="nav-doc-templates" onclick="gotoView('doc-templates')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="1.5" y="1.5" width="13" height="13" rx="2"/>
+          <line x1="4" y1="5.5" x2="12" y2="5.5"/>
+          <line x1="4" y1="8" x2="10" y2="8"/>
+          <line x1="4" y1="10.5" x2="7.5" y2="10.5"/>
+        </svg>
+        文档模板
+      </div>
       <div class="nav-item" id="nav-logs" onclick="gotoView('logs')">
         <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
           <rect x="1.5" y="1.5" width="13" height="13" rx="2"/>
@@ -142,7 +152,7 @@
     </div>
 
     <div style="margin-top:8px;text-align:center;font-size:10px;color:var(--muted)">
-      <span id="app-version">v2026.06.06-beta8</span>
+      <span id="app-version">v2026.06.06-beta9</span>
     </div>
   </div>
 </aside>
@@ -363,12 +373,13 @@
               <tr>
                 <th width="12%">阶段</th>
                 <th>文件名称</th>
+                <th width="10%">责任人</th>
                 <th width="16%">状态 / 完成时间</th>
                 <th>位置 / 链接</th>
               </tr>
             </thead>
             <tbody id="docs-tbody">
-              <tr><td colspan="4"><div class="empty-state" style="padding:20px">请选择项目</div></td></tr>
+              <tr><td colspan="5"><div class="empty-state" style="padding:20px">请选择项目</div></td></tr>
             </tbody>
           </table>
         </div>
@@ -508,6 +519,11 @@
         <div class="loading-spinner">加载中...</div>
       </div>
       <div id="admin-settings-area"></div>
+    </div>
+
+    <!-- ══════════════════════ VIEW — DOC TEMPLATES ══════════════════════ -->
+    <div class="view" id="view-doc-templates">
+      <div class="loading-spinner">加载中...</div>
     </div>
 
     <!-- ══════════════════════ VIEW — TOPOLOGY ══════════════════════ -->
@@ -710,6 +726,7 @@
 <script src="/js/topology.js"></script>
 <script src="/js/admin.js"></script>
 <script src="/js/customers.js"></script>
+<script src="/js/doc-templates.js"></script>
 <script src="/js/app.js"></script>
 <script>
 async function triggerSync() {

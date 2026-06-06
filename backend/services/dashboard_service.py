@@ -220,6 +220,29 @@ def _detect_alerts_internal(db: Session) -> list[dict]:
                             "project_id": p.id, "project_code": proj_code, "stage_name": e.name,
                         })
 
+    # Doc completeness: check ProjectDocument status for completed stages
+    from backend.models.document import ProjectDocument
+    for p in projects:
+        proj_code = p.code or (p.name.split('-')[0] if p.name and '-' in p.name else None)
+        executions = db.query(CachedExecution).filter(
+            CachedExecution.project_id == p.id
+        ).all()
+        for e in executions:
+            if e.status not in ("done", "closed"):
+                continue
+            # Check for pending documents in completed stages
+            pending_docs = db.query(ProjectDocument).filter(
+                ProjectDocument.execution_id == e.id,
+                ProjectDocument.status == "pending"
+            ).all()
+            for pd in pending_docs:
+                alert_id += 1
+                alerts.append({
+                    "id": alert_id, "severity": "yellow",
+                    "message": f"阶段「{e.name}」已完成，但文档「{pd.doc_name}」未提交",
+                    "sub_message": f"请及时提交输出件或标记文档状态",
+                    "project_id": p.id, "project_code": proj_code, "stage_name": e.name,
+                })
+
     # TODO: GitLab发布未同步告警 — 检测GitLab release版本号与禅道版本号是否一致（Phase 3）
-    # TODO: 输出件缺失告警 — 按阶段预定义文档清单逐一检查是否存在对应文件（Phase 3）
     return alerts

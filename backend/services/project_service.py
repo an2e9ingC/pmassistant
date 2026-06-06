@@ -9,6 +9,7 @@ from backend.config import settings, zentao_project_url, zentao_product_url
 from backend.models.zentao import (
     CachedProject, CachedExecution, CachedTask, CachedProduct, ProductProjectLink,
 )
+from backend.models.document import ProjectDocument
 
 
 def get_projects(db: Session) -> list[dict]:
@@ -39,16 +40,26 @@ def get_project_stages(db: Session, project_id: int) -> list[dict]:
             .order_by(CachedTask.id)
             .all()
         )
-        # TODO: 根据阶段类型返回固定的文档清单（非禅道任务名）
-        # 不同阶段对应不同的文档模板，例如：
-        #   售前 → 技术需求书、技术可行性报告、商务可行性报告、立项决议书、项目交付节点
-        #   硬件开发 → 硬件方案设计、原理图、PCB Layout、BOM、硬件测试报告
-        #   软件开发 → 软件需求规格、概要设计、详细设计、测试用例、测试报告
-        #   结构设计 → 结构设计报告、热设计报告
-        # 当前阶段名: e.stage_name or e.name
-        deliverables = [
-            {"name": "TODO: 根据阶段配置文档清单", "done": False, "warn": False, "completed_at": None, "location": None},
-        ]
+        # Query real document status from ProjectDocument table
+        pd_rows = (
+            db.query(ProjectDocument)
+            .filter(ProjectDocument.execution_id == e.id)
+            .order_by(ProjectDocument.sort_order)
+            .all()
+        )
+        deliverables = []
+        for pd in pd_rows:
+            is_done = e.status in ("done", "closed")
+            is_pending = pd.status == "pending"
+            deliverables.append({
+                "id": pd.id,
+                "name": pd.doc_name,
+                "done": pd.status == "submitted",
+                "warn": is_done and is_pending,
+                "completed_at": str(pd.completed_at)[:10] if pd.completed_at else None,
+                "location": pd.location,
+                "responsible_role": pd.responsible_role,
+            })
         who = _get_who(tasks, e, project) or "未指派"
         from backend.config import get_zentao_web_base
         web_base = get_zentao_web_base()
@@ -69,20 +80,8 @@ def get_project_stages(db: Session, project_id: int) -> list[dict]:
 
 
 def get_project_documents(db: Session, project_id: int) -> list[dict]:
-    stages = get_project_stages(db, project_id)
-    docs = []
-    for s in stages:
-        for d in s.get("deliverables", []):
-            docs.append({
-                "stage_name": s["name"],
-                "stage_completed_date": s["completed_date"],
-                "name": d["name"],
-                "done": d["done"],
-                "warn": d["warn"],
-                "completed_at": d["completed_at"],
-                "location": d["location"],
-            })
-    return docs
+    from backend.services.document_service import get_or_init_project_documents
+    return get_or_init_project_documents(db, project_id)
 
 
 def get_project_gantt(db: Session, project_id: int) -> list[dict]:

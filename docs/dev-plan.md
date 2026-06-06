@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-> 当前版本：v2026.06.06-beta8 | 最后更新：2026-06-06
+> 当前版本：v2026.06.06-beta9 | 最后更新：2026-06-06
 
 ---
 
@@ -160,8 +160,9 @@
 ## 待完成
 
 ### Phase 2
+- [x] 交付状态 PMA 本地配置（应交付总数、交付备注、计划 vs 实际对比）
+- [x] 文档齐套性（模板配置 + 项目文档初始化 + 状态跟踪 + 告警集成）
 - [ ] GitLab 集成（commit 统计、发布验证）
-- [ ] 交付状态 PMA 本地配置
 - [ ] NAS 售前项目检测（需 NAS 路径配置）
 - [ ] 外协进度跟踪
 - [ ] 关系图谱可视化（思维导图 SVG）
@@ -241,3 +242,4 @@
 | 2026-06-06 | v2026.06.06-beta6 | 客户详情页+双栏布局+实体颜色一致性(.gs-cust/proj/prod)+设计规范§19+快速检索客户链路修复 |
 | 2026-06-06 | v2026.06.06-beta7 | customer_name全链路修复(CustomerProjectLink)+快速检索产品按钮+gotoCustomerProjects→openCustomerByName |
 | 2026-06-06 | v2026.06.06-beta8 | 操作日志(AuditLog)+密码验证可配置(PmaSetting+6开关)+设计规范§19+关键操作密码确认 |
+| 2026-06-06 | v2026.06.06-beta9 | 文档齐套性(DocumentTemplate+ProjectDocument+模板配置页)+交付状态修复(planned vs actual)+告警集成 |

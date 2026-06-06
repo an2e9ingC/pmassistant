@@ -1,10 +1,13 @@
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
-from backend.middleware.auth import get_current_user
+from backend.middleware.auth import get_current_user, require_perm
 from backend.models.local import ProjectNote
+from backend.models.zentao import CachedProject
 from backend.services import project_service
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -38,6 +41,29 @@ def get_documents(project_id: int, db: Session = Depends(get_db), _=Depends(get_
     return {"code": 0, "data": docs, "message": "ok"}
 
 
+class DocumentUpdate(BaseModel):
+    status: Optional[str] = None  # "pending" | "submitted"
+    location: Optional[str] = None
+    completed_at: Optional[str] = None
+
+
+@router.put("/{project_id}/documents/{doc_id}", response_model=dict)
+def update_document(
+    project_id: int,
+    doc_id: int,
+    body: DocumentUpdate,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("project_edit")),
+):
+    from backend.services import document_service
+    result = document_service.update_project_document(
+        db, doc_id, body.model_dump(exclude_none=True), user.username
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {"code": 0, "data": result, "message": "ok"}
+
+
 @router.get("/{project_id}/gantt", response_model=dict)
 def get_gantt(project_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
     from backend.models.zentao import CachedProject
@@ -58,6 +84,36 @@ def get_gantt(project_id: int, db: Session = Depends(get_db), _=Depends(get_curr
 def get_delivery(project_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
     delivery = project_service.get_project_delivery(db, project_id)
     return {"code": 0, "data": delivery, "message": "ok"}
+
+
+class DeliveryPlanUpdate(BaseModel):
+    planned_delivery_qty: Optional[int] = None
+    delivery_note: Optional[str] = None
+
+
+@router.put("/{project_id}/delivery-plan", response_model=dict)
+def update_delivery_plan(
+    project_id: int,
+    body: DeliveryPlanUpdate,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("project_edit")),
+):
+    project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if body.planned_delivery_qty is not None:
+        project.planned_delivery_qty = body.planned_delivery_qty
+    if body.delivery_note is not None:
+        project.delivery_note = body.delivery_note
+    db.commit()
+    return {
+        "code": 0,
+        "data": {
+            "planned_delivery_qty": project.planned_delivery_qty,
+            "delivery_note": project.delivery_note,
+        },
+        "message": "ok",
+    }
 
 
 @router.get("/{project_id}/resources", response_model=dict)
