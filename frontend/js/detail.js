@@ -592,8 +592,8 @@ function buildGantt(data) {
     if (isMissing) rowStyle = 'opacity:0.4;';
     else if (isUnmatched) rowStyle = 'background:var(--warn-lt);';
 
-    // Bar — add red bottom border for overdue stages
-    var ganttOverdue = !isMissing && !isUnmatched && isStageOverdue(s);
+    // Bar — add red bottom border for overdue stages (all non-missing)
+    var ganttOverdue = !isMissing && isStageOverdue(s);
     var barCls = 'gantt-bar ' + s.status + (ganttOverdue ? ' gantt-overdue' : '');
     var barHtml = '';
     if (isMissing) {
@@ -791,7 +791,7 @@ function buildStages(stages) {
       '<span style="font-size:12px;white-space:nowrap;' + (!s.who || s.who === '未指派' ? 'color:var(--danger);font-weight:540' : '') + '">' + escHtml(s.who || '未指派') + '</span>';
     var dateHtml = isMissing ? '<span style="color:var(--muted)">—</span>' :
       '<span style="font-size:11.5px;color:var(--muted);white-space:nowrap;line-height:1.8">' + formatDate(s.start) + '<br>' + formatDate(s.end) + '</span>';
-    var overdue = !isMissing && !isUnmatched && isStageOverdue(s);
+    var overdue = !isMissing && isStageOverdue(s);
     var statusHtml = isMissing ? '<span class="pill" style="background:var(--warn-lt);color:var(--warn)">阶段缺失</span>' :
       renderPill(s.status) +
       (overdue ? '<div style="font-size:10.5px;color:var(--danger);margin-top:4px;font-family:var(--mono);font-weight:600">⚠ 超期</div>' : '') +
