@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-> 当前版本：v2026.06.06-beta7 | 最后更新：2026-06-06
+> 当前版本：v2026.06.06-beta8 | 最后更新：2026-06-06
 
 ---
 
@@ -240,3 +240,4 @@
 | 2026-06-06 | v2026.06.06-beta5 | 客户管理CRUD+项目维护Tab(关联产品/客户+搜索多选+密码确认)+CustomerProductLink |
 | 2026-06-06 | v2026.06.06-beta6 | 客户详情页+双栏布局+实体颜色一致性(.gs-cust/proj/prod)+设计规范§19+快速检索客户链路修复 |
 | 2026-06-06 | v2026.06.06-beta7 | customer_name全链路修复(CustomerProjectLink)+快速检索产品按钮+gotoCustomerProjects→openCustomerByName |
+| 2026-06-06 | v2026.06.06-beta8 | 操作日志(AuditLog)+密码验证可配置(PmaSetting+6开关)+设计规范§19+关键操作密码确认 |

@@ -273,6 +273,8 @@ function init() {
   // Data source status — render defaults immediately, then update
   renderSourceTags();
   updateLinkStatus();
+  // Load PMA settings (password verification toggles etc.)
+  loadPmaSettings();
   // Poll for auto-sync — show progress if running, notify when done
   var _autoSyncEl = null;
   var _autoSyncStart = 0;

@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.config import settings
-from backend.middleware.auth import require_admin
+from backend.middleware.auth import require_admin, get_current_user
+from backend.routers.logs import log_audit
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -170,7 +171,7 @@ def update_config(payload: DataSourceConfig, _=Depends(require_admin)):
 
 
 @router.post("/clear-db", response_model=dict)
-def clear_database(_=Depends(require_admin)):
+def clear_database(_=Depends(require_admin), cu = Depends(get_current_user)):
     """Clear all cached Zentao data (keep config and users)."""
     from backend.database import SessionLocal
     from backend.models.zentao import (
@@ -191,9 +192,40 @@ def clear_database(_=Depends(require_admin)):
         for t in tables:
             count += db.query(t).delete()
         db.commit()
+        log_audit(db, cu, "clear_database", f"deleted={count} records")
         return {"code": 0, "data": {"deleted": count}, "message": f"已清除 {count} 条缓存数据"}
     except Exception as e:
         db.rollback()
         return {"code": 1, "message": f"清除失败: {e}"}
     finally:
         db.close()
+
+
+# ── PMA App Settings ──
+
+PMA_SETTINGS = {
+    "pw_verify_delete_user": ("删除用户密码验证", "1"),
+    "pw_verify_delete_cust": ("删除客户密码验证", "1"),
+    "pw_verify_delete_delivery": ("删除交付记录密码验证", "1"),
+    "pw_verify_clear_logs": ("清除日志密码验证", "1"),
+    "pw_verify_clear_db": ("清除数据库密码验证", "1"),
+    "pw_verify_maint_remove": ("维护页移除关联密码验证", "1"),
+}
+
+
+@router.get("/settings", response_model=dict)
+def get_pma_settings(db: Session = Depends(get_db), _=Depends(require_admin)):
+    from backend.models.local import PmaSetting
+    data = {}
+    for key, (label, default) in PMA_SETTINGS.items():
+        data[key] = {"label": label, "value": PmaSetting.get(db, key, default) == "1"}
+    return {"code": 0, "data": data, "message": "ok"}
+
+
+@router.put("/settings", response_model=dict)
+def update_pma_settings(payload: dict, db: Session = Depends(get_db), _=Depends(require_admin)):
+    from backend.models.local import PmaSetting
+    for key in PMA_SETTINGS:
+        if key in payload:
+            PmaSetting.set(db, key, "1" if payload[key] else "0")
+    return {"code": 0, "message": "设置已保存"}

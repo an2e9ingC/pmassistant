@@ -11,6 +11,7 @@ async function initAdmin() {
     var data = await API.get('/admin/config');
     _adminFormData = data;
     renderConfigForm(_adminFormData);
+    loadPmaSettingsUI();
   } catch(e) {
     container.innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '<br><button onclick="initAdmin()">重试</button></div>';
   }
@@ -133,6 +134,8 @@ async function saveConfig() {
 async function clearDatabase() {
   if (!confirm('确定清除所有缓存数据？（项目/产品/执行/任务/Bug等）\n注意：此操作不可撤销，清除后需重新同步。')) return;
   if (!confirm('再次确认：清除后需从禅道重新同步全部数据，可能耗时较长。确定继续？')) return;
+  var ok = await verifyPassword('清除数据库', 'pw_verify_clear_db');
+  if (!ok) return;
   try {
     var result = await API.post('/admin/clear-db');
     showToast(result.message || '已清除', 'success');
@@ -448,6 +451,8 @@ async function toggleUserActive(id, currentActive) {
 
 async function deleteUser(id, username) {
   if (!confirm('确定删除用户 "' + username + '"？此操作不可撤销。')) return;
+  var ok = await verifyPassword('删除用户', 'pw_verify_delete_user');
+  if (!ok) return;
   try {
     await API.del('/admin/users/' + id);
     initUserManagement();
@@ -455,6 +460,32 @@ async function deleteUser(id, username) {
   } catch(e) {
     showToast('删除失败: ' + e.message, 'error');
   }
+}
+
+/* ── PMA Settings in Config Page ── */
+
+async function loadPmaSettingsUI() {
+  try {
+    var settings = await API.get('/admin/settings');
+    var html = '<div class="section-hd" style="margin-top:22px"><div class="section-title">操作安全设置</div></div>' +
+      '<div class="card" style="padding:16px;margin-bottom:20px">' +
+        '<div style="font-size:12px;color:var(--muted);margin-bottom:10px">以下操作是否需要密码验证确认：</div>';
+    Object.keys(settings).forEach(function(key) {
+      var s = settings[key];
+      html += '<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;cursor:pointer">' +
+        '<input type="checkbox" ' + (s.value ? 'checked' : '') + ' onchange="togglePmaSetting(\'' + key + '\',this.checked)">' +
+        escHtml(s.label) + '</label>';
+    });
+    html += '</div>';
+    var container = document.getElementById('admin-settings-area');
+    if (container) container.innerHTML = html;
+  } catch(e) {}
+}
+
+async function togglePmaSetting(key, checked) {
+  var payload = {}; payload[key] = checked;
+  try { await API.put('/admin/settings', payload); _pmaSettings = null; loadPmaSettings(); showToast('已更新', 'success'); }
+  catch(e) { showToast('保存失败: ' + e.message, 'error'); }
 }
 
 /* ═══════════════════════════════════════════════════

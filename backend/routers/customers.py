@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.middleware.auth import get_current_user, require_perm
 from backend.models.zentao import CachedCustomer, CachedProject, CachedProduct, CustomerProjectLink, CustomerProductLink, ProductProjectLink
+from backend.routers.logs import log_audit
 
 router = APIRouter(prefix="/api/customers", tags=["customers"])
 
@@ -77,14 +78,16 @@ def update_customer(customer_id: int, payload: CustomerUpdate, db: Session = Dep
 
 
 @router.delete("/{customer_id}", response_model=dict)
-def delete_customer(customer_id: int, db: Session = Depends(get_db), _=Depends(require_perm("customer_link"))):
+def delete_customer(customer_id: int, db: Session = Depends(get_db), _=Depends(require_perm("customer_link")), cu = Depends(get_current_user)):
     c = db.query(CachedCustomer).filter(CachedCustomer.id == customer_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="客户不存在")
+    cname = c.name
     db.query(CustomerProjectLink).filter(CustomerProjectLink.customer_id == customer_id).delete()
     db.query(CustomerProductLink).filter(CustomerProductLink.customer_id == customer_id).delete()
     db.delete(c)
     db.commit()
+    log_audit(db, cu, "delete_customer", f"name={cname!r}")
     return {"code": 0, "message": "客户已删除"}
 
 

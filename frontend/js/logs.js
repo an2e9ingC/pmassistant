@@ -143,10 +143,67 @@ function clearLogAutoRefresh() {
 
 async function clearLogs() {
   if (!confirm('确定清空所有日志？此操作不可撤销。')) return;
+  var ok = await verifyPassword('清除日志', 'pw_verify_clear_logs');
+  if (!ok) return;
   try {
     await API.post('/logs/clear');
     document.getElementById('log-content').innerHTML = '<div class="empty-state" style="padding:20px">日志已清除</div>';
   } catch(e) {
     showToast('清除失败: ' + e.message, 'error');
+  }
+}
+
+/* ── Audit Log Tab ── */
+
+var _logTab = 'system';
+
+function switchLogTab(tab) {
+  _logTab = tab;
+  document.querySelectorAll('#view-logs .map-tab').forEach(function(t) { t.classList.remove('active'); });
+  var tabEl = document.getElementById('logtab-' + tab);
+  if (tabEl) tabEl.classList.add('active');
+  document.getElementById('log-sec-system').style.display = tab === 'system' ? '' : 'none';
+  document.getElementById('log-sec-audit').style.display = tab === 'audit' ? '' : 'none';
+  if (tab === 'audit') loadAuditLogs();
+  else refreshLogs();
+}
+
+async function loadAuditLogs() {
+  var container = document.getElementById('audit-content');
+  container.innerHTML = '<div class="loading-spinner">加载操作日志...</div>';
+  try {
+    var data = await API.get('/logs/audit?tail=200');
+    if (!data || !data.length) {
+      container.innerHTML = '<div class="empty-state" style="padding:20px">暂无操作日志</div>';
+      return;
+    }
+    container.innerHTML = '<table style="width:100%;border-collapse:collapse"><thead><tr>' +
+      '<th style="text-align:left;padding:8px 12px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);width:140px">时间</th>' +
+      '<th style="text-align:left;padding:8px 12px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);width:80px">用户</th>' +
+      '<th style="text-align:left;padding:8px 12px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);width:100px">操作</th>' +
+      '<th style="text-align:left;padding:8px 12px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border)">详情</th>' +
+    '</tr></thead><tbody>' +
+    data.map(function(e) {
+      return '<tr>' +
+        '<td style="padding:6px 12px;font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap;border-bottom:1px solid var(--border)">' + escHtml(e.created_at) + '</td>' +
+        '<td style="padding:6px 12px;font-size:12px;border-bottom:1px solid var(--border)">' + escHtml(e.username) + '</td>' +
+        '<td style="padding:6px 12px;font-size:11px;border-bottom:1px solid var(--border)"><span class="pill" style="background:var(--danger-lt);color:var(--danger);font-size:10px">' + escHtml(e.action) + '</span></td>' +
+        '<td style="padding:6px 12px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border)">' + escHtml(e.detail) + '</td>' +
+      '</tr>';
+    }).join('') +
+    '</tbody></table>';
+  } catch(e) {
+    container.innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '</div>';
+  }
+}
+
+async function clearAuditLogs() {
+  if (!confirm('确定清空所有操作日志？此操作不可撤销。')) return;
+  try {
+    await API.post('/logs/audit/clear');
+    showToast('操作日志已清除', 'success');
+    document.getElementById('audit-content').innerHTML = '<div class="empty-state" style="padding:20px">操作日志已清除</div>';
+  } catch(e) {
+    showToast('清除失败: ' + e.message + '（仅admin可清除操作日志）', 'error');
   }
 }

@@ -7,11 +7,21 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import desc
 
 from backend.database import SessionLocal, get_db
-from backend.middleware.auth import require_admin
+from backend.middleware.auth import require_admin, get_current_user
+from backend.models.local import AuditLog, LocalUser
 from backend.models.log_entry import LogEntry
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
+
+
+def log_audit(db: Session, user: LocalUser, action: str, detail: str = ""):
+    """Write an audit log entry."""
+    try:
+        db.add(AuditLog(username=user.username, action=action, detail=detail or ""))
+        db.commit()
+    except Exception:
+        pass  # never fail main operation
 
 # Resolve log file path (same directory as database)
 import backend.database as _db_module
@@ -111,12 +121,45 @@ def log_levels(_=Depends(require_admin)):
 
 
 @router.post("/clear", response_model=dict)
-def clear_logs(db: Session = Depends(get_db), _=Depends(require_admin)):
-    """Truncate the log file and clear DB log entries."""
+def clear_logs(db: Session = Depends(get_db), _=Depends(require_admin), cu = Depends(get_current_user)):
+    """Truncate the log file and clear DB log entries (NOT audit logs)."""
     try:
         open(LOG_FILE, "w").close()
         db.query(LogEntry).delete()
         db.commit()
+        log_audit(db, cu, "clear_logs", "system logs cleared")
         return {"code": 0, "message": "日志已清除"}
     except Exception as e:
         return {"code": 1, "message": f"清除失败: {e}"}
+
+
+# ── Audit Logs (separate from system logs, admin-only delete) ──
+
+@router.get("/audit", response_model=dict)
+def view_audit_logs(
+    tail: int = Query(100, ge=10, le=500),
+    _=Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    entries = db.query(AuditLog).order_by(AuditLog.id.desc()).limit(tail).all()
+    return {
+        "code": 0,
+        "data": [
+            {
+                "id": e.id,
+                "username": e.username,
+                "action": e.action,
+                "detail": e.detail or "",
+                "created_at": e.created_at.strftime("%Y-%m-%d %H:%M:%S") if e.created_at else "",
+            }
+            for e in reversed(entries)
+        ],
+        "message": "ok",
+    }
+
+
+@router.post("/audit/clear", response_model=dict)
+def clear_audit_logs(db: Session = Depends(get_db), _=Depends(require_admin)):
+    db.query(AuditLog).delete()
+    db.commit()
+    return {"code": 0, "message": "操作日志已清除"}

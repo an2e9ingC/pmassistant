@@ -43,6 +43,32 @@ function formatShortDate(d) {
   return m + '月' + day + '日';
 }
 
+var _pmaSettings = null; // cached settings from API
+
+async function loadPmaSettings() {
+  try { _pmaSettings = await API.get('/admin/settings'); } catch(e) { _pmaSettings = null; }
+}
+
+function isPwVerifyEnabled(settingKey) {
+  if (!_pmaSettings || !_pmaSettings[settingKey]) return true; // default: enabled
+  return _pmaSettings[settingKey].value !== false;
+}
+
+function verifyPassword(action, settingKey) {
+  // Check if password verification is enabled for this operation
+  if (settingKey && !isPwVerifyEnabled(settingKey)) return Promise.resolve(true);
+  var pw = prompt('⚠ ' + (action || '此操作') + '，请输入登录密码确认：');
+  if (!pw) return Promise.resolve(false);
+  var user = getCurrentUser();
+  if (!user) return Promise.resolve(false);
+  return API.post('/auth/login', { username: user.username, password: pw }).then(function() {
+    return true;
+  }).catch(function() {
+    showToast('密码验证失败', 'error');
+    return false;
+  });
+}
+
 async function openCustomerByName(name) {
   if (!name) return;
   try {

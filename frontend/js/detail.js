@@ -856,6 +856,8 @@ async function saveDeliveryRecord(recordId) {
 
 async function deleteDeliveryRecord(id) {
   if (!confirm('确认删除此交付记录？')) return;
+  var ok = await verifyPassword('删除交付记录', 'pw_verify_delete_delivery');
+  if (!ok) return;
   try {
     await API.del('/delivery/records/' + id);
     showToast('删除成功', 'success');
@@ -1080,14 +1082,10 @@ async function maintSave_prod() {
 }
 
 function maintRemove_prod(pid) {
-  var pw = prompt('⚠ 确认移除产品关联，请输入登录密码确认：');
-  if (!pw) return;
-  var user = getCurrentUser();
-  API.post('/auth/login', { username: user.username, password: pw }).then(function() {
+  verifyPassword('移除产品关联', 'pw_verify_maint_remove').then(function(ok) {
+    if (!ok) return;
     var ids = _maintLinkedProds.map(function(p) { return p.id; }).filter(function(id) { return id !== pid; });
-    return API.put('/maintenance/projects/' + _comboCurId + '/products', { ids: ids });
-  }).then(function() { loadMaintProjectProducts(); }).catch(function(e) {
-    showToast('密码验证失败或操作被拒绝', 'error');
+    API.put('/maintenance/projects/' + _comboCurId + '/products', { ids: ids }).then(function() { loadMaintProjectProducts(); });
   });
 }
 
@@ -1123,14 +1121,10 @@ async function maintSave_cust() {
 }
 
 function maintRemove_cust(cid) {
-  var pw = prompt('⚠ 确认移除客户关联，请输入登录密码确认：');
-  if (!pw) return;
-  var user = getCurrentUser();
-  API.post('/auth/login', { username: user.username, password: pw }).then(function() {
+  verifyPassword('移除客户关联', 'pw_verify_maint_remove').then(function(ok) {
+    if (!ok) return;
     var ids = _maintLinkedCustomers.map(function(c) { return c.id; }).filter(function(id) { return id !== cid; });
-    return API.put('/maintenance/projects/' + _comboCurId + '/customers', { ids: ids });
-  }).then(function() { loadMaintProjectCustomers(); }).catch(function(e) {
-    showToast('密码验证失败或操作被拒绝', 'error');
+    API.put('/maintenance/projects/' + _comboCurId + '/customers', { ids: ids }).then(function() { loadMaintProjectCustomers(); });
   });
 }
 

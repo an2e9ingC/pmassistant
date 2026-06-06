@@ -8,8 +8,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
-from backend.middleware.auth import require_admin
+from backend.middleware.auth import require_admin, get_current_user
 from backend.models.local import LocalUser, Role, UserRole
+from backend.routers.logs import log_audit
 from backend.services.auth_service import hash_password
 
 router = APIRouter(prefix="/api/admin/users", tags=["admin"])
@@ -250,16 +251,17 @@ def reset_user_password(user_id: int, payload: PasswordReset, db: Session = Depe
 
 
 @router.delete("/{user_id}", response_model=dict)
-def delete_user(user_id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
+def delete_user(user_id: int, db: Session = Depends(get_db), _=Depends(require_admin), cu: LocalUser = Depends(get_current_user)):
     user = db.query(LocalUser).filter(LocalUser.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
     try:
-        # Delete related user_roles first (FK constraint)
+        uname = user.username
         db.query(UserRole).filter(UserRole.user_id == user_id).delete()
         db.delete(user)
         db.commit()
-        logger.info(f"User deleted: id={user_id} username={user.username!r}")
+        log_audit(db, cu, "delete_user", f"username={uname!r}")
+        logger.info(f"User deleted: id={user_id} username={uname!r}")
         return {"code": 0, "message": "用户已删除"}
     except Exception as e:
         db.rollback()

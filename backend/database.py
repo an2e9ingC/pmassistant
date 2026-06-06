@@ -85,7 +85,7 @@ def _migrate_sqlite():
 
 
 def init_db():
-    from backend.models.local import LocalUser, Role, UserRole, ProjectNote  # noqa: F401
+    from backend.models.local import LocalUser, Role, UserRole, ProjectNote, PmaSetting, AuditLog  # noqa: F401
     from backend.models.bug import CachedBug  # noqa: F401
     from backend.models.delivery import DeliveryRecord  # noqa: F401
     from backend.models.log_entry import LogEntry  # noqa: F401

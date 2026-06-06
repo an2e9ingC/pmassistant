@@ -59,6 +59,38 @@ class ProjectNote(Base):
     created_at = Column(DateTime, default=func.now())
 
 
+class PmaSetting(Base):
+    __tablename__ = "pma_settings"
+
+    id = Column(Integer, primary_key=True)
+    key = Column(String(64), unique=True, nullable=False, index=True)
+    value = Column(String(256), default="")
+
+    @classmethod
+    def get(cls, db_session, key: str, default: str = "") -> str:
+        row = db_session.query(cls).filter(cls.key == key).first()
+        return row.value if row else default
+
+    @classmethod
+    def set(cls, db_session, key: str, value: str):
+        row = db_session.query(cls).filter(cls.key == key).first()
+        if row:
+            row.value = value
+        else:
+            db_session.add(cls(key=key, value=value))
+        db_session.commit()
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True)
+    username = Column(String(64), nullable=False)
+    action = Column(String(64), nullable=False)  # delete_user, delete_cust, clear_db, etc.
+    detail = Column(String(512), nullable=True)
+    created_at = Column(DateTime, default=func.now())
+
+
 class SyncLog(Base):
     __tablename__ = "sync_logs"
 
