@@ -286,7 +286,7 @@ function renderProdDetailProjects(p) {
     return '<tr onclick="openProject(\'' + proj.id + '\')" style="cursor:pointer">' +
       '<td>' + renderProjIcon(proj.project_type, projCode) + '</td>' +
       '<td><div class="proj-name">' + escHtml(coreName) + '</div><div class="proj-code">' + escHtml(projCode) + '</div></td>' +
-      '<td><span onclick="event.stopPropagation();gotoCustomerProjects(\'' + escHtml(proj.customer_name || '') + '\')" style="cursor:pointer">' + renderCustomerBadge(proj.customer_name) + '</span></td>' +
+      '<td><span onclick="event.stopPropagation();openCustomerByName(\'' + escHtml(proj.customer_name || '') + '\')" style="cursor:pointer">' + renderCustomerBadge(proj.customer_name) + '</span></td>' +
       '<td>' + renderTypeBadge(proj.project_type) + '</td>' +
       '<td style="font-size:13px">' + escHtml(proj.status || '—') + '</td>' +
       '<td>' + renderPill(proj.status) + '</td>' +

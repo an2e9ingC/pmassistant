@@ -157,7 +157,7 @@ function buildDetailHeader(p) {
         '</span>' +
         '<span class="meta-item">' +
           '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1.5"/><line x1="5" y1="8" x2="11" y2="8"/><line x1="5" y1="11" x2="9" y2="11"/></svg>' +
-          (p.customer_name ? '<span onclick="gotoCustomerProjects(\'' + escHtml(p.customer_name) + '\')" style="cursor:pointer">' + renderCustomerBadge(p.customer_name) + '</span>' : '<span style="color:var(--muted);font-size:12px">—</span>') +
+          (p.customer_name ? '<span onclick="openCustomerByName(\'' + escHtml(p.customer_name) + '\')" style="cursor:pointer">' + renderCustomerBadge(p.customer_name) + '</span>' : '<span style="color:var(--muted);font-size:12px">—</span>') +
         '</span>' +
         renderTypeBadge(p.project_type) +
         renderPill(p.status) +

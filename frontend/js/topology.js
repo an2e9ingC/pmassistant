@@ -51,12 +51,17 @@ async function doTopoSearch() {
     tbody.innerHTML = items.map(function(item) {
       var code = extractProjectCode(item.project_name);
       var coreName = extractCoreName(item.project_name);
-      var products = (item.product_names || []).join(', ') || '—';
+      var productList = item.products || [];
+      var productsHtml = productList.length
+        ? productList.map(function(pr) {
+            return '<button class="gs-btn gs-prod" onclick="event.stopPropagation();openProductDetail(\'' + pr.id + '\')" style="margin:1px 2px;font-size:11px">' + escHtml(pr.name) + '</button>';
+          }).join('')
+        : '<span style="font-size:12px;color:var(--muted)">—</span>';
       return '<tr onclick="openProject(\'' + item.project_id + '\')">' +
         '<td>' + renderProjIcon(item.project_type, code) + '</td>' +
         '<td><div class="proj-name">' + escHtml(coreName) + '</div><div class="proj-code">' + escHtml(code) + '</div></td>' +
-        '<td><span onclick="event.stopPropagation();gotoCustomerProjects(\'' + escHtml(item.customer_name || '') + '\')" style="cursor:pointer">' + renderCustomerBadge(item.customer_name) + '</span></td>' +
-        '<td style="font-size:12.5px">' + escHtml(products) + '</td>' +
+        '<td><span onclick="event.stopPropagation();openCustomerByName(\'' + escHtml(item.customer_name || '') + '\')" style="cursor:pointer">' + renderCustomerBadge(item.customer_name) + '</span></td>' +
+        '<td>' + productsHtml + '</td>' +
         '<td>' + renderPill(item.project_status) + '</td>' +
       '</tr>';
     }).join('');

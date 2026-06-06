@@ -157,12 +157,11 @@ function renderCustomerBadge(customerName) {
   return '<span class="cust-badge">' + escHtml(customerName) + '</span>';
 }
 
-// Navigate to topology page and pre-fill customer filter
+// Navigate to customer detail (replaces old topology redirect)
 var _pendingCustSelect = null;
 function gotoCustomerProjects(custName) {
   if (!custName) return;
-  _pendingCustSelect = custName;
-  if (typeof gotoView === 'function') gotoView('topology');
+  openCustomerByName(custName);
 }
 
 // Render unified project identity block: [PE0406] 核心名 · CDLY

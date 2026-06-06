@@ -67,7 +67,7 @@ def search_topology(
         .filter(ProductProjectLink.project_id.in_(project_ids))
         .all()
     )
-    products_map: Dict[int, List[str]] = {}
+    products_map: Dict[int, List[dict]] = {}
     product_ids = set(link.product_id for link in links)
     prods = {
         p.id: p.name
@@ -76,7 +76,7 @@ def search_topology(
     for link in links:
         name = prods.get(link.product_id)
         if name:
-            products_map.setdefault(link.project_id, []).append(name)
+            products_map.setdefault(link.project_id, []).append({"id": link.product_id, "name": name})
 
     # Batch-load linked customers
     cust_links = (
@@ -106,7 +106,7 @@ def search_topology(
             "project_code": p.code or (p.name.split("-")[0] if p.name and "-" in p.name else ""),
             "project_name": p.name or "",
             "customer_name": "、".join(cust_names),
-            "product_names": products_map.get(p.id, []),
+            "products": products_map.get(p.id, []),
             "project_type": p.project_type or "RD",
             "project_status": p.status or "",
             "progress": p.progress or 0,

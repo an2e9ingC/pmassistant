@@ -57,6 +57,7 @@ def update_product(db: Session, product_id: int, data: dict) -> Optional[dict]:
 
 
 def get_product_projects(db: Session, product_id: int) -> list[dict]:
+    from backend.models.zentao import CustomerProjectLink, CachedCustomer
     links = db.query(ProductProjectLink).filter(
         ProductProjectLink.product_id == product_id
     ).all()
@@ -66,18 +67,40 @@ def get_product_projects(db: Session, product_id: int) -> list[dict]:
     projects = db.query(CachedProject).filter(
         CachedProject.id.in_(project_ids)
     ).all()
+    # Batch-load linked customers via CustomerProjectLink
+    cust_links = db.query(CustomerProjectLink).filter(
+        CustomerProjectLink.project_id.in_(project_ids)
+    ).all()
+    cust_ids = set(l.customer_id for l in cust_links)
+    custs = {c.id: c.name for c in db.query(CachedCustomer).filter(CachedCustomer.id.in_(cust_ids)).all()} if cust_ids else {}
+    cust_map = {}
+    for cl in cust_links:
+        name = custs.get(cl.customer_id)
+        if name:
+            cust_map.setdefault(cl.project_id, []).append(name)
     _status_map = {"wait":"pending","doing":"active","done":"completed","closed":"completed","suspended":"blocked"}
     return [{
         "id": p.id, "code": p.code, "name": p.name,
         "project_type": p.project_type,
         "status": _status_map.get(p.status, p.status or "pending"),
-        "customer_name": p.customer_name,
+        "customer_name": _merge_customers(p.customer_name, cust_map.get(p.id, [])),
         "progress": p.progress or "0",
         "begin": str(p.begin) if p.begin else None,
         "end": str(p.end) if p.end else None,
         "tags": p.tags or "",
         "tags_list": (p.tags or "").split(",") if p.tags else [],
     } for p in projects]
+
+
+def _merge_customers(existing: str, linked: list) -> str:
+    """Merge project.customer_name with linked customer names, deduplicated."""
+    names = []
+    if existing:
+        names.append(existing)
+    for n in linked:
+        if n not in names:
+            names.append(n)
+    return "、".join(names) if names else ""
 
 
 def add_product_project_link(db: Session, product_id: int, project_id: int) -> dict:

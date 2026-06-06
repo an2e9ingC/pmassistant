@@ -38,13 +38,25 @@ def get_projects(
     items, total = dashboard_service.get_project_list(
         db, search, type, status, category, program_id, sort_by, sort_order, page, limit,
     )
+    # Batch-load linked customers for all items
+    from backend.models.zentao import CustomerProjectLink, CachedCustomer
+    proj_ids = [p.id for p in items]
+    cust_links = db.query(CustomerProjectLink).filter(CustomerProjectLink.project_id.in_(proj_ids)).all()
+    cust_map = {}
+    if cust_links:
+        cids = set(l.customer_id for l in cust_links)
+        cnames = {c.id: c.name for c in db.query(CachedCustomer).filter(CachedCustomer.id.in_(cids)).all()}
+        for cl in cust_links:
+            name = cnames.get(cl.customer_id)
+            if name:
+                cust_map.setdefault(cl.project_id, []).append(name)
     return {
         "code": 0,
         "data": {
             "page": page,
             "limit": limit,
             "total": total,
-            "items": [_project_list_item(p) for p in items],
+            "items": [_project_list_item(p, cust_map.get(p.id, [])) for p in items],
         },
         "message": "ok",
     }
@@ -83,7 +95,7 @@ def get_bug_stats(
     return {"code": 0, "data": {"stats": stats, "bugs": bugs, "total": total}, "message": "ok"}
 
 
-def _project_list_item(p) -> dict:
+def _project_list_item(p, linked_customers=None) -> dict:
     # Determine current stage
     exc = getattr(p, "executions", None)
     current_stage = None
@@ -91,8 +103,15 @@ def _project_list_item(p) -> dict:
         active = [e for e in exc if e.status in ("doing",)]
         current_stage = (active[0].name if active else exc[-1].name) if exc else None
 
-    # Customer: prefer stored value, fallback to on-the-fly extraction
-    customer = p.customer_name or ""
+    # Customer: merge stored value + linked customers + fallback extraction
+    cust_names = []
+    if p.customer_name:
+        cust_names.append(p.customer_name)
+    if linked_customers:
+        for n in linked_customers:
+            if n not in cust_names:
+                cust_names.append(n)
+    customer = "、".join(cust_names)
     if not customer:
         customer = _extract_customer_fallback(p)
 
