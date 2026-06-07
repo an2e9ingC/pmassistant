@@ -186,16 +186,34 @@ def get_project_documents(db: Session, project_id: int) -> dict:
     # Build result: one entry per standard stage (in order)
     from backend.config import get_zentao_web_base
     web_base = get_zentao_web_base()
+
+    # Also collect match status from executions (for display consistency with stages tab)
+    executions = db.query(CachedExecution).filter(
+        CachedExecution.project_id == project_id
+    ).all()
+    exec_match: dict[str, dict] = {}
+    for e in executions:
+        actual_name = (e.name or "").strip()
+        result2 = _match_stage_type(actual_name, standard_stages) if actual_name else None
+        if result2:
+            st2 = result2[0]
+            if st2 not in exec_match:
+                exec_match[st2] = {"match_kind": result2[1], "exec_id": e.id}
+
     result = []
     for st in standard_stages:
         items = grouped.get(st, [])
-        exec_id = items[0].get("execution_id") if items else None
+        em = exec_match.get(st, {})
+        exec_id = items[0].get("execution_id") if items else em.get("exec_id")
         scd = items[0].get("stage_completed_date") if items else None
         exec_url = f"{web_base}/index.php?m=execution&f=task&executionID={exec_id}&status=all&param=0&orderBy=status,id_desc&recTotal=10&recPerPage=100" if exec_id else None
+        has_exec = st in exec_match
         result.append({
             "stage_name": st,
             "stage_completed_date": scd,
             "has_documents": len(items) > 0,
+            "has_execution": has_exec,
+            "match_kind": em.get("match_kind") if has_exec else None,  # "exact" | "fuzzy" | None
             "execution_id": exec_id,
             "execution_url": exec_url,
             "documents": items,

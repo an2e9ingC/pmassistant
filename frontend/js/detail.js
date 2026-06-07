@@ -842,21 +842,35 @@ function buildDocs(data) {
     var bg = stageIdx % 2 === 0 ? 'var(--surface)' : 'var(--bg)';
     var completedDate = stage.stage_completed_date || null;
 
-    // Stage name with gs-btn style (matching stages tab)
+    // Stage name with gs-btn style + match status indicator (matching stages tab)
+    var hasExec = stage.has_execution;
+    var mk = stage.match_kind;
     var stageNameHtml;
     if (hasDocs && stage.execution_url) {
       stageNameHtml = '<a href="' + escHtml(stage.execution_url) + '" target="_blank" class="gs-btn" title="在禅道中查看此阶段" onclick="event.stopPropagation()" style="text-decoration:none;font-size:12px">' + escHtml(stageName) + '</a>';
-    } else if (hasDocs) {
+    } else if (hasExec) {
       stageNameHtml = '<span style="font-weight:540;font-size:12px">' + escHtml(stageName) + '</span>';
     } else {
       stageNameHtml = '<span style="font-weight:500;color:var(--muted);font-size:12px">' + escHtml(stageName) + '</span>';
     }
+    // Match status indicators (same as stages tab)
+    if (!hasExec) {
+      stageNameHtml += ' <span class="pill" style="background:var(--warn-lt);color:var(--warn);font-size:10px">阶段缺失</span>';
+    } else if (mk === 'fuzzy') {
+      stageNameHtml += ' <span class="pill" style="background:var(--info-lt,var(--accent-lt));color:var(--accent);font-size:10px">~模糊匹配</span>';
+    }
 
-    if (!hasDocs) {
-      // Standard stage with no documents — show placeholder row
+    if (!hasDocs && !hasExec) {
+      // Standard stage with no execution and no documents
       rows += '<tr style="background:' + bg + ';opacity:0.5">' +
         '<td style="vertical-align:middle;font-weight:540;border-right:1px solid var(--border)">' + stageNameHtml + '</td>' +
         '<td colspan="4" style="color:var(--muted);font-style:italic;font-size:12px">暂无文档（阶段未匹配到禅道数据或文档模板）</td>' +
+      '</tr>';
+    } else if (!hasDocs && hasExec) {
+      // Has execution but no documents initialized yet
+      rows += '<tr style="background:' + bg + ';opacity:0.5">' +
+        '<td style="vertical-align:middle;font-weight:540;border-right:1px solid var(--border)">' + stageNameHtml + '</td>' +
+        '<td colspan="4" style="color:var(--muted);font-style:italic;font-size:12px">暂无文档（文档尚未初始化，请先配置文档模板）</td>' +
       '</tr>';
     } else {
       items.forEach(function(d, i) {
@@ -878,9 +892,12 @@ function buildDocs(data) {
           locHtml = '<span style="font-size:11.5px;color:var(--muted);font-style:italic">待提交</span>';
         }
 
+        // Deliverable icon (same as stages tab output件)
+        var delIcon = renderDelIcon(d);
+
         rows += '<tr class="' + rowCls + '" style="background:' + bg + '" id="doc-row-' + d.id + '">' +
           (i === 0 ? '<td rowspan="' + items.length + '" style="vertical-align:middle;border-right:1px solid var(--border)">' + stageNameHtml + (completedDate ? '<br><span style="font-size:10.5px;color:var(--success);font-weight:400">&#10003; ' + completedDate + '</span>' : '') + '</td>' : '') +
-          '<td>' + escHtml(d.doc_name) + '</td>' +
+          '<td><span style="display:flex;align-items:center;gap:6px">' + delIcon + escHtml(d.doc_name) + '</span></td>' +
           '<td style="font-size:12px;color:' + (d.responsible_role ? 'var(--fg)' : 'var(--muted)') + '">' + escHtml(d.responsible_role || '—') + '</td>' +
           '<td>' + statusCell + '</td><td id="doc-loc-cell-' + d.id + '">' + locHtml + '</td>' +
         '</tr>';
