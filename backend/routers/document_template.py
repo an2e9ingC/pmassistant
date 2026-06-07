@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.middleware.auth import get_current_user, require_admin, require_perm
+from backend.routers.logs import log_audit
 from backend.services import document_service
 
 router = APIRouter(prefix="/api/doc-templates", tags=["doc-templates"])
@@ -43,9 +44,10 @@ def list_templates(db: Session = Depends(get_db), _=Depends(get_current_user)):
 def create_template(
     body: TemplateCreate,
     db: Session = Depends(get_db),
-    _=Depends(require_perm("doc_template")),
+    user=Depends(require_perm("doc_template")),
 ):
     tpl = document_service.create_template(db, body.model_dump())
+    log_audit(db, user, "doc_template_add", f"{body.stage_type}/{body.doc_name}")
     return {"code": 0, "data": tpl, "message": "ok"}
 
 
@@ -54,13 +56,14 @@ def update_template(
     template_id: int,
     body: TemplateUpdate,
     db: Session = Depends(get_db),
-    _=Depends(require_perm("doc_template")),
+    user=Depends(require_perm("doc_template")),
 ):
     tpl = document_service.update_template(
         db, template_id, body.model_dump(exclude_none=True)
     )
     if not tpl:
         raise HTTPException(status_code=404, detail="Template not found")
+    log_audit(db, user, "doc_template_edit", f"id={template_id} {body.doc_name or ''}")
     return {"code": 0, "data": tpl, "message": "ok"}
 
 
@@ -68,11 +71,12 @@ def update_template(
 def delete_template(
     template_id: int,
     db: Session = Depends(get_db),
-    _=Depends(require_perm("doc_template")),
+    user=Depends(require_perm("doc_template")),
 ):
     ok = document_service.delete_template(db, template_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Template not found")
+    log_audit(db, user, "doc_template_del", f"id={template_id}")
     return {"code": 0, "data": None, "message": "ok"}
 
 
@@ -85,9 +89,10 @@ class StageTypeRename(BaseModel):
 def rename_stage_type(
     body: StageTypeRename,
     db: Session = Depends(get_db),
-    _=Depends(require_perm("doc_template")),
+    user=Depends(require_perm("doc_template")),
 ):
     count = document_service.rename_stage_type(db, body.old_name, body.new_name)
+    log_audit(db, user, "doc_stage_rename", f"{body.old_name} -> {body.new_name} ({count} docs)")
     return {"code": 0, "data": {"updated": count}, "message": "ok"}
 
 
@@ -95,7 +100,8 @@ def rename_stage_type(
 def delete_stage_type(
     stage_type: str,
     db: Session = Depends(get_db),
-    _=Depends(require_perm("doc_template")),
+    user=Depends(require_perm("doc_template")),
 ):
     count = document_service.delete_stage_type(db, stage_type)
+    log_audit(db, user, "doc_stage_del", f"{stage_type} ({count} docs)")
     return {"code": 0, "data": {"deleted": count}, "message": "ok"}

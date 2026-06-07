@@ -4,6 +4,9 @@
 
 var _templatesGrouped = {};  // { stage_type: [template, ...] }
 var _selectedStage = null;   // currently selected stage_type
+var _pendingOps = [];        // queued changes: {type, data...}
+var _nextTempId = -1;        // negative IDs for unsaved templates
+var _originalGrouped = null; // snapshot before edits, for "discard"
 
 // Fixed stage order matching the project lifecycle
 var STAGE_ORDER = [
@@ -91,9 +94,20 @@ function renderTemplatesPage() {
   (canEdit ? '<div class="dt-stage-item" style="justify-content:center;color:var(--accent);font-size:12px;cursor:pointer;border:1px dashed var(--border)" onclick="showAddStageDialog()">+ 新增阶段类型</div>' : '');
 
   // Right panel: document list for selected stage
+  var pendingCount = _pendingOps.length;
+  var saveBtnHtml = '';
+  if (canEdit && pendingCount > 0) {
+    saveBtnHtml = '<button class="btn btn-primary" style="font-size:11px;padding:4px 14px;margin-left:8px" onclick="saveAllChanges()">保存配置 (' + pendingCount + ')</button>' +
+      '<button class="btn" style="font-size:11px;padding:4px 10px;margin-left:4px" onclick="discardChanges()">放弃</button>';
+  } else if (canEdit && pendingCount === 0) {
+    saveBtnHtml = '<span style="font-size:11px;color:var(--muted);margin-left:8px">无待保存更改</span>';
+  }
   var rightHtml = '<div class="dt-right">' +
     '<div class="dt-right-head">' +
-      '<div class="section-title">' + escHtml(_selectedStage) + ' — 文档清单</div>' +
+      '<div style="display:flex;align-items:center">' +
+        '<div class="section-title">' + escHtml(_selectedStage) + ' — 文档清单</div>' +
+        saveBtnHtml +
+      '</div>' +
       (canEdit ? '<button class="btn" style="font-size:11px;padding:4px 12px" onclick="showAddTemplateForm()">+ 添加文档</button>' : '') +
     '</div>';
 
@@ -186,7 +200,7 @@ function cancelTemplateForm() {
   if (el) el.innerHTML = '';
 }
 
-async function saveTemplate(id) {
+function saveTemplate(id) {
   var nameEl = document.getElementById('dt-doc-name');
   var sortEl = document.getElementById('dt-sort');
   var roleEl = document.getElementById('dt-role');
@@ -201,42 +215,50 @@ async function saveTemplate(id) {
   if (!name) { showToast('请输入文档名称', 'error'); return; }
   if (isNaN(sort) || sort < 0) sort = 0;
 
-  var stageType = _selectedStage; // snapshot before async
+  var stageType = _selectedStage;
   if (!id && !stageType) { showToast('阶段类型丢失，请重新选择阶段', 'error'); return; }
 
-  try {
-    var body = { doc_name: name, sort_order: sort, responsible_role: role || '', description: desc };
-    if (id) {
-      await API.put('/doc-templates/' + id, body);
-      showToast('修改成功', 'success');
-    } else {
-      body.stage_type = stageType;
-      await API.post('/doc-templates', body);
-      showToast('添加成功', 'success');
+  if (id && id > 0) {
+    // Edit existing — queue update
+    var arr = _templatesGrouped[stageType] || [];
+    var existing = arr.find(function(x) { return x.id === id; });
+    if (existing) {
+      existing.doc_name = name;
+      existing.sort_order = sort;
+      existing.responsible_role = role || '';
+      existing.description = desc;
+      _pendingOps.push({ type: 'edit', id: id, stage_type: stageType,
+        doc_name: name, sort_order: sort, responsible_role: role || '', description: desc });
     }
-    cancelTemplateForm();
-    // Always full refresh to stay in sync with server
-    var fresh = await API.get('/doc-templates');
-    if (fresh && Object.keys(fresh).length) {
-      _templatesGrouped = fresh;
-    }
-    _selectedStage = stageType;
-    renderTemplatesPage();
-  } catch(e) {
-    showToast('保存失败: ' + (e.message || '未知错误'), 'error');
+  } else {
+    // New template — add locally with temp ID
+    var tempId = _nextTempId--;
+    var newDoc = { id: tempId, stage_type: stageType, doc_name: name,
+      sort_order: sort, responsible_role: role || '', description: desc };
+    _pendingOps.push({ type: 'add', tempId: tempId, stage_type: stageType,
+      doc_name: name, sort_order: sort, responsible_role: role || '', description: desc });
+    var arr2 = _templatesGrouped[stageType];
+    if (!arr2) { _templatesGrouped[stageType] = []; arr2 = _templatesGrouped[stageType]; }
+    arr2.push(newDoc);
   }
+
+  cancelTemplateForm();
+  _selectedStage = stageType;
+  renderTemplatesPage();
 }
 
-async function deleteTemplate(id) {
-  if (!confirm('确认删除此文档模板？此操作不可撤销。')) return;
-  try {
-    await API.del('/doc-templates/' + id);
-    showToast('删除成功', 'success');
-    _templatesGrouped = await API.get('/doc-templates');
-    renderTemplatesPage();
-  } catch(e) {
-    showToast('删除失败: ' + (e.message || '未知错误'), 'error');
+function deleteTemplate(id) {
+  if (!confirm('确认删除此文档模板？')) return;
+  if (id > 0) _pendingOps.push({ type: 'delete', id: id });
+  // Remove from local cache
+  var stageType = _selectedStage;
+  var arr = _templatesGrouped[stageType];
+  if (arr) {
+    for (var i = arr.length - 1; i >= 0; i--) {
+      if (arr[i].id === id) { arr.splice(i, 1); break; }
+    }
   }
+  renderTemplatesPage();
 }
 
 /* ── Stage Type Management (rename / add / delete) ── */
@@ -258,20 +280,20 @@ function showRenameStageDialog(oldName) {
   document.getElementById('dt-rename-input').select();
 }
 
-async function renameStageType(oldName) {
+function renameStageType(oldName) {
   var newName = document.getElementById('dt-rename-input').value.trim();
   if (!newName) { showToast('请输入新名称', 'error'); return; }
   if (newName === oldName) { document.querySelector('.note-dialog-overlay').remove(); return; }
-  try {
-    var result = await API.put('/doc-templates/stage-types/rename', { old_name: oldName, new_name: newName });
-    showToast('已更新 ' + result.updated + ' 个模板', 'success');
-    if (_selectedStage === oldName) _selectedStage = newName;
-    document.querySelector('.note-dialog-overlay').remove();
-    _templatesGrouped = await API.get('/doc-templates');
-    renderTemplatesPage();
-  } catch(e) {
-    showToast('重命名失败: ' + (e.message || '未知错误'), 'error');
+  _pendingOps.push({ type: 'rename_stage', old_name: oldName, new_name: newName });
+  // Update local cache
+  if (_templatesGrouped[oldName]) {
+    _templatesGrouped[newName] = _templatesGrouped[oldName];
+    delete _templatesGrouped[oldName];
+    _templatesGrouped[newName].forEach(function(d) { d.stage_type = newName; });
   }
+  if (_selectedStage === oldName) _selectedStage = newName;
+  document.querySelector('.note-dialog-overlay').remove();
+  renderTemplatesPage();
 }
 
 function showAddStageDialog() {
@@ -290,36 +312,92 @@ function showAddStageDialog() {
   document.getElementById('dt-new-stage-input').focus();
 }
 
-async function addStageType() {
+function addStageType() {
   var name = document.getElementById('dt-new-stage-input').value.trim();
   if (!name) { showToast('请输入阶段名称', 'error'); return; }
-  try {
-    // Create a placeholder template to establish the stage type
-    await API.post('/doc-templates', { stage_type: name, doc_name: '（待配置）', sort_order: 1, responsible_role: '', description: '请修改或删除此占位模板' });
-    showToast('阶段类型已创建', 'success');
-    document.querySelector('.note-dialog-overlay').remove();
-    _selectedStage = name;
-    _templatesGrouped = await API.get('/doc-templates');
-    renderTemplatesPage();
-  } catch(e) {
-    showToast('创建失败: ' + (e.message || '未知错误'), 'error');
-  }
+  _pendingOps.push({ type: 'add_stage', stage_type: name });
+  var tempId = _nextTempId--;
+  var placeholder = { id: tempId, stage_type: name, doc_name: '（待配置）',
+    sort_order: 1, responsible_role: '', description: '请修改或删除此占位模板' };
+  _pendingOps.push({ type: 'add', tempId: tempId, stage_type: name,
+    doc_name: placeholder.doc_name, sort_order: 1, responsible_role: '', description: placeholder.description });
+  _templatesGrouped[name] = [placeholder];
+  document.querySelector('.note-dialog-overlay').remove();
+  _selectedStage = name;
+  renderTemplatesPage();
 }
 
-async function deleteStageType(stageType) {
+function deleteStageType(stageType) {
   var count = (_templatesGrouped[stageType] || []).length;
   if (!confirm('确认删除阶段类型 "' + stageType + '"？\n将同时删除其下的 ' + count + ' 个文档模板。此操作不可撤销。')) return;
+  _pendingOps.push({ type: 'delete_stage', stage_type: stageType });
+  delete _templatesGrouped[stageType];
+  if (_selectedStage === stageType) _selectedStage = null;
+  if (!Object.keys(_templatesGrouped).length) {
+    document.getElementById('view-doc-templates').innerHTML = '<div class="empty-state" style="padding:40px">暂无文档模板，点击下方"保存配置"或刷新页面</div>';
+    return;
+  }
+  renderTemplatesPage();
+}
+
+/* ── Save / Discard ── */
+
+async function saveAllChanges() {
+  if (!_pendingOps.length) { showToast('没有待保存的更改', 'error'); return; }
+  var ops = _pendingOps.slice(); // snapshot
+  var total = ops.length;
+  var success = 0, fail = 0;
+
+  for (var i = 0; i < ops.length; i++) {
+    var op = ops[i];
+    try {
+      if (op.type === 'add') {
+        await API.post('/doc-templates', { stage_type: op.stage_type, doc_name: op.doc_name, sort_order: op.sort_order, responsible_role: op.responsible_role || '', description: op.description || '' });
+        success++;
+      } else if (op.type === 'edit') {
+        await API.put('/doc-templates/' + op.id, { doc_name: op.doc_name, sort_order: op.sort_order, responsible_role: op.responsible_role || '', description: op.description || '' });
+        success++;
+      } else if (op.type === 'delete') {
+        await API.del('/doc-templates/' + op.id);
+        success++;
+      } else if (op.type === 'rename_stage') {
+        await API.put('/doc-templates/stage-types/rename', { old_name: op.old_name, new_name: op.new_name });
+        success++;
+      } else if (op.type === 'delete_stage') {
+        await API.del('/doc-templates/stage-types/' + encodeURIComponent(op.stage_type));
+        success++;
+      } else if (op.type === 'add_stage') {
+        // No-op: the placeholder template is handled by 'add' op
+        success++;
+      }
+    } catch(e) {
+      fail++;
+      showToast('操作失败: ' + (e.message || '未知错误'), 'error');
+    }
+  }
+
+  _pendingOps = [];
+  // Full refresh from server
   try {
-    await API.del('/doc-templates/stage-types/' + encodeURIComponent(stageType));
-    showToast('已删除', 'success');
-    if (_selectedStage === stageType) _selectedStage = null;
-    _templatesGrouped = await API.get('/doc-templates');
-    if (!Object.keys(_templatesGrouped).length) {
-      document.getElementById('view-doc-templates').innerHTML = '<div class="empty-state" style="padding:40px">暂无文档模板，请联系管理员初始化</div>';
-      return;
+    var fresh = await API.get('/doc-templates');
+    if (fresh && Object.keys(fresh).length) {
+      _templatesGrouped = fresh;
+    }
+  } catch(e) {}
+  showToast('保存完成: ' + success + ' 成功' + (fail > 0 ? ', ' + fail + ' 失败' : ''), success === total ? 'success' : 'error');
+  renderTemplatesPage();
+}
+
+function discardChanges() {
+  if (!confirm('放弃所有未保存的更改？此操作不可撤销。')) return;
+  _pendingOps = [];
+  // Re-fetch from server
+  API.get('/doc-templates').then(function(fresh) {
+    if (fresh && Object.keys(fresh).length) {
+      _templatesGrouped = fresh;
     }
     renderTemplatesPage();
-  } catch(e) {
-    showToast('删除失败: ' + (e.message || '未知错误'), 'error');
-  }
+  }).catch(function() {
+    renderTemplatesPage();
+  });
 }
