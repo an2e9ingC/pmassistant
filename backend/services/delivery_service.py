@@ -61,6 +61,7 @@ def create_delivery_record(db: Session, project_id: int, data: dict) -> Delivery
         quantity=data.get("quantity", 0),
         delivery_date=_parse_date(data.get("delivery_date")),
         receiver=data.get("receiver", ""),
+        responsible_person=data.get("responsible_person", ""),
         note=data.get("note", ""),
     )
     db.add(record)
@@ -73,7 +74,7 @@ def update_delivery_record(db: Session, record_id: int, data: dict) -> Optional[
     r = db.query(DeliveryRecord).filter(DeliveryRecord.id == record_id).first()
     if not r:
         return None
-    for field in ("product_name", "quantity", "receiver", "note"):
+    for field in ("product_name", "quantity", "receiver", "responsible_person", "note"):
         if field in data:
             setattr(r, field, data[field])
     if "serial_numbers" in data:
@@ -109,6 +110,7 @@ def record_dict(r: DeliveryRecord) -> dict:
         "qty": r.quantity or 0,
         "date": str(r.delivery_date) if r.delivery_date else None,
         "receiver": r.receiver,
+        "responsible_person": r.responsible_person,
         "note": r.note,
         "items": ", ".join(serials) if serials else "",
     }

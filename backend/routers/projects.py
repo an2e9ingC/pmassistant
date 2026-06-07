@@ -14,6 +14,26 @@ from backend.services import project_service
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 
+# Separate router for user names (used by delivery form dropdown)
+user_router = APIRouter(prefix="/api/users", tags=["users"])
+
+
+@user_router.get("/names", response_model=dict)
+def list_user_names(db: Session = Depends(get_db), _=Depends(get_current_user)):
+    """Return PMA local user names for delivery form dropdown."""
+    from backend.models.local import LocalUser
+    users = db.query(LocalUser.username).filter(LocalUser.is_active == True).order_by(LocalUser.username).all()
+    return {"code": 0, "data": [u[0] for u in users if u[0]], "message": "ok"}
+
+
+@user_router.get("/customers/names", response_model=dict)
+def list_customer_names(db: Session = Depends(get_db), _=Depends(get_current_user)):
+    """Return cached customer names for delivery form dropdown."""
+    from backend.models.zentao import CachedCustomer
+    customers = db.query(CachedCustomer.name).order_by(CachedCustomer.name).all()
+    return {"code": 0, "data": [c[0] for c in customers if c[0]], "message": "ok"}
+
+
 @router.get("", response_model=dict)
 def list_projects(db: Session = Depends(get_db), _=Depends(get_current_user)):
     items = project_service.get_projects(db)

@@ -16,6 +16,7 @@ class DeliveryRecord(Base):
     quantity = Column(Integer, default=0)
     delivery_date = Column(Date, nullable=True)
     receiver = Column(String(128), nullable=True)
+    responsible_person = Column(String(128), nullable=True)  # 交付责任人
     note = Column(Text, nullable=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

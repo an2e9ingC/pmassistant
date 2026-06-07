@@ -19,6 +19,7 @@ class DeliveryRecordCreate(BaseModel):
     quantity: int = 0
     delivery_date: Optional[str] = None
     receiver: Optional[str] = None
+    responsible_person: Optional[str] = None
     note: Optional[str] = None
 
 
@@ -28,6 +29,7 @@ class DeliveryRecordUpdate(BaseModel):
     quantity: Optional[int] = None
     delivery_date: Optional[str] = None
     receiver: Optional[str] = None
+    responsible_person: Optional[str] = None
     note: Optional[str] = None
 
 

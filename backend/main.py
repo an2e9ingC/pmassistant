@@ -98,6 +98,7 @@ async def global_exception_handler(request, exc):
 app.include_router(auth.router)
 app.include_router(dashboard.router)
 app.include_router(projects.router)
+app.include_router(projects.user_router)
 app.include_router(sync.router)
 app.include_router(products.router)
 app.include_router(delivery.router)
