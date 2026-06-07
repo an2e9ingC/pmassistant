@@ -1269,6 +1269,7 @@ function switchDTab(id, el) {
   }
   // Refresh maintenance tab content when switching to it
   if (id === 'maintenance') buildMaintenance();
+  if (id === 'activities') loadActivities();
 }
 
 function gotoStageDetail(idx) {
@@ -1442,3 +1443,50 @@ document.addEventListener('click', function(e) {
     document.querySelectorAll('.maint-dd').forEach(function(d) { d.style.display = 'none'; });
   }
 });
+
+/* ── Project Activities (进度明细) ── */
+
+var _activitySort = 'desc';
+
+async function loadActivities() {
+  var container = document.getElementById('activities-content');
+  container.innerHTML = '<div class="loading-spinner">加载活动记录...</div>';
+  try {
+    var data = await API.get('/projects/' + _comboCurId + '/activities?sort=' + _activitySort + '&limit=200');
+    buildActivities(data || []);
+  } catch(e) {
+    container.innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '</div>';
+  }
+}
+
+function buildActivities(items) {
+  var container = document.getElementById('activities-content');
+
+  var sortBtn = '<button class="btn" style="font-size:11px;padding:4px 12px;margin-bottom:12px" onclick="toggleActivitySort()">' +
+    (_activitySort === 'desc' ? '↓ 最新优先' : '↑ 最早优先') + '</button>';
+
+  if (!items || !items.length) {
+    container.innerHTML = sortBtn + '<div class="empty-state" style="padding:20px">暂无活动记录</div>';
+    return;
+  }
+
+  var html = sortBtn + '<div class="activity-list">';
+  items.forEach(function(a) {
+    var time = (a.created_at || '').replace('T', ' ');
+    html += '<div class="activity-item">' +
+      '<div class="activity-time">' + escHtml(time) + '</div>' +
+      '<div class="activity-body">' +
+        '<span class="activity-user">' + escHtml(a.username) + '</span>' +
+        ' <span class="activity-action pill" style="font-size:10px">' + escHtml(a.action) + '</span>' +
+        (a.detail ? ' <span class="activity-detail">' + escHtml(a.detail) + '</span>' : '') +
+      '</div>' +
+    '</div>';
+  });
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function toggleActivitySort() {
+  _activitySort = _activitySort === 'desc' ? 'asc' : 'desc';
+  loadActivities();
+}

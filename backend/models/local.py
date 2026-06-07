@@ -91,6 +91,18 @@ class AuditLog(Base):
     created_at = Column(DateTime, default=func.now())
 
 
+class ProjectActivity(Base):
+    """Per-project activity log for PMA operations (non-deletable)."""
+    __tablename__ = "project_activities"
+
+    id = Column(Integer, primary_key=True)
+    project_id = Column(Integer, ForeignKey("zenta_projects.id"), nullable=False, index=True)
+    username = Column(String(64), nullable=False)
+    action = Column(String(128), nullable=False)   # e.g. 交付计划, 文档状态, 阶段映射, 项目笔记
+    detail = Column(String(512), nullable=True)     # e.g. "设置应交付总数 10 → 20"
+    created_at = Column(DateTime, default=func.now())
+
+
 class SyncLog(Base):
     __tablename__ = "sync_logs"
 

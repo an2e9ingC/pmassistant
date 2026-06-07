@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.middleware.auth import get_current_user, require_admin
 from backend.services import delivery_service
+from backend.services.project_service import log_project_activity
 
 router = APIRouter(prefix="/api/delivery", tags=["delivery"])
 
@@ -47,11 +48,13 @@ def create_record(
     project_id: int,
     body: DeliveryRecordCreate,
     db: Session = Depends(get_db),
-    _=Depends(require_admin),
+    user=Depends(require_admin),
 ):
     data = body.model_dump()
     data["serial_numbers"] = body.serial_numbers or []
     record = delivery_service.create_delivery_record(db, project_id, data)
+    log_project_activity(db, project_id, user.username, "交付记录",
+        f"新增: {body.product_name} x{body.quantity}")
     return {"code": 0, "data": delivery_service.record_dict(record), "message": "ok"}
 
 

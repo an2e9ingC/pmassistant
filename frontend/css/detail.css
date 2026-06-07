@@ -568,3 +568,44 @@
 .doc-link:hover {
   text-decoration: underline;
 }
+
+/* ── Activity List (项目进度明细) ── */
+
+.activity-list {
+  max-height: calc(100vh - 280px);
+  overflow-y: auto;
+}
+
+.activity-item {
+  display: flex;
+  gap: 14px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  align-items: flex-start;
+}
+
+.activity-item:last-child { border-bottom: none; }
+
+.activity-time {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  min-width: 130px;
+  padding-top: 1px;
+}
+
+.activity-body {
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.activity-user {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.activity-detail {
+  color: var(--muted);
+  font-size: 12px;
+}

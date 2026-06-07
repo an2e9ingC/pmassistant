@@ -6,8 +6,9 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.middleware.auth import get_current_user, require_perm
-from backend.models.local import ProjectNote
+from backend.models.local import ProjectNote, ProjectActivity
 from backend.models.zentao import CachedProject, CachedExecution
+from backend.services.project_service import log_project_activity
 from backend.services import project_service
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -80,8 +81,11 @@ async def sync_stage_name_to_zentao(
         raise HTTPException(status_code=404, detail="Execution not found")
 
     new_name = body.stage_name.strip()
+    old_name = e.name
     e.stage_name = new_name
     db.commit()
+    log_project_activity(db, project_id, user.username, "阶段映射",
+        f"{old_name} → {new_name}")
 
     return {
         "code": 0,
@@ -120,6 +124,8 @@ def update_document(
     )
     if not result:
         raise HTTPException(status_code=404, detail="Document not found")
+    log_project_activity(db, project_id, user.username, "文档状态",
+        f"{result.get('doc_name','')} → {result.get('status','')}")
     return {"code": 0, "data": result, "message": "ok"}
 
 
@@ -155,6 +161,8 @@ def update_delivery_plan(
     if body.delivery_note is not None:
         project.delivery_note = body.delivery_note
     db.commit()
+    log_project_activity(db, project_id, user.username, "交付计划",
+        f"应交付总数={project.planned_delivery_qty}, 备注={project.delivery_note or ''}")
     return {
         "code": 0,
         "data": {
@@ -217,6 +225,8 @@ def add_note(
     db.add(note)
     db.commit()
     db.refresh(note)
+    log_project_activity(db, project_id, user.username, "项目笔记",
+        f"{payload.stage_name or '项目整体'}: {payload.content[:80]}")
     return {
         "code": 0,
         "data": {
@@ -226,5 +236,34 @@ def add_note(
             "recorded_by": note.recorded_by,
             "created_at": str(note.created_at)[:19] if note.created_at else "",
         },
+        "message": "ok",
+    }
+
+
+@router.get("/{project_id}/activities", response_model=dict)
+def get_activities(
+    project_id: int,
+    sort: str = "desc",  # "asc" or "desc"
+    limit: int = 200,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    """Get project activity log (non-deletable audit trail)."""
+    order = ProjectActivity.id.desc() if sort == "desc" else ProjectActivity.id.asc()
+    rows = db.query(ProjectActivity).filter(
+        ProjectActivity.project_id == project_id
+    ).order_by(order).limit(limit).all()
+    return {
+        "code": 0,
+        "data": [
+            {
+                "id": r.id,
+                "username": r.username,
+                "action": r.action,
+                "detail": r.detail or "",
+                "created_at": str(r.created_at)[:19] if r.created_at else "",
+            }
+            for r in rows
+        ],
         "message": "ok",
     }

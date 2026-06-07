@@ -65,7 +65,7 @@ def zentao_project_url(project_id: int) -> str:
 
 
 def zentao_product_url(product_id: int) -> str:
-    return f"{get_zentao_web_base()}/index.php?m=product&f=index&productID={product_id}"
+    return f"{get_zentao_web_base()}/index.php?m=product&f=dashboard&productID={product_id}"
 
 def zentao_product_bugs_url(product_id: int) -> str:
     return f"{get_zentao_web_base()}/index.php?m=bug&f=browse&productID={product_id}"

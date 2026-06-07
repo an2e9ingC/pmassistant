@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.middleware.auth import require_perm
 from backend.models.zentao import ProductProjectLink, CustomerProjectLink, CustomerProductLink, CachedProduct, CachedProject, CachedCustomer
+from backend.services.project_service import log_project_activity
 
 router = APIRouter(prefix="/api/maintenance", tags=["maintenance"])
 
@@ -37,11 +38,13 @@ def get_project_products(project_id: int, db: Session = Depends(get_db), _=Depen
 
 
 @router.put("/projects/{project_id}/products", response_model=dict)
-def set_project_products(project_id: int, payload: LinkIds, db: Session = Depends(get_db), _=Depends(require_perm("project_edit"))):
+def set_project_products(project_id: int, payload: LinkIds, db: Session = Depends(get_db), user=Depends(require_perm("project_edit"))):
     db.query(ProductProjectLink).filter(ProductProjectLink.project_id == project_id).delete()
     for pid in payload.ids:
         db.add(ProductProjectLink(product_id=pid, project_id=project_id))
     db.commit()
+    names = [p.name for p in db.query(CachedProduct).filter(CachedProduct.id.in_(payload.ids)).all()]
+    log_project_activity(db, project_id, user.username, "关联产品", f"设置关联产品: {', '.join(names) if names else '清空'}")
     return {"code": 0, "data": payload.ids, "message": "ok"}
 
 
@@ -56,11 +59,13 @@ def get_project_customers(project_id: int, db: Session = Depends(get_db), _=Depe
 
 
 @router.put("/projects/{project_id}/customers", response_model=dict)
-def set_project_customers(project_id: int, payload: LinkIds, db: Session = Depends(get_db), _=Depends(require_perm("project_edit"))):
+def set_project_customers(project_id: int, payload: LinkIds, db: Session = Depends(get_db), user=Depends(require_perm("project_edit"))):
     db.query(CustomerProjectLink).filter(CustomerProjectLink.project_id == project_id).delete()
     for cid in payload.ids:
         db.add(CustomerProjectLink(customer_id=cid, project_id=project_id))
     db.commit()
+    names = [c.name for c in db.query(CachedCustomer).filter(CachedCustomer.id.in_(payload.ids)).all()]
+    log_project_activity(db, project_id, user.username, "关联客户", f"设置关联客户: {', '.join(names) if names else '清空'}")
     return {"code": 0, "data": payload.ids, "message": "ok"}
 
 

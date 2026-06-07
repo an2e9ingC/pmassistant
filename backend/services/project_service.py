@@ -10,7 +10,17 @@ from backend.models.zentao import (
     CachedProject, CachedExecution, CachedTask, CachedProduct, ProductProjectLink,
 )
 from backend.models.document import ProjectDocument
+from backend.models.local import ProjectActivity
 from backend.services.document_service import _match_stage_type, get_stage_types_for_project
+
+
+def log_project_activity(db: Session, project_id: int, username: str, action: str, detail: str = ""):
+    """Log a project activity (non-deletable audit trail)."""
+    try:
+        db.add(ProjectActivity(project_id=project_id, username=username, action=action, detail=detail or ""))
+        db.commit()
+    except Exception:
+        pass  # never fail the main operation
 
 
 def get_projects(db: Session) -> list[dict]:

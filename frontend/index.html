@@ -152,7 +152,7 @@
     </div>
 
     <div style="margin-top:8px;text-align:center;font-size:10px;color:var(--muted)">
-      <span id="app-version">v2026.06.06-beta24</span>
+      <span id="app-version">v2026.06.06-beta25</span>
     </div>
   </div>
 </aside>
@@ -324,6 +324,7 @@
         <div class="dtab" onclick="switchDTab('docs',this)">文档齐套</div>
         <div class="dtab" onclick="switchDTab('delivery',this)">交付状态</div>
         <div class="dtab" onclick="switchDTab('resources',this)">软硬件资料</div>
+        <div class="dtab" onclick="switchDTab('activities',this)">项目进度明细</div>
         <div class="dtab" id="dt-maintenance" onclick="switchDTab('maintenance',this)">项目维护</div>
       </div>
 
@@ -391,6 +392,11 @@
       </div>
       <div class="dsec" id="dsec-resources">
         <div id="resources-content">
+          <div class="empty-state" style="padding:20px">请选择项目</div>
+        </div>
+      </div>
+      <div class="dsec" id="dsec-activities">
+        <div id="activities-content">
           <div class="empty-state" style="padding:20px">请选择项目</div>
         </div>
       </div>
