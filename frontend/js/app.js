@@ -257,8 +257,13 @@ function init() {
     return;
   }
 
-  // Theme
-  var t = localStorage.getItem('pm_theme') || 'light';
+  // Theme — prefer saved, fallback to system preference
+  var t = localStorage.getItem('pm_theme');
+  if (!t) {
+    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    t = prefersDark ? 'dark' : 'light';
+    localStorage.setItem('pm_theme', t);
+  }
   document.documentElement.setAttribute('data-theme', t);
   if (t === 'dark') {
     document.getElementById('theme-lbl').textContent = '深色';
