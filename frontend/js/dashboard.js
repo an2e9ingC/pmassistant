@@ -129,7 +129,7 @@ async function loadProjectTable(filter) {
   if (_curProgramId) params.program_id = _curProgramId;
 
   var tbody = document.getElementById('proj-tbody');
-  tbody.innerHTML = '<tr><td colspan="9"><div class="loading-spinner">加载中...</div></td></tr>';
+  tbody.innerHTML = '<tr><td colspan="10"><div class="loading-spinner">加载中...</div></td></tr>';
 
   try {
     var query = Object.keys(params).map(function(k) {
@@ -139,7 +139,7 @@ async function loadProjectTable(filter) {
     var list = data.items || [];
 
     if (!list.length) {
-      tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state">未找到匹配项目</div></td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state">未找到匹配项目</div></td></tr>';
       return;
     }
 
@@ -159,12 +159,18 @@ async function loadProjectTable(filter) {
       }
       var rowClick = 'onclick="filterAlertsByProject(\'' + p.id + '\', \'' + escHtml(projCode + ' ' + coreName).replace(/'/g, "\\'") + '\')"';
       var projIconHtml = renderProjIcon(p.type, projCode).replace('<div class=', '<div onclick="event.stopPropagation();openProject(\'' + p.id + '\')" class=');
+      var riskLevel = p.risk_level || 'normal';
+      var riskLabel = { normal: '正常', low: '较低', medium: '中等', high: '高', overdue: '已超期' }[riskLevel] || '正常';
+      var riskColor = { normal: 'var(--success)', low: 'var(--muted)', medium: 'var(--warn)', high: 'var(--danger)', overdue: 'var(--danger)' }[riskLevel] || 'var(--muted)';
+      var riskBg = { normal: 'var(--success-lt)', low: 'var(--bg)', medium: 'var(--warn-lt)', high: 'var(--danger-lt)', overdue: 'var(--danger-lt)' }[riskLevel] || 'var(--bg)';
+
       return '<tr ' + rowClick + '>' +
         '<td>' + projIconHtml + '</td>' +
         '<td><div class="proj-name">' + escHtml(coreName) + '</div><div class="proj-code">' + escHtml(projCode) + '</div></td>' +
         '<td><span onclick="event.stopPropagation();openCustomerByName(\'' + escHtml(p.customer_name || '') + '\')" style="cursor:pointer">' + renderCustomerBadge(p.customer_name) + '</span></td>' +
         '<td>' + renderTypeBadge(p.type) + '</td>' +
         '<td style="font-size:13px">' + escHtml(p.current_stage || '—') + '</td>' +
+        '<td><span class="risk-tag" style="--risk-color:' + riskColor + ';background:' + riskBg + ';font-size:11px">' + riskLabel + '</span></td>' +
         '<td>' + renderPill(p.status) + '</td>' +
         '<td class="prog-cell">' + renderProgressBar(p.progress, p.status) + '</td>' +
         '<td style="font-size:12.5px;color:' + (p.end ? 'var(--muted)' : 'var(--warn)') + '">' + (p.end ? formatDate(p.end) : '长期') + '</td>' +
@@ -172,7 +178,7 @@ async function loadProjectTable(filter) {
       '</tr>';
     }).join('');
   } catch(e) {
-    tbody.innerHTML = '<tr><td colspan="9"><div class="error-state">加载失败: ' + escHtml(e.message) + '<br><button onclick="loadProjectTable(\'' + filter + '\')">重试</button></div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10"><div class="error-state">加载失败: ' + escHtml(e.message) + '<br><button onclick="loadProjectTable(\'' + filter + '\')">重试</button></div></td></tr>';
   }
 }
 

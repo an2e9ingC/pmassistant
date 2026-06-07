@@ -121,6 +121,7 @@ def _project_list_item(p, linked_customers=None) -> dict:
         tags_str = _extract_tags_fallback(p)
     tags_list = tags_str.split(",") if tags_str else []
 
+    from backend.services.project_service import _calc_risk_level
     return {
         "id": p.id,
         "code": p.code,
@@ -136,6 +137,7 @@ def _project_list_item(p, linked_customers=None) -> dict:
         "description": p.description or "",
         "tags": tags_str,
         "tags_list": tags_list,
+        "risk_level": _calc_risk_level(p),
     }
 
 

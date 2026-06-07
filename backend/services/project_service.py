@@ -395,7 +395,42 @@ def _project_brief(p: CachedProject) -> dict:
         "project_type": p.project_type,
         "customer_name": _resolve_customer(p),
         "status": _map_status(p.status),
+        "progress": p.progress,
+        "begin": str(p.begin) if p.begin else None,
+        "end": str(p.end) if p.end else None,
+        "risk_level": _calc_risk_level(p),
     }
+
+
+def _calc_risk_level(p: CachedProject) -> str:
+    """Calculate project risk level based on progress vs remaining time."""
+    from datetime import date
+    if p.status in ("done", "closed"):
+        return "normal"
+    if not p.begin or not p.end:
+        return "normal"
+    try:
+        progress = float(p.progress or 0)
+    except (ValueError, TypeError):
+        progress = 0
+    today = date.today()
+    begin = p.begin if isinstance(p.begin, date) else date.fromisoformat(str(p.begin))
+    end = p.end if isinstance(p.end, date) else date.fromisoformat(str(p.end))
+    total_days = (end - begin).days
+    if total_days <= 0:
+        return "normal"
+    elapsed_days = (today - begin).days
+    elapsed_pct = max(0, min(100, elapsed_days / total_days * 100))
+    gap = elapsed_pct - progress
+    if today > end and progress < 100:
+        return "overdue"
+    if gap <= 0:
+        return "normal"
+    if gap <= 15:
+        return "low"
+    if gap <= 30:
+        return "medium"
+    return "high"
 
 
 def _resolve_customer(p: CachedProject) -> str:
