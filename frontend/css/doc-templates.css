@@ -68,6 +68,8 @@
   display: flex;
 }
 
+.dt-right .table-scroll { max-height: none; }
+
 @media (max-width: 768px) {
   .dt-layout {
     grid-template-columns: 1fr;

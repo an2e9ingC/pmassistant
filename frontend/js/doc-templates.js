@@ -108,7 +108,7 @@ function renderTemplatesPage() {
 
     docs.forEach(function(d) {
       rightHtml += '<tr>' +
-        '<td style="font-family:var(--mono);color:var(--muted);text-align:center">' + (d.sort_order || '—') + '</td>' +
+        '<td style="font-family:var(--mono);color:var(--muted);text-align:center">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
         '<td style="font-weight:500">' + escHtml(d.doc_name) + '</td>' +
         '<td style="font-size:12px;white-space:nowrap">' + escHtml(d.responsible_role || '—') + '</td>' +
         '<td style="font-size:12px;color:var(--muted)">' + escHtml(d.description || '') + '</td>' +
@@ -150,7 +150,7 @@ function showAddTemplateForm() {
       '<div class="section-title" style="margin-bottom:10px">添加文档模板 — ' + escHtml(_selectedStage) + '</div>' +
       '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">' +
         '<div style="flex:1;min-width:180px"><label style="font-size:11px;color:var(--muted)">文档名称</label><input class="search-inp" id="dt-doc-name" style="margin-top:4px"></div>' +
-        '<div style="width:70px"><label style="font-size:11px;color:var(--muted)">序号</label><input class="search-inp" id="dt-sort" type="number" min="1" value="' + ((_templatesGrouped[_selectedStage] || []).length + 1) + '" style="margin-top:4px"></div>' +
+        '<div style="width:80px"><label style="font-size:11px;color:var(--muted)">序号</label><input class="search-inp" id="dt-sort" type="number" min="0" value="' + ((_templatesGrouped[_selectedStage] || []).length + 1) + '" style="margin-top:4px;width:100%;box-sizing:border-box;padding:8px 4px;text-align:center"></div>' +
         '<div style="width:150px"><label style="font-size:11px;color:var(--muted)">责任人（岗位）</label>' + _roleSelect('') + '</div>' +
         '<div style="flex:1;min-width:180px"><label style="font-size:11px;color:var(--muted)">说明（可选）</label><input class="search-inp" id="dt-desc" style="margin-top:4px"></div>' +
         '<button class="btn btn-primary" onclick="saveTemplate()" style="height:34px;font-size:12px">添加</button>' +
@@ -164,13 +164,13 @@ function showAddTemplateForm() {
 function showEditTemplateForm(id) {
   var docs = _templatesGrouped[_selectedStage] || [];
   var d = docs.find(function(x) { return x.id === id; });
-  if (!d) return;
+  if (!d) { showToast('未找到该模板数据，请刷新页面', 'error'); return; }
   var html =
     '<div class="card" style="padding:16px;margin-top:12px" id="dt-form-card">' +
       '<div class="section-title" style="margin-bottom:10px">编辑文档模板</div>' +
       '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">' +
         '<div style="flex:1;min-width:180px"><label style="font-size:11px;color:var(--muted)">文档名称</label><input class="search-inp" id="dt-doc-name" value="' + escHtml(d.doc_name) + '" style="margin-top:4px"></div>' +
-        '<div style="width:70px"><label style="font-size:11px;color:var(--muted)">序号</label><input class="search-inp" id="dt-sort" type="number" min="1" value="' + (d.sort_order || 1) + '" style="margin-top:4px"></div>' +
+        '<div style="width:80px"><label style="font-size:11px;color:var(--muted)">序号</label><input class="search-inp" id="dt-sort" type="number" min="0" value="' + (d.sort_order != null ? d.sort_order : 1) + '" style="margin-top:4px;width:100%;box-sizing:border-box;padding:8px 4px;text-align:center"></div>' +
         '<div style="width:150px"><label style="font-size:11px;color:var(--muted)">责任人（岗位）</label>' + _roleSelect(d.responsible_role || '') + '</div>' +
         '<div style="flex:1;min-width:180px"><label style="font-size:11px;color:var(--muted)">说明（可选）</label><input class="search-inp" id="dt-desc" value="' + escHtml(d.description || '') + '" style="margin-top:4px"></div>' +
         '<button class="btn btn-primary" onclick="saveTemplate(' + id + ')" style="height:34px;font-size:12px">保存</button>' +
@@ -182,18 +182,27 @@ function showEditTemplateForm(id) {
 }
 
 function cancelTemplateForm() {
-  document.getElementById('dt-form-container').innerHTML = '';
+  var el = document.getElementById('dt-form-container');
+  if (el) el.innerHTML = '';
 }
 
 async function saveTemplate(id) {
-  var name = document.getElementById('dt-doc-name').value.trim();
-  var sortVal = document.getElementById('dt-sort').value;
-  var sort = (sortVal !== '' && sortVal !== null) ? parseInt(sortVal) : 0;
+  var nameEl = document.getElementById('dt-doc-name');
+  var sortEl = document.getElementById('dt-sort');
   var roleEl = document.getElementById('dt-role');
-  var role = roleEl.value.trim();
-  var desc = document.getElementById('dt-desc').value.trim();
+  var descEl = document.getElementById('dt-desc');
+  if (!nameEl || !sortEl) { showToast('表单数据异常，请重新打开', 'error'); return; }
+
+  var name = nameEl.value.trim();
+  var sortVal = sortEl.value;
+  var sort = sortVal !== '' ? parseInt(sortVal) : 0;
+  var role = roleEl ? roleEl.value.trim() : '';
+  var desc = descEl ? descEl.value.trim() : '';
   if (!name) { showToast('请输入文档名称', 'error'); return; }
   if (isNaN(sort) || sort < 0) sort = 0;
+
+  var stageType = _selectedStage; // snapshot before async
+  if (!id && !stageType) { showToast('阶段类型丢失，请重新选择阶段', 'error'); return; }
 
   try {
     var body = { doc_name: name, sort_order: sort, responsible_role: role || '', description: desc };
@@ -201,13 +210,17 @@ async function saveTemplate(id) {
       await API.put('/doc-templates/' + id, body);
       showToast('修改成功', 'success');
     } else {
-      body.stage_type = _selectedStage;
+      body.stage_type = stageType;
       await API.post('/doc-templates', body);
       showToast('添加成功', 'success');
     }
     cancelTemplateForm();
-    // Refresh data
-    _templatesGrouped = await API.get('/doc-templates');
+    // Always full refresh to stay in sync with server
+    var fresh = await API.get('/doc-templates');
+    if (fresh && Object.keys(fresh).length) {
+      _templatesGrouped = fresh;
+    }
+    _selectedStage = stageType;
     renderTemplatesPage();
   } catch(e) {
     showToast('保存失败: ' + (e.message || '未知错误'), 'error');
