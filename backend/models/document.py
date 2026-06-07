@@ -29,6 +29,7 @@ class ProjectDocument(Base):
     sort_order = Column(Integer, default=0)
     status = Column(String(32), default="pending")  # pending | submitted
     responsible_role = Column(String(128), nullable=True)  # 责任人/岗位（从模板复制）
+    description = Column(String(512), nullable=True)  # 说明（从模板复制）
     completed_at = Column(DateTime, nullable=True)
     location = Column(Text, nullable=True)
     updated_by = Column(String(64), nullable=True)

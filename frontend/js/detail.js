@@ -897,7 +897,7 @@ function buildDocs(data) {
 
         rows += '<tr class="' + rowCls + '" style="background:' + bg + '" id="doc-row-' + d.id + '">' +
           (i === 0 ? '<td rowspan="' + items.length + '" style="vertical-align:middle;border-right:1px solid var(--border)">' + stageNameHtml + (completedDate ? '<br><span style="font-size:10.5px;color:var(--success);font-weight:400">&#10003; ' + completedDate + '</span>' : '') + '</td>' : '') +
-          '<td><span style="display:flex;align-items:center;gap:6px">' + delIcon + escHtml(d.doc_name) + '</span></td>' +
+          '<td><span style="display:flex;align-items:center;gap:6px" title="' + escHtml(d.description || '') + '">' + delIcon + escHtml(d.doc_name) + '</span></td>' +
           '<td style="font-size:12px;color:' + (d.responsible_role ? 'var(--fg)' : 'var(--muted)') + '">' + escHtml(d.responsible_role || '—') + '</td>' +
           '<td>' + statusCell + '</td><td id="doc-loc-cell-' + d.id + '">' + locHtml + '</td>' +
         '</tr>';

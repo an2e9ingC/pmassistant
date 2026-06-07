@@ -285,6 +285,7 @@ def _init_from_templates(db: Session, project_id: int, project_type: str = "RD")
                 sort_order=tpl.sort_order,
                 status="pending",
                 responsible_role=tpl.responsible_role,
+                description=tpl.description,
             )
             db.add(pd)
             new_count += 1
@@ -292,12 +293,31 @@ def _init_from_templates(db: Session, project_id: int, project_type: str = "RD")
         db.commit()
 
 
+# Keyword-based fallback mapping for common Zentao names that don't
+# substring-match standard stage names directly.
+_STAGE_KEYWORD_MAP = {
+    "需求": "需求分解",
+    "立项": "项目立项",
+    "硬件": "硬件开发",
+    "结构": "结构设计",
+    "bsp": "BSP开发",
+    "软件": "软件开发",
+    "业务": "软件开发",
+    "测试": "测试",
+    "发货": "产品发货",
+    "总结": "项目总结",
+    "归档": "项目总结",
+    "交付": "测试",  # last resort — will match "测试" if no other match
+    "售前": "售前",
+}
+
+
 def _match_stage_type(stage_name: str, standard_stages: list[str]) -> Optional[tuple[str, str]]:
     """Match an execution stage_name against standard stages.
 
     Returns (matched_stage_type, match_kind) where match_kind is:
-      - "exact": exact match (name is a standard stage)
-      - "fuzzy": substring match (name contains or is contained by a standard stage)
+      - "exact": exact match
+      - "fuzzy": substring or keyword match
     Returns None if no match at all.
     """
     if not stage_name:
@@ -309,14 +329,20 @@ def _match_stage_type(stage_name: str, standard_stages: list[str]) -> Optional[t
         if name == st:
             return (st, "exact")
 
-    # 2. Substring match: standard stage is contained in the execution name
+    # 2. Substring match: standard stage contained in execution name
     for st in standard_stages:
         if st in name:
             return (st, "fuzzy")
 
-    # 3. Substring match: execution name is contained in standard stage
+    # 3. Substring match: execution name contained in standard stage
     for st in standard_stages:
         if name in st:
+            return (st, "fuzzy")
+
+    # 4. Keyword-based fallback
+    name_lower = name.lower()
+    for kw, st in _STAGE_KEYWORD_MAP.items():
+        if kw in name_lower and st in standard_stages:
             return (st, "fuzzy")
 
     return None
@@ -332,10 +358,11 @@ def _query_project_documents(db: Session, project_id: int) -> list[dict]:
         .all()
     )
 
-    # Also get execution names for display
+    # Also get execution names + task output status for display
     exec_names: dict[int, str] = {}
     exec_end_dates: dict[int, Optional[str]] = {}
     exec_statuses: dict[int, str] = {}
+    exec_has_output: dict[int, bool] = {}  # execution has done tasks with files
     for pd_doc, exec_status in rows:
         if pd_doc.execution_id not in exec_names:
             e = db.query(CachedExecution).filter(
@@ -347,14 +374,25 @@ def _query_project_documents(db: Session, project_id: int) -> list[dict]:
                     str(e.end) if e.end else None
                 )
                 exec_statuses[pd_doc.execution_id] = e.status or ""
+                # Check if any task in this execution is done with files
+                from backend.models.zentao import CachedTask
+                tasks_with_files = db.query(CachedTask).filter(
+                    CachedTask.execution_id == pd_doc.execution_id,
+                    CachedTask.status.in_(["done", "closed"]),
+                    CachedTask.has_files == True,
+                ).count()
+                exec_has_output[pd_doc.execution_id] = tasks_with_files > 0
 
     docs: list[dict] = []
+    auto_updated = False
     for pd_doc, _ in rows:
         exec_status = exec_statuses.get(pd_doc.execution_id, "")
-        # Compute warn: stage is done/closed but doc is still pending
         is_done = exec_status in ("done", "closed")
         is_pending = pd_doc.status == "pending"
-        warn = is_done and is_pending
+        has_task_output = exec_has_output.get(pd_doc.execution_id, False)
+        if is_pending and has_task_output and is_done:
+            pd_doc.status = "submitted"
+        warn = is_done and pd_doc.status == "pending"
 
         docs.append({
             "id": pd_doc.id,
@@ -374,6 +412,7 @@ def _query_project_documents(db: Session, project_id: int) -> list[dict]:
             "done": pd_doc.status == "submitted",
             "warn": warn,
             "responsible_role": pd_doc.responsible_role,
+            "description": pd_doc.description,
             "completed_at": str(pd_doc.completed_at)[:10] if pd_doc.completed_at else None,
             "location": pd_doc.location,
         })
@@ -418,6 +457,7 @@ def _doc_dict(pd: ProjectDocument) -> dict:
         "status": pd.status,
         "done": pd.status == "submitted",
         "responsible_role": pd.responsible_role,
+        "description": pd.description,
         "completed_at": str(pd.completed_at)[:10] if pd.completed_at else None,
         "location": pd.location,
         "updated_by": pd.updated_by,

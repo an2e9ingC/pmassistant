@@ -609,3 +609,6 @@
   color: var(--muted);
   font-size: 12px;
 }
+
+/* Documents tab sticky header */
+#dsec-docs .table-scroll { max-height: calc(100vh - 300px); }

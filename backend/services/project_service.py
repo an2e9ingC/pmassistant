@@ -187,10 +187,10 @@ def get_project_documents(db: Session, project_id: int) -> dict:
     # Init documents for matched stages (incremental)
     docs_list = get_or_init_project_documents(db, project_id, project_type)
 
-    # Group existing docs by stage_name
+    # Group existing docs by stage_type (standard stage name)
     grouped: dict[str, list[dict]] = {}
     for d in docs_list:
-        st = d.get("stage_name") or "未分类"
+        st = d.get("stage_type") or "未分类"
         grouped.setdefault(st, []).append(d)
 
     # Build result: one entry per standard stage (in order)
