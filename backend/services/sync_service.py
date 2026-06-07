@@ -129,7 +129,52 @@ def _finish_log(db: Session, log: SyncLog, status: str, items_fetched: int = 0,
 
 
 # Auto-sync notification state
-_auto_sync_notify = {"completed": False, "time": ""}
+_auto_sync_notify = {"completed": False, "time": "", "mismatches": None}
+
+
+def _check_stage_mismatches(db) -> dict:
+    """After sync, count executions with non-standard stage names."""
+    from backend.models.zentao import CachedProject, CachedExecution
+    from backend.services.document_service import _match_stage_type, get_stage_types_for_project
+
+    projects = db.query(CachedProject).all()
+    total_unmatched = 0
+    total_fuzzy = 0
+    affected_projects = []
+
+    for p in projects:
+        standard_stages = get_stage_types_for_project(p.project_type or "RD")
+        executions = db.query(CachedExecution).filter(
+            CachedExecution.project_id == p.id
+        ).all()
+        proj_unmatched = 0
+        proj_fuzzy = 0
+        for e in executions:
+            actual_name = (e.name or "").strip()
+            if not actual_name:
+                continue
+            result = _match_stage_type(actual_name, standard_stages)
+            if not result:
+                proj_unmatched += 1
+                total_unmatched += 1
+            elif result[1] == "fuzzy":
+                proj_fuzzy += 1
+                total_fuzzy += 1
+
+        if proj_unmatched > 0 or proj_fuzzy > 0:
+            affected_projects.append({
+                "project_id": p.id,
+                "code": p.code or "",
+                "name": (p.name or "")[:40],
+                "unmatched": proj_unmatched,
+                "fuzzy": proj_fuzzy,
+            })
+
+    return {
+        "total_unmatched": total_unmatched,
+        "total_fuzzy": total_fuzzy,
+        "affected_projects": affected_projects[:20],  # top 20
+    }
 
 # Global sync progress state
 _sync_progress = {
@@ -181,6 +226,14 @@ class SyncService:
 
             logger.info(f"Sync completed in {timings['total']}s: {timings}")
             results["timings"] = timings
+
+            # Post-sync: check stage name mismatches
+            mismatch = _check_stage_mismatches(db)
+            results["stage_mismatches"] = mismatch
+            _auto_sync_notify["completed"] = True
+            _auto_sync_notify["time"] = time.strftime("%H:%M:%S")
+            _auto_sync_notify["mismatches"] = mismatch
+
             return {"code": 0, "data": results, "message": f"sync completed in {timings['total']}s"}
         except Exception as e:
             logger.exception("Full sync failed")

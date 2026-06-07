@@ -58,6 +58,42 @@ def update_stage_name(
     return {"code": 0, "data": {"id": e.id, "stage_name": e.stage_name}, "message": "ok"}
 
 
+@router.put("/{project_id}/stages/{execution_id}/sync-to-zentao", response_model=dict)
+async def sync_stage_name_to_zentao(
+    project_id: int,
+    execution_id: int,
+    body: StageNameUpdate,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("stage_mapping")),
+):
+    """Set PMA-local stage_name mapping for matching purposes.
+
+    This does NOT push to Zentao (REST API v1 doesn't support execution
+    updates via PUT). The user should manually update the execution name
+    in Zentao's web interface. Once synced, the exact match will apply.
+    """
+    e = db.query(CachedExecution).filter(
+        CachedExecution.id == execution_id,
+        CachedExecution.project_id == project_id,
+    ).first()
+    if not e:
+        raise HTTPException(status_code=404, detail="Execution not found")
+
+    new_name = body.stage_name.strip()
+    e.stage_name = new_name
+    db.commit()
+
+    return {
+        "code": 0,
+        "data": {
+            "id": e.id,
+            "name": e.name,
+            "stage_name": e.stage_name,
+        },
+        "message": f"PMA 阶段映射已保存: {e.name} → {new_name}（请在禅道中手动修改执行名为标准名）",
+    }
+
+
 @router.get("/{project_id}/documents", response_model=dict)
 def get_documents(project_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
     docs = project_service.get_project_documents(db, project_id)

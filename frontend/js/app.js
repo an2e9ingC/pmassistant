@@ -337,7 +337,20 @@ function init() {
         _autoSyncKnownRunning = false;
         // Show completion notification
         API.get('/sync/auto-notify').then(function(n) {
-          if (n && n.completed) showToast('数据已自动更新（' + n.time + '，耗时' + elapsed + 's）', 'success', 5000);
+          if (n && n.completed) {
+            var msg = '数据已自动更新（' + n.time + '，耗时' + elapsed + 's）';
+            var mm = n.mismatches;
+            if (mm && (mm.total_unmatched > 0 || mm.total_fuzzy > 0)) {
+              var parts = [];
+              if (mm.total_unmatched > 0) parts.push(mm.total_unmatched + ' 个非标准阶段');
+              if (mm.total_fuzzy > 0) parts.push(mm.total_fuzzy + ' 个模糊匹配');
+              msg += ' ⚠ ' + parts.join('，') + '，';
+              msg += '影响 ' + (mm.affected_projects || []).length + ' 个项目';
+              showToast(msg, 'warn', 8000);
+            } else {
+              showToast(msg, 'success', 5000);
+            }
+          }
         }).catch(function() {});
       }
     } catch(ignore) {}

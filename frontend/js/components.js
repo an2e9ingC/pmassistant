@@ -118,33 +118,7 @@ function showStageMismatchDialog(execId, stageName, suggestedName, event) {
   bodyHtml += '</div>';
 
   var buttons = [{ text: '关闭', cls: '', onclick: "this.closest('.note-dialog-overlay').remove()" }];
-  if (execId) {
-    buttons.unshift({ text: '在 PMA 中临时映射', cls: 'btn-primary', onclick: "showStageNameEdit('" + escHtml(stageName) + "','" + escHtml(suggestedName || '') + "');this.closest('.note-dialog-overlay').remove()" });
-  }
 
   openDialog('⚠ 请修改禅道阶段名为标准名字', bodyHtml, buttons, { overlayClass: 'stage-mismatch-dialog-overlay' });
 }
 
-function showStageNameEdit(currentName, suggestedName) {
-  var standards = (typeof _standardStages !== 'undefined' && _standardStages.length)
-    ? _standardStages : STAGE_OPTIONS;
-  var optionsHtml = standards.map(function(st) {
-    var sel = (st === suggestedName) ? ' selected' : '';
-    return '<option value="' + st + '"' + sel + '>' + st + '</option>';
-  }).join('');
-
-  var bodyHtml = '<div style="padding:8px 0">' +
-    '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">当前禅道名称: <b>' + escHtml(currentName) + '</b></div>' +
-    '<div style="margin-bottom:12px">' +
-      '<label style="font-size:11px;color:var(--muted)">映射到标准阶段</label>' +
-      '<select class="search-inp" id="stage-name-select" style="margin-top:4px;padding:7px 10px;width:100%">' +
-        '<option value="">— 请选择 —</option>' + optionsHtml +
-      '</select>' +
-    '</div>' +
-  '</div>';
-
-  openDialog('设置 PMA 阶段映射', bodyHtml, [
-    { text: '取消', cls: '', onclick: "this.closest('.note-dialog-overlay').remove()" },
-    { text: '保存映射', cls: 'btn-primary', onclick: "saveStageNameMapping();this.closest('.note-dialog-overlay').remove()" },
-  ], { overlayClass: 'stage-mismatch-dialog-overlay' });
-}

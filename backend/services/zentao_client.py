@@ -84,6 +84,8 @@ class ZentaoClient:
                         preview = raw[:300].decode(enc, errors="replace")
                         logger.error(f"Zentao non-JSON response: {method} {url} -> HTTP {resp.status_code}, body: {preview}")
                         if not preview.strip():
+                            if 200 <= resp.status_code < 300:
+                                return {}  # success with empty body (e.g. PUT)
                             raise RuntimeError(f"Zentao returned empty response (HTTP {resp.status_code}) from {url}. Check ZENTAO_BASE_URL config.")
                         raise RuntimeError(f"Zentao returned non-JSON response (HTTP {resp.status_code}) from {url}: {preview}")
 
@@ -196,6 +198,22 @@ class ZentaoClient:
 
     async def get_product_stories(self, product_id: int) -> list:
         return await self._get_all_pages(f"/products/{product_id}/stories")
+
+    async def update_execution(self, execution_id: int, name: str) -> dict:
+        """Update an execution's name in Zentao.
+
+        Sends ALL current fields back with only the name changed.
+        Zentao's REST API may require a complete object for PUT.
+        """
+        current = await self.get_execution(execution_id)
+        payload = dict(current)  # copy all fields
+        payload["name"] = name
+        # Remove read-only fields that Zentao may reject on PUT
+        for k in ("id", "project", "parent", "path", "grade", "days",
+                  "realBegan", "realEnd", "firstEnd", "hasProduct",
+                  "percent", "synced_at", "raw_json"):
+            payload.pop(k, None)
+        return await self._request("PUT", f"/executions/{execution_id}", json=payload)
 
     async def get_product_releases(self, product_id: int) -> list:
         return await self._get_all_pages(f"/products/{product_id}/releases")

@@ -229,7 +229,7 @@ def _detect_alerts_internal(db: Session) -> list[dict]:
             CachedExecution.project_id == p.id
         ).all()
         for e in executions:
-            actual_name = (e.stage_name or e.name or "").strip()
+            actual_name = (e.name or "").strip()
             if actual_name and not _match_stage_type(actual_name, standard_stages):
                 alert_id += 1
                 alerts.append({

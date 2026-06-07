@@ -254,7 +254,7 @@ def _init_from_templates(db: Session, project_id: int, project_type: str = "RD")
     new_count = 0
     for e in executions:
         # Priority: PMA-local stage_name > Zentao name
-        stage_name = (e.stage_name or e.name or "").strip()
+        stage_name = (e.name or "").strip()
         if not stage_name:
             continue
         result = _match_stage_type(stage_name, standard_stages)
@@ -342,7 +342,7 @@ def _query_project_documents(db: Session, project_id: int) -> list[dict]:
                 CachedExecution.id == pd_doc.execution_id
             ).first()
             if e:
-                exec_names[pd_doc.execution_id] = e.stage_name or e.name or ""
+                exec_names[pd_doc.execution_id] = e.name or ""
                 exec_end_dates[pd_doc.execution_id] = (
                     str(e.end) if e.end else None
                 )

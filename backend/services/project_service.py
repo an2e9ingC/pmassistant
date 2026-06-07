@@ -49,7 +49,7 @@ def get_project_stages(db: Session, project_id: int) -> dict:
     unmatched_execs = []
 
     for e in executions:
-        actual_name = (e.stage_name or e.name or "").strip()
+        actual_name = (e.name or "").strip()
         result = _match_stage_type(actual_name, standard_stages) if actual_name else None
         if result:
             st = result[0]
@@ -76,7 +76,7 @@ def get_project_stages(db: Session, project_id: int) -> dict:
                 who = _get_who(tasks, e, project) or "未指派"
                 stages.append({
                     "id": e.id,
-                    "name": e.stage_name or e.name,
+                    "name": e.name,
                     "execution_url": f"{web_base}/index.php?m=execution&f=task&executionID={e.id}&status=all&param=0&orderBy=status,id_desc&recTotal=10&recPerPage=100",
                     "status": _map_status(e.status),
                     "who": who,
@@ -120,7 +120,7 @@ def get_project_stages(db: Session, project_id: int) -> dict:
         who = _get_who(tasks, e, project) or "未指派"
         stages.append({
             "id": e.id,
-            "name": e.stage_name or e.name,
+            "name": e.name,
             "execution_url": f"{web_base}/index.php?m=execution&f=task&executionID={e.id}&status=all&param=0&orderBy=status,id_desc&recTotal=10&recPerPage=100",
             "status": _map_status(e.status),
             "who": who,
@@ -223,7 +223,7 @@ def get_project_gantt(db: Session, project_id: int) -> dict:
     matched_execs: dict[str, list] = {}
     unmatched_execs = []
     for e in executions:
-        actual_name = (e.stage_name or e.name or "").strip()
+        actual_name = (e.name or "").strip()
         result = _match_stage_type(actual_name, standard_stages) if actual_name else None
         if result:
             matched_execs.setdefault(result[0], []).append((e, result[1]))
@@ -244,7 +244,7 @@ def get_project_gantt(db: Session, project_id: int) -> dict:
                 who = _get_who(tasks, e, project) or "未指派"
                 tasks_done = sum(1 for t in tasks if t.status in ("done", "closed"))
                 gantt_stages.append({
-                    "name": e.stage_name or e.name,
+                    "name": e.name,
                     "standard_stage": st,
                     "who": who,
                     "start": str(e.begin) if e.begin else None,
@@ -285,7 +285,7 @@ def get_project_gantt(db: Session, project_id: int) -> dict:
         who = _get_who(tasks, e, project) or "未指派"
         tasks_done = sum(1 for t in tasks if t.status in ("done", "closed"))
         gantt_stages.append({
-            "name": e.stage_name or e.name,
+            "name": e.name,
             "standard_stage": None,
             "who": who,
             "start": str(e.begin) if e.begin else None,
