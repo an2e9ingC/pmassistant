@@ -735,6 +735,17 @@ function buildStages(stages) {
   var _standardStages = (stages && stages.standard_stages) ? stages.standard_stages : [];
   var stageList = (stages && stages.stages) ? stages.stages : stages;
 
+  // Extract Zentao web base URL from first execution_url for dialog links
+  if (!window._zentaoWebBase && stageList.length) {
+    for (var si = 0; si < stageList.length; si++) {
+      var u = stageList[si].execution_url;
+      if (u) {
+        var m = u.match(/^(.+)\/index\.php/);
+        if (m) { window._zentaoWebBase = m[1]; break; }
+      }
+    }
+  }
+
   if (!stageList || !stageList.length) {
     document.getElementById('stages-tbody').innerHTML = '<tr><td colspan="8"><div class="empty-state">暂无阶段数据</div></td></tr>';
     return;
@@ -770,14 +781,11 @@ function buildStages(stages) {
     var riskHtml = '';
     if (isMissing) {
       riskHtml = '<span class="risk-tag" style="--risk-color:var(--warn)">⚠ 阶段缺失</span>';
-    } else if (isUnmatched) {
+    } else if (isUnmatched || matchKind === 'fuzzy') {
+      var suggested = (matchKind === 'fuzzy') ? (s.standard_stage || '') : '';
       riskHtml = '<span class="risk-tag" style="--risk-color:var(--warn);cursor:pointer" ' +
-        'onclick="showStageMismatchDialog(' + (s.id || 0) + ',\'' + escHtml(s.name || '') + '\',\'\',event)" ' +
-        'title="点击查看详情">⚠ 请修改禅道阶段名</span>';
-    } else if (matchKind === 'fuzzy') {
-      riskHtml = '<span class="risk-tag" style="--risk-color:var(--warn);cursor:pointer;font-size:11px" ' +
-        'onclick="showStageMismatchDialog(' + s.id + ',\'' + escHtml(s.name || '') + '\',\'' + escHtml(s.standard_stage || '') + '\',event)" ' +
-        'title="请修改为: ' + escHtml(s.standard_stage || '') + '">⚠ 请修改禅道阶段名</span>';
+        'onclick="showStageMismatchDialog(' + (s.id || 0) + ',\'' + escHtml(s.name || '') + '\',\'' + escHtml(suggested) + '\',event)" ' +
+        'title="' + (suggested ? '请修改为: ' + escHtml(suggested) : '请修改禅道阶段名为标准名字') + '">⚠ 请修改禅道阶段名</span>';
     } else {
       var risk = getStageRisk(s);
       riskHtml = '<span class="risk-tag" style="--risk-color:' + risk.color + '" title="' + escHtml(risk.tip) + '">' + escHtml(risk.label) + '</span>';
@@ -834,10 +842,20 @@ function buildDocs(data) {
     var bg = stageIdx % 2 === 0 ? 'var(--surface)' : 'var(--bg)';
     var completedDate = stage.stage_completed_date || null;
 
+    // Stage name with gs-btn style (matching stages tab)
+    var stageNameHtml;
+    if (hasDocs && stage.execution_url) {
+      stageNameHtml = '<a href="' + escHtml(stage.execution_url) + '" target="_blank" class="gs-btn" title="在禅道中查看此阶段" onclick="event.stopPropagation()" style="text-decoration:none;font-size:12px">' + escHtml(stageName) + '</a>';
+    } else if (hasDocs) {
+      stageNameHtml = '<span style="font-weight:540;font-size:12px">' + escHtml(stageName) + '</span>';
+    } else {
+      stageNameHtml = '<span style="font-weight:500;color:var(--muted);font-size:12px">' + escHtml(stageName) + '</span>';
+    }
+
     if (!hasDocs) {
       // Standard stage with no documents — show placeholder row
       rows += '<tr style="background:' + bg + ';opacity:0.5">' +
-        '<td style="vertical-align:middle;font-weight:540;border-right:1px solid var(--border);color:var(--muted)">' + escHtml(stageName) + '</td>' +
+        '<td style="vertical-align:middle;font-weight:540;border-right:1px solid var(--border)">' + stageNameHtml + '</td>' +
         '<td colspan="4" style="color:var(--muted);font-style:italic;font-size:12px">暂无文档（阶段未匹配到禅道数据或文档模板）</td>' +
       '</tr>';
     } else {
@@ -861,7 +879,7 @@ function buildDocs(data) {
         }
 
         rows += '<tr class="' + rowCls + '" style="background:' + bg + '" id="doc-row-' + d.id + '">' +
-          (i === 0 ? '<td rowspan="' + items.length + '" style="vertical-align:middle;font-weight:540;border-right:1px solid var(--border)">' + escHtml(stageName) + (completedDate ? '<br><span style="font-size:10.5px;color:var(--success);font-weight:400">&#10003; ' + completedDate + '</span>' : '') + '</td>' : '') +
+          (i === 0 ? '<td rowspan="' + items.length + '" style="vertical-align:middle;border-right:1px solid var(--border)">' + stageNameHtml + (completedDate ? '<br><span style="font-size:10.5px;color:var(--success);font-weight:400">&#10003; ' + completedDate + '</span>' : '') + '</td>' : '') +
           '<td>' + escHtml(d.doc_name) + '</td>' +
           '<td style="font-size:12px;color:' + (d.responsible_role ? 'var(--fg)' : 'var(--muted)') + '">' + escHtml(d.responsible_role || '—') + '</td>' +
           '<td>' + statusCell + '</td><td id="doc-loc-cell-' + d.id + '">' + locHtml + '</td>' +
@@ -1251,85 +1269,7 @@ function gotoStageDetail(idx) {
   }, 100);
 }
 
-/* ── Stage Mismatch Alert Dialog ── */
-
-var STAGE_OPTIONS = ['售前', '项目立项', '需求分解', '硬件开发', '结构设计', 'BSP开发', '软件开发', '测试', '产品发货', '项目总结'];
-var _mismatchExecId = null;
-
-function showStageMismatchDialog(execId, stageName, suggestedName, event) {
-  _mismatchExecId = execId;
-  if (event) event.stopPropagation();
-
-  var existing = document.querySelector('.stage-name-dialog-overlay');
-  if (existing) existing.remove();
-
-  var bodyHtml = '';
-  if (suggestedName) {
-    // Fuzzy match — show exact name to change to
-    bodyHtml =
-      '<p style="margin-bottom:10px">当前阶段名 <b style="color:var(--warn)">"' + escHtml(stageName) + '"</b> 与标准名不一致。</p>' +
-      '<p style="margin-bottom:6px">请在禅道中将阶段名修改为：</p>' +
-      '<p style="padding:12px 16px;background:var(--accent-lt);border:1px solid var(--accent);border-radius:8px;font-size:16px;font-weight:700;color:var(--accent);text-align:center;margin:10px 0">' + escHtml(suggestedName) + '</p>';
-  } else {
-    // Unmatched — show all standard stage names
-    var standards = (typeof _standardStages !== 'undefined' && _standardStages.length)
-      ? _standardStages : STAGE_OPTIONS;
-    var stageListHtml = standards.map(function(st) {
-      return '<li style="padding:2px 0;font-weight:500">' + escHtml(st) + '</li>';
-    }).join('');
-    bodyHtml =
-      '<p style="margin-bottom:10px">当前阶段名 <b style="color:var(--warn)">"' + escHtml(stageName) + '"</b> 不在标准阶段列表中。</p>' +
-      '<p style="margin-bottom:6px;color:var(--muted)">请修改禅道阶段名为以下标准名称之一：</p>' +
-      '<ul style="margin:0;padding-left:20px;color:var(--fg);font-size:13px">' +
-        stageListHtml +
-      '</ul>';
-  }
-
-  var html = '<div class="note-dialog-overlay stage-name-dialog-overlay" onclick="if(event.target===this)this.remove()">' +
-    '<div class="note-dialog" style="max-width:440px" onclick="event.stopPropagation()">' +
-      '<div class="note-dialog-head"><span class="note-dialog-title">⚠ 请修改禅道阶段名为标准名字</span>' +
-        '<button class="note-dialog-close" onclick="this.closest(\'.stage-name-dialog-overlay\').remove()">&times;</button></div>' +
-      '<div style="padding:8px 0;line-height:1.8">' +
-        bodyHtml +
-        '<p style="margin-top:12px;font-size:11px;color:var(--muted);font-style:italic">修改后下次禅道同步生效，系统将自动匹配并显示正常数据。</p>' +
-      '</div>' +
-      '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">' +
-        (execId ? '<button class="btn btn-primary" onclick="showStageNameEdit(\'' + escHtml(stageName) + '\',\'' + escHtml(suggestedName || '') + '\')">在 PMA 中临时映射</button>' : '') +
-        '<button class="btn" onclick="this.closest(\'.stage-name-dialog-overlay\').remove()">关闭</button>' +
-      '</div>' +
-    '</div></div>';
-  document.body.insertAdjacentHTML('beforeend', html);
-}
-
-function showStageNameEdit(currentName, suggestedName) {
-  var dlg = document.querySelector('.stage-name-dialog-overlay');
-  if (dlg) dlg.remove();
-
-  var standards = (typeof _standardStages !== 'undefined' && _standardStages.length)
-    ? _standardStages : STAGE_OPTIONS;
-  var optionsHtml = standards.map(function(st) {
-    var sel = (st === suggestedName) ? ' selected' : '';
-    return '<option value="' + st + '"' + sel + '>' + st + '</option>';
-  }).join('');
-
-  var html = '<div class="note-dialog-overlay stage-name-dialog-overlay" onclick="if(event.target===this)this.remove()">' +
-    '<div class="note-dialog" style="max-width:420px" onclick="event.stopPropagation()">' +
-      '<div class="note-dialog-head"><span class="note-dialog-title">设置 PMA 阶段映射</span>' +
-        '<button class="note-dialog-close" onclick="this.closest(\'.stage-name-dialog-overlay\').remove()">&times;</button></div>' +
-      '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">当前禅道名称: <b>' + escHtml(currentName) + '</b></div>' +
-      '<div style="margin-bottom:12px">' +
-        '<label style="font-size:11px;color:var(--muted)">映射到标准阶段</label>' +
-        '<select class="search-inp" id="stage-name-select" style="margin-top:4px;padding:7px 10px;width:100%">' +
-          '<option value="">— 请选择 —</option>' + optionsHtml +
-        '</select>' +
-      '</div>' +
-      '<div style="display:flex;justify-content:flex-end;gap:8px">' +
-        '<button class="btn" onclick="this.closest(\'.stage-name-dialog-overlay\').remove()">取消</button>' +
-        '<button class="btn btn-primary" onclick="saveStageNameMapping()">保存映射</button>' +
-      '</div>' +
-    '</div></div>';
-  document.body.insertAdjacentHTML('beforeend', html);
-}
+/* ⚠ showStageMismatchDialog / showStageNameEdit are now in components.js */
 
 async function saveStageNameMapping() {
   if (!_mismatchExecId) { showToast('请重新点击告警标记', 'error'); return; }
@@ -1339,9 +1279,9 @@ async function saveStageNameMapping() {
   try {
     await API.put('/projects/' + _comboCurId + '/stages/' + _mismatchExecId + '/stage-name', { stage_name: name });
     showToast('映射已保存', 'success');
-    document.querySelector('.stage-name-dialog-overlay').remove();
+    var dlg = document.querySelector('.stage-mismatch-dialog-overlay');
+    if (dlg) dlg.remove();
     _mismatchExecId = null;
-    // Reload
     var p = await Promise.all([
       API.get('/projects/' + _comboCurId + '/stages'),
       API.get('/projects/' + _comboCurId + '/documents'),

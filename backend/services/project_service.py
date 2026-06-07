@@ -184,18 +184,20 @@ def get_project_documents(db: Session, project_id: int) -> dict:
         grouped.setdefault(st, []).append(d)
 
     # Build result: one entry per standard stage (in order)
+    from backend.config import get_zentao_web_base
+    web_base = get_zentao_web_base()
     result = []
     for st in standard_stages:
         items = grouped.get(st, [])
-        if items:
-            # Use the stage_completed_date from the first item
-            scd = items[0].get("stage_completed_date") if items else None
-        else:
-            scd = None
+        exec_id = items[0].get("execution_id") if items else None
+        scd = items[0].get("stage_completed_date") if items else None
+        exec_url = f"{web_base}/index.php?m=execution&f=task&executionID={exec_id}&status=all&param=0&orderBy=status,id_desc&recTotal=10&recPerPage=100" if exec_id else None
         result.append({
             "stage_name": st,
             "stage_completed_date": scd,
             "has_documents": len(items) > 0,
+            "execution_id": exec_id,
+            "execution_url": exec_url,
             "documents": items,
         })
 
