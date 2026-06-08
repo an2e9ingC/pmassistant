@@ -160,7 +160,7 @@
     </div>
 
     <div style="margin-top:8px;text-align:center;font-size:10px;color:var(--muted)">
-      <span id="app-version">v2026.06.08-beta40</span>
+      <span id="app-version">v2026.06.08-beta41</span>
     </div>
   </div>
 </aside>
@@ -532,7 +532,7 @@
 
     <!-- ══════════════════════ VIEW — PERMISSIONS ══════════════════════ -->
     <div class="view" id="view-permissions">
-      <div class="section-hd"><div class="section-title">权限管理（按角色组）</div>
+      <div class="section-hd"><div class="section-title">权限管理</div>
         <div style="display:flex;align-items:center;gap:8px">
           <span style="font-size:11px;color:var(--muted)">权限调试信息</span>
           <div class="toggle-switch" id="toggle-debug-perm" onclick="toggleDebugPerm()">
@@ -540,19 +540,37 @@
           </div>
         </div>
       </div>
-      <div class="card table-scroll" style="max-height:calc(100vh - 200px)">
-        <table class="proj-table" id="perm-table">
-          <thead><tr>
-            <th width="14%">角色组</th>
-            <th>特殊权限</th>
-            <th>成员</th>
-            <th width="14%">操作</th>
-            <th width="16%">说明</th>
-          </tr></thead>
-          <tbody id="perm-tbody">
-            <tr><td colspan="5"><div class="loading-spinner">加载中...</div></td></tr>
-          </tbody>
-        </table>
+      <div class="tabs" style="margin-bottom:12px">
+        <span class="tab active" id="ptab-roles" onclick="switchPermTab('roles')">按角色组</span>
+        <span class="tab" id="ptab-perms" onclick="switchPermTab('perms')">按权限</span>
+      </div>
+      <div id="psec-roles">
+        <div class="card table-scroll" style="max-height:calc(100vh - 260px)">
+          <table class="proj-table" id="perm-table">
+            <thead><tr>
+              <th width="14%">角色组</th>
+              <th>特殊权限</th>
+              <th>成员</th>
+              <th width="14%">操作</th>
+              <th width="16%">说明</th>
+            </tr></thead>
+            <tbody id="perm-tbody">
+              <tr><td colspan="5"><div class="loading-spinner">加载中...</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div id="psec-perms" style="display:none">
+        <div class="card table-scroll" style="max-height:calc(100vh - 260px)">
+          <table class="proj-table" id="perm-perm-table">
+            <thead><tr>
+              <th>权限</th><th>已有角色组</th><th style="width:80px">角色数</th>
+            </tr></thead>
+            <tbody id="perm-perm-tbody">
+              <tr><td colspan="3"><div class="loading-spinner">加载中...</div></td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
