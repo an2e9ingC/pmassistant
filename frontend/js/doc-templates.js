@@ -219,7 +219,18 @@ function saveTemplate(id) {
   if (!id && !stageType) { showToast('阶段类型丢失，请重新选择阶段', 'error'); return; }
 
   if (id && id > 0) {
-    // Edit existing — queue update
+    // Edit existing server-side template
+    var arr = _templatesGrouped[stageType] || [];
+    var existing = arr.find(function(x) { return x.id === id; });
+    if (!existing) { showToast('未找到该模板', 'error'); return; }
+    existing.doc_name = name;
+    existing.sort_order = sort;
+    existing.responsible_role = role || '';
+    existing.description = desc;
+    _pendingOps.push({ type: 'edit', id: id, stage_type: stageType,
+      doc_name: name, sort_order: sort, responsible_role: role || '', description: desc });
+  } else if (id && id < 0) {
+    // Edit locally-added (not yet saved) template — update pending add op
     var arr = _templatesGrouped[stageType] || [];
     var existing = arr.find(function(x) { return x.id === id; });
     if (existing) {
@@ -227,8 +238,16 @@ function saveTemplate(id) {
       existing.sort_order = sort;
       existing.responsible_role = role || '';
       existing.description = desc;
-      _pendingOps.push({ type: 'edit', id: id, stage_type: stageType,
-        doc_name: name, sort_order: sort, responsible_role: role || '', description: desc });
+    }
+    // Update the pending add op too
+    for (var pi = 0; pi < _pendingOps.length; pi++) {
+      if (_pendingOps[pi].tempId === id) {
+        _pendingOps[pi].doc_name = name;
+        _pendingOps[pi].sort_order = sort;
+        _pendingOps[pi].responsible_role = role || '';
+        _pendingOps[pi].description = desc;
+        break;
+      }
     }
   } else {
     // New template — add locally with temp ID
@@ -249,7 +268,14 @@ function saveTemplate(id) {
 
 function deleteTemplate(id) {
   if (!confirm('确认删除此文档模板？')) return;
-  if (id > 0) _pendingOps.push({ type: 'delete', id: id });
+  if (id > 0) {
+    _pendingOps.push({ type: 'delete', id: id });
+  } else if (id < 0) {
+    // Remove pending add op for locally-added template
+    for (var pi = _pendingOps.length - 1; pi >= 0; pi--) {
+      if (_pendingOps[pi].tempId === id) { _pendingOps.splice(pi, 1); break; }
+    }
+  }
   // Remove from local cache
   var stageType = _selectedStage;
   var arr = _templatesGrouped[stageType];
