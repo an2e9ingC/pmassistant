@@ -284,10 +284,18 @@ function init() {
     var initials = (user.username || '').substring(0, 2).toUpperCase();
     document.getElementById('user-avatar').textContent = initials;
     document.getElementById('user-name').textContent = user.username + ' · ' + user.role;
-    // Show admin/PM nav items
+    // Show admin/PM nav items (hide individual items based on role)
     if (user.role === 'admin' || user.role === 'pm') {
       var adminGroup = document.getElementById('nav-group-admin');
       if (adminGroup) adminGroup.style.display = '';
+      // PM can only see 文档模板 and 流程规范
+      if (user.role !== 'admin') {
+        var adminOnlyIds = ['nav-users', 'nav-permissions', 'nav-config', 'nav-logs'];
+        adminOnlyIds.forEach(function(id) {
+          var el = document.getElementById(id);
+          if (el) el.style.display = 'none';
+        });
+      }
     }
   }
 
