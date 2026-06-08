@@ -236,6 +236,9 @@
 .ru-user-tag:hover { border-color: var(--accent); }
 .ru-user-tag.selected { background: var(--accent); color: #fff; border-color: var(--accent); }
 
+/* Ensure checkboxes are visible in both themes */
+input[type="checkbox"] { accent-color: var(--accent); }
+
 .zentao-link {
   display: inline-flex; align-items: center; gap: 3px;
   padding: 2px 9px; border-radius: 5px;
