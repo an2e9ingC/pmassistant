@@ -36,9 +36,9 @@ def require_admin(user: LocalUser = Depends(get_current_user)) -> LocalUser:
 
 
 def has_perm(user: LocalUser, perm: str) -> bool:
-    """Check if user has a specific permission. 'admin' permission grants all."""
+    """Check if user has a specific permission."""
     perms = _get_perms(user)
-    return "admin" in perms or perm in perms
+    return perm in perms
 
 
 def require_perm(perm: str):

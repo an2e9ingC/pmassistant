@@ -226,6 +226,16 @@
   transform: translateX(20px);
 }
 
+.ru-user-tag {
+  display: inline-block; padding: 4px 10px; margin: 3px;
+  border-radius: 6px; font-size: 12px; cursor: pointer;
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border);
+  transition: all 0.15s;
+}
+.ru-user-tag:hover { border-color: var(--accent); }
+.ru-user-tag.selected { background: var(--accent); color: #fff; border-color: var(--accent); }
+
 .zentao-link {
   display: inline-flex; align-items: center; gap: 3px;
   padding: 2px 9px; border-radius: 5px;

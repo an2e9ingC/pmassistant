@@ -102,6 +102,8 @@ def update_role(role_id: int, payload: dict, db: Session = Depends(get_db), _=De
     role = db.query(Role).filter(Role.id == role_id).first()
     if not role:
         raise HTTPException(status_code=404, detail="角色不存在")
+    if role.key == "admin":
+        raise HTTPException(status_code=403, detail="admin角色不可修改")
     if "permissions" in payload:
         perms = payload["permissions"]
         role.permissions = ",".join(p for p in perms if p in ALL_PERMISSIONS) if isinstance(perms, list) else perms
@@ -136,6 +138,8 @@ def delete_role(role_id: int, db: Session = Depends(get_db), _=Depends(require_a
     role = db.query(Role).filter(Role.id == role_id).first()
     if not role:
         raise HTTPException(status_code=404, detail="角色不存在")
+    if role.key == "admin":
+        raise HTTPException(status_code=403, detail="admin角色不可删除")
     # Remove all user-role assignments for this role
     db.query(UserRole).filter(UserRole.role_id == role_id).delete()
     db.delete(role)

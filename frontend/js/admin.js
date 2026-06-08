@@ -245,8 +245,9 @@ function renderRoleTable() {
       '<td><button class="btn" style="font-size:11px;padding:3px 10px"' +
         ' onclick="showRoleUsers(' + r.id + ',\'' + escHtml(r.label) + '\')">' + userCount + ' 人</button></td>' +
       '<td style="white-space:nowrap">' +
-        '<button class="btn" onclick="openRoleCreateDialog(' + r.id + ')" style="font-size:11px;padding:3px 10px;margin-right:4px">编辑</button>' +
-        '<button class="btn" onclick="deleteRole(' + r.id + ',\'' + escHtml(r.label) + '\')" style="font-size:11px;padding:3px 10px;color:var(--danger)">删除</button>' +
+        (r.key === 'admin' ? '<span style="font-size:11px;color:var(--muted)">系统内置</span>' :
+          '<button class="btn" onclick="openRoleCreateDialog(' + r.id + ')" style="font-size:11px;padding:3px 10px;margin-right:4px">编辑</button>' +
+          '<button class="btn" onclick="deleteRole(' + r.id + ',\'' + escHtml(r.label) + '\')" style="font-size:11px;padding:3px 10px;color:var(--danger)">删除</button>') +
       '</td>' +
     '</tr>';
   }).join('');
@@ -287,41 +288,65 @@ async function saveRole(editId) {
   }
 }
 
+var _ruSelected = {};  // { userId: username }
+
 function showRoleUsers(roleId, roleLabel) {
-  var checkboxes = _userList.map(function(u) {
-    var inRole = (u.role_ids || []).indexOf(roleId) >= 0;
-    return '<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;cursor:pointer">' +
-      '<input type="checkbox" value="' + u.id + '" ' + (inRole ? 'checked' : '') + ' class="ru-cb">' +
-      escHtml(u.username) +
-      (u.is_active ? '' : ' <span class="pill" style="font-size:10px;background:var(--danger-lt);color:var(--danger)">已禁用</span>') +
-    '</label>';
+  _ruSelected = {};
+  _userList.forEach(function(u) {
+    if ((u.role_ids || []).indexOf(roleId) >= 0) {
+      _ruSelected[u.id] = u.username;
+    }
+  });
+
+  // Show all users as clickable tags (styling via CSS class only)
+  var allTags = _userList.map(function(u) {
+    var sel = _ruSelected.hasOwnProperty(u.id);
+    return '<span class="ru-user-tag' + (sel ? ' selected' : '') + '" data-uid="' + u.id + '" onclick="ruToggleUser(' + u.id + ')"' +
+      '>' + escHtml(u.username) + (u.is_active ? '' : ' <span style="font-size:9px;opacity:0.6">已禁用</span>') + '</span>';
   }).join('');
 
   var bodyHtml = '<div style="padding:8px 0">' +
-    '<div style="margin-bottom:8px;font-size:12px;color:var(--muted)">角色 <b>' + escHtml(roleLabel) + '</b> — 勾选用户以分配此角色</div>' +
-    '<input class="search-inp" id="ru-filter" placeholder="搜索用户..." oninput="filterRoleUsers()" style="margin-bottom:8px;padding:7px 10px">' +
-    '<div style="max-height:300px;overflow-y:auto" id="ru-list">' + checkboxes + '</div>' +
+    '<div style="margin-bottom:6px;font-size:12px;color:var(--muted)">角色 <b>' + escHtml(roleLabel) + '</b> — 点击用户标签选择，已选 <span id="ru-count">' + Object.keys(_ruSelected).length + '</span> 人</div>' +
+    '<div style="display:flex;gap:6px;margin-bottom:8px">' +
+      '<button class="btn" style="font-size:11px;padding:4px 10px" onclick="ruSelectAll()">全选</button>' +
+      '<button class="btn" style="font-size:11px;padding:4px 10px;color:var(--danger)" onclick="ruClearAll()">清空</button>' +
+    '</div>' +
+    '<div id="ru-all-tags" style="max-height:300px;overflow-y:auto;line-height:2">' + allTags + '</div>' +
   '</div>';
+
   openDialog('管理角色成员', bodyHtml, [
     { text: '取消', cls: '', onclick: "this.closest('.note-dialog-overlay').remove()" },
     { text: '保存', cls: 'btn-primary', onclick: "saveRoleUsers(" + roleId + ");this.closest('.note-dialog-overlay').remove()" },
-  ]);
+  ], { maxWidth: 550 });
 }
 
-function filterRoleUsers() {
-  var q = document.getElementById('ru-filter');
-  if (!q) return;
-  var v = q.value.toLowerCase();
-  var labels = document.querySelectorAll('#ru-list label');
-  labels.forEach(function(l) {
-    l.style.display = v ? (l.textContent.toLowerCase().indexOf(v) >= 0 ? '' : 'none') : '';
-  });
+function ruToggleUser(id) {
+  if (_ruSelected[id]) {
+    delete _ruSelected[id];
+  } else {
+    var u = _userList.find(function(x) { return x.id === id; });
+    if (u) _ruSelected[id] = u.username;
+  }
+  // Update only the specific tag for this user
+  var tag = document.querySelector('.ru-user-tag[data-uid="' + id + '"]');
+  if (tag) tag.classList.toggle('selected', _ruSelected.hasOwnProperty(id));
+  document.getElementById('ru-count').textContent = Object.keys(_ruSelected).length;
+}
+
+function ruSelectAll() {
+  _userList.forEach(function(u) { _ruSelected[u.id] = u.username; });
+  document.querySelectorAll('.ru-user-tag').forEach(function(t) { t.classList.add('selected'); });
+  document.getElementById('ru-count').textContent = Object.keys(_ruSelected).length;
+}
+
+function ruClearAll() {
+  _ruSelected = {};
+  document.querySelectorAll('.ru-user-tag').forEach(function(t) { t.classList.remove('selected'); });
+  document.getElementById('ru-count').textContent = '0';
 }
 
 async function saveRoleUsers(roleId) {
-  var userIds = [];
-  document.querySelectorAll('.ru-cb:checked').forEach(function(cb) { userIds.push(parseInt(cb.value)); });
-  // Update each user's role assignment for this role
+  var userIds = Object.keys(_ruSelected).map(function(id) { return parseInt(id); });
   var promises = _userList.map(function(u) {
     var roleIds = (u.role_ids || []).slice();
     var inRole = roleIds.indexOf(roleId) >= 0;
@@ -734,8 +759,9 @@ function renderPermTable() {
       '<td><strong>' + escHtml(r.label) + (isPageDirty() && _permRolesOrig && !arraysEqual(perms, (_permRolesOrig.find(function(x){return x.id===r.id})||{}).permissions||[]) ? ' <span style="font-size:8px;color:var(--warn);vertical-align:super">●</span>' : '') + '</strong><div style="font-size:10.5px;color:var(--muted);font-family:var(--mono)">' + escHtml(r.key) + '</div></td>' +
       '<td style="font-size:11.5px">' + _allPerms.map(function(p) {
         var checked = perms.indexOf(p.key) >= 0;
-        return '<label style="cursor:pointer;display:inline-flex;align-items:center;gap:3px;margin-right:8px;font-size:11px">' +
-          '<input type="checkbox" ' + (checked ? 'checked' : '') + ' onchange="toggleRolePerm(' + r.id + ',\'' + p.key + '\',this.checked)">' +
+        var disabled = r.key === 'admin' ? ' disabled' : '';
+        return '<label style="cursor:' + (disabled ? 'default' : 'pointer') + ';display:inline-flex;align-items:center;gap:3px;margin-right:8px;font-size:11px;opacity:' + (disabled ? '0.6' : '1') + '">' +
+          '<input type="checkbox" ' + (checked ? 'checked' : '') + disabled + ' onchange="toggleRolePerm(' + r.id + ',\'' + p.key + '\',this.checked)">' +
           escHtml(p.label) + '</label>';
       }).join('') + '</td>' +
       '<td style="font-size:11.5px">' +
@@ -749,6 +775,18 @@ function renderPermTable() {
       '<td style="font-size:11px;color:var(--muted)">' + escHtml(r.description || '') + '</td>' +
     '</tr>';
   }).join('');
+  // Show save/discard bar when permissions have been modified
+  var existing = document.getElementById('perm-save-bar');
+  if (existing) existing.remove();
+  if (isPageDirty()) {
+    var bar = document.createElement('div');
+    bar.id = 'perm-save-bar';
+    bar.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:100;display:flex;gap:8px;background:var(--surface);padding:10px 16px;border:1px solid var(--warn);border-radius:10px;box-shadow:var(--sh-md)';
+    bar.innerHTML = '<span style="font-size:12px;color:var(--warn);line-height:2">⚠ 已修改，待保存</span>' +
+      '<button class="btn btn-primary" onclick="savePermChanges()">保存配置</button>' +
+      '<button class="btn" style="color:var(--warn);border-color:var(--warn)" onclick="discardPermChanges()">放弃</button>';
+    document.getElementById('view-permissions').appendChild(bar);
+  }
 }
 
 function openRoleMemberDialog(roleId, roleLabel) {
@@ -813,7 +851,7 @@ async function submitRoleMembers(roleId) {
 
 function toggleRolePerm(roleId, permKey, checked) {
   var role = _permRoles.find(function(r) { return r.id === roleId; });
-  if (!role) return;
+  if (!role || role.key === 'admin') return;  // admin is immutable
   var perms = (role.permissions || []).slice();
   if (checked) { if (perms.indexOf(permKey) < 0) perms.push(permKey); }
   else { perms = perms.filter(function(p) { return p !== permKey; }); }

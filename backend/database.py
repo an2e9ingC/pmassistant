@@ -130,7 +130,7 @@ def init_db():
         # Seed default roles if not exist
         default_roles = [
             ("public", "普通用户", "", "默认角色组，所有登录用户自动拥有（基础访问权限）"),
-            ("admin", "管理员", "admin", "系统完整管理权限"),
+            ("admin", "管理员", "admin,sync,project_edit,product_link,customer_link,doc_template,stage_mapping", "系统完整管理权限（不可修改）"),
             ("ceo", "CEO", "", "查看所有项目数据"),
             ("cto", "CTO", "", "查看所有项目数据"),
             ("pm", "项目经理", "sync,project_edit,product_link,customer_link,doc_template,stage_mapping", "项目管理+同步+产客关系维护+文档模板+阶段映射"),
