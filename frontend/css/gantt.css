@@ -332,6 +332,11 @@
   overflow: hidden; box-sizing: border-box;
   z-index: 1; min-width: 4px;
 }
+/* Fill covers entire bar including border area — no gap at 100% */
+.gantt-bar-fill {
+  position: absolute; top: 0; left: 0; height: 100%;
+  border-radius: 0; min-width: 0;
+}
 .gantt-bar:hover { filter: brightness(0.92); }
 /* Track — lighter background + subtle border = full planned period */
 .gantt-bar.completed { background: var(--success-lt); border: 2px solid var(--success); }
@@ -340,11 +345,7 @@
 .gantt-bar.planning  { background: var(--warn-lt);    border: 2px solid var(--warn); }
 .gantt-bar.pending   { background: #B0B8C4;           border: 2px solid #505A70; }
 .gantt-bar.canceled  { background: #A0A8B4;           border: 2px solid #505A70; opacity: 0.55; }
-/* Fill — solid color = % complete */
-.gantt-bar-fill {
-  height: 100%; border-radius: 5px;
-  min-width: 0;
-}
+/* Fill colors — solid color = % complete */
 .gantt-bar.completed .gantt-bar-fill { background: var(--success); }
 .gantt-bar.active    .gantt-bar-fill { background: var(--accent); }
 .gantt-bar.blocked   .gantt-bar-fill { background: var(--danger); }
