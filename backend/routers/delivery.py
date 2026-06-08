@@ -65,7 +65,7 @@ def update_record(
     record_id: int,
     body: DeliveryRecordUpdate,
     db: Session = Depends(get_db),
-    _=Depends(require_admin),
+    user=Depends(require_admin),
 ):
     data = {k: v for k, v in body.model_dump().items() if v is not None}
     if not data:
@@ -73,6 +73,8 @@ def update_record(
     record = delivery_service.update_delivery_record(db, record_id, data)
     if not record:
         raise HTTPException(status_code=404, detail="Record not found")
+    log_project_activity(db, record.project_id, user.username, "交付记录编辑",
+        f"编辑: {record.product_name} x{record.quantity}")
     return {"code": 0, "data": delivery_service.record_dict(record), "message": "ok"}
 
 
@@ -80,9 +82,15 @@ def update_record(
 def delete_record(
     record_id: int,
     db: Session = Depends(get_db),
-    _=Depends(require_admin),
+    user=Depends(require_admin),
 ):
-    ok = delivery_service.delete_delivery_record(db, record_id)
-    if not ok:
+    from backend.models.delivery import DeliveryRecord
+    r = db.query(DeliveryRecord).filter(DeliveryRecord.id == record_id).first()
+    if not r:
         raise HTTPException(status_code=404, detail="Record not found")
+    detail = f"{r.product_name} x{r.quantity} ({r.delivery_date})"
+    db.delete(r)
+    db.commit()
+    log_project_activity(db, r.project_id, user.username, "交付记录删除",
+        f"删除: {detail}")
     return {"code": 0, "data": {"deleted": True}, "message": "ok"}

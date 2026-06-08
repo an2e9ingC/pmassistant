@@ -17,11 +17,13 @@ router = APIRouter(prefix="/api/logs", tags=["logs"])
 
 def log_audit(db: Session, user: LocalUser, action: str, detail: str = ""):
     """Write an audit log entry."""
+    import logging
+    logger = logging.getLogger(__name__)
     try:
         db.add(AuditLog(username=user.username, action=action, detail=detail or ""))
         db.commit()
-    except Exception:
-        pass  # never fail main operation
+    except Exception as e:
+        logger.error(f"Audit log write failed: {e}")
 
 # Resolve log file path (same directory as database)
 import backend.database as _db_module

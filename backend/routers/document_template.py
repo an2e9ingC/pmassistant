@@ -73,10 +73,14 @@ def delete_template(
     db: Session = Depends(get_db),
     user=Depends(require_perm("doc_template")),
 ):
-    ok = document_service.delete_template(db, template_id)
-    if not ok:
+    from backend.models.document import DocumentTemplate
+    tpl = db.query(DocumentTemplate).filter(DocumentTemplate.id == template_id).first()
+    if not tpl:
         raise HTTPException(status_code=404, detail="Template not found")
-    log_audit(db, user, "doc_template_del", f"id={template_id}")
+    detail = f"{tpl.stage_type}/{tpl.doc_name}"
+    db.delete(tpl)
+    db.commit()
+    log_audit(db, user, "doc_template_del", detail)
     return {"code": 0, "data": None, "message": "ok"}
 
 
