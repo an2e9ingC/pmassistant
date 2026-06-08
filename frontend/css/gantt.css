@@ -357,6 +357,10 @@
   border-bottom: 3px solid var(--danger) !important;
 }
 
+.gantt-bar.gantt-no-tasks {
+  border-style: dashed !important;
+}
+
 /* ── Today line ── */
 .gantt-today-line {
   position: absolute; top: 0; bottom: 0; width: 2px;

@@ -609,7 +609,8 @@ function buildGantt(data) {
 
     // Bar — add red bottom border for overdue stages (all non-missing)
     var ganttOverdue = !isMissing && isStageOverdue(s);
-    var barCls = 'gantt-bar ' + s.status + (ganttOverdue ? ' gantt-overdue' : '');
+    var noTasks = tasksTotal === 0 && !isMissing;
+    var barCls = 'gantt-bar ' + s.status + (ganttOverdue ? ' gantt-overdue' : '') + (noTasks ? ' gantt-no-tasks' : '');
     var barHtml = '';
     if (isMissing) {
       barHtml = '';
