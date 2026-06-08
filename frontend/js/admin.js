@@ -202,7 +202,7 @@ function renderRoleTable() {
       '<td style="font-family:var(--mono);font-size:12px;font-weight:500">' + escHtml(r.key) + '</td>' +
       '<td style="font-size:13px">' + escHtml(r.label) + '</td>' +
       '<td>' + permBadges + '</td>' +
-      '<td style="font-size:12px;color:var(--muted)">' + userCount + ' 人</td>' +
+      '<td style="font-size:12px;color:var(--accent);cursor:pointer;text-decoration:underline" onclick="showRoleUsers(' + r.id + ',\'' + escHtml(r.label) + '\')">' + userCount + ' 人</td>' +
       '<td style="white-space:nowrap">' +
         '<button class="btn" onclick="openRoleCreateDialog(' + r.id + ')" style="font-size:11px;padding:3px 10px;margin-right:4px">编辑</button>' +
         '<button class="btn" onclick="deleteRole(' + r.id + ',\'' + escHtml(r.label) + '\')" style="font-size:11px;padding:3px 10px;color:var(--danger)">删除</button>' +
@@ -244,6 +244,26 @@ async function saveRole(editId) {
   } catch(e) {
     showToast('保存失败: ' + (e.message || '未知错误'), 'error');
   }
+}
+
+function showRoleUsers(roleId, roleLabel) {
+  var users = _userList.filter(function(u) { return (u.role_ids || []).indexOf(roleId) >= 0; });
+  var userListHtml = users.length
+    ? '<ul style="margin:0;padding-left:20px;max-height:300px;overflow-y:auto">' +
+      users.map(function(u) {
+        return '<li style="padding:3px 0;font-size:13px">' + escHtml(u.username) +
+          (u.is_active ? '' : ' <span class="pill" style="font-size:10px;background:var(--danger-lt);color:var(--danger)">已禁用</span>') +
+        '</li>';
+      }).join('') + '</ul>'
+    : '<div class="empty-state" style="padding:10px">该角色组暂无成员</div>';
+
+  var bodyHtml = '<div style="padding:8px 0">' +
+    '<div style="margin-bottom:8px;font-size:12px;color:var(--muted)">角色 <b>' + escHtml(roleLabel) + '</b> 共有 ' + users.length + ' 个成员</div>' +
+    userListHtml +
+  '</div>';
+  openDialog('角色成员列表', bodyHtml, [
+    { text: '关闭', cls: '', onclick: "this.closest('.note-dialog-overlay').remove()" },
+  ]);
 }
 
 async function deleteRole(id, label) {
