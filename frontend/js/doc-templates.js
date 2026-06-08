@@ -98,9 +98,9 @@ function renderTemplatesPage() {
   var saveBtnHtml = '';
   if (canEdit && pendingCount > 0) {
     saveBtnHtml = '<button class="btn btn-primary" style="font-size:11px;padding:4px 14px;margin-left:8px" onclick="saveAllChanges()">保存配置 (' + pendingCount + ')</button>' +
-      '<button class="btn" style="font-size:11px;padding:4px 10px;margin-left:4px" onclick="discardChanges()">放弃</button>';
+      '<button class="btn" style="font-size:11px;padding:4px 10px;margin-left:4px;color:var(--warn);border-color:var(--warn)" onclick="discardChanges()">放弃</button>';
   } else if (canEdit && pendingCount === 0) {
-    saveBtnHtml = '<span style="font-size:11px;color:var(--muted);margin-left:8px">无待保存更改</span>';
+    saveBtnHtml = '<span style="font-size:11px;color:var(--muted);margin-left:8px"><span style="color:var(--muted)">✓ 已保存</span></span>';
   }
   var rightHtml = '<div class="dt-right">' +
     '<div class="dt-right-head">' +

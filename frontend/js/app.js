@@ -12,11 +12,22 @@ var VIEW_PERMS = {
   customers: 'customer_link', 'customer-detail': '登录即可',
 };
 
+var _pageDirty = false;
+function markPageDirty() { _pageDirty = true; }
+function markPageClean() { _pageDirty = false; }
+function isPageDirty() { return _pageDirty; }
+
 function gotoView(view) {
   // Check auth
   if (!isLoggedIn()) {
     window.location.href = '/login';
     return;
+  }
+
+  // Warn if unsaved changes
+  if (_pageDirty) {
+    if (!confirm('当前页面有未保存的修改，是否放弃并切换页面？')) return;
+    _pageDirty = false;
   }
 
   // Update views

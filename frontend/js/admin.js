@@ -493,8 +493,11 @@ async function togglePmaSetting(key, checked) {
 ═══════════════════════════════════════════════════ */
 
 var _permRoles = [];
+var _permRolesOrig = null;
 var _permUsers = [];
 var _allPerms = [];
+
+function arraysEqual(a, b) { if (!a || !b) return a === b; if (a.length !== b.length) return false; for (var i=0;i<a.length;i++){if(a[i]!==b[i])return false;} return true; }
 
 async function toggleDebugPerm() {
   var toggle = document.getElementById('toggle-debug-perm');
@@ -533,6 +536,9 @@ async function initPermissions() {
     _permUsers = data || [];
     var roles = await API.get('/admin/users/roles');
     _permRoles = roles || [];
+    // Snapshot original permissions for change detection
+    _permRolesOrig = JSON.parse(JSON.stringify(_permRoles));
+    markPageClean();
     renderPermTable();
   } catch(e) {
     document.getElementById('perm-tbody').innerHTML = '<tr><td colspan="5"><div class="error-state">加载失败: ' + escHtml(e.message) + '</div></td></tr>';
@@ -549,7 +555,7 @@ function renderPermTable() {
     var perms = r.permissions || [];
     var usersInRole = _permUsers.filter(function(u) { return (u.role_ids || []).indexOf(r.id) >= 0; });
     return '<tr>' +
-      '<td><strong>' + escHtml(r.label) + '</strong><div style="font-size:10.5px;color:var(--muted);font-family:var(--mono)">' + escHtml(r.key) + '</div></td>' +
+      '<td><strong>' + escHtml(r.label) + (isPageDirty() && _permRolesOrig && !arraysEqual(perms, (_permRolesOrig.find(function(x){return x.id===r.id})||{}).permissions||[]) ? ' <span style="font-size:8px;color:var(--warn);vertical-align:super">●</span>' : '') + '</strong><div style="font-size:10.5px;color:var(--muted);font-family:var(--mono)">' + escHtml(r.key) + '</div></td>' +
       '<td style="font-size:11.5px">' + _allPerms.map(function(p) {
         var checked = perms.indexOf(p.key) >= 0;
         return '<label style="cursor:pointer;display:inline-flex;align-items:center;gap:3px;margin-right:8px;font-size:11px">' +
@@ -629,13 +635,40 @@ async function submitRoleMembers(roleId) {
   }
 }
 
-async function toggleRolePerm(roleId, permKey, checked) {
+function toggleRolePerm(roleId, permKey, checked) {
   var role = _permRoles.find(function(r) { return r.id === roleId; });
   if (!role) return;
-  var perms = role.permissions || [];
+  var perms = (role.permissions || []).slice();
   if (checked) { if (perms.indexOf(permKey) < 0) perms.push(permKey); }
   else { perms = perms.filter(function(p) { return p !== permKey; }); }
-  await API.put('/admin/users/roles/' + roleId, { permissions: perms });
   role.permissions = perms;
+  markPageDirty();
   renderPermTable();
+}
+
+async function savePermChanges() {
+  var success = 0, fail = 0;
+  for (var i = 0; i < _permRoles.length; i++) {
+    var r = _permRoles[i];
+    try {
+      await API.put('/admin/users/roles/' + r.id, { permissions: r.permissions });
+      success++;
+    } catch(e) { fail++; }
+  }
+  showToast('保存完成: ' + success + ' 成功' + (fail > 0 ? ', ' + fail + ' 失败' : ''), fail ? 'error' : 'success');
+  markPageClean();
+  renderPermTable();
+}
+
+function discardPermChanges() {
+  if (!confirm('放弃所有未保存的权限修改？')) return;
+  API.get('/admin/users').then(function(users) { _permUsers = users || []; });
+  API.get('/admin/users/roles').then(function(roles) {
+    _permRoles = roles || [];
+    // Snapshot original permissions for change detection
+    _permRolesOrig = JSON.parse(JSON.stringify(_permRoles));
+    markPageClean();
+    markPageClean();
+    renderPermTable();
+  });
 }

@@ -8,7 +8,7 @@ async function initStandards() {
   var container = document.getElementById('view-standards');
   container.innerHTML = '<div class="loading-spinner">加载流程规范...</div>';
   try {
-    _standardsGrouped = await API.get('/standards') || {};
+    markPageClean(); _standardsGrouped = await API.get('/standards') || {};
     renderStandards();
   } catch(e) {
     container.innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '<br><button class="btn" onclick="initStandards()">重试</button></div>';
@@ -48,6 +48,20 @@ function renderStandards() {
     html += '</tbody></table></div>';
   });
 
+    if (isPageDirty()) {
+    html += '<div style="position:fixed;bottom:20px;right:20px;z-index:100;display:flex;gap:8px;background:var(--surface);padding:10px 16px;border:1px solid var(--warn);border-radius:10px;box-shadow:var(--sh-md)">' +
+      '<span style="font-size:12px;color:var(--warn);line-height:2">⚠ 已修改，待保存</span>' +
+      '<button class="btn btn-primary" onclick="saveStandardsChanges()">保存配置</button>' +
+      '<button class="btn" style="color:var(--warn);border-color:var(--warn)" onclick="discardStandardsChanges()">放弃</button>' +
+    '</div>';
+  }
+  // Show change indicator dot for modified items
+  if (isPageDirty()) {
+    html = html.replace(/<td><code style="font-size:12px;color:var\(--accent\);word-break:break-all">([^<]+)<\/code><\/td>/g, function(match, val) {
+      // Check if this item was modified by comparing with original
+      return match.replace('</code></td>', ' <span style="font-size:8px;color:var(--warn);vertical-align:super">●</span></code></td>');
+    });
+  }
   document.getElementById('view-standards').innerHTML = html;
 }
 
@@ -87,9 +101,39 @@ async function saveStdEdit(id) {
   try {
     await API.put('/standards/' + id, { value: value, description: desc });
     showToast('已保存', 'success');
-    _standardsGrouped = await API.get('/standards');
+    markPageClean(); _standardsGrouped = await API.get('/standards');
     renderStandards();
   } catch(e) {
     showToast('保存失败: ' + (e.message || '未知错误'), 'error');
   }
+}
+
+/* ── Batch Save / Discard ── */
+
+async function saveStandardsChanges() {
+  var all = [];
+  Object.keys(_standardsGrouped).forEach(function(cat) {
+    (_standardsGrouped[cat] || []).forEach(function(s) { all.push(s); });
+  });
+  var success = 0, fail = 0;
+  for (var i = 0; i < all.length; i++) {
+    var s = all[i];
+    try {
+      await API.put('/standards/' + s.id, { value: s.value, description: s.description });
+      success++;
+    } catch(e) { fail++; }
+  }
+  showToast('保存完成: ' + success + ' 成功' + (fail > 0 ? ', ' + fail + ' 失败' : ''), fail ? 'error' : 'success');
+  _standardsGrouped = await API.get('/standards');
+  markPageClean();
+  renderStandards();
+}
+
+function discardStandardsChanges() {
+  if (!confirm('放弃所有未保存的修改？')) return;
+  API.get('/standards').then(function(d) {
+    _standardsGrouped = d;
+    markPageClean();
+    renderStandards();
+  });
 }
