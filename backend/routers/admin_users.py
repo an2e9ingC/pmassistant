@@ -108,6 +108,36 @@ def update_role(role_id: int, payload: dict, db: Session = Depends(get_db), _=De
     return {"code": 0, "message": "角色已更新"}
 
 
+class RoleCreate(BaseModel):
+    key: str
+    label: str
+    permissions: str = ""
+    description: str = ""
+
+
+@router.post("/roles", response_model=dict)
+def create_role(payload: RoleCreate, db: Session = Depends(get_db), _=Depends(require_admin)):
+    if db.query(Role).filter(Role.key == payload.key).first():
+        raise HTTPException(status_code=400, detail="角色key已存在")
+    role = Role(key=payload.key, label=payload.label, permissions=payload.permissions, description=payload.description)
+    db.add(role)
+    db.commit()
+    db.refresh(role)
+    return {"code": 0, "data": {"id": role.id, "key": role.key, "label": role.label}, "message": "角色已创建"}
+
+
+@router.delete("/roles/{role_id}", response_model=dict)
+def delete_role(role_id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
+    role = db.query(Role).filter(Role.id == role_id).first()
+    if not role:
+        raise HTTPException(status_code=404, detail="角色不存在")
+    # Remove all user-role assignments for this role
+    db.query(UserRole).filter(UserRole.role_id == role_id).delete()
+    db.delete(role)
+    db.commit()
+    return {"code": 0, "message": "角色已删除"}
+
+
 # ── User-Role Assignment ──
 
 @router.get("/{user_id}/roles", response_model=dict)

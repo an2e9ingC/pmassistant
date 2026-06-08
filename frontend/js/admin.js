@@ -171,24 +171,96 @@ var _userList = [];
 
 async function initUserManagement() {
   _userList = [];
-  document.getElementById('users-tbody').innerHTML = '<tr><td colspan="6"><div class="loading-spinner">加载中...</div></td></tr>';
+  document.getElementById('users-tbody').innerHTML = '<tr><td colspan="5"><div class="loading-spinner">加载中...</div></td></tr>';
+  document.getElementById('roles-tbody').innerHTML = '<tr><td colspan="5"><div class="loading-spinner">加载中...</div></td></tr>';
   try {
-    // Also load roles for badge display
-    if (!_permRoles.length) {
-      try { _permRoles = await API.get('/admin/users/roles'); } catch(e) {}
-    }
-    var data = await API.get('/admin/users');
-    _userList = data || [];
+    // Load roles + users in parallel
+    var rolesPromise = API.get('/admin/users/roles');
+    var usersPromise = API.get('/admin/users');
+    _permRoles = await rolesPromise || [];
+    _userList = await usersPromise || [];
     renderUserTable();
+    renderRoleTable();
   } catch(e) {
-    document.getElementById('users-tbody').innerHTML = '<tr><td colspan="6"><div class="error-state">加载失败: ' + escHtml(e.message) + '</div></td></tr>';
+    document.getElementById('users-tbody').innerHTML = '<tr><td colspan="5"><div class="error-state">加载失败: ' + escHtml(e.message) + '</div></td></tr>';
+  }
+}
+
+function renderRoleTable() {
+  var tbody = document.getElementById('roles-tbody');
+  if (!_permRoles.length) {
+    tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state" style="padding:16px">暂无角色</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = _permRoles.map(function(r) {
+    var perms = r.permissions || [];
+    var permBadges = perms.map(function(p) {
+      return '<span style="display:inline-block;margin:1px 2px;padding:1px 6px;border-radius:3px;font-size:10px;background:var(--accent-lt);color:var(--accent)">' + escHtml(p) + '</span>';
+    }).join('') || '<span style="font-size:11px;color:var(--muted)">无</span>';
+    var userCount = _userList.filter(function(u) { return (u.role_ids || []).indexOf(r.id) >= 0; }).length;
+    return '<tr>' +
+      '<td style="font-family:var(--mono);font-size:12px;font-weight:500">' + escHtml(r.key) + '</td>' +
+      '<td style="font-size:13px">' + escHtml(r.label) + '</td>' +
+      '<td>' + permBadges + '</td>' +
+      '<td style="font-size:12px;color:var(--muted)">' + userCount + ' 人</td>' +
+      '<td style="white-space:nowrap">' +
+        '<button class="btn" onclick="openRoleCreateDialog(' + r.id + ')" style="font-size:11px;padding:3px 10px;margin-right:4px">编辑</button>' +
+        '<button class="btn" onclick="deleteRole(' + r.id + ',\'' + escHtml(r.label) + '\')" style="font-size:11px;padding:3px 10px;color:var(--danger)">删除</button>' +
+      '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+function openRoleCreateDialog(editId) {
+  var r = editId ? _permRoles.find(function(x) { return x.id === editId; }) : null;
+  var title = r ? '编辑角色: ' + r.label : '添加角色';
+  var bodyHtml = '<div style="padding:8px 0">' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">角色Key</label>' +
+      '<input class="search-inp" id="role-key" value="' + escHtml(r ? r.key : '') + '" ' + (r ? 'readonly' : '') + ' style="margin-top:4px;font-family:var(--mono)"></div>' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">显示名</label>' +
+      '<input class="search-inp" id="role-label" value="' + escHtml(r ? r.label : '') + '" style="margin-top:4px"></div>' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">说明</label>' +
+      '<input class="search-inp" id="role-desc" value="' + escHtml(r ? (r.description || '') : '') + '" style="margin-top:4px"></div>' +
+  '</div>';
+  openDialog(title, bodyHtml, [
+    { text: '取消', cls: '', onclick: "this.closest('.note-dialog-overlay').remove()" },
+    { text: '保存', cls: 'btn-primary', onclick: "saveRole(" + (editId || 0) + ");this.closest('.note-dialog-overlay').remove()" },
+  ]);
+}
+
+async function saveRole(editId) {
+  var key = document.getElementById('role-key').value.trim();
+  var label = document.getElementById('role-label').value.trim();
+  var desc = document.getElementById('role-desc').value.trim();
+  if (!key || !label) { showToast('Key和显示名不能为空', 'error'); return; }
+  try {
+    if (editId) {
+      await API.put('/admin/users/roles/' + editId, { label: label, description: desc });
+    } else {
+      await API.post('/admin/users/roles', { key: key, label: label, description: desc });
+    }
+    showToast(editId ? '角色已更新' : '角色已创建', 'success');
+    initUserManagement();
+  } catch(e) {
+    showToast('保存失败: ' + (e.message || '未知错误'), 'error');
+  }
+}
+
+async function deleteRole(id, label) {
+  if (!confirm('确定删除角色 "' + label + '"？关联的用户将被移除该角色。')) return;
+  try {
+    await API.del('/admin/users/roles/' + id);
+    showToast('角色已删除', 'success');
+    initUserManagement();
+  } catch(e) {
+    showToast('删除失败: ' + (e.message || '未知错误'), 'error');
   }
 }
 
 function renderUserTable() {
   var tbody = document.getElementById('users-tbody');
   if (!_userList.length) {
-    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state" style="padding:16px">暂无用户</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state" style="padding:16px">暂无用户</div></td></tr>';
     return;
   }
   tbody.innerHTML = _userList.map(function(u) {
@@ -203,7 +275,7 @@ function renderUserTable() {
       return r ? '<span style="display:inline-block;margin:1px 2px;padding:1px 6px;border-radius:3px;font-size:10.5px;background:var(--accent-lt);color:var(--accent)">' + escHtml(r.label) + '</span>' : '';
     }).join('');
     return '<tr>' +
-      '<td style="font-family:var(--mono);font-size:13px">' + escHtml(u.username) + '</td>' +
+      '<td style="font-size:13px;font-weight:500">' + escHtml(u.username) + '</td>' +
       '<td>' + (roleBadges || '<span style="font-size:11px;color:var(--muted)">未分配</span>') + '</td>' +
       '<td>' + statusHtml + '</td>' +
       '<td style="font-size:12px;color:var(--muted)">' + escHtml(u.created_at || '') + '</td>' +
