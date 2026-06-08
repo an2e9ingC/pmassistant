@@ -338,8 +338,8 @@
 .gantt-bar.active    { background: var(--accent-lt);  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); }
 .gantt-bar.blocked   { background: var(--danger-lt);  border: 1px solid color-mix(in srgb, var(--danger) 25%, transparent); }
 .gantt-bar.planning  { background: var(--warn-lt);    border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent); }
-.gantt-bar.pending   { background: #D6DAE4;           border: 1px solid color-mix(in srgb, #8B93A8 40%, transparent); }
-.gantt-bar.canceled  { background: #C7CBD3;           border: 1px solid color-mix(in srgb, #7B8291 40%, transparent); opacity: 0.55; }
+.gantt-bar.pending   { background: #C5CAD6;           border: 1px solid color-mix(in srgb, #6B7388 40%, transparent); }
+.gantt-bar.canceled  { background: #B5B9C2;           border: 1px solid color-mix(in srgb, #6B7388 40%, transparent); opacity: 0.55; }
 /* Fill — solid color = % complete */
 .gantt-bar-fill {
   height: 100%; border-radius: 5px;
@@ -349,8 +349,8 @@
 .gantt-bar.active    .gantt-bar-fill { background: var(--accent); }
 .gantt-bar.blocked   .gantt-bar-fill { background: var(--danger); }
 .gantt-bar.planning  .gantt-bar-fill { background: var(--warn); }
-.gantt-bar.pending   .gantt-bar-fill { background: #8B93A8; }
-.gantt-bar.canceled  .gantt-bar-fill { background: #7B8291; }
+.gantt-bar.pending   .gantt-bar-fill { background: #6B7388; }
+.gantt-bar.canceled  .gantt-bar-fill { background: #6B7388; }
 
 /* Overdue indicator — red bottom border on both layers */
 .gantt-bar.gantt-overdue {
@@ -359,6 +359,8 @@
 
 .gantt-bar.gantt-no-tasks {
   border-style: dashed !important;
+  border-width: 2px !important;
+  opacity: 0.85;
 }
 
 /* ── Today line ── */
