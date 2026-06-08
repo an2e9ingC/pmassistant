@@ -334,12 +334,12 @@
 }
 .gantt-bar:hover { filter: brightness(0.92); }
 /* Track — lighter background + subtle border = full planned period */
-.gantt-bar.completed { background: var(--success-lt); border: 1px solid color-mix(in srgb, var(--success) 40%, transparent); }
-.gantt-bar.active    { background: var(--accent-lt);  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
-.gantt-bar.blocked   { background: var(--danger-lt);  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent); }
-.gantt-bar.planning  { background: var(--warn-lt);    border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); }
-.gantt-bar.pending   { background: #BAC0CC;           border: 1px solid color-mix(in srgb, #505A70 50%, transparent); }
-.gantt-bar.canceled  { background: #A8ADB8;           border: 1px solid color-mix(in srgb, #505A70 50%, transparent); opacity: 0.55; }
+.gantt-bar.completed { background: var(--success-lt); border: 2px solid var(--success); }
+.gantt-bar.active    { background: var(--accent-lt);  border: 2px solid var(--accent); }
+.gantt-bar.blocked   { background: var(--danger-lt);  border: 2px solid var(--danger); }
+.gantt-bar.planning  { background: var(--warn-lt);    border: 2px solid var(--warn); }
+.gantt-bar.pending   { background: #B0B8C4;           border: 2px solid #505A70; }
+.gantt-bar.canceled  { background: #A0A8B4;           border: 2px solid #505A70; opacity: 0.55; }
 /* Fill — solid color = % complete */
 .gantt-bar-fill {
   height: 100%; border-radius: 5px;
