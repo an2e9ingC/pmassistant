@@ -362,6 +362,11 @@
   position: absolute; top: 0; bottom: 0; width: 2px;
   background: var(--accent); opacity: 0.8; z-index: 5;
   pointer-events: none;
+  animation: today-pulse 2s ease-in-out infinite;
+}
+@keyframes today-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; box-shadow: 0 0 6px var(--accent); }
 }
 
 /* ── Legend ── */

@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -109,3 +109,25 @@ def delete_stage_type(
     count = document_service.delete_stage_type(db, stage_type)
     log_audit(db, user, "doc_stage_del", f"{stage_type} ({count} docs)", "管理", "high")
     return {"code": 0, "data": {"deleted": count}, "message": "ok"}
+
+
+class ResetProjectDocsRequest(BaseModel):
+    stage_types: List[str] = []
+
+
+@router.post("/reset-project-docs", response_model=dict)
+def reset_project_documents(
+    body: ResetProjectDocsRequest,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("doc_template")),
+):
+    """Clear project_documents for given stage types so they re-init from updated templates."""
+    from backend.models.document import ProjectDocument
+    stage_types = body.stage_types
+    if stage_types:
+        count = db.query(ProjectDocument).filter(ProjectDocument.stage_type.in_(stage_types)).delete()
+    else:
+        count = 0
+    db.commit()
+    log_audit(db, user, "doc_reset", f"Cleared {count} project documents for {stage_types}", "管理", "medium")
+    return {"code": 0, "data": {"deleted": count}, "message": f"已清除 {count} 条，涉及阶段: {', '.join(stage_types)}"}

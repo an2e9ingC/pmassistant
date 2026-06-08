@@ -403,6 +403,15 @@ async function saveAllChanges() {
   }
 
   _pendingOps = [];
+  // Collect affected stage types and reset their project documents
+  var affectedTypes = [];
+  ops.forEach(function(op) {
+    var st = op.stage_type || (op.old_name || op.stage_type);
+    if (st && affectedTypes.indexOf(st) < 0) affectedTypes.push(st);
+  });
+  if (affectedTypes.length) {
+    try { await API.post('/doc-templates/reset-project-docs', { stage_types: affectedTypes }); } catch(e) {}
+  }
   // Full refresh from server
   try {
     var fresh = await API.get('/doc-templates');

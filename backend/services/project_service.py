@@ -44,6 +44,9 @@ def get_project_stages(db: Session, project_id: int) -> dict:
     with a warning marker.
     """
     project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
+    # Sync project documents with latest templates (add/remove/update)
+    from backend.services.document_service import _sync_from_templates
+    _sync_from_templates(db, project_id, project.project_type or "RD")
     standard_stages = get_stage_types_for_project(project.project_type or "RD")
 
     executions = (

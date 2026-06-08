@@ -233,14 +233,15 @@ def get_or_init_project_documents(db: Session, project_id: int, project_type: st
     so fixing a stage_name for a previously unmatched execution will
     immediately generate documents for it.
     """
-    _init_from_templates(db, project_id, project_type)
+    _sync_from_templates(db, project_id, project_type)
     return _query_project_documents(db, project_id)
 
 
-def _init_from_templates(db: Session, project_id: int, project_type: str = "RD") -> None:
-    """Create ProjectDocument rows from templates for matched executions.
+def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD") -> None:
+    """Sync project documents with current templates: add new, remove obsolete.
 
-    Incremental: skips executions that already have documents.
+    Called on every document query so template changes propagate immediately.
+    Preserves user-set status for documents that still exist in the template.
     """
     standard_stages = get_stage_types_for_project(project_type)
 
@@ -251,45 +252,61 @@ def _init_from_templates(db: Session, project_id: int, project_type: str = "RD")
         .all()
     )
 
-    new_count = 0
+    changed = False
     for e in executions:
-        # Priority: PMA-local stage_name > Zentao name
         stage_name = (e.name or "").strip()
         if not stage_name:
             continue
         result = _match_stage_type(stage_name, standard_stages)
         if not result:
             continue
-        matched_type = result[0]  # stage type name
+        matched_type = result[0]
 
-        # Skip if this execution already has documents
-        already = db.query(ProjectDocument).filter(
-            ProjectDocument.execution_id == e.id
-        ).count()
-        if already > 0:
-            continue
-
-        # Copy templates for this stage type
         templates = (
             db.query(DocumentTemplate)
             .filter(DocumentTemplate.stage_type == matched_type)
             .order_by(DocumentTemplate.sort_order)
             .all()
         )
-        for tpl in templates:
-            pd = ProjectDocument(
-                project_id=project_id,
-                execution_id=e.id,
-                stage_type=matched_type,
-                doc_name=tpl.doc_name,
-                sort_order=tpl.sort_order,
-                status="pending",
-                responsible_role=tpl.responsible_role,
-                description=tpl.description,
-            )
-            db.add(pd)
-            new_count += 1
-    if new_count > 0:
+        template_names = {t.doc_name: t for t in templates}
+
+        existing_docs = (
+            db.query(ProjectDocument)
+            .filter(ProjectDocument.execution_id == e.id)
+            .all()
+        )
+        existing_names = {pd.doc_name: pd for pd in existing_docs}
+
+        # Add new docs (in template but not in project)
+        for doc_name, tpl in template_names.items():
+            if doc_name not in existing_names:
+                pd = ProjectDocument(
+                    project_id=project_id, execution_id=e.id,
+                    stage_type=matched_type, doc_name=tpl.doc_name,
+                    sort_order=tpl.sort_order, status="pending",
+                    responsible_role=tpl.responsible_role, description=tpl.description,
+                )
+                db.add(pd)
+                changed = True
+
+        # Remove obsolete docs (in project but not in template)
+        for doc_name, pd in existing_names.items():
+            if doc_name not in template_names:
+                db.delete(pd)
+                changed = True
+
+        # Update metadata for existing docs (preserve user-set status)
+        for doc_name, pd in existing_names.items():
+            tpl = template_names.get(doc_name)
+            if tpl and (pd.sort_order != tpl.sort_order or
+                        pd.responsible_role != tpl.responsible_role or
+                        pd.description != tpl.description):
+                pd.sort_order = tpl.sort_order
+                pd.responsible_role = tpl.responsible_role
+                pd.description = tpl.description
+                changed = True
+
+    if changed:
         db.commit()
 
 
