@@ -178,13 +178,16 @@
 
 .proj-table { width: 100%; border-collapse: collapse; }
 .proj-table th {
-  text-align: left; padding: 9px 12px;
+  text-align: center; white-space: nowrap; padding: 9px 12px;
   font-size: 12.5px; font-weight: 620; color: var(--fg);
   text-transform: uppercase; letter-spacing: 0.05em;
   background: var(--surface2);
   border-bottom: 1px solid var(--border);
 }
-.proj-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.proj-table th { border-right: 1px solid var(--border); }
+.proj-table th:last-child { border-right: none; }
+.proj-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.proj-table td:last-child { border-right: none; }
 .proj-table td:has(.proj-name) { white-space: normal; overflow: visible; }
 .proj-table tr:last-child td { border-bottom: none; }
 .proj-table tbody tr { cursor: pointer; transition: background 0.1s; }

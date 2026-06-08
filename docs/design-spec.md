@@ -444,3 +444,21 @@ utils.js → api.js → auth.js → components.js → dashboard.js → detail.js
 2. `docs/design-spec.md` — 设计规范是否需要新增/更新章节
 3. `docs/deploy-guide.md` — 部署运维是否需要更新
 4. 实体颜色一致性（§19）：新实体类型必须分配统一主题色并在全局保持一致
+
+## 20. 表格设计规范
+
+**所有表格（`.stage-table` 和 `.proj-table`）必须遵守以下规范：**
+
+- **表头（th）**：居中对齐 + 单行显示（`text-align: center; white-space: nowrap`）
+- **单元格（td）**：左对齐 + 垂直居中（`text-align: left; vertical-align: middle`）
+- 表头禁止换行，内容过多时通过 `overflow: hidden; text-overflow: ellipsis` 截断
+- 特殊列（如序号列）可单独覆盖 `text-align: center`，进度条/图标列保持居中
+
+**修改记录：**
+- 2026-06-08：统一 `.stage-table td` 从 `vertical-align: top` 改为 `middle`
+- 2026-06-08：统一 `.stage-table th` 和 `.proj-table th` 从 `text-align: left` 改为 `center`
+- 2026-06-08：表头新增 `white-space: nowrap` 单行显示
+
+**补充规则（2026-06-08）：**
+- 列与列之间增加细微竖线分隔：`th` 和 `td` 添加 `border-right: 1px solid var(--border)`
+- 最后一列不显示右边框：`:last-child { border-right: none }`
