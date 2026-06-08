@@ -144,7 +144,7 @@ async function clearDatabase() {
   }
 }
 
-var _roleLabels = {admin:'管理员',ceo:'CEO',cto:'CTO',pm:'项目经理',sales:'销售及售前',hw_dev:'硬件开发',structure:'结构设计及装配',hw_test:'硬件测试',bsp_dev:'BSP开发',sw_dev:'业务软件开发',test_delivery:'测试交付',procurement:'采购',quality:'质检',warehouse:'库房管理',viewer:'只读用户'};
+var _roleLabels = {public:'普通用户',admin:'管理员',ceo:'CEO',cto:'CTO',pm:'项目经理',sales:'销售及售前',hw_dev:'硬件开发',structure:'结构设计及装配',hw_test:'硬件测试',bsp_dev:'BSP开发',sw_dev:'业务软件开发',test_delivery:'测试交付',procurement:'采购',quality:'质检',warehouse:'库房管理',viewer:'只读用户'};
 
 function _roleOptions(selected) {
   return Object.keys(_roleLabels).map(function(k) {
@@ -169,40 +169,81 @@ function _roleCheckboxes(roleIds) {
 
 var _userList = [];
 
+var _userTab = 'users';
+
+function switchUserTab(tab) {
+  _userTab = tab;
+  document.getElementById('utab-users').classList.toggle('active', tab === 'users');
+  document.getElementById('utab-roles').classList.toggle('active', tab === 'roles');
+  document.getElementById('usec-users').style.display = tab === 'users' ? '' : 'none';
+  document.getElementById('usec-roles').style.display = tab === 'roles' ? '' : 'none';
+}
+
 async function initUserManagement() {
   _userList = [];
-  document.getElementById('users-tbody').innerHTML = '<tr><td colspan="5"><div class="loading-spinner">加载中...</div></td></tr>';
-  document.getElementById('roles-tbody').innerHTML = '<tr><td colspan="5"><div class="loading-spinner">加载中...</div></td></tr>';
+  document.getElementById('users-tbody').innerHTML = '<tr><td colspan="6"><div class="loading-spinner">加载中...</div></td></tr>';
+  document.getElementById('roles-tbody').innerHTML = '<tr><td colspan="6"><div class="loading-spinner">加载中...</div></td></tr>';
   try {
-    // Load roles + users in parallel
     var rolesPromise = API.get('/admin/users/roles');
     var usersPromise = API.get('/admin/users');
     _permRoles = await rolesPromise || [];
     _userList = await usersPromise || [];
+    switchUserTab(_userTab);
     renderUserTable();
     renderRoleTable();
+    renderUserKPIs();
+    renderRoleKPIs();
   } catch(e) {
-    document.getElementById('users-tbody').innerHTML = '<tr><td colspan="5"><div class="error-state">加载失败: ' + escHtml(e.message) + '</div></td></tr>';
+    document.getElementById('users-tbody').innerHTML = '<tr><td colspan="6"><div class="error-state">加载失败: ' + escHtml(e.message) + '</div></td></tr>';
   }
+}
+
+function renderUserKPIs() {
+  var total = _userList.length;
+  var active = _userList.filter(function(u) { return u.is_active; }).length;
+  var disabled = total - active;
+  var html = '<div class="kpi-card"><div class="kpi-label">总用户</div><div class="kpi-value">' + total + '</div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">活跃用户</div><div class="kpi-value" style="color:var(--success)">' + active + '</div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">已禁用</div><div class="kpi-value" style="color:var(--muted)">' + disabled + '</div></div>';
+  var grid = document.getElementById('user-kpi-grid');
+  if (grid) grid.innerHTML = html;
+}
+
+function renderRoleKPIs() {
+  var total = _permRoles.length;
+  var withPerms = _permRoles.filter(function(r) { return (r.permissions || []).length > 0; }).length;
+  var html = '<div class="kpi-card"><div class="kpi-label">角色组总数</div><div class="kpi-value">' + total + '</div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">有权限角色</div><div class="kpi-value" style="color:var(--accent)">' + withPerms + '</div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">基础角色(public)</div><div class="kpi-value" style="color:var(--muted)">' + (total - withPerms) + '</div></div>';
+  var grid = document.getElementById('role-kpi-grid');
+  if (grid) grid.innerHTML = html;
 }
 
 function renderRoleTable() {
   var tbody = document.getElementById('roles-tbody');
   if (!_permRoles.length) {
-    tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state" style="padding:16px">暂无角色</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state" style="padding:16px">暂无角色</div></td></tr>';
     return;
   }
-  tbody.innerHTML = _permRoles.map(function(r) {
+  // Sort: public first, then alphabetically by key
+  var sorted = _permRoles.slice().sort(function(a, b) {
+    if (a.key === 'public') return -1;
+    if (b.key === 'public') return 1;
+    return (a.key < b.key) ? -1 : 1;
+  });
+  tbody.innerHTML = sorted.map(function(r, idx) {
     var perms = r.permissions || [];
     var permBadges = perms.map(function(p) {
       return '<span style="display:inline-block;margin:1px 2px;padding:1px 6px;border-radius:3px;font-size:10px;background:var(--accent-lt);color:var(--accent)">' + escHtml(p) + '</span>';
     }).join('') || '<span style="font-size:11px;color:var(--muted)">无</span>';
     var userCount = _userList.filter(function(u) { return (u.role_ids || []).indexOf(r.id) >= 0; }).length;
     return '<tr>' +
+      '<td style="font-family:var(--mono);color:var(--muted);text-align:center">' + (idx + 1) + '</td>' +
       '<td style="font-family:var(--mono);font-size:12px;font-weight:500">' + escHtml(r.key) + '</td>' +
       '<td style="font-size:13px">' + escHtml(r.label) + '</td>' +
       '<td>' + permBadges + '</td>' +
-      '<td style="font-size:12px;color:var(--accent);cursor:pointer;text-decoration:underline" onclick="showRoleUsers(' + r.id + ',\'' + escHtml(r.label) + '\')">' + userCount + ' 人</td>' +
+      '<td><button class="btn" style="font-size:11px;padding:3px 10px"' +
+        ' onclick="showRoleUsers(' + r.id + ',\'' + escHtml(r.label) + '\')">' + userCount + ' 人</button></td>' +
       '<td style="white-space:nowrap">' +
         '<button class="btn" onclick="openRoleCreateDialog(' + r.id + ')" style="font-size:11px;padding:3px 10px;margin-right:4px">编辑</button>' +
         '<button class="btn" onclick="deleteRole(' + r.id + ',\'' + escHtml(r.label) + '\')" style="font-size:11px;padding:3px 10px;color:var(--danger)">删除</button>' +
@@ -247,23 +288,57 @@ async function saveRole(editId) {
 }
 
 function showRoleUsers(roleId, roleLabel) {
-  var users = _userList.filter(function(u) { return (u.role_ids || []).indexOf(roleId) >= 0; });
-  var userListHtml = users.length
-    ? '<ul style="margin:0;padding-left:20px;max-height:300px;overflow-y:auto">' +
-      users.map(function(u) {
-        return '<li style="padding:3px 0;font-size:13px">' + escHtml(u.username) +
-          (u.is_active ? '' : ' <span class="pill" style="font-size:10px;background:var(--danger-lt);color:var(--danger)">已禁用</span>') +
-        '</li>';
-      }).join('') + '</ul>'
-    : '<div class="empty-state" style="padding:10px">该角色组暂无成员</div>';
+  var checkboxes = _userList.map(function(u) {
+    var inRole = (u.role_ids || []).indexOf(roleId) >= 0;
+    return '<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;cursor:pointer">' +
+      '<input type="checkbox" value="' + u.id + '" ' + (inRole ? 'checked' : '') + ' class="ru-cb">' +
+      escHtml(u.username) +
+      (u.is_active ? '' : ' <span class="pill" style="font-size:10px;background:var(--danger-lt);color:var(--danger)">已禁用</span>') +
+    '</label>';
+  }).join('');
 
   var bodyHtml = '<div style="padding:8px 0">' +
-    '<div style="margin-bottom:8px;font-size:12px;color:var(--muted)">角色 <b>' + escHtml(roleLabel) + '</b> 共有 ' + users.length + ' 个成员</div>' +
-    userListHtml +
+    '<div style="margin-bottom:8px;font-size:12px;color:var(--muted)">角色 <b>' + escHtml(roleLabel) + '</b> — 勾选用户以分配此角色</div>' +
+    '<input class="search-inp" id="ru-filter" placeholder="搜索用户..." oninput="filterRoleUsers()" style="margin-bottom:8px;padding:7px 10px">' +
+    '<div style="max-height:300px;overflow-y:auto" id="ru-list">' + checkboxes + '</div>' +
   '</div>';
-  openDialog('角色成员列表', bodyHtml, [
-    { text: '关闭', cls: '', onclick: "this.closest('.note-dialog-overlay').remove()" },
+  openDialog('管理角色成员', bodyHtml, [
+    { text: '取消', cls: '', onclick: "this.closest('.note-dialog-overlay').remove()" },
+    { text: '保存', cls: 'btn-primary', onclick: "saveRoleUsers(" + roleId + ");this.closest('.note-dialog-overlay').remove()" },
   ]);
+}
+
+function filterRoleUsers() {
+  var q = document.getElementById('ru-filter');
+  if (!q) return;
+  var v = q.value.toLowerCase();
+  var labels = document.querySelectorAll('#ru-list label');
+  labels.forEach(function(l) {
+    l.style.display = v ? (l.textContent.toLowerCase().indexOf(v) >= 0 ? '' : 'none') : '';
+  });
+}
+
+async function saveRoleUsers(roleId) {
+  var userIds = [];
+  document.querySelectorAll('.ru-cb:checked').forEach(function(cb) { userIds.push(parseInt(cb.value)); });
+  // Update each user's role assignment for this role
+  var promises = _userList.map(function(u) {
+    var roleIds = (u.role_ids || []).slice();
+    var inRole = roleIds.indexOf(roleId) >= 0;
+    var shouldBe = userIds.indexOf(u.id) >= 0;
+    if (inRole === shouldBe) return null;
+    if (shouldBe) roleIds.push(roleId);
+    else roleIds = roleIds.filter(function(r) { return r !== roleId; });
+    return API.put('/admin/users/' + u.id + '/roles', { role_ids: roleIds });
+  }).filter(Boolean);
+
+  try {
+    await Promise.all(promises);
+    showToast('成员已更新', 'success');
+    initUserManagement();
+  } catch(e) {
+    showToast('保存失败: ' + (e.message || '未知错误'), 'error');
+  }
 }
 
 async function deleteRole(id, label) {
@@ -280,21 +355,30 @@ async function deleteRole(id, label) {
 function renderUserTable() {
   var tbody = document.getElementById('users-tbody');
   if (!_userList.length) {
-    tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state" style="padding:16px">暂无用户</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state" style="padding:16px">暂无用户</div></td></tr>';
     return;
   }
-  tbody.innerHTML = _userList.map(function(u) {
+  tbody.innerHTML = _userList.map(function(u, idx) {
     var statusHtml = u.is_active
       ? '<span class="pill" style="background:var(--success-lt);color:var(--success)">正常</span>'
       : '<span class="pill" style="background:var(--danger-lt);color:var(--danger)">已禁用</span>';
     var toggleLabel = u.is_active ? '禁用' : '启用';
     // Role group badges from user_roles
     var roleIds = u.role_ids || [];
+    // Sort: public role badge first
+    roleIds.sort(function(a, b) {
+      var ra = _permRoles.find(function(x) { return x.id === a; });
+      var rb = _permRoles.find(function(x) { return x.id === b; });
+      if (ra && ra.key === 'public') return -1;
+      if (rb && rb.key === 'public') return 1;
+      return 0;
+    });
     var roleBadges = roleIds.map(function(rid) {
       var r = _permRoles.find(function(x) { return x.id === rid; });
       return r ? '<span style="display:inline-block;margin:1px 2px;padding:1px 6px;border-radius:3px;font-size:10.5px;background:var(--accent-lt);color:var(--accent)">' + escHtml(r.label) + '</span>' : '';
     }).join('');
     return '<tr>' +
+      '<td style="font-family:var(--mono);color:var(--muted);text-align:center">' + (idx + 1) + '</td>' +
       '<td style="font-size:13px;font-weight:500">' + escHtml(u.username) + '</td>' +
       '<td>' + (roleBadges || '<span style="font-size:11px;color:var(--muted)">未分配</span>') + '</td>' +
       '<td>' + statusHtml + '</td>' +

@@ -190,7 +190,8 @@
 .proj-table td:last-child { border-right: none; }
 .proj-table td:has(.proj-name) { white-space: normal; overflow: visible; }
 .proj-table tr:last-child td { border-bottom: none; }
-.proj-table tbody tr { cursor: pointer; transition: background 0.1s; }
+.proj-table tbody tr { transition: background 0.1s; }
+.proj-table.clickable tbody tr { cursor: pointer; }
 .proj-table tbody tr:nth-child(odd) td { background: var(--surface); }
 .proj-table tbody tr:nth-child(even) td { background: var(--bg); }
 .proj-table tbody tr:hover td { background: var(--surface2); }

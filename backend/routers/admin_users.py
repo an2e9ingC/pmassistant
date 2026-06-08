@@ -5,6 +5,7 @@ logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import case
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
@@ -36,6 +37,7 @@ class PasswordReset(BaseModel):
 
 # All company roles
 ROLES = [
+    "public",
     "admin", "ceo", "cto", "pm",
     "sales", "hw_dev", "structure", "hw_test",
     "bsp_dev", "sw_dev", "test_delivery",
@@ -46,6 +48,7 @@ ROLES = [
 ALL_PERMISSIONS = ["admin", "sync", "project_edit", "product_link", "customer_link", "doc_template", "stage_mapping"]
 
 ROLE_LABELS = {
+    "public": "普通用户",
     "admin": "管理员", "ceo": "CEO", "cto": "CTO", "pm": "项目经理",
     "sales": "销售及售前", "hw_dev": "硬件开发", "structure": "结构设计及装配",
     "hw_test": "硬件测试", "bsp_dev": "BSP开发", "sw_dev": "业务软件开发",
@@ -77,7 +80,9 @@ def get_permissions_meta(_=Depends(require_admin)):
 
 @router.get("/roles", response_model=dict)
 def list_roles(db: Session = Depends(get_db), _=Depends(require_admin)):
-    roles = db.query(Role).order_by(Role.id).all()
+    roles = db.query(Role).order_by(
+        case((Role.key == "public", 0), else_=1), Role.id
+    ).all()
     return {
         "code": 0,
         "data": [
@@ -229,6 +234,11 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db), _=Depends(re
         db.add(user)
         db.commit()
         db.refresh(user)
+        # Auto-assign public role to every new user
+        public_role = db.query(Role).filter(Role.key == "public").first()
+        if public_role:
+            db.add(UserRole(user_id=user.id, role_id=public_role.id))
+            db.commit()
         logger.info(f"User created: id={user.id} username={user.username!r} role={user.role}")
         return {"code": 0, "data": {"id": user.id, "username": user.username}, "message": "用户已创建"}
     except Exception as e:

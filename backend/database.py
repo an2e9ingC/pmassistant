@@ -129,6 +129,7 @@ def init_db():
 
         # Seed default roles if not exist
         default_roles = [
+            ("public", "普通用户", "", "默认角色组，所有登录用户自动拥有（基础访问权限）"),
             ("admin", "管理员", "admin", "系统完整管理权限"),
             ("ceo", "CEO", "", "查看所有项目数据"),
             ("cto", "CTO", "", "查看所有项目数据"),

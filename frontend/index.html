@@ -160,7 +160,7 @@
     </div>
 
     <div style="margin-top:8px;text-align:center;font-size:10px;color:var(--muted)">
-      <span id="app-version">v2026.06.08-beta38</span>
+      <span id="app-version">v2026.06.08-beta39</span>
     </div>
   </div>
 </aside>
@@ -272,7 +272,7 @@
         </div>
       </div>
       <div class="card table-scroll" style="margin-bottom:28px">
-        <table class="proj-table">
+        <table class="proj-table clickable">
           <thead>
             <tr>
               <th width="6%" style="cursor:pointer;user-select:none" onclick="toggleSortCode()">项目编号 <span id="sort-code-ind" style="color:var(--muted)">⇅</span></th>
@@ -492,37 +492,41 @@
 
     <!-- ══════════════════════ VIEW — USERS ══════════════════════ -->
     <div class="view" id="view-users">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <div class="section-title">用户管理</div>
-        <button class="btn btn-primary" onclick="openUserCreateDialog()" style="font-size:12px;padding:5px 16px">+ 添加用户</button>
+      <div class="tabs" style="margin-bottom:12px">
+        <span class="tab active" id="utab-users" onclick="switchUserTab('users')">用户管理</span>
+        <span class="tab" id="utab-roles" onclick="switchUserTab('roles')">角色组管理</span>
       </div>
-      <div class="card table-scroll" style="max-height:40vh;margin-bottom:16px">
-        <table class="proj-table">
-          <thead>
-            <tr>
-              <th>用户名</th><th width="20%">角色组</th><th width="8%">状态</th><th width="14%">创建时间</th><th width="18%">操作</th>
-            </tr>
-          </thead>
-          <tbody id="users-tbody">
-            <tr><td colspan="5"><div class="loading-spinner">加载中...</div></td></tr>
-          </tbody>
-        </table>
+      <div id="usec-users">
+        <div class="kpi-grid" style="margin-bottom:12px" id="user-kpi-grid"></div>
+        <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+          <button class="btn btn-primary" onclick="openUserCreateDialog()" style="font-size:12px;padding:5px 16px">+ 添加用户</button>
+        </div>
+        <div class="card table-scroll" style="max-height:calc(100vh - 340px)">
+          <table class="proj-table">
+            <thead><tr>
+              <th style="width:40px">序号</th><th>用户名</th><th width="20%">角色组</th><th width="8%">状态</th><th width="14%">创建时间</th><th width="18%">操作</th>
+            </tr></thead>
+            <tbody id="users-tbody">
+              <tr><td colspan="6"><div class="loading-spinner">加载中...</div></td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <div class="section-title">角色组管理</div>
-        <button class="btn btn-primary" onclick="openRoleCreateDialog()" style="font-size:12px;padding:5px 16px">+ 添加角色</button>
-      </div>
-      <div class="card table-scroll" style="max-height:35vh">
-        <table class="proj-table">
-          <thead>
-            <tr>
-              <th>角色Key</th><th>显示名</th><th>权限</th><th>用户数</th><th style="width:12%">操作</th>
-            </tr>
-          </thead>
-          <tbody id="roles-tbody">
-            <tr><td colspan="5"><div class="loading-spinner">加载中...</div></td></tr>
-          </tbody>
-        </table>
+      <div id="usec-roles" style="display:none">
+        <div class="kpi-grid" style="margin-bottom:12px" id="role-kpi-grid"></div>
+        <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+          <button class="btn btn-primary" onclick="openRoleCreateDialog()" style="font-size:12px;padding:5px 16px">+ 添加角色</button>
+        </div>
+        <div class="card table-scroll" style="max-height:calc(100vh - 340px)">
+          <table class="proj-table">
+            <thead><tr>
+              <th style="width:40px">序号</th><th>角色Key</th><th>显示名</th><th>特殊权限</th><th>用户数</th><th style="width:12%">操作</th>
+            </tr></thead>
+            <tbody id="roles-tbody">
+              <tr><td colspan="6"><div class="loading-spinner">加载中...</div></td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -540,7 +544,7 @@
         <table class="proj-table" id="perm-table">
           <thead><tr>
             <th width="14%">角色组</th>
-            <th>权限</th>
+            <th>特殊权限</th>
             <th>成员</th>
             <th width="14%">操作</th>
             <th width="16%">说明</th>
