@@ -766,16 +766,30 @@ function switchPermTab(tab) {
 function renderPermByPermTable() {
   var tbody = document.getElementById('perm-perm-tbody');
   tbody.innerHTML = _allPerms.map(function(p) {
-    var roles = _permRoles.filter(function(r) { return (r.permissions || []).indexOf(p.key) >= 0; });
-    var roleBadges = roles.map(function(r) {
-      return '<span style="display:inline-block;margin:1px 2px;padding:1px 6px;border-radius:3px;font-size:10.5px;background:var(--accent-lt);color:var(--accent)">' + escHtml(r.label) + '</span>';
-    }).join('') || '<span style="font-size:11px;color:var(--muted)">无</span>';
+    var allRoles = _permRoles.filter(function(r) { return r.key !== 'admin'; }); // exclude immutable admin
+    var checkboxes = allRoles.map(function(r) {
+      var has = (r.permissions || []).indexOf(p.key) >= 0;
+      return '<label style="display:inline-flex;align-items:center;gap:3px;margin:2px 4px;font-size:11px;cursor:pointer">' +
+        '<input type="checkbox" ' + (has ? 'checked' : '') + ' onchange="togglePermForRole(' + r.id + ',\'' + p.key + '\',this.checked)">' +
+        escHtml(r.label) + '</label>';
+    }).join('');
     return '<tr>' +
       '<td style="font-size:13px;font-weight:500">' + escHtml(p.label) + ' <span style="font-size:10px;color:var(--muted);font-family:var(--mono)">' + escHtml(p.key) + '</span></td>' +
-      '<td>' + roleBadges + '</td>' +
-      '<td style="font-size:12px;color:var(--muted)">' + roles.length + ' 个角色</td>' +
+      '<td style="line-height:2">' + (checkboxes || '<span style="font-size:11px;color:var(--muted)">无</span>') + '</td>' +
+      '<td style="font-size:12px;color:var(--muted)">' + allRoles.filter(function(r){return (r.permissions||[]).indexOf(p.key)>=0;}).length + ' 个角色</td>' +
     '</tr>';
   }).join('');
+}
+
+function togglePermForRole(roleId, permKey, checked) {
+  var role = _permRoles.find(function(r) { return r.id === roleId; });
+  if (!role || role.key === 'admin') return;
+  var perms = (role.permissions || []).slice();
+  if (checked) { if (perms.indexOf(permKey) < 0) perms.push(permKey); }
+  else { perms = perms.filter(function(p) { return p !== permKey; }); }
+  role.permissions = perms;
+  markPageDirty();
+  renderPermByPermTable();
 }
 
 async function initPermissions() {
@@ -923,6 +937,7 @@ async function savePermChanges() {
   showToast('保存完成: ' + success + ' 成功' + (fail > 0 ? ', ' + fail + ' 失败' : ''), fail ? 'error' : 'success');
   markPageClean();
   renderPermTable();
+  if (_permTab === 'perms') renderPermByPermTable();
 }
 
 function discardPermChanges() {
