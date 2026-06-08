@@ -198,6 +198,30 @@
 .table-scroll .proj-table tr:last-child td { border-bottom: none; }
 
 /* Zentao quick link */
+/* iOS-style toggle switch */
+.toggle-switch {
+  width: 44px; height: 24px;
+  background: var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.2s;
+}
+.toggle-switch.on {
+  background: var(--accent);
+}
+.toggle-switch-knob {
+  width: 20px; height: 20px;
+  background: #fff;
+  border-radius: 50%;
+  position: absolute; top: 2px; left: 2px;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.toggle-switch.on .toggle-switch-knob {
+  transform: translateX(20px);
+}
+
 .zentao-link {
   display: inline-flex; align-items: center; gap: 3px;
   padding: 2px 9px; border-radius: 5px;

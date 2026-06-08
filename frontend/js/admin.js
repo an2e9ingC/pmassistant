@@ -261,7 +261,7 @@ function addUdRow() {
     '<div style="flex:3;min-width:280px;position:relative">' +
       '<div class="ud-ms-trigger" onclick="toggleUdMs(this)" style="cursor:pointer;border:1px solid var(--border);border-radius:6px;padding:3px 6px;min-height:28px;background:var(--surface);display:flex;align-items:center;gap:4px" title="点击选择角色">' +
         '<span class="ud-ms-tags" style="flex:1;word-break:break-all;line-height:1.6"></span>' +
-        '<span style="font-size:9px;color:var(--muted);flex-shrink:0">&#x25BC;</span>' +
+        '<span style="font-size:11px;color:var(--muted);flex-shrink:0">&#x25BC;</span>' +
       '</div>' +
       '<select class="ud-ms-select" multiple style="display:none">' + roleOpts + '</select>' +
       '<div class="ud-ms-dd" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:6px;box-shadow:var(--sh-md);padding:4px;max-height:200px;overflow-y:auto;overscroll-behavior:contain">' +
@@ -496,7 +496,36 @@ var _permRoles = [];
 var _permUsers = [];
 var _allPerms = [];
 
+async function toggleDebugPerm() {
+  var toggle = document.getElementById('toggle-debug-perm');
+  var next = !window._debugPermEnabled;
+  try {
+    await API.put('/admin/settings', { debug_perm: next });
+    window._debugPermEnabled = next;
+    if (toggle) toggle.classList.toggle('on', next);
+    // Refresh current page title
+    var view = localStorage.getItem('pm_view') || 'dashboard';
+    var title = VIEW_TITLES[view] || '';
+    if (next) {
+      var user = getCurrentUser();
+      var roleKey = user ? (user.role || '?') : '未登录';
+      var roleLabels = window._roleLabels || {};
+      var currentLabel = roleLabels[roleKey] || roleKey;
+      var permKey = VIEW_PERMS[view] || '?';
+      var permRoles = window._permRoles || {};
+      var requiredLabel = (permRoles[permKey] || []).join(', ') || permKey;
+      title += ' <span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:8px">[需: ' + requiredLabel + ' | 当前: ' + currentLabel + ']</span>';
+    }
+    document.getElementById('topbar-title').innerHTML = title;
+    showToast('权限调试: ' + (next ? '开' : '关'), 'success');
+  } catch(e) {
+    showToast('切换失败: ' + (e.message || '未知错误'), 'error');
+  }
+}
+
 async function initPermissions() {
+  var debugToggle = document.getElementById("toggle-debug-perm");
+  if (debugToggle) debugToggle.classList.toggle("on", window._debugPermEnabled);
   try {
     var meta = await API.get('/admin/users/permissions');
     _allPerms = meta.permissions || [];

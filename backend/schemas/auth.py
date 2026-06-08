@@ -10,6 +10,7 @@ class UserInfo(BaseModel):
     id: int
     username: str
     role: str
+    permissions: str = ""  # comma-separated permission keys
 
     model_config = {"from_attributes": True}
 

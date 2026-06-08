@@ -3,6 +3,15 @@
 ═══════════════════════════════════════════════════ */
 var VIEW_TITLES = { dashboard: '项目总览', detail: '项目详情', topology: '快速检索', reports: '统计报告', logs: '系统日志', users: '用户管理', permissions: '权限管理', config: '数据源配置', 'doc-templates': '文档模板配置', 'standards': '流程规范', 'product-list': '产品总览', 'product-detail': '产品详情', customers: '客户管理', 'customer-detail': '客户详情' };
 
+// Permission requirements per view (for debug display)
+var VIEW_PERMS = {
+  dashboard: '登录即可', detail: '登录即可', topology: '登录即可', reports: '登录即可',
+  logs: 'admin', users: 'admin', permissions: 'admin', config: 'admin',
+  'doc-templates': 'doc_template', standards: 'doc_template',
+  'product-list': '登录即可', 'product-detail': '登录即可',
+  customers: 'customer_link', 'customer-detail': '登录即可',
+};
+
 function gotoView(view) {
   // Check auth
   if (!isLoggedIn()) {
@@ -21,7 +30,21 @@ function gotoView(view) {
   if (navEl) navEl.classList.add('active');
 
   // Update title
-  document.getElementById('topbar-title').textContent = VIEW_TITLES[view] || '';
+  var title = VIEW_TITLES[view] || '';
+  // Permission debug overlay (globally toggled via permissions page)
+  if (window._debugPermEnabled) {
+    var user = getCurrentUser();
+    // 当前: user's role label
+    var roleKey = user ? (user.role || '?') : '未登录';
+    var roleLabels = window._roleLabels || {};
+    var currentLabel = roleLabels[roleKey] || roleKey;
+    // 需: roles that have the required permission
+    var permKey = VIEW_PERMS[view] || '?';
+    var permRoles = window._permRoles || {};
+    var requiredLabel = (permRoles[permKey] || []).join(', ') || permKey;
+    title += ' <span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:8px">[需: ' + requiredLabel + ' | 当前: ' + currentLabel + ']</span>';
+  }
+  document.getElementById('topbar-title').innerHTML = title;
 
   // View-specific init
   if (view === 'dashboard') {
@@ -59,16 +82,18 @@ function gotoView(view) {
   }
   if (view === 'doc-templates') {
     var user = getCurrentUser();
-    if (!user || (user.role !== 'admin' && user.role !== 'pm')) {
-      showToast('文档模板配置仅限管理员和项目经理访问', 'error');
+    var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+    if (!user || (user.role !== 'admin' && perms.indexOf('doc_template') < 0)) {
+      showToast('文档模板需要 doc_template 权限', 'error');
       return;
     }
     initDocTemplates();
   }
   if (view === 'standards') {
     var user = getCurrentUser();
-    if (!user || (user.role !== 'admin' && user.role !== 'pm')) {
-      showToast('流程规范仅限管理员和项目经理访问', 'error');
+    var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+    if (!user || (user.role !== 'admin' && perms.indexOf('doc_template') < 0)) {
+      showToast('流程规范需要 doc_template 权限', 'error');
       return;
     }
     initStandards();
@@ -96,6 +121,12 @@ function gotoView(view) {
     initProductDetail();
   }
   if (view === 'customers') {
+    var user = getCurrentUser();
+    var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+    if (!user || (user.role !== 'admin' && perms.indexOf('customer_link') < 0)) {
+      showToast('客户管理需要 customer_link 权限', 'error');
+      return;
+    }
     initCustomerManagement();
   }
   if (view === 'customer-detail') {
@@ -284,18 +315,27 @@ function init() {
     var initials = (user.username || '').substring(0, 2).toUpperCase();
     document.getElementById('user-avatar').textContent = initials;
     document.getElementById('user-name').textContent = user.username + ' · ' + user.role;
-    // Show admin/PM nav items (hide individual items based on role)
-    if (user.role === 'admin' || user.role === 'pm') {
+    // Show admin nav items based on permissions
+    var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+    var isAdmin = user && user.role === 'admin';
+    var hasAdminAccess = user && (isAdmin || perms.indexOf('doc_template') >= 0);
+    if (hasAdminAccess) {
       var adminGroup = document.getElementById('nav-group-admin');
       if (adminGroup) adminGroup.style.display = '';
-      // PM can only see 文档模板 and 流程规范
-      if (user.role !== 'admin') {
+      // Non-admin: hide admin-only items
+      if (!isAdmin) {
         var adminOnlyIds = ['nav-users', 'nav-permissions', 'nav-config', 'nav-logs'];
         adminOnlyIds.forEach(function(id) {
           var el = document.getElementById(id);
           if (el) el.style.display = 'none';
         });
       }
+    }
+
+    // Hide nav items for pages user lacks permission to access
+    if (!isAdmin && perms.indexOf('customer_link') < 0) {
+      var custNav = document.getElementById('nav-customers');
+      if (custNav) custNav.style.display = 'none';
     }
   }
 
@@ -304,6 +344,13 @@ function init() {
   updateLinkStatus();
   // Load PMA settings (password verification toggles etc.)
   loadPmaSettings();
+  // Load public settings (debug_perm + role-permission mapping)
+  API.get('/admin/settings/public').then(function(d) {
+    window._debugPermEnabled = d && d.debug_perm;
+    if (d && d.perm_roles) window._permRoles = d.perm_roles;
+    if (d && d.role_labels) window._roleLabels = d.role_labels;
+  }).catch(function() {});
+
   // Poll for auto-sync — show progress if running, notify when done
   var _autoSyncEl = null;
   var _autoSyncStart = 0;

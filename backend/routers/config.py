@@ -210,6 +210,7 @@ PMA_SETTINGS = {
     "pw_verify_clear_logs": ("清除日志密码验证", "1"),
     "pw_verify_clear_db": ("清除数据库密码验证", "1"),
     "pw_verify_maint_remove": ("维护页移除关联密码验证", "1"),
+    "debug_perm": ("权限调试信息显示", "0"),
 }
 
 
@@ -220,6 +221,29 @@ def get_pma_settings(db: Session = Depends(get_db), _=Depends(require_admin)):
     for key, (label, default) in PMA_SETTINGS.items():
         data[key] = {"label": label, "value": PmaSetting.get(db, key, default) == "1"}
     return {"code": 0, "data": data, "message": "ok"}
+
+
+@router.get("/settings/public", response_model=dict)
+def get_public_settings(db: Session = Depends(get_db)):
+    """Public settings + role-permission mapping (no admin required)."""
+    from backend.models.local import PmaSetting
+    from backend.routers.admin_users import ROLE_LABELS, ALL_PERMISSIONS
+    from backend.models.local import Role
+
+    roles = db.query(Role).all()
+    perm_roles = {}
+    for p in ALL_PERMISSIONS:
+        perm_roles[p] = [ROLE_LABELS.get(r.key, r.key) for r in roles if p in (r.permissions or "").split(",")]
+
+    return {
+        "code": 0,
+        "data": {
+            "debug_perm": PmaSetting.get(db, "debug_perm", "0") == "1",
+            "perm_roles": perm_roles,
+            "role_labels": ROLE_LABELS,
+        },
+        "message": "ok",
+    }
 
 
 @router.put("/settings", response_model=dict)

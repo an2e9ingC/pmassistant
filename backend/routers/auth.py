@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.middleware.auth import get_current_user
 from backend.models.local import LocalUser
+from backend.middleware.auth import get_user_perms
 from backend.schemas.auth import LoginRequest, LoginResponse, UserInfo
 from backend.services.auth_service import authenticate_user, create_access_token, hash_password, verify_password
 
@@ -18,12 +19,14 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="用户名或密码错误")
 
     token = create_access_token(user.id)
+    user_info = UserInfo.model_validate(user).model_dump()
+    user_info["permissions"] = ",".join(get_user_perms(user))
     return {
         "code": 0,
         "data": {
             "access_token": token,
             "token_type": "bearer",
-            "user": UserInfo.model_validate(user).model_dump(),
+            "user": user_info,
         },
         "message": "ok",
     }
@@ -31,9 +34,11 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
 
 @router.get("/me", response_model=dict)
 def me(user: LocalUser = Depends(get_current_user)):
+    user_info = UserInfo.model_validate(user).model_dump()
+    user_info["permissions"] = ",".join(get_user_perms(user))
     return {
         "code": 0,
-        "data": UserInfo.model_validate(user).model_dump(),
+        "data": user_info,
         "message": "ok",
     }
 
