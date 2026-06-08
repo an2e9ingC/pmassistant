@@ -15,12 +15,17 @@ from sqlalchemy.orm import Session
 router = APIRouter(prefix="/api/logs", tags=["logs"])
 
 
-def log_audit(db: Session, user: LocalUser, action: str, detail: str = ""):
-    """Write an audit log entry."""
+def log_audit(db: Session, user: LocalUser, action: str, detail: str = "", category: str = "", level: str = "medium"):
+    """Write an audit log entry.
+
+    category: 项目/产品/客户/工具/管理
+    level: high(删除/权限)/medium(编辑/新增)/low(配置/查看)
+    """
     import logging
     logger = logging.getLogger(__name__)
     try:
-        db.add(AuditLog(username=user.username, action=action, detail=detail or ""))
+        db.add(AuditLog(username=user.username, action=action, detail=detail or "",
+                         category=category or "", level=level))
         db.commit()
     except Exception as e:
         logger.error(f"Audit log write failed: {e}")
@@ -140,22 +145,43 @@ def clear_logs(db: Session = Depends(get_db), _=Depends(require_admin), cu = Dep
 @router.get("/audit", response_model=dict)
 def view_audit_logs(
     tail: int = Query(100, ge=10, le=500),
+    category: str = Query("", description="Filter by category (项目/产品/客户/工具/管理)"),
+    level: str = Query("", description="Filter by level (high/medium/low)"),
+    search: str = Query("", description="Search in action and detail"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=10, le=200),
     _=Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    entries = db.query(AuditLog).order_by(AuditLog.id.desc()).limit(tail).all()
+    q = db.query(AuditLog)
+    if category:
+        q = q.filter(AuditLog.category == category)
+    if level:
+        q = q.filter(AuditLog.level == level)
+    if search:
+        pattern = f"%{search}%"
+        q = q.filter((AuditLog.action.ilike(pattern)) | (AuditLog.detail.ilike(pattern)))
+    total = q.count()
+    entries = q.order_by(AuditLog.id.desc()).offset((page - 1) * limit).limit(limit).all()
     return {
         "code": 0,
-        "data": [
-            {
-                "id": e.id,
-                "username": e.username,
-                "action": e.action,
-                "detail": e.detail or "",
-                "created_at": e.created_at.strftime("%Y-%m-%d %H:%M:%S") if e.created_at else "",
-            }
-            for e in reversed(entries)
-        ],
+        "data": {
+            "items": [
+                {
+                    "id": e.id,
+                    "username": e.username,
+                    "action": e.action,
+                    "category": e.category or "",
+                    "level": e.level or "medium",
+                    "detail": e.detail or "",
+                    "created_at": e.created_at.strftime("%Y-%m-%d %H:%M:%S") if e.created_at else "",
+                }
+                for e in entries
+            ],
+            "total": total,
+            "page": page,
+            "limit": limit,
+        },
         "message": "ok",
     }
 

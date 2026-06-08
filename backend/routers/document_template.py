@@ -47,7 +47,7 @@ def create_template(
     user=Depends(require_perm("doc_template")),
 ):
     tpl = document_service.create_template(db, body.model_dump())
-    log_audit(db, user, "doc_template_add", f"{body.stage_type}/{body.doc_name}")
+    log_audit(db, user, "doc_template_add", f"{body.stage_type}/{body.doc_name}", "管理", "medium")
     return {"code": 0, "data": tpl, "message": "ok"}
 
 
@@ -63,7 +63,7 @@ def update_template(
     )
     if not tpl:
         raise HTTPException(status_code=404, detail="Template not found")
-    log_audit(db, user, "doc_template_edit", f"id={template_id} {body.doc_name or ''}")
+    log_audit(db, user, "doc_template_edit", f"id={template_id} {body.doc_name or ''}", "管理", "medium")
     return {"code": 0, "data": tpl, "message": "ok"}
 
 
@@ -80,7 +80,7 @@ def delete_template(
     detail = f"{tpl.stage_type}/{tpl.doc_name}"
     db.delete(tpl)
     db.commit()
-    log_audit(db, user, "doc_template_del", detail)
+    log_audit(db, user, "doc_template_del", detail, "管理", "high")
     return {"code": 0, "data": None, "message": "ok"}
 
 
@@ -96,7 +96,7 @@ def rename_stage_type(
     user=Depends(require_perm("doc_template")),
 ):
     count = document_service.rename_stage_type(db, body.old_name, body.new_name)
-    log_audit(db, user, "doc_stage_rename", f"{body.old_name} -> {body.new_name} ({count} docs)")
+    log_audit(db, user, "doc_stage_rename", f"{body.old_name} -> {body.new_name} ({count} docs)", "管理", "medium")
     return {"code": 0, "data": {"updated": count}, "message": "ok"}
 
 
@@ -107,5 +107,5 @@ def delete_stage_type(
     user=Depends(require_perm("doc_template")),
 ):
     count = document_service.delete_stage_type(db, stage_type)
-    log_audit(db, user, "doc_stage_del", f"{stage_type} ({count} docs)")
+    log_audit(db, user, "doc_stage_del", f"{stage_type} ({count} docs)", "管理", "high")
     return {"code": 0, "data": {"deleted": count}, "message": "ok"}

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.middleware.auth import get_current_user, require_perm
+from backend.routers.logs import log_audit
 from backend.models.zentao import CachedCustomer, CachedProject, CachedProduct, CustomerProjectLink, CustomerProductLink, ProductProjectLink
 from backend.routers.logs import log_audit
 
@@ -53,7 +54,7 @@ def list_customers(
 
 
 @router.post("", response_model=dict)
-def create_customer(payload: CustomerCreate, db: Session = Depends(get_db), _=Depends(require_perm("customer_link"))):
+def create_customer(payload: CustomerCreate, db: Session = Depends(get_db), user=Depends(require_perm("customer_link"))):
     existing = db.query(CachedCustomer).filter(CachedCustomer.name == payload.name).first()
     if existing:
         raise HTTPException(status_code=400, detail="客户名称已存在")
@@ -65,7 +66,7 @@ def create_customer(payload: CustomerCreate, db: Session = Depends(get_db), _=De
 
 
 @router.put("/{customer_id}", response_model=dict)
-def update_customer(customer_id: int, payload: CustomerUpdate, db: Session = Depends(get_db), _=Depends(require_perm("customer_link"))):
+def update_customer(customer_id: int, payload: CustomerUpdate, db: Session = Depends(get_db), user=Depends(require_perm("customer_link"))):
     c = db.query(CachedCustomer).filter(CachedCustomer.id == customer_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="客户不存在")

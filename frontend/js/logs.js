@@ -168,30 +168,90 @@ function switchLogTab(tab) {
   else refreshLogs();
 }
 
+var _auditCategory = '';
+var _auditLevel = '';
+var _auditSearch = '';
+var _auditPage = 1;
+
 async function loadAuditLogs() {
   var container = document.getElementById('audit-content');
   container.innerHTML = '<div class="loading-spinner">加载操作日志...</div>';
   try {
-    var data = await API.get('/logs/audit?tail=200');
-    if (!data || !data.length) {
-      container.innerHTML = '<div class="empty-state" style="padding:20px">暂无操作日志</div>';
-      return;
+    var params = 'limit=50&page=' + _auditPage;
+    if (_auditCategory) params += '&category=' + encodeURIComponent(_auditCategory);
+    if (_auditLevel) params += '&level=' + encodeURIComponent(_auditLevel);
+    if (_auditSearch) params += '&search=' + encodeURIComponent(_auditSearch);
+    var data = await API.get('/logs/audit?' + params);
+    var items = data.items || [];
+    var total = data.total || 0;
+
+    // Category filter buttons
+    var catBtns = ['', '项目', '产品', '客户', '工具', '管理'].map(function(c) {
+      var label = c || '全部';
+      var cls = _auditCategory === c ? 'tab active' : 'tab';
+      return '<span class="' + cls + '" onclick="_auditCategory=\'' + c + '\';_auditPage=1;loadAuditLogs()">' + label + '</span>';
+    }).join('');
+
+    var lvlBtns = ['', 'high', 'medium', 'low'].map(function(l) {
+      var label = l === 'high' ? '高' : (l === 'medium' ? '中' : (l === 'low' ? '低' : '全部'));
+      var cls = _auditLevel === l ? 'tab active' : 'tab';
+      return '<span class="' + cls + '" onclick="_auditLevel=\'' + l + '\';_auditPage=1;loadAuditLogs()">' + label + '</span>';
+    }).join('');
+
+    // Level pill color
+    function levelPill(lvl) {
+      var c = lvl === 'high' ? 'var(--danger)' : (lvl === 'low' ? 'var(--muted)' : 'var(--warn)');
+      var bg = lvl === 'high' ? 'var(--danger-lt)' : (lvl === 'low' ? 'var(--bg)' : 'var(--warn-lt)');
+      var label = lvl === 'high' ? '高' : (lvl === 'low' ? '低' : '中');
+      return '<span class="pill" style="background:' + bg + ';color:' + c + ';font-size:10px">' + label + '</span>';
     }
-    container.innerHTML = '<table style="width:100%;border-collapse:collapse"><thead><tr>' +
-      '<th style="text-align:left;padding:8px 12px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);width:140px">时间</th>' +
-      '<th style="text-align:left;padding:8px 12px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);width:80px">用户</th>' +
-      '<th style="text-align:left;padding:8px 12px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);width:100px">操作</th>' +
-      '<th style="text-align:left;padding:8px 12px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border)">详情</th>' +
-    '</tr></thead><tbody>' +
-    data.map(function(e) {
-      return '<tr>' +
-        '<td style="padding:6px 12px;font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap;border-bottom:1px solid var(--border)">' + escHtml(e.created_at) + '</td>' +
-        '<td style="padding:6px 12px;font-size:12px;border-bottom:1px solid var(--border)">' + escHtml(e.username) + '</td>' +
-        '<td style="padding:6px 12px;font-size:11px;border-bottom:1px solid var(--border)"><span class="pill" style="background:var(--danger-lt);color:var(--danger);font-size:10px">' + escHtml(e.action) + '</span></td>' +
-        '<td style="padding:6px 12px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border)">' + escHtml(e.detail) + '</td>' +
-      '</tr>';
-    }).join('') +
-    '</tbody></table>';
+
+    var html = '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">' +
+      '<div style="display:flex;align-items:center;gap:6px">' +
+        '<span style="font-size:11px;color:var(--muted)">分类:</span><span class="tabs" style="display:inline-flex">' + catBtns + '</span>' +
+      '</div>' +
+      '<div style="display:flex;align-items:center;gap:6px">' +
+        '<span style="font-size:11px;color:var(--muted)">等级:</span><span class="tabs" style="display:inline-flex">' + lvlBtns + '</span>' +
+        '<input class="search-inp" id="audit-search-inp" placeholder="搜索..." value="' + escHtml(_auditSearch) + '" style="width:140px;margin-left:8px" onkeyup="if(event.key===\'Enter\'){_auditSearch=this.value;_auditPage=1;loadAuditLogs()}">' +
+      '</div>' +
+    '</div>';
+
+    if (!items.length) {
+      html += '<div class="empty-state" style="padding:20px">暂无操作日志</div>';
+    } else {
+      html += '<div class="table-scroll" style="max-height:calc(100vh - 280px)"><table class="stage-table"><thead><tr>' +
+        '<th style="width:140px">时间</th>' +
+        '<th style="width:70px">用户</th>' +
+        '<th style="width:80px">分类</th>' +
+        '<th style="width:140px">操作</th>' +
+        '<th style="width:50px">等级</th>' +
+        '<th>详情</th>' +
+      '</tr></thead><tbody>' +
+      items.map(function(e) {
+        return '<tr>' +
+          '<td style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">' + escHtml(e.created_at) + '</td>' +
+          '<td style="font-size:12px">' + escHtml(e.username) + '</td>' +
+          '<td style="font-size:11px">' + escHtml(e.category || '—') + '</td>' +
+          '<td style="font-size:11px">' + escHtml(e.action) + '</td>' +
+          '<td>' + levelPill(e.level) + '</td>' +
+          '<td style="font-size:11px;color:var(--muted)">' + escHtml(e.detail) + '</td>' +
+        '</tr>';
+      }).join('') +
+      '</tbody></table></div>';
+
+      // Pagination
+      var totalPages = Math.ceil(total / 50);
+      if (totalPages > 1) {
+        html += '<div style="display:flex;justify-content:center;gap:4px;margin-top:10px">';
+        for (var p = 1; p <= totalPages; p++) {
+          var pCls = p === _auditPage ? 'tab active' : 'tab';
+          html += '<span class="' + pCls + '" onclick="_auditPage=' + p + ';loadAuditLogs()">' + p + '</span>';
+        }
+        html += '</div>';
+      }
+    }
+
+    container.innerHTML = html;
   } catch(e) {
     container.innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '</div>';
   }
