@@ -376,6 +376,11 @@
   50% { opacity: 1; box-shadow: 0 0 6px var(--accent); }
 }
 
+.legend-today-line {
+  width: 2px; height: 14px; background: var(--accent); border-radius: 1px;
+  animation: today-pulse 2s ease-in-out infinite;
+}
+
 /* ── Legend ── */
 .gantt-legend {
   display: flex; gap: 18px; margin-top: 12px;
