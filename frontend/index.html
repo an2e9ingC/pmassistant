@@ -119,6 +119,14 @@
         </svg>
         数据源配置
       </div>
+      <div class="nav-item" id="nav-standards" onclick="gotoView('standards')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M2 3h5l2 2h5v8H2z"/>
+          <line x1="4" y1="8" x2="12" y2="8"/>
+          <line x1="4" y1="10.5" x2="10" y2="10.5"/>
+        </svg>
+        流程规范
+      </div>
       <div class="nav-item" id="nav-doc-templates" onclick="gotoView('doc-templates')">
         <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
           <rect x="1.5" y="1.5" width="13" height="13" rx="2"/>
@@ -152,7 +160,7 @@
     </div>
 
     <div style="margin-top:8px;text-align:center;font-size:10px;color:var(--muted)">
-      <span id="app-version">v2026.06.06-beta28</span>
+      <span id="app-version">v2026.06.08-beta1</span>
     </div>
   </div>
 </aside>
@@ -533,6 +541,11 @@
       <div class="loading-spinner">加载中...</div>
     </div>
 
+    <!-- ══════════════════════ VIEW — STANDARDS ══════════════════════ -->
+    <div class="view" id="view-standards">
+      <div class="loading-spinner">加载中...</div>
+    </div>
+
     <!-- ══════════════════════ VIEW — TOPOLOGY ══════════════════════ -->
     <div class="view" id="view-topology">
       <div class="topo-search-bar">
@@ -734,6 +747,7 @@
 <script src="/js/admin.js"></script>
 <script src="/js/customers.js"></script>
 <script src="/js/doc-templates.js"></script>
+<script src="/js/standards.js"></script>
 <script src="/js/app.js"></script>
 <script>
 async function triggerSync() {

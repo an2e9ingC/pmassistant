@@ -1,0 +1,95 @@
+/* ═══════════════════════════════════════════════════
+   PROCESS STANDARDS PAGE (流程规范)
+═══════════════════════════════════════════════════ */
+
+var _standardsGrouped = {};  // { category: [{id, key, value, description}, ...] }
+
+async function initStandards() {
+  var container = document.getElementById('view-standards');
+  container.innerHTML = '<div class="loading-spinner">加载流程规范...</div>';
+  try {
+    _standardsGrouped = await API.get('/standards') || {};
+    renderStandards();
+  } catch(e) {
+    container.innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '<br><button class="btn" onclick="initStandards()">重试</button></div>';
+  }
+}
+
+function renderStandards() {
+  var user = getCurrentUser();
+  var canEdit = user && (user.role === 'admin' || user.role === 'pm' || user.role === 'test_delivery');
+
+  var categories = Object.keys(_standardsGrouped).sort();
+  if (!categories.length) {
+    document.getElementById('view-standards').innerHTML = '<div class="empty-state" style="padding:40px">暂无流程规范</div>';
+    return;
+  }
+
+  var html = '';
+  categories.forEach(function(cat) {
+    var items = _standardsGrouped[cat] || [];
+    html += '<div class="card" style="padding:16px;margin-bottom:16px">' +
+      '<div class="section-title" style="margin-bottom:12px">' + escHtml(cat) + '</div>' +
+      '<table class="stage-table"><thead><tr>' +
+        '<th style="width:200px">规则键</th>' +
+        '<th>规则值</th>' +
+        '<th style="width:300px">说明</th>' +
+        (canEdit ? '<th style="width:70px">操作</th>' : '') +
+      '</tr></thead><tbody>';
+
+    items.forEach(function(s) {
+      html += '<tr id="std-row-' + s.id + '">' +
+        '<td style="font-family:var(--mono);font-size:12px;font-weight:500">' + escHtml(s.key) + '</td>' +
+        '<td><code style="font-size:12px;color:var(--accent);word-break:break-all">' + escHtml(s.value || '（未设置）') + '</code></td>' +
+        '<td style="font-size:12px;color:var(--muted)">' + escHtml(s.description || '') + '</td>' +
+        (canEdit ? '<td><button class="btn" style="font-size:10px;padding:2px 8px" onclick="showStdEdit(' + s.id + ')">编辑</button></td>' : '') +
+      '</tr>';
+    });
+    html += '</tbody></table></div>';
+  });
+
+  document.getElementById('view-standards').innerHTML = html;
+}
+
+function showStdEdit(id) {
+  var found = null;
+  Object.keys(_standardsGrouped).forEach(function(cat) {
+    (_standardsGrouped[cat] || []).forEach(function(s) {
+      if (s.id === id) found = s;
+    });
+  });
+  if (!found) return;
+
+  var bodyHtml = '<div style="padding:8px 0">' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted)">规则键</label>' +
+      '<div style="font-family:var(--mono);font-size:13px;font-weight:600;margin-top:2px">' + escHtml(found.key) + '</div>' +
+    '</div>' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted)">规则值</label>' +
+      '<textarea class="search-inp" id="std-value" style="margin-top:4px;width:100%;min-height:80px;font-family:var(--mono);font-size:12px;box-sizing:border-box">' + escHtml(found.value || '') + '</textarea>' +
+    '</div>' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted)">说明</label>' +
+      '<input class="search-inp" id="std-desc" value="' + escHtml(found.description || '') + '" style="margin-top:4px">' +
+    '</div>' +
+  '</div>';
+
+  openDialog('编辑规则: ' + found.key, bodyHtml, [
+    { text: '取消', cls: '', onclick: "this.closest('.note-dialog-overlay').remove()" },
+    { text: '保存', cls: 'btn-primary', onclick: "saveStdEdit(" + id + ");this.closest('.note-dialog-overlay').remove()" },
+  ]);
+}
+
+async function saveStdEdit(id) {
+  var value = document.getElementById('std-value').value;
+  var desc = document.getElementById('std-desc').value.trim();
+  try {
+    await API.put('/standards/' + id, { value: value, description: desc });
+    showToast('已保存', 'success');
+    _standardsGrouped = await API.get('/standards');
+    renderStandards();
+  } catch(e) {
+    showToast('保存失败: ' + (e.message || '未知错误'), 'error');
+  }
+}

@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════
    MAIN APP
 ═══════════════════════════════════════════════════ */
-var VIEW_TITLES = { dashboard: '项目总览', detail: '项目详情', topology: '快速检索', reports: '统计报告', logs: '系统日志', users: '用户管理', permissions: '权限管理', config: '数据源配置', 'doc-templates': '文档模板配置', 'product-list': '产品总览', 'product-detail': '产品详情', customers: '客户管理', 'customer-detail': '客户详情' };
+var VIEW_TITLES = { dashboard: '项目总览', detail: '项目详情', topology: '快速检索', reports: '统计报告', logs: '系统日志', users: '用户管理', permissions: '权限管理', config: '数据源配置', 'doc-templates': '文档模板配置', 'standards': '流程规范', 'product-list': '产品总览', 'product-detail': '产品详情', customers: '客户管理', 'customer-detail': '客户详情' };
 
 function gotoView(view) {
   // Check auth
@@ -64,6 +64,14 @@ function gotoView(view) {
       return;
     }
     initDocTemplates();
+  }
+  if (view === 'standards') {
+    var user = getCurrentUser();
+    if (!user || (user.role !== 'admin' && user.role !== 'pm')) {
+      showToast('流程规范仅限管理员和项目经理访问', 'error');
+      return;
+    }
+    initStandards();
   }
   if (view === 'users') {
     var user = getCurrentUser();

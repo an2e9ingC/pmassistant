@@ -144,12 +144,13 @@
 .search-wrap { position: relative; flex: 1; max-width: 380px; }
 .search-ico { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
 .search-inp {
-  width: 100%; padding: 8px 34px 8px 34px;
+  width: 100%; padding: 8px 10px;
   border: 1px solid var(--border); border-radius: 8px;
   background: var(--surface); color: var(--fg);
   font-family: var(--font); font-size: 13px;
   outline: none; transition: border-color 0.12s;
 }
+.search-wrap .search-inp { padding: 8px 34px 8px 34px; }
 .search-inp:focus { border-color: var(--accent); }
 .search-clear {
   position: absolute; right: 6px; top: 50%; transform: translateY(-50%);

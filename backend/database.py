@@ -89,6 +89,7 @@ def init_db():
     from backend.models.bug import CachedBug  # noqa: F401
     from backend.models.delivery import DeliveryRecord  # noqa: F401
     from backend.models.document import DocumentTemplate, ProjectDocument  # noqa: F401
+    from backend.models.standard import ProcessStandard  # noqa: F401
     from backend.models.log_entry import LogEntry  # noqa: F401
     from backend.models.zentao import (  # noqa: F401
         CachedProject,
