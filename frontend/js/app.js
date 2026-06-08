@@ -422,6 +422,30 @@ function init() {
   // Navigate to saved view or dashboard
   var lastView = localStorage.getItem('pm_view') || 'dashboard';
   gotoView(lastView);
+
+  // Global ESC handler: first ESC blurs input, second closes dialog / clears search
+  var _escBlurred = false;
+  document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') { _escBlurred = false; return; }
+    var active = document.activeElement;
+    var isInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT');
+    if (isInput && !_escBlurred) {
+      active.blur();
+      _escBlurred = true;
+      return;
+    }
+    _escBlurred = false;
+    // Close any open dialogs (note-dialog-overlay)
+    var dlg = document.querySelector('.note-dialog-overlay');
+    if (dlg) { dlg.remove(); return; }
+    // Clear search inputs
+    var searchInps = document.querySelectorAll('.search-inp');
+    var cleared = false;
+    searchInps.forEach(function(inp) {
+      if (inp.value && inp === document.activeElement) return; // skip focused input
+      if (inp.value) { inp.value = ''; inp.dispatchEvent(new Event('input')); cleared = true; }
+    });
+  });
 }
 
 /* User menu */
