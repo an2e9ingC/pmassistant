@@ -339,12 +339,12 @@
 }
 .gantt-bar:hover { filter: brightness(0.92); }
 /* Track — lighter background + subtle border = full planned period */
-.gantt-bar.completed { background: var(--success-lt); border: 2px solid var(--success); }
-.gantt-bar.active    { background: var(--accent-lt);  border: 2px solid var(--accent); }
-.gantt-bar.blocked   { background: var(--danger-lt);  border: 2px solid var(--danger); }
-.gantt-bar.planning  { background: var(--warn-lt);    border: 2px solid var(--warn); }
-.gantt-bar.pending   { background: #B0B8C4;           border: 2px solid #505A70; }
-.gantt-bar.canceled  { background: #A0A8B4;           border: 2px solid #505A70; opacity: 0.55; }
+.gantt-bar.completed { background: var(--success-lt); border: 1.5px solid var(--success); }
+.gantt-bar.active    { background: var(--accent-lt);  border: 1.5px solid var(--accent); }
+.gantt-bar.blocked   { background: var(--danger-lt);  border: 1.5px solid var(--danger); }
+.gantt-bar.planning  { background: var(--warn-lt);    border: 1.5px solid var(--warn); }
+.gantt-bar.pending   { background: #B0B8C4;           border: 1.5px solid #505A70; }
+.gantt-bar.canceled  { background: #A0A8B4;           border: 1.5px solid #505A70; opacity: 0.55; }
 /* Fill colors — solid color = % complete */
 .gantt-bar.completed .gantt-bar-fill { background: var(--success); }
 .gantt-bar.active    .gantt-bar-fill { background: var(--accent); }
