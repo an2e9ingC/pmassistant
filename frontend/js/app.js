@@ -337,8 +337,20 @@ function toggleTheme() {
   var dark = document.documentElement.getAttribute('data-theme') === 'dark';
   var next = dark ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', next);
-  document.getElementById('theme-lbl').textContent = next === 'dark' ? '深色' : '浅色';
-  document.getElementById('theme-toggle').classList.toggle('on', next === 'dark');
+  // Sidebar (kept for backward compat, may be null after move to user menu)
+  var lbl = document.getElementById('theme-lbl');
+  if (lbl) lbl.textContent = next === 'dark' ? '深色' : '浅色';
+  var tgl = document.getElementById('theme-toggle');
+  if (tgl) tgl.classList.toggle('on', next === 'dark');
+  // User menu
+  var menuLbl = document.getElementById('theme-menu-lbl');
+  if (menuLbl) menuLbl.textContent = next === 'dark' ? '切换浅色主题' : '切换深色主题';
+  var menuIcon = document.getElementById('theme-menu-icon');
+  if (menuIcon && next === 'dark') {
+    menuIcon.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1a7 7 0 1 0 0 14 5.5 5.5 0 0 1 0-11z"/></svg>';
+  } else if (menuIcon) {
+    menuIcon.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.2 3.2l1 1M11.8 11.8l1 1M11.8 3.2l-1 1M4.2 11.8l-1 1M5 8a3 3 0 1 0 6 0 3 3 0 0 0-6 0z"/></svg>';
+  }
   localStorage.setItem('pm_theme', next);
 }
 
@@ -500,10 +512,11 @@ function init() {
     localStorage.setItem('pm_theme', t);
   }
   document.documentElement.setAttribute('data-theme', t);
-  if (t === 'dark') {
-    document.getElementById('theme-lbl').textContent = '深色';
-    document.getElementById('theme-toggle').classList.add('on');
-  }
+  // Theme toggle moved to user menu — update if elements exist
+  var themeLbl = document.getElementById('theme-lbl');
+  if (themeLbl) themeLbl.textContent = t === 'dark' ? '深色' : '浅色';
+  var themeTgl = document.getElementById('theme-toggle');
+  if (themeTgl) themeTgl.classList.toggle('on', t === 'dark');
 
   // User display
   var user = getCurrentUser();
@@ -579,6 +592,25 @@ function init() {
         var phaseEl = document.getElementById('auto-sync-phase');
         var statsEl = document.getElementById('auto-sync-stats');
         var et = document.getElementById('auto-sync-elapsed');
+        // Detect phase transitions for per-source notifications
+        var phase = p.phase || '';
+        if (!_zentaoNotified && phase && (phase === '发布版本' || phase === 'GitLab校验')) {
+          _zentaoNotified = true;
+          API.get('/sync/auto-notify').then(function(n) {
+            if (n && n.zentao && n.zentao.status !== 'pending') {
+              _notifySource('禅道', n.zentao.status, n.zentao.summary);
+            }
+          }).catch(function() {});
+        }
+        if (!_gitlabNotified && _autoLastPhase === 'GitLab校验' && phase && phase !== 'GitLab校验' && phase !== '发布版本') {
+          _gitlabNotified = true;
+          API.get('/sync/auto-notify').then(function(n) {
+            if (n && n.gitlab && n.gitlab.status !== 'pending') {
+              _notifySource('GitLab', n.gitlab.status, n.gitlab.summary);
+            }
+          }).catch(function() {});
+        }
+        _autoLastPhase = phase;
         if (phaseEl) phaseEl.textContent = p.phase || '...';
         if (statsEl) {
           var parts = [];
@@ -591,48 +623,35 @@ function init() {
         }
         if (et) et.textContent = Math.round((Date.now() - _autoSyncStart) / 1000) + 's';
       } else if (_autoSyncKnownRunning && _autoSyncEl) {
-        // Sync just finished
+        // Sync just finished — show per-source toasts
         var elapsed = Math.round((Date.now() - _autoSyncStart) / 1000);
         _autoSyncEl.remove();
         _autoSyncEl = null;
         _autoSyncKnownRunning = false;
-        // Show completion notification with per-source results
         API.get('/sync/auto-notify').then(function(n) {
-          if (n && n.completed) {
-            var parts = ['数据同步完成（' + n.time + '，耗时' + elapsed + 's）'];
-
-            // Zentao result
-            var z = n.zentao || {};
-            var zIcon = z.status === 'success' ? '✓' : (z.status === 'failed' ? '✗' : '—');
-            parts.push('禅道 ' + zIcon + ' ' + (z.summary || z.status || ''));
-
-            // GitLab result
-            var g = n.gitlab || {};
-            var gIcon = g.status === 'success' ? '✓' : (g.status === 'failed' ? '✗' : (g.status === 'skipped' ? '⊘' : '—'));
-            parts.push('GitLab ' + gIcon + ' ' + (g.summary || g.status || ''));
-
-            // NAS result
-            var nas = n.nas || {};
-            var nasIcon = nas.status === 'skipped' ? '⊘' : '—';
-            parts.push('NAS ' + nasIcon + ' ' + (nas.summary || nas.status || ''));
-
-            var msg = parts.join('\n');
-            var isWarn = z.status === 'failed' || g.status === 'failed' || (n.mismatches && (n.mismatches.total_unmatched > 0 || n.mismatches.total_fuzzy > 0));
-
-            // Add stage mismatch details if any
-            var mm = n.mismatches;
-            if (mm && (mm.total_unmatched > 0 || mm.total_fuzzy > 0)) {
-              var mmParts = [];
-              if (mm.total_unmatched > 0) mmParts.push(mm.total_unmatched + ' 个非标准阶段');
-              if (mm.total_fuzzy > 0) mmParts.push(mm.total_fuzzy + ' 个模糊匹配');
-              msg += '\n⚠ ' + mmParts.join('，') + '，影响 ' + (mm.affected_projects || []).length + ' 个项目';
-              showToast(msg, 'warn', 8000);
-            } else if (isWarn) {
-              showToast(msg, 'warn', 8000);
-            } else {
-              showToast(msg, 'success', 5000);
-            }
+          if (!n || !n.completed) return;
+          // Show remaining sources not yet notified
+          if (!_zentaoNotified && n.zentao && n.zentao.status !== 'pending') {
+            _notifySource('禅道', n.zentao.status, n.zentao.summary);
           }
+          if (!_gitlabNotified && n.gitlab && n.gitlab.status !== 'pending') {
+            _notifySource('GitLab', n.gitlab.status, n.gitlab.summary);
+          }
+          if (n.nas && n.nas.status !== 'pending') {
+            _notifySource('NAS', n.nas.status, n.nas.summary);
+          }
+          // Stage mismatch warning
+          var mm = n.mismatches;
+          if (mm && (mm.total_unmatched > 0 || mm.total_fuzzy > 0)) {
+            var mmParts = [];
+            if (mm.total_unmatched > 0) mmParts.push(mm.total_unmatched + ' 个非标准阶段');
+            if (mm.total_fuzzy > 0) mmParts.push(mm.total_fuzzy + ' 个模糊匹配');
+            showToast('⚠ ' + mmParts.join('，') + '，影响 ' + (mm.affected_projects || []).length + ' 个项目', 'warn', 8000);
+          }
+          // Reset for next sync
+          _zentaoNotified = false;
+          _gitlabNotified = false;
+          _autoLastPhase = '';
         }).catch(function() {});
       }
     } catch(ignore) {}

@@ -158,12 +158,14 @@ def _finish_log(db: Session, log: SyncLog, status: str, items_fetched: int = 0,
     db.commit()
 
 
-# Auto-sync notification state — per-source results
+# Auto-sync notification state — per-source results, each source notifies independently
 _auto_sync_notify = {
     "completed": False, "time": "", "mismatches": None,
-    "zentao": {"status": "pending"},   # status: pending|success|failed|skipped
-    "gitlab": {"status": "pending"},
-    "nas": {"status": "pending"},
+    "zentao": {"status": "pending", "notified": False},
+    "gitlab": {"status": "pending", "notified": False},
+    "nas": {"status": "pending", "notified": False},
+    # "notified" flag: set to True after frontend has consumed the notification.
+    # Reset to False at the start of each new sync.
 }
 
 

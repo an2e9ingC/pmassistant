@@ -97,7 +97,7 @@
         </svg>
         GitLab 发布
       </div>
-      <div class="nav-item" id="nav-reports" onclick="gotoView('reports')">">
+      <div class="nav-item" id="nav-reports" onclick="gotoView('reports')">
         <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
           <polyline points="1,12 4.5,7.5 7.5,9.5 11,5 14.5,7"/>
           <line x1="1" y1="15" x2="15" y2="15"/>
@@ -157,22 +157,13 @@
   </nav>
 
   <div class="sidebar-footer">
-    <div class="theme-row" onclick="toggleTheme()">
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-        <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.2 3.2l1 1M11.8 11.8l1 1M11.8 3.2l-1 1M4.2 11.8l-1 1M5 8a3 3 0 1 0 6 0 3 3 0 0 0-6 0z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-      </svg>
-      <span id="theme-lbl">浅色</span>
-      <div class="toggle" id="theme-toggle">
-        <div class="toggle-knob"></div>
-      </div>
-    </div>
 
-    <div style="margin-top:8px;text-align:center;font-size:10px;color:var(--muted)">
+    <div style="text-align:center;font-size:10px;color:var(--muted)">
       <a href="#" onclick="openFeedbackDialog();return false" style="color:var(--muted);text-decoration:none;display:block;margin-bottom:4px" title="提交 Bug 或功能建议">
         <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle;margin-right:3px"><circle cx="8" cy="8" r="6"/><line x1="8" y1="5" x2="8" y2="9"/><circle cx="8" cy="12" r="0.8" fill="currentColor" stroke="none"/></svg>
         反馈 Bug
       </a>
-      <span id="app-version">v2026.06.09-beta16</span>
+      <span id="app-version">v2026.06.10-beta1</span>
     </div>
   </div>
 </aside>
@@ -217,6 +208,10 @@
           <span class="user-label" id="user-name">用户</span>
         </div>
         <div class="user-menu" id="user-menu">
+          <div class="user-menu-item" onclick="toggleTheme();closeUserMenu()" style="display:flex;align-items:center;gap:8px">
+            <span id="theme-menu-icon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.2 3.2l1 1M11.8 11.8l1 1M11.8 3.2l-1 1M4.2 11.8l-1 1M5 8a3 3 0 1 0 6 0 3 3 0 0 0-6 0z"/></svg></span>
+            <span id="theme-menu-lbl">切换深色主题</span>
+          </div>
           <div class="user-menu-item" onclick="changePassword();closeUserMenu()">修改密码</div>
           <div class="user-menu-divider"></div>
           <div class="user-menu-item" onclick="logout()">退出登录</div>
