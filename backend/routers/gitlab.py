@@ -108,6 +108,56 @@ async def validate_gitlab_urls(_=Depends(require_admin)):
         db.close()
 
 
+@router.get("/releases/stats", response_model=dict)
+def releases_stats(db: Session = Depends(get_db), _=Depends(get_current_user)):
+    """Get GitLab releases statistics with KPI data and release list."""
+    from sqlalchemy import func as sa_func
+
+    releases = db.query(CachedRelease).order_by(CachedRelease.date.desc()).all()
+
+    total = len(releases)
+    with_url = sum(1 for r in releases if r.gitlab_url)
+    valid = sum(1 for r in releases if r.gitlab_url_valid is True)
+    invalid = sum(1 for r in releases if r.gitlab_url_valid is False)
+    unchecked = sum(1 for r in releases if r.gitlab_url and r.gitlab_url_valid is None)
+    missing_url = sum(1 for r in releases if not r.gitlab_url)
+
+    # Build detailed list
+    items = []
+    for r in releases:
+        product = db.query(CachedProduct).filter(CachedProduct.id == r.product_id).first()
+        items.append({
+            "id": r.id,
+            "product_id": r.product_id,
+            "product_name": product.name if product else "",
+            "product_code": product.code if product else "",
+            "version": r.name,
+            "marker": r.marker,
+            "status": r.status,
+            "date": r.date.isoformat() if r.date else None,
+            "desc": (r.desc or "")[:200],  # preview of Zentao release description
+            "gitlab_url": r.gitlab_url,
+            "gitlab_url_valid": r.gitlab_url_valid,
+            "gitlab_url_checked_at": r.gitlab_url_checked_at.isoformat() if r.gitlab_url_checked_at else None,
+        })
+
+    return {
+        "code": 0,
+        "data": {
+            "kpi": {
+                "total": total,
+                "with_url": with_url,
+                "valid": valid,
+                "invalid": invalid,
+                "unchecked": unchecked,
+                "missing_url": missing_url,
+            },
+            "items": items,
+        },
+        "message": "ok",
+    }
+
+
 @router.post("/validate/url", response_model=dict)
 async def validate_single_url(
     url: str = Query(...),

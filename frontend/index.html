@@ -89,7 +89,15 @@
         </svg>
         快速检索
       </div>
-      <div class="nav-item" id="nav-reports" onclick="gotoView('reports')">
+      <div class="nav-item" id="nav-gitlab-releases" onclick="gotoView('gitlab-releases')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M8 2L2 5v6l6 3 6-3V5L8 2z"/>
+          <line x1="5" y1="7" x2="11" y2="7"/>
+          <line x1="5" y1="9.5" x2="11" y2="9.5"/>
+        </svg>
+        GitLab 发布
+      </div>
+      <div class="nav-item" id="nav-reports" onclick="gotoView('reports')">">
         <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
           <polyline points="1,12 4.5,7.5 7.5,9.5 11,5 14.5,7"/>
           <line x1="1" y1="15" x2="15" y2="15"/>
@@ -160,7 +168,7 @@
     </div>
 
     <div style="margin-top:8px;text-align:center;font-size:10px;color:var(--muted)">
-      <span id="app-version">v2026.06.09-beta12</span>
+      <span id="app-version">v2026.06.09-beta13</span>
     </div>
   </div>
 </aside>
@@ -627,6 +635,79 @@
       </div>
     </div>
 
+    <!-- ══════════════════════ VIEW — GITLAB RELEASES ══════════════════════ -->
+    <div class="view" id="view-gitlab-releases">
+      <div class="kpi-grid" id="glr-kpi-grid">
+        <div class="kpi-card active" data-glr-filter="all" onclick="filterGlrReleases('all', this)">
+          <div class="kpi-label">全部发布</div>
+          <div class="kpi-value" id="glr-kpi-total">—</div>
+          <div class="kpi-meta">禅道中所有产品发布版本</div>
+        </div>
+        <div class="kpi-card" data-glr-filter="with-url" data-color="accent" onclick="filterGlrReleases('with-url', this)" style="--cat-color: var(--accent)">
+          <div class="kpi-label">已填写链接</div>
+          <div class="kpi-value" id="glr-kpi-with-url">—</div>
+          <div class="kpi-meta">desc 中含 GitLab URL</div>
+        </div>
+        <div class="kpi-card" data-glr-filter="valid" data-color="success" onclick="filterGlrReleases('valid', this)" style="--cat-color: var(--success)">
+          <div class="kpi-label">✓ 链接有效</div>
+          <div class="kpi-value" id="glr-kpi-valid">—</div>
+          <div class="kpi-meta">GitLab 上存在对应 release</div>
+        </div>
+        <div class="kpi-card" data-glr-filter="invalid" data-color="danger" onclick="filterGlrReleases('invalid', this)" style="--cat-color: var(--danger)">
+          <div class="kpi-label">✗ 链接无效</div>
+          <div class="kpi-value" id="glr-kpi-invalid">—</div>
+          <div class="kpi-meta">GitLab 链接无法访问</div>
+        </div>
+        <div class="kpi-card" data-glr-filter="missing" data-color="warn" onclick="filterGlrReleases('missing', this)" style="--cat-color: var(--warn)">
+          <div class="kpi-label">未填写链接</div>
+          <div class="kpi-value" id="glr-kpi-missing">—</div>
+          <div class="kpi-meta">desc 中无 GitLab URL</div>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+        <span style="font-size:11px;color:var(--muted);font-weight:600;white-space:nowrap">校验:</span>
+        <span class="tabs">
+          <span class="tab active" data-glr-valid="" onclick="filterGlrByValid('',this)">全部</span>
+          <span class="tab" data-glr-valid="valid" onclick="filterGlrByValid('valid',this)">✓ 有效</span>
+          <span class="tab" data-glr-valid="invalid" onclick="filterGlrByValid('invalid',this)">✗ 无效</span>
+          <span class="tab" data-glr-valid="unchecked" onclick="filterGlrByValid('unchecked',this)">待校验</span>
+          <span class="tab" data-glr-valid="missing" onclick="filterGlrByValid('missing',this)">未填写</span>
+        </span>
+      </div>
+
+      <div class="section-hd">
+        <div class="section-title">发布版本列表</div>
+        <div class="section-acts">
+          <span style="font-size:11px;color:var(--muted);margin-right:8px" title="GitLab URL 从禅道发布版本的「描述」字段自动提取；校验结果需配置 GitLab Token 后同步时自动检测">ⓘ 数据来源: 禅道产品发布版本描述字段</span>
+          <div class="search-wrap" style="max-width:280px">
+            <svg class="search-ico" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/>
+            </svg>
+            <input class="search-inp" id="glr-search" placeholder="搜索产品名、版本…" oninput="onGlrSearch(this.value)">
+            <button class="search-clear" onclick="clearSearch('glr-search',onGlrSearch)" title="清除">&times;</button>
+          </div>
+        </div>
+      </div>
+      <div class="card table-scroll" style="max-height:calc(100vh - 360px)">
+        <table class="proj-table">
+          <thead>
+            <tr>
+              <th width="12%">产品</th>
+              <th width="10%">发布版本</th>
+              <th width="30%">GitLab 链接</th>
+              <th width="8%">校验</th>
+              <th width="8%">发布日期</th>
+              <th width="20%">描述（来源）</th>
+            </tr>
+          </thead>
+          <tbody id="glr-tbody">
+            <tr><td colspan="6"><div class="loading-spinner">加载中...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- ══════════════════════ VIEW 6 — PRODUCT LIST ══════════════════════ -->
     <div class="view" id="view-product-list">
 
@@ -789,6 +870,7 @@
 <script src="/js/reports.js"></script>
 <script src="/js/logs.js"></script>
 <script src="/js/product.js"></script>
+<script src="/js/gitlab-releases.js"></script>
 <script src="/js/topology.js"></script>
 <script src="/js/admin.js"></script>
 <script src="/js/customers.js"></script>

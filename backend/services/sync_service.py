@@ -745,28 +745,14 @@ class SyncService:
         return 1
 
     async def _sync_releases(self, db: Session) -> dict:
-        """Sync Zentao product releases/versions (for GitLab URL validation)."""
+        """Sync Zentao product releases/versions (for GitLab URL validation).
+        Releases are product-level data — sync ALL products, not just filtered ones."""
         from backend.models.zentao import CachedRelease, CachedProduct
         log = _log_sync(db, "releases")
         created, updated, deleted = 0, 0, 0
         total = 0
         try:
             products = db.query(CachedProduct).all()
-            # Apply project filter: only sync releases for products linked to filtered projects
-            from backend.config import settings
-            pf = getattr(settings, "ZENTAO_PROJECT_FILTER", "") or os.environ.get("ZENTAO_PROJECT_FILTER", "")
-            if pf:
-                prefixes = [x.strip() for x in pf.split(",") if x.strip()]
-                filtered_project_ids = {
-                    p.id for p in db.query(CachedProject).all()
-                    if p.code and any(p.code.startswith(px) for px in prefixes)
-                }
-                linked_product_ids = {
-                    l.product_id for l in db.query(ProductProjectLink).filter(
-                        ProductProjectLink.project_id.in_(filtered_project_ids)
-                    ).all()
-                }
-                products = [p for p in products if p.id in linked_product_ids]
 
             import asyncio
             sem = asyncio.Semaphore(10)
