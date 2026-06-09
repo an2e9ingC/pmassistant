@@ -269,6 +269,11 @@ def get_or_init_project_documents(db: Session, project_id: int, project_type: st
 def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD") -> None:
     """Sync project documents with current templates: add new, remove obsolete.
 
+    Two-phase sync:
+    1. Matched executions: create/update/remove docs per template
+    2. Unmatched standard stages: create docs with execution_id=0 so they
+       appear in the doc-completeness tab even without a matching execution.
+
     Called on every document query so template changes propagate immediately.
     Preserves user-set status for documents that still exist in the template.
     """
@@ -282,6 +287,9 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
     )
 
     changed = False
+    matched_stages = set()
+
+    # Phase 1: sync per execution (matched stages only)
     for e in executions:
         stage_name = (e.name or "").strip()
         if not stage_name:
@@ -290,6 +298,7 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
         if not result:
             continue
         matched_type = result[0]
+        matched_stages.add(matched_type)
 
         templates = (
             db.query(DocumentTemplate)
@@ -306,7 +315,6 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
         )
         existing_names = {pd.doc_name: pd for pd in existing_docs}
 
-        # Add new docs (in template but not in project)
         for doc_name, tpl in template_names.items():
             if doc_name not in existing_names:
                 pd = ProjectDocument(
@@ -318,13 +326,60 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
                 db.add(pd)
                 changed = True
 
-        # Remove obsolete docs (in project but not in template)
         for doc_name, pd in existing_names.items():
             if doc_name not in template_names:
                 db.delete(pd)
                 changed = True
 
-        # Update metadata for existing docs (preserve user-set status)
+        for doc_name, pd in existing_names.items():
+            tpl = template_names.get(doc_name)
+            if tpl and (pd.sort_order != tpl.sort_order or
+                        pd.responsible_role != tpl.responsible_role or
+                        pd.description != tpl.description):
+                pd.sort_order = tpl.sort_order
+                pd.responsible_role = tpl.responsible_role
+                pd.description = tpl.description
+                changed = True
+
+    # Phase 2: unmatched standard stages — init docs with execution_id=0
+    for st in standard_stages:
+        if st in matched_stages:
+            continue
+        templates = (
+            db.query(DocumentTemplate)
+            .filter(DocumentTemplate.stage_type == st)
+            .order_by(DocumentTemplate.sort_order)
+            .all()
+        )
+        if not templates:
+            continue
+        template_names = {t.doc_name: t for t in templates}
+
+        existing_docs = (
+            db.query(ProjectDocument)
+            .filter(ProjectDocument.project_id == project_id,
+                    ProjectDocument.stage_type == st,
+                    ProjectDocument.execution_id == 0)
+            .all()
+        )
+        existing_names = {pd.doc_name: pd for pd in existing_docs}
+
+        for doc_name, tpl in template_names.items():
+            if doc_name not in existing_names:
+                pd = ProjectDocument(
+                    project_id=project_id, execution_id=0,
+                    stage_type=st, doc_name=tpl.doc_name,
+                    sort_order=tpl.sort_order, status="pending",
+                    responsible_role=tpl.responsible_role, description=tpl.description,
+                )
+                db.add(pd)
+                changed = True
+
+        for doc_name, pd in existing_names.items():
+            if doc_name not in template_names:
+                db.delete(pd)
+                changed = True
+
         for doc_name, pd in existing_names.items():
             tpl = template_names.get(doc_name)
             if tpl and (pd.sort_order != tpl.sort_order or
@@ -395,10 +450,11 @@ def _match_stage_type(stage_name: str, standard_stages: list[str]) -> Optional[t
 
 
 def _query_project_documents(db: Session, project_id: int) -> list[dict]:
-    """Return all ProjectDocument rows for a project with computed warn flag."""
+    """Return all ProjectDocument rows for a project with computed warn flag.
+    Uses outer join to include execution_id=0 placeholder docs (unmatched stages)."""
     rows = (
         db.query(ProjectDocument, CachedExecution.status.label("exec_status"))
-        .join(CachedExecution, CachedExecution.id == ProjectDocument.execution_id)
+        .outerjoin(CachedExecution, CachedExecution.id == ProjectDocument.execution_id)
         .filter(ProjectDocument.project_id == project_id)
         .order_by(ProjectDocument.execution_id, ProjectDocument.sort_order)
         .all()

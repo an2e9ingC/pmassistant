@@ -152,10 +152,12 @@ def get_project_stages(db: Session, project_id: int) -> dict:
 
 
 def _build_deliverables(db: Session, e: CachedExecution) -> list[dict]:
-    """Build deliverables list for an execution from ProjectDocument table."""
+    """Build deliverables list for an execution from ProjectDocument table.
+    Only includes docs with execution_id > 0 (excludes placeholder docs for unmatched stages)."""
     pd_rows = (
         db.query(ProjectDocument)
-        .filter(ProjectDocument.execution_id == e.id)
+        .filter(ProjectDocument.execution_id == e.id,
+                ProjectDocument.execution_id > 0)
         .order_by(ProjectDocument.sort_order)
         .all()
     )

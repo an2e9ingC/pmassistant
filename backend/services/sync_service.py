@@ -67,25 +67,30 @@ def _parse_float(val) -> Optional[float]:
 def _extract_gitlab_url(text: str) -> Optional[str]:
     """Extract the first GitLab release URL from a text (release desc).
     Supports formats like:
-      - http://192.168.0.128/rd/product/-/releases/v1.0
-      - http://192.168.0.128/rd/product/-/releases/v1.0.0
-      - http://192.168.0.128/rd/product/-/tags/v1.0
-      - https://gitlab.example.com/group/proj/-/releases/v1.0
+      - Plain text: http://192.168.0.128/rd/product/-/releases/v1.0
+      - HTML links: <a href="http://192.168.0.128/rd/product/-/releases/v1.0">text</a>
     Returns the full URL string or None.
     """
     if not text:
         return None
-    # Match GitLab release/tag URLs: <domain>/<path>/-/releases/<tag> or /-/tags/<tag>
     import re as _re
-    # Strip HTML tags first
+
+    # Pattern for GitLab release/tag URLs (stop at whitespace, quotes, brackets, commas)
+    url_pattern = r"https?://[^\s/]+(?:/[^\s/]+)*/-/(?:releases|tags)/[^\s)\]\",;]+"
+
+    # 1. First try extracting from href attributes (URL may not appear in visible text)
+    href_m = _re.search(r'href="(' + url_pattern + r')"', text)
+    if href_m:
+        return href_m.group(1)
+
+    # 2. Fall back to plain text extraction (strip HTML tags first)
     plain = _re.sub(r"<[^>]+>", "", text)
-    pattern = r"https?://[^\s/]+(?:/[^\s/]+)*/-/(?:releases|tags)/[^\s)\]]+"
-    m = _re.search(pattern, plain)
+    m = _re.search(url_pattern, plain)
     if not m:
         return None
     url = m.group(0)
     # Strip trailing punctuation that isn't part of the URL
-    url = url.rstrip(",;:!?）】)")  # strip trailing punctuation (but not dots, tag names may contain them)
+    url = url.rstrip(",;:!?）】)\"")  # strip trailing punctuation/quotes
     return url
 
 
