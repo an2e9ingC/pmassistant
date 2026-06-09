@@ -101,6 +101,7 @@ def init_db():
         CachedCustomer,
         CustomerProjectLink,
         CustomerProductLink,
+        CachedRelease,
     )
 
     logger.info(f"Database path: {_db_path}")

@@ -400,6 +400,8 @@ function init() {
           if (p.projects_total) parts.push('项目 ' + (p.projects_done||0) + '/' + p.projects_total);
           if (p.execs_total) parts.push('执行 ' + (p.execs_done||0) + '/' + p.execs_total);
           if (p.tasks_total) parts.push('任务 ' + p.tasks_total);
+          // GitLab phases don't have counters yet, just show phase name
+          if (p.phase === '发布版本' || p.phase === 'GitLab校验') parts.push(p.phase);
           statsEl.textContent = parts.join(' · ') || '';
         }
         if (et) et.textContent = Math.round((Date.now() - _autoSyncStart) / 1000) + 's';
@@ -409,17 +411,38 @@ function init() {
         _autoSyncEl.remove();
         _autoSyncEl = null;
         _autoSyncKnownRunning = false;
-        // Show completion notification
+        // Show completion notification with per-source results
         API.get('/sync/auto-notify').then(function(n) {
           if (n && n.completed) {
-            var msg = '数据已自动更新（' + n.time + '，耗时' + elapsed + 's）';
+            var parts = ['数据同步完成（' + n.time + '，耗时' + elapsed + 's）'];
+
+            // Zentao result
+            var z = n.zentao || {};
+            var zIcon = z.status === 'success' ? '✓' : (z.status === 'failed' ? '✗' : '—');
+            parts.push('禅道 ' + zIcon + ' ' + (z.summary || z.status || ''));
+
+            // GitLab result
+            var g = n.gitlab || {};
+            var gIcon = g.status === 'success' ? '✓' : (g.status === 'failed' ? '✗' : (g.status === 'skipped' ? '⊘' : '—'));
+            parts.push('GitLab ' + gIcon + ' ' + (g.summary || g.status || ''));
+
+            // NAS result
+            var nas = n.nas || {};
+            var nasIcon = nas.status === 'skipped' ? '⊘' : '—';
+            parts.push('NAS ' + nasIcon + ' ' + (nas.summary || nas.status || ''));
+
+            var msg = parts.join('\n');
+            var isWarn = z.status === 'failed' || g.status === 'failed' || (n.mismatches && (n.mismatches.total_unmatched > 0 || n.mismatches.total_fuzzy > 0));
+
+            // Add stage mismatch details if any
             var mm = n.mismatches;
             if (mm && (mm.total_unmatched > 0 || mm.total_fuzzy > 0)) {
-              var parts = [];
-              if (mm.total_unmatched > 0) parts.push(mm.total_unmatched + ' 个非标准阶段');
-              if (mm.total_fuzzy > 0) parts.push(mm.total_fuzzy + ' 个模糊匹配');
-              msg += ' ⚠ ' + parts.join('，') + '，';
-              msg += '影响 ' + (mm.affected_projects || []).length + ' 个项目';
+              var mmParts = [];
+              if (mm.total_unmatched > 0) mmParts.push(mm.total_unmatched + ' 个非标准阶段');
+              if (mm.total_fuzzy > 0) mmParts.push(mm.total_fuzzy + ' 个模糊匹配');
+              msg += '\n⚠ ' + mmParts.join('，') + '，影响 ' + (mm.affected_projects || []).length + ' 个项目';
+              showToast(msg, 'warn', 8000);
+            } else if (isWarn) {
               showToast(msg, 'warn', 8000);
             } else {
               showToast(msg, 'success', 5000);

@@ -172,3 +172,24 @@ class CustomerProductLink(Base):
     created_at = Column(DateTime, default=func.now())
 
     __table_args__ = (UniqueConstraint("customer_id", "product_id"),)
+
+
+class CachedRelease(Base):
+    """Zentao product releases/versions — synced from /products/:id/releases."""
+    __tablename__ = "zenta_releases"
+
+    id = Column(Integer, primary_key=True)
+    product_id = Column(Integer, ForeignKey("zenta_products.id"), nullable=False, index=True)
+    name = Column(String(256), nullable=False)            # version name, e.g. "v1.0.0"
+    marker = Column(Integer, default=0)                    # 0=normal, 1=milestone
+    status = Column(String(32), default="normal")          # normal / terminated
+    date = Column(Date, nullable=True)                     # release date
+    desc = Column(Text, nullable=True)                     # description (may contain GitLab URLs)
+    # PMA-local enrichments
+    gitlab_url = Column(String(1024), nullable=True)       # extracted GitLab release URL
+    gitlab_url_valid = Column(Boolean, nullable=True)      # None=not checked, True=valid, False=invalid
+    gitlab_url_checked_at = Column(DateTime, nullable=True)  # last validation time
+    raw_json = Column(Text)
+    synced_at = Column(DateTime, default=func.now())
+
+    product = relationship("CachedProduct", backref="releases_list")

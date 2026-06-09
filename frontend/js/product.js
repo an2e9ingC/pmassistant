@@ -299,20 +299,80 @@ function renderProdDetailProjects(p) {
 
 function renderProdDetailResources(p) {
   var card = document.getElementById('prod-resources-card');
-  var html = '<ul style="list-style:none;padding:16px;margin:0">';
+  var html = '';
+
+  // ── 交付资料（NAS + Git 仓库链接） ──
+  html += '<div class="section-hd"><div class="section-title">交付资料</div></div>';
+  html += '<ul style="list-style:none;padding:16px;margin:0">';
   var items = [];
   if (p.nas_path) {
     items.push('<li style="padding:6px 0;font-size:13px"><span style="color:var(--muted)">NAS路径: </span><code>' + escHtml(p.nas_path) + '</code></li>');
   }
   if (p.git_url) {
-    items.push('<li style="padding:6px 0;font-size:13px"><span style="color:var(--muted)">Git仓库: </span><code>' + escHtml(p.git_url) + '</code></li>');
-  }
-  if (p.releases > 0) {
-    items.push('<li style="padding:6px 0;font-size:13px"><span style="color:var(--muted)">发布次数: </span>' + p.releases + '</li>');
+    items.push('<li style="padding:6px 0;font-size:13px"><span style="color:var(--muted)">Git仓库: </span><a href="' + escHtml(p.git_url) + '" target="_blank" style="color:var(--accent)"><code>' + escHtml(p.git_url) + '</code> &#x2197;</a></li>');
   }
   if (!items.length) {
     items.push('<li style="padding:6px 0;font-size:13px;color:var(--muted)">暂无交付资料信息</li>');
   }
   html += items.join('') + '</ul>';
+
+  // ── 发布版本（含 GitLab 链接校验） ──
+  var releases = p.releases_list || [];
+  html += '<div class="section-hd" style="margin-top:16px"><div class="section-title">发布版本</div>';
+  if (releases.length > 0) {
+    html += '<span style="font-size:12px;color:var(--muted);margin-left:8px">共 ' + releases.length + ' 个</span>';
+  }
+  html += '</div>';
+
+  if (releases.length > 0) {
+    html += '<div class="table-scroll" style="max-height:300px">';
+    html += '<table class="stage-table"><thead><tr>';
+    html += '<th>版本</th><th>发布日期</th><th>状态</th><th>GitLab 链接</th><th>校验</th>';
+    html += '</tr></thead><tbody>';
+
+    releases.forEach(function(r) {
+      var dateStr = r.date ? r.date : '—';
+      var statusPill = r.status === 'normal' ? '<span class="pill active">正常</span>' :
+                       r.status === 'terminated' ? '<span class="pill closed">已终止</span>' :
+                       '<span class="pill">' + escHtml(r.status || '未知') + '</span>';
+
+      // GitLab URL link
+      var urlHtml = '—';
+      if (r.gitlab_url) {
+        urlHtml = '<a href="' + escHtml(r.gitlab_url) + '" target="_blank" style="color:var(--accent);font-size:12px" title="' + escHtml(r.gitlab_url) + '">' +
+          (r.gitlab_url.length > 50 ? escHtml(r.gitlab_url.substring(0, 47)) + '...' : escHtml(r.gitlab_url)) +
+        ' &#x2197;</a>';
+      } else if (r.desc) {
+        urlHtml = '<span style="font-size:12px;color:var(--muted)">未填写</span>';
+      }
+
+      // Validation status
+      var validationHtml = '';
+      if (!r.gitlab_url) {
+        validationHtml = '<span style="font-size:12px;color:var(--muted)">—</span>';
+      } else if (r.gitlab_url_valid === true) {
+        validationHtml = '<span style="color:var(--success);font-weight:600" title="已校验: ' + (r.gitlab_url_checked_at || '') + '">&#x2713; 有效</span>';
+      } else if (r.gitlab_url_valid === false) {
+        validationHtml = '<span style="color:var(--danger);font-weight:600" title="已校验: ' + (r.gitlab_url_checked_at || '') + '">&#x2717; 无效</span>';
+      } else {
+        validationHtml = '<span style="color:var(--muted);font-size:12px" title="待同步后校验">待校验</span>';
+      }
+
+      // Row style: red-ish if invalid
+      var rowStyle = r.gitlab_url_valid === false ? ' style="background:var(--danger-lt)"' : '';
+
+      html += '<tr' + rowStyle + '>' +
+        '<td><strong>' + escHtml(r.name) + '</strong></td>' +
+        '<td style="font-size:12px">' + dateStr + '</td>' +
+        '<td>' + statusPill + '</td>' +
+        '<td>' + urlHtml + '</td>' +
+        '<td>' + validationHtml + '</td>' +
+      '</tr>';
+    });
+    html += '</tbody></table></div>';
+  } else {
+    html += '<div style="padding:16px;font-size:13px;color:var(--muted);font-style:italic">TODO: 同步禅道发布版本数据后将在此显示 GitLab 链接校验状态</div>';
+  }
+
   card.innerHTML = html;
 }

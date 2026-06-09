@@ -363,6 +363,26 @@ def get_project_resources(db: Session, project_id: int) -> list[dict]:
                 links.append({"label": f"NAS - {prod.name}", "url": prod.nas_path, "description": f"{prod.name} 硬件资料"})
             if prod.git_url:
                 links.append({"label": f"Git - {prod.name}", "url": prod.git_url, "description": f"{prod.name} 代码仓库"})
+
+    # Add GitLab release links from associated products' cached releases
+    from backend.models.zentao import CachedRelease
+    product_ids = [lr.product_id for lr in link_records]
+    if product_ids:
+        releases = db.query(CachedRelease).filter(
+            CachedRelease.product_id.in_(product_ids),
+            CachedRelease.gitlab_url.isnot(None),
+            CachedRelease.gitlab_url != "",
+        ).order_by(CachedRelease.date.desc()).all()
+        for r in releases:
+            prod = db.query(CachedProduct).filter(CachedProduct.id == r.product_id).first()
+            prod_name = prod.name if prod else f"产品#{r.product_id}"
+            valid_suffix = " ✓" if r.gitlab_url_valid else (" ✗" if r.gitlab_url_valid is False else "")
+            links.append({
+                "label": f"Release - {prod_name} {r.name}{valid_suffix}",
+                "url": r.gitlab_url,
+                "description": f"{prod_name} 版本 {r.name} GitLab 发布链接",
+            })
+
     return links
 
 

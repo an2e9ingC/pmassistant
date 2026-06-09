@@ -263,5 +263,68 @@ def _detect_alerts_internal(db: Session) -> list[dict]:
                     "project_id": p.id, "project_code": proj_code, "stage_name": e.name,
                 })
 
-    # TODO: GitLab发布未同步告警 — 检测GitLab release版本号与禅道版本号是否一致（Phase 3）
+    # GitLab release URL validation alerts (FR-004)
+    from backend.models.zentao import CachedRelease, CachedProduct
+    invalid_releases = db.query(CachedRelease).filter(
+        CachedRelease.gitlab_url.isnot(None),
+        CachedRelease.gitlab_url != "",
+        CachedRelease.gitlab_url_valid == False,
+    ).all()
+    for r in invalid_releases:
+        product = db.query(CachedProduct).filter(CachedProduct.id == r.product_id).first()
+        product_name = product.name if product else f"产品#{r.product_id}"
+        alert_id += 1
+        alerts.append({
+            "id": alert_id, "severity": "yellow",
+            "message": f"产品「{product_name}」版本 {r.name} 的 GitLab 发布链接无效",
+            "sub_message": f"链接: {r.gitlab_url[:80]}{'...' if len(r.gitlab_url or '') > 80 else ''}，请检查 GitLab 上是否存在对应 release",
+            "project_id": None, "product_id": r.product_id,
+            "stage_name": r.name,
+        })
+
+    # GitLab URL not set but release has description (may contain non-URL text)
+    missing_url_releases = db.query(CachedRelease).filter(
+        (CachedRelease.gitlab_url.is_(None)) | (CachedRelease.gitlab_url == ""),
+        CachedRelease.desc.isnot(None),
+        CachedRelease.desc != "",
+    ).all()
+    for r in missing_url_releases:
+        product = db.query(CachedProduct).filter(CachedProduct.id == r.product_id).first()
+        product_name = product.name if product else f"产品#{r.product_id}"
+        alert_id += 1
+        alerts.append({
+            "id": alert_id, "severity": "yellow",
+            "message": f"产品「{product_name}」版本 {r.name} 未填写 GitLab 发布链接",
+            "sub_message": "请在禅道发布页面补充 GitLab release 链接",
+            "project_id": None, "product_id": r.product_id,
+            "stage_name": r.name,
+        })
+
+    # ── Data source unconfigured alerts ──
+    from backend.config import settings
+    import os
+
+    # GitLab not configured
+    if not settings.GITLAB_TOKEN:
+        alert_id += 1
+        alerts.append({
+            "id": alert_id, "severity": "yellow",
+            "message": "GitLab 数据源未配置",
+            "sub_message": "请在「管理 → 数据源配置」中填写 GitLab Token，以启用发布版本校验功能",
+            "project_id": None, "product_id": None,
+            "stage_name": "GitLab",
+        })
+
+    # NAS not configured
+    nas_host = os.environ.get("NAS_HOST", "")
+    if not nas_host:
+        alert_id += 1
+        alerts.append({
+            "id": alert_id, "severity": "yellow",
+            "message": "NAS 数据源未配置",
+            "sub_message": "请在「管理 → 数据源配置」中填写 NAS 连接信息，以启用售前项目检测功能",
+            "project_id": None, "product_id": None,
+            "stage_name": "NAS",
+        })
+
     return alerts

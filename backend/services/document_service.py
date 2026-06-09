@@ -131,22 +131,51 @@ def seed_document_templates(db: Session) -> int:
 # ---------------------------------------------------------------------------
 
 def get_templates_grouped(db: Session) -> dict:
-    """Return all templates grouped by stage_type, sorted by sort_order."""
+    """Return all templates grouped by stage_type, sorted by sort_order.
+    Includes all known stage types even if they have 0 templates."""
     templates = db.query(DocumentTemplate).order_by(
         DocumentTemplate.stage_type, DocumentTemplate.sort_order
     ).all()
     grouped: dict[str, list[dict]] = {}
+
+    # Ensure all known stage types appear (even with empty list)
+    for st in get_stage_types(db):
+        grouped[st] = []
+
     for t in templates:
         grouped.setdefault(t.stage_type, []).append(_template_dict(t))
     return grouped
 
 
+CUSTOM_STAGE_TYPES_KEY = "custom_stage_types"  # PmaSetting key, comma-separated
+
+
+def _get_custom_stage_types(db: Session) -> list[str]:
+    """Read persisted custom stage types from PmaSetting."""
+    from backend.models.local import PmaSetting
+    val = PmaSetting.get(db, CUSTOM_STAGE_TYPES_KEY, "")
+    return [s.strip() for s in val.split(",") if s.strip()]
+
+
+def _save_custom_stage_types(db: Session, stage_types: list[str]):
+    """Persist custom stage types to PmaSetting."""
+    from backend.models.local import PmaSetting
+    val = ",".join(stage_types)
+    PmaSetting.set(db, CUSTOM_STAGE_TYPES_KEY, val)
+
+
 def get_stage_types(db: Session) -> list[str]:
-    """Return distinct stage types that have templates configured."""
-    rows = db.query(DocumentTemplate.stage_type).distinct().order_by(
-        DocumentTemplate.stage_type
-    ).all()
-    return [r[0] for r in rows]
+    """Return all known stage types: predefined lifecycle stages + persisted custom ones.
+    Stage types are the authoritative definition of project phases — they exist
+    independently of whether any document templates are configured for them."""
+    all_stages = list(dict.fromkeys(RD_STAGE_TYPES + SC_STAGE_TYPES))  # dedup preserving order
+
+    # Include persisted custom stage types
+    for st in _get_custom_stage_types(db):
+        if st not in all_stages:
+            all_stages.append(st)
+
+    return all_stages
 
 
 def create_template(db: Session, data: dict) -> dict:

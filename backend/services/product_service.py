@@ -229,4 +229,24 @@ def _product_detail(p: CachedProduct, db: Session) -> dict:
         "zentao_releases_url": zentao_product_releases_url(p.id),
         "projects": projects,
         "project_count": len(projects),
+        "releases_list": _get_product_releases(db, p.id),
     }
+
+
+def _get_product_releases(db: Session, product_id: int) -> list[dict]:
+    """Get cached Zentao releases for a product, with GitLab validation status."""
+    from backend.models.zentao import CachedRelease
+    releases = db.query(CachedRelease).filter(
+        CachedRelease.product_id == product_id
+    ).order_by(CachedRelease.date.desc()).all()
+    return [{
+        "id": r.id,
+        "name": r.name,
+        "marker": r.marker,
+        "status": r.status,
+        "date": r.date.isoformat() if r.date else None,
+        "desc": r.desc,
+        "gitlab_url": r.gitlab_url,
+        "gitlab_url_valid": r.gitlab_url_valid,
+        "gitlab_url_checked_at": r.gitlab_url_checked_at.isoformat() if r.gitlab_url_checked_at else None,
+    } for r in releases]

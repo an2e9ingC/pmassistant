@@ -341,13 +341,13 @@ function showAddStageDialog() {
 function addStageType() {
   var name = document.getElementById('dt-new-stage-input').value.trim();
   if (!name) { showToast('请输入阶段名称', 'error'); return; }
+  // Check if already exists
+  if (_templatesGrouped[name]) {
+    showToast('阶段类型已存在', 'error');
+    return;
+  }
   _pendingOps.push({ type: 'add_stage', stage_type: name });
-  var tempId = _nextTempId--;
-  var placeholder = { id: tempId, stage_type: name, doc_name: '（待配置）',
-    sort_order: 1, responsible_role: '', description: '请修改或删除此占位模板' };
-  _pendingOps.push({ type: 'add', tempId: tempId, stage_type: name,
-    doc_name: placeholder.doc_name, sort_order: 1, responsible_role: '', description: placeholder.description });
-  _templatesGrouped[name] = [placeholder];
+  _templatesGrouped[name] = [];
   document.querySelector('.note-dialog-overlay').remove();
   _selectedStage = name;
   renderTemplatesPage();
@@ -393,7 +393,7 @@ async function saveAllChanges() {
         await API.del('/doc-templates/stage-types/' + encodeURIComponent(op.stage_type));
         success++;
       } else if (op.type === 'add_stage') {
-        // No-op: the placeholder template is handled by 'add' op
+        await API.post('/doc-templates/stage-types?stage_type=' + encodeURIComponent(op.stage_type), {});
         success++;
       }
     } catch(e) {

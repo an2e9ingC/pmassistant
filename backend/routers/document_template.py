@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -107,8 +107,36 @@ def delete_stage_type(
     user=Depends(require_perm("doc_template")),
 ):
     count = document_service.delete_stage_type(db, stage_type)
+    # Also remove from persisted custom stage types
+    from backend.services.document_service import _get_custom_stage_types, _save_custom_stage_types
+    customs = _get_custom_stage_types(db)
+    if stage_type in customs:
+        customs.remove(stage_type)
+        _save_custom_stage_types(db, customs)
     log_audit(db, user, "doc_stage_del", f"{stage_type} ({count} docs)", "管理", "high")
     return {"code": 0, "data": {"deleted": count}, "message": "ok"}
+
+
+@router.post("/stage-types", response_model=dict)
+def add_stage_type(
+    stage_type: str = Query(...),
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("doc_template")),
+):
+    """Persist a new custom stage type (independent of document templates)."""
+    from backend.services.document_service import _get_custom_stage_types, _save_custom_stage_types, RD_STAGE_TYPES, SC_STAGE_TYPES
+    predefined = set(RD_STAGE_TYPES + SC_STAGE_TYPES)
+    if stage_type in predefined:
+        return {"code": 1, "message": f"'{stage_type}' 是预定义阶段，无需添加"}
+
+    customs = _get_custom_stage_types(db)
+    if stage_type in customs:
+        return {"code": 1, "message": f"阶段类型 '{stage_type}' 已存在"}
+
+    customs.append(stage_type)
+    _save_custom_stage_types(db, customs)
+    log_audit(db, user, "doc_stage_add", stage_type, "管理", "medium")
+    return {"code": 0, "data": {"stage_type": stage_type}, "message": "ok"}
 
 
 class ResetProjectDocsRequest(BaseModel):

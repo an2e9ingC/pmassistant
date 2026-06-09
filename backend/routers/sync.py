@@ -137,20 +137,54 @@ def sync_sources(db: Session = Depends(get_db), _=Depends(get_current_user)):
         "configured": True,
         "sync_status": zentao_status,
         "last_sync": zentao_log.finished_at.isoformat() if (zentao_log and zentao_log.finished_at) else None,
-        "description": "项目管理（项目/迭代/任务/Bug）",
+        "description": "项目管理（项目/迭代/任务/Bug/发布版本）",
         "detail": f"API: {settings.ZENTAO_BASE_URL}\n账号: {settings.ZENTAO_AUTH_ACCOUNT}",
     })
 
-    # GitLab — configured if token is set
+    # GitLab — configured if token is set; check latest release sync + validation
     gitlab_configured = bool(settings.GITLAB_TOKEN)
+    release_log = (
+        db.query(SyncLog)
+        .filter(SyncLog.entity_type == "releases")
+        .order_by(SyncLog.started_at.desc())
+        .first()
+    )
+    gitlab_sync_status = "pending"
+    gitlab_last_sync = None
+    if release_log:
+        gitlab_sync_status = release_log.status if release_log.status != "running" else "ok"
+        gitlab_last_sync = release_log.finished_at.isoformat() if release_log.finished_at else None
+
+    # Count invalid GitLab URLs for detail
+    from backend.models.zentao import CachedRelease
+    total_releases = db.query(CachedRelease).count()
+    invalid_count = db.query(CachedRelease).filter(
+        CachedRelease.gitlab_url.isnot(None),
+        CachedRelease.gitlab_url != "",
+        CachedRelease.gitlab_url_valid == False,
+    ).count()
+    unchecked_count = db.query(CachedRelease).filter(
+        CachedRelease.gitlab_url.isnot(None),
+        CachedRelease.gitlab_url != "",
+        CachedRelease.gitlab_url_valid.is_(None),
+    ).count()
+
+    detail_parts = [f"API: {settings.GITLAB_BASE_URL}", f"Token: {'已配置' if gitlab_configured else '未配置'}"]
+    if total_releases > 0:
+        detail_parts.append(f"发布版本: {total_releases}个")
+        if invalid_count > 0:
+            detail_parts.append(f"链接无效: {invalid_count}个")
+        if unchecked_count > 0:
+            detail_parts.append(f"待校验: {unchecked_count}个")
+
     sources.append({
         "key": "gitlab",
         "name": "GitLab",
         "configured": gitlab_configured,
-        "sync_status": "pending",
-        "last_sync": None,
-        "description": "代码仓库（commit统计、发布验证）" if gitlab_configured else "代码仓库（未配置Token）",
-        "detail": f"API: {settings.GITLAB_BASE_URL}\nToken: {'已配置' if gitlab_configured else '未配置'}",
+        "sync_status": gitlab_sync_status,
+        "last_sync": gitlab_last_sync,
+        "description": "代码仓库（发布版本校验）" if gitlab_configured else "代码仓库（未配置Token）",
+        "detail": "\n".join(detail_parts),
     })
 
     # NAS — not yet integrated

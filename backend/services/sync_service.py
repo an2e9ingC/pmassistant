@@ -64,6 +64,31 @@ def _parse_float(val) -> Optional[float]:
     return None
 
 
+def _extract_gitlab_url(text: str) -> Optional[str]:
+    """Extract the first GitLab release URL from a text (release desc).
+    Supports formats like:
+      - http://192.168.0.128/rd/product/-/releases/v1.0
+      - http://192.168.0.128/rd/product/-/releases/v1.0.0
+      - http://192.168.0.128/rd/product/-/tags/v1.0
+      - https://gitlab.example.com/group/proj/-/releases/v1.0
+    Returns the full URL string or None.
+    """
+    if not text:
+        return None
+    # Match GitLab release/tag URLs: <domain>/<path>/-/releases/<tag> or /-/tags/<tag>
+    import re as _re
+    # Strip HTML tags first
+    plain = _re.sub(r"<[^>]+>", "", text)
+    pattern = r"https?://[^\s/]+(?:/[^\s/]+)*/-/(?:releases|tags)/[^\s)\]]+"
+    m = _re.search(pattern, plain)
+    if not m:
+        return None
+    url = m.group(0)
+    # Strip trailing punctuation that isn't part of the URL
+    url = url.rstrip(",;:!?）】)")  # strip trailing punctuation (but not dots, tag names may contain them)
+    return url
+
+
 def _parse_datetime(val) -> Optional[datetime]:
     if not val:
         return None
@@ -128,8 +153,13 @@ def _finish_log(db: Session, log: SyncLog, status: str, items_fetched: int = 0,
     db.commit()
 
 
-# Auto-sync notification state
-_auto_sync_notify = {"completed": False, "time": "", "mismatches": None}
+# Auto-sync notification state — per-source results
+_auto_sync_notify = {
+    "completed": False, "time": "", "mismatches": None,
+    "zentao": {"status": "pending"},   # status: pending|success|failed|skipped
+    "gitlab": {"status": "pending"},
+    "nas": {"status": "pending"},
+}
 
 
 def _check_stage_mismatches(db) -> dict:
@@ -215,17 +245,81 @@ class SyncService:
         timings = {}
         t_start = time.time()
         self.client = ZentaoClient()
+        from backend.config import settings
+
         try:
-            t0 = time.time(); await self.client.authenticate(); timings["auth"] = round(time.time() - t0, 1)
-            _sync_progress["phase"] = "用户"; t0 = time.time(); results["users"] = await self._sync_users(db); timings["users"] = round(time.time() - t0, 1)
-            _sync_progress["phase"] = "产品"; t0 = time.time(); results["products"] = await self._sync_products(db); timings["products"] = round(time.time() - t0, 1)
-            _sync_progress["phase"] = "项目"; t0 = time.time(); results["projects"] = await self._sync_projects(db); timings["projects"] = round(time.time() - t0, 1)
-            _sync_progress["phase"] = "执行与任务"; t0 = time.time(); results["executions_tasks"] = await self._sync_executions_and_tasks(db); timings["execs_tasks"] = round(time.time() - t0, 1)
-            _sync_progress["phase"] = "Bug"; t0 = time.time(); results["bugs"] = await self._sync_bugs(db); timings["bugs"] = round(time.time() - t0, 1)
+            # ── Source 1: Zentao ──
+            zentao_summary = {}
+            try:
+                t0 = time.time(); await self.client.authenticate(); timings["auth"] = round(time.time() - t0, 1)
+                logger.info("[禅道] 认证成功，开始同步...")
+                _sync_progress["phase"] = "用户"; t0 = time.time(); results["users"] = await self._sync_users(db); timings["users"] = round(time.time() - t0, 1)
+                logger.info(f"[禅道] 用户同步完成: {results['users']}")
+                _sync_progress["phase"] = "产品"; t0 = time.time(); results["products"] = await self._sync_products(db); timings["products"] = round(time.time() - t0, 1)
+                logger.info(f"[禅道] 产品同步完成: {results['products']}")
+                _sync_progress["phase"] = "项目"; t0 = time.time(); results["projects"] = await self._sync_projects(db); timings["projects"] = round(time.time() - t0, 1)
+                logger.info(f"[禅道] 项目同步完成: {results['projects']}")
+                _sync_progress["phase"] = "执行与任务"; t0 = time.time(); results["executions_tasks"] = await self._sync_executions_and_tasks(db); timings["execs_tasks"] = round(time.time() - t0, 1)
+                logger.info(f"[禅道] 执行与任务同步完成: {results['executions_tasks']}")
+                _sync_progress["phase"] = "Bug"; t0 = time.time(); results["bugs"] = await self._sync_bugs(db); timings["bugs"] = round(time.time() - t0, 1)
+                logger.info(f"[禅道] Bug同步完成: {results['bugs']}")
+
+                zs = {k: v for k, v in results.items() if k in ("users", "products", "projects", "executions_tasks", "bugs")}
+                z_total = sum(v.get("fetched", v.get("executions_fetched", 0)) + v.get("tasks_fetched", 0) for v in zs.values() if isinstance(v, dict))
+                zentao_summary = {
+                    "status": "success",
+                    "summary": f"用户{results.get('users',{}).get('fetched',0)} / 产品{results.get('products',{}).get('fetched',0)} / 项目{results.get('projects',{}).get('fetched',0)} / 执行{results.get('executions_tasks',{}).get('executions_fetched',0)} / 任务{results.get('executions_tasks',{}).get('tasks_fetched',0)} / Bug{results.get('bugs',{}).get('fetched',0)}",
+                }
+                _auto_sync_notify["zentao"] = zentao_summary
+            except Exception as e:
+                logger.error(f"[禅道] 同步失败: {e}")
+                zentao_summary = {"status": "failed", "summary": str(e)[:100]}
+                _auto_sync_notify["zentao"] = zentao_summary
+
+            # ── Source 2: GitLab (releases sync + URL validation) ──
+            gitlab_summary = {}
+            if settings.GITLAB_TOKEN:
+                try:
+                    _sync_progress["phase"] = "发布版本"
+                    t0 = time.time()
+                    results["releases"] = await self._sync_releases(db)
+                    timings["releases"] = round(time.time() - t0, 1)
+                    logger.info(f"[GitLab] 禅道发布版本同步完成: {results['releases']}")
+
+                    _sync_progress["phase"] = "GitLab校验"
+                    from backend.services.gitlab_service import validate_all_releases
+                    t0 = time.time()
+                    vresult = await validate_all_releases(db, concurrency=5)
+                    results["gitlab_validation"] = vresult
+                    timings["gitlab_validation"] = round(time.time() - t0, 1)
+                    logger.info(f"[GitLab] URL校验完成: {vresult}")
+
+                    r = results["releases"]
+                    gitlab_summary = {
+                        "status": "success",
+                        "summary": f"发布版本{r.get('fetched',0)}个 / 有效{vresult.get('valid',0)} / 无效{vresult.get('invalid',0)}",
+                    }
+                    _auto_sync_notify["gitlab"] = gitlab_summary
+                except Exception as e:
+                    logger.error(f"[GitLab] 同步或校验失败: {e}")
+                    gitlab_summary = {"status": "failed", "summary": str(e)[:100]}
+                    _auto_sync_notify["gitlab"] = gitlab_summary
+            else:
+                logger.warning("[GitLab] 未配置Token，跳过")
+                gitlab_summary = {"status": "skipped", "summary": "未配置Token"}
+                _auto_sync_notify["gitlab"] = gitlab_summary
+
+            # ── Source 3: NAS ──
+            nas_summary = {"status": "skipped", "summary": "未配置NAS路径"}
+            _auto_sync_notify["nas"] = nas_summary
+
             timings["total"] = round(time.time() - t_start, 1)
 
-            logger.info(f"Sync completed in {timings['total']}s: {timings}")
+            logger.info(f"Sync completed in {timings['total']}s | 禅道:{zentao_summary.get('status','?')} GitLab:{gitlab_summary.get('status','?')} NAS:{nas_summary.get('status','?')}")
             results["timings"] = timings
+            results["zentao_summary"] = zentao_summary
+            results["gitlab_summary"] = gitlab_summary
+            results["nas_summary"] = nas_summary
 
             # Post-sync: check stage name mismatches
             mismatch = _check_stage_mismatches(db)
@@ -649,6 +743,92 @@ class SyncService:
         existing.raw_json = json.dumps(b, ensure_ascii=False)
         existing.synced_at = datetime.now(timezone.utc)
         return 1
+
+    async def _sync_releases(self, db: Session) -> dict:
+        """Sync Zentao product releases/versions (for GitLab URL validation)."""
+        from backend.models.zentao import CachedRelease, CachedProduct
+        log = _log_sync(db, "releases")
+        created, updated, deleted = 0, 0, 0
+        total = 0
+        try:
+            products = db.query(CachedProduct).all()
+            # Apply project filter: only sync releases for products linked to filtered projects
+            from backend.config import settings
+            pf = getattr(settings, "ZENTAO_PROJECT_FILTER", "") or os.environ.get("ZENTAO_PROJECT_FILTER", "")
+            if pf:
+                prefixes = [x.strip() for x in pf.split(",") if x.strip()]
+                filtered_project_ids = {
+                    p.id for p in db.query(CachedProject).all()
+                    if p.code and any(p.code.startswith(px) for px in prefixes)
+                }
+                linked_product_ids = {
+                    l.product_id for l in db.query(ProductProjectLink).filter(
+                        ProductProjectLink.project_id.in_(filtered_project_ids)
+                    ).all()
+                }
+                products = [p for p in products if p.id in linked_product_ids]
+
+            import asyncio
+            sem = asyncio.Semaphore(10)
+            all_releases = []
+            all_api_ids = set()
+
+            async def _fetch_one(prod):
+                async with sem:
+                    try:
+                        return await self.client.get_product_releases(prod.id)
+                    except Exception:
+                        logger.warning(f"Failed to fetch releases for product {prod.id}")
+                        return []
+
+            results = await asyncio.gather(*[_fetch_one(p) for p in products])
+
+            for prod, releases in zip(products, results):
+                total += len(releases)
+                for r in releases:
+                    r_id = r["id"]
+                    all_api_ids.add(r_id)
+                    desc = r.get("desc", "") or ""
+                    gitlab_url = _extract_gitlab_url(desc)
+                    existing = db.query(CachedRelease).filter(CachedRelease.id == r_id).first()
+                    if existing:
+                        existing.name = r.get("name", "")
+                        existing.marker = r.get("marker", 0)
+                        existing.status = r.get("status", "normal")
+                        existing.date = _parse_date(r.get("date"))
+                        existing.desc = desc
+                        existing.gitlab_url = gitlab_url
+                        existing.raw_json = json.dumps(r, ensure_ascii=False)
+                        existing.synced_at = datetime.now(timezone.utc)
+                        updated += 1
+                    else:
+                        db.add(CachedRelease(
+                            id=r_id,
+                            product_id=prod.id,
+                            name=r.get("name", ""),
+                            marker=r.get("marker", 0),
+                            status=r.get("status", "normal"),
+                            date=_parse_date(r.get("date")),
+                            desc=desc,
+                            gitlab_url=gitlab_url,
+                            raw_json=json.dumps(r, ensure_ascii=False),
+                        ))
+                        created += 1
+                db.commit()
+
+            # Cleanup stale releases
+            if all_api_ids:
+                stale = db.query(CachedRelease).filter(~CachedRelease.id.in_(all_api_ids)).all()
+                for sr in stale:
+                    db.delete(sr)
+                    deleted += 1
+                db.commit()
+
+            _finish_log(db, log, "success", total, created + deleted, updated)
+            return {"fetched": total, "created": created, "updated": updated, "deleted": deleted}
+        except Exception as e:
+            _finish_log(db, log, "failed", error=str(e))
+            raise
 
     # --- Build helpers ---
 

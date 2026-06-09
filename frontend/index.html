@@ -160,7 +160,7 @@
     </div>
 
     <div style="margin-top:8px;text-align:center;font-size:10px;color:var(--muted)">
-      <span id="app-version">v2026.06.09-beta10</span>
+      <span id="app-version">v2026.06.09-beta12</span>
     </div>
   </div>
 </aside>
@@ -860,8 +860,12 @@ async function triggerSync() {
     var result = await API.post('/sync/trigger');
     clearInterval(progTimer);
     if (progEl.parentElement) progEl.remove();
-    var parts = [];
+
+    // Build 3-part result message
     var d = result || {};
+    var msgLines = [];
+    // Zentao
+    var parts = [];
     if (d.users) parts.push('用户' + d.users.fetched);
     if (d.products) parts.push('产品' + d.products.fetched);
     if (d.projects) parts.push('项目' + d.projects.fetched);
@@ -869,9 +873,22 @@ async function triggerSync() {
       parts.push('执行' + (d.executions_tasks.executions_fetched || 0));
       parts.push('任务' + (d.executions_tasks.tasks_fetched || 0));
     }
+    if (d.bugs) parts.push('Bug' + (d.bugs.fetched || 0));
     var timingMsg = result.timings ? '（' + result.timings.total + 's）' : '';
-    showToast('数据同步完成 ' + timingMsg + '（' + parts.join(' / ') + '）', 'success');
-    if (_srcStates) { _srcStates.zentao = 'ok'; renderSourceTags(); }
+    msgLines.push('禅道 ' + timingMsg + '（' + parts.join(' / ') + '）');
+
+    // GitLab
+    var gs = d.gitlab_summary || {};
+    var gIcon = gs.status === 'success' ? '✓' : (gs.status === 'failed' ? '✗' : '—');
+    msgLines.push('GitLab ' + gIcon + ' ' + (gs.summary || gs.status || '未执行'));
+
+    // NAS
+    var ns = d.nas_summary || {};
+    var nIcon = ns.status === 'skipped' ? '⊘' : '—';
+    msgLines.push('NAS ' + nIcon + ' ' + (ns.summary || ns.status || '未执行'));
+
+    showToast('数据同步完成\n' + msgLines.join('\n'), 'success');
+    if (_srcStates) { _srcStates.zentao = 'ok'; _srcStates.gitlab = gs.status === 'success' ? 'ok' : (gs.status === 'failed' ? 'err' : 'warn'); renderSourceTags(); }
     updateLinkStatus();
     if (document.getElementById('view-dashboard').classList.contains('active')) { renderDashboard(); }
   } catch(e) {

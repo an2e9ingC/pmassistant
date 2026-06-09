@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-> 当前版本：v2026.06.09-beta10 | 最后更新：2026-06-09
+> 当前版本：v2026.06.09-beta12 | 最后更新：2026-06-09
 
 ---
 
@@ -9,7 +9,7 @@
 | 模块 | 状态 | 说明 |
 |------|------|------|
 | 项目脚手架 | ✅ 完成 | FastAPI + SQLite + Docker Compose |
-| 数据库层 | ✅ 完成 | 17 张表（4 本地 + 13 缓存） |
+| 数据库层 | ✅ 完成 | 18 张表（4 本地 + 14 缓存） |
 | 禅道同步 | ✅ 完成 | 全量/增量 + 并发优化 + 暂停/取消 |
 | 认证系统 | ✅ 完成 | JWT + bcrypt + 角色组权限体系 |
 | Dashboard | ✅ 完成 | KPI 卡片 + 4 分类 + 项目集过滤 + 告警联动 |
@@ -26,7 +26,8 @@
 | 自动同步 | ✅ 完成 | 后台 asyncio + 前端进度 + 气泡通知 |
 | 主题切换 | ✅ 完成 | 浅色/深色 + CSS var(--xxx) |
 | 部署 | ⚠️ 待验证 | Docker Compose 就绪 |
-| GitLab 集成 | ❌ Phase 2 | commit 统计、发布验证 |
+| GitLab 集成 | ✅ 完成 | 禅道 Release 同步 + GitLab URL 校验 + 告警 + 3 源独立通知 |
+| 文档模板 | ✅ 完成 | 阶段类型独立持久化 + 0 模板阶段可见 + 增删改查 |
 | NAS 监控 | ❌ Phase 2 | 售前项目检测 |
 
 ---
@@ -162,10 +163,57 @@
 ### Phase 2
 - [x] 交付状态 PMA 本地配置（应交付总数、交付备注、计划 vs 实际对比）
 - [x] 文档齐套性（模板配置 + 项目文档初始化 + 状态跟踪 + 告警集成）
-- [ ] GitLab 集成（commit 统计、发布验证）
+- [x] **GitLab 集成** — 详见下方 Phase 2.1 详细计划
 - [ ] NAS 售前项目检测（需 NAS 路径配置）
 - [ ] 外协进度跟踪
 - [ ] 关系图谱可视化（思维导图 SVG）
+
+### Phase 2.1: GitLab 集成（详细计划）
+
+> **核心逻辑**: 禅道产品发布/版本中记录 GitLab 发布链接 → PMA 同步禅道 Release → 提取 GitLab URL → 调用 GitLab API 校验链接有效性 → 告警
+> **参考文档**: `docs/gitlab-api.md`、`docs/requirements-spec.md` §3.3/§4.2/§7.2
+> **关联需求**: FR-004 (GitLab未发布告警), FR-007/008 (交付资料 GitLab 路径), FR-009 (快捷跳转), FR-024 (数据源状态)
+
+#### 阶段 A：同步禅道 Release 记录（基础数据）
+
+- [x] A1. 新增 `zenta_releases` 缓存表（id, product_id, name, marker, status, date, desc, gitlab_url, gitlab_url_valid, gitlab_url_checked_at, raw_json, synced_at）
+- [x] A2. SyncService 集成 `_sync_releases()`：在 Bug 同步之后调用 `get_product_releases()` 逐产品同步
+- [x] A3. GitLab URL 提取：从 release 描述/字段中解析 GitLab 项目路径 + tag 名称
+
+#### 阶段 B：GitLab Client（轻量版）
+
+- [x] B1. `backend/services/gitlab_client.py`：异步 httpx + PRIVATE-TOKEN 认证 + 分页 + 重试 + 429 限速
+- [x] B2. 核心方法：`get_release()` + `get_tag()` + `get_version()` + `get_tree()` + `get_raw_file()`
+- [x] B3. `backend/config.py` settings 已有 `GITLAB_BASE_URL` / `GITLAB_TOKEN`，无需改动
+
+#### 阶段 C：URL 校验 + 告警集成
+
+- [x] C1. GitLab URL 解析器：`parse_gitlab_release_url()` 支持 releases/tags 多格式
+- [x] C2. 批量校验：`validate_all_releases()` 异步校验，结果写入 `gitlab_url_valid` / `gitlab_url_checked_at`
+- [x] C3. 告警集成：`_detect_alerts_internal()` 增加 GitLab 发布链接无效/缺失 + GitLab/NAS 未配置 告警
+
+#### 阶段 D：前端展示
+
+- [x] D1. 产品详情页「发布版本」表格，展示 Release 列表 + GitLab 链接有效性状态（✓/✗/待校验）
+- [x] D2. Dashboard 告警列表新增「GitLab 链接无效」「未填写GitLab链接」「数据源未配置」类型
+- [x] D3. 数据源状态标签增强：release 同步状态 + 链接无效计数
+
+#### 阶段 E：交付资料 GitLab 链接
+
+- [x] E1. 资料链接 Tab：增加关联产品的 GitLab release 链接（含有效性标记）
+- [x] E2. 快捷跳转（FR-009）：产品详情和项目资料中 GitLab 链接可直接点击跳转
+
+#### 阶段 F：同步拆分与通知
+
+- [x] F1. 同步拆分为禅道/GitLab/NAS 3 个独立部分，各自 try/except 互不影响
+- [x] F2. 同步完成通知展示 3 部分独立结果（✓/✗/⊘）
+- [x] F3. 每步增加 `[禅道]`、`[GitLab]` 前缀日志
+
+#### 阶段 G：阶段类型独立持久化
+
+- [x] G1. `get_stage_types()` 改为预定义 + PmaSetting 持久化，与模板数量解耦
+- [x] G2. `POST /doc-templates/stage-types` 持久化自定义阶段类型
+- [x] G3. `addStageType()` 不再创建占位模板，空阶段可正常添加文档
 
 ### 技术债务
 - [ ] 生产环境部署验证
@@ -178,6 +226,8 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-06-09 | v2026.06.09-beta12 | GitLab 集成完成：Release 同步+URL 校验+告警+3 源独立通知；阶段类型独立持久化+0 模板可见 |
+| 2026-06-09 | v2026.06.09-beta12 | GitLab 集成详细计划（Phase 2.1 A-E）+ `docs/gitlab-api.md` 开发手册 |
 | 2026-05-28 | v2026.05.28-beta1 | Phase 1 主体完成：后端全功能 + 前端 Dashboard + 项目详情 |
 | 2026-05-29 | v2026.05.29-beta1 | 甘特图优化：线性缩放、拖拽平移、固定宽度、双列布局、滚动防抖 |
 | 2026-05-29 | v2026.05.29-beta8 | Bug修复：ProductProjectLink导入、sync双次fetch、N+1查询、硬编码URL、权限跳过、空集合清理、canceled样式 |
