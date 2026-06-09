@@ -170,6 +170,41 @@ class GitLabClient:
         result = await self.get_tag(project_path, tag_name)
         return result is not None
 
+    # ── Issues ──
+
+    async def get_last_committer(self, project_path: str) -> dict | None:
+        """Get the author of the most recent commit on the default branch."""
+        pid = quote(project_path, safe="")
+        commits = await self._request("GET", f"/projects/{pid}/repository/commits", params={
+            "per_page": 1, "first_parent": "true",
+        })
+        if commits and isinstance(commits, list) and len(commits) > 0:
+            c = commits[0]
+            return {
+                "name": c.get("author_name", ""),
+                "email": c.get("author_email", ""),
+            }
+        return None
+
+    async def create_issue(
+        self, project_path: str, title: str,
+        description: str = "", labels: str = "",
+    ) -> dict | None:
+        """Create a new issue in a GitLab project."""
+        pid = quote(project_path, safe="")
+        data = {"title": title, "description": description}
+        if labels:
+            data["labels"] = labels
+        return await self._request("POST", f"/projects/{pid}/issues", json=data)
+
+    # ── Members ──
+
+    async def get_members(self, project_path: str) -> list:
+        """Get all members of a GitLab project (including inherited group members)."""
+        pid = quote(project_path, safe="")
+        # /members/all includes members inherited from parent groups
+        return await self._get_all_pages(f"/projects/{pid}/members/all")
+
     # ── Repository files ──
 
     async def get_tree(

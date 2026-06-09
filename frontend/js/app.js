@@ -170,6 +170,169 @@ window.addEventListener('popstate', function(e) {
 
 /* Theme */
 
+/* Feedback Dialog — create GitLab issue (bug/feature) */
+
+var _fbComponents = [];  // selected component labels
+
+var _FB_COMPONENTS = [
+  { label: '前端UI',     tag: 'frontend',     color: 'var(--accent)' },
+  { label: '后端API',    tag: 'backend',      color: 'var(--success)' },
+  { label: '甘特图',     tag: 'gantt',        color: 'var(--warn)' },
+  { label: '文档模板',   tag: 'doc-template', color: 'var(--danger)' },
+  { label: '数据同步',   tag: 'sync',         color: '#8b5cf6' },
+  { label: '权限',       tag: 'auth',         color: '#ec4899' },
+  { label: 'GitLab集成', tag: 'gitlab',       color: '#f97316' },
+  { label: '产品管理',   tag: 'product',      color: '#06b6d4' },
+  { label: '交付管理',   tag: 'delivery',     color: '#84cc16' },
+  { label: '统计报表',   tag: 'reports',      color: '#6366f1' },
+];
+
+function openFeedbackDialog() {
+  _fbComponents = [];
+  // Inject chip styles once
+  if (!document.getElementById('fb-chip-styles')) {
+    var styleEl = document.createElement('style');
+    styleEl.id = 'fb-chip-styles';
+    styleEl.textContent = '.fb-chip{cursor:pointer;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:500;border:1.5px solid var(--border);color:var(--muted);transition:all 0.15s;user-select:none} .fb-chip:hover{border-color:var(--chip-color,var(--accent));color:var(--chip-color,var(--accent))} .fb-chip.active{background:var(--chip-color,var(--accent));color:#fff;border-color:var(--chip-color,var(--accent))}';
+    document.head.appendChild(styleEl);
+  }
+  var chipsHtml = _FB_COMPONENTS.map(function(c) {
+    return '<span class="fb-chip" data-tag="' + c.tag + '" onclick="toggleFbChip(this)" style="--chip-color:' + c.color + '">' + c.label + '</span>';
+  }).join('');
+
+  var html = '<div class="note-dialog-overlay" onclick="if(event.target===this)closeFeedbackDialog()">' +
+    '<div class="note-dialog" style="max-width:500px" onclick="event.stopPropagation()">' +
+      '<div class="note-dialog-head"><span class="note-dialog-title">提交反馈</span>' +
+        '<button class="note-dialog-close" onclick="closeFeedbackDialog()">&times;</button></div>' +
+      '<div style="margin-bottom:12px">' +
+        '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">类型</label>' +
+        '<span class="tabs" style="display:inline-flex">' +
+          '<span class="tab active" id="fb-type-bug" onclick="selectFeedbackType(\'bug\')" style="color:var(--muted);border-color:var(--border)">🐛 Bug 报告</span>' +
+          '<span class="tab" id="fb-type-feature" onclick="selectFeedbackType(\'feature\')" style="color:var(--muted);border-color:var(--border)">💡 功能建议</span>' +
+        '</span>' +
+      '</div>' +
+      '<div style="margin-bottom:12px">' +
+        '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">组件（可多选）</label>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:6px">' + chipsHtml + '</div>' +
+      '</div>' +
+      '<div style="margin-bottom:12px">' +
+        '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">标题</label>' +
+        '<input class="search-inp" id="fb-title" placeholder="简要描述问题或建议..." style="width:100%;box-sizing:border-box">' +
+      '</div>' +
+      '<div style="margin-bottom:12px">' +
+        '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">详细描述 <span style="font-weight:400">（可选）</span></label>' +
+        '<textarea class="search-inp" id="fb-desc" rows="4" placeholder="请详细描述遇到的问题或期望的功能（可选）..." style="width:100%;box-sizing:border-box;resize:vertical"></textarea>' +
+      '</div>' +
+      '<div style="margin-bottom:12px">' +
+        '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">指派给</label>' +
+        '<select id="fb-assignee" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);font-size:13px">' +
+          '<option value="">— 自动指派（最近提交者）—</option>' +
+        '</select>' +
+      '</div>' +
+      '<div style="display:flex;justify-content:flex-end;gap:8px">' +
+        '<button class="btn" onclick="closeFeedbackDialog()">取消</button>' +
+        '<button class="btn btn-primary" id="fb-submit" onclick="submitFeedback()">提交</button>' +
+      '</div>' +
+    '</div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+  window._fbType = 'bug';
+  selectFeedbackType('bug');
+  loadFeedbackMembers();
+  document.getElementById('fb-title').focus();
+}
+
+function toggleFbChip(el) {
+  var tag = el.getAttribute('data-tag');
+  var idx = _fbComponents.indexOf(tag);
+  if (idx >= 0) {
+    _fbComponents.splice(idx, 1);
+    el.classList.remove('active');
+  } else {
+    _fbComponents.push(tag);
+    el.classList.add('active');
+  }
+}
+
+async function loadFeedbackMembers() {
+  var sel = document.getElementById('fb-assignee');
+  if (!sel) return;
+  try {
+    var data = await API.get('/gitlab/members');
+    var members = (data && data.members) ? data.members : (Array.isArray(data) ? data : []);
+    var defaultId = (data && data.default_assignee_id) || null;
+    if (members.length) {
+      members.forEach(function(m) {
+        var opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.name + ' (@' + m.username + ')';
+        if (m.id === defaultId) opt.selected = true;
+        sel.appendChild(opt);
+      });
+    } else {
+      sel.innerHTML = '<option value="">— 无可用成员 —</option>';
+    }
+  } catch (e) {
+    sel.innerHTML = '<option value="">— 加载失败 —</option>';
+  }
+}
+
+function closeFeedbackDialog() {
+  var overlay = document.querySelector('.note-dialog-overlay');
+  if (overlay) overlay.remove();
+}
+
+function selectFeedbackType(type) {
+  window._fbType = type;
+  var bugEl = document.getElementById('fb-type-bug');
+  var featEl = document.getElementById('fb-type-feature');
+  // Bug tab
+  bugEl.classList.toggle('active', type === 'bug');
+  bugEl.style.background = type === 'bug' ? 'var(--danger-lt)' : '';
+  bugEl.style.color = type === 'bug' ? 'var(--danger)' : 'var(--muted)';
+  bugEl.style.borderColor = type === 'bug' ? 'var(--danger)' : 'var(--border)';
+  bugEl.style.fontWeight = type === 'bug' ? '600' : '';
+  // Feature tab
+  featEl.classList.toggle('active', type === 'feature');
+  featEl.style.background = type === 'feature' ? 'var(--accent-lt)' : '';
+  featEl.style.color = type === 'feature' ? 'var(--accent)' : 'var(--muted)';
+  featEl.style.borderColor = type === 'feature' ? 'var(--accent)' : 'var(--border)';
+  featEl.style.fontWeight = type === 'feature' ? '600' : '';
+}
+
+async function submitFeedback() {
+  var title = document.getElementById('fb-title').value.trim();
+  var desc = document.getElementById('fb-desc').value.trim();
+  if (!title) { showToast('请输入标题', 'error'); return; }
+
+  var btn = document.getElementById('fb-submit');
+  btn.disabled = true; btn.textContent = '提交中...';
+
+  try {
+    var user = getCurrentUser();
+    var assigneeEl = document.getElementById('fb-assignee');
+    var assigneeId = assigneeEl ? parseInt(assigneeEl.value) || null : null;
+    var componentLabels = _fbComponents.length ? _fbComponents.join(',') : '';
+    var result = await API.post('/gitlab/issues', {
+      issue_type: window._fbType || 'bug',
+      title: title,
+      description: desc,
+      reporter: user ? (user.username || '') : '',
+      assignee_id: assigneeId,
+      labels: componentLabels
+    });
+    closeFeedbackDialog();
+    if (result && result.web_url) {
+      showToast('反馈已提交: ' + result.web_url, 'success', 6000);
+    } else {
+      showToast('反馈已提交', 'success');
+    }
+  } catch (e) {
+    showToast('提交失败: ' + (e.message || '未知错误'), 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '提交';
+  }
+}
+
 function toggleTheme() {
   var dark = document.documentElement.getAttribute('data-theme') === 'dark';
   var next = dark ? 'light' : 'dark';
