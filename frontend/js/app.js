@@ -17,7 +17,9 @@ function markPageDirty() { _pageDirty = true; }
 function markPageClean() { _pageDirty = false; }
 function isPageDirty() { return _pageDirty; }
 
-function gotoView(view) {
+var _navigatingBack = false;
+
+function gotoView(view, pushState) {
   // Check auth
   if (!isLoggedIn()) {
     window.location.href = '/login';
@@ -147,7 +149,24 @@ function gotoView(view) {
     initCustomerDetail();
   }
   localStorage.setItem('pm_view', view);
+
+  // Browser history: push state unless navigating back/forward or initial load
+  if (pushState !== false && !_navigatingBack) {
+    var url = '#/' + view;
+    if (window.location.hash !== url) {
+      history.pushState({ view: view }, '', url);
+    }
+  }
 }
+
+// Handle browser back/forward buttons
+window.addEventListener('popstate', function(e) {
+  if (e.state && e.state.view) {
+    _navigatingBack = true;
+    gotoView(e.state.view, false);
+    _navigatingBack = false;
+  }
+});
 
 /* Theme */
 
@@ -456,9 +475,13 @@ function init() {
     } catch(ignore) {}
   }, 3000);
 
-  // Navigate to saved view or dashboard
-  var lastView = localStorage.getItem('pm_view') || 'dashboard';
-  gotoView(lastView);
+  // Navigate to saved view or dashboard (respect URL hash first)
+  var hashView = window.location.hash.replace('#/', '');
+  var lastView = hashView || localStorage.getItem('pm_view') || 'dashboard';
+  gotoView(lastView, false);  // don't push state on initial load
+  if (!hashView && window.location.hash !== '#/' + lastView) {
+    history.replaceState({ view: lastView }, '', '#/' + lastView);
+  }
 
   // Global ESC handler: first ESC blurs input, second closes dialog / clears search
   var _escBlurred = false;
