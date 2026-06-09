@@ -6,7 +6,7 @@ from sqlalchemy import func
 
 from backend.config import settings
 from backend.database import get_db
-from backend.middleware.auth import get_current_user, require_admin
+from backend.middleware.auth import get_current_user, require_admin, require_perm
 from backend.models.local import SyncLog
 from backend.services.sync_service import SyncService
 
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/sync", tags=["sync"])
 
 
 @router.post("/trigger", response_model=dict)
-async def trigger_sync(_=Depends(require_admin)):
+async def trigger_sync(_=Depends(require_perm("sync"))):
     svc = SyncService()
     result = await svc.full_sync()
     return result

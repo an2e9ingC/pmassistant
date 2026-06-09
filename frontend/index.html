@@ -163,7 +163,7 @@
         <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle;margin-right:3px"><circle cx="8" cy="8" r="6"/><line x1="8" y1="5" x2="8" y2="9"/><circle cx="8" cy="12" r="0.8" fill="currentColor" stroke="none"/></svg>
         反馈 Bug
       </a>
-      <span id="app-version">v2026.06.10-beta1</span>
+      <span id="app-version">v2026.06.10-beta2</span>
     </div>
   </div>
 </aside>
@@ -177,7 +177,7 @@
         <span class="src-tag pending" id="src-zentao" onclick="toggleSrcTip('zentao',event)"><span class="src-tag-label">禅道 待同步</span><span class="src-tag-tip" id="src-zentao-tip"></span></span>
         <span class="src-tag pending" id="src-gitlab" onclick="toggleSrcTip('gitlab',event)"><span class="src-tag-label">GitLab 未配置</span><span class="src-tag-tip" id="src-gitlab-tip"></span></span>
         <span class="src-tag pending" id="src-nas" onclick="toggleSrcTip('nas',event)"><span class="src-tag-label">NAS 未配置</span><span class="src-tag-tip" id="src-nas-tip"></span></span>
-        <button class="src-sync-btn" onclick="triggerSync()" title="从禅道同步最新数据">
+        <button class="src-sync-btn" id="src-sync-btn" onclick="triggerSync()" title="从禅道同步最新数据" style="display:none">
           <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="1.5,5.5 3.5,2.5 1.5,2.5"/>
             <polyline points="14.5,10.5 12.5,13.5 14.5,13.5"/>
@@ -875,7 +875,7 @@
 <script src="/js/customers.js"></script>
 <script src="/js/doc-templates.js"></script>
 <script src="/js/standards.js"></script>
-<script src="/js/app.js"></script>
+<script src="/js/app.js?v=v2026.06.10-beta2"></script>
 <script>
 async function triggerSync() {
   var btn = document.querySelector('.src-sync-btn');

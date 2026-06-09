@@ -546,6 +546,12 @@ function init() {
       var custNav = document.getElementById('nav-customers');
       if (custNav) custNav.style.display = 'none';
     }
+
+    // Show sync button only for users with sync permission
+    var syncBtn = document.getElementById('src-sync-btn');
+    if (syncBtn && (isAdmin || perms.indexOf('sync') >= 0)) {
+      syncBtn.style.display = 'flex';
+    }
   }
 
   // Data source status — render defaults immediately, then update
