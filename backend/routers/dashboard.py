@@ -50,13 +50,16 @@ def get_projects(
             name = cnames.get(cl.customer_id)
             if name:
                 cust_map.setdefault(cl.project_id, []).append(name)
+    # Batch-load pending doc counts for completion check
+    from backend.services.project_service import _get_pending_doc_counts
+    pending_map = _get_pending_doc_counts(db, proj_ids)
     return {
         "code": 0,
         "data": {
             "page": page,
             "limit": limit,
             "total": total,
-            "items": [_project_list_item(p, cust_map.get(p.id, [])) for p in items],
+            "items": [_project_list_item(p, cust_map.get(p.id, []), pending_map.get(p.id, False)) for p in items],
         },
         "message": "ok",
     }
@@ -95,7 +98,7 @@ def get_bug_stats(
     return {"code": 0, "data": {"stats": stats, "bugs": bugs, "total": total}, "message": "ok"}
 
 
-def _project_list_item(p, linked_customers=None) -> dict:
+def _project_list_item(p, linked_customers=None, has_pending_docs: bool = False) -> dict:
     # Determine current stage
     exc = getattr(p, "executions", None)
     current_stage = None
@@ -121,13 +124,13 @@ def _project_list_item(p, linked_customers=None) -> dict:
         tags_str = _extract_tags_fallback(p)
     tags_list = tags_str.split(",") if tags_str else []
 
-    from backend.services.project_service import _calc_risk_level
+    from backend.services.project_service import _calc_risk_level, _map_status
     return {
         "id": p.id,
         "code": p.code,
         "name": p.name,
         "type": p.project_type or "RD",
-        "status": _STATUS_MAP.get(p.status, p.status or "pending"),
+        "status": _map_status(p.status, has_pending_docs),
         "progress": p.progress or "0",
         "begin": str(p.begin) if p.begin else None,
         "end": str(p.end) if p.end else None,
@@ -137,7 +140,7 @@ def _project_list_item(p, linked_customers=None) -> dict:
         "description": p.description or "",
         "tags": tags_str,
         "tags_list": tags_list,
-        "risk_level": _calc_risk_level(p),
+        "risk_level": _calc_risk_level(p, has_pending_docs),
     }
 
 

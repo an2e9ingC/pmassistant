@@ -23,9 +23,30 @@ def log_project_activity(db: Session, project_id: int, username: str, action: st
         pass  # never fail the main operation
 
 
+def _get_pending_doc_counts(db: Session, project_ids: list[int]) -> dict:
+    """Return {project_id: bool} — True if project has pending docs for done/closed stages."""
+    if not project_ids:
+        return {}
+    from backend.models.document import ProjectDocument
+    rows = (
+        db.query(ProjectDocument.project_id)
+        .join(CachedExecution, ProjectDocument.execution_id == CachedExecution.id)
+        .filter(
+            ProjectDocument.project_id.in_(project_ids),
+            ProjectDocument.execution_id > 0,
+            ProjectDocument.status == "pending",
+            CachedExecution.status.in_(["done", "closed"]),
+        )
+        .distinct()
+        .all()
+    )
+    return {row[0]: True for row in rows}
+
+
 def get_projects(db: Session) -> list[dict]:
     projects = db.query(CachedProject).order_by(CachedProject.id).all()
-    return [_project_brief(p) for p in projects]
+    pending_map = _get_pending_doc_counts(db, [p.id for p in projects])
+    return [_project_brief(p, pending_map.get(p.id, False)) for p in projects]
 
 
 def get_project_detail(db: Session, project_id: int) -> Optional[dict]:
@@ -412,26 +433,26 @@ def get_project_products(db: Session, project_id: int) -> list[dict]:
 
 # --- helpers ---
 
-def _project_brief(p: CachedProject) -> dict:
+def _project_brief(p: CachedProject, has_pending_docs: bool = False) -> dict:
     return {
         "id": p.id,
         "code": p.code,
         "name": p.name,
         "project_type": p.project_type,
         "customer_name": _resolve_customer(p),
-        "status": _map_status(p.status),
+        "status": _map_status(p.status, has_pending_docs),
         "progress": p.progress,
         "begin": str(p.begin) if p.begin else None,
         "end": str(p.end) if p.end else None,
-        "risk_level": _calc_risk_level(p),
+        "risk_level": _calc_risk_level(p, has_pending_docs),
     }
 
 
-def _calc_risk_level(p: CachedProject) -> str:
+def _calc_risk_level(p: CachedProject, has_pending_docs: bool = False) -> str:
     """Calculate project risk level based on progress vs remaining time."""
     from datetime import date
     if p.status in ("done", "closed"):
-        return "normal"
+        return "incomplete" if has_pending_docs else "normal"
     if not p.begin or not p.end:
         return "normal"
     try:
@@ -527,8 +548,12 @@ def _project_detail(p: CachedProject) -> dict:
     }
 
 
-def _map_status(status: str) -> str:
-    """Map Zentao raw status (wait/doing/done/closed/suspended) to PMA display status."""
+def _map_status(status: str, has_pending_docs: bool = False) -> str:
+    """Map Zentao raw status (wait/doing/done/closed/suspended) to PMA display status.
+    When project is done/closed but has pending docs for completed stages,
+    returns 'incomplete' instead of 'completed'."""
+    if status in ("done", "closed") and has_pending_docs:
+        return "incomplete"
     mapping = {
         "wait": "pending",
         "doing": "active",

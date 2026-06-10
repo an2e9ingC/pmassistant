@@ -160,9 +160,9 @@ async function loadProjectTable(filter) {
       var rowClick = 'onclick="filterAlertsByProject(\'' + p.id + '\', \'' + escHtml(projCode + ' ' + coreName).replace(/'/g, "\\'") + '\')"';
       var projIconHtml = renderProjIcon(p.type, projCode).replace('<div class=', '<div onclick="event.stopPropagation();openProject(\'' + p.id + '\')" class=');
       var riskLevel = p.risk_level || 'normal';
-      var riskLabel = { normal: '正常', low: '较低', medium: '中等', high: '高', overdue: '已超期' }[riskLevel] || '正常';
-      var riskColor = { normal: 'var(--success)', low: 'var(--muted)', medium: 'var(--warn)', high: 'var(--danger)', overdue: 'var(--danger)' }[riskLevel] || 'var(--muted)';
-      var riskBg = { normal: 'var(--success-lt)', low: 'var(--bg)', medium: 'var(--warn-lt)', high: 'var(--danger-lt)', overdue: 'var(--danger-lt)' }[riskLevel] || 'var(--bg)';
+      var riskLabel = { normal: '正常', low: '较低', medium: '中等', high: '高', overdue: '已超期', incomplete: '资料不全' }[riskLevel] || '正常';
+      var riskColor = { normal: 'var(--success)', low: 'var(--muted)', medium: 'var(--warn)', high: 'var(--danger)', overdue: 'var(--danger)', incomplete: 'var(--warn)' }[riskLevel] || 'var(--muted)';
+      var riskBg = { normal: 'var(--success-lt)', low: 'var(--bg)', medium: 'var(--warn-lt)', high: 'var(--danger-lt)', overdue: 'var(--danger-lt)', incomplete: 'var(--warn-lt)' }[riskLevel] || 'var(--bg)';
 
       return '<tr ' + rowClick + '>' +
         '<td>' + projIconHtml + '</td>' +

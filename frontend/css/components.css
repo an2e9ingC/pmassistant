@@ -60,6 +60,8 @@
 }
 .pill.completed { background: var(--success-lt); color: var(--success); }
 .pill.completed::before { background: var(--success); }
+.pill.incomplete { background: var(--warn-lt); color: var(--warn); }
+.pill.incomplete::before { background: var(--warn); }
 .pill.active { background: var(--accent-lt); color: var(--accent); }
 .pill.active::before { background: var(--accent); }
 .pill.blocked { background: var(--danger-lt); color: var(--danger); }
