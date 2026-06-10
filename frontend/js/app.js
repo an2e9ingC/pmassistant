@@ -377,9 +377,16 @@ function updateLinkStatus() {
       }
     });
     renderSourceTags();
-      sources.forEach(function(s) {
+    // Pre-fill tips with permission-aware detail
+    var user = getCurrentUser();
+    var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+    var isAdmin = user && user.role === 'admin';
+    var canSeeDetail = isAdmin || (user && user.role === 'pm');
+    sources.forEach(function(s) {
       var tip = document.getElementById('src-' + s.key + '-tip');
-      if (tip && s.detail) tip.textContent = s.detail;
+      if (tip) {
+        tip.textContent = canSeeDetail ? (s.detail || getSimpleStatus(s)) : getSimpleStatus(s);
+      }
     });
   }).catch(function(e) {
     console.error('updateLinkStatus failed:', e);
