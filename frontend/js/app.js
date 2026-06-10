@@ -390,17 +390,33 @@ function toggleSrcTip(key, e) {
   e.stopPropagation();
   var tip = document.getElementById('src-' + key + '-tip');
   if (!tip) return;
-  // Fetch detail on demand if not yet populated
   if (!tip.textContent) {
     tip.textContent = '加载中...';
+    var user = getCurrentUser();
+    var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+    var isAdmin = user && user.role === 'admin';
+    var canSeeDetail = isAdmin || (user && user.role === 'pm');
     API.get('/sync/sources').then(function(sources) {
       var s = sources.find(function(x) { return x.key === key; });
-      if (s && s.detail) tip.textContent = s.detail;
-      else tip.textContent = '暂无信息';
+      if (!s) { tip.textContent = '暂无信息'; return; }
+      if (canSeeDetail) {
+        tip.textContent = s.detail || getSimpleStatus(s);
+      } else {
+        tip.textContent = getSimpleStatus(s);
+      }
     }).catch(function() { tip.textContent = '获取失败'; });
   }
   document.querySelectorAll('.src-tag-tip.show').forEach(function(t) { if (t !== tip) t.classList.remove('show'); });
   tip.classList.toggle('show');
+}
+
+function getSimpleStatus(s) {
+  var names = { zentao: '禅道', gitlab: 'GitLab', nas: 'NAS' };
+  var name = names[s.key] || s.key;
+  if (!s.configured) return name + ' 未配置';
+  if (s.sync_status === 'success') return name + ' 连接正常';
+  if (s.sync_status === 'failed') return name + ' 连接异常';
+  return name + ' 待同步';
 }
 document.addEventListener('click', function(e) {
   if (!e.target.closest('.src-tag')) document.querySelectorAll('.src-tag-tip.show').forEach(function(t) { t.classList.remove('show'); });
