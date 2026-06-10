@@ -446,7 +446,7 @@ var _udRowCount = 0;
 
 function openUserCreateDialog() {
   _udRowCount = 0;
-  var html = '<div class="note-dialog-overlay" onclick="if(event.target===this)closeUserDialog()">' +
+  var html = '<div class="note-dialog-overlay">' +
     '<div class="note-dialog" style="width:820px;max-width:none;max-height:80vh;display:flex;flex-direction:column">' +
       '<div class="note-dialog-head"><span class="note-dialog-title">批量添加用户</span>' +
         '<button class="note-dialog-close" onclick="closeUserDialog()">&times;</button></div>' +
@@ -630,7 +630,7 @@ async function submitUserCreate() {
 function openUserEditDialog(id) {
   var u = _userList.find(function(x) { return x.id === id; });
   if (!u) return;
-  var html = '<div class="note-dialog-overlay" onclick="if(event.target===this)closeUserDialog()">' +
+  var html = '<div class="note-dialog-overlay">' +
     '<div class="note-dialog">' +
       '<div class="note-dialog-head"><span class="note-dialog-title">编辑用户: ' + escHtml(u.username) + '</span>' +
         '<button class="note-dialog-close" onclick="closeUserDialog()">&times;</button></div>' +
@@ -864,7 +864,7 @@ function openRoleMemberDialog(roleId, roleLabel) {
     '</label>';
   }).join('');
 
-  var html = '<div class="note-dialog-overlay" onclick="if(event.target===this)closeUserDialog()">' +
+  var html = '<div class="note-dialog-overlay">' +
     '<div class="note-dialog" style="max-width:360px">' +
       '<div class="note-dialog-head"><span class="note-dialog-title">管理角色成员: ' + roleLabel + '</span>' +
         '<button class="note-dialog-close" onclick="closeUserDialog()">&times;</button></div>' +

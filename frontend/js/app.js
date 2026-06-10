@@ -200,8 +200,8 @@ function openFeedbackDialog() {
     return '<span class="fb-chip" data-tag="' + c.tag + '" onclick="toggleFbChip(this)" style="--chip-color:' + c.color + '">' + c.label + '</span>';
   }).join('');
 
-  var html = '<div class="note-dialog-overlay" onclick="if(event.target===this)closeFeedbackDialog()">' +
-    '<div class="note-dialog" style="max-width:500px" onclick="event.stopPropagation()">' +
+  var html = '<div class="note-dialog-overlay">' +
+    '<div class="note-dialog" style="max-width:500px">' +
       '<div class="note-dialog-head"><span class="note-dialog-title">提交反馈</span>' +
         '<button class="note-dialog-close" onclick="closeFeedbackDialog()">&times;</button></div>' +
       '<div style="margin-bottom:12px">' +
@@ -706,10 +706,7 @@ function init() {
       return;
     }
     _escBlurred = false;
-    // Close any open dialogs (note-dialog-overlay)
-    var dlg = document.querySelector('.note-dialog-overlay');
-    if (dlg) { dlg.remove(); return; }
-    // Clear search inputs
+    // Clear search inputs (dialogs only close via confirm/cancel buttons)
     var searchInps = document.querySelectorAll('.search-inp');
     var cleared = false;
     searchInps.forEach(function(inp) {
@@ -739,7 +736,7 @@ document.addEventListener('click', function(e) {
 });
 
 function changePassword() {
-  var html = '<div class="note-dialog-overlay" onclick="if(event.target===this)closePwDialog()">' +
+  var html = '<div class="note-dialog-overlay">' +
     '<div class="note-dialog">' +
       '<div class="note-dialog-head"><span class="note-dialog-title">修改密码</span>' +
         '<button class="note-dialog-close" onclick="closePwDialog()">&times;</button></div>' +

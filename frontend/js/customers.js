@@ -32,7 +32,7 @@ function renderCustTable() {
 }
 
 function openCustCreateDialog() {
-  var html = '<div class="note-dialog-overlay" onclick="if(event.target===this)closeCustDialog()">' +
+  var html = '<div class="note-dialog-overlay">' +
     '<div class="note-dialog">' +
       '<div class="note-dialog-head"><span class="note-dialog-title">添加客户</span>' +
         '<button class="note-dialog-close" onclick="closeCustDialog()">&times;</button></div>' +
@@ -65,7 +65,7 @@ async function submitCustCreate() {
 function openCustEditDialog(id) {
   var c = _custList.find(function(x) { return x.id === id; });
   if (!c) return;
-  var html = '<div class="note-dialog-overlay" onclick="if(event.target===this)closeCustDialog()">' +
+  var html = '<div class="note-dialog-overlay">' +
     '<div class="note-dialog">' +
       '<div class="note-dialog-head"><span class="note-dialog-title">编辑: ' + escHtml(c.name) + '</span>' +
         '<button class="note-dialog-close" onclick="closeCustDialog()">&times;</button></div>' +

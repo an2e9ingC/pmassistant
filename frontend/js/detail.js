@@ -1130,8 +1130,8 @@ function showDeliveryForm(record) {
   var autoQty = serials.filter(function(s) { return s && s.trim(); }).length || 0;
 
   var html =
-    '<div class="note-dialog-overlay" onclick="if(event.target===this)cancelDeliveryForm()">' +
-    '<div class="note-dialog" style="max-width:520px;max-height:85vh;overflow-y:auto" onclick="event.stopPropagation()">' +
+    '<div class="note-dialog-overlay">' +
+    '<div class="note-dialog" style="max-width:520px;max-height:85vh;overflow-y:auto">' +
       '<div class="note-dialog-head"><span class="note-dialog-title">' + (isEdit ? '编辑交付记录' : '添加交付记录') + '</span>' +
         '<button class="note-dialog-close" onclick="cancelDeliveryForm()">&times;</button></div>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">' +

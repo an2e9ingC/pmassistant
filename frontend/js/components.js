@@ -66,14 +66,23 @@ function openDialog(title, bodyHtml, buttons, opts) {
     '</div>';
   }
 
-  var html = '<div class="note-dialog-overlay ' + overlayClass + '" onclick="if(event.target===this)this.remove()">' +
-    '<div class="note-dialog" style="max-width:' + maxWidth + 'px" onclick="event.stopPropagation()">' +
+  var html = '<div class="note-dialog-overlay ' + overlayClass + '">' +
+    '<div class="note-dialog" style="max-width:' + maxWidth + 'px">' +
       '<div class="note-dialog-head"><span class="note-dialog-title">' + title + '</span>' +
         '<button class="note-dialog-close" onclick="this.closest(\'.note-dialog-overlay\').remove()">&times;</button></div>' +
       bodyHtml +
       btnHtml +
     '</div></div>';
   document.body.insertAdjacentHTML('beforeend', html);
+
+  // Auto-focus first focusable element in dialog
+  var overlay = document.querySelector('.' + overlayClass);
+  if (overlay) {
+    var firstFocusable = overlay.querySelector('input, textarea, select, button:not(.note-dialog-close)');
+    if (firstFocusable) {
+      setTimeout(function() { firstFocusable.focus(); }, 50);
+    }
+  }
 }
 
 /* ═══════════════════════════════════════════════════

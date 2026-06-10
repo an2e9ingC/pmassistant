@@ -290,8 +290,8 @@ function deleteTemplate(id) {
 /* ── Stage Type Management (rename / add / delete) ── */
 
 function showRenameStageDialog(oldName) {
-  var html = '<div class="note-dialog-overlay" onclick="if(event.target===this)this.remove()">' +
-    '<div class="note-dialog" style="max-width:380px" onclick="event.stopPropagation()">' +
+  var html = '<div class="note-dialog-overlay">' +
+    '<div class="note-dialog" style="max-width:380px">' +
       '<div class="note-dialog-head"><span class="note-dialog-title">重命名阶段类型</span>' +
         '<button class="note-dialog-close" onclick="this.closest(\'.note-dialog-overlay\').remove()">&times;</button></div>' +
       '<div style="margin-bottom:10px;font-size:12px;color:var(--muted)">当前名称: <b>' + escHtml(oldName) + '</b></div>' +
@@ -323,8 +323,8 @@ function renameStageType(oldName) {
 }
 
 function showAddStageDialog() {
-  var html = '<div class="note-dialog-overlay" onclick="if(event.target===this)this.remove()">' +
-    '<div class="note-dialog" style="max-width:380px" onclick="event.stopPropagation()">' +
+  var html = '<div class="note-dialog-overlay">' +
+    '<div class="note-dialog" style="max-width:380px">' +
       '<div class="note-dialog-head"><span class="note-dialog-title">新增阶段类型</span>' +
         '<button class="note-dialog-close" onclick="this.closest(\'.note-dialog-overlay\').remove()">&times;</button></div>' +
       '<div style="margin-bottom:10px;font-size:12px;color:var(--muted)">输入新阶段类型名称（新增后需手动添加文档模板）</div>' +

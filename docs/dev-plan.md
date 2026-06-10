@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-> 当前版本：v2026.06.10-beta4 | 最后更新：2026-06-10
+> 当前版本：v2026.06.10-beta5 | 最后更新：2026-06-10
 
 ---
 
@@ -226,6 +226,7 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-06-10 | v2026.06.10-beta5 | 弹窗全局改造：backdrop-filter背景模糊+禁止点击外部关闭+自动聚焦+ESC不关闭弹窗 Closes #5 |
 | 2026-06-10 | v2026.06.10-beta4 | 系统日志时区修复：server.sh TZ=Asia/Shanghai + DatabaseLogHandler BEIJING_TZ |
 | 2026-06-10 | v2026.06.10-beta3 | 数据源标签tooltip权限分级：admin/PM看详情，其他用户仅简要状态 |
 | 2026-06-10 | v2026.06.10-beta2 | 同步按钮权限控制：CSS !important修复+默认隐藏+仅admin/sync显示+require_perm |
