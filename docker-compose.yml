@@ -14,6 +14,7 @@ services:
       - ZENTAO_AUTH_ACCOUNT=${ZENTAO_AUTH_ACCOUNT:-}
       - ZENTAO_AUTH_PASSWORD=${ZENTAO_AUTH_PASSWORD:-}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-}
+      - TZ=Asia/Shanghai
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - SYNC_INTERVAL_MINUTES=${SYNC_INTERVAL_MINUTES:-60}
     restart: unless-stopped

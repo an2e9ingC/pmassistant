@@ -67,7 +67,7 @@ do_start() {
     mkdir -p "$SCRIPT_DIR/data"
 
     echo -n "[PMA] 启动服务器..."
-    nohup python3 -m uvicorn backend.main:app \
+    TZ=Asia/Shanghai nohup python3 -m uvicorn backend.main:app \
         --host "$HOST" \
         --port "$PORT" \
         >> "$SERVER_LOG" 2>&1 &

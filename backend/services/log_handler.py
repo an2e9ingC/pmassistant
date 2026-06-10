@@ -1,9 +1,11 @@
 import logging
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from backend.database import SessionLocal
 from backend.models.log_entry import LogEntry
+
+BEIJING_TZ = timezone(timedelta(hours=8))
 
 
 class DatabaseLogHandler(logging.Handler):
@@ -14,7 +16,7 @@ class DatabaseLogHandler(logging.Handler):
             db = SessionLocal()
             try:
                 entry = LogEntry(
-                    timestamp=datetime.fromtimestamp(record.created, tz=timezone.utc),
+                    timestamp=datetime.fromtimestamp(record.created, tz=BEIJING_TZ),
                     level=record.levelname,
                     logger=record.name,
                     message=self.format(record),
