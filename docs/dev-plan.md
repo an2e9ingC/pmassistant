@@ -356,5 +356,6 @@
 | 2026-06-11 | v2026.06.11-beta13 | docs: worktree触发规则改为`worktree:`前缀—用户显式前缀触发隔离开发，普通prompt直接在当前分支操作 |
 | 2026-06-11 | v2026.06.11-beta14 | docs: worktree分支必须从trunk最新提交创建；feat: 项目维护增加标签功能—从标签模板选择并单击切换 |
 | 2026-06-11 | v2026.06.11-beta15 | feat: 项目维护三个按钮改为对话框形式（客户单击切换+标签分类单击切换+产品checkbox确认）；server.sh支持多实例状态查看和批量停止 |
+| 2026-06-11 | v2026.06.11-beta16 | docs: 重构并行开发约定—核心概念(每个worktree=独立开发者)+merge流程修正(三阶段)+多实例管理命令+清理指导+边界情况 |
 | 2026-06-11 | v2026.06.11-beta16 | fix: saveAllProductChanges未处理add_line/delete_line导致产品线删除不生效 |
 | 2026-06-11 | v2026.06.11-beta17 | fix: 登录页显示服务端错误详情(detail)；trunk分支server.sh强制使用默认端口 |
