@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-> 当前版本：v2026.06.11-beta19 | 最后更新：2026-06-11
+> 当前版本：v2026.06.11-beta20 | 最后更新：2026-06-11
 
 ---
 
@@ -361,3 +361,4 @@
 | 2026-06-11 | v2026.06.11-beta17 | fix: 登录页显示服务端错误详情(detail)；trunk分支server.sh强制使用默认端口 |
 | 2026-06-11 | v2026.06.11-beta18 | fix: 产品线新增pma_product_lines表持久化+get_product_lines移除CachedProduct依赖+add_line/delete_line前后端全链路修复 |
 | 2026-06-11 | v2026.06.11-beta19 | fix: 权限管理保存跳过admin+未修改+后端审计日志 |
+| 2026-06-11 | v2026.06.11-beta20 | fix: 全面端口隔离—DB/日志/配置文件默认值按PMA_PORT区分，消除pma.db硬编码 |

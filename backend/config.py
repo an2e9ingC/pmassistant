@@ -22,7 +22,7 @@ _load_dotenv()
 
 class Settings:
     PROJECT_NAME: str = "PMA"
-    DATABASE_URL: str = "sqlite:///./data/pma.db"
+    DATABASE_URL: str = "sqlite:///./data/pma-8800.db"
     ZENTAO_BASE_URL: str = "http://192.168.3.22/zentao/api.php/v1"
     ZENTAO_AUTH_ACCOUNT: str = ""
     ZENTAO_AUTH_PASSWORD: str = ""

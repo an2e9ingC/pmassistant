@@ -17,7 +17,8 @@ from backend.routers.logs import log_audit
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
-CONFIG_FILE = Path("data/source_config.json")
+_port = os.environ.get("PMA_PORT", "8800")
+CONFIG_FILE = Path(f"data/source_config-{_port}.json")
 ENV_FILE = Path(".env")
 
 

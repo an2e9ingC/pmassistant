@@ -30,10 +30,11 @@ def log_audit(db: Session, user: LocalUser, action: str, detail: str = "", categ
     except Exception as e:
         logger.error(f"Audit log write failed: {e}")
 
-# Resolve log file path (same directory as database)
+# Resolve log file path (same directory as database, port-specific)
 import backend.database as _db_module
-_db_dir = os.path.dirname(getattr(_db_module, "_db_path", "data/pma.db"))
-LOG_FILE = os.path.join(_db_dir, "pma.log")
+_db_dir = os.path.dirname(getattr(_db_module, "_db_path", "data/pma-8800.db"))
+_port = os.environ.get("PMA_PORT", "8800")
+LOG_FILE = os.path.join(_db_dir, f"pma-{_port}.log")
 MAX_LINES = 2000
 
 LEVEL_ORDER = {"DEBUG": 10, "INFO": 20, "WARNING": 30, "ERROR": 40, "CRITICAL": 50}
