@@ -88,6 +88,35 @@ def set_product_projects(product_id: int, payload: LinkIds, db: Session = Depend
     return {"code": 0, "data": payload.ids, "message": "ok"}
 
 
+# ── Project Tag Linking ──
+
+class TagList(BaseModel):
+    tags: List[str]
+
+
+@router.get("/projects/{project_id}/tags", response_model=dict)
+def get_project_tags(project_id: int, db: Session = Depends(get_db), _=Depends(require_perm("project_edit"))):
+    """Get current tags for a project (comma-separated string parsed to list)."""
+    project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    tags_str = project.tags or ""
+    tags_list = [t.strip() for t in tags_str.split(",") if t.strip()]
+    return {"code": 0, "data": tags_list, "message": "ok"}
+
+
+@router.put("/projects/{project_id}/tags", response_model=dict)
+def set_project_tags(project_id: int, payload: TagList, db: Session = Depends(get_db), user=Depends(require_perm("project_edit"))):
+    """Set tags for a project from the tag template library."""
+    project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    project.tags = ",".join(payload.tags) if payload.tags else ""
+    db.commit()
+    log_project_activity(db, project_id, user.username, "项目标签", f"设置标签: {', '.join(payload.tags) if payload.tags else '清空'}")
+    return {"code": 0, "data": payload.tags, "message": "ok"}
+
+
 # ── Product/Customer Linking ──
 
 @router.get("/products/{product_id}/customers", response_model=dict)
