@@ -2,13 +2,11 @@ __pycache__/
 *.pyc
 *.pyo
 .env
-data/pma.db
-data/pma.log*
 .venv/
 *.egg-info/
 dist/
 .pytest_cache/
 .pma-server*.pid
-data/
 .claude/settings.json
 .claude/worktrees/
+data/*.log
