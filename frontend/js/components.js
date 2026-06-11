@@ -66,10 +66,12 @@ function openDialog(title, bodyHtml, buttons, opts) {
     '</div>';
   }
 
+  var closeHtml = opts.hideClose ? '' :
+    '<button class="note-dialog-close" onclick="this.closest(\'.note-dialog-overlay\').remove()">&times;</button>';
   var html = '<div class="note-dialog-overlay ' + overlayClass + '">' +
     '<div class="note-dialog" style="max-width:' + maxWidth + 'px">' +
       '<div class="note-dialog-head"><span class="note-dialog-title">' + title + '</span>' +
-        '<button class="note-dialog-close" onclick="this.closest(\'.note-dialog-overlay\').remove()">&times;</button></div>' +
+        closeHtml + '</div>' +
       bodyHtml +
       btnHtml +
     '</div></div>';

@@ -5,7 +5,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from backend.models.document import DocumentTemplate, ProjectDocument
+from backend.models.document import DocumentTemplate, ProjectDocument, ProductDocTemplate, PmaTag
 from backend.models.zentao import CachedExecution, CachedProject
 
 # Standard stage names from requirements spec (Section 4.1 Project Lifecycle).
@@ -643,4 +643,133 @@ def sync_all_projects(db: Session) -> dict:
         "failed": len(failed),
         "synced_list": synced,
         "failed_list": failed,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Product Document Templates — per product line
+# ---------------------------------------------------------------------------
+
+def get_product_templates_grouped(db: Session) -> dict:
+    """Return all product doc templates grouped by product_line, sorted by sort_order."""
+    templates = db.query(ProductDocTemplate).order_by(
+        ProductDocTemplate.product_line, ProductDocTemplate.sort_order
+    ).all()
+    grouped: dict[str, list[dict]] = {}
+    for t in templates:
+        grouped.setdefault(t.product_line, []).append(_product_template_dict(t))
+    return grouped
+
+
+def get_product_lines(db: Session) -> list[str]:
+    """Return distinct product lines from templates + existing products."""
+    lines = set()
+    for row in db.query(ProductDocTemplate.product_line).distinct():
+        lines.add(row[0])
+    # Also include product lines from Zentao sync (program_name / category)
+    from backend.models.zentao import CachedProduct
+    products = db.query(CachedProduct).all()
+    for p in products:
+        name = (p.category or p.program_name or "").strip()
+        if name:
+            lines.add(name)
+    return sorted(lines)
+
+
+def create_product_template(db: Session, data: dict) -> dict:
+    tpl = ProductDocTemplate(**data)
+    db.add(tpl)
+    db.commit()
+    return _product_template_dict(tpl)
+
+
+def update_product_template(db: Session, template_id: int, data: dict) -> Optional[dict]:
+    tpl = db.query(ProductDocTemplate).filter(ProductDocTemplate.id == template_id).first()
+    if not tpl:
+        return None
+    for k, v in data.items():
+        if hasattr(tpl, k) and v is not None:
+            setattr(tpl, k, v)
+    db.commit()
+    return _product_template_dict(tpl)
+
+
+def delete_product_template(db: Session, template_id: int) -> bool:
+    tpl = db.query(ProductDocTemplate).filter(ProductDocTemplate.id == template_id).first()
+    if not tpl:
+        return False
+    db.delete(tpl)
+    db.commit()
+    return True
+
+
+def rename_product_line(db: Session, old_name: str, new_name: str) -> int:
+    count = db.query(ProductDocTemplate).filter(
+        ProductDocTemplate.product_line == old_name
+    ).update({"product_line": new_name})
+    db.commit()
+    return count
+
+
+def delete_product_line(db: Session, product_line: str) -> int:
+    count = db.query(ProductDocTemplate).filter(
+        ProductDocTemplate.product_line == product_line
+    ).delete()
+    db.commit()
+    return count
+
+
+def _product_template_dict(t: ProductDocTemplate) -> dict:
+    return {
+        "id": t.id,
+        "product_line": t.product_line,
+        "doc_name": t.doc_name,
+        "sort_order": t.sort_order,
+        "description": t.description,
+        "responsible_role": t.responsible_role,
+    }
+
+
+# ---------------------------------------------------------------------------
+# PMA Tags — label library for products and projects
+# ---------------------------------------------------------------------------
+
+def get_all_tags(db: Session) -> list[dict]:
+    tags = db.query(PmaTag).order_by(PmaTag.category, PmaTag.name).all()
+    return [_tag_dict(t) for t in tags]
+
+
+def create_tag(db: Session, data: dict) -> dict:
+    tag = PmaTag(**data)
+    db.add(tag)
+    db.commit()
+    return _tag_dict(tag)
+
+
+def update_tag(db: Session, tag_id: int, data: dict) -> Optional[dict]:
+    tag = db.query(PmaTag).filter(PmaTag.id == tag_id).first()
+    if not tag:
+        return None
+    for k, v in data.items():
+        if hasattr(tag, k) and v is not None:
+            setattr(tag, k, v)
+    db.commit()
+    return _tag_dict(tag)
+
+
+def delete_tag(db: Session, tag_id: int) -> bool:
+    tag = db.query(PmaTag).filter(PmaTag.id == tag_id).first()
+    if not tag:
+        return False
+    db.delete(tag)
+    db.commit()
+    return True
+
+
+def _tag_dict(t: PmaTag) -> dict:
+    return {
+        "id": t.id,
+        "name": t.name,
+        "category": t.category,
+        "created_at": str(t.created_at)[:19] if t.created_at else None,
     }

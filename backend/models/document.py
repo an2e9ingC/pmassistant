@@ -35,3 +35,25 @@ class ProjectDocument(Base):
     updated_by = Column(String(64), nullable=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class ProductDocTemplate(Base):
+    """Global document template per product line. Configurable via admin UI."""
+    __tablename__ = "product_doc_templates"
+
+    id = Column(Integer, primary_key=True)
+    product_line = Column(String(128), nullable=False, index=True)
+    doc_name = Column(String(256), nullable=False)
+    sort_order = Column(Integer, default=0)
+    description = Column(String(512), nullable=True)
+    responsible_role = Column(String(128), nullable=True)  # 责任人/岗位
+
+
+class PmaTag(Base):
+    """Managed tags for products and projects. Configurable via admin UI."""
+    __tablename__ = "pma_tags"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(128), nullable=False, unique=True)
+    category = Column(String(32), nullable=True)  # 'project' | 'product' | null(通用)
+    created_at = Column(DateTime, default=func.now())

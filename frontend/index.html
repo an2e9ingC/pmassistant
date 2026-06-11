@@ -163,7 +163,7 @@
         <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle;margin-right:3px"><circle cx="8" cy="8" r="6"/><line x1="8" y1="5" x2="8" y2="9"/><circle cx="8" cy="12" r="0.8" fill="currentColor" stroke="none"/></svg>
         反馈 Bug
       </a>
-      <span id="app-version">v2026.06.11-beta8</span>
+      <span id="app-version">v2026.06.11-beta9</span>
     </div>
   </div>
 </aside>
@@ -591,7 +591,14 @@
 
     <!-- ══════════════════════ VIEW — DOC TEMPLATES ══════════════════════ -->
     <div class="view" id="view-doc-templates">
-      <div class="loading-spinner">加载中...</div>
+      <div class="map-tabs">
+        <div class="map-tab active" id="dttab-project" onclick="switchDocTemplateTab('project',this)">项目文档模板</div>
+        <div class="map-tab" id="dttab-product" onclick="switchDocTemplateTab('product',this)">产品文档模板</div>
+        <div class="map-tab" id="dttab-tags" onclick="switchDocTemplateTab('tags',this)">标签模板</div>
+      </div>
+      <div id="dtsec-project"><div class="loading-spinner">加载中...</div></div>
+      <div id="dtsec-product" style="display:none"></div>
+      <div id="dtsec-tags" style="display:none"></div>
     </div>
 
     <!-- ══════════════════════ VIEW — STANDARDS ══════════════════════ -->

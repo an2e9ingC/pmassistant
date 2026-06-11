@@ -42,8 +42,21 @@ function _roleSelect(selected) {
   '</select>';
 }
 
+function switchDocTemplateTab(tab, el) {
+  _currentTab = tab;
+  document.querySelectorAll('#view-doc-templates .map-tab').forEach(function(t) { t.classList.remove('active'); });
+  if (el) el.classList.add('active');
+  document.getElementById('dtsec-project').style.display = tab === 'project' ? '' : 'none';
+  document.getElementById('dtsec-product').style.display = tab === 'product' ? '' : 'none';
+  document.getElementById('dtsec-tags').style.display = tab === 'tags' ? '' : 'none';
+  if (tab === 'project') initDocTemplates();
+  else if (tab === 'product') initProductDocTemplates();
+  else if (tab === 'tags') initTags();
+}
+var _currentTab = 'project';
+
 async function initDocTemplates() {
-  var container = document.getElementById('view-doc-templates');
+  var container = document.getElementById('dtsec-project');
   container.innerHTML = '<div class="loading-spinner">加载模板配置...</div>';
   try {
     var data = await API.get('/doc-templates');
@@ -68,7 +81,7 @@ function renderTemplatesPage() {
 
   var stageTypes = _sortStageTypes(Object.keys(_templatesGrouped));
   if (!stageTypes.length) {
-    document.getElementById('view-doc-templates').innerHTML = '<div class="empty-state" style="padding:40px">暂无文档模板配置</div>';
+    document.getElementById('dtsec-project').innerHTML = '<div class="empty-state" style="padding:40px">暂无文档模板配置</div>';
     return;
   }
 
@@ -145,15 +158,14 @@ function renderTemplatesPage() {
   }
   rightHtml += '</div>';
 
-  document.getElementById('view-doc-templates').innerHTML =
+  document.getElementById('dtsec-project').innerHTML =
     '<div class="dt-layout">' +
       '<div class="dt-left">' +
         '<div class="section-title" style="margin-bottom:10px">阶段类型</div>' +
         leftHtml +
       '</div>' +
       rightHtml +
-    '</div>' +
-    '<div id="dt-form-container"></div>';
+    '</div>';
 }
 
 function selectDocTemplateStage(stageType) {
@@ -164,45 +176,45 @@ function selectDocTemplateStage(stageType) {
 /* ── Add/Edit Template Forms ── */
 
 function showAddTemplateForm() {
-  var html =
-    '<div class="card" style="padding:16px;margin-top:12px" id="dt-form-card">' +
-      '<div class="section-title" style="margin-bottom:10px">添加文档模板 — ' + escHtml(_selectedStage) + '</div>' +
-      '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">' +
-        '<div style="flex:1;min-width:180px"><label style="font-size:11px;color:var(--muted)">文档名称</label><input class="search-inp" id="dt-doc-name" style="margin-top:4px"></div>' +
-        '<div style="width:80px"><label style="font-size:11px;color:var(--muted)">序号</label><input class="search-inp" id="dt-sort" type="number" min="0" value="' + ((_templatesGrouped[_selectedStage] || []).length + 1) + '" style="margin-top:4px;width:100%;box-sizing:border-box;padding:8px 4px;text-align:center"></div>' +
-        '<div style="width:150px"><label style="font-size:11px;color:var(--muted)">责任人（岗位）</label>' + _roleSelect('') + '</div>' +
-        '<div style="flex:1;min-width:180px"><label style="font-size:11px;color:var(--muted)">说明（可选）</label><input class="search-inp" id="dt-desc" style="margin-top:4px"></div>' +
-        '<button class="btn btn-primary" onclick="saveTemplate()" style="height:34px;font-size:12px">添加</button>' +
-        '<button class="btn" onclick="cancelTemplateForm()" style="height:34px;font-size:12px">取消</button>' +
-      '</div>' +
-    '</div>';
-  document.getElementById('dt-form-container').innerHTML = html;
-  document.getElementById('dt-doc-name').focus();
+  var nextSort = ((_templatesGrouped[_selectedStage] || []).length + 1);
+  openDialog('添加文档模板 — ' + escHtml(_selectedStage),
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名称</label>' +
+      '<input class="search-inp" id="dt-doc-name" style="width:100%;box-sizing:border-box">' +
+    '</div>' +
+    '<div style="display:flex;gap:10px;margin-bottom:10px">' +
+      '<div style="width:80px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">序号</label>' +
+        '<input class="search-inp" id="dt-sort" type="number" min="0" value="' + nextSort + '" style="width:100%;box-sizing:border-box;padding:8px 4px;text-align:center"></div>' +
+      '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">责任人（岗位）</label>' + _roleSelect('') + '</div>' +
+    '</div>' +
+    '<div style="margin-bottom:4px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">说明（可选）</label>' +
+      '<input class="search-inp" id="dt-desc" style="width:100%;box-sizing:border-box">' +
+    '</div>',
+    [{text: '取消', cls: '', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
+     {text: '确定', cls: 'btn-primary', onclick: 'saveTemplate()'}], {hideClose: true});
 }
 
 function showEditTemplateForm(id) {
   var docs = _templatesGrouped[_selectedStage] || [];
   var d = docs.find(function(x) { return x.id === id; });
   if (!d) { showToast('未找到该模板数据，请刷新页面', 'error'); return; }
-  var html =
-    '<div class="card" style="padding:16px;margin-top:12px" id="dt-form-card">' +
-      '<div class="section-title" style="margin-bottom:10px">编辑文档模板</div>' +
-      '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">' +
-        '<div style="flex:1;min-width:180px"><label style="font-size:11px;color:var(--muted)">文档名称</label><input class="search-inp" id="dt-doc-name" value="' + escHtml(d.doc_name) + '" style="margin-top:4px"></div>' +
-        '<div style="width:80px"><label style="font-size:11px;color:var(--muted)">序号</label><input class="search-inp" id="dt-sort" type="number" min="0" value="' + (d.sort_order != null ? d.sort_order : 1) + '" style="margin-top:4px;width:100%;box-sizing:border-box;padding:8px 4px;text-align:center"></div>' +
-        '<div style="width:150px"><label style="font-size:11px;color:var(--muted)">责任人（岗位）</label>' + _roleSelect(d.responsible_role || '') + '</div>' +
-        '<div style="flex:1;min-width:180px"><label style="font-size:11px;color:var(--muted)">说明（可选）</label><input class="search-inp" id="dt-desc" value="' + escHtml(d.description || '') + '" style="margin-top:4px"></div>' +
-        '<button class="btn btn-primary" onclick="saveTemplate(' + id + ')" style="height:34px;font-size:12px">保存</button>' +
-        '<button class="btn" onclick="cancelTemplateForm()" style="height:34px;font-size:12px">取消</button>' +
-      '</div>' +
-    '</div>';
-  document.getElementById('dt-form-container').innerHTML = html;
-  document.getElementById('dt-doc-name').focus();
-}
-
-function cancelTemplateForm() {
-  var el = document.getElementById('dt-form-container');
-  if (el) el.innerHTML = '';
+  openDialog('编辑文档模板',
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名称</label>' +
+      '<input class="search-inp" id="dt-doc-name" value="' + escHtml(d.doc_name) + '" style="width:100%;box-sizing:border-box">' +
+    '</div>' +
+    '<div style="display:flex;gap:10px;margin-bottom:10px">' +
+      '<div style="width:80px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">序号</label>' +
+        '<input class="search-inp" id="dt-sort" type="number" min="0" value="' + (d.sort_order != null ? d.sort_order : 1) + '" style="width:100%;box-sizing:border-box;padding:8px 4px;text-align:center"></div>' +
+      '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">责任人（岗位）</label>' + _roleSelect(d.responsible_role || '') + '</div>' +
+    '</div>' +
+    '<div style="margin-bottom:4px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">说明（可选）</label>' +
+      '<input class="search-inp" id="dt-desc" value="' + escHtml(d.description || '') + '" style="width:100%;box-sizing:border-box">' +
+    '</div>',
+    [{text: '取消', cls: '', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
+     {text: '确定', cls: 'btn-primary', onclick: 'saveTemplate(' + id + ')'}], {hideClose: true});
 }
 
 function saveTemplate(id) {
@@ -266,7 +278,8 @@ function saveTemplate(id) {
     arr2.push(newDoc);
   }
 
-  cancelTemplateForm();
+  var overlay = document.querySelector('.shared-dialog-overlay');
+  if (overlay) overlay.remove();
   _selectedStage = stageType;
   renderTemplatesPage();
 }
@@ -365,7 +378,7 @@ function deleteStageType(stageType) {
   delete _templatesGrouped[stageType];
   if (_selectedStage === stageType) _selectedStage = null;
   if (!Object.keys(_templatesGrouped).length) {
-    document.getElementById('view-doc-templates').innerHTML = '<div class="empty-state" style="padding:40px">暂无文档模板，点击下方"保存配置"或刷新页面</div>';
+    document.getElementById('dtsec-project').innerHTML = '<div class="empty-state" style="padding:40px">暂无文档模板，点击下方"保存配置"或刷新页面</div>';
     return;
   }
   renderTemplatesPage();
@@ -465,5 +478,440 @@ async function syncAllProjects() {
     btn.disabled = false;
     alert('同步失败: ' + e.message);
     showToast('err', '同步失败', e.message);
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   PRODUCT DOCUMENT TEMPLATES TAB
+═══════════════════════════════════════════════════ */
+
+var _productTemplatesGrouped = {};  // { product_line: [template, ...] }
+var _selectedProductLine = null;
+var _productPendingOps = [];
+var _productNextTempId = -1;
+
+async function initProductDocTemplates() {
+  var container = document.getElementById('dtsec-product');
+  container.innerHTML = '<div class="loading-spinner">加载产品文档模板...</div>';
+  try {
+    var data = await API.get('/product-doc-templates');
+    _productTemplatesGrouped = data || {};
+    var lines = Object.keys(_productTemplatesGrouped);
+    if (!lines.length) _selectedProductLine = null;
+    else if (!_selectedProductLine || lines.indexOf(_selectedProductLine) < 0) _selectedProductLine = lines[0];
+    // Also fetch product lines from API for the left panel
+    var linesData = await API.get('/product-doc-templates/product-lines');
+    _allProductLines = linesData || [];
+    renderProductTemplatesPage();
+  } catch(e) {
+    container.innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '<br><button class="btn" onclick="initProductDocTemplates()">重试</button></div>';
+  }
+}
+var _allProductLines = [];
+
+function renderProductTemplatesPage() {
+  var user = getCurrentUser();
+  var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+  var canEdit = user && (user.role === 'admin' || perms.indexOf('doc_template') >= 0);
+
+  var lines = _allProductLines.slice();
+  // Ensure lines with templates are in the list
+  Object.keys(_productTemplatesGrouped).forEach(function(l) {
+    if (lines.indexOf(l) < 0) lines.push(l);
+  });
+  lines.sort();
+
+  if (!_selectedProductLine || lines.indexOf(_selectedProductLine) < 0) {
+    _selectedProductLine = lines[0] || null;
+  }
+
+  var docs = _productTemplatesGrouped[_selectedProductLine] || [];
+
+  // Left panel
+  var leftHtml = lines.map(function(l) {
+    var count = (_productTemplatesGrouped[l] || []).length;
+    var sel = l === _selectedProductLine ? ' selected' : '';
+    return '<div class="dt-stage-item' + sel + '" onclick="selectProductLine(\'' + escHtml(l) + '\')">' +
+      '<span style="flex:1">' + escHtml(l) + '</span>' +
+      '<span class="dt-stage-count">' + count + '</span>' +
+      (canEdit ? '<span class="dt-stage-acts">' +
+        '<button class="btn" style="font-size:10px;padding:1px 5px" onclick="event.stopPropagation();showRenameProductLineDialog(\'' + escHtml(l) + '\')" title="重命名">✎</button>' +
+        '<button class="btn" style="font-size:10px;padding:1px 5px;color:var(--danger)" onclick="event.stopPropagation();deleteProductLine(\'' + escHtml(l) + '\')" title="删除">✕</button>' +
+      '</span>' : '') +
+    '</div>';
+  }).join('') +
+  (canEdit ? '<div class="dt-stage-item" style="justify-content:center;color:var(--accent);font-size:12px;cursor:pointer;border:1px dashed var(--border)" onclick="showAddProductLineDialog()">+ 新增产品线</div>' : '');
+
+  // Save button
+  var pendingCount = _productPendingOps.length;
+  var saveBtnHtml = '';
+  if (canEdit && pendingCount > 0) {
+    saveBtnHtml = '<button class="btn btn-primary" style="font-size:11px;padding:4px 14px;margin-left:8px" onclick="saveAllProductChanges()">保存配置 (' + pendingCount + ')</button>' +
+      '<button class="btn" style="font-size:11px;padding:4px 10px;margin-left:4px;color:var(--warn);border-color:var(--warn)" onclick="discardProductChanges()">放弃</button>';
+  } else if (canEdit && pendingCount === 0) {
+    saveBtnHtml = '<span style="font-size:11px;color:var(--muted);margin-left:8px">✓ 已保存</span>';
+  }
+
+  // Right panel
+  var rightHtml = '<div class="dt-right">' +
+    '<div class="dt-right-head">' +
+      '<div style="display:flex;align-items:center">' +
+        '<div class="section-title">' + escHtml(_selectedProductLine || '') + ' — 文档清单</div>' +
+        saveBtnHtml +
+      '</div>' +
+      (canEdit ? '<button class="btn" style="font-size:11px;padding:4px 12px" onclick="showAddProductTemplateForm()">+ 添加文档</button>' : '') +
+    '</div>';
+
+  if (docs.length) {
+    rightHtml += '<div class="table-scroll"><table class="stage-table"><thead><tr>' +
+      '<th style="width:50px">序号</th><th>文档名称</th><th>责任人（岗位）</th><th>说明</th>' +
+      (canEdit ? '<th style="width:90px;white-space:nowrap">操作</th>' : '') +
+    '</tr></thead><tbody>';
+    docs.forEach(function(d) {
+      rightHtml += '<tr>' +
+        '<td style="font-family:var(--mono);color:var(--muted);text-align:center">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
+        '<td style="font-weight:500">' + escHtml(d.doc_name) + '</td>' +
+        '<td style="font-size:12px;white-space:nowrap">' + escHtml(d.responsible_role || '—') + '</td>' +
+        '<td style="font-size:12px;color:var(--muted)">' + escHtml(d.description || '') + '</td>' +
+        (canEdit ? '<td style="white-space:nowrap;text-align:center">' +
+          '<button class="btn" style="font-size:10px;padding:2px 8px;margin-right:4px" onclick="showEditProductTemplateForm(' + d.id + ')">编辑</button>' +
+          '<button class="btn" style="font-size:10px;padding:2px 8px;color:var(--danger)" onclick="deleteProductTemplate(' + d.id + ')">删除</button>' +
+        '</td>' : '') +
+      '</tr>';
+    });
+    rightHtml += '</tbody></table></div>';
+  } else {
+    rightHtml += '<div class="empty-state" style="padding:20px">该产品线暂无文档模板</div>';
+  }
+  rightHtml += '</div>';
+
+  document.getElementById('dtsec-product').innerHTML =
+    '<div class="dt-layout">' +
+      '<div class="dt-left">' +
+        '<div class="section-title" style="margin-bottom:10px">产品线</div>' +
+        leftHtml +
+      '</div>' +
+      rightHtml +
+    '</div>';
+}
+
+function selectProductLine(line) {
+  _selectedProductLine = line;
+  renderProductTemplatesPage();
+}
+
+// Product template CRUD (offline-first, same pattern as project templates)
+
+function showAddProductTemplateForm() {
+  openDialog('添加文档模板 — ' + escHtml(_selectedProductLine || ''),
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名称</label>' +
+      '<input class="search-inp" id="ptf-name" style="width:100%;box-sizing:border-box">' +
+    '</div>' +
+    '<div style="display:flex;gap:10px;margin-bottom:10px">' +
+      '<div style="width:80px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">序号</label>' +
+        '<input class="search-inp" id="ptf-order" type="number" min="0" value="1" style="width:100%;box-sizing:border-box;padding:8px 4px;text-align:center"></div>' +
+      '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">责任人（岗位）</label>' + _roleSelect('') + '</div>' +
+    '</div>' +
+    '<div style="margin-bottom:4px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">说明（可选）</label>' +
+      '<input class="search-inp" id="ptf-desc" style="width:100%;box-sizing:border-box">' +
+    '</div>',
+    [{text: '取消', cls: '', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
+     {text: '确定', cls: 'btn-primary', onclick: 'saveProductTemplate()'}], {hideClose: true});
+}
+
+function showEditProductTemplateForm(id) {
+  var tpl = null;
+  var docs = _productTemplatesGrouped[_selectedProductLine] || [];
+  for (var i = 0; i < docs.length; i++) { if (docs[i].id === id) { tpl = docs[i]; break; } }
+  if (!tpl) return;
+  openDialog('编辑文档模板',
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名称</label>' +
+      '<input class="search-inp" id="ptf-name" value="' + escHtml(tpl.doc_name) + '" style="width:100%;box-sizing:border-box">' +
+    '</div>' +
+    '<div style="display:flex;gap:10px;margin-bottom:10px">' +
+      '<div style="width:80px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">序号</label>' +
+        '<input class="search-inp" id="ptf-order" type="number" min="0" value="' + (tpl.sort_order || '') + '" style="width:100%;box-sizing:border-box;padding:8px 4px;text-align:center"></div>' +
+      '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">责任人（岗位）</label>' + _roleSelect(tpl.responsible_role || '') + '</div>' +
+    '</div>' +
+    '<div style="margin-bottom:4px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">说明（可选）</label>' +
+      '<input class="search-inp" id="ptf-desc" value="' + escHtml(tpl.description || '') + '" style="width:100%;box-sizing:border-box">' +
+    '</div>',
+    [{text: '取消', cls: '', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
+     {text: '确定', cls: 'btn-primary', onclick: 'saveProductTemplate(' + id + ')'}], {hideClose: true});
+}
+
+function saveProductTemplate(id) {
+  var name = document.getElementById('ptf-name').value.trim();
+  var order = parseInt(document.getElementById('ptf-order').value) || 0;
+  var desc = document.getElementById('ptf-desc').value.trim();
+  var role = document.getElementById('dt-role') ? document.getElementById('dt-role').value : '';
+  if (!name) { showToast('请输入文档名称', 'error'); return; }
+
+  var docs = _productTemplatesGrouped[_selectedProductLine] || [];
+  if (id > 0) {
+    for (var i = 0; i < docs.length; i++) {
+      if (docs[i].id === id) {
+        docs[i].doc_name = name; docs[i].sort_order = order;
+        docs[i].description = desc; docs[i].responsible_role = role;
+        _productPendingOps.push({type: 'edit', id: id, data: {doc_name: name, sort_order: order, description: desc, responsible_role: role}});
+        break;
+      }
+    }
+  } else {
+    var newId = _productNextTempId--;
+    docs.push({id: newId, doc_name: name, sort_order: order, description: desc, responsible_role: role, product_line: _selectedProductLine});
+    _productPendingOps.push({type: 'add', data: {product_line: _selectedProductLine, doc_name: name, sort_order: order, description: desc, responsible_role: role}});
+  }
+  var overlay = document.querySelector('.shared-dialog-overlay');
+  if (overlay) overlay.remove();
+  renderProductTemplatesPage();
+}
+
+function deleteProductTemplate(id) {
+  if (!confirm('确认删除此文档模板？')) return;
+  var docs = _productTemplatesGrouped[_selectedProductLine] || [];
+  for (var i = 0; i < docs.length; i++) {
+    if (docs[i].id === id) {
+      if (id > 0) _productPendingOps.push({type: 'delete', id: id});
+      docs.splice(i, 1);
+      break;
+    }
+  }
+  renderProductTemplatesPage();
+}
+
+async function saveAllProductChanges() {
+  if (!_productPendingOps.length) return;
+  var ok = 0, fail = 0;
+  for (var i = 0; i < _productPendingOps.length; i++) {
+    var op = _productPendingOps[i];
+    try {
+      if (op.type === 'add') await API.post('/product-doc-templates', op.data);
+      else if (op.type === 'edit') await API.put('/product-doc-templates/' + op.id, op.data);
+      else if (op.type === 'delete') await API.del('/product-doc-templates/' + op.id);
+      ok++;
+    } catch(e) { fail++; showToast('保存失败: ' + e.message, 'error'); }
+  }
+  _productPendingOps = [];
+  showToast('保存完成: ' + ok + ' 成功' + (fail ? ', ' + fail + ' 失败' : ''), fail ? 'warn' : 'ok');
+  // Refresh
+  var data = await API.get('/product-doc-templates');
+  _productTemplatesGrouped = data || {};
+  var lines = await API.get('/product-doc-templates/product-lines');
+  _allProductLines = lines || [];
+  renderProductTemplatesPage();
+}
+
+function discardProductChanges() {
+  if (!confirm('放弃所有未保存的更改？此操作不可撤销。')) return;
+  _productPendingOps = [];
+  API.get('/product-doc-templates').then(function(fresh) {
+    if (fresh && Object.keys(fresh).length) _productTemplatesGrouped = fresh;
+    API.get('/product-doc-templates/product-lines').then(function(lines) {
+      _allProductLines = lines || [];
+      renderProductTemplatesPage();
+    });
+  }).catch(function() { renderProductTemplatesPage(); });
+}
+
+// Product line management
+
+function showAddProductLineDialog() {
+  openDialog('新增产品线',
+    '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--muted)">产品线名称</label>' +
+    '<input class="search-inp" id="plf-name" placeholder="如：嵌入式产品线" style="width:100%;box-sizing:border-box;margin-top:4px"></div>',
+    [{text: '取消', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
+     {text: '确定', cls: 'btn-primary', onclick: 'addProductLine()'}], {hideClose: true});
+}
+
+function addProductLine() {
+  var name = document.getElementById('plf-name').value.trim();
+  if (!name) { showToast('请输入产品线名称', 'error'); return; }
+  document.querySelector('.shared-dialog-overlay').remove();
+  if (_allProductLines.indexOf(name) < 0) _allProductLines.push(name);
+  _allProductLines.sort();
+  _selectedProductLine = name;
+  if (!_productTemplatesGrouped[name]) _productTemplatesGrouped[name] = [];
+  _productPendingOps.push({type: 'add_line', name: name});
+  renderProductTemplatesPage();
+}
+
+function showRenameProductLineDialog(oldName) {
+  openDialog('重命名产品线',
+    '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--muted)">新名称</label>' +
+    '<input class="search-inp" id="plf-rename" value="' + escHtml(oldName) + '" style="width:100%;box-sizing:border-box;margin-top:4px"></div>',
+    [{text: '取消', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
+     {text: '确定', cls: 'btn-primary', onclick: 'renameProductLine(\'' + escHtml(oldName) + '\')'}], {hideClose: true});
+}
+
+async function renameProductLine(oldName) {
+  var newName = document.getElementById('plf-rename').value.trim();
+  if (!newName || newName === oldName) { document.querySelector('.shared-dialog-overlay').remove(); return; }
+  document.querySelector('.shared-dialog-overlay').remove();
+  try {
+    await API.put('/product-doc-templates/product-lines/rename', {old_name: oldName, new_name: newName});
+    // Update local
+    if (_productTemplatesGrouped[oldName]) { _productTemplatesGrouped[newName] = _productTemplatesGrouped[oldName]; delete _productTemplatesGrouped[oldName]; }
+    var idx = _allProductLines.indexOf(oldName);
+    if (idx >= 0) _allProductLines[idx] = newName;
+    if (_selectedProductLine === oldName) _selectedProductLine = newName;
+    renderProductTemplatesPage();
+    showToast('产品线已重命名', 'ok');
+  } catch(e) { showToast('重命名失败: ' + e.message, 'error'); }
+}
+
+function deleteProductLine(line) {
+  var count = (_productTemplatesGrouped[line] || []).length;
+  if (!confirm('确认删除产品线「' + line + '」？\n将同时删除其下的 ' + count + ' 个文档模板。\n此操作不可撤销。')) return;
+  _productPendingOps.push({type: 'delete_line', name: line});
+  delete _productTemplatesGrouped[line];
+  var idx = _allProductLines.indexOf(line);
+  if (idx >= 0) _allProductLines.splice(idx, 1);
+  if (_selectedProductLine === line) _selectedProductLine = _allProductLines[0] || null;
+  renderProductTemplatesPage();
+}
+
+/* ═══════════════════════════════════════════════════
+   TAGS TEMPLATE TAB
+═══════════════════════════════════════════════════ */
+
+var _tags = [];
+
+async function initTags() {
+  var container = document.getElementById('dtsec-tags');
+  container.innerHTML = '<div class="loading-spinner">加载标签...</div>';
+  try {
+    var data = await API.get('/tags');
+    _tags = data || [];
+    renderTagsPage();
+  } catch(e) {
+    container.innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '<br><button class="btn" onclick="initTags()">重试</button></div>';
+  }
+}
+
+function renderTagsPage() {
+  var user = getCurrentUser();
+  var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+  var canEdit = user && (user.role === 'admin' || perms.indexOf('doc_template') >= 0);
+
+  var projectTags = _tags.filter(function(t) { return t.category === 'project'; });
+  var productTags = _tags.filter(function(t) { return t.category === 'product'; });
+  var generalTags = _tags.filter(function(t) { return !t.category || t.category === ''; });
+
+  var sections = [
+    { title: '项目标签', color: 'var(--accent)', bg: 'var(--accent-lt)', tags: projectTags },
+    { title: '产品标签', color: 'var(--success)', bg: 'var(--success-lt)', tags: productTags },
+    { title: '通用标签', color: 'var(--muted)', bg: 'var(--bg)', tags: generalTags },
+  ];
+
+  var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
+    '<div class="section-title">标签管理 <span style="font-size:11px;color:var(--muted);font-weight:400">（' + _tags.length + '）</span></div>' +
+    (canEdit ? '<button class="btn btn-primary" style="font-size:11px;padding:4px 12px" onclick="showAddTagDialog()">+ 添加标签</button>' : '') +
+  '</div>';
+
+  sections.forEach(function(sec) {
+    html += '<div class="card" style="margin-bottom:12px;padding:14px 16px">' +
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:' + (sec.tags.length ? '10px' : '4px') + '">' +
+        '<span style="width:8px;height:8px;border-radius:50%;background:' + sec.color + '"></span>' +
+        '<span style="font-weight:540;font-size:13px">' + sec.title + '</span>' +
+        '<span style="font-size:11px;color:var(--muted)">' + sec.tags.length + '</span>' +
+      '</div>';
+    if (sec.tags.length) {
+      html += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+      sec.tags.forEach(function(t) {
+        html += '<span class="tag-badge tag-' + (t.name.length % 5) + '" style="font-size:12px;padding:3px 12px;cursor:' + (canEdit ? 'pointer' : 'default') + '"' +
+          (canEdit ? ' onclick="showEditTagDialog(' + t.id + ')" title="点击编辑"' : '') + '>#' + escHtml(t.name) +
+          (canEdit ? '<span onclick="event.stopPropagation();deleteTag(' + t.id + ')" style="margin-left:4px;opacity:0.5;font-size:14px;line-height:1" title="删除">&times;</span>' : '') +
+        '</span>';
+      });
+      html += '</div>';
+    } else {
+      html += '<div style="font-size:11px;color:var(--muted);font-style:italic">暂无</div>';
+    }
+    html += '</div>';
+  });
+
+  document.getElementById('dtsec-tags').innerHTML = html;
+}
+
+function showAddTagDialog() {
+  openDialog('添加标签',
+    '<div style="margin-bottom:12px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">标签名</label>' +
+      '<input class="search-inp" id="tf-name" placeholder="如：全国产、双V7、PCIe卡" style="width:100%;box-sizing:border-box">' +
+    '</div>' +
+    '<div style="margin-bottom:8px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">分类</label>' +
+      '<select id="tf-cat" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);font-size:13px">' +
+        '<option value="">通用（项目+产品）</option>' +
+        '<option value="project">项目</option>' +
+        '<option value="product">产品</option>' +
+      '</select>' +
+    '</div>',
+    [{text: '取消', cls: '', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
+     {text: '确定', cls: 'btn-primary', onclick: 'saveTag()'}], {hideClose: true});
+}
+
+function showEditTagDialog(id) {
+  var tag = null;
+  for (var i = 0; i < _tags.length; i++) { if (_tags[i].id === id) { tag = _tags[i]; break; } }
+  if (!tag) return;
+  openDialog('编辑标签',
+    '<div style="margin-bottom:12px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">标签名</label>' +
+      '<input class="search-inp" id="tf-name" value="' + escHtml(tag.name) + '" style="width:100%;box-sizing:border-box">' +
+    '</div>' +
+    '<div style="margin-bottom:8px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">分类</label>' +
+      '<select id="tf-cat" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);font-size:13px">' +
+        '<option value=""' + (!tag.category ? ' selected' : '') + '>通用（项目+产品）</option>' +
+        '<option value="project"' + (tag.category === 'project' ? ' selected' : '') + '>项目</option>' +
+        '<option value="product"' + (tag.category === 'product' ? ' selected' : '') + '>产品</option>' +
+      '</select>' +
+    '</div>',
+    [{text: '取消', cls: '', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
+     {text: '确定', cls: 'btn-primary', onclick: 'saveTag(' + id + ')'}],
+    {hideClose: true, overlayClass: 'shared-dialog-overlay'});
+}
+
+async function saveTag(id) {
+  var nameEl = document.getElementById('tf-name');
+  var catEl = document.getElementById('tf-cat');
+  if (!nameEl) return;
+  var name = nameEl.value.trim();
+  var cat = catEl ? catEl.value : '';
+  if (!name) { showToast('请输入标签名', 'error'); return; }
+
+  document.querySelector('.shared-dialog-overlay').remove();
+  try {
+    if (id) {
+      var updated = await API.put('/tags/' + id, {name: name, category: cat || null});
+      for (var i = 0; i < _tags.length; i++) { if (_tags[i].id === id) { _tags[i] = updated; break; } }
+    } else {
+      var created = await API.post('/tags', {name: name, category: cat || null});
+      _tags.push(created);
+    }
+    renderTagsPage();
+    showToast(id ? '标签已更新' : '标签已创建', 'ok');
+  } catch(e) {
+    showToast('保存失败: ' + e.message, 'error');
+  }
+}
+
+async function deleteTag(id) {
+  var tag = null;
+  for (var i = 0; i < _tags.length; i++) { if (_tags[i].id === id) { tag = _tags[i]; break; } }
+  if (!confirm('确认删除标签 #' + (tag ? tag.name : id) + '？')) return;
+  try {
+    await API.del('/tags/' + id);
+    _tags = _tags.filter(function(t) { return t.id !== id; });
+    renderTagsPage();
+    showToast('标签已删除', 'ok');
+  } catch(e) {
+    showToast('删除失败: ' + e.message, 'error');
   }
 }
