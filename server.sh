@@ -24,17 +24,18 @@ usage() {
     echo ""
     echo "Commands:"
     echo "  start    启动服务器（后台运行）"
-    echo "  stop     停止服务器"
+    echo "  stop     停止所有服务器（加 -p 停止指定端口）"
     echo "  restart  重启服务器"
-    echo "  status   查看服务器运行状态"
+    echo "  status   查看所有运行中的服务器（加 -p 查看单个详情）"
     echo "  logs     查看系统日志（最近 50 行）"
     echo "  tail     实时跟踪系统日志"
     echo "  help     显示此帮助"
     echo ""
     echo "Examples:"
-    echo "  $0 -p 8801 start    # 在 8801 端口启动"
-    echo "  $0 -p 8801 restart  # 重启 8801 端口服务"
-    echo "  $0 -p 8801 status   # 查看 8801 端口状态"
+    echo "  $0 status             # 查看所有运行实例"
+    echo "  $0 -p 8800 status     # 查看 8800 端口详细状态"
+    echo "  $0 -p 8801 start      # 在 8801 端口启动"
+    echo "  $0 -p 8801 restart    # 重启 8801 端口服务"
     exit 0
 }
 
@@ -143,6 +144,70 @@ do_stop() {
     echo " 完成"
 }
 
+# ── Stop All ──
+do_stop_all() {
+    echo "停止所有 PMA 服务器..."
+
+    local found=0
+
+    # Stop servers from PID files
+    for pid_file in "$SCRIPT_DIR"/.pma-server-*.pid; do
+        [ -f "$pid_file" ] || continue
+        local pid=$(cat "$pid_file" 2>/dev/null)
+        [ -n "$pid" ] || continue
+        if ! kill -0 "$pid" 2>/dev/null; then
+            rm -f "$pid_file"
+            continue
+        fi
+
+        local fname=$(basename "$pid_file")
+        local port=$(echo "$fname" | sed 's/\.pma-server-\([0-9]*\)\.pid/\1/')
+        echo -n "  [PMA:$port] 停止 (PID: $pid)..."
+        kill "$pid" 2>/dev/null || true
+
+        local waited=0
+        while [ $waited -lt 20 ]; do
+            if ! kill -0 "$pid" 2>/dev/null; then
+                echo " 完成"
+                rm -f "$pid_file"
+                found=$((found + 1))
+                break
+            fi
+            sleep 0.5
+            waited=$((waited + 1))
+        done
+
+        if kill -0 "$pid" 2>/dev/null; then
+            kill -9 "$pid" 2>/dev/null || true
+            sleep 0.5
+            rm -f "$pid_file"
+            echo " 强制终止"
+            found=$((found + 1))
+        fi
+    done
+
+    # Also stop any orphan uvicorn processes
+    local orphans=$(pgrep -f "uvicorn backend.main:app" 2>/dev/null)
+    if [ -n "$orphans" ]; then
+        for pid in $orphans; do
+            local already=0
+            for pid_file in "$SCRIPT_DIR"/.pma-server-*.pid; do
+                [ -f "$pid_file" ] || continue
+                [ "$(cat "$pid_file" 2>/dev/null)" = "$pid" ] && already=1 && break
+            done
+            [ "$already" -eq 1 ] && continue
+            echo -n "  [孤儿进程] 停止 (PID: $pid)..."
+            kill "$pid" 2>/dev/null || true
+            sleep 1
+            kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null || true
+            echo " 完成"
+            found=$((found + 1))
+        done
+    fi
+
+    echo "已停止 $found 个实例"
+}
+
 # ── Restart ──
 do_restart() {
     echo "[PMA:$PORT] 重启服务器..."
@@ -185,7 +250,7 @@ do_status() {
 
         # Recent errors from server log
         local err_count=$(grep -c "ERROR\|CRITICAL" "$SERVER_LOG" 2>/dev/null || echo 0)
-        if [ "$err_count" -gt 0 ]; then
+        if [ "$err_count" -gt 0 ] 2>/dev/null; then
             echo "  最近错误: $err_count 条（查看: $0 logs）"
         fi
     else
@@ -193,7 +258,7 @@ do_status() {
     fi
 
     # DB info
-    local db_file="$SCRIPT_DIR/data/pma.db"
+    local db_file="$SCRIPT_DIR/data/pma-$PORT.db"
     if [ -f "$db_file" ]; then
         local db_size=$(du -h "$db_file" | cut -f1)
         echo "  数据库:  $db_file ($db_size)"
@@ -207,6 +272,104 @@ do_status() {
     fi
 
     echo "══════════════════════════════════════"
+}
+
+# ── Status All (multi-server overview) ──
+do_status_all() {
+    echo "══════════════════════════════════════════════════════════════"
+    echo "  PMA Server Status — All Running Instances"
+    echo "══════════════════════════════════════════════════════════════"
+
+    local found=0
+
+    # Collect servers from PID files
+    for pid_file in "$SCRIPT_DIR"/.pma-server-*.pid; do
+        [ -f "$pid_file" ] || continue
+        local pid=$(cat "$pid_file" 2>/dev/null)
+        [ -n "$pid" ] || continue
+        if ! kill -0 "$pid" 2>/dev/null; then
+            continue  # stale PID file
+        fi
+
+        # Extract port from filename: .pma-server-8800.pid → 8800
+        local fname=$(basename "$pid_file")
+        local port=$(echo "$fname" | sed 's/\.pma-server-\([0-9]*\)\.pid/\1/')
+
+        _print_server_row "$port" "$pid"
+        found=$((found + 1))
+    done
+
+    # Also check for uvicorn processes without PID files
+    local uvicorn_pids=$(pgrep -f "uvicorn backend.main:app" 2>/dev/null)
+    if [ -n "$uvicorn_pids" ]; then
+        for pid in $uvicorn_pids; do
+            # Skip if already covered by a PID file
+            local already_listed=0
+            for pid_file in "$SCRIPT_DIR"/.pma-server-*.pid; do
+                [ -f "$pid_file" ] || continue
+                local fpid=$(cat "$pid_file" 2>/dev/null)
+                if [ "$fpid" = "$pid" ]; then
+                    already_listed=1
+                    break
+                fi
+            done
+            [ "$already_listed" -eq 1 ] && continue
+
+            # Extract port from command line
+            local port=$(ps -o args= -p "$pid" 2>/dev/null | grep -oP '(?<=--port )\d+')
+            [ -z "$port" ] && port="?"
+            _print_server_row "$port" "$pid"
+            found=$((found + 1))
+        done
+    fi
+
+    if [ "$found" -eq 0 ]; then
+        echo "  没有运行中的 PMA 服务器"
+    fi
+
+    echo "──────────────────────────────────────────────────────────"
+    echo "  共 $found 个运行实例"
+    echo "══════════════════════════════════════════════════════════════"
+}
+
+# ── Print a single server row in compact format ──
+_print_server_row() {
+    local port="$1"
+    local pid="$2"
+
+    local ip=$(detect_ip)
+    local url="http://${ip}:${port}"
+
+    # Uptime
+    local elapsed=$(ps -o etime= -p "$pid" 2>/dev/null | tr -d ' ')
+
+    # Memory
+    local mem=$(ps -o rss= -p "$pid" 2>/dev/null | tr -d ' ')
+    local mem_mb="?"
+    [ -n "$mem" ] && mem_mb="$((mem / 1024))M"
+
+    # Health
+    local health="?"
+    if curl -s --max-time 2 "http://localhost:${port}/api/health" > /dev/null 2>&1; then
+        health="OK"
+    else
+        health="FAIL"
+    fi
+
+    # Branch info (if available via API)
+    local branch=""
+    if [ "$health" = "OK" ]; then
+        branch=$(curl -s --max-time 2 "http://localhost:${port}/api/health" 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('branch',''))" 2>/dev/null || true)
+    fi
+
+    printf "  端口 %-6s PID %-8s 运行 %-10s 内存 %-6s 健康 %s\n" \
+        "$port" "$pid" "${elapsed:-?}" "$mem_mb" "$health"
+    if [ -n "$branch" ]; then
+        echo "         分支: $branch  |  $url"
+    else
+        echo "         地址: $url"
+    fi
+    echo ""
 }
 
 # ── Logs ──
@@ -240,14 +403,15 @@ do_tail() {
 
 # Parse -p <port> argument
 PORT_ARG=""
+PORT_EXPLICIT=0
 while [ $# -gt 0 ]; do
     case "$1" in
-        -p) PORT_ARG="$2"; shift 2 ;;
+        -p) PORT_ARG="$2"; PORT_EXPLICIT=1; shift 2 ;;
         *)  break ;;
     esac
 done
-# Priority: -p arg > PMA_PORT env > default 8800
-PORT="${PORT_ARG:-${PMA_PORT:-8800}}"
+# Priority: -p arg > PMA_PORT env > default 8000
+PORT="${PORT_ARG:-${PMA_PORT:-8000}}"
 PID_FILE="$SCRIPT_DIR/.pma-server-$PORT.pid"
 LOG_FILE="$SCRIPT_DIR/data/pma-$PORT.log"
 SERVER_LOG="$SCRIPT_DIR/data/server-$PORT.log"
@@ -255,9 +419,21 @@ BASE_URL="${PMA_URL:-http://$(detect_ip):$PORT}"
 
 case "${1:-help}" in
     start)   do_start ;;
-    stop)    do_stop ;;
+    stop)
+        if [ "$PORT_EXPLICIT" -eq 1 ]; then
+            do_stop
+        else
+            do_stop_all
+        fi
+        ;;
     restart) do_restart ;;
-    status)  do_status ;;
+    status)
+        if [ "$PORT_EXPLICIT" -eq 1 ]; then
+            do_status
+        else
+            do_status_all
+        fi
+        ;;
     logs)    do_logs ;;
     tail)    do_tail ;;
     help|*)  usage ;;
