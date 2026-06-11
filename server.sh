@@ -410,8 +410,19 @@ while [ $# -gt 0 ]; do
         *)  break ;;
     esac
 done
-# Priority: -p arg > PMA_PORT env > default 8000
-PORT="${PORT_ARG:-${PMA_PORT:-8000}}"
+# Determine default port before -p override
+DEFAULT_PORT="${PMA_PORT:-8000}"
+PORT="${PORT_ARG:-$DEFAULT_PORT}"
+# Trunk branch: force default port for start/restart, ignore -p
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+if [ "$CURRENT_BRANCH" = "trunk" ] && [ "$PORT_EXPLICIT" -eq 1 ]; then
+    case "${1:-help}" in
+        start|restart)
+            echo "[PMA] trunk 分支仅允许使用默认端口 $DEFAULT_PORT，忽略 -p $PORT_ARG"
+            PORT="$DEFAULT_PORT"
+            ;;
+    esac
+fi
 PID_FILE="$SCRIPT_DIR/.pma-server-$PORT.pid"
 LOG_FILE="$SCRIPT_DIR/data/pma-$PORT.log"
 SERVER_LOG="$SCRIPT_DIR/data/server-$PORT.log"

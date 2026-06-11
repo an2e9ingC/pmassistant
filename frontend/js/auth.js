@@ -32,7 +32,7 @@ async function onLogin(e) {
     });
     const json = await res.json();
     if (json.code !== 0) {
-      errorEl.textContent = json.message || '登录失败';
+      errorEl.textContent = json.detail || json.message || '登录失败';
       btn.disabled = false;
       btn.textContent = '登录';
       return;
