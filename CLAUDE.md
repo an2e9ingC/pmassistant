@@ -84,11 +84,12 @@ cp data/pma.db data/pma-$PORT.db
 2. git rebase origin/trunk          # 变基 + 有冲突则解决
 3. git diff origin/trunk...HEAD     # Code Review（必须）
 4. git checkout trunk && git merge --no-ff <feature-branch>
-5. git push origin trunk
-6. 清理 worktree（ExitWorktree）
+5. 报告 merge 完成，等待 push 指令
+6. 清理 worktree（用户确认后 ExitWorktree）
 ```
 
 **用户不主动说 merge，绝不自作主张合并。**
+**Merge 后不自动 push。** Push 需要用户单独发出 "push"/"推送" 指令，或用户自行 push。
 
 Code Review 检查点：
 - 逻辑正确性、边界条件
