@@ -5,7 +5,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from backend.models.document import DocumentTemplate, ProjectDocument, ProductDocTemplate, PmaTag
+from backend.models.document import DocumentTemplate, ProjectDocument, ProductDocTemplate, ProductLine, PmaTag
 from backend.models.zentao import CachedExecution, CachedProject
 
 # Standard stage names from requirements spec (Section 4.1 Project Lifecycle).
@@ -662,17 +662,12 @@ def get_product_templates_grouped(db: Session) -> dict:
 
 
 def get_product_lines(db: Session) -> list[str]:
-    """Return distinct product lines from templates + existing products."""
+    """Return distinct product lines from local ProductLine table + templates."""
     lines = set()
     for row in db.query(ProductDocTemplate.product_line).distinct():
         lines.add(row[0])
-    # Also include product lines from Zentao sync (program_name / category)
-    from backend.models.zentao import CachedProduct
-    products = db.query(CachedProduct).all()
-    for p in products:
-        name = (p.category or p.program_name or "").strip()
-        if name:
-            lines.add(name)
+    for row in db.query(ProductLine.name).order_by(ProductLine.name).all():
+        lines.add(row[0])
     return sorted(lines)
 
 
@@ -703,6 +698,17 @@ def delete_product_template(db: Session, template_id: int) -> bool:
     return True
 
 
+def add_product_line_to_db(db: Session, name: str) -> dict:
+    """Explicitly add a product line to the local database."""
+    existing = db.query(ProductLine).filter(ProductLine.name == name).first()
+    if existing:
+        return {"name": existing.name, "id": existing.id, "created_at": str(existing.created_at)[:19] if existing.created_at else None}
+    pl = ProductLine(name=name)
+    db.add(pl)
+    db.commit()
+    return {"name": pl.name, "id": pl.id, "created_at": str(pl.created_at)[:19] if pl.created_at else None}
+
+
 def rename_product_line(db: Session, old_name: str, new_name: str) -> int:
     count = db.query(ProductDocTemplate).filter(
         ProductDocTemplate.product_line == old_name
@@ -715,6 +721,8 @@ def delete_product_line(db: Session, product_line: str) -> int:
     count = db.query(ProductDocTemplate).filter(
         ProductDocTemplate.product_line == product_line
     ).delete()
+    # Also remove the explicitly managed product line record
+    db.query(ProductLine).filter(ProductLine.name == product_line).delete()
     db.commit()
     return count
 

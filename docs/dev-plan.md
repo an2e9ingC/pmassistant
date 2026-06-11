@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-> 当前版本：v2026.06.11-beta17 | 最后更新：2026-06-11
+> 当前版本：v2026.06.11-beta18 | 最后更新：2026-06-11
 
 ---
 
@@ -359,3 +359,4 @@
 | 2026-06-11 | v2026.06.11-beta16 | docs: 重构并行开发约定—核心概念(每个worktree=独立开发者)+merge流程修正(三阶段)+多实例管理命令+清理指导+边界情况 |
 | 2026-06-11 | v2026.06.11-beta16 | fix: saveAllProductChanges未处理add_line/delete_line导致产品线删除不生效 |
 | 2026-06-11 | v2026.06.11-beta17 | fix: 登录页显示服务端错误详情(detail)；trunk分支server.sh强制使用默认端口 |
+| 2026-06-11 | v2026.06.11-beta18 | fix: 产品线新增pma_product_lines表持久化+get_product_lines移除CachedProduct依赖+add_line/delete_line前后端全链路修复 |

@@ -49,6 +49,15 @@ class ProductDocTemplate(Base):
     responsible_role = Column(String(128), nullable=True)  # 责任人/岗位
 
 
+class ProductLine(Base):
+    """Locally managed product lines for the document template system."""
+    __tablename__ = "pma_product_lines"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(128), nullable=False, unique=True)
+    created_at = Column(DateTime, default=func.now())
+
+
 class PmaTag(Base):
     """Managed tags for products and projects. Configurable via admin UI."""
     __tablename__ = "pma_tags"

@@ -97,10 +97,9 @@ def add_product_line(
     db: Session = Depends(get_db),
     user=Depends(require_perm("doc_template")),
 ):
-    # Product lines are implicitly created when templates reference them,
-    # but this endpoint provides explicit creation for empty lines.
+    result = document_service.add_product_line_to_db(db, product_line)
     log_audit(db, user, "product_line_add", product_line, "管理", "medium")
-    return {"code": 0, "data": product_line, "message": "ok"}
+    return {"code": 0, "data": result, "message": "ok"}
 
 
 @router.put("/product-lines/rename", response_model=dict)

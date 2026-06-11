@@ -693,7 +693,10 @@ async function saveAllProductChanges() {
       if (op.type === 'add') { await API.post('/product-doc-templates', op.data); ok++; }
       else if (op.type === 'edit') { await API.put('/product-doc-templates/' + op.id, op.data); ok++; }
       else if (op.type === 'delete') { await API.del('/product-doc-templates/' + op.id); ok++; }
-      else if (op.type === 'add_line') { /* product lines are implicit — no API needed */ ok++; }
+      else if (op.type === 'add_line') {
+        await API.post('/product-doc-templates/product-lines?product_line=' + encodeURIComponent(op.name));
+        ok++;
+      }
       else if (op.type === 'delete_line') {
         await API.del('/product-doc-templates/product-lines/' + encodeURIComponent(op.name));
         ok++;
