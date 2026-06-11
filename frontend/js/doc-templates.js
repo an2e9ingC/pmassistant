@@ -63,7 +63,8 @@ async function initDocTemplates() {
 
 function renderTemplatesPage() {
   var user = getCurrentUser();
-  var canEdit = user && (user.role === 'admin' || user.role === 'pm' || user.role === 'test_delivery');
+  var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+  var canEdit = user && (user.role === 'admin' || perms.indexOf('doc_template') >= 0);
 
   var stageTypes = _sortStageTypes(Object.keys(_templatesGrouped));
   if (!stageTypes.length) {

@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-> 当前版本：v2026.06.11-beta5 | 最后更新：2026-06-11
+> 当前版本：v2026.06.11-beta6 | 最后更新：2026-06-11
 
 ---
 
@@ -226,6 +226,7 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-06-11 | v2026.06.11-beta6 | fix: 文档模板配置页权限检查改为permissions而非role，修复CTO等非admin/pm角色无法编辑 |
 | 2026-06-11 | v2026.06.11-beta5 | fix: _sync_from_templates Phase1+2全量去重 + 占位文档清理 + stage_type更新 + sync-all端点+前端按钮 |
 | 2026-06-11 | v2026.06.11-beta4 | fix: _sync_from_templates 增加去重—同execution_id+doc_name重复行自动清理 |
 | 2026-06-11 | v2026.06.11-beta3 | fix: _sync_from_templates 修复—清理未匹配执行的孤立文档+更新跨阶段保留文档的stage_type |
