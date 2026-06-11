@@ -45,15 +45,23 @@ NAS 文件 ───────────┘
 
 ### 核心原则
 
-**一个 session = 一个 worktree = 一个分支 = 一个需求**
+**`worktree:` 前缀触发隔离开发：一个 worktree = 一个分支 = 一个需求**
+
+用户输入以 `worktree:` 开头时，AI 创建独立 worktree；普通 prompt 直接在当前分支操作。
 
 ### 启动新功能
 
-用户打开新 Claude Code 窗口，说 "在 worktree 中开发 xxx 功能"。AI 应：
+用户打开新 Claude Code 窗口，输入以 `worktree:` 开头的提示词即可触发隔离开发工作流。AI 应：
 
-1. `EnterWorktree(name: "feat/<short-desc>")` 创建隔离工作区
+1. `EnterWorktree(name: "feat/<short-desc>" 或 "fix/<short-desc>")` 创建隔离工作区
 2. 在 worktree 中开发、测试、提交
 3. 完成后说"功能已验证通过，等待 merge 指令"
+
+示例：
+- `worktree: 优化项目详情，增加添加标签功能`
+- `worktree: 修复登录超时问题 #15`
+
+**只有以 `worktree:` 开头才进入 worktree 流程**，普通 prompt 直接在当前分支操作。
 
 ### 端口分配
 
@@ -227,7 +235,7 @@ Co-Authored-By: <model-name> / <tool-name>
 
 | 用户指令 | AI 执行 |
 |---------|--------|
-| "在 worktree 中开发 xxx" | EnterWorktree → 开发 → 等 merge |
+| `worktree: <描述>` | EnterWorktree → 开发 → 等 merge |
 | "commit" / "提交" | 更新版本号 → commit |
 | "merge" / "合并" | rebase → code review → merge → push |
 | 后端 .py 修改 | 自动 `./server.sh -p <PORT> restart` |
