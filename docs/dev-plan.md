@@ -354,3 +354,4 @@
 | 2026-06-11 | v2026.06.11-beta11 | docs: AI开发指南CLAUDE.md—整合19条规则/记忆为9章（项目概述+并行开发+commit规范+版本管理+前端规则+环境+Bug流程+速查） |
 | 2026-06-11 | v2026.06.11-beta12 | docs: Merge流程修正—合入trunk后不自动push，push需用户单独指令 |
 | 2026-06-11 | v2026.06.11-beta13 | docs: worktree触发规则改为`worktree:`前缀—用户显式前缀触发隔离开发，普通prompt直接在当前分支操作 |
+| 2026-06-11 | v2026.06.11-beta14 | docs: worktree分支必须从trunk最新提交创建，不可从其他feature分支创建 |

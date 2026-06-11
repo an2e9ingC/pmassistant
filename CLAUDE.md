@@ -54,6 +54,8 @@ NAS 文件 ───────────┘
 用户打开新 Claude Code 窗口，输入以 `worktree:` 开头的提示词即可触发隔离开发工作流。AI 应：
 
 1. `EnterWorktree(name: "feat/<short-desc>" 或 "fix/<short-desc>")` 创建隔离工作区
+   - **worktree 分支必须从 `origin/trunk` 最新提交创建**，不可从其他 feature 分支创建
+   - 创建后验证：`git merge-base <new-branch> origin/trunk` 应等于 `origin/trunk` 最新 commit
 2. 在 worktree 中开发、测试、提交
 3. 完成后说"功能已验证通过，等待 merge 指令"
 
