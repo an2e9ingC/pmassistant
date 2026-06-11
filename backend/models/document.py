@@ -38,11 +38,12 @@ class ProjectDocument(Base):
 
 
 class ProductDocTemplate(Base):
-    """Global document template per product line. Configurable via admin UI."""
+    """Global document template per leaf product (level 3). Configurable via admin UI."""
     __tablename__ = "product_doc_templates"
 
     id = Column(Integer, primary_key=True)
-    product_line = Column(String(128), nullable=False, index=True)
+    product_line = Column(String(128), nullable=False, default="", server_default="", index=True)  # legacy, migrated to product_id
+    product_id = Column(Integer, ForeignKey("pma_product_lines.id"), nullable=True, index=True)
     doc_name = Column(String(256), nullable=False)
     sort_order = Column(Integer, default=0)
     description = Column(String(512), nullable=True)
@@ -50,11 +51,15 @@ class ProductDocTemplate(Base):
 
 
 class ProductLine(Base):
-    """Locally managed product lines for the document template system."""
+    """Hierarchical product tree nodes (3 levels).
+    Level 1 = 产品线, Level 2 = 产品系列, Level 3 = 产品型号.
+    Doc templates attach to leaf nodes (level 3)."""
     __tablename__ = "pma_product_lines"
 
     id = Column(Integer, primary_key=True)
-    name = Column(String(128), nullable=False, unique=True)
+    name = Column(String(128), nullable=False)
+    parent_id = Column(Integer, ForeignKey("pma_product_lines.id"), nullable=True, index=True)
+    sort_order = Column(Integer, default=0)
     created_at = Column(DateTime, default=func.now())
 
 

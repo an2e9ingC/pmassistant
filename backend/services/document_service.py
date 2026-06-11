@@ -647,28 +647,69 @@ def sync_all_projects(db: Session) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Product Document Templates — per product line
+# Product Document Templates — 3-level tree (产品线 → 产品系列 → 产品型号)
 # ---------------------------------------------------------------------------
 
-def get_product_templates_grouped(db: Session) -> dict:
-    """Return all product doc templates grouped by product_line, sorted by sort_order."""
-    templates = db.query(ProductDocTemplate).order_by(
-        ProductDocTemplate.product_line, ProductDocTemplate.sort_order
+def get_product_tree(db: Session) -> list[dict]:
+    """Return the full 3-level product tree with template counts per node."""
+    all_nodes = db.query(ProductLine).order_by(
+        ProductLine.sort_order, ProductLine.name
     ).all()
-    grouped: dict[str, list[dict]] = {}
-    for t in templates:
-        grouped.setdefault(t.product_line, []).append(_product_template_dict(t))
-    return grouped
+
+    # Build parent → children map
+    nodes_by_parent: dict = {}
+    for node in all_nodes:
+        nodes_by_parent.setdefault(node.parent_id, []).append(node)
+
+    # Count templates per product (leaf nodes)
+    template_counts: dict[int, int] = {}
+    from sqlalchemy import func as sqlfunc
+    for row in db.query(
+        ProductDocTemplate.product_id,
+        sqlfunc.count(ProductDocTemplate.id),
+    ).filter(ProductDocTemplate.product_id.isnot(None)).group_by(
+        ProductDocTemplate.product_id
+    ).all():
+        template_counts[row[0]] = row[1]
+
+    def build_tree(parent_id=None, level=1):
+        children = nodes_by_parent.get(parent_id, [])
+        result = []
+        for node in children:
+            child_list = build_tree(node.id, level + 1) if level < 3 else []
+            result.append({
+                "id": node.id,
+                "name": node.name,
+                "parent_id": node.parent_id,
+                "sort_order": node.sort_order,
+                "level": level,
+                "template_count": template_counts.get(node.id, 0),
+                "children": child_list,
+            })
+        return result
+
+    return build_tree()
 
 
-def get_product_lines(db: Session) -> list[str]:
-    """Return distinct product lines from local ProductLine table + templates."""
-    lines = set()
-    for row in db.query(ProductDocTemplate.product_line).distinct():
-        lines.add(row[0])
-    for row in db.query(ProductLine.name).order_by(ProductLine.name).all():
-        lines.add(row[0])
-    return sorted(lines)
+def get_templates_for_product(db: Session, product_id: int) -> list[dict]:
+    """Return all doc templates for a specific product (leaf node)."""
+    templates = db.query(ProductDocTemplate).filter(
+        ProductDocTemplate.product_id == product_id
+    ).order_by(ProductDocTemplate.sort_order).all()
+    return [_product_template_dict(t) for t in templates]
+
+
+def get_node_breadcrumb(db: Session, node_id: int) -> list[str]:
+    """Return breadcrumb path from root to node, e.g. ['嵌入式', 'VPX系列', 'VPX-6206']."""
+    path = []
+    current = db.query(ProductLine).filter(ProductLine.id == node_id).first()
+    while current:
+        path.insert(0, current.name)
+        if current.parent_id:
+            current = db.query(ProductLine).filter(ProductLine.id == current.parent_id).first()
+        else:
+            break
+    return path
 
 
 def create_product_template(db: Session, data: dict) -> dict:
@@ -698,39 +739,100 @@ def delete_product_template(db: Session, template_id: int) -> bool:
     return True
 
 
-def add_product_line_to_db(db: Session, name: str) -> dict:
-    """Explicitly add a product line to the local database."""
-    existing = db.query(ProductLine).filter(ProductLine.name == name).first()
+# ── Product Node CRUD (tree nodes) ──
+
+def add_product_node(db: Session, name: str, parent_id: int | None = None,
+                     sort_order: int = 0) -> dict:
+    """Add a new product tree node at any level."""
+    # Check name uniqueness within same parent
+    existing = db.query(ProductLine).filter(
+        ProductLine.name == name,
+        ProductLine.parent_id == parent_id,
+    ).first()
     if existing:
-        return {"name": existing.name, "id": existing.id, "created_at": str(existing.created_at)[:19] if existing.created_at else None}
-    pl = ProductLine(name=name)
-    db.add(pl)
+        raise ValueError(f"同级下已存在同名节点: {name}")
+    node = ProductLine(name=name, parent_id=parent_id, sort_order=sort_order)
+    db.add(node)
     db.commit()
-    return {"name": pl.name, "id": pl.id, "created_at": str(pl.created_at)[:19] if pl.created_at else None}
+    return _product_line_dict(node)
 
 
-def rename_product_line(db: Session, old_name: str, new_name: str) -> int:
-    count = db.query(ProductDocTemplate).filter(
-        ProductDocTemplate.product_line == old_name
+def rename_product_node(db: Session, node_id: int, new_name: str) -> dict:
+    """Rename a node and cascade to product_doc_templates for leaf nodes."""
+    node = db.query(ProductLine).filter(ProductLine.id == node_id).first()
+    if not node:
+        raise ValueError(f"节点不存在: {node_id}")
+    old_name = node.name
+    node.name = new_name
+
+    # Also update legacy product_line field on templates referencing this node
+    db.query(ProductDocTemplate).filter(
+        ProductDocTemplate.product_id == node_id,
     ).update({"product_line": new_name})
     db.commit()
-    return count
+    return _product_line_dict(node)
 
 
-def delete_product_line(db: Session, product_line: str) -> int:
-    count = db.query(ProductDocTemplate).filter(
-        ProductDocTemplate.product_line == product_line
-    ).delete()
-    # Also remove the explicitly managed product line record
-    db.query(ProductLine).filter(ProductLine.name == product_line).delete()
+def update_product_node(db: Session, node_id: int, data: dict) -> dict:
+    """Update a node's parent_id or sort_order (move/reorder)."""
+    node = db.query(ProductLine).filter(ProductLine.id == node_id).first()
+    if not node:
+        raise ValueError(f"节点不存在: {node_id}")
+    if "parent_id" in data:
+        node.parent_id = data["parent_id"]
+    if "sort_order" in data:
+        node.sort_order = data["sort_order"]
+    if "name" in data:
+        node.name = data["name"]
     db.commit()
-    return count
+    return _product_line_dict(node)
+
+
+def delete_product_node(db: Session, node_id: int) -> dict:
+    """Delete a node, its descendants, and their templates. Returns stats."""
+    node = db.query(ProductLine).filter(ProductLine.id == node_id).first()
+    if not node:
+        raise ValueError(f"节点不存在: {node_id}")
+
+    # Find all descendant IDs recursively
+    def get_descendant_ids(pid):
+        children = db.query(ProductLine).filter(ProductLine.parent_id == pid).all()
+        ids = []
+        for c in children:
+            ids.append(c.id)
+            ids.extend(get_descendant_ids(c.id))
+        return ids
+
+    all_ids = [node_id] + get_descendant_ids(node_id)
+
+    # Delete templates for all affected products
+    template_count = db.query(ProductDocTemplate).filter(
+        ProductDocTemplate.product_id.in_(all_ids)
+    ).delete(synchronize_session=False)
+
+    # Delete all affected nodes (children first to avoid FK issues)
+    for pid in reversed(all_ids):
+        db.query(ProductLine).filter(ProductLine.id == pid).delete(synchronize_session=False)
+
+    db.commit()
+    return {"node_count": len(all_ids), "template_count": template_count}
+
+
+def _product_line_dict(node: ProductLine) -> dict:
+    return {
+        "id": node.id,
+        "name": node.name,
+        "parent_id": node.parent_id,
+        "sort_order": node.sort_order,
+        "created_at": str(node.created_at)[:19] if node.created_at else None,
+    }
 
 
 def _product_template_dict(t: ProductDocTemplate) -> dict:
     return {
         "id": t.id,
         "product_line": t.product_line,
+        "product_id": t.product_id,
         "doc_name": t.doc_name,
         "sort_order": t.sort_order,
         "description": t.description,

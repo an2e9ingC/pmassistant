@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-> 当前版本：v2026.06.11-beta20 | 最后更新：2026-06-11
+> 当前版本：v2026.06.11-beta21 | 最后更新：2026-06-11
 
 ---
 
@@ -362,3 +362,4 @@
 | 2026-06-11 | v2026.06.11-beta18 | fix: 产品线新增pma_product_lines表持久化+get_product_lines移除CachedProduct依赖+add_line/delete_line前后端全链路修复 |
 | 2026-06-11 | v2026.06.11-beta19 | fix: 权限管理保存跳过admin+未修改+后端审计日志 |
 | 2026-06-11 | v2026.06.11-beta20 | fix: 全面端口隔离—DB/日志/配置文件默认值按PMA_PORT区分，消除pma.db硬编码 |
+| 2026-06-11 | v2026.06.11-beta21 | feat: 产品文档模板3层架构(product_line→product_series→product_model)+parent_id树形结构+级联删除 |

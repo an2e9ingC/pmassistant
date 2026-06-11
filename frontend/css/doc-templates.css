@@ -70,6 +70,106 @@
 
 .dt-right .table-scroll { max-height: none; }
 
+/* ── Product Tree ── */
+
+.dt-tree-node {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px 6px 4px;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.12s;
+  margin-bottom: 1px;
+  gap: 2px;
+}
+.dt-tree-node:hover {
+  background: var(--accent-lt);
+}
+.dt-tree-node.selected {
+  background: var(--accent-lt);
+  color: var(--accent);
+  font-weight: 540;
+}
+.dt-tree-node.non-leaf {
+  color: var(--fg);
+}
+
+.dt-tree-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  cursor: pointer;
+  font-size: 9px;
+  user-select: none;
+  transition: transform 0.15s;
+  color: var(--muted);
+}
+.dt-tree-arrow.collapsed {
+  transform: rotate(-90deg);
+}
+
+.dt-tree-icon {
+  width: 14px;
+  flex-shrink: 0;
+  font-size: 11px;
+  text-align: center;
+  opacity: 0.7;
+}
+
+.dt-tree-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dt-tree-badge {
+  font-size: 10px;
+  color: var(--muted);
+  background: var(--bg);
+  padding: 0px 6px;
+  border-radius: 10px;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.dt-tree-acts {
+  display: none;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.dt-tree-node:hover .dt-tree-acts {
+  display: flex;
+}
+
+.dt-tree-children {
+  overflow: hidden;
+}
+.dt-tree-children.collapsed {
+  display: none;
+}
+
+.dt-tree-add {
+  justify-content: center;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px dashed var(--border);
+  border-radius: 7px;
+  padding: 6px 12px;
+  margin-top: 4px;
+}
+.dt-tree-add:hover {
+  background: var(--accent-lt);
+}
+
+/* ── Legacy dt-stage-item (still used by project templates tab) ── */
+/* These are kept for backward compatibility with the project tab */
+
 @media (max-width: 768px) {
   .dt-layout {
     grid-template-columns: 1fr;
