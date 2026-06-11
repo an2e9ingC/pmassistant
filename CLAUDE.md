@@ -52,6 +52,8 @@ NAS 文件 ───────────┘
 用户打开新 Claude Code 窗口，说 "在 worktree 中开发 xxx 功能"。AI 应：
 
 1. `EnterWorktree(name: "feat/<short-desc>")` 创建隔离工作区
+   - **worktree 分支必须从 `origin/trunk` 最新提交创建**，不可从其他 feature 分支创建
+   - 创建后验证：`git merge-base <new-branch> origin/trunk` 应等于 `origin/trunk` 最新 commit
 2. 在 worktree 中开发、测试、提交
 3. 完成后说"功能已验证通过，等待 merge 指令"
 
