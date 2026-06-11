@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-> 当前版本：v2026.06.11-beta18 | 最后更新：2026-06-11
+> 当前版本：v2026.06.11-beta19 | 最后更新：2026-06-11
 
 ---
 
@@ -360,3 +360,4 @@
 | 2026-06-11 | v2026.06.11-beta16 | fix: saveAllProductChanges未处理add_line/delete_line导致产品线删除不生效 |
 | 2026-06-11 | v2026.06.11-beta17 | fix: 登录页显示服务端错误详情(detail)；trunk分支server.sh强制使用默认端口 |
 | 2026-06-11 | v2026.06.11-beta18 | fix: 产品线新增pma_product_lines表持久化+get_product_lines移除CachedProduct依赖+add_line/delete_line前后端全链路修复 |
+| 2026-06-11 | v2026.06.11-beta19 | fix: 权限管理保存跳过admin+未修改+后端审计日志 |

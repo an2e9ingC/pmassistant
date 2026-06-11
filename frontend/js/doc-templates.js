@@ -540,7 +540,7 @@ function renderProductTemplatesPage() {
       '</span>' : '') +
     '</div>';
   }).join('') +
-  (canEdit ? '<div class="dt-stage-item" style="justify-content:center;color:var(--accent);font-size:12px;cursor:pointer;border:1px dashed var(--border)" onclick="showAddProductLineDialog()">+ 新增产品线</div>' : '');
+  (canEdit ? '<div class="dt-stage-item" style="justify-content:center;color:var(--accent);font-size:12px;cursor:pointer;border:1px dashed var(--border)" onclick="showAddProductLineDialog()">+ 新增产品</div>' : '');
 
   // Save button
   var pendingCount = _productPendingOps.length;
@@ -728,7 +728,7 @@ function discardProductChanges() {
 // Product line management
 
 function showAddProductLineDialog() {
-  openDialog('新增产品线',
+  openDialog('新增产品',
     '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--muted)">产品线名称</label>' +
     '<input class="search-inp" id="plf-name" placeholder="如：嵌入式产品线" style="width:100%;box-sizing:border-box;margin-top:4px"></div>',
     [{text: '取消', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},

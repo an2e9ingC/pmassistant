@@ -98,7 +98,7 @@ def list_roles(db: Session = Depends(get_db), _=Depends(require_admin)):
 
 
 @router.put("/roles/{role_id}", response_model=dict)
-def update_role(role_id: int, payload: dict, db: Session = Depends(get_db), _=Depends(require_admin)):
+def update_role(role_id: int, payload: dict, db: Session = Depends(get_db), user=Depends(require_admin)):
     role = db.query(Role).filter(Role.id == role_id).first()
     if not role:
         raise HTTPException(status_code=404, detail="角色不存在")
@@ -112,6 +112,7 @@ def update_role(role_id: int, payload: dict, db: Session = Depends(get_db), _=De
     if "description" in payload:
         role.description = payload["description"]
     db.commit()
+    log_audit(db, user, "role_update", f"{role.key}: {role.permissions}", "管理", "high")
     return {"code": 0, "message": "角色已更新"}
 
 

@@ -926,15 +926,23 @@ function toggleRolePerm(roleId, permKey, checked) {
 }
 
 async function savePermChanges() {
-  var success = 0, fail = 0;
+  var success = 0, fail = 0, skipped = 0;
   for (var i = 0; i < _permRoles.length; i++) {
     var r = _permRoles[i];
+    // Skip admin role (immutable)
+    if (r.key === 'admin') { skipped++; continue; }
+    // Skip unchanged roles
+    var orig = _permRolesOrig ? _permRolesOrig.find(function(x) { return x.id === r.id; }) : null;
+    if (orig && arraysEqual(r.permissions, orig.permissions || [])) { skipped++; continue; }
     try {
       await API.put('/admin/users/roles/' + r.id, { permissions: r.permissions });
       success++;
-    } catch(e) { fail++; }
+    } catch(e) { fail++; showToast('保存 ' + r.label + ' 失败: ' + (e.message || '未知错误'), 'error'); }
   }
-  showToast('保存完成: ' + success + ' 成功' + (fail > 0 ? ', ' + fail + ' 失败' : ''), fail ? 'error' : 'success');
+  var msg = '保存完成: ' + success + ' 成功';
+  if (fail > 0) msg += ', ' + fail + ' 失败';
+  if (skipped > 0) msg += ', ' + skipped + ' 跳过';
+  showToast(msg, fail > 0 ? 'error' : 'success');
   markPageClean();
   renderPermTable();
   if (_permTab === 'perms') renderPermByPermTable();
