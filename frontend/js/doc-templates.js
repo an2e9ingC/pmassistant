@@ -83,8 +83,8 @@ function renderTemplatesPage() {
   var leftHtml = stageTypes.map(function(st) {
     var count = (_templatesGrouped[st] || []).length;
     var sel = st === _selectedStage ? ' selected' : '';
-    return '<div class="dt-stage-item' + sel + '">' +
-      '<span onclick="selectDocTemplateStage(\'' + escHtml(st) + '\')" style="flex:1;cursor:pointer">' + escHtml(st) + '</span>' +
+    return '<div class="dt-stage-item' + sel + '" onclick="selectDocTemplateStage(\'' + escHtml(st) + '\')">' +
+      '<span style="flex:1">' + escHtml(st) + '</span>' +
       '<span class="dt-stage-count">' + count + '</span>' +
       (canEdit ? '<span class="dt-stage-acts">' +
         '<button class="btn" style="font-size:10px;padding:1px 5px" onclick="event.stopPropagation();showRenameStageDialog(\'' + escHtml(st) + '\')" title="重命名">✎</button>' +
