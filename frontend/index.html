@@ -163,7 +163,7 @@
         <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle;margin-right:3px"><circle cx="8" cy="8" r="6"/><line x1="8" y1="5" x2="8" y2="9"/><circle cx="8" cy="12" r="0.8" fill="currentColor" stroke="none"/></svg>
         反馈 Bug
       </a>
-      <span id="app-version">v2026.06.10-beta6</span>
+      <span id="app-version">v2026.06.10-beta7</span>
     </div>
   </div>
 </aside>
@@ -226,27 +226,27 @@
     <div class="view active" id="view-dashboard">
 
       <div class="kpi-grid" id="kpi-grid">
-        <div class="kpi-card" data-category="" onclick="filterByCategory('', this)" style="border-left-color:var(--muted)">
+        <div class="kpi-card" data-category="" onclick="filterByCategory('', this)" style="border-left-color:var(--muted)" title="所有项目总数（含研发和生产）&#10;筛选条件：数据源配置中的项目编号前缀">
           <div class="kpi-label">全部</div>
           <div class="kpi-value" id="kpi-all-count" style="color:var(--fg)">—</div>
           <div class="kpi-meta" id="kpi-all-filter" style="font-size:10.5px;font-family:var(--mono);cursor:help" title="">加载中...</div>
         </div>
-        <div class="kpi-card active" data-category="active" onclick="filterByCategory('active', this)">
+        <div class="kpi-card active" data-category="active" onclick="filterByCategory('active', this)" title="统计条件：禅道项目状态为「进行中」或「未开始」&#10;即 p.status IN (doing, wait)">
           <div class="kpi-label">进行中</div>
           <div class="kpi-value" id="kpi-active-count">—</div>
           <div class="kpi-meta" id="kpi-meta-types">加载中...</div>
         </div>
-        <div class="kpi-card" data-category="completed" onclick="filterByCategory('completed', this)">
+        <div class="kpi-card" data-category="completed" onclick="filterByCategory('completed', this)" title="PMA 严格完成标准（四条件全满足）：&#10;① 禅道项目状态为 已完成/已关闭&#10;② 所有已完结阶段的输出件全部提交&#10;③ 所有任务进度 100% done/closed&#10;④ 所有阶段名精确匹配标准阶段名，且无超期阶段">
           <div class="kpi-label">已完成</div>
           <div class="kpi-value" id="kpi-completed-count">—</div>
           <div class="kpi-meta">已关闭/已完成</div>
         </div>
-        <div class="kpi-card" data-category="high_risk" onclick="filterByCategory('high_risk', this)">
+        <div class="kpi-card" data-category="high_risk" onclick="filterByCategory('high_risk', this)" title="统计条件：存在红色告警的项目&#10;告警类型：阶段计划结束日期已过但状态未完成（超期）">
           <div class="kpi-label">高风险</div>
           <div class="kpi-value" id="kpi-high-risk-count">—</div>
           <div class="kpi-meta">阶段超期/阻塞</div>
         </div>
-        <div class="kpi-card" data-category="incomplete_docs" onclick="filterByCategory('incomplete_docs', this)">
+        <div class="kpi-card" data-category="incomplete_docs" onclick="filterByCategory('incomplete_docs', this)" title="统计条件：存在黄色告警的项目&#10;告警类型：阶段名不匹配、已完成阶段文档未提交、任务无输出件、&#10;GitLab 链接无效/未填写、审核任务缺少审批等">
           <div class="kpi-label">资料不全</div>
           <div class="kpi-value" id="kpi-incomplete-docs-count">—</div>
           <div class="kpi-meta">输出件缺失</div>
@@ -875,7 +875,7 @@
 <script src="/js/customers.js"></script>
 <script src="/js/doc-templates.js"></script>
 <script src="/js/standards.js"></script>
-<script src="/js/app.js?v=v2026.06.10-beta6"></script>
+<script src="/js/app.js?v=v2026.06.10-beta7"></script>
 <script>
 async function triggerSync() {
   var btn = document.querySelector('.src-sync-btn');

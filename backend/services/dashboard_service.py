@@ -11,9 +11,15 @@ from backend.models.zentao import CachedProject, CachedExecution, CachedTask
 
 def get_kpi(db: Session) -> dict:
     projects = db.query(CachedProject).all()
-    active = [p for p in projects if p.status in ("doing", "wait")]
-    rd_count = sum(1 for p in active if p.project_type == "RD")
-    sc_count = sum(1 for p in active if p.project_type == "SC")
+
+    # Active = only truly in-progress (doing), not wait
+    active = [p for p in projects if p.status == "doing"]
+    active_rd = sum(1 for p in active if p.project_type == "RD")
+    active_sc = sum(1 for p in active if p.project_type == "SC")
+
+    # All-project type counts (for filter tab labels)
+    rd_all = sum(1 for p in projects if p.project_type == "RD")
+    sc_all = sum(1 for p in projects if p.project_type == "SC")
 
     # Average progress of active projects
     progresses = []
@@ -24,12 +30,10 @@ def get_kpi(db: Session) -> dict:
             pass
     avg_progress = sum(progresses) / len(progresses) if progresses else 0.0
 
-    # Alert count
+    # Alert count + category counts (pass active list to avoid redundant computation)
     alerts = _detect_alerts_internal(db)
     alert_count = len(alerts)
-
-    # Category counts
-    cat_counts = _get_category_counts(db, alerts)
+    cat_counts = _get_category_counts(db, alerts, active)
 
     # TODO: 本月交付数量 — 需统计DeliveryRecord表中本月交付记录的总数量（Phase 2）
     delivered_this_month = 0
@@ -55,8 +59,10 @@ def get_kpi(db: Session) -> dict:
         "project_filter": pf,
         "active_projects": len(active),
         "total_projects": len(projects),
-        "rd_count": rd_count,
-        "sc_count": sc_count,
+        "rd_count": active_rd,
+        "sc_count": active_sc,
+        "rd_all": rd_all,
+        "sc_all": sc_all,
         "pending_alerts": alert_count,
         "delivered_this_month": delivered_this_month,
         "avg_progress": round(avg_progress, 1),
@@ -104,9 +110,24 @@ def get_project_list(
     # Category filter: applies alert-based filtering
     if category:
         if category == "active":
-            q = q.filter(CachedProject.status.in_(["doing", "wait"]))
+            q = q.filter(CachedProject.status == "doing")
         elif category == "completed":
+            # Use PMA 4-condition check (not raw status)
+            from backend.services.project_service import _get_pending_doc_counts, _get_incomplete_task_counts, _get_stage_anomaly_counts
             q = q.filter(CachedProject.status.in_(["done", "closed"]))
+            all_items = q.options(joinedload(CachedProject.executions)).order_by(CachedProject.id).all()
+            pids_done = [p.id for p in all_items]
+            pending_map = _get_pending_doc_counts(db, pids_done)
+            incomplete_task_map = _get_incomplete_task_counts(db, pids_done)
+            stage_anomaly_map = _get_stage_anomaly_counts(db, pids_done)
+            all_items = [p for p in all_items if not (
+                pending_map.get(p.id) or
+                incomplete_task_map.get(p.id) or
+                stage_anomaly_map.get(p.id)
+            )]
+            total = len(all_items)
+            start = (page - 1) * limit
+            return all_items[start:start + limit], total
         elif category in ("high_risk", "incomplete_docs"):
             # Compute alert project IDs for the requested severity
             alerts = _detect_alerts_internal(db)
@@ -147,11 +168,34 @@ def get_alerts(db: Session, severity: Optional[str] = None,
     return alerts[start:start + limit], total
 
 
-def _get_category_counts(db: Session, alerts: list[dict]) -> dict:
-    """Return project counts for each of the 4 dashboard categories."""
+def _get_category_counts(db: Session, alerts: list[dict], active: list[CachedProject] | None = None) -> dict:
+    """Return project counts for the 5 dashboard KPI cards.
+
+    - active: only truly in-progress (status == "doing"), not "wait"
+    - completed: PMA 4-condition strict check
+    - high_risk: projects with red alerts (stage overdue)
+    - incomplete_docs: projects with yellow alerts (doc/task/stage warnings)
+    """
+    from backend.services.project_service import _get_pending_doc_counts, _get_incomplete_task_counts, _get_stage_anomaly_counts
+
     projects = db.query(CachedProject).all()
-    active_count = sum(1 for p in projects if p.status in ("doing", "wait"))
-    completed_count = sum(1 for p in projects if p.status in ("done", "closed"))
+    pids = [p.id for p in projects]
+    pending_map = _get_pending_doc_counts(db, pids)
+    incomplete_task_map = _get_incomplete_task_counts(db, pids)
+    stage_anomaly_map = _get_stage_anomaly_counts(db, pids)
+
+    # active_count: only truly in-progress (doing), matches _map_status(doing) → active
+    active_count = len(active) if active is not None else sum(1 for p in projects if p.status == "doing")
+
+    completed_count = 0
+    for p in projects:
+        if p.status in ("done", "closed"):
+            has_pending = pending_map.get(p.id, False)
+            has_incomplete_tasks = incomplete_task_map.get(p.id, False)
+            has_stage_anomalies = stage_anomaly_map.get(p.id, False)
+            if not has_pending and not has_incomplete_tasks and not has_stage_anomalies:
+                completed_count += 1
+
     high_risk_count = len({a["project_id"] for a in alerts if a["severity"] == "red"})
     incomplete_docs_count = len({a["project_id"] for a in alerts if a["severity"] == "yellow"})
     return {

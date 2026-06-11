@@ -43,17 +43,90 @@ def _get_pending_doc_counts(db: Session, project_ids: list[int]) -> dict:
     return {row[0]: True for row in rows}
 
 
+def _get_incomplete_task_counts(db: Session, project_ids: list[int]) -> dict:
+    """Return {project_id: bool} — True if project has tasks not done/closed (not 100%)."""
+    if not project_ids:
+        return {}
+    rows = (
+        db.query(CachedTask.project_id)
+        .filter(
+            CachedTask.project_id.in_(project_ids),
+            CachedTask.status.notin_(["done", "closed"]),
+        )
+        .distinct()
+        .all()
+    )
+    return {row[0]: True for row in rows}
+
+
+def _get_stage_anomaly_counts(db: Session, project_ids: list[int]) -> dict:
+    """Return {project_id: bool} — True if any execution has stage-level anomalies.
+
+    A stage is anomalous if ANY of:
+    1. Name match is fuzzy or unmatched (not exact)
+    2. Stage is overdue (end < today, not done/closed)
+    """
+    if not project_ids:
+        return {}
+    from datetime import date
+    from backend.services.document_service import _match_stage_type, get_stage_types_for_project
+
+    anomalous: set[int] = set()
+    today = date.today()
+
+    # Check each project's executions for non-exact matches and overdue
+    projects = db.query(CachedProject).filter(CachedProject.id.in_(project_ids)).all()
+    for p in projects:
+        standard_stages = get_stage_types_for_project(p.project_type or "RD")
+        executions = db.query(CachedExecution).filter(
+            CachedExecution.project_id == p.id
+        ).all()
+        for e in executions:
+            # Check 1: non-exact stage name match
+            name = (e.name or "").strip()
+            if name:
+                result = _match_stage_type(name, standard_stages)
+                if result is None or result[1] != "exact":
+                    anomalous.add(p.id)
+                    break  # one anomaly is enough for this project
+
+            # Check 2: overdue (end date passed, not done/closed)
+            if e.end and e.status not in ("done", "closed"):
+                e_end = e.end if isinstance(e.end, date) else date.fromisoformat(str(e.end))
+                if e_end < today:
+                    anomalous.add(p.id)
+                    break
+
+    return {pid: True for pid in anomalous}
+
+
 def get_projects(db: Session) -> list[dict]:
     projects = db.query(CachedProject).order_by(CachedProject.id).all()
-    pending_map = _get_pending_doc_counts(db, [p.id for p in projects])
-    return [_project_brief(p, pending_map.get(p.id, False)) for p in projects]
+    pids = [p.id for p in projects]
+    pending_map = _get_pending_doc_counts(db, pids)
+    incomplete_task_map = _get_incomplete_task_counts(db, pids)
+    stage_anomaly_map = _get_stage_anomaly_counts(db, pids)
+    return [
+        _project_brief(p,
+            pending_map.get(p.id, False),
+            incomplete_task_map.get(p.id, False),
+            stage_anomaly_map.get(p.id, False))
+        for p in projects
+    ]
 
 
 def get_project_detail(db: Session, project_id: int) -> Optional[dict]:
     p = db.query(CachedProject).filter(CachedProject.id == project_id).first()
     if not p:
         return None
-    return _project_detail(p)
+    pids = [p.id]
+    pending_map = _get_pending_doc_counts(db, pids)
+    incomplete_task_map = _get_incomplete_task_counts(db, pids)
+    stage_anomaly_map = _get_stage_anomaly_counts(db, pids)
+    return _project_detail(p,
+        pending_map.get(p.id, False),
+        incomplete_task_map.get(p.id, False),
+        stage_anomaly_map.get(p.id, False))
 
 
 def get_project_stages(db: Session, project_id: int) -> dict:
@@ -433,26 +506,26 @@ def get_project_products(db: Session, project_id: int) -> list[dict]:
 
 # --- helpers ---
 
-def _project_brief(p: CachedProject, has_pending_docs: bool = False) -> dict:
+def _project_brief(p: CachedProject, has_pending_docs: bool = False, has_incomplete_tasks: bool = False, has_stage_anomalies: bool = False) -> dict:
     return {
         "id": p.id,
         "code": p.code,
         "name": p.name,
         "project_type": p.project_type,
         "customer_name": _resolve_customer(p),
-        "status": _map_status(p.status, has_pending_docs),
+        "status": _map_status(p.status, has_pending_docs, has_incomplete_tasks, has_stage_anomalies),
         "progress": p.progress,
         "begin": str(p.begin) if p.begin else None,
         "end": str(p.end) if p.end else None,
-        "risk_level": _calc_risk_level(p, has_pending_docs),
+        "risk_level": _calc_risk_level(p, has_pending_docs, has_incomplete_tasks, has_stage_anomalies),
     }
 
 
-def _calc_risk_level(p: CachedProject, has_pending_docs: bool = False) -> str:
+def _calc_risk_level(p: CachedProject, has_pending_docs: bool = False, has_incomplete_tasks: bool = False, has_stage_anomalies: bool = False) -> str:
     """Calculate project risk level based on progress vs remaining time."""
     from datetime import date
     if p.status in ("done", "closed"):
-        return "incomplete" if has_pending_docs else "normal"
+        return "incomplete" if (has_pending_docs or has_incomplete_tasks or has_stage_anomalies) else "normal"
     if not p.begin or not p.end:
         return "normal"
     try:
@@ -506,7 +579,7 @@ def _resolve_customer(p: CachedProject) -> str:
     return ""
 
 
-def _project_detail(p: CachedProject) -> dict:
+def _project_detail(p: CachedProject, has_pending_docs: bool = False, has_incomplete_tasks: bool = False, has_stage_anomalies: bool = False) -> dict:
     # Extract description and customer【...】from raw_json
     desc = ""
     customer_from_desc = ""
@@ -530,7 +603,7 @@ def _project_detail(p: CachedProject) -> dict:
         "name": p.name,
         "model": p.model,
         "project_type": p.project_type,
-        "status": _map_status(p.status),
+        "status": _map_status(p.status, has_pending_docs, has_incomplete_tasks, has_stage_anomalies),
         "begin": str(p.begin) if p.begin else None,
         "end": str(p.end) if p.end else None,
         "real_began": str(p.real_began) if p.real_began else None,
@@ -548,12 +621,18 @@ def _project_detail(p: CachedProject) -> dict:
     }
 
 
-def _map_status(status: str, has_pending_docs: bool = False) -> str:
-    """Map Zentao raw status (wait/doing/done/closed/suspended) to PMA display status.
-    When project is done/closed but has pending docs for completed stages,
-    returns 'incomplete' instead of 'completed'."""
-    if status in ("done", "closed") and has_pending_docs:
-        return "incomplete"
+def _map_status(status: str, has_pending_docs: bool = False, has_incomplete_tasks: bool = False, has_stage_anomalies: bool = False) -> str:
+    """Map Zentao raw status to PMA display status.
+
+    PMA-level project completion requires ALL four conditions:
+    1. Zentao project status is done/closed
+    2. All documents for done/closed stages are submitted
+    3. All tasks are done/closed (100% completion)
+    4. All stages are normal (exact name match, no overdue stages)
+    If ANY condition fails → 'incomplete' (待完善)."""
+    if status in ("done", "closed"):
+        if has_pending_docs or has_incomplete_tasks or has_stage_anomalies:
+            return "incomplete"
     mapping = {
         "wait": "pending",
         "doing": "active",
