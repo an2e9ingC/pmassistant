@@ -166,7 +166,7 @@ async function loadProjectTable(filter) {
 
       return '<tr ' + rowClick + '>' +
         '<td>' + projIconHtml + '</td>' +
-        '<td><div class="proj-name">' + escHtml(coreName) + '</div><div class="proj-code">' + escHtml(projCode) + '</div></td>' +
+        '<td><div class="proj-name">' + escHtml(coreName) + '</div></td>' +
         '<td><span onclick="event.stopPropagation();openCustomerByName(\'' + escHtml(p.customer_name || '') + '\')" style="cursor:pointer">' + renderCustomerBadge(p.customer_name) + '</span></td>' +
         '<td>' + renderTypeBadge(p.type) + '</td>' +
         '<td style="font-size:13px">' + escHtml(p.current_stage || '—') + '</td>' +

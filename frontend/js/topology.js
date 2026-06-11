@@ -59,7 +59,7 @@ async function doTopoSearch() {
         : '<span style="font-size:12px;color:var(--muted)">—</span>';
       return '<tr onclick="openProject(\'' + item.project_id + '\')">' +
         '<td>' + renderProjIcon(item.project_type, code) + '</td>' +
-        '<td><div class="proj-name">' + escHtml(coreName) + '</div><div class="proj-code">' + escHtml(code) + '</div></td>' +
+        '<td><div class="proj-name">' + escHtml(coreName) + '</div></td>' +
         '<td><span onclick="event.stopPropagation();openCustomerByName(\'' + escHtml(item.customer_name || '') + '\')" style="cursor:pointer">' + renderCustomerBadge(item.customer_name) + '</span></td>' +
         '<td>' + productsHtml + '</td>' +
         '<td>' + renderPill(item.project_status) + '</td>' +
