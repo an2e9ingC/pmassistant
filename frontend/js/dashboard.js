@@ -170,10 +170,10 @@ async function loadProjectTable(filter) {
         '<td><span onclick="event.stopPropagation();openCustomerByName(\'' + escHtml(p.customer_name || '') + '\')" style="cursor:pointer">' + renderCustomerBadge(p.customer_name) + '</span></td>' +
         '<td>' + renderTypeBadge(p.type) + '</td>' +
         '<td style="font-size:13px">' + escHtml(p.current_stage || '—') + '</td>' +
-        '<td><span class="risk-tag" style="--risk-color:' + riskColor + ';background:' + riskBg + ';font-size:11px">' + riskLabel + '</span></td>' +
+        '<td style="font-size:12.5px;color:' + (p.end ? 'var(--muted)' : 'var(--warn)') + '">' + (p.end ? formatDate(p.end) : '长期') + '</td>' +
         '<td>' + renderPill(p.status) + '</td>' +
         '<td class="prog-cell">' + renderProgressBar(p.progress, p.status) + '</td>' +
-        '<td style="font-size:12.5px;color:' + (p.end ? 'var(--muted)' : 'var(--warn)') + '">' + (p.end ? formatDate(p.end) : '长期') + '</td>' +
+        '<td><span class="risk-tag" style="--risk-color:' + riskColor + ';background:' + riskBg + ';font-size:11px">' + riskLabel + '</span></td>' +
         '<td>' + tagsHtml + '</td>' +
       '</tr>';
     }).join('');
