@@ -690,10 +690,14 @@ async function saveAllProductChanges() {
   for (var i = 0; i < _productPendingOps.length; i++) {
     var op = _productPendingOps[i];
     try {
-      if (op.type === 'add') await API.post('/product-doc-templates', op.data);
-      else if (op.type === 'edit') await API.put('/product-doc-templates/' + op.id, op.data);
-      else if (op.type === 'delete') await API.del('/product-doc-templates/' + op.id);
-      ok++;
+      if (op.type === 'add') { await API.post('/product-doc-templates', op.data); ok++; }
+      else if (op.type === 'edit') { await API.put('/product-doc-templates/' + op.id, op.data); ok++; }
+      else if (op.type === 'delete') { await API.del('/product-doc-templates/' + op.id); ok++; }
+      else if (op.type === 'add_line') { /* product lines are implicit — no API needed */ ok++; }
+      else if (op.type === 'delete_line') {
+        await API.del('/product-doc-templates/product-lines/' + encodeURIComponent(op.name));
+        ok++;
+      }
     } catch(e) { fail++; showToast('保存失败: ' + e.message, 'error'); }
   }
   _productPendingOps = [];
