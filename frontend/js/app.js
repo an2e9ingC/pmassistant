@@ -203,6 +203,7 @@ function openFeedbackDialog() {
   var html = '<div class="note-dialog-overlay">' +
     '<div class="note-dialog" style="max-width:500px">' +
       '<div class="note-dialog-head"><span class="note-dialog-title">提交反馈</span>' +
+        '<a href="http://192.168.0.128/bsp_dev/fake_it/pma/-/issues" target="_blank" class="zentao-link" title="在 GitLab 中查看所有 Issue">↗ GitLab</a>' +
         '<button class="note-dialog-close" onclick="closeFeedbackDialog()">&times;</button></div>' +
       '<div style="margin-bottom:12px">' +
         '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">类型</label>' +
@@ -322,7 +323,7 @@ async function submitFeedback() {
     });
     closeFeedbackDialog();
     if (result && result.web_url) {
-      showToast('反馈已提交: ' + result.web_url, 'success', 6000);
+      showToast('反馈已提交：<a href="' + result.web_url + '" target="_blank" style="color:var(--success);text-decoration:underline">' + result.web_url + '</a>', 'success', 6000, true, '反馈已提交: ' + result.web_url);
     } else {
       showToast('反馈已提交', 'success');
     }

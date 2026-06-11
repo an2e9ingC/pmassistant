@@ -104,10 +104,10 @@ function escHtml(str) {
 var _notifQueue = [];
 var _notifUnread = 0;
 
-function showToast(msg, type, duration) {
+function showToast(msg, type, duration, allowHtml, bellMsg) {
   type = type || 'info';
-  // Add to notification queue for bell dropdown
-  _notifQueue.unshift({ message: msg, type: type, time: new Date().toLocaleTimeString() });
+  // Add to notification queue for bell dropdown (plain text only)
+  _notifQueue.unshift({ message: bellMsg || msg, type: type, time: new Date().toLocaleTimeString() });
   if (_notifQueue.length > 50) _notifQueue.pop();
   _notifUnread++;
   updateBellBadge();
@@ -124,7 +124,8 @@ function showToast(msg, type, duration) {
   if (!autoClose) {
     closeHtml = '<button class="toast-close" onclick="this.parentElement.remove()">&times;</button>';
   }
-  el.innerHTML = '<span>' + escHtml(msg) + '</span>' + closeHtml;
+  var content = allowHtml ? msg : escHtml(msg);
+  el.innerHTML = '<span>' + content + '</span>' + closeHtml;
   container.appendChild(el);
   if (autoClose) {
     setTimeout(function() {
