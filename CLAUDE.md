@@ -41,65 +41,140 @@ NAS 文件 ───────────┘
 
 ---
 
-## 2. 多 Session 并行开发（重要）
+## 2. 并行开发约定（重要）
 
-### 核心原则
+### 2.1 核心理念：每个 Worktree = 一个"独立开发者"
 
-**`worktree:` 前缀触发隔离开发：一个 worktree = 一个分支 = 一个需求**
+一个 git 工作目录同一时间只能持有一个分支。在团队中，多个开发者各自在自己的机器上开发不同分支，互不干扰。
 
-用户输入以 `worktree:` 开头时，AI 创建独立 worktree；普通 prompt 直接在当前分支操作。
+但当一个人需要同时开发/调试多个功能时（比如 feature A 正在调试，又需要紧急修复 bug B），单个目录就产生了冲突：
 
-### 启动新功能
+- 切换分支会丢弃未提交的修改
+- 无法同时运行两个分支的服务（数据库 schema 可能不同）
+- 开发上下文被破坏（打开的编辑器、运行中的服务）
 
-用户打开新 Claude Code 窗口，输入以 `worktree:` 开头的提示词即可触发隔离开发工作流。AI 应：
+Git worktree 正是为解决此问题设计的：为同一个仓库创建多个独立工作目录，每个目录对应一个不同分支。
 
-1. `EnterWorktree(name: "feat/<short-desc>" 或 "fix/<short-desc>")` 创建隔离工作区
-   - **worktree 分支必须从 `origin/trunk` 最新提交创建**，不可从其他 feature 分支创建
-   - 创建后验证：`git merge-base <new-branch> origin/trunk` 应等于 `origin/trunk` 最新 commit
-2. 在 worktree 中开发、测试、提交
-3. 完成后说"功能已验证通过，等待 merge 指令"
+本项目将此机制约定为"并行开发约定"：
+
+**每个 worktree session = 一个"独立开发者"**，拥有自己的：
+- Git 分支（`feat/xxx` 或 `fix/xxx`）
+- 工作目录（`.claude/worktrees/` 下独立文件夹）
+- 服务端口（8001、8002...）
+- 数据库文件（`data/pma-$PORT.db`）
+- 日志文件（`data/pma-$PORT.log`、`data/server-$PORT.log`）
+- PID 文件（`.pma-server-$PORT.pid`）
+
+所有 worktree 共享同一个 `.git` 仓库，但各自的开发环境完全隔离。
+
+### 2.2 触发方式：`worktree:` 前缀
+
+`worktree:` 前缀是进入并行开发模式的触发器。前缀只是意图标识，本质是"我要开始一个独立的开发任务"。
+
+- 用户 prompt 以 `worktree:` 开头 → AI 创建独立 worktree
+- 其他 prompt → AI 在当前分支直接操作
 
 示例：
 - `worktree: 优化项目详情，增加添加标签功能`
 - `worktree: 修复登录超时问题 #15`
+- `帮我把 Dashboard 的标题改大一点` ← 普通 prompt，当前分支直接修改
 
-**只有以 `worktree:` 开头才进入 worktree 流程**，普通 prompt 直接在当前分支操作。
+### 2.3 创建新的开发 Session
 
-### 端口分配
+AI 收到 `worktree:` 开头的 prompt 时：
+
+1. 从 prompt 提取简短描述，生成分支名：
+   - 新功能：`feat/<short-desc>`（如 `feat/add-tag`）
+   - Bug 修复：`fix/<short-desc>`（如 `fix/login-timeout`）
+   - 英文小写 + 连字符，不超过 50 字符
+
+2. `EnterWorktree(name: "feat/<short-desc>" 或 "fix/<short-desc>")` 创建隔离工作区
+   - **worktree 分支必须从 `origin/trunk` 最新提交创建**，不可从其他 feature 分支创建
+   - 创建后验证：`git merge-base <new-branch> origin/trunk` 应等于 `origin/trunk` 最新 commit
+
+3. 准备开发环境（见 2.4）
+
+4. 在 worktree 中开发、测试、提交
+
+5. 完成后说"功能已验证通过，等待 merge 指令"
+
+**注意**：同一 session 内不应创建第二个 worktree（避免 session 管理混乱）。
+
+### 2.4 资源隔离：端口、数据库、日志
 
 不同 session 通过 `-p` 参数使用不同端口，运行时数据完全隔离：
 
 ```
-主 session (trunk):  ./server.sh -p 8800 restart
-Worktree A:         ./server.sh -p 8801 restart
-Worktree B:         ./server.sh -p 8802 restart
+主 session (trunk):  ./server.sh -p 8000 restart
+Worktree A:         ./server.sh -p 8001 restart
+Worktree B:         ./server.sh -p 8002 restart
 ```
 
-端口隔离的数据：`data/pma-$PORT.db`、`data/pma-$PORT.log`、`data/server-$PORT.log`、`.pma-server-$PORT.pid`
+端口隔离的数据文件：
 
-优先级：`-p` 参数 > `PMA_PORT` 环境变量 > 默认 8800
+| 文件 | 说明 |
+|------|------|
+| `data/pma-$PORT.db` | SQLite 数据库 |
+| `data/pma-$PORT.log` | 应用日志 |
+| `data/server-$PORT.log` | uvicorn 服务器日志 |
+| `.pma-server-$PORT.pid` | 进程 PID 文件 |
 
-### 首次启动
+端口优先级：`-p` 参数 > `PMA_PORT` 环境变量 > 默认 8000
 
-新 worktree 的 `data/` 为空（在 `.gitignore` 中），数据库无用户数据无法登录。从主 session 拷贝：
+**多实例管理命令**（`server.sh` 支持）：
+
+- `./server.sh status` — 查看所有运行实例概览（端口/PID/运行时间/内存/健康/分支）
+- `./server.sh stop` — 停止所有实例（含孤儿进程）
+- `./server.sh -p <PORT> status` — 查看单个实例详情
+- `./server.sh -p <PORT> stop` — 停止指定端口
+
+**首次启动**：新 worktree 的 `data/` 为空（在 `.gitignore` 中），数据库无用户数据无法登录。从主 session 拷贝：
 
 ```bash
 cp data/pma.db data/pma-$PORT.db
 ```
 
-### Merge 流程（用户说 "merge"/"合并" 时执行）
+### 2.5 日常开发流程
+
+在 worktree 中的开发与主 session 规则完全相同：
+
+- 后端 `.py` 修改后 → `./server.sh -p <PORT> restart`（见 Section 5）
+- 前端修改 → 刷新浏览器即可
+- Commit 规范 → 遵循 Section 3
+- 版本号管理 → 遵循 Section 4
+- 禁止修改其他 worktree 的 `data/` 文件
+
+### 2.6 合并流程（用户说 "merge"/"合并" 时执行）
+
+**重要：合并必须从主 session（trunk 分支所在目录）执行。** git worktree 绑定到自己的分支，无法在 worktree 内 `git checkout trunk`。
+
+**阶段一：准备（在 worktree 中执行）**
 
 ```
 1. git fetch origin
 2. git rebase origin/trunk          # 变基 + 有冲突则解决
 3. git diff origin/trunk...HEAD     # Code Review（必须）
-4. git checkout trunk && git merge --no-ff <feature-branch>
-5. 报告 merge 完成，等待 push 指令
-6. 清理 worktree（用户确认后 ExitWorktree）
 ```
 
-**用户不主动说 merge，绝不自作主张合并。**
-**Merge 后不自动 push。** Push 需要用户单独发出 "push"/"推送" 指令，或用户自行 push。
+**阶段二：合并（返回主 session 执行）**
+
+```
+4. ExitWorktree(action: "keep")     # 保留 worktree，返回主 session
+5. git merge --no-ff <feature-branch>
+6. 报告 merge 完成，等待 push 指令
+```
+
+**阶段三：推送与清理（用户确认后）**
+
+```
+7. 用户发出 "push"/"推送" → git push origin trunk
+8. 用户确认清理 → ExitWorktree(action: "remove")
+```
+
+**安全原则：**
+- **用户不主动说 merge，绝不自作主张合并**
+- **Merge 后不自动 push**。Push 需要用户单独发出指令
+- Push 前不做任何清理（保留回滚能力）
 
 Code Review 检查点：
 - 逻辑正确性、边界条件
@@ -107,6 +182,45 @@ Code Review 检查点：
 - 代码风格（CSS var 变量、TODO 格式）
 - 调试残留（console.log、print）
 - 依赖完整、DB 迁移
+
+### 2.7 清理
+
+**正常清理**（merge + push 成功后）：
+
+用户确认后 `ExitWorktree(action: "remove")`，自动删除 worktree 目录 + 本地分支。
+
+**异常清理**（worktree 被废弃、不再需要合并）：
+
+```bash
+# 1. 列出所有 worktree
+git worktree list
+
+# 2. 删除指定 worktree（未合并需加 --force）
+git worktree remove .claude/worktrees/<name>
+
+# 3. 删除本地分支
+git branch -D <branch-name>
+
+# 4. 停止对应端口的服务
+./server.sh -p <PORT> stop
+
+# 5. 清理运行时文件（可选）
+rm data/pma-$PORT.db data/pma-$PORT.log data/server-$PORT.log .pma-server-$PORT.pid
+```
+
+建议定期执行 `git worktree list` 检查是否有遗忘的 worktree。
+
+### 2.8 边界情况与注意事项
+
+| 场景 | 处理方式 |
+|------|---------|
+| 两个 worktree 修改了同一文件 | 开发期各自独立不冲突；rebase/merge 时按 git 冲突流程解决 |
+| 开发期间 trunk 有新提交 | 合并前的 rebase 步骤自动处理 |
+| 端口被占用 | `./server.sh status` 检查 → `./server.sh stop` 释放或换下一个端口 |
+| Worktree 创建失败 | 检查分支名是否已存在（`git branch -a`）、目录是否已存在 |
+| Worktree 目录被手动删除 | `git worktree prune` 清理失效记录 + `git branch -D <branch>` |
+| 忘记拷贝数据库 | 停止服务 → 从主 session 拷贝 `data/pma.db` → 重启 |
+| 资源限制 | 每个 worktree 消耗 1 个端口 + ~100MB 内存，建议同时活跃 ≤3 个 |
 
 ---
 
@@ -186,9 +300,10 @@ Co-Authored-By: <model-name> / <tool-name>
 ./server.sh -p <PORT> restart
 ```
 
-- 主 session 用 `-p 8800`，worktree session 用各自的端口
+- 主 session 用 `-p 8000`，worktree session 用各自的端口
 - 纯前端修改无需重启（用户刷新即可）
 - `server.sh` 命令：`{start|stop|restart|status|logs|tail}`
+- 不加 `-p` 时：`status` 查看所有实例、`stop` 停止所有实例
 
 ---
 
@@ -239,5 +354,7 @@ Co-Authored-By: <model-name> / <tool-name>
 |---------|--------|
 | `worktree: <描述>` | EnterWorktree → 开发 → 等 merge |
 | "commit" / "提交" | 更新版本号 → commit |
-| "merge" / "合并" | rebase → code review → merge → push |
+| "merge" / "合并" | rebase+review(worktree) → 回主session → merge --no-ff → 等push |
+| `./server.sh status` | 查看所有运行实例概览 |
+| `./server.sh stop` | 停止所有实例 |
 | 后端 .py 修改 | 自动 `./server.sh -p <PORT> restart` |
