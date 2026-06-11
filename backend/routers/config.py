@@ -253,3 +253,20 @@ def update_pma_settings(payload: dict, db: Session = Depends(get_db), _=Depends(
         if key in payload:
             PmaSetting.set(db, key, "1" if payload[key] else "0")
     return {"code": 0, "message": "设置已保存"}
+
+
+# ── System Info ──
+
+@router.get("/system-info", response_model=dict)
+def get_system_info():
+    """Return current git branch for multi-session development identification."""
+    import subprocess
+    try:
+        branch = subprocess.check_output(
+            ["git", "branch", "--show-current"],
+            stderr=subprocess.DEVNULL,
+            text=True
+        ).strip()
+    except Exception:
+        branch = "unknown"
+    return {"code": 0, "data": {"branch": branch}, "message": "ok"}

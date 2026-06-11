@@ -772,4 +772,23 @@ async function submitPassword() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', init);
+// Fetch and display current git branch (for multi-session parallel dev)
+function fetchBranch() {
+  API.get('/admin/system-info').then(function(data) {
+    if (data && data.branch) {
+      var badge = document.getElementById('branch-badge');
+      if (badge) {
+        badge.textContent = data.branch;
+        badge.title = '当前开发分支: ' + data.branch;
+        if (data.branch !== 'trunk') {
+          badge.classList.add('branch-dev');
+        }
+      }
+    }
+  }).catch(function() {});
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  init();
+  fetchBranch();
+});

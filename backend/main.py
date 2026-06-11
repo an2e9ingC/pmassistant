@@ -16,7 +16,9 @@ from backend.routers import auth, config, dashboard, projects, sync, products, d
 # File log handler — use same directory as database
 import backend.database as _db_module
 _log_dir = _os.path.dirname(getattr(_db_module, "_db_path", "data/pma.db"))
-_log_file = _os.path.join(_log_dir, "pma.log")
+_port = _os.environ.get("PMA_PORT", "")
+_log_suffix = f"-{_port}" if _port else ""
+_log_file = _os.path.join(_log_dir, f"pma{_log_suffix}.log")
 _os.makedirs(_log_dir, exist_ok=True)
 _file_handler = RotatingFileHandler(
     _log_file, maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"

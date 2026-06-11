@@ -8,6 +8,7 @@ data/pma.log*
 *.egg-info/
 dist/
 .pytest_cache/
-.pma-server.pid
+.pma-server*.pid
 data/
 .claude/settings.json
+.claude/worktrees/

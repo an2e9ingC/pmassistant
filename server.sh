@@ -6,17 +6,21 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-PID_FILE="$SCRIPT_DIR/.pma-server.pid"
-LOG_FILE="$SCRIPT_DIR/data/pma.log"
-SERVER_LOG="$SCRIPT_DIR/data/server.log"
 HOST="0.0.0.0"
-PORT="${PMA_PORT:-8000}"
+
+# Auto-detect LAN IP for display (prefer first non-loopback IPv4)
+detect_ip() {
+    hostname -I 2>/dev/null | awk '{print $1}'
+}
 
 # ── Help ──
 usage() {
     echo "PMA Server Management"
     echo ""
-    echo "Usage: $0 <command>"
+    echo "Usage: $0 [-p <port>] <command>"
+    echo ""
+    echo "Options:"
+    echo "  -p <port>  指定端口号（默认 8800，也支持 PMA_PORT 环境变量）"
     echo ""
     echo "Commands:"
     echo "  start    启动服务器（后台运行）"
@@ -26,6 +30,11 @@ usage() {
     echo "  logs     查看系统日志（最近 50 行）"
     echo "  tail     实时跟踪系统日志"
     echo "  help     显示此帮助"
+    echo ""
+    echo "Examples:"
+    echo "  $0 -p 8801 start    # 在 8801 端口启动"
+    echo "  $0 -p 8801 restart  # 重启 8801 端口服务"
+    echo "  $0 -p 8801 status   # 查看 8801 端口状态"
     exit 0
 }
 
@@ -58,16 +67,16 @@ get_pid() {
 # ── Start ──
 do_start() {
     if is_running; then
-        echo "[PMA] 服务器已在运行中 (PID: $(get_pid))"
-        echo "[PMA] 访问地址: http://localhost:$PORT"
+        echo "[PMA:$PORT] 服务器已在运行中 (PID: $(get_pid))"
+        echo "[PMA:$PORT] 访问地址: $BASE_URL"
         return 0
     fi
 
     # Ensure data directory exists
     mkdir -p "$SCRIPT_DIR/data"
 
-    echo -n "[PMA] 启动服务器..."
-    TZ=Asia/Shanghai nohup python3 -m uvicorn backend.main:app \
+    echo -n "[PMA:$PORT] 启动服务器..."
+    TZ=Asia/Shanghai PMA_PORT="$PORT" DATABASE_URL="sqlite:///./data/pma-$PORT.db" nohup python3 -m uvicorn backend.main:app \
         --host "$HOST" \
         --port "$PORT" \
         >> "$SERVER_LOG" 2>&1 &
@@ -82,9 +91,9 @@ do_start() {
         waited=$((waited + 1))
         if curl -s "http://localhost:$PORT/api/health" > /dev/null 2>&1; then
             echo " 完成"
-            echo "[PMA] PID: $pid"
-            echo "[PMA] 访问地址: http://localhost:$PORT"
-            echo "[PMA] 健康检查: http://localhost:$PORT/api/health"
+            echo "[PMA:$PORT] PID: $pid"
+            echo "[PMA:$PORT] 访问地址: $BASE_URL"
+            echo "[PMA:$PORT] 健康检查: $BASE_URL/api/health"
             return 0
         fi
     done
@@ -92,11 +101,11 @@ do_start() {
     # Check if process is still alive
     if kill -0 "$pid" 2>/dev/null; then
         echo " 启动中（可能较慢）"
-        echo "[PMA] PID: $pid"
-        echo "[PMA] 查看日志: $0 logs"
+        echo "[PMA:$PORT] PID: $pid"
+        echo "[PMA:$PORT] 查看日志: $0 logs"
     else
         echo " 失败"
-        echo "[PMA] 启动失败，查看错误日志: tail -20 $SERVER_LOG"
+        echo "[PMA:$PORT] 启动失败，查看错误日志: tail -20 $SERVER_LOG"
         rm -f "$PID_FILE"
         return 1
     fi
@@ -105,13 +114,13 @@ do_start() {
 # ── Stop ──
 do_stop() {
     if ! is_running; then
-        echo "[PMA] 服务器未运行"
+        echo "[PMA:$PORT] 服务器未运行"
         rm -f "$PID_FILE"
         return 0
     fi
 
     local pid=$(get_pid)
-    echo -n "[PMA] 停止服务器 (PID: $pid)..."
+    echo -n "[PMA:$PORT] 停止服务器 (PID: $pid)..."
     kill "$pid" 2>/dev/null || true
 
     # Wait for graceful shutdown
@@ -136,7 +145,7 @@ do_stop() {
 
 # ── Restart ──
 do_restart() {
-    echo "[PMA] 重启服务器..."
+    echo "[PMA:$PORT] 重启服务器..."
     do_stop
     sleep 1
     do_start
@@ -153,7 +162,7 @@ do_status() {
         echo "  状态:   运行中"
         echo "  PID:    $pid"
         echo "  端口:   $PORT"
-        echo "  地址:   http://localhost:$PORT"
+        echo "  地址:   $BASE_URL"
 
         # Uptime
         local elapsed=$(ps -o etime= -p "$pid" 2>/dev/null | tr -d ' ')
@@ -205,9 +214,9 @@ do_logs() {
     if [ -f "$LOG_FILE" ]; then
         tail -50 "$LOG_FILE"
     else
-        echo "[PMA] 日志文件不存在: $LOG_FILE"
+        echo "[PMA:$PORT] 日志文件不存在: $LOG_FILE"
         if [ -f "$SERVER_LOG" ]; then
-            echo "[PMA] 服务器日志 (最近 20 行):"
+            echo "[PMA:$PORT] 服务器日志 (最近 20 行):"
             tail -20 "$SERVER_LOG"
         fi
     fi
@@ -220,14 +229,30 @@ do_tail() {
         target="$SERVER_LOG"
     fi
     if [ ! -f "$target" ]; then
-        echo "[PMA] 没有可用的日志文件"
+        echo "[PMA:$PORT] 没有可用的日志文件"
         exit 1
     fi
-    echo "[PMA] 实时跟踪: $target (Ctrl+C 退出)"
+    echo "[PMA:$PORT] 实时跟踪: $target (Ctrl+C 退出)"
     tail -f "$target"
 }
 
 # ── Dispatch ──
+
+# Parse -p <port> argument
+PORT_ARG=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -p) PORT_ARG="$2"; shift 2 ;;
+        *)  break ;;
+    esac
+done
+# Priority: -p arg > PMA_PORT env > default 8800
+PORT="${PORT_ARG:-${PMA_PORT:-8800}}"
+PID_FILE="$SCRIPT_DIR/.pma-server-$PORT.pid"
+LOG_FILE="$SCRIPT_DIR/data/pma-$PORT.log"
+SERVER_LOG="$SCRIPT_DIR/data/server-$PORT.log"
+BASE_URL="${PMA_URL:-http://$(detect_ip):$PORT}"
+
 case "${1:-help}" in
     start)   do_start ;;
     stop)    do_stop ;;

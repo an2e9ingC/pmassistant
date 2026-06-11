@@ -196,6 +196,24 @@
 .topbar-title { font-size: 15px; font-weight: 620; letter-spacing: -0.015em; }
 .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 
+#branch-badge {
+  font-size: 11px; font-weight: 600; padding: 3px 10px;
+  border-radius: 5px; background: var(--accent-lt); color: var(--accent);
+  border: 1px solid var(--accent);
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+#branch-badge.branch-dev {
+  background: var(--warn-lt); color: var(--warn);
+  border-color: var(--warn);
+  animation: branch-pulse 2s ease-in-out infinite;
+}
+@keyframes branch-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
 /* Data source status tags (right side, before bell) */
 .src-tags {
   display: flex; align-items: center; gap: 12px;
