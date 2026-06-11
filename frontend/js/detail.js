@@ -1453,6 +1453,7 @@ function buildMaintenance() {
   if (!hasPerm) return;
   loadMaintProjectProducts();
   loadMaintProjectCustomers();
+  loadMaintProjectTags();
 }
 
 // ── Shared multi-select helper ──
@@ -1558,6 +1559,76 @@ function maintRemove_cust(cid) {
     var ids = _maintLinkedCustomers.map(function(c) { return c.id; }).filter(function(id) { return id !== cid; });
     API.put('/maintenance/projects/' + _comboCurId + '/customers', { ids: ids }).then(function() { loadMaintProjectCustomers(); });
   });
+}
+
+// ── Tags ──
+
+var _maintLinkedTags = [];
+var _maintAllTags = [];
+
+async function loadMaintProjectTags() {
+  try {
+    var linked = await API.get('/maintenance/projects/' + _comboCurId + '/tags');
+    _maintLinkedTags = linked || [];
+    var allData = await API.get('/tags');
+    var allList = allData || [];
+    // Filter to project-specific and general tags only
+    _maintAllTags = allList.filter(function(t) {
+      return t.category === 'project' || !t.category || t.category === '';
+    });
+    _renderMaintTagSection();
+  } catch(e) {
+    document.getElementById('maint-proj-tags').innerHTML = '<div class="error-state">加载失败</div>';
+  }
+}
+
+function _renderMaintTagSection() {
+  var container = document.getElementById('maint-proj-tags');
+  var linkedNames = _maintLinkedTags.slice();
+
+  // Current tags as badges
+  var tagsHtml = linkedNames.length ? linkedNames.map(function(name) {
+    var cls = 'tag-' + (name.length % 5);
+    return '<span class="tag-badge ' + cls + '" style="font-size:12px;padding:3px 12px;display:inline-flex;align-items:center;gap:4px">' +
+      '#' + escHtml(name) +
+      ' <span data-tag-name="' + escHtml(name) + '" onclick="maintRemove_tag(this.getAttribute(\'data-tag-name\'))" style="cursor:pointer;opacity:0.5;font-size:14px;line-height:1" title="移除">&times;</span></span>';
+  }).join('') : '<span style="font-size:12px;color:var(--muted)">暂无标签</span>';
+
+  // Checkbox list of available tag templates
+  var cbHtml = _maintAllTags.map(function(t) {
+    return '<label style="display:flex;align-items:center;gap:6px;padding:3px 6px;font-size:12px;cursor:pointer" class="maint-cb-tag" data-filter="' + escHtml(t.name.toLowerCase()) + '">' +
+      '<input type="checkbox" value="' + escHtml(t.name) + '" ' + (linkedNames.indexOf(t.name) >= 0 ? 'checked' : '') + '>' +
+      '<span class="tag-badge tag-' + (t.name.length % 5) + '" style="font-size:11px;padding:2px 10px">#' + escHtml(t.name) + '</span></label>';
+  }).join('');
+
+  container.innerHTML =
+    '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">' + tagsHtml + '</div>' +
+    '<div style="position:relative">' +
+      '<input class="search-inp" placeholder="搜索标签模板并多选..." oninput="maintFilter_tag(this.value)" style="width:100%;padding:6px 8px;font-size:12px;margin-bottom:6px;box-sizing:border-box">' +
+      '<div class="maint-dd" style="max-height:180px;overflow-y:auto;overscroll-behavior:contain;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px;display:none" id="maint-dd-tag">' + cbHtml + '</div>' +
+    '</div>' +
+    '<button class="btn btn-primary" onclick="maintSave_tag()" style="font-size:11px;margin-top:4px">保存标签</button>';
+}
+
+function maintFilter_tag(v) {
+  var q = (v || '').toLowerCase();
+  var dd = document.getElementById('maint-dd-tag');
+  dd.style.display = 'block';
+  document.querySelectorAll('.maint-cb-tag').forEach(function(cb) {
+    cb.style.display = q ? (cb.dataset.filter.indexOf(q) >= 0 ? '' : 'none') : '';
+  });
+}
+
+async function maintSave_tag() {
+  var tags = [];
+  document.querySelectorAll('.maint-cb-tag input:checked').forEach(function(cb) { tags.push(cb.value); });
+  await API.put('/maintenance/projects/' + _comboCurId + '/tags', { tags: tags });
+  loadMaintProjectTags();
+}
+
+function maintRemove_tag(name) {
+  var tags = _maintLinkedTags.filter(function(t) { return t !== name; });
+  API.put('/maintenance/projects/' + _comboCurId + '/tags', { tags: tags }).then(function() { loadMaintProjectTags(); });
 }
 
 // Close dropdown on outside click
