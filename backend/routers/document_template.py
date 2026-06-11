@@ -100,6 +100,21 @@ def rename_stage_type(
     return {"code": 0, "data": {"updated": count}, "message": "ok"}
 
 
+@router.post("/sync-all", response_model=dict)
+def sync_all_projects(
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("doc_template")),
+):
+    """Apply current templates to all projects — add/update/remove/cleanup docs."""
+    result = document_service.sync_all_projects(db)
+    log_audit(
+        db, user, "doc_template_sync_all",
+        f"{result['synced']}/{result['total']} projects synced"
+        + (f", {result['failed']} failed" if result['failed'] else ""),
+        "管理", "medium",
+    )
+    return {"code": 0, "data": result, "message": "ok"}
+
 @router.delete("/stage-types/{stage_type}", response_model=dict)
 def delete_stage_type(
     stage_type: str,

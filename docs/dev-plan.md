@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-> 当前版本：v2026.06.11-beta2 | 最后更新：2026-06-11
+> 当前版本：v2026.06.11-beta5 | 最后更新：2026-06-11
 
 ---
 
@@ -226,6 +226,9 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-06-11 | v2026.06.11-beta5 | fix: _sync_from_templates Phase1+2全量去重 + 占位文档清理 + stage_type更新 + sync-all端点+前端按钮 |
+| 2026-06-11 | v2026.06.11-beta4 | fix: _sync_from_templates 增加去重—同execution_id+doc_name重复行自动清理 |
+| 2026-06-11 | v2026.06.11-beta3 | fix: _sync_from_templates 修复—清理未匹配执行的孤立文档+更新跨阶段保留文档的stage_type |
 | 2026-06-11 | v2026.06.11-beta2 | 移除项目名列中多余的PE编号显示（dashboard/product/topology），PE编号仅保留在项目编号列 Closes #11 |
 | 2026-06-11 | v2026.06.11-beta1 | 项目总览表格风险列移至计划完成列之后 |
 | 2026-06-11 | v2026.06.10-beta7 | 项目完成四条件严格判定（禅道done+文档齐套+任务100%+阶段精确匹配无异常）+ docs/status-conditions.md Closes #9 |

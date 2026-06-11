@@ -102,11 +102,15 @@ function renderTemplatesPage() {
   } else if (canEdit && pendingCount === 0) {
     saveBtnHtml = '<span style="font-size:11px;color:var(--muted);margin-left:8px"><span style="color:var(--muted)">✓ 已保存</span></span>';
   }
+  var syncAllHtml = canEdit
+    ? '<button class="btn" style="font-size:11px;padding:4px 10px;margin-left:8px;color:var(--accent);border-color:var(--accent)" onclick="syncAllProjects()" title="将当前模板应用到全部项目的文档清单">↻ 应用到全部项目</button>'
+    : '';
   var rightHtml = '<div class="dt-right">' +
     '<div class="dt-right-head">' +
       '<div style="display:flex;align-items:center">' +
         '<div class="section-title">' + escHtml(_selectedStage) + ' — 文档清单</div>' +
         saveBtnHtml +
+        syncAllHtml +
       '</div>' +
       (canEdit ? '<button class="btn" style="font-size:11px;padding:4px 12px" onclick="showAddTemplateForm()">+ 添加文档</button>' : '') +
     '</div>';
@@ -435,4 +439,30 @@ function discardChanges() {
   }).catch(function() {
     renderTemplatesPage();
   });
+}
+
+async function syncAllProjects() {
+  if (!confirm('将当前文档模板应用到全部项目？\n\n这会把所有项目的文档清单与模板同步：\n• 新增模板中的文档到各项目\n• 删除模板中已不存在的文档\n• 清理孤立和重复数据\n\n此操作不可撤销，确认继续？')) return;
+
+  var btn = event.target;
+  btn.disabled = true;
+  btn.textContent = '⏳ 同步中...';
+
+  try {
+    var data = await API.post('/doc-templates/sync-all');
+    btn.textContent = '↻ 应用到全部项目';
+    btn.disabled = false;
+    var msg = '同步完成：' + data.synced + '/' + data.total + ' 个项目';
+    if (data.failed > 0) {
+      msg += '\n失败：' + data.failed + ' 个';
+      msg += '\n' + data.failed_list.join('\n');
+    }
+    alert(msg);
+    showToast(data.failed > 0 ? 'warn' : 'ok', '同步完成', msg.replace(/\n/g, '; '));
+  } catch (e) {
+    btn.textContent = '↻ 应用到全部项目';
+    btn.disabled = false;
+    alert('同步失败: ' + e.message);
+    showToast('err', '同步失败', e.message);
+  }
 }

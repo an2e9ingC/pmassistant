@@ -6,7 +6,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from backend.models.document import DocumentTemplate, ProjectDocument
-from backend.models.zentao import CachedExecution
+from backend.models.zentao import CachedExecution, CachedProject
 
 # Standard stage names from requirements spec (Section 4.1 Project Lifecycle).
 # These are the authoritative stage definitions; Zentao execution names must
@@ -288,6 +288,7 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
 
     changed = False
     matched_stages = set()
+    matched_exec_ids = set()
 
     # Phase 1: sync per execution (matched stages only)
     for e in executions:
@@ -299,6 +300,7 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
             continue
         matched_type = result[0]
         matched_stages.add(matched_type)
+        matched_exec_ids.add(e.id)
 
         templates = (
             db.query(DocumentTemplate)
@@ -313,7 +315,19 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
             .filter(ProjectDocument.execution_id == e.id)
             .all()
         )
-        existing_names = {pd.doc_name: pd for pd in existing_docs}
+
+        # Deduplicate: keep only the first row per doc_name, delete extras
+        seen = {}
+        duplicates = []
+        for pd in existing_docs:
+            if pd.doc_name in seen:
+                duplicates.append(pd)
+            else:
+                seen[pd.doc_name] = pd
+        for pd in duplicates:
+            db.delete(pd)
+            changed = True
+        existing_names = seen
 
         for doc_name, tpl in template_names.items():
             if doc_name not in existing_names:
@@ -335,15 +349,42 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
             tpl = template_names.get(doc_name)
             if tpl and (pd.sort_order != tpl.sort_order or
                         pd.responsible_role != tpl.responsible_role or
-                        pd.description != tpl.description):
+                        pd.description != tpl.description or
+                        pd.stage_type != matched_type):
                 pd.sort_order = tpl.sort_order
                 pd.responsible_role = tpl.responsible_role
                 pd.description = tpl.description
+                pd.stage_type = matched_type
+                changed = True
+
+    # Phase 1 cleanup: remove orphaned docs from unmatched executions
+    # (executions that previously matched a stage but no longer do)
+    for e in executions:
+        if e.id not in matched_exec_ids:
+            orphaned = (
+                db.query(ProjectDocument)
+                .filter(ProjectDocument.execution_id == e.id)
+                .all()
+            )
+            for pd in orphaned:
+                db.delete(pd)
                 changed = True
 
     # Phase 2: unmatched standard stages — init docs with execution_id=0
     for st in standard_stages:
         if st in matched_stages:
+            # Stage is now matched — remove any leftover execution_id=0 placeholder
+            # docs from a previous sync when this stage was unmatched.
+            stale = (
+                db.query(ProjectDocument)
+                .filter(ProjectDocument.project_id == project_id,
+                        ProjectDocument.stage_type == st,
+                        ProjectDocument.execution_id == 0)
+                .all()
+            )
+            for pd in stale:
+                db.delete(pd)
+                changed = True
             continue
         templates = (
             db.query(DocumentTemplate)
@@ -362,7 +403,19 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
                     ProjectDocument.execution_id == 0)
             .all()
         )
-        existing_names = {pd.doc_name: pd for pd in existing_docs}
+
+        # Deduplicate: keep only the first row per doc_name, delete extras
+        seen = {}
+        duplicates = []
+        for pd in existing_docs:
+            if pd.doc_name in seen:
+                duplicates.append(pd)
+            else:
+                seen[pd.doc_name] = pd
+        for pd in duplicates:
+            db.delete(pd)
+            changed = True
+        existing_names = seen
 
         for doc_name, tpl in template_names.items():
             if doc_name not in existing_names:
@@ -563,4 +616,31 @@ def _doc_dict(pd: ProjectDocument) -> dict:
         "completed_at": str(pd.completed_at)[:10] if pd.completed_at else None,
         "location": pd.location,
         "updated_by": pd.updated_by,
+    }
+
+
+def sync_all_projects(db: Session) -> dict:
+    """Sync all projects' documents with current templates.
+
+    Iterates every project in zenta_projects, calls _sync_from_templates
+    for each, and returns success/fail counts with per-project details.
+    """
+    projects = db.query(CachedProject).order_by(CachedProject.id).all()
+    synced: list[str] = []
+    failed: list[str] = []
+
+    for p in projects:
+        ptype = (p.project_type or "RD").strip()
+        try:
+            _sync_from_templates(db, p.id, ptype)
+            synced.append(f"{p.id}:{p.name}")
+        except Exception as exc:
+            failed.append(f"{p.id}:{p.name} ({exc})")
+
+    return {
+        "total": len(projects),
+        "synced": len(synced),
+        "failed": len(failed),
+        "synced_list": synced,
+        "failed_list": failed,
     }
