@@ -264,6 +264,7 @@ Co-Authored-By: <model-name> / <tool-name>
 - 多 scope 时优先按功能拆分，而非按 scope 拆分
 - 修复 GitLab issue 时 body 加 `Closes #X`
 - **不要每改一行就 commit**，等用户确认后再提交
+- **每次 commit 必须包含数据库文件**：`git add data/pma-$PORT.db`（当前运行端口对应的 db 文件）。数据库是项目数据的一部分，需随代码一起版本管理
 
 ### Co-Authored-By（AI 生成 commit 必须）
 

@@ -189,6 +189,8 @@ var _FB_COMPONENTS = [
 
 function openFeedbackDialog() {
   _fbComponents = [];
+  var user = getCurrentUser();
+  var reporterName = user ? (user.username || '') : '';
   // Inject chip styles once
   if (!document.getElementById('fb-chip-styles')) {
     var styleEl = document.createElement('style');
@@ -222,6 +224,10 @@ function openFeedbackDialog() {
       '<div style="margin-bottom:12px">' +
         '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">详细描述 <span style="font-weight:400">（可选）</span></label>' +
         '<textarea class="search-inp" id="fb-desc" rows="4" placeholder="请详细描述遇到的问题或期望的功能（可选）..." style="width:100%;box-sizing:border-box;resize:vertical"></textarea>' +
+      '</div>' +
+      '<div style="margin-bottom:12px">' +
+        '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">反馈人 <span style="font-weight:400">（默认当前登录用户）</span></label>' +
+        '<input class="search-inp" id="fb-reporter" value="' + escHtml(reporterName) + '" placeholder="请输入反馈人姓名..." style="width:100%;box-sizing:border-box">' +
       '</div>' +
       '<div style="margin-bottom:12px">' +
         '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">指派给</label>' +
@@ -302,13 +308,14 @@ function selectFeedbackType(type) {
 async function submitFeedback() {
   var title = document.getElementById('fb-title').value.trim();
   var desc = document.getElementById('fb-desc').value.trim();
+  var reporterEl = document.getElementById('fb-reporter');
+  var reporter = reporterEl ? reporterEl.value.trim() : '';
   if (!title) { showToast('请输入标题', 'error'); return; }
 
   var btn = document.getElementById('fb-submit');
   btn.disabled = true; btn.textContent = '提交中...';
 
   try {
-    var user = getCurrentUser();
     var assigneeEl = document.getElementById('fb-assignee');
     var assigneeId = assigneeEl ? parseInt(assigneeEl.value) || null : null;
     var componentLabels = _fbComponents.length ? _fbComponents.join(',') : '';
@@ -316,7 +323,7 @@ async function submitFeedback() {
       issue_type: window._fbType || 'bug',
       title: title,
       description: desc,
-      reporter: user ? (user.username || '') : '',
+      reporter: reporter,
       assignee_id: assigneeId,
       labels: componentLabels
     });

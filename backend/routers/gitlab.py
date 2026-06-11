@@ -230,7 +230,7 @@ async def create_issue(
         return {"code": 1, "message": "GitLab Token 未配置，无法创建 Issue"}
 
     # Build issue content using templates
-    user_info = f"**提交者**: {body.reporter}" if body.reporter else ""
+    user_info = f"**反馈人**: {body.reporter}" if body.reporter else ""
 
     if body.issue_type == "bug":
         title = body.title or "Bug 反馈"
