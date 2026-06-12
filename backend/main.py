@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 
 from backend.config import settings
 from backend.database import init_db
-from backend.routers import auth, config, dashboard, projects, sync, products, delivery, reports, logs, topology, admin_users, maintenance, customers, document_template, product_doc_template, pma_tag, standards, gitlab
+from backend.routers import auth, config, dashboard, projects, sync, products, delivery, reports, logs, topology, admin_users, maintenance, customers, document_template, product_doc_template, pma_tag, standards, gitlab, db_manage
 
 # File log handler — use same directory as database
 import backend.database as _db_module
@@ -71,8 +71,14 @@ async def lifespan(app: FastAPI):
                     logger.error(f"Auto-sync failed: {e}, next retry in {interval} minutes (at {next_time})")
 
     _auto_sync_task = asyncio.create_task(auto_sync_loop())
+
+    # Start background auto-backup task
+    from backend.routers.db_manage import auto_backup_loop
+    _auto_backup_task = asyncio.create_task(auto_backup_loop())
+
     yield
     _auto_sync_task.cancel()
+    _auto_backup_task.cancel()
     logger.info("Shutting down PMA backend...")
 
 
@@ -116,6 +122,7 @@ app.include_router(product_doc_template.router)
 app.include_router(pma_tag.router)
 app.include_router(standards.router)
 app.include_router(gitlab.router)
+app.include_router(db_manage.router)
 
 # Static files (frontend)
 app.mount("/css", StaticFiles(directory="frontend/css"), name="css")

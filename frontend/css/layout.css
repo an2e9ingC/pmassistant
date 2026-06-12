@@ -335,3 +335,8 @@
 .content { padding: 24px 28px; flex: 1; min-width: 0; }
 .view { display: none; }
 .view.active { display: block; }
+
+/* DB Manage */
+.db-manage-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.db-manage-grid .config-section { min-width: 0; }
+@media (max-width: 900px) { .db-manage-grid { grid-template-columns: 1fr; } }

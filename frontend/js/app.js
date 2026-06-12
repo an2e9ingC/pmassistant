@@ -1,14 +1,14 @@
 /* ═══════════════════════════════════════════════════
    MAIN APP
 ═══════════════════════════════════════════════════ */
-var VIEW_TITLES = { dashboard: '项目总览', detail: '项目详情', topology: '快速检索', reports: '统计报告', logs: '系统日志', users: '用户管理', permissions: '权限管理', config: '数据源配置', 'doc-templates': '文档模板配置', 'standards': '流程规范', 'product-list': '产品总览', 'product-detail': '产品详情', 'gitlab-releases': 'GitLab 发布', customers: '客户管理', 'customer-detail': '客户详情' };
+var VIEW_TITLES = { dashboard: '项目总览', detail: '项目详情', topology: '快速检索', reports: '统计报告', logs: '系统日志', users: '用户管理', permissions: '权限管理', config: '数据源配置', 'doc-templates': '文档模板配置', 'standards': '流程规范', 'product-list': '产品总览', 'product-detail': '产品详情', 'gitlab-releases': 'GitLab 发布', 'db-manage': '数据库管理', customers: '客户管理', 'customer-detail': '客户详情' };
 
 // Permission requirements per view (for debug display)
 var VIEW_PERMS = {
   dashboard: '登录即可', detail: '登录即可', topology: '登录即可', reports: '登录即可',
   logs: 'admin', users: 'admin', permissions: 'admin', config: 'admin',
   'doc-templates': 'doc_template', standards: 'doc_template',
-  'product-list': '登录即可', 'product-detail': '登录即可',
+  'db-manage': 'admin', 'product-list': '登录即可', 'product-detail': '登录即可',
   customers: 'customer_link', 'customer-detail': '登录即可',
 };
 
@@ -112,6 +112,15 @@ function gotoView(view, pushState) {
       return;
     }
     initStandards();
+  }
+  if (view === 'db-manage') {
+    var user = getCurrentUser();
+    var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+    if (!user || (user.role !== 'admin' && perms.indexOf('admin') < 0)) {
+      showToast('数据库管理仅限管理员访问', 'error');
+      return;
+    }
+    initDbManage();
   }
   if (view === 'users') {
     var user = getCurrentUser();
@@ -572,7 +581,7 @@ async function init() {
       if (adminGroup) adminGroup.style.display = '';
       // Non-admin: hide admin-only items
       if (!isAdmin) {
-        var adminOnlyIds = ['nav-users', 'nav-permissions', 'nav-config', 'nav-logs'];
+        var adminOnlyIds = ['nav-users', 'nav-permissions', 'nav-config', 'nav-logs', 'nav-db-manage'];
         adminOnlyIds.forEach(function(id) {
           var el = document.getElementById(id);
           if (el) el.style.display = 'none';
