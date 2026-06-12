@@ -269,6 +269,26 @@
   margin-left: 4px; white-space: nowrap;
 }
 .topbar .src-sync-btn:hover { background: var(--accent-lt); color: var(--accent); border-color: var(--accent); }
+
+/* Sync dropdown menu */
+.src-sync-wrap { position: relative; display: inline-flex; margin-left: 4px; }
+.src-sync-menu {
+  position: absolute; top: 100%; right: 0;
+  margin-top: 6px; min-width: 150px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+  z-index: 101; overflow: hidden;
+}
+.src-sync-menu-item {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 9px 14px;
+  background: var(--surface); color: var(--fg);
+  border: none; cursor: pointer; font-size: 12.5px; text-align: left;
+  transition: background 0.1s;
+}
+.src-sync-menu-item:hover { background: var(--accent-lt); color: var(--accent); }
+.src-sync-menu-item + .src-sync-menu-item { border-top: 1px solid var(--border); }
+
 .icon-btn {
   width: 34px; height: 34px; border-radius: 8px;
   display: flex; align-items: center; justify-content: center;

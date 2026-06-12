@@ -163,7 +163,7 @@
         <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle;margin-right:3px"><circle cx="8" cy="8" r="6"/><line x1="8" y1="5" x2="8" y2="9"/><circle cx="8" cy="12" r="0.8" fill="currentColor" stroke="none"/></svg>
         反馈 Bug
       </a>
-      <span id="app-version">v2026.06.12-beta1</span>
+      <span id="app-version">v2026.06.12-beta2</span>
     </div>
   </div>
 </aside>
@@ -178,15 +178,37 @@
         <span class="src-tag pending" id="src-zentao" onclick="toggleSrcTip('zentao',event)"><span class="src-tag-label">禅道 待同步</span><span class="src-tag-tip" id="src-zentao-tip"></span></span>
         <span class="src-tag pending" id="src-gitlab" onclick="toggleSrcTip('gitlab',event)"><span class="src-tag-label">GitLab 未配置</span><span class="src-tag-tip" id="src-gitlab-tip"></span></span>
         <span class="src-tag pending" id="src-nas" onclick="toggleSrcTip('nas',event)"><span class="src-tag-label">NAS 未配置</span><span class="src-tag-tip" id="src-nas-tip"></span></span>
-        <button class="src-sync-btn" id="src-sync-btn" onclick="triggerSync()" title="从禅道同步最新数据" style="display:none">
-          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="1.5,5.5 3.5,2.5 1.5,2.5"/>
-            <polyline points="14.5,10.5 12.5,13.5 14.5,13.5"/>
-            <path d="M2.5 8a5.5 5.5 0 0 1 10-2.5"/>
-            <path d="M13.5 8a5.5 5.5 0 0 1-10 2.5"/>
-          </svg>
-          数据源同步
-        </button>
+        <div class="src-sync-wrap" id="src-sync-btn" style="display:none">
+          <button class="src-sync-btn" onclick="toggleSyncMenu(event)" title="数据源配置">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="1.5,5.5 3.5,2.5 1.5,2.5"/>
+              <polyline points="14.5,10.5 12.5,13.5 14.5,13.5"/>
+              <path d="M2.5 8a5.5 5.5 0 0 1 10-2.5"/>
+              <path d="M13.5 8a5.5 5.5 0 0 1-10 2.5"/>
+            </svg>
+            数据源配置
+            <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor" style="margin-left:2px"><path d="M2 2.5L4 5l2-2.5z"/></svg>
+          </button>
+          <div class="src-sync-menu" id="src-sync-menu" style="display:none">
+            <button class="src-sync-menu-item" onclick="event.stopPropagation();toggleSyncMenu();triggerSync()">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="1.5,5.5 3.5,2.5 1.5,2.5"/>
+                <polyline points="14.5,10.5 12.5,13.5 14.5,13.5"/>
+                <path d="M2.5 8a5.5 5.5 0 0 1 10-2.5"/>
+                <path d="M13.5 8a5.5 5.5 0 0 1-10 2.5"/>
+              </svg>
+              数据同步
+            </button>
+            <button class="src-sync-menu-item" onclick="event.stopPropagation();toggleSyncMenu();openProjectFilterDialog()">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="14 2 6 2 3 6 3 14 14 14"/>
+                <line x1="3" y1="6" x2="6" y2="6"/>
+                <line x1="6" y1="6" x2="6" y2="2"/>
+              </svg>
+              项目筛选
+            </button>
+          </div>
+        </div>
       </div>
       <div style="position:relative">
         <button class="icon-btn" title="通知中心" onclick="toggleNotifDropdown(event)">
@@ -889,6 +911,67 @@
 <script src="/js/standards.js"></script>
 <script src="/js/app.js?v=v2026.06.10-beta7"></script>
 <script>
+// ── Sync menu dropdown ──
+function toggleSyncMenu(e) {
+  if (e) e.stopPropagation();
+  var menu = document.getElementById('src-sync-menu');
+  if (menu) { menu.style.display = menu.style.display === 'none' ? '' : 'none'; }
+}
+// Close menu when clicking outside
+document.addEventListener('click', function(e) {
+  var menu = document.getElementById('src-sync-menu');
+  var btn = document.getElementById('src-sync-btn');
+  if (menu && btn && !btn.contains(e.target)) { menu.style.display = 'none'; }
+});
+
+// ── Project Filter Dialog ──
+var _pfDirty = false;
+async function openProjectFilterDialog() {
+  markPageDirty(); _pfDirty = true;
+  try {
+    var data = await API.get('/admin/project-filter');
+    var currentFilter = (data && data.project_filter) ? data.project_filter : '';
+    var html =
+      '<div class="note-dialog-overlay">' +
+        '<div class="note-dialog" style="max-width:460px">' +
+          '<div class="note-dialog-head">' +
+            '<span class="note-dialog-title">项目筛选配置</span>' +
+            '<button class="note-dialog-close" onclick="closeProjectFilterDialog()">&times;</button>' +
+          '</div>' +
+          '<div style="margin-bottom:12px">' +
+            '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">项目筛选前缀</label>' +
+            '<input class="search-inp" id="pf-project-filter" value="' + escHtml(currentFilter) + '" placeholder="如 PE04,PE05（逗号分隔前缀，留空=全部项目）" style="width:100%;box-sizing:border-box">' +
+            '<div style="font-size:10.5px;color:var(--muted);margin-top:4px">只同步项目代号匹配指定前缀的项目。多个前缀用英文逗号分隔。留空则同步全部项目。</div>' +
+          '</div>' +
+          '<div style="display:flex;justify-content:flex-end;gap:8px">' +
+            '<button class="btn" onclick="closeProjectFilterDialog()">取消</button>' +
+            '<button class="btn btn-primary" onclick="saveProjectFilter()">保存</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    document.body.insertAdjacentHTML('beforeend', html);
+    document.getElementById('pf-project-filter').focus();
+  } catch(e) {
+    showToast('获取项目筛选配置失败: ' + (e.message || '未知错误'), 'error');
+    _pfDirty = false; markPageClean();
+  }
+}
+async function saveProjectFilter() {
+  var pf = document.getElementById('pf-project-filter').value.trim();
+  try {
+    await API.put('/admin/project-filter', { project_filter: pf });
+    showToast('项目筛选配置已保存', 'success');
+    closeProjectFilterDialog();
+  } catch(e) {
+    showToast('保存失败: ' + (e.message || '未知错误'), 'error');
+  }
+}
+function closeProjectFilterDialog() {
+  var overlay = document.querySelector('.note-dialog-overlay');
+  if (overlay) overlay.remove();
+  if (_pfDirty) { _pfDirty = false; markPageClean(); }
+}
+
 async function triggerSync() {
   var btn = document.querySelector('.src-sync-btn');
   if (btn) { btn.disabled = true; btn.style.opacity = '0.4'; }

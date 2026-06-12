@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.config import settings
-from backend.middleware.auth import require_admin, get_current_user
+from backend.middleware.auth import require_admin, require_perm, get_current_user
 from backend.routers.logs import log_audit
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -169,6 +169,30 @@ def update_config(payload: DataSourceConfig, _=Depends(require_admin)):
     _save_config(cfg)
     settings.reload()  # Reload in-memory settings from updated os.environ
     return {"code": 0, "data": cfg, "message": "配置已保存"}
+
+
+# ── Project Filter (sync permission, not full admin) ──
+
+class ProjectFilterUpdate(BaseModel):
+    project_filter: str = ""
+
+
+@router.get("/project-filter", response_model=dict)
+def get_project_filter(_=Depends(require_perm("sync"))):
+    """Get current project filter value (sync-level access)."""
+    cfg = _load_config()
+    pf = cfg.get("zentao", {}).get("project_filter", "")
+    return {"code": 0, "data": {"project_filter": pf}, "message": "ok"}
+
+
+@router.put("/project-filter", response_model=dict)
+def update_project_filter(payload: ProjectFilterUpdate, _=Depends(require_perm("sync"))):
+    """Update project filter value (sync-level access)."""
+    cfg = _load_config()
+    cfg["zentao"]["project_filter"] = payload.project_filter
+    _save_config(cfg)
+    settings.reload()
+    return {"code": 0, "data": {"project_filter": payload.project_filter}, "message": "项目筛选已更新"}
 
 
 @router.post("/clear-db", response_model=dict)
