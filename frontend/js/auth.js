@@ -48,6 +48,19 @@ async function onLogin(e) {
   }
 }
 
+async function refreshCurrentUser() {
+  try {
+    var data = await API.get('/auth/me');
+    if (data) {
+      localStorage.setItem('pma_user', JSON.stringify(data));
+    }
+    return data;
+  } catch (e) {
+    console.error('Failed to refresh user:', e);
+    return null;
+  }
+}
+
 function logout() {
   localStorage.removeItem('pma_token');
   localStorage.removeItem('pma_user');

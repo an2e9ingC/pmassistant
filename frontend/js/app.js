@@ -78,7 +78,8 @@ function gotoView(view, pushState) {
   }
   if (view === 'logs') {
     var user = getCurrentUser();
-    if (!user || user.role !== 'admin') {
+    var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+    if (!user || (user.role !== 'admin' && perms.indexOf('admin') < 0)) {
       showToast('系统日志仅限管理员访问', 'error');
       return;
     }
@@ -87,7 +88,8 @@ function gotoView(view, pushState) {
   }
   if (view === 'config') {
     var user = getCurrentUser();
-    if (!user || user.role !== 'admin') {
+    var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+    if (!user || (user.role !== 'admin' && perms.indexOf('admin') < 0)) {
       showToast('数据源配置仅限管理员访问', 'error');
       return;
     }
@@ -113,7 +115,8 @@ function gotoView(view, pushState) {
   }
   if (view === 'users') {
     var user = getCurrentUser();
-    if (!user || user.role !== 'admin') {
+    var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+    if (!user || (user.role !== 'admin' && perms.indexOf('admin') < 0)) {
       showToast('用户管理仅限管理员访问', 'error');
       return;
     }
@@ -121,7 +124,8 @@ function gotoView(view, pushState) {
   }
   if (view === 'permissions') {
     var user = getCurrentUser();
-    if (!user || user.role !== 'admin') {
+    var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+    if (!user || (user.role !== 'admin' && perms.indexOf('admin') < 0)) {
       showToast('权限管理仅限管理员访问', 'error');
       return;
     }
@@ -387,7 +391,7 @@ function updateLinkStatus() {
     // Pre-fill tips with permission-aware detail
     var user = getCurrentUser();
     var perms = (user && user.permissions) ? user.permissions.split(',') : [];
-    var isAdmin = user && user.role === 'admin';
+    var isAdmin = user && (user.role === 'admin' || perms.indexOf('admin') >= 0);
     var canSeeDetail = isAdmin || (user && user.role === 'pm');
     sources.forEach(function(s) {
       var tip = document.getElementById('src-' + s.key + '-tip');
@@ -408,7 +412,7 @@ function toggleSrcTip(key, e) {
     tip.textContent = '加载中...';
     var user = getCurrentUser();
     var perms = (user && user.permissions) ? user.permissions.split(',') : [];
-    var isAdmin = user && user.role === 'admin';
+    var isAdmin = user && (user.role === 'admin' || perms.indexOf('admin') >= 0);
     var canSeeDetail = isAdmin || (user && user.role === 'pm');
     API.get('/sync/sources').then(function(sources) {
       var s = sources.find(function(x) { return x.key === key; });
@@ -527,11 +531,16 @@ document.addEventListener('click', function(e) {
 
 /* Init */
 
-function init() {
+async function init() {
   // Auth check
   if (!isLoggedIn() && window.location.pathname !== '/login') {
     window.location.href = '/login';
     return;
+  }
+
+  // Refresh user data from server (permissions may have been updated by admin)
+  if (isLoggedIn()) {
+    await refreshCurrentUser();
   }
 
   // Theme — prefer saved, fallback to system preference
@@ -556,7 +565,7 @@ function init() {
     document.getElementById('user-name').textContent = user.username + ' · ' + user.role;
     // Show admin nav items based on permissions
     var perms = (user && user.permissions) ? user.permissions.split(',') : [];
-    var isAdmin = user && user.role === 'admin';
+    var isAdmin = user && (user.role === 'admin' || perms.indexOf('admin') >= 0);
     var hasAdminAccess = user && (isAdmin || perms.indexOf('doc_template') >= 0);
     if (hasAdminAccess) {
       var adminGroup = document.getElementById('nav-group-admin');
