@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy import case
 from sqlalchemy.orm import Session
 
-from backend.database import get_db
+from backend.database import get_db, to_local_str
 from backend.middleware.auth import require_admin, get_current_user
 from backend.models.local import LocalUser, Role, UserRole
 from backend.routers.logs import log_audit
@@ -213,7 +213,7 @@ def list_users(db: Session = Depends(get_db), _=Depends(require_admin)):
                 "role_ids": [ur.role_id for ur in (u.user_roles or [])],
                 "permissions": sorted(_get_perms(u)),
                 "is_active": u.is_active,
-                "created_at": str(u.created_at)[:19] if u.created_at else "",
+                "created_at": to_local_str(u.created_at),
             }
             for u in users
         ],

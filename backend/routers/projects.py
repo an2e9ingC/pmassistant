@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from backend.database import get_db
+from backend.database import get_db, to_local_str
 from backend.middleware.auth import get_current_user, require_perm
 from backend.models.local import ProjectNote, ProjectActivity
 from backend.models.zentao import CachedProject, CachedExecution
@@ -221,7 +221,7 @@ def get_notes(project_id: int, db: Session = Depends(get_db), _=Depends(get_curr
                 "content": n.content,
                 "stage_name": n.stage_name or "",
                 "recorded_by": n.recorded_by,
-                "created_at": str(n.created_at)[:19] if n.created_at else "",
+                "created_at": to_local_str(n.created_at),
             }
             for n in notes
         ],
@@ -254,7 +254,7 @@ def add_note(
             "content": note.content,
             "stage_name": note.stage_name or "",
             "recorded_by": note.recorded_by,
-            "created_at": str(note.created_at)[:19] if note.created_at else "",
+            "created_at": to_local_str(note.created_at),
         },
         "message": "ok",
     }
@@ -281,7 +281,7 @@ def get_activities(
                 "username": r.username,
                 "action": r.action,
                 "detail": r.detail or "",
-                "created_at": str(r.created_at)[:19] if r.created_at else "",
+                "created_at": to_local_str(r.created_at),
             }
             for r in rows
         ],

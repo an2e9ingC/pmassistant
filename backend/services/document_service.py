@@ -5,6 +5,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from backend.database import to_local_str
 from backend.models.document import DocumentTemplate, ProjectDocument, ProductDocTemplate, ProductLine, PmaTag
 from backend.models.zentao import CachedExecution, CachedProject
 
@@ -824,7 +825,7 @@ def _product_line_dict(node: ProductLine) -> dict:
         "name": node.name,
         "parent_id": node.parent_id,
         "sort_order": node.sort_order,
-        "created_at": str(node.created_at)[:19] if node.created_at else None,
+        "created_at": to_local_str(node.created_at) or None,
     }
 
 
@@ -881,5 +882,5 @@ def _tag_dict(t: PmaTag) -> dict:
         "id": t.id,
         "name": t.name,
         "category": t.category,
-        "created_at": str(t.created_at)[:19] if t.created_at else None,
+        "created_at": to_local_str(t.created_at) or None,
     }

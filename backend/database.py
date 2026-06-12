@@ -1,5 +1,6 @@
 import os as _os
 import logging
+from datetime import datetime as _datetime, timedelta as _timedelta
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
@@ -7,6 +8,18 @@ from sqlalchemy.orm import sessionmaker, DeclarativeBase
 from backend.config import settings
 
 logger = logging.getLogger(__name__)
+
+# SQLite func.now() returns UTC; Beijing is UTC+8
+_BEIJING_OFFSET = _timedelta(hours=8)
+
+
+def to_local_str(dt) -> str:
+    """Convert a UTC datetime to Beijing-time string (YYYY-MM-DD HH:MM:SS)."""
+    if dt is None:
+        return ""
+    if isinstance(dt, str):
+        return dt[:19]
+    return str((dt + _BEIJING_OFFSET).replace(tzinfo=None))[:19]
 
 
 def _resolve_db_path() -> str:
