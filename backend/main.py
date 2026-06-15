@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 
 from backend.config import settings
 from backend.database import init_db
-from backend.routers import auth, config, dashboard, projects, sync, products, delivery, reports, logs, topology, admin_users, maintenance, customers, document_template, product_doc_template, pma_tag, standards, gitlab, db_manage
+from backend.routers import auth, config, dashboard, projects, sync, products, delivery, reports, logs, topology, admin_users, maintenance, customers, document_template, product_doc_template, pma_tag, standards, gitlab, db_manage, product_management
 
 # File log handler — use same directory as database
 import backend.database as _db_module
@@ -123,6 +123,7 @@ app.include_router(pma_tag.router)
 app.include_router(standards.router)
 app.include_router(gitlab.router)
 app.include_router(db_manage.router)
+app.include_router(product_management.router)
 
 # Static files (frontend)
 app.mount("/css", StaticFiles(directory="frontend/css"), name="css")

@@ -40,6 +40,8 @@ class CachedProject(Base):
     tags = Column(Text, nullable=True)  # comma-separated #tags extracted from desc
     raw_json = Column(Text)
     synced_at = Column(DateTime, default=func.now())
+    # PMA-local flag: True for manually created projects (not synced from Zentao)
+    is_local = Column(Boolean, default=False)
 
 
 class CachedExecution(Base):
@@ -129,6 +131,8 @@ class CachedProduct(Base):
     tags = Column(Text, nullable=True)  # comma-separated #tags extracted from desc
     raw_json = Column(Text)
     synced_at = Column(DateTime, default=func.now())
+    # PMA-local flag: True for manually created products (not synced from Zentao)
+    is_local = Column(Boolean, default=False)
 
 
 class ProductProjectLink(Base):
@@ -193,3 +197,15 @@ class CachedRelease(Base):
     synced_at = Column(DateTime, default=func.now())
 
     product = relationship("CachedProduct", backref="releases_list")
+
+
+class ProductNodeLink(Base):
+    """Link ZenTao/local products (zenta_products) to product hierarchy tree nodes (pma_product_lines)."""
+    __tablename__ = "product_node_links"
+
+    id = Column(Integer, primary_key=True)
+    product_id = Column(Integer, ForeignKey("zenta_products.id"), nullable=False, index=True)
+    product_node_id = Column(Integer, ForeignKey("pma_product_lines.id"), nullable=False, index=True)
+    created_at = Column(DateTime, default=func.now())
+
+    __table_args__ = (UniqueConstraint("product_id", "product_node_id"),)

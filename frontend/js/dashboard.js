@@ -265,3 +265,81 @@ function openProject(id) {
   selectComboProject(id);
   gotoView('detail');
 }
+
+/* ── Dashboard: Create Local Project Dialog ── */
+
+var _dashAllProducts = [];
+var _dashAllProjects = [];
+
+async function showDashboardCreateProjectDialog() {
+  // Load products and projects if not already loaded
+  if (!_dashAllProducts.length) {
+    try { _dashAllProducts = (await API.get('/product-management/all-products')) || []; } catch(e) {}
+  }
+  if (!_dashAllProjects.length) {
+    try { _dashAllProjects = (await API.get('/product-management/all-projects')) || []; } catch(e) {}
+  }
+
+  var productCheckboxes = _dashAllProducts.length
+    ? _dashAllProducts.slice(0, 100).map(function(p) {
+        return '<label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;cursor:pointer">' +
+          '<input type="checkbox" value="' + p.id + '" class="dash-newproj-prod">' +
+          escHtml(p.code || '') + ' ' + escHtml(p.name) +
+        '</label>';
+      }).join('')
+    : '<span style="font-size:12px;color:var(--muted)">暂无可选产品，请先在禅道同步或本地创建产品</span>';
+
+  openDialog('新建项目',
+    '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">项目名称 *</label>' +
+    '<input class="search-inp" id="dash-newproj-name" placeholder="如：某型计算刀片" style="width:100%;box-sizing:border-box;margin-top:4px"></div>' +
+    '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">项目编号 *</label>' +
+    '<input class="search-inp" id="dash-newproj-code" placeholder="如：PROJ-001" style="width:100%;box-sizing:border-box;margin-top:4px"></div>' +
+    '<div style="display:flex;gap:10px;margin-bottom:10px">' +
+      '<div style="flex:1"><label style="font-size:11px;color:var(--muted)">类型</label>' +
+      '<select id="dash-newproj-type" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);margin-top:4px">' +
+        '<option value="RD">研发项目</option><option value="SC">生产项目</option>' +
+      '</select></div>' +
+      '<div style="flex:1"><label style="font-size:11px;color:var(--muted)">状态</label>' +
+      '<select id="dash-newproj-status" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);margin-top:4px">' +
+        '<option value="wait">未开始</option><option value="doing">进行中</option><option value="done">已完成</option>' +
+      '</select></div>' +
+    '</div>' +
+    '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">描述</label>' +
+    '<textarea class="search-inp" id="dash-newproj-desc" rows="2" placeholder="项目描述（可选）" style="width:100%;box-sizing:border-box;margin-top:4px;resize:vertical"></textarea></div>' +
+    '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">关联产品 * <span style="font-weight:400;color:var(--danger)">（至少选1个）</span></label>' +
+    '<div style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;margin-top:4px;background:var(--surface)">' + productCheckboxes + '</div></div>',
+    [{text: '取消', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
+     {text: '创建', cls: 'btn-primary', onclick: 'dashboardCreateProject()'}],
+    {hideClose: true});
+}
+
+async function dashboardCreateProject() {
+  var name = document.getElementById('dash-newproj-name').value.trim();
+  var code = document.getElementById('dash-newproj-code').value.trim();
+  var pt = document.getElementById('dash-newproj-type').value;
+  var st = document.getElementById('dash-newproj-status').value;
+  var desc = document.getElementById('dash-newproj-desc').value.trim();
+
+  if (!name) { showToast('请输入项目名称', 'error'); return; }
+  if (!code) { showToast('请输入项目编号', 'error'); return; }
+
+  var productIds = [];
+  document.querySelectorAll('.dash-newproj-prod:checked').forEach(function(cb) {
+    productIds.push(parseInt(cb.value));
+  });
+
+  if (!productIds.length) { showToast('项目必须关联至少1个产品', 'error'); return; }
+
+  document.querySelector('.shared-dialog-overlay').remove();
+  try {
+    await API.post('/product-management/projects', {
+      name: name, code: code, project_type: pt,
+      status: st, description: desc, product_ids: productIds
+    });
+    showToast('项目已创建: ' + name, 'ok');
+    // Refresh dashboard
+    renderDashboard();
+  } catch (e) {
+    showToast('创建失败: ' + (e.detail || e.message), 'error');
+  }
+}
