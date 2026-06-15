@@ -6,6 +6,7 @@
 
 var _prodCurCategory = '';
 var _prodCurStatus = '';  // '' = all, 'normal', 'closed'
+var _prodCurSource = '';  // '' = all, 'zentao', 'local'
 var _prodSearchVal = '';
 var _prodSearchTimer = null;
 var _allProducts = [];
@@ -68,6 +69,24 @@ function filterByProdStatus(st, el) {
   renderProductTable();
 }
 
+function filterByProdSource() {
+  // Cycle: '' (all) → 'zentao' → 'local' → '' (all)
+  if (_prodCurSource === '') { _prodCurSource = 'zentao'; }
+  else if (_prodCurSource === 'zentao') { _prodCurSource = 'local'; }
+  else { _prodCurSource = ''; }
+  var indicator = document.getElementById('prod-src-indicator');
+  var icon = document.getElementById('prod-src-filter-icon');
+  if (indicator) {
+    if (_prodCurSource === 'zentao') indicator.textContent = '禅道';
+    else if (_prodCurSource === 'local') indicator.textContent = '本地';
+    else indicator.textContent = '';
+  }
+  if (icon) {
+    icon.style.opacity = _prodCurSource ? '0' : '0.4';
+  }
+  renderProductTable();
+}
+
 function onProdSearch(v) {
   _prodSearchVal = v;
   clearTimeout(_prodSearchTimer);
@@ -88,6 +107,13 @@ function renderProductTable() {
       return p.status === _prodCurStatus;
     });
   }
+  if (_prodCurSource) {
+    filtered = filtered.filter(function(p) {
+      if (_prodCurSource === 'zentao') return !p.is_local && p.synced_at;
+      if (_prodCurSource === 'local') return p.is_local;
+      return true;
+    });
+  }
   if (_prodSearchVal) {
     var q = _prodSearchVal.toLowerCase();
     filtered = filtered.filter(function(p) {
@@ -100,7 +126,7 @@ function renderProductTable() {
 
   var tbody = document.getElementById('prod-tbody');
   if (!filtered.length) {
-    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state" style="padding:20px">未找到匹配产品</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state" style="padding:20px">未找到匹配产品</div></td></tr>';
     return;
   }
 
@@ -122,6 +148,7 @@ function renderProductTable() {
       '<td>' + renderPill(p.status) + '</td>' +
       '<td style="font-size:13px;font-weight:550">' + (p.project_count || 0) + '</td>' +
       '<td>' + tagsHtml + '</td>' +
+      '<td>' + (p.is_local ? '<span class="pm-src-badge local">本地</span>' : (p.synced_at ? '<span class="pm-src-badge synced" title="同步于 ' + escHtml(p.synced_at) + '">禅道</span>' : '<span class="pm-src-badge unknown">—</span>')) + '</td>' +
     '</tr>';
   }).join('');
 }
@@ -228,6 +255,9 @@ function renderProdDetailHeader(p) {
     '<div class="detail-meta">' +
       '<div class="detail-title">' +
         escHtml(p.name) +
+        (p.is_local
+          ? ' <span class="pm-src-badge local" style="vertical-align:middle;margin-left:6px">PMA本地</span>'
+          : (p.synced_at ? ' <span class="pm-src-badge synced" style="vertical-align:middle;margin-left:6px" title="同步于 ' + escHtml(p.synced_at) + '">禅道同步</span>' : '')) +
         (p.zentao_url ? '<a href="' + p.zentao_url + '" target="_blank" class="zentao-link" style="margin-left:10px;font-size:12px" title="在禅道中查看">&#x2197; 禅道</a>' : '') +
       '</div>' +
       (p.code ? '<div class="detail-subtitle" style="font-family:var(--mono);font-size:12px;color:var(--muted)">' + escHtml(p.code) + '</div>' : '') +

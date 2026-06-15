@@ -186,7 +186,7 @@ function renderProductManagementPage() {
           '<td style="font-weight:500">' + escHtml(p.name) + '</td>' +
           '<td>' + renderPill(p.status) + '</td>' +
           '<td style="text-align:center">' + (p.project_count || 0) + '</td>' +
-          '<td style="font-size:11px;color:var(--muted)">' + (p.is_local ? 'PMA本地' : (p.synced_at ? '禅道同步' : '未知')) + '</td>' +
+          '<td>' + (p.is_local ? '<span class="pm-src-badge local">PMA本地</span>' : (p.synced_at ? '<span class="pm-src-badge synced" title="同步于 ' + escHtml(p.synced_at) + '">禅道同步</span>' : '<span class="pm-src-badge unknown">未知</span>')) + '</td>' +
           (_pmIsAdmin ? '<td style="white-space:nowrap;text-align:center">' +
             '<button class="btn" style="font-size:10px;padding:2px 6px;margin-right:3px" onclick="_pmShowManageProductProjects(' + p.id + ',\'' + escHtml(p.name).replace(/'/g, "\\'") + '\')">项目</button>' +
             '<button class="btn" style="font-size:10px;padding:2px 6px;color:var(--danger)" onclick="_pmUnlinkProduct(' + p.id + ')">移除</button>' +
@@ -215,7 +215,7 @@ function renderProductManagementPage() {
           '<td>' + renderTypeBadge(proj.project_type) + '</td>' +
           '<td>' + renderPill(proj.status) + '</td>' +
           '<td style="font-size:12px;color:var(--muted)">' + escHtml(productNames || '—') + '</td>' +
-          '<td style="font-size:11px;color:var(--muted)">' + (proj.is_local ? 'PMA本地' : (proj.synced_at ? '禅道同步' : '未知')) + '</td>' +
+          '<td>' + (proj.is_local ? '<span class="pm-src-badge local">PMA本地</span>' : (proj.synced_at ? '<span class="pm-src-badge synced" title="同步于 ' + escHtml(proj.synced_at) + '">禅道同步</span>' : '<span class="pm-src-badge unknown">未知</span>')) + '</td>' +
         '</tr>';
       });
       rightHtml += '</tbody></table></div>';

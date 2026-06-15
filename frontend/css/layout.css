@@ -341,3 +341,12 @@
 .db-manage-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .db-manage-grid .config-section { min-width: 0; }
 @media (max-width: 900px) { .db-manage-grid { grid-template-columns: 1fr; } }
+
+/* Product source badge */
+.pm-src-badge {
+  display: inline-block; padding: 1px 8px; border-radius: 10px;
+  font-size: 10.5px; font-weight: 500; white-space: nowrap;
+}
+.pm-src-badge.synced  { background: var(--accent-lt); color: var(--accent); }
+.pm-src-badge.local   { background: var(--warn-lt);  color: var(--warn); }
+.pm-src-badge.unknown { background: var(--bg);       color: var(--muted); }

@@ -4,6 +4,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from backend.config import zentao_product_url, zentao_product_bugs_url, zentao_product_releases_url
+from backend.database import to_local_str
 from backend.models.zentao import (
     CachedProduct, CachedProject, ProductProjectLink,
 )
@@ -190,6 +191,8 @@ def _product_item(p: CachedProduct, db: Session) -> dict:
         "description": p.description or "",
         "tags": tags_str,
         "tags_list": tags_str.split(",") if tags_str else [],
+        "is_local": bool(p.is_local),
+        "synced_at": to_local_str(p.synced_at) or None,
     }
 
 
@@ -230,6 +233,8 @@ def _product_detail(p: CachedProduct, db: Session) -> dict:
         "projects": projects,
         "project_count": len(projects),
         "releases_list": _get_product_releases(db, p.id),
+        "is_local": bool(p.is_local),
+        "synced_at": to_local_str(p.synced_at) or None,
     }
 
 
