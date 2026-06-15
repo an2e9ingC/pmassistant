@@ -408,6 +408,34 @@ class SyncService:
                     db.delete(sp)
                     deleted += 1
             db.commit()
+
+            # Auto-link synced products to product tree nodes by program_name matching
+            try:
+                from backend.models.document import ProductLine, ProductNodeLink
+                synced_products = db.query(CachedProduct).filter(
+                    CachedProduct.is_local == False,
+                    CachedProduct.program_name.isnot(None),
+                    CachedProduct.program_name != "",
+                ).all()
+                tree_nodes = db.query(ProductLine).all()
+                linked_count = 0
+                for sp in synced_products:
+                    # Find matching tree node by name (case-insensitive)
+                    match = next((n for n in tree_nodes if n.name.lower() == (sp.program_name or "").lower()), None)
+                    if match:
+                        existing_link = db.query(ProductNodeLink).filter(
+                            ProductNodeLink.product_id == sp.id,
+                            ProductNodeLink.product_node_id == match.id,
+                        ).first()
+                        if not existing_link:
+                            db.add(ProductNodeLink(product_id=sp.id, product_node_id=match.id))
+                            linked_count += 1
+                if linked_count:
+                    db.commit()
+                    logger.info(f"Auto-linked {linked_count} products to tree nodes")
+            except Exception as e:
+                logger.warning(f"Auto-link products failed (non-fatal): {e}")
+
             _finish_log(db, log, "success", len(products), created + deleted, updated)
             return {"fetched": len(products), "created": created, "updated": updated, "deleted": deleted}
         except Exception as e:

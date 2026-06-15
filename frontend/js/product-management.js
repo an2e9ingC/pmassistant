@@ -1,19 +1,18 @@
 /* ═══════════════════════════════════════════════════
    PRODUCT MANAGEMENT PAGE
-   Left: Product hierarchy tree (from pma_product_lines)
-   Right: Products & Projects linked to selected node
+   Left: 2-level product nav (产品线 → 产品系列)
+   Right: Next-level items + contextual actions
 ═══════════════════════════════════════════════════ */
 
 var _pmTree = [];              // [{id, name, parent_id, level, product_count, project_count, children}]
 var _pmSelectedNodeId = null;  // currently selected tree node ID
-var _pmNodeProducts = [];      // products linked to selected node
-var _pmNodeProjects = [];      // projects linked to selected node's products
-var _pmExpandedNodes = {};     // {nodeId: true}
+var _pmNodeProducts = [];      // products linked to selected node (for L2 → products)
+var _pmNodeChildren = [];      // child nodes of selected node (for L1 → L2 list)
 var _pmAllProducts = [];       // all products (for dropdowns)
 var _pmAllProjects = [];       // all projects (for dropdowns)
-var _pmIsAdmin = false;        // whether current user has admin access
+var _pmIsAdmin = false;
 
-var PM_TREE_ICONS = ['', '📁', '📂', '📄'];  // level 1/2/3
+var PM_TREE_ICONS = ['', '📁', '📂', '📄'];
 
 /* ── Init ── */
 
@@ -26,48 +25,30 @@ async function initProductManagement() {
   container.innerHTML = '<div class="loading-spinner">加载产品管理...</div>';
 
   try {
-    // Load tree + all products + all projects in parallel
     var treeData = await API.get('/product-management/tree');
     _pmTree = treeData || [];
 
-    // Load all products and projects for dropdowns
-    try {
-      _pmAllProducts = (await API.get('/product-management/all-products')) || [];
-    } catch (e) {
-      _pmAllProducts = [];
-    }
-    try {
-      _pmAllProjects = (await API.get('/product-management/all-projects')) || [];
-    } catch (e) {
-      _pmAllProjects = [];
-    }
+    try { _pmAllProducts = (await API.get('/product-management/all-products')) || []; } catch (e) { _pmAllProducts = []; }
+    try { _pmAllProjects = (await API.get('/product-management/all-projects')) || []; } catch (e) { _pmAllProjects = []; }
 
-    // Auto-expand level 1 only (L2 collapsed → hides L3)
-    _pmExpandedNodes = {};
-    function _pmSetExpand(nodes) {
-      nodes.forEach(function (n) {
-        if (n.level === 1) {
-          _pmExpandedNodes[n.id] = true;
-        } else if (n.level === 2) {
-          _pmExpandedNodes[n.id] = false;
-        }
-        if (n.children && n.children.length) _pmSetExpand(n.children);
-      });
-    }
-    _pmSetExpand(_pmTree);
-
-    // Select first leaf or first node
+    // Select first L2 or L1 by default
     if (!_pmSelectedNodeId || !_pmFindNodeById(_pmSelectedNodeId)) {
-      _pmSelectedNodeId = _pmFindFirstLeaf() || (_pmTree.length ? _pmTree[0].id : null);
+      var firstL2 = _pmFindFirstL2(_pmTree);
+      _pmSelectedNodeId = firstL2 || (_pmTree.length ? _pmTree[0].id : null);
     }
-    if (_pmSelectedNodeId) {
-      await _pmLoadNodeContent(_pmSelectedNodeId);
-    }
+    await _pmLoadContent();
     renderProductManagementPage();
   } catch (e) {
     container.innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) +
       '<br><button class="btn" onclick="initProductManagement()">重试</button></div>';
   }
+}
+
+function _pmFindFirstL2(nodes) {
+  for (var i = 0; i < nodes.length; i++) {
+    if (nodes[i].children && nodes[i].children.length) return nodes[i].children[0].id;
+  }
+  return null;
 }
 
 /* ── Tree Helpers ── */
@@ -87,45 +68,43 @@ function _pmFindInTree(nodes, id) {
   return null;
 }
 
-function _pmFindFirstLeaf() {
-  return _pmFindFirstLeafIn(_pmTree);
-}
-
-function _pmFindFirstLeafIn(nodes) {
-  for (var i = 0; i < nodes.length; i++) {
-    if (!nodes[i].children || !nodes[i].children.length) return nodes[i].id;
-    var found = _pmFindFirstLeafIn(nodes[i].children);
-    if (found) return found;
-  }
-  return null;
-}
-
 function _pmGetBreadcrumb(nodeId) {
   var node = _pmFindNodeById(nodeId);
   if (!node) return [];
   var path = [node.name];
+  var ids = [node.id];
   var parentId = node.parent_id;
   while (parentId) {
     var p = _pmFindNodeById(parentId);
     if (!p) break;
     path.unshift(p.name);
+    ids.unshift(p.id);
     parentId = p.parent_id;
   }
+  // Cache ids for breadcrumb click navigation
+  _pmBreadcrumbIds = ids;
   return path;
 }
 
-/* ── Load Node Content ── */
+var _pmBreadcrumbIds = [];
+function _pmGetBreadcrumbNodeId(index) {
+  return _pmBreadcrumbIds[index] || null;
+}
 
-async function _pmLoadNodeContent(nodeId) {
+/* ── Load Content ── */
+
+async function _pmLoadContent() {
+  var selNode = _pmFindNodeById(_pmSelectedNodeId);
+  if (!selNode) { _pmNodeProducts = []; _pmNodeChildren = []; return; }
+
+  // Child nodes (L2 children for L1, L3 children for L2)
+  _pmNodeChildren = (selNode.children || []).slice();
+
+  // Products linked to this node
   try {
-    _pmNodeProducts = (await API.get('/product-management/nodes/' + nodeId + '/products')) || [];
+    _pmNodeProducts = (await API.get('/product-management/nodes/' + _pmSelectedNodeId + '/products')) || [];
   } catch (e) {
     _pmNodeProducts = [];
-  }
-  try {
-    _pmNodeProjects = (await API.get('/product-management/nodes/' + nodeId + '/projects')) || [];
-  } catch (e) {
-    _pmNodeProjects = [];
   }
 }
 
@@ -133,52 +112,84 @@ async function _pmLoadNodeContent(nodeId) {
 
 function renderProductManagementPage() {
   var selNode = _pmFindNodeById(_pmSelectedNodeId);
+  var isL1 = selNode && selNode.level === 1;
+  var isL2 = selNode && selNode.level === 2;
 
-  // ── Top button bar (admin only) ──
-  var topBarHtml = '';
+  // Left panel: 2-level nav
+  var leftHtml = '<div class="section-title" style="margin-bottom:10px">产品导航</div>';
+  _pmTree.forEach(function (l1) {
+    leftHtml += _pmRenderL1Node(l1);
+  });
+  // Add product line button at bottom
   if (_pmIsAdmin) {
-    topBarHtml = '<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">' +
-      '<button class="btn btn-primary" style="font-size:12px;padding:5px 14px" onclick="_pmShowAddProductLineDialog()">+ 新增产品线</button>' +
-      '<button class="btn btn-primary" style="font-size:12px;padding:5px 14px" onclick="_pmShowAddProductSeriesDialog()">+ 新增产品系列</button>' +
-      '<button class="btn btn-primary" style="font-size:12px;padding:5px 14px" onclick="_pmShowAddProductModelDialog()">+ 添加产品型号</button>' +
-      '<span style="font-size:10.5px;color:var(--muted);align-self:center;margin-left:4px">一级 / 二级 / 三级</span>' +
+    leftHtml += '<div class="dt-tree-node" style="cursor:pointer;color:var(--accent);font-weight:500;padding:6px 12px" onclick="_pmShowAddProductLineDialog()">' +
+      '<span style="width:16px;flex-shrink:0"></span>' +
+      '<span class="dt-tree-icon">➕</span>' +
+      '<span class="dt-tree-label">新增产品线</span>' +
     '</div>';
   }
-
-  // Build left panel: tree (read-only structure display)
-  var leftHtml = '<div class="section-title" style="margin-bottom:10px">产品架构</div>';
-  _pmTree.forEach(function (n) {
-    leftHtml += _pmRenderTreeNode(n, 0);
-  });
 
   // Breadcrumb
   var crumbs = selNode ? _pmGetBreadcrumb(_pmSelectedNodeId) : [];
   var titleHtml = crumbs.length
-    ? crumbs.join(' <span style="color:var(--muted);font-weight:300">›</span> ')
+    ? crumbs.map(function(c, i) {
+        var nodeId = _pmGetBreadcrumbNodeId(i);
+        if (i < crumbs.length - 1 && nodeId) {
+          return '<a href="javascript:void(0)" onclick="_pmSelectNode(' + nodeId + ')" style="color:var(--accent);text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">' + escHtml(c) + '</a>';
+        }
+        return escHtml(c);
+      }).join(' <span style="color:var(--muted);font-weight:300">›</span> ')
     : '选择产品节点';
 
   // Right panel
   var rightHtml = '<div class="dt-right">';
   rightHtml += '<div class="dt-right-head">';
   rightHtml += '<div class="section-title">' + titleHtml + '</div>';
-  rightHtml += '<div style="display:flex;gap:6px">';
-  if (_pmIsAdmin && selNode) {
-    rightHtml += '<button class="btn btn-primary" style="font-size:11px;padding:4px 12px" onclick="_pmShowLinkProductDialog()">+ 关联已有产品</button>';
-    if (selNode.level >= 3) {
-      rightHtml += '<button class="btn btn-primary" style="font-size:11px;padding:4px 12px" onclick="_pmShowCreateProductDialog()">+ 新建产品</button>';
-    }
-  }
-  rightHtml += '</div></div>';
+  rightHtml += '</div>';
 
   if (!selNode) {
     rightHtml += '<div class="empty-state" style="padding:20px">请从左侧选择产品节点</div>';
-  } else {
-    // Products table
-    rightHtml += '<div class="section-hd" style="margin-top:14px"><div class="section-title">关联产品 (' + _pmNodeProducts.length + ')</div></div>';
-    if (_pmNodeProducts.length) {
-      rightHtml += '<div class="table-scroll" style="max-height:300px"><table class="stage-table"><thead><tr>' +
-        '<th>编号</th><th>产品名</th><th>状态</th><th>关联项目数</th><th>来源</th>' +
+  } else if (isL1) {
+    // L1 selected → Show L2 (产品系列) list
+    rightHtml += '<div class="section-hd" style="margin-top:10px"><div class="section-title">二级产品 · 产品系列 (' + _pmNodeChildren.length + ')</div></div>';
+    if (_pmNodeChildren.length) {
+      rightHtml += '<div class="table-scroll" style="max-height:400px"><table class="stage-table"><thead><tr>' +
+        '<th>产品系列名称</th><th>型号数</th>' +
         (_pmIsAdmin ? '<th style="width:100px">操作</th>' : '') +
+        '</tr></thead><tbody>';
+      _pmNodeChildren.forEach(function (l2) {
+        var modelCount = (l2.children || []).length;
+        rightHtml += '<tr style="cursor:pointer" onclick="_pmSelectNode(' + l2.id + ')">' +
+          '<td style="font-weight:500">📂 ' + escHtml(l2.name) + '</td>' +
+          '<td style="text-align:center">' + modelCount + '</td>' +
+          (_pmIsAdmin ? '<td style="white-space:nowrap;text-align:center">' +
+            '<button class="btn" style="font-size:10px;padding:2px 6px;margin-right:3px" onclick="event.stopPropagation();_pmShowRenameNodeDialog(' + l2.id + ')">✎</button>' +
+            '<button class="btn" style="font-size:10px;padding:2px 6px;color:var(--danger)" onclick="event.stopPropagation();_pmDeleteNode(' + l2.id + ')">✕</button>' +
+          '</td>' : '') +
+        '</tr>';
+      });
+      rightHtml += '</tbody></table></div>';
+    } else {
+      rightHtml += '<div class="empty-state" style="padding:16px;font-size:13px">暂无二级产品（产品系列）</div>';
+    }
+    if (_pmIsAdmin) {
+      rightHtml += '<div style="padding:10px 0">' +
+        '<button class="btn btn-primary" style="font-size:12px;padding:5px 14px" onclick="_pmShowAddChildDialog(' + _pmSelectedNodeId + ', 2)">+ 添加二级产品</button>' +
+      '</div>';
+    }
+  } else if (isL2) {
+    // L2 selected → Show products linked to this L2 node
+    rightHtml += '<div style="display:flex;gap:6px;margin-bottom:12px">';
+    if (_pmIsAdmin) {
+      rightHtml += '<button class="btn btn-primary" style="font-size:11px;padding:5px 12px" onclick="_pmShowCreateProductDialog()">+ 添加三级产品</button>';
+      rightHtml += '<button class="btn btn-primary" style="font-size:11px;padding:5px 12px" onclick="_pmShowLinkProductDialog()">+ 关联已有三级产品</button>';
+    }
+    rightHtml += '</div>';
+    rightHtml += '<div class="section-hd"><div class="section-title">三级产品 · 产品型号 (' + _pmNodeProducts.length + ')</div></div>';
+    if (_pmNodeProducts.length) {
+      rightHtml += '<div class="table-scroll" style="max-height:400px"><table class="stage-table"><thead><tr>' +
+        '<th>编号</th><th>产品名</th><th>状态</th><th>关联项目数</th><th>来源</th>' +
+        (_pmIsAdmin ? '<th style="width:120px">操作</th>' : '') +
         '</tr></thead><tbody>';
       _pmNodeProducts.forEach(function (p) {
         rightHtml += '<tr>' +
@@ -195,109 +206,120 @@ function renderProductManagementPage() {
       });
       rightHtml += '</tbody></table></div>';
     } else {
-      rightHtml += '<div class="empty-state" style="padding:12px;font-size:13px">该节点暂无关联产品' +
-        (selNode.level < 3 ? '<br><span style="color:var(--muted)">建议关联到三级产品型号节点</span>' : '') +
-      '</div>';
+      rightHtml += '<div class="empty-state" style="padding:16px;font-size:13px">该产品系列下暂无产品型号</div>';
     }
 
-    // Projects table
-    rightHtml += '<div class="section-hd" style="margin-top:18px"><div class="section-title">关联项目 (' + _pmNodeProjects.length + ')</div></div>';
-    if (_pmNodeProjects.length) {
+    // Also show L3 nodes (product tree nodes) that are children of this L2
+    if (_pmNodeChildren.length) {
+      rightHtml += '<div class="section-hd" style="margin-top:18px"><div class="section-title">产品型号节点 (' + _pmNodeChildren.length + ')</div></div>';
+      rightHtml += '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">以下为产品架构中的三级节点，需关联禅道产品后才在此处显示为完整产品</div>';
       rightHtml += '<div class="table-scroll" style="max-height:300px"><table class="stage-table"><thead><tr>' +
-        '<th>编号</th><th>项目名</th><th>类型</th><th>状态</th><th>关联产品</th><th>来源</th>' +
+        '<th>节点名称</th>' +
+        (_pmIsAdmin ? '<th style="width:100px">操作</th>' : '') +
         '</tr></thead><tbody>';
-      _pmNodeProjects.forEach(function (proj) {
-        var productNames = (proj.product_names || []).slice(0, 3).join(', ');
-        if ((proj.product_names || []).length > 3) productNames += ' ...';
-        rightHtml += '<tr onclick="openProject(\'' + proj.id + '\')" style="cursor:pointer">' +
-          '<td style="font-family:var(--mono);font-size:12px">' + escHtml(proj.code || '') + '</td>' +
-          '<td style="font-weight:500">' + escHtml(proj.name) + '</td>' +
-          '<td>' + renderTypeBadge(proj.project_type) + '</td>' +
-          '<td>' + renderPill(proj.status) + '</td>' +
-          '<td style="font-size:12px;color:var(--muted)">' + escHtml(productNames || '—') + '</td>' +
-          '<td>' + (proj.is_local ? '<span class="pm-src-badge local">PMA本地</span>' : (proj.synced_at ? '<span class="pm-src-badge synced" title="同步于 ' + escHtml(proj.synced_at) + '">禅道同步</span>' : '<span class="pm-src-badge unknown">未知</span>')) + '</td>' +
+      _pmNodeChildren.forEach(function (l3) {
+        rightHtml += '<tr>' +
+          '<td>📄 ' + escHtml(l3.name) + '</td>' +
+          (_pmIsAdmin ? '<td style="white-space:nowrap;text-align:center">' +
+            '<button class="btn" style="font-size:10px;padding:2px 6px;margin-right:3px" onclick="_pmShowRenameNodeDialog(' + l3.id + ')">✎</button>' +
+            '<button class="btn" style="font-size:10px;padding:2px 6px;color:var(--danger)" onclick="_pmDeleteNode(' + l3.id + ')">✕</button>' +
+          '</td>' : '') +
         '</tr>';
       });
       rightHtml += '</tbody></table></div>';
-    } else {
-      rightHtml += '<div class="empty-state" style="padding:12px;font-size:13px">该节点下产品暂未关联项目</div>';
     }
   }
+
   rightHtml += '</div>'; // .dt-right
 
   document.getElementById('view-product-management').innerHTML =
-    topBarHtml +
     '<div class="dt-layout">' +
       '<div class="dt-left">' + leftHtml + '</div>' +
       rightHtml +
     '</div>';
 }
 
-/* ── Tree Node Rendering ── */
+/* ── Left Nav Rendering (2 levels only) ── */
 
-function _pmRenderTreeNode(node, depth) {
-  var collapsed = _pmExpandedNodes[node.id] === false;
-  var hasChildren = node.children && node.children.length > 0;
-  var isSelected = node.id === _pmSelectedNodeId;
-  var indent = depth * 18;
+function _pmRenderL1Node(l1) {
+  var isSelected = l1.id === _pmSelectedNodeId;
+  var hasChildren = l1.children && l1.children.length > 0;
 
-  var html = '<div class="dt-tree-node' +
-    (isSelected ? ' selected' : '') +
-    '" style="padding-left:' + (4 + indent) + 'px" onclick="_pmSelectNode(' + node.id + ')" ondblclick="event.stopPropagation();_pmToggleNode(' + node.id + ')">';
+  var html = '<div class="dt-tree-node' + (isSelected ? ' selected' : '') +
+    '" style="padding-left:4px" onclick="_pmSelectNode(' + l1.id + ')">';
 
-  // Arrow
+  html += '<span style="width:16px;flex-shrink:0"></span>';
+  html += '<span class="dt-tree-icon">📁</span>';
+  html += '<span class="dt-tree-label">' + escHtml(l1.name) + '</span>';
   if (hasChildren) {
-    html += '<span class="dt-tree-arrow' + (collapsed ? ' collapsed' : '') +
-      '" onclick="event.stopPropagation();_pmToggleNode(' + node.id + ')">▼</span>';
-  } else {
-    html += '<span style="width:16px;flex-shrink:0"></span>';
+    html += '<span class="dt-tree-badge">' + l1.children.length + '</span>';
   }
-
-  // Icon
-  html += '<span class="dt-tree-icon">' + (PM_TREE_ICONS[node.level] || '📄') + '</span>';
-
-  // Name
-  html += '<span class="dt-tree-label">' + escHtml(node.name) + '</span>';
-
-  // Badges
-  html += '<span class="dt-tree-badge" style="background:var(--accent-lt);color:var(--accent)">' + (node.product_count || 0) + '</span>';
-  if (node.project_count) {
-    html += '<span class="dt-tree-badge" style="background:var(--success-lt);color:var(--success);margin-left:2px">' + node.project_count + '</span>';
-  }
-
-  // Actions (hover, admin only) — add operations moved to top button bar
   if (_pmIsAdmin) {
-    html += '<span class="dt-tree-acts">';
-    html += '<button class="btn" style="font-size:10px;padding:1px 5px" onclick="event.stopPropagation();_pmShowRenameNodeDialog(' + node.id + ')" title="重命名">✎</button>';
-    html += '<button class="btn" style="font-size:10px;padding:1px 5px;color:var(--danger)" onclick="event.stopPropagation();_pmDeleteNode(' + node.id + ')" title="删除">✕</button>';
-    html += '</span>';
+    html += '<span class="dt-tree-acts">' +
+      '<button class="btn" style="font-size:10px;padding:1px 5px" onclick="event.stopPropagation();_pmShowRenameNodeDialog(' + l1.id + ')" title="重命名">✎</button>' +
+      '<button class="btn" style="font-size:10px;padding:1px 5px;color:var(--danger)" onclick="event.stopPropagation();_pmDeleteNode(' + l1.id + ')" title="删除">✕</button>' +
+    '</span>';
   }
-
   html += '</div>';
 
-  // Children
+  // Show L2 children (always visible, indented)
   if (hasChildren) {
-    html += '<div class="dt-tree-children' + (collapsed ? ' collapsed' : '') + '">';
-    node.children.forEach(function (child) {
-      html += _pmRenderTreeNode(child, depth + 1);
+    l1.children.forEach(function (l2) {
+      var l2Selected = l2.id === _pmSelectedNodeId;
+      html += '<div class="dt-tree-node' + (l2Selected ? ' selected' : '') +
+        '" style="padding-left:24px" onclick="_pmSelectNode(' + l2.id + ')">';
+      html += '<span style="width:16px;flex-shrink:0"></span>';
+      html += '<span class="dt-tree-icon">📂</span>';
+      html += '<span class="dt-tree-label">' + escHtml(l2.name) + '</span>';
+      var l3Count = (l2.children || []).length;
+      if (l3Count) {
+        html += '<span class="dt-tree-badge" style="background:var(--accent-lt);color:var(--accent)">' + l3Count + '</span>';
+      }
+      if (_pmIsAdmin) {
+        html += '<span class="dt-tree-acts">' +
+          '<button class="btn" style="font-size:10px;padding:1px 5px" onclick="event.stopPropagation();_pmShowRenameNodeDialog(' + l2.id + ')" title="重命名">✎</button>' +
+          '<button class="btn" style="font-size:10px;padding:1px 5px;color:var(--danger)" onclick="event.stopPropagation();_pmDeleteNode(' + l2.id + ')" title="删除">✕</button>' +
+        '</span>';
+      }
+      html += '</div>';
     });
-    html += '</div>';
   }
 
   return html;
 }
 
-/* ── Tree Interactions ── */
-
-function _pmToggleNode(nodeId) {
-  _pmExpandedNodes[nodeId] = !_pmExpandedNodes[nodeId];
-  renderProductManagementPage();
-}
+/* ── Selection ── */
 
 async function _pmSelectNode(nodeId) {
   _pmSelectedNodeId = nodeId;
-  await _pmLoadNodeContent(nodeId);
+  await _pmLoadContent();
   renderProductManagementPage();
+}
+
+/* ── Add Child Node (L2 under L1, or L3 under L2) ── */
+
+function _pmShowAddChildDialog(parentId, level) {
+  var parent = _pmFindNodeById(parentId);
+  var levelLabel = level === 2 ? '二级产品（产品系列）' : '三级产品（产品型号）';
+  openDialog('添加' + levelLabel + ' — 归属于「' + escHtml(parent ? parent.name : '') + '」',
+    '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--muted)">名称</label>' +
+    '<input class="search-inp" id="pm-child-name" placeholder="请输入名称" style="width:100%;box-sizing:border-box;margin-top:4px"></div>',
+    [{text: '取消', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
+     {text: '确定', cls: 'btn-primary', onclick: '_pmAddChildNode(' + parentId + ')'}],
+    {hideClose: true});
+}
+
+async function _pmAddChildNode(parentId) {
+  var name = document.getElementById('pm-child-name').value.trim();
+  if (!name) { showToast('请输入名称', 'error'); return; }
+  document.querySelector('.shared-dialog-overlay').remove();
+  try {
+    await API.post('/product-doc-templates/product-nodes', {name: name, parent_id: parentId, sort_order: 0});
+    showToast('已添加: ' + name, 'ok');
+    await refreshPMData();
+  } catch (e) {
+    showToast('添加失败: ' + (e.detail || e.message), 'error');
+  }
 }
 
 /* ── Node CRUD (rename / delete) ── */
@@ -322,9 +344,7 @@ async function _pmRenameNode(nodeId) {
   try {
     await API.put('/product-doc-templates/product-nodes/' + nodeId, {name: name});
     showToast('已重命名', 'ok');
-    _pmTree = (await API.get('/product-management/tree')) || [];
-    if (_pmSelectedNodeId) await _pmLoadNodeContent(_pmSelectedNodeId);
-    renderProductManagementPage();
+    await refreshPMData();
   } catch (e) {
     showToast('重命名失败: ' + (e.detail || e.message), 'error');
   }
@@ -339,21 +359,44 @@ async function _pmDeleteNode(nodeId) {
   try {
     await API.del('/product-doc-templates/product-nodes/' + nodeId);
     showToast('已删除: ' + node.name, 'ok');
-    _pmTree = (await API.get('/product-management/tree')) || [];
+    await refreshPMData();
+    // If selected node was deleted, select first available
     if (!_pmFindNodeById(_pmSelectedNodeId)) {
-      _pmSelectedNodeId = _pmFindFirstLeaf() || (_pmTree.length ? _pmTree[0].id : null);
+      var firstL2 = _pmFindFirstL2(_pmTree);
+      _pmSelectedNodeId = firstL2 || (_pmTree.length ? _pmTree[0].id : null);
     }
-    if (_pmSelectedNodeId) await _pmLoadNodeContent(_pmSelectedNodeId);
-    renderProductManagementPage();
   } catch (e) {
     showToast('删除失败: ' + (e.detail || e.message), 'error');
   }
 }
 
-/* ── Link Product to Node ── */
+/* ── Add Product Line (L1) ── */
+
+function _pmShowAddProductLineDialog() {
+  openDialog('新增产品线',
+    '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--muted)">产品线名称</label>' +
+    '<input class="search-inp" id="pm-line-name" placeholder="如：嵌入式产品线" style="width:100%;box-sizing:border-box;margin-top:4px"></div>',
+    [{text: '取消', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
+     {text: '确定', cls: 'btn-primary', onclick: '_pmAddProductLine()'}],
+    {hideClose: true});
+}
+
+async function _pmAddProductLine() {
+  var name = document.getElementById('pm-line-name').value.trim();
+  if (!name) { showToast('请输入产品线名称', 'error'); return; }
+  document.querySelector('.shared-dialog-overlay').remove();
+  try {
+    await API.post('/product-doc-templates/product-nodes', {name: name, parent_id: null, sort_order: 0});
+    showToast('已添加产品线: ' + name, 'ok');
+    await refreshPMData();
+  } catch (e) {
+    showToast('添加失败: ' + (e.detail || e.message), 'error');
+  }
+}
+
+/* ── Link Existing Product ── */
 
 function _pmShowLinkProductDialog() {
-  // Filter out already-linked products
   var linkedIds = {};
   _pmNodeProducts.forEach(function(p) { linkedIds[p.id] = true; });
   var available = _pmAllProducts.filter(function(p) { return !linkedIds[p.id]; });
@@ -369,7 +412,7 @@ function _pmShowLinkProductDialog() {
     '</select>';
   }
 
-  openDialog('关联已有产品 — 到「' + escHtml((_pmFindNodeById(_pmSelectedNodeId) || {}).name || '') + '」',
+  openDialog('关联已有三级产品 — 到「' + escHtml((_pmFindNodeById(_pmSelectedNodeId) || {}).name || '') + '」',
     '<div style="margin-bottom:12px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">选择产品</label>' +
       optionsHtml +
@@ -408,11 +451,17 @@ async function _pmUnlinkProduct(productId) {
   }
 }
 
-/* ── Create Local Product ── */
+/* ── Create Local Product (PMA-local, for L2 → 三级产品) ── */
 
 function _pmShowCreateProductDialog() {
   var node = _pmFindNodeById(_pmSelectedNodeId);
-  // Project checkbox list
+  var crumbs = _pmGetBreadcrumb(_pmSelectedNodeId);
+  var crumbTitle = crumbs.length > 1
+    ? '<span style="color:var(--accent);font-weight:500">' + escHtml(crumbs[0]) + '</span>' +
+      ' <span style="color:var(--muted)">/</span> ' +
+      '<span style="color:var(--accent);font-weight:500">' + escHtml(crumbs[1]) + '</span>'
+    : '<span style="color:var(--accent);font-weight:500">' + escHtml(crumbs[0] || '') + '</span>';
+
   var projectCheckboxes = _pmAllProjects.length
     ? _pmAllProjects.slice(0, 50).map(function(proj) {
         return '<label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;cursor:pointer">' +
@@ -422,11 +471,11 @@ function _pmShowCreateProductDialog() {
       }).join('')
     : '<span style="font-size:12px;color:var(--muted)">暂无可选项目</span>';
 
-  openDialog('新建产品 — 归属于「' + escHtml(node ? node.name : '') + '」',
-    '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">产品名称 *</label>' +
-    '<input class="search-inp" id="pm-newprod-name" placeholder="如：VPX-6206" style="width:100%;box-sizing:border-box;margin-top:4px"></div>' +
-    '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">产品编号 *</label>' +
-    '<input class="search-inp" id="pm-newprod-code" placeholder="如：PROD-VPX6206" style="width:100%;box-sizing:border-box;margin-top:4px"></div>' +
+  openDialog('添加三级产品 — ' + crumbTitle,
+    '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">产品编号 * <span style="font-weight:400">（如：LVX624M-V010，短横线前为产品主体，后为硬件版本 V010/V020）</span></label>' +
+    '<input class="search-inp" id="pm-newprod-code" placeholder="如：LVX624M-V010" style="width:100%;box-sizing:border-box;margin-top:4px"></div>' +
+    '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">产品名称 * <span style="font-weight:400">（通常与编号一致，也可不同如：手持频谱仪）</span></label>' +
+    '<input class="search-inp" id="pm-newprod-name" placeholder="如：LVX624M-V010 或 手持频谱仪" style="width:100%;box-sizing:border-box;margin-top:4px"></div>' +
     '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">状态</label>' +
     '<select id="pm-newprod-status" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);margin-top:4px">' +
       '<option value="normal">正常</option><option value="closed">已关闭</option>' +
@@ -436,7 +485,7 @@ function _pmShowCreateProductDialog() {
     '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">关联项目 <span style="font-weight:400">（可选，可多选）</span></label>' +
     '<div style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;margin-top:4px;background:var(--surface)">' + projectCheckboxes + '</div></div>',
     [{text: '取消', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
-     {text: '创建', cls: 'btn-primary', onclick: '_pmCreateProduct()'}],
+     {text: '添加', cls: 'btn-primary', onclick: '_pmCreateProduct()'}],
     {hideClose: true});
 }
 
@@ -467,160 +516,9 @@ async function _pmCreateProduct() {
   }
 }
 
-/* ── Add Product Model (level 3) with parent selection ── */
-
-function _pmShowAddProductModelDialog() {
-  // Collect level-1 nodes (产品线) and level-2 nodes (产品系列)
-  var level1Nodes = [];
-  var level2Nodes = [];
-  function collectNodes(nodes) {
-    nodes.forEach(function(n) {
-      if (n.level === 1) level1Nodes.push(n);
-      if (n.level === 2) level2Nodes.push(n);
-      if (n.children && n.children.length) collectNodes(n.children);
-    });
-  }
-  collectNodes(_pmTree);
-
-  var l1Options = level1Nodes.length
-    ? '<option value="">— 请选择 —</option>' + level1Nodes.map(function(n) {
-        return '<option value="' + n.id + '">' + escHtml(n.name) + '</option>';
-      }).join('')
-    : '<option value="">暂无产品线，请先创建</option>';
-
-  var l2Options = '<option value="">— 请先选择产品线 —</option>';
-
-  openDialog('添加产品型号',
-    '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">一级 — 产品线</label>' +
-    '<select id="pm-model-l1" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);margin-top:4px" onchange="_pmModelL1Changed()">' + l1Options + '</select></div>' +
-    '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">二级 — 产品系列</label>' +
-    '<select id="pm-model-l2" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);margin-top:4px" onchange="_pmModelL2Changed()">' + l2Options + '</select></div>' +
-    '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">三级 — 产品型号名称 *</label>' +
-    '<input class="search-inp" id="pm-model-name" placeholder="如：VPX-6206" style="width:100%;box-sizing:border-box;margin-top:4px"></div>',
-    [{text: '取消', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
-     {text: '确定', cls: 'btn-primary', onclick: '_pmAddProductModel()'}],
-    {hideClose: true});
-}
-
-function _pmModelL1Changed() {
-  var l1Id = parseInt(document.getElementById('pm-model-l1').value) || 0;
-  var l2Sel = document.getElementById('pm-model-l2');
-  if (!l1Id) {
-    l2Sel.innerHTML = '<option value="">— 请先选择产品线 —</option>';
-    return;
-  }
-  // Find the level-1 node and collect its direct children (level 2)
-  var l1Node = _pmFindNodeById(l1Id);
-  var children = (l1Node && l1Node.children) ? l1Node.children : [];
-  if (children.length) {
-    l2Sel.innerHTML = '<option value="">— 请选择 —</option>' + children.map(function(n) {
-      return '<option value="' + n.id + '">' + escHtml(n.name) + '</option>';
-    }).join('');
-  } else {
-    l2Sel.innerHTML = '<option value="">该产品线下暂无系列</option>';
-  }
-}
-
-function _pmModelL2Changed() {
-  // No action needed — just for UX
-}
-
-async function _pmAddProductModel() {
-  var l1Id = parseInt(document.getElementById('pm-model-l1').value) || 0;
-  var l2Id = parseInt(document.getElementById('pm-model-l2').value) || 0;
-  var name = document.getElementById('pm-model-name').value.trim();
-
-  if (!l1Id) { showToast('请选择产品线', 'error'); return; }
-  if (!l2Id) { showToast('请选择产品系列', 'error'); return; }
-  if (!name) { showToast('请输入产品型号名称', 'error'); return; }
-
-  document.querySelector('.shared-dialog-overlay').remove();
-  try {
-    await API.post('/product-doc-templates/product-nodes', {name: name, parent_id: l2Id, sort_order: 0});
-    showToast('已添加产品型号: ' + name, 'ok');
-    await refreshPMData();
-    // Select the new node if found
-    _pmExpandedNodes[l1Id] = true;
-    _pmExpandedNodes[l2Id] = true;
-  } catch (e) {
-    showToast('添加失败: ' + (e.detail || e.message), 'error');
-  }
-}
-
-/* ── Add Product Line (level 1) ── */
-
-function _pmShowAddProductLineDialog() {
-  openDialog('新增产品线',
-    '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--muted)">产品线名称</label>' +
-    '<input class="search-inp" id="pm-line-name" placeholder="如：嵌入式产品线" style="width:100%;box-sizing:border-box;margin-top:4px"></div>',
-    [{text: '取消', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
-     {text: '确定', cls: 'btn-primary', onclick: '_pmAddProductLine()'}],
-    {hideClose: true});
-}
-
-async function _pmAddProductLine() {
-  var name = document.getElementById('pm-line-name').value.trim();
-  if (!name) { showToast('请输入产品线名称', 'error'); return; }
-  document.querySelector('.shared-dialog-overlay').remove();
-  try {
-    await API.post('/product-doc-templates/product-nodes', {name: name, parent_id: null, sort_order: 0});
-    showToast('已添加产品线: ' + name, 'ok');
-    await refreshPMData();
-  } catch (e) {
-    showToast('添加失败: ' + (e.detail || e.message), 'error');
-  }
-}
-
-/* ── Add Product Series (level 2, needs level-1 parent) ── */
-
-function _pmShowAddProductSeriesDialog() {
-  var level1Nodes = [];
-  function collectL1(nodes) {
-    nodes.forEach(function(n) {
-      if (n.level === 1) level1Nodes.push(n);
-      if (n.children && n.children.length) collectL1(n.children);
-    });
-  }
-  collectL1(_pmTree);
-
-  var l1Options = level1Nodes.length
-    ? '<option value="">— 请选择 —</option>' + level1Nodes.map(function(n) {
-        return '<option value="' + n.id + '">' + escHtml(n.name) + '</option>';
-      }).join('')
-    : '<option value="">暂无产品线，请先创建</option>';
-
-  openDialog('新增产品系列',
-    '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">所属产品线</label>' +
-    '<select id="pm-series-l1" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);margin-top:4px">' + l1Options + '</select></div>' +
-    '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">产品系列名称</label>' +
-    '<input class="search-inp" id="pm-series-name" placeholder="如：VPX系列" style="width:100%;box-sizing:border-box;margin-top:4px"></div>',
-    [{text: '取消', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
-     {text: '确定', cls: 'btn-primary', onclick: '_pmAddProductSeries()'}],
-    {hideClose: true});
-}
-
-async function _pmAddProductSeries() {
-  var l1Id = parseInt(document.getElementById('pm-series-l1').value) || 0;
-  var name = document.getElementById('pm-series-name').value.trim();
-
-  if (!l1Id) { showToast('请选择所属产品线', 'error'); return; }
-  if (!name) { showToast('请输入产品系列名称', 'error'); return; }
-
-  document.querySelector('.shared-dialog-overlay').remove();
-  try {
-    await API.post('/product-doc-templates/product-nodes', {name: name, parent_id: l1Id, sort_order: 0});
-    showToast('已添加产品系列: ' + name, 'ok');
-    _pmExpandedNodes[l1Id] = true;
-    await refreshPMData();
-  } catch (e) {
-    showToast('添加失败: ' + (e.detail || e.message), 'error');
-  }
-}
-
 /* ── Manage Product-Project Associations ── */
 
 function _pmShowManageProductProjects(productId, productName) {
-  // Load current project links for this product
   API.get('/product-management/products/' + productId + '/projects').then(function(linkedProjects) {
     var linkedIds = {};
     (linkedProjects || []).forEach(function(p) { linkedIds[p.id] = true; });
@@ -673,11 +571,7 @@ async function refreshPMData() {
     _pmTree = (await API.get('/product-management/tree')) || [];
     _pmAllProducts = (await API.get('/product-management/all-products')) || [];
     _pmAllProjects = (await API.get('/product-management/all-projects')) || [];
-  } catch (e) {
-    // ignore individual failures
-  }
-  if (_pmSelectedNodeId) {
-    await _pmLoadNodeContent(_pmSelectedNodeId);
-  }
+  } catch (e) { /* ignore */ }
+  await _pmLoadContent();
   renderProductManagementPage();
 }
