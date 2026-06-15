@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.middleware.auth import get_current_user, require_perm
+from backend.models.document import ProductLine, ProductDocTemplate
 from backend.routers.logs import log_audit
 from backend.services import document_service
 
@@ -75,7 +76,11 @@ def add_product_node(
         node = document_service.add_product_node(
             db, body.name, body.parent_id, body.sort_order
         )
-        log_audit(db, user, "product_node_add", body.name, "管理", "medium")
+        parent_info = ""
+        if body.parent_id:
+            parent = db.query(ProductLine).filter(ProductLine.id == body.parent_id).first()
+            parent_info = f"（上级: {parent.name}）" if parent else ""
+        log_audit(db, user, "product_node_add", f"新增产品节点: {body.name}{parent_info}", "管理", "medium")
         return {"code": 0, "data": node, "message": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -89,10 +94,22 @@ def update_product_node(
     user=Depends(require_perm("doc_template")),
 ):
     try:
-        node = document_service.update_product_node(
-            db, node_id, body.model_dump(exclude_none=True)
-        )
-        log_audit(db, user, "product_node_update", f"id={node_id}", "管理", "medium")
+        old_node = db.query(ProductLine).filter(ProductLine.id == node_id).first()
+        old_name = old_node.name if old_node else "?"
+        old_parent_id = old_node.parent_id if old_node else None
+        data = body.model_dump(exclude_none=True)
+        node = document_service.update_product_node(db, node_id, data)
+        # Build human-readable change description
+        changes = []
+        if "name" in data:
+            changes.append(f"名称 {old_name} → {data['name']}")
+        if "parent_id" in data:
+            new_parent = db.query(ProductLine).filter(ProductLine.id == data["parent_id"]).first()
+            changes.append(f"移动到 {new_parent.name}" if new_parent else "移到根节点")
+        if "sort_order" in data:
+            changes.append(f"排序→{data['sort_order']}")
+        detail = "; ".join(changes) if changes else f"节点: {node.get('name', '?')}"
+        log_audit(db, user, "product_node_update", detail, "管理", "medium")
         return {"code": 0, "data": node, "message": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -105,12 +122,15 @@ def delete_product_node(
     user=Depends(require_perm("doc_template")),
 ):
     try:
+        node_info = db.query(ProductLine).filter(ProductLine.id == node_id).first()
+        node_name = node_info.name if node_info else f"id={node_id}"
         result = document_service.delete_product_node(db, node_id)
-        log_audit(
-            db, user, "product_node_del",
-            f"id={node_id}, nodes={result['node_count']}, templates={result['template_count']}",
-            "管理", "high",
-        )
+        detail = f"删除产品节点: {node_name}"
+        if result['node_count'] > 1:
+            detail += f"（含子节点共{result['node_count']}个）"
+        if result['template_count'] > 0:
+            detail += f"，关联模板{result['template_count']}个"
+        log_audit(db, user, "product_node_del", detail, "管理", "high")
         return {"code": 0, "data": result, "message": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -125,7 +145,11 @@ def create_template(
     user=Depends(require_perm("doc_template")),
 ):
     tpl = document_service.create_product_template(db, body.model_dump())
-    log_audit(db, user, "product_doc_template_add", f"product_id={body.product_id}/{body.doc_name}", "管理", "medium")
+    product_name = db.query(ProductLine).filter(ProductLine.id == body.product_id).first()
+    detail = f"新增模板: {body.doc_name}"
+    if product_name:
+        detail += f" → {product_name.name}"
+    log_audit(db, user, "product_doc_template_add", detail, "管理", "medium")
     return {"code": 0, "data": tpl, "message": "ok"}
 
 
@@ -146,12 +170,18 @@ def update_template(
     db: Session = Depends(get_db),
     user=Depends(require_perm("doc_template")),
 ):
+    old_tpl = db.query(ProductDocTemplate).filter(ProductDocTemplate.id == template_id).first()
+    old_doc_name = old_tpl.doc_name if old_tpl else "?"
     tpl = document_service.update_product_template(
         db, template_id, body.model_dump(exclude_none=True)
     )
     if not tpl:
         raise HTTPException(status_code=404, detail="Template not found")
-    log_audit(db, user, "product_doc_template_edit", f"id={template_id}", "管理", "medium")
+    new_name = tpl.get("doc_name", old_doc_name)
+    detail = f"编辑模板: {new_name}"
+    if old_doc_name != new_name:
+        detail = f"编辑模板: {old_doc_name} → {new_name}"
+    log_audit(db, user, "product_doc_template_edit", detail, "管理", "medium")
     return {"code": 0, "data": tpl, "message": "ok"}
 
 
@@ -161,8 +191,10 @@ def delete_template(
     db: Session = Depends(get_db),
     user=Depends(require_perm("doc_template")),
 ):
+    old_tpl = db.query(ProductDocTemplate).filter(ProductDocTemplate.id == template_id).first()
+    tpl_name = old_tpl.doc_name if old_tpl else f"id={template_id}"
     ok = document_service.delete_product_template(db, template_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Template not found")
-    log_audit(db, user, "product_doc_template_del", f"id={template_id}", "管理", "high")
+    log_audit(db, user, "product_doc_template_del", f"删除模板: {tpl_name}", "管理", "high")
     return {"code": 0, "data": None, "message": "ok"}

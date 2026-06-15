@@ -316,6 +316,8 @@ function _pmShowRenameNodeDialog(nodeId) {
 async function _pmRenameNode(nodeId) {
   var name = document.getElementById('pm-rename').value.trim();
   if (!name) { showToast('请输入名称', 'error'); return; }
+  var ok = await verifyPassword('重命名产品节点', 'pw_verify_product_node_edit');
+  if (!ok) return;
   document.querySelector('.shared-dialog-overlay').remove();
   try {
     await API.put('/product-doc-templates/product-nodes/' + nodeId, {name: name});
@@ -332,6 +334,8 @@ async function _pmDeleteNode(nodeId) {
   var node = _pmFindNodeById(nodeId);
   if (!node) return;
   if (!confirm('确定删除「' + node.name + '」及其所有子节点？\n\n注意：子节点下的文档模板也会被删除。')) return;
+  var ok = await verifyPassword('删除产品节点', 'pw_verify_product_node_del');
+  if (!ok) return;
   try {
     await API.del('/product-doc-templates/product-nodes/' + nodeId);
     showToast('已删除: ' + node.name, 'ok');
@@ -393,6 +397,8 @@ async function _pmLinkProduct() {
 
 async function _pmUnlinkProduct(productId) {
   if (!confirm('确定从此节点移除该产品？')) return;
+  var ok = await verifyPassword('移除产品关联', 'pw_verify_product_node_edit');
+  if (!ok) return;
   try {
     await API.del('/product-management/link-product-node?product_id=' + productId + '&node_id=' + _pmSelectedNodeId);
     showToast('已移除关联', 'ok');
