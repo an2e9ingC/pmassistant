@@ -51,6 +51,14 @@
     </div>
     <div class="nav-group">
       <div class="nav-group-label">产品</div>
+      <div class="nav-item" id="nav-product-management" onclick="gotoView('product-management')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M2 3h5l2 2h5v8H2z"/>
+          <line x1="4" y1="8" x2="12" y2="8"/>
+          <line x1="4" y1="10.5" x2="10" y2="10.5"/>
+        </svg>
+        产品管理
+      </div>
       <div class="nav-item" id="nav-product-list" onclick="gotoView('product-list')">
         <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
           <rect x="1.5" y="1.5" width="13" height="13" rx="2"/>
@@ -171,7 +179,7 @@
         <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle;margin-right:3px"><circle cx="8" cy="8" r="6"/><line x1="8" y1="5" x2="8" y2="9"/><circle cx="8" cy="12" r="0.8" fill="currentColor" stroke="none"/></svg>
         反馈 Bug
       </a>
-      <span id="app-version">v2026.06.12-beta4</span>
+      <span id="app-version">v2026.06.15-beta1</span>
     </div>
   </div>
 </aside>
@@ -300,6 +308,7 @@
           </span>
         </div>
         <div class="section-acts">
+          <button class="btn btn-primary" id="dash-new-proj-btn" onclick="showDashboardCreateProjectDialog()" style="font-size:12px;padding:5px 14px;margin-right:8px;display:none">+ 新建项目</button>
           <div class="search-wrap" style="max-width:240px">
             <svg class="search-ico" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
               <circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/>
@@ -852,6 +861,11 @@
       </div>
     </div>
 
+    <!-- ══════════════════════ VIEW — PRODUCT MANAGEMENT ══════════════════════ -->
+    <div class="view" id="view-product-management">
+      <div class="loading-spinner">加载中...</div>
+    </div>
+
     <!-- ══════════════════════ VIEW — CUSTOMERS ══════════════════════ -->
     <div class="view" id="view-customers">
       <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
@@ -914,6 +928,7 @@
 <script src="/js/reports.js"></script>
 <script src="/js/logs.js"></script>
 <script src="/js/product.js"></script>
+<script src="/js/product-management.js"></script>
 <script src="/js/gitlab-releases.js"></script>
 <script src="/js/topology.js"></script>
 <script src="/js/admin.js"></script>

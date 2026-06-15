@@ -3,7 +3,7 @@
 ═══════════════════════════════════════════════════ */
 .sidebar {
   width: var(--sidebar-w);
-  min-height: 100vh;
+  height: 100vh;
   background: var(--surface);
   border-right: 1px solid var(--border);
   display: flex;
@@ -27,7 +27,7 @@
 [data-theme="dark"] .brand-logo-dark { display: block; }
 
 .sidebar-nav { padding: 10px 6px; flex: 1; overflow-y: auto; }
-.nav-group { margin-bottom: 10px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.nav-group { margin-bottom: 10px; padding-bottom: 12px; border-bottom: 1px solid var(--border); max-height: 180px; overflow-y: auto; }
 .nav-group:last-child { border-bottom: none; }
 .nav-group-label {
   font-size: 11.5px; font-weight: 650; color: var(--fg);
@@ -76,6 +76,7 @@
 .sidebar-footer {
   padding: 10px 8px 14px;
   border-top: 1px solid var(--border);
+  flex-shrink: 0;
 }
 .theme-row {
   display: flex; align-items: center; gap: 9px;

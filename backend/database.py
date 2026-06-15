@@ -214,6 +214,7 @@ def init_db():
         CustomerProjectLink,
         CustomerProductLink,
         CachedRelease,
+        ProductNodeLink,
     )
 
     logger.info(f"Database path: {_db_path}")

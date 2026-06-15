@@ -4,7 +4,7 @@
 
 .dt-layout {
   display: grid;
-  grid-template-columns: 220px 1fr;
+  grid-template-columns: 286px 1fr;
   gap: 20px;
   align-items: start;
 }
@@ -14,6 +14,8 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 14px;
+  overflow-x: auto;
+  min-width: 0;
 }
 
 .dt-stage-item {
