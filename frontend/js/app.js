@@ -215,6 +215,15 @@ function openFeedbackDialog() {
   _fbComponents = [];
   var user = getCurrentUser();
   var reporterName = user ? (user.username || '') : '';
+  // Fetch version info for diagnostic context
+  var versionInfo = '';
+  API.get('/admin/system-info').then(function(info) {
+    if (info) {
+      versionInfo = (info.version || '?') + ' (' + (info.commit || '?') + ')';
+      var el = document.getElementById('fb-version');
+      if (el) el.textContent = versionInfo;
+    }
+  }).catch(function() {});
   // Inject chip styles once
   if (!document.getElementById('fb-chip-styles')) {
     var styleEl = document.createElement('style');
@@ -252,6 +261,10 @@ function openFeedbackDialog() {
       '<div style="margin-bottom:12px">' +
         '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">反馈人 <span style="font-weight:400">（默认当前登录用户）</span></label>' +
         '<input class="search-inp" id="fb-reporter" value="' + escHtml(reporterName) + '" placeholder="请输入反馈人姓名..." style="width:100%;box-sizing:border-box">' +
+      '</div>' +
+      '<div style="margin-bottom:12px">' +
+        '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">版本信息</label>' +
+        '<div id="fb-version" style="font-size:11.5px;font-family:JetBrains Mono,monospace;color:var(--muted);padding:6px 10px;background:var(--bg);border-radius:6px;border:1px solid var(--border)">加载中...</div>' +
       '</div>' +
       '<div style="margin-bottom:12px">' +
         '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">指派给</label>' +
@@ -334,7 +347,15 @@ async function submitFeedback() {
   var desc = document.getElementById('fb-desc').value.trim();
   var reporterEl = document.getElementById('fb-reporter');
   var reporter = reporterEl ? reporterEl.value.trim() : '';
+  var versionEl = document.getElementById('fb-version');
+  var versionInfo = versionEl ? versionEl.textContent : '';
   if (!title) { showToast('请输入标题', 'error'); return; }
+
+  // Append version info to description
+  var fullDesc = desc || '';
+  if (versionInfo && versionInfo !== '加载中...') {
+    fullDesc += '\n\n**版本信息**: ' + versionInfo;
+  }
 
   var btn = document.getElementById('fb-submit');
   btn.disabled = true; btn.textContent = '提交中...';
@@ -346,7 +367,7 @@ async function submitFeedback() {
     var result = await API.post('/gitlab/issues', {
       issue_type: window._fbType || 'bug',
       title: title,
-      description: desc,
+      description: fullDesc,
       reporter: reporter,
       assignee_id: assigneeId,
       labels: componentLabels

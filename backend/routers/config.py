@@ -284,7 +284,7 @@ def update_pma_settings(payload: dict, db: Session = Depends(get_db), _=Depends(
 
 @router.get("/system-info", response_model=dict)
 def get_system_info():
-    """Return current git branch for multi-session development identification."""
+    """Return current git branch, version, and latest commit hash."""
     import subprocess
     try:
         branch = subprocess.check_output(
@@ -294,4 +294,41 @@ def get_system_info():
         ).strip()
     except Exception:
         branch = "unknown"
-    return {"code": 0, "data": {"branch": branch}, "message": "ok"}
+    try:
+        commit = subprocess.check_output(
+            ["git", "log", "-1", "--format=%h"],
+            stderr=subprocess.DEVNULL,
+            text=True
+        ).strip()
+    except Exception:
+        commit = "unknown"
+    try:
+        commit_full = subprocess.check_output(
+            ["git", "log", "-1", "--format=%H"],
+            stderr=subprocess.DEVNULL,
+            text=True
+        ).strip()
+    except Exception:
+        commit_full = "unknown"
+    # Read version from index.html
+    import re
+    version = "unknown"
+    try:
+        idx_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "frontend", "index.html")
+        with open(idx_path) as f:
+            content = f.read()
+        m = re.search(r'id="app-version">([^<]+)<', content)
+        if m:
+            version = m.group(1)
+    except Exception:
+        pass
+    return {
+        "code": 0,
+        "data": {
+            "branch": branch,
+            "version": version,
+            "commit": commit,
+            "commit_full": commit_full,
+        },
+        "message": "ok",
+    }
