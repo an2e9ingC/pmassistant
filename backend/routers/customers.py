@@ -88,7 +88,7 @@ def delete_customer(customer_id: int, db: Session = Depends(get_db), _=Depends(r
     db.query(CustomerProductLink).filter(CustomerProductLink.customer_id == customer_id).delete()
     db.delete(c)
     db.commit()
-    log_audit(db, cu, "delete_customer", f"name={cname!r}")
+    log_audit(db, cu, "delete_customer", f"name={cname!r}", "客户", "high")
     return {"code": 0, "message": "客户已删除"}
 
 

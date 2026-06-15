@@ -108,7 +108,7 @@ def link_product_to_node(
         result = pm_service.link_product_to_node(db, body.product_id, body.node_id)
         log_audit(db, user, "product_node_link",
                   f"product_id={body.product_id}, node_id={body.node_id}",
-                  "管理", "medium")
+                  "产品", "medium")
         return {"code": 0, "data": result, "message": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -126,7 +126,7 @@ def unlink_product_from_node(
         result = pm_service.unlink_product_from_node(db, product_id, node_id)
         log_audit(db, user, "product_node_unlink",
                   f"product_id={product_id}, node_id={node_id}",
-                  "管理", "medium")
+                  "产品", "medium")
         return {"code": 0, "data": result, "message": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -153,7 +153,7 @@ def create_local_product(
         )
         log_audit(db, user, "local_product_create",
                   f"name={body.name}, code={body.code}, node_id={body.node_id}",
-                  "管理", "medium")
+                  "产品", "medium")
         return {"code": 0, "data": product, "message": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -173,7 +173,7 @@ def update_local_product(
         )
         log_audit(db, user, "local_product_update",
                   f"product_id={product_id}",
-                  "管理", "medium")
+                  "产品", "medium")
         return {"code": 0, "data": product, "message": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -213,7 +213,7 @@ def create_local_project(
         )
         log_audit(db, user, "local_project_create",
                   f"name={body.name}, code={body.code}, products={len(body.product_ids)}",
-                  "管理", "medium")
+                  "项目", "medium")
         return {"code": 0, "data": project, "message": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -233,7 +233,7 @@ def update_local_project(
         )
         log_audit(db, user, "local_project_update",
                   f"project_id={project_id}",
-                  "管理", "medium")
+                  "项目", "medium")
         return {"code": 0, "data": project, "message": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -277,7 +277,7 @@ def update_product_projects(
         result = pm_service.update_product_projects(db, product_id, body.project_ids)
         log_audit(db, user, "product_projects_update",
                   f"product_id={product_id}, projects={len(body.project_ids)}",
-                  "管理", "medium")
+                  "产品", "medium")
         return {"code": 0, "data": result, "message": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

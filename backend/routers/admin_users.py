@@ -306,7 +306,7 @@ def delete_user(user_id: int, db: Session = Depends(get_db), _=Depends(require_a
         db.query(UserRole).filter(UserRole.user_id == user_id).delete()
         db.delete(user)
         db.commit()
-        log_audit(db, cu, "delete_user", f"username={uname!r}")
+        log_audit(db, cu, "delete_user", f"username={uname!r}", "用户", "high")
         logger.info(f"User deleted: id={user_id} username={uname!r}")
         return {"code": 0, "message": "用户已删除"}
     except Exception as e:

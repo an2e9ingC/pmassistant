@@ -80,7 +80,7 @@ def add_product_node(
         if body.parent_id:
             parent = db.query(ProductLine).filter(ProductLine.id == body.parent_id).first()
             parent_info = f"（上级: {parent.name}）" if parent else ""
-        log_audit(db, user, "product_node_add", f"新增产品节点: {body.name}{parent_info}", "管理", "medium")
+        log_audit(db, user, "product_node_add", f"新增产品节点: {body.name}{parent_info}", "产品", "medium")
         return {"code": 0, "data": node, "message": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -109,7 +109,7 @@ def update_product_node(
         if "sort_order" in data:
             changes.append(f"排序→{data['sort_order']}")
         detail = "; ".join(changes) if changes else f"节点: {node.get('name', '?')}"
-        log_audit(db, user, "product_node_update", detail, "管理", "medium")
+        log_audit(db, user, "product_node_update", detail, "产品", "medium")
         return {"code": 0, "data": node, "message": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -130,7 +130,7 @@ def delete_product_node(
             detail += f"（含子节点共{result['node_count']}个）"
         if result['template_count'] > 0:
             detail += f"，关联模板{result['template_count']}个"
-        log_audit(db, user, "product_node_del", detail, "管理", "high")
+        log_audit(db, user, "product_node_del", detail, "产品", "high")
         return {"code": 0, "data": result, "message": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -149,7 +149,7 @@ def create_template(
     detail = f"新增模板: {body.doc_name}"
     if product_name:
         detail += f" → {product_name.name}"
-    log_audit(db, user, "product_doc_template_add", detail, "管理", "medium")
+    log_audit(db, user, "product_doc_template_add", detail, "产品", "medium")
     return {"code": 0, "data": tpl, "message": "ok"}
 
 
@@ -181,7 +181,7 @@ def update_template(
     detail = f"编辑模板: {new_name}"
     if old_doc_name != new_name:
         detail = f"编辑模板: {old_doc_name} → {new_name}"
-    log_audit(db, user, "product_doc_template_edit", detail, "管理", "medium")
+    log_audit(db, user, "product_doc_template_edit", detail, "产品", "medium")
     return {"code": 0, "data": tpl, "message": "ok"}
 
 
@@ -196,5 +196,5 @@ def delete_template(
     ok = document_service.delete_product_template(db, template_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Template not found")
-    log_audit(db, user, "product_doc_template_del", f"删除模板: {tpl_name}", "管理", "high")
+    log_audit(db, user, "product_doc_template_del", f"删除模板: {tpl_name}", "产品", "high")
     return {"code": 0, "data": None, "message": "ok"}
