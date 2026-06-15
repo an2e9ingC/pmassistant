@@ -396,46 +396,88 @@ async function _pmAddProductLine() {
 
 /* ── Link Existing Product ── */
 
+var _pmLinkAvailable = [];  // cache for filter
+
 function _pmShowLinkProductDialog() {
   var linkedIds = {};
   _pmNodeProducts.forEach(function(p) { linkedIds[p.id] = true; });
-  var available = _pmAllProducts.filter(function(p) { return !linkedIds[p.id]; });
+  _pmLinkAvailable = _pmAllProducts.filter(function(p) { return !linkedIds[p.id]; });
 
-  var optionsHtml = '';
-  if (!available.length) {
-    optionsHtml = '<div style="font-size:12px;color:var(--muted);padding:8px">所有产品已关联到此节点</div>';
-  } else {
-    optionsHtml = '<select id="pm-link-product-select" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg)" size="8">' +
-      available.map(function(p) {
-        return '<option value="' + p.id + '">' + escHtml(p.code || '') + ' — ' + escHtml(p.name) + '</option>';
-      }).join('') +
-    '</select>';
+  if (!_pmLinkAvailable.length) {
+    openDialog('关联已有三级产品 — 到「' + escHtml((_pmFindNodeById(_pmSelectedNodeId) || {}).name || '') + '」',
+      '<div style="font-size:12px;color:var(--muted);padding:12px">所有产品已关联到此节点</div>',
+      [{text: '关闭', cls: 'btn-primary', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'}],
+      {hideClose: true});
+    return;
   }
 
   openDialog('关联已有三级产品 — 到「' + escHtml((_pmFindNodeById(_pmSelectedNodeId) || {}).name || '') + '」',
-    '<div style="margin-bottom:12px">' +
-      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">选择产品</label>' +
-      optionsHtml +
+    '<div style="margin-bottom:8px">' +
+      '<input class="search-inp" id="pm-link-search" placeholder="搜索产品编号或名称..." style="width:100%;box-sizing:border-box" oninput="_pmFilterLinkProducts()">' +
+    '</div>' +
+    '<div style="margin-bottom:6px;font-size:10.5px;color:var(--muted)">' +
+      '<span id="pm-link-count">共 ' + _pmLinkAvailable.length + ' 个可选</span>' +
+      '<a href="javascript:void(0)" onclick="_pmSelectAllLinks(true)" style="margin-left:8px;color:var(--accent);text-decoration:none">全选</a>' +
+      '<a href="javascript:void(0)" onclick="_pmSelectAllLinks(false)" style="margin-left:6px;color:var(--accent);text-decoration:none">取消全选</a>' +
+    '</div>' +
+    '<div id="pm-link-list" style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:4px;background:var(--surface)">' +
+      _pmRenderLinkList(_pmLinkAvailable) +
     '</div>',
     [{text: '取消', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
-     {text: '关联', cls: 'btn-primary', onclick: '_pmLinkProduct()'}],
-    {hideClose: true});
+     {text: '关联选中', cls: 'btn-primary', onclick: '_pmLinkProducts()'}],
+    {hideClose: true, maxWidth: 500});
 }
 
-async function _pmLinkProduct() {
-  var sel = document.getElementById('pm-link-product-select');
-  if (!sel || !sel.value) { showToast('请选择产品', 'error'); return; }
-  document.querySelector('.shared-dialog-overlay').remove();
-  try {
-    await API.post('/product-management/link-product-node', {
-      product_id: parseInt(sel.value),
-      node_id: _pmSelectedNodeId
-    });
-    showToast('已关联产品', 'ok');
-    await refreshPMData();
-  } catch (e) {
-    showToast('关联失败: ' + (e.detail || e.message), 'error');
+function _pmRenderLinkList(products) {
+  if (!products.length) {
+    return '<div style="font-size:12px;color:var(--muted);padding:12px;text-align:center">未找到匹配产品</div>';
   }
+  return products.map(function(p) {
+    return '<label style="display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:12.5px;cursor:pointer;border-radius:4px" ' +
+      'onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'\'">' +
+      '<input type="checkbox" value="' + p.id + '" class="pm-link-cb">' +
+      '<span style="font-family:var(--mono);font-size:11px;min-width:110px;color:var(--muted)">' + escHtml(p.code || '') + '</span>' +
+      '<span style="flex:1">' + escHtml(p.name) + '</span>' +
+      (p.is_local ? '<span class="pm-src-badge local">本地</span>' : '<span class="pm-src-badge synced">禅道</span>') +
+    '</label>';
+  }).join('');
+}
+
+function _pmFilterLinkProducts() {
+  var q = document.getElementById('pm-link-search').value.toLowerCase();
+  var filtered = q ? _pmLinkAvailable.filter(function(p) {
+    return (p.code || '').toLowerCase().indexOf(q) >= 0 || (p.name || '').toLowerCase().indexOf(q) >= 0;
+  }) : _pmLinkAvailable;
+  document.getElementById('pm-link-list').innerHTML = _pmRenderLinkList(filtered);
+  document.getElementById('pm-link-count').textContent = q ? ('筛选到 ' + filtered.length + ' 个') : ('共 ' + _pmLinkAvailable.length + ' 个可选');
+}
+
+function _pmSelectAllLinks(val) {
+  document.querySelectorAll('.pm-link-cb').forEach(function(cb) { cb.checked = val; });
+}
+
+async function _pmLinkProducts() {
+  var cbs = document.querySelectorAll('.pm-link-cb:checked');
+  if (!cbs.length) { showToast('请至少勾选一个产品', 'error'); return; }
+  var ids = [];
+  cbs.forEach(function(cb) { ids.push(parseInt(cb.value)); });
+
+  document.querySelector('.shared-dialog-overlay').remove();
+  var success = 0, fail = 0;
+  for (var i = 0; i < ids.length; i++) {
+    try {
+      await API.post('/product-management/link-product-node', {
+        product_id: ids[i],
+        node_id: _pmSelectedNodeId
+      });
+      success++;
+    } catch (e) {
+      fail++;
+    }
+  }
+  if (success) showToast('已关联 ' + success + ' 个产品' + (fail ? '，' + fail + ' 个失败' : ''), fail ? 'warn' : 'ok');
+  else showToast('关联失败', 'error');
+  await refreshPMData();
 }
 
 async function _pmUnlinkProduct(productId) {
