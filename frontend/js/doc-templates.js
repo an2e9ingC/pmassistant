@@ -579,7 +579,7 @@ function renderProductTreePage() {
   _productTree.forEach(function(l1) {
     leftHtml += _renderL1Node(l1);
   });
-  leftHtml += '<div style="font-size:10.5px;color:var(--muted);padding:8px 4px;font-style:italic">※ 产品维护请到「产品管理」页面</div>';
+  leftHtml += '<div style="font-size:10.5px;color:var(--muted);padding:8px 4px;font-style:italic;cursor:pointer" onclick="gotoView(\'product-management\')" title="跳转到产品管理页面">※ 产品维护请到「<span style="color:var(--accent);text-decoration:underline">产品管理</span>」页面</div>';
 
   // Breadcrumb
   var crumbs = selNode ? _getNodeBreadcrumb(_selectedNodeId) : [];

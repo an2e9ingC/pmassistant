@@ -460,18 +460,5 @@ function renderProdMaintenance(p) {
   }
   html += '</div>';
 
-  // Delivery resources
-  html += '<div class="card" style="padding:16px">';
-  html += '<div class="section-hd"><div class="section-title">交付资料</div></div>';
-  var items = [];
-  if (p.nas_path) items.push('<div style="padding:4px 0;font-size:13px"><span style="color:var(--muted)">NAS路径: </span><code>' + escHtml(p.nas_path) + '</code></div>');
-  if (p.git_url) items.push('<div style="padding:4px 0;font-size:13px"><span style="color:var(--muted)">Git仓库: </span><a href="' + escHtml(p.git_url) + '" target="_blank" style="color:var(--accent)"><code>' + escHtml(p.git_url) + '</code> &#x2197;</a></div>');
-  if (items.length) {
-    html += '<div style="margin-top:8px">' + items.join('') + '</div>';
-  } else {
-    html += '<div style="font-size:12px;color:var(--muted);margin-top:8px">暂无交付资料</div>';
-  }
-  html += '</div>';
-
   document.getElementById('prodsec-maintenance').innerHTML = html;
 }

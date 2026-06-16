@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
-from backend.middleware.auth import get_current_user, require_admin
+from backend.middleware.auth import get_current_user, require_perm
 from backend.routers.logs import log_audit
 from backend.services import product_management_service as pm_service
 from backend.services import product_service as prod_service
@@ -101,7 +101,7 @@ def get_node_projects(
 def link_product_to_node(
     body: ProductNodeLinkRequest,
     db: Session = Depends(get_db),
-    user=Depends(require_admin),
+    user=Depends(require_perm("product_link")),
 ):
     """Link a product to a tree node."""
     try:
@@ -119,7 +119,7 @@ def unlink_product_from_node(
     product_id: int = Query(...),
     node_id: int = Query(...),
     db: Session = Depends(get_db),
-    user=Depends(require_admin),
+    user=Depends(require_perm("product_link")),
 ):
     """Remove a product-node link."""
     try:
@@ -138,7 +138,7 @@ def unlink_product_from_node(
 def create_local_product(
     body: LocalProductCreate,
     db: Session = Depends(get_db),
-    user=Depends(require_admin),
+    user=Depends(require_perm("product_link")),
 ):
     """Create a PMA-local product and optionally link to projects."""
     try:
@@ -164,7 +164,7 @@ def update_local_product(
     product_id: int,
     body: LocalProductUpdate,
     db: Session = Depends(get_db),
-    user=Depends(require_admin),
+    user=Depends(require_perm("product_link")),
 ):
     """Update a PMA-local product."""
     try:
@@ -198,7 +198,7 @@ def get_all_products(
 def create_local_project(
     body: LocalProjectCreate,
     db: Session = Depends(get_db),
-    user=Depends(require_admin),
+    user=Depends(require_perm("product_link")),
 ):
     """Create a PMA-local project (must link at least 1 product)."""
     try:
@@ -224,7 +224,7 @@ def update_local_project(
     project_id: int,
     body: LocalProjectUpdate,
     db: Session = Depends(get_db),
-    user=Depends(require_admin),
+    user=Depends(require_perm("product_link")),
 ):
     """Update a PMA-local project."""
     try:
@@ -270,7 +270,7 @@ def update_product_projects(
     product_id: int,
     body: ProductProjectsUpdate,
     db: Session = Depends(get_db),
-    user=Depends(require_admin),
+    user=Depends(require_perm("product_link")),
 ):
     """Replace all project associations for a product."""
     try:

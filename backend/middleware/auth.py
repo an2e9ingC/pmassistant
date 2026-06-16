@@ -50,6 +50,16 @@ def require_perm(perm: str):
     return checker
 
 
+def require_any_perm(*perms: str):
+    """Dependency factory: allow access if user has ANY of the given permissions."""
+    def checker(user: LocalUser = Depends(get_current_user)) -> LocalUser:
+        user_perms = _get_perms(user)
+        if not any(p in user_perms for p in perms):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Requires one of: {', '.join(perms)}")
+        return user
+    return checker
+
+
 def _get_perms(user: LocalUser) -> set:
     """Aggregate permissions from all user's roles."""
     perms = set()

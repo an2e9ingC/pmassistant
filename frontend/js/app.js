@@ -8,7 +8,7 @@ var VIEW_PERMS = {
   dashboard: '登录即可', detail: '登录即可', topology: '登录即可', reports: '登录即可',
   logs: 'admin', users: 'admin', permissions: 'admin', config: 'admin',
   'doc-templates': 'doc_template', standards: 'doc_template',
-  'db-manage': 'admin', 'product-management': '登录即可', 'product-list': '登录即可', 'product-detail': '登录即可',
+  'db-manage': 'admin', 'product-management': 'product_link', 'product-list': '登录即可', 'product-detail': '登录即可',
   customers: 'customer_link', 'customer-detail': '登录即可',
 };
 
@@ -158,6 +158,12 @@ function gotoView(view, pushState) {
     initProductDetail();
   }
   if (view === 'product-management') {
+    var user = getCurrentUser();
+    var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+    if (!user || (user.role !== 'admin' && perms.indexOf('product_link') < 0)) {
+      showToast('产品管理需要 product_link 权限', 'error');
+      return;
+    }
     initProductManagement();
   }
   if (view === 'customers') {
@@ -625,6 +631,10 @@ async function init() {
     if (!isAdmin && perms.indexOf('customer_link') < 0) {
       var custNav = document.getElementById('nav-customers');
       if (custNav) custNav.style.display = 'none';
+    }
+    if (!isAdmin && perms.indexOf('product_link') < 0) {
+      var pmNav = document.getElementById('nav-product-management');
+      if (pmNav) pmNav.style.display = 'none';
     }
 
     // Show sync button only for users with sync permission

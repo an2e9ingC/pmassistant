@@ -19,7 +19,7 @@ var PM_TREE_ICONS = ['', '📁', '📂', '📄'];
 async function initProductManagement() {
   var user = getCurrentUser();
   var perms = (user && user.permissions) ? user.permissions.split(',') : [];
-  _pmIsAdmin = user && (user.role === 'admin' || perms.indexOf('admin') >= 0);
+  _pmIsAdmin = user && (user.role === 'admin' || perms.indexOf('admin') >= 0 || perms.indexOf('product_link') >= 0);
 
   var container = document.getElementById('view-product-management');
   container.innerHTML = '<div class="loading-spinner">加载产品管理...</div>';
@@ -125,7 +125,7 @@ function renderProductManagementPage() {
     leftHtml += '<div class="dt-tree-node" style="cursor:pointer;color:var(--accent);font-weight:500;padding:6px 12px" onclick="_pmShowAddProductLineDialog()">' +
       '<span style="width:16px;flex-shrink:0"></span>' +
       '<span class="dt-tree-icon">➕</span>' +
-      '<span class="dt-tree-label">新增产品线</span>' +
+      '<span class="dt-tree-label">新增一级产品线</span>' +
     '</div>';
   }
 
@@ -373,7 +373,7 @@ async function _pmDeleteNode(nodeId) {
 /* ── Add Product Line (L1) ── */
 
 function _pmShowAddProductLineDialog() {
-  openDialog('新增产品线',
+  openDialog('新增一级产品线',
     '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--muted)">产品线名称</label>' +
     '<input class="search-inp" id="pm-line-name" placeholder="如：嵌入式产品线" style="width:100%;box-sizing:border-box;margin-top:4px"></div>',
     [{text: '取消', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},

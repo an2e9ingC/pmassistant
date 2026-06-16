@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
-from backend.middleware.auth import get_current_user, require_perm
+from backend.middleware.auth import get_current_user, require_perm, require_any_perm
 from backend.models.document import ProductLine, ProductDocTemplate
 from backend.routers.logs import log_audit
 from backend.services import document_service
@@ -70,7 +70,7 @@ def get_node_breadcrumb(
 def add_product_node(
     body: ProductNodeCreate,
     db: Session = Depends(get_db),
-    user=Depends(require_perm("doc_template")),
+    user=Depends(require_any_perm("doc_template", "product_link")),
 ):
     try:
         node = document_service.add_product_node(
@@ -91,7 +91,7 @@ def update_product_node(
     node_id: int,
     body: ProductNodeUpdate,
     db: Session = Depends(get_db),
-    user=Depends(require_perm("doc_template")),
+    user=Depends(require_any_perm("doc_template", "product_link")),
 ):
     try:
         old_node = db.query(ProductLine).filter(ProductLine.id == node_id).first()
@@ -119,7 +119,7 @@ def update_product_node(
 def delete_product_node(
     node_id: int,
     db: Session = Depends(get_db),
-    user=Depends(require_perm("doc_template")),
+    user=Depends(require_any_perm("doc_template", "product_link")),
 ):
     try:
         node_info = db.query(ProductLine).filter(ProductLine.id == node_id).first()

@@ -790,6 +790,7 @@ function togglePermForRole(roleId, permKey, checked) {
   role.permissions = perms;
   markPageDirty();
   renderPermByPermTable();
+  _renderPermSaveBar();
 }
 
 async function initPermissions() {
@@ -840,6 +841,10 @@ function renderPermTable() {
       '<td style="font-size:11px;color:var(--muted)">' + escHtml(r.description || '') + '</td>' +
     '</tr>';
   }).join('');
+  _renderPermSaveBar();
+}
+
+function _renderPermSaveBar() {
   // Show save/discard bar when permissions have been modified
   var existing = document.getElementById('perm-save-bar');
   if (existing) existing.remove();
