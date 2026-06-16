@@ -11,3 +11,4 @@ dist/
 .claude/worktrees/
 data/*.log
 data/backups/secrets/
+data/backups/pma-backup*.db
