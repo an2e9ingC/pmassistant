@@ -55,6 +55,51 @@ function switchDocTemplateTab(tab, el) {
 }
 var _currentTab = 'project';
 
+// ── Drag-and-drop reorder ──
+
+var _dragSourceIndex = -1;
+
+function _trDragStart(e) {
+  _dragSourceIndex = parseInt(this.getAttribute('data-drag-index'));
+  this.style.opacity = '0.4';
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', '');
+}
+
+function _trDragEnd(e) {
+  this.style.opacity = '';
+  document.querySelectorAll('.dt-drag-over').forEach(function(r) { r.classList.remove('dt-drag-over'); });
+}
+
+function _trDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  this.classList.add('dt-drag-over');
+}
+
+function _trDragLeave(e) {
+  this.classList.remove('dt-drag-over');
+}
+
+function _trDrop(e, list, renderFn) {
+  e.preventDefault();
+  this.classList.remove('dt-drag-over');
+  var targetIndex = parseInt(this.getAttribute('data-drag-index'));
+  if (_dragSourceIndex < 0 || _dragSourceIndex === targetIndex) return;
+
+  // Reorder the array
+  var moved = list.splice(_dragSourceIndex, 1)[0];
+  list.splice(targetIndex, 0, moved);
+
+  // Update sort_order for all items
+  for (var i = 0; i < list.length; i++) {
+    list[i].sort_order = i + 1;
+  }
+
+  _dragSourceIndex = -1;
+  renderFn();
+}
+
 async function initDocTemplates() {
   var container = document.getElementById('dtsec-project');
   container.innerHTML = '<div class="loading-spinner">加载模板配置...</div>';
@@ -139,15 +184,19 @@ function renderTemplatesPage() {
       (canEdit ? '<th style="width:90px;white-space:nowrap">操作</th>' : '') +
     '</tr></thead><tbody>';
 
-    docs.forEach(function(d) {
-      rightHtml += '<tr>' +
+    docs.forEach(function(d, i) {
+      rightHtml += '<tr data-drag-index="' + i + '" draggable="true"' +
+        ' ondragstart="_trDragStart.call(this,event)" ondragend="_trDragEnd.call(this,event)"' +
+        ' ondragover="_trDragOver.call(this,event)" ondragleave="_trDragLeave.call(this,event)"' +
+        ' ondrop="_trDrop.call(this,event,_templatesGrouped[_selectedStage] || [],renderTemplatesAfterReorder)"' +
+        ' style="cursor:grab">' +
         '<td style="font-family:var(--mono);color:var(--muted);text-align:center">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
         '<td style="font-weight:500">' + escHtml(d.doc_name) + '</td>' +
         '<td style="font-size:12px;white-space:nowrap">' + escHtml(d.responsible_role || '—') + '</td>' +
         '<td style="font-size:11px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escHtml(d.doc_path || '') + '">' + escHtml(d.doc_path || '—') + '</td>' +
         '<td style="font-size:12px;color:var(--muted)">' + escHtml(d.description || '') + '</td>' +
         (canEdit
-          ? '<td style="white-space:nowrap;text-align:center">' +
+          ? '<td style="white-space:nowrap;text-align:center" ondragover="event.stopPropagation()" ondrop="event.stopPropagation()">' +
               '<button class="btn" style="font-size:10px;padding:2px 8px;margin-right:4px" onclick="showEditTemplateForm(' + d.id + ')">编辑</button>' +
               '<button class="btn" style="font-size:10px;padding:2px 8px;color:var(--danger)" onclick="deleteTemplate(' + d.id + ')">删除</button>' +
             '</td>'
@@ -297,6 +346,21 @@ function saveTemplate(id) {
   var overlay = document.querySelector('.shared-dialog-overlay');
   if (overlay) overlay.remove();
   _selectedStage = stageType;
+  renderTemplatesPage();
+}
+
+function renderTemplatesAfterReorder() {
+  var docs = _templatesGrouped[_selectedStage] || [];
+  for (var i = 0; i < docs.length; i++) {
+    var d = docs[i];
+    d.sort_order = i + 1;
+    // Push edit op for server-side templates
+    if (d.id > 0) {
+      _pendingOps.push({ type: 'edit', id: d.id, stage_type: _selectedStage,
+        doc_name: d.doc_name, sort_order: d.sort_order, responsible_role: d.responsible_role || '',
+        description: d.description || '', doc_path: d.doc_path || '' });
+    }
+  }
   renderTemplatesPage();
 }
 
@@ -504,6 +568,8 @@ async function syncAllProjects() {
 var _productTree = [];           // [{id, name, parent_id, level, template_count, children[...]}]
 var _selectedNodeId = null;      // currently selected product node ID
 var _productTemplates = [];      // doc templates for selected node
+var _productPendingOps = [];     // pending operations queue (add/edit/delete/reorder)
+var _productNextTempId = -1000;  // temp IDs for locally-added templates
 var _dtBreadcrumbIds = [];       // cached breadcrumb node IDs for click nav
 
 var TREE_ICONS = ['', '📁', '📂', '📄'];  // level 1/2/3 icons
@@ -610,9 +676,21 @@ function renderProductTreePage() {
     : '选择产品 — 文档清单';
 
   // Right panel
+  var pendingCount = _productPendingOps.length;
+  var saveBtnHtml = '';
+  if (canEdit && pendingCount > 0) {
+    saveBtnHtml = '<button class="btn btn-primary" style="font-size:11px;padding:4px 14px;margin-left:8px" onclick="saveProductChanges()">保存配置 (' + pendingCount + ')</button>' +
+      '<button class="btn" style="font-size:11px;padding:4px 10px;margin-left:4px;color:var(--warn);border-color:var(--warn)" onclick="discardProductChanges()">放弃</button>';
+  } else if (canEdit && pendingCount === 0 && _productTemplates.length >= 0 && _selectedNodeId) {
+    // Only show "已保存" when we have loaded a node
+    saveBtnHtml = '<span style="font-size:11px;color:var(--muted);margin-left:8px">✓ 已保存</span>';
+  }
   var rightHtml = '<div class="dt-right">';
   rightHtml += '<div class="dt-right-head">';
+  rightHtml += '<div style="display:flex;align-items:center">';
   rightHtml += '<div class="section-title">' + titleHtml + '</div>';
+  rightHtml += saveBtnHtml;
+  rightHtml += '</div>';
   if (canEdit && isL2) {
     rightHtml += '<span style="display:flex;gap:4px">' +
       '<button class="btn" style="font-size:11px;padding:4px 12px" onclick="showAddProductTemplateForm()">+ 添加文档</button>' +
@@ -649,14 +727,18 @@ function renderProductTreePage() {
         '<th style="width:50px">序号</th><th>文档名称</th><th>责任人（岗位）</th><th style="width:140px">路径</th><th>说明</th>' +
         (canEdit ? '<th style="width:90px;white-space:nowrap">操作</th>' : '') +
       '</tr></thead><tbody>';
-      _productTemplates.forEach(function(d) {
-        rightHtml += '<tr>' +
+      _productTemplates.forEach(function(d, i) {
+        rightHtml += '<tr data-drag-index="' + i + '" draggable="true"' +
+          ' ondragstart="_trDragStart.call(this,event)" ondragend="_trDragEnd.call(this,event)"' +
+          ' ondragover="_trDragOver.call(this,event)" ondragleave="_trDragLeave.call(this,event)"' +
+          ' ondrop="_trDrop.call(this,event,_productTemplates,renderProductAfterReorder)"' +
+          ' style="cursor:grab">' +
           '<td style="font-family:var(--mono);color:var(--muted);text-align:center">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
           '<td style="font-weight:500">' + escHtml(d.doc_name) + '</td>' +
           '<td style="font-size:12px;white-space:nowrap">' + escHtml(d.responsible_role || '—') + '</td>' +
           '<td style="font-size:11px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escHtml(d.doc_path || '') + '">' + escHtml(d.doc_path || '—') + '</td>' +
           '<td style="font-size:12px;color:var(--muted)">' + escHtml(d.description || '') + '</td>' +
-          (canEdit ? '<td style="white-space:nowrap;text-align:center">' +
+          (canEdit ? '<td style="white-space:nowrap;text-align:center" ondragover="event.stopPropagation()" ondrop="event.stopPropagation()">' +
             '<button class="btn" style="font-size:10px;padding:2px 8px;margin-right:4px" onclick="showEditProductTemplateForm(' + d.id + ')">编辑</button>' +
             '<button class="btn" style="font-size:10px;padding:2px 8px;color:var(--danger)" onclick="deleteProductTemplate(' + d.id + ')">删除</button>' +
           '</td>' : '') +
@@ -771,7 +853,22 @@ function showEditProductTemplateForm(id) {
      {text: '确定', cls: 'btn-primary', onclick: 'saveProductTemplate(' + id + ')'}], {hideClose: true});
 }
 
-async function saveProductTemplate(id) {
+function renderProductAfterReorder() {
+  // Reorder is local-only; push pending ops for each template
+  for (var i = 0; i < _productTemplates.length; i++) {
+    var t = _productTemplates[i];
+    t.sort_order = i + 1;
+    if (t.id > 0) {
+      _productPendingOps.push({ type: 'edit', id: t.id,
+        doc_name: t.doc_name, sort_order: t.sort_order,
+        responsible_role: t.responsible_role || '', description: t.description || '',
+        doc_path: t.doc_path || '' });
+    }
+  }
+  renderProductTreePage();
+}
+
+function saveProductTemplate(id) {
   var nameEl = document.getElementById('ptf-name');
   var order = parseInt(document.getElementById('ptf-order').value) || 0;
   var desc = document.getElementById('ptf-desc').value.trim();
@@ -785,37 +882,113 @@ async function saveProductTemplate(id) {
   var overlay = document.querySelector('.shared-dialog-overlay');
   if (overlay) overlay.remove();
 
-  try {
-    var payload = {doc_name: name, sort_order: order, doc_path: path, description: desc, responsible_role: role};
-    if (id && id > 0) {
-      await API.put('/product-doc-templates/' + id, payload);
-      showToast('模板已更新', 'ok');
-    } else {
-      payload.product_id = _selectedNodeId;
-      await API.post('/product-doc-templates', payload);
-      showToast('模板已添加', 'ok');
+  if (id && id > 0) {
+    // Edit existing template
+    var tpl = _productTemplates.find(function(x) { return x.id === id; });
+    if (!tpl) { showToast('未找到该模板', 'error'); return; }
+    tpl.doc_name = name;
+    tpl.sort_order = order;
+    tpl.description = desc;
+    tpl.responsible_role = role;
+    tpl.doc_path = path;
+    _productPendingOps.push({ type: 'edit', id: id,
+      doc_name: name, sort_order: order, responsible_role: role,
+      description: desc, doc_path: path });
+  } else if (id && id < 0) {
+    // Edit locally-added template
+    var tpl2 = _productTemplates.find(function(x) { return x.id === id; });
+    if (tpl2) {
+      tpl2.doc_name = name;
+      tpl2.sort_order = order;
+      tpl2.description = desc;
+      tpl2.responsible_role = role;
+      tpl2.doc_path = path;
     }
-    // Refresh
-    _productTree = (await API.get('/product-doc-templates/product-tree')) || [];
-    if (_selectedNodeId) await _loadTemplatesForNode(_selectedNodeId);
-    renderProductTreePage();
-  } catch(e) {
-    showToast('保存失败: ' + (e.detail || e.message), 'error');
+    // Update the pending add op
+    for (var pi = 0; pi < _productPendingOps.length; pi++) {
+      if (_productPendingOps[pi].tempId === id) {
+        _productPendingOps[pi].doc_name = name;
+        _productPendingOps[pi].sort_order = order;
+        _productPendingOps[pi].responsible_role = role;
+        _productPendingOps[pi].description = desc;
+        _productPendingOps[pi].doc_path = path;
+        break;
+      }
+    }
+  } else {
+    // New template — add locally with temp ID
+    var tempId = _productNextTempId--;
+    var newDoc = { id: tempId, doc_name: name, sort_order: order,
+      responsible_role: role, description: desc, doc_path: path };
+    _productTemplates.push(newDoc);
+    _productPendingOps.push({ type: 'add', tempId: tempId,
+      doc_name: name, sort_order: order, responsible_role: role,
+      description: desc, doc_path: path });
   }
+  renderProductTreePage();
 }
 
-async function deleteProductTemplate(id) {
+function deleteProductTemplate(id) {
   if (!confirm('确认删除此文档模板？')) return;
+  if (id > 0) {
+    _productPendingOps.push({ type: 'delete', id: id });
+  } else {
+    // Remove from pending add ops
+    _productPendingOps = _productPendingOps.filter(function(op) { return op.tempId !== id; });
+  }
+  // Remove locally
+  _productTemplates = _productTemplates.filter(function(t) { return t.id !== id; });
+  renderProductTreePage();
+}
+
+/* ── Product Template Save / Discard ── */
+
+async function saveProductChanges() {
+  if (!_productPendingOps.length) { showToast('没有待保存的更改', 'error'); return; }
+  var ops = _productPendingOps.slice();
+  var success = 0, fail = 0;
+
+  for (var i = 0; i < ops.length; i++) {
+    var op = ops[i];
+    try {
+      if (op.type === 'add') {
+        await API.post('/product-doc-templates', { product_id: _selectedNodeId, doc_name: op.doc_name, sort_order: op.sort_order, responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '' });
+        success++;
+      } else if (op.type === 'edit') {
+        await API.put('/product-doc-templates/' + op.id, { doc_name: op.doc_name, sort_order: op.sort_order, responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '' });
+        success++;
+      } else if (op.type === 'delete') {
+        await API.del('/product-doc-templates/' + op.id);
+        success++;
+      } else if (op.type === 'import') {
+        await API.post('/product-doc-templates/import/' + _selectedNodeId, { source_node_id: op.source_node_id });
+        success++;
+      }
+    } catch(e) {
+      fail++;
+      showToast('操作失败: ' + (e.message || '未知错误'), 'error');
+    }
+  }
+
+  _productPendingOps = [];
+  // Refresh from server
   try {
-    await API.del('/product-doc-templates/' + id);
-    showToast('模板已删除', 'ok');
-    // Refresh
+    _productTree = (await API.get('/product-doc-templates/product-tree')) || [];
+  } catch(e) {}
+  if (_selectedNodeId) await _loadTemplatesForNode(_selectedNodeId);
+  showToast('保存完成: ' + success + ' 成功' + (fail > 0 ? ', ' + fail + ' 失败' : ''), success === ops.length ? 'success' : 'error');
+  renderProductTreePage();
+}
+
+async function discardProductChanges() {
+  if (!confirm('放弃所有未保存的更改？此操作不可撤销。')) return;
+  _productPendingOps = [];
+  // Re-fetch from server
+  try {
     _productTree = (await API.get('/product-doc-templates/product-tree')) || [];
     if (_selectedNodeId) await _loadTemplatesForNode(_selectedNodeId);
-    renderProductTreePage();
-  } catch(e) {
-    showToast('删除失败: ' + (e.detail || e.message), 'error');
-  }
+  } catch(e) {}
+  renderProductTreePage();
 }
 
 // ── Import Templates from Another Node ──
@@ -884,23 +1057,17 @@ function selectImportSource(nodeId, name, el) {
   if (btn) btn.disabled = false;
 }
 
-async function executeImportTemplates() {
+function executeImportTemplates() {
   if (!window._importSourceId || !_selectedNodeId) return;
   document.querySelector('.shared-dialog-overlay').remove();
 
-  showToast('正在导入模板...', 'info');
-  try {
-    var res = await API.post('/product-doc-templates/import/' + _selectedNodeId, {
-      source_node_id: window._importSourceId,
-    });
-    window._importSourceId = null;
-    showToast(res.message || '导入完成', 'success');
-    _productTree = (await API.get('/product-doc-templates/product-tree')) || [];
-    if (_selectedNodeId) await _loadTemplatesForNode(_selectedNodeId);
-    renderProductTreePage();
-  } catch(e) {
-    showToast('导入失败: ' + (e.detail || e.message), 'error');
-  }
+  var sourceId = window._importSourceId;
+  window._importSourceId = null;
+
+  // Push as pending operation: "import" type
+  _productPendingOps.push({ type: 'import', source_node_id: sourceId });
+  showToast('导入模板已加入待保存队列，点击保存配置生效', 'info');
+  renderProductTreePage();
 }
 
 

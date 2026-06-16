@@ -172,6 +172,12 @@
 /* ── Legacy dt-stage-item (still used by project templates tab) ── */
 /* These are kept for backward compatibility with the project tab */
 
+/* ── Drag-and-drop ── */
+.dt-drag-over {
+  background: var(--accent-lt) !important;
+  border-top: 2px dashed var(--accent) !important;
+}
+
 @media (max-width: 768px) {
   .dt-layout {
     grid-template-columns: 1fr;
