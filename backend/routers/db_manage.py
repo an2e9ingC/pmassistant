@@ -228,6 +228,9 @@ def restore_backup(
     except Exception as e:
         return {"code": 1, "message": f"备份文件校验失败: {e}"}
 
+    # Log BEFORE replacing the database file (after which connections are invalid)
+    log_audit(db, cu, "db_restore_backup", f"from={safe_name}", "管理", "high")
+
     # Create a backup of current database before restoring
     t = datetime.now().strftime("%Y%m%d-%H%M%S")
     pre_restore_path = BACKUP_DIR / f"pma-backup-{t}-before-restore.db"
@@ -235,6 +238,10 @@ def restore_backup(
         shutil.copy2(_db_path, pre_restore_path)
     except Exception as e:
         return {"code": 1, "message": f"备份当前数据库失败: {e}"}
+
+    # Close all DB connections before replacing the file
+    from backend.database import engine
+    engine.dispose()
 
     # Restore from backup
     try:
@@ -246,7 +253,6 @@ def restore_backup(
             shutil.copy2(str(pre_restore_path), _db_path)
         return {"code": 1, "message": f"恢复失败，已回滚: {e}"}
 
-    log_audit(db, cu, "db_restore_backup", f"from={safe_name} pre_restore={pre_restore_path.name}", "管理", "high")
     return {
         "code": 0,
         "data": {"pre_restore_backup": pre_restore_path.name},

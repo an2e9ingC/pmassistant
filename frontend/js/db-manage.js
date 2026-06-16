@@ -333,17 +333,13 @@ async function restoreBackup(name) {
 
   var startTime = Date.now();
   try {
-    var res = await API.post('/admin/db/backups/' + encodeURIComponent(name) + '/restore');
+    await API.post('/admin/db/backups/' + encodeURIComponent(name) + '/restore');
     if (progEl.parentElement) progEl.remove();
     var elapsed = Math.round((Date.now() - startTime) / 1000);
-    if (res && res.code === 0) {
-      showToast('恢复成功（' + elapsed + 's）', 'success');
-      setTimeout(async function() {
-        try { _dbBackups = await API.get('/admin/db/backups') || []; renderDbManage(); } catch(e) {}
-      }, 500);
-    } else {
-      showToast('恢复失败: ' + ((res && res.message) || '未知错误'), 'error');
-    }
+    showToast('恢复成功（' + elapsed + 's）', 'success');
+    setTimeout(async function() {
+      try { _dbBackups = await API.get('/admin/db/backups') || []; renderDbManage(); } catch(e) {}
+    }, 500);
   } catch(e) {
     if (progEl.parentElement) progEl.remove();
     showToast('恢复失败: ' + (e.message || '未知错误'), 'error');
@@ -377,20 +373,16 @@ async function rekeyDatabase() {
 
   var startTime = Date.now();
   try {
-    var res = await API.post('/admin/db/rekey', {
+    await API.post('/admin/db/rekey', {
       old_passphrase: oldPass,
       new_passphrase: newPass,
     });
     if (progEl.parentElement) progEl.remove();
     var elapsed = Math.round((Date.now() - startTime) / 1000);
-    if (res && res.code === 0) {
-      showToast('数据库密码已更换（' + elapsed + 's）', 'success');
-      document.getElementById('db-rekey-old-pass').value = '';
-      document.getElementById('db-rekey-new-pass').value = '';
-      document.getElementById('db-rekey-confirm').value = '';
-    } else {
-      showToast('更换失败: ' + ((res && res.message) || '未知错误'), 'error');
-    }
+    showToast('数据库密码已更换（' + elapsed + 's）', 'success');
+    document.getElementById('db-rekey-old-pass').value = '';
+    document.getElementById('db-rekey-new-pass').value = '';
+    document.getElementById('db-rekey-confirm').value = '';
   } catch(e) {
     if (progEl.parentElement) progEl.remove();
     showToast('更换密码失败: ' + (e.message || '未知错误'), 'error');
