@@ -807,27 +807,29 @@ class SyncService:
         Releases are product-level data — sync ALL products, not just filtered ones."""
         from backend.models.zentao import CachedRelease, CachedProduct
         log = _log_sync(db, "releases")
-        created, updated, deleted = 0, 0, 0
+        created, updated, deleted, failed_products = 0, 0, 0, 0
         total = 0
         try:
-            products = db.query(CachedProduct).all()
+            products = db.query(CachedProduct).filter(CachedProduct.is_local != True).all()
 
             import asyncio
             sem = asyncio.Semaphore(10)
-            all_releases = []
             all_api_ids = set()
 
             async def _fetch_one(prod):
+                nonlocal failed_products
                 async with sem:
                     try:
-                        return await self.client.get_product_releases(prod.id)
+                        return (prod.id, await self.client.get_product_releases(prod.id))
                     except Exception:
                         logger.warning(f"Failed to fetch releases for product {prod.id}")
-                        return []
+                        failed_products += 1
+                        return (prod.id, [])
 
             results = await asyncio.gather(*[_fetch_one(p) for p in products])
 
-            for prod, releases in zip(products, results):
+            for prod_id, releases in results:
+                prod = next((p for p in products if p.id == prod_id), None)
                 total += len(releases)
                 for r in releases:
                     r_id = r["id"]
@@ -848,7 +850,7 @@ class SyncService:
                     else:
                         db.add(CachedRelease(
                             id=r_id,
-                            product_id=prod.id,
+                            product_id=prod_id,
                             name=r.get("name", ""),
                             marker=r.get("marker", 0),
                             status=r.get("status", "normal"),
@@ -869,7 +871,7 @@ class SyncService:
                 db.commit()
 
             _finish_log(db, log, "success", total, created + deleted, updated)
-            return {"fetched": total, "created": created, "updated": updated, "deleted": deleted}
+            return {"fetched": total, "created": created, "updated": updated, "deleted": deleted, "failed_products": failed_products}
         except Exception as e:
             _finish_log(db, log, "failed", error=str(e))
             raise

@@ -179,7 +179,7 @@
         <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle;margin-right:3px"><circle cx="8" cy="8" r="6"/><line x1="8" y1="5" x2="8" y2="9"/><circle cx="8" cy="12" r="0.8" fill="currentColor" stroke="none"/></svg>
         反馈 Bug
       </a>
-      <span id="app-version">v2026.06.16-beta16</span>
+      <span id="app-version">v2026.06.16-beta17</span>
     </div>
   </div>
 </aside>
@@ -1084,7 +1084,12 @@ async function triggerSync() {
     // GitLab
     var gs = d.gitlab_summary || {};
     var gIcon = gs.status === 'success' ? '✓' : (gs.status === 'failed' ? '✗' : '—');
-    msgLines.push('GitLab ' + gIcon + ' ' + (gs.summary || gs.status || '未执行'));
+    var rel = d.releases || {};
+    var relSummary = gs.summary || gs.status || '未执行';
+    if (rel.failed_products && rel.failed_products > 0) {
+      relSummary += '（' + rel.failed_products + ' 个产品获取失败）';
+    }
+    msgLines.push('GitLab ' + gIcon + ' ' + relSummary);
 
     // NAS
     var ns = d.nas_summary || {};
