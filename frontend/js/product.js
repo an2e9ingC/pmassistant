@@ -309,13 +309,13 @@ function renderProdInfo(p) {
   // Stats row — KPI numbers with status colors
   html += '<div class="delivery-kpi" style="grid-template-columns:repeat(4, 1fr)">';
   var stats = [
-    { label: '关联项目', value: p.project_count || 0, color: 'var(--accent)', icon: '🔗', click: true },
+    { label: '关联项目', value: p.project_count || 0, color: 'var(--accent)', icon: '🔗', click: true, clickAction: 'switchToProdMaintenance()' },
     { label: '发布次数', value: p.releases || 0, color: 'var(--warn)', icon: '🚀' },
     { label: '需求总数', value: p.total_stories || 0, color: 'var(--success)', icon: '📋' },
     { label: 'Bug 总数', value: p.total_bugs || 0, color: 'var(--danger)', icon: '🐛' },
   ];
   stats.forEach(function(s) {
-    html += '<div class="dkpi"' + (s.click ? ' style="cursor:pointer" onclick="gotoView(\'topology\');document.getElementById(\'topo-prod\').value=\'' + escHtml(p.code || p.name) + '\';setTimeout(function(){if(typeof onTopoSearch==\'function\')onTopoSearch()},100)" title="点击查看关联项目"' : '') + '>' +
+    html += '<div class="dkpi"' + (s.click ? ' style="cursor:pointer" onclick="' + (s.clickAction || ('gotoView(\'topology\');document.getElementById(\'topo-prod\').value=\'' + escHtml(p.code || p.name) + '\';setTimeout(function(){if(typeof onTopoSearch==\'function\')onTopoSearch()},100)')) + '" title="点击查看关联项目"' : '') + '>' +
       '<div class="dkpi-lbl">' + s.icon + ' ' + s.label + '</div>' +
       '<div class="dkpi-val" style="color:' + s.color + '">' + s.value + '</div></div>';
   });
@@ -506,6 +506,11 @@ function _renderProdDocsInline(docs) {
   el.innerHTML = html;
 }
 
+function switchToProdMaintenance() {
+  var tab = document.querySelector('#view-product-detail .dtab[onclick*="maintenance"]');
+  if (tab) switchProdTab('maintenance', tab);
+}
+
 async function toggleProdDocStatus(docId, newStatus) {
   try {
     await API.put('/products/' + _prodDetailCurId + '/documents/' + docId, { status: newStatus });
@@ -612,18 +617,19 @@ function renderProdMaintenance(p) {
   var projects = p.projects || [];
   var canEdit = isAdminLike() || hasPerm('product_link');
 
-  // Action buttons for edit/delete/link
+  // Action buttons for edit/delete
   var html = '<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">';
   if (canEdit) {
     html += '<button class="btn btn-primary" style="font-size:11px;padding:5px 12px" onclick="showProdEditDialog()">✎ 编辑产品</button>';
-    html += '<button class="btn btn-primary" style="font-size:11px;padding:5px 12px" onclick="showProdLinkProjectsDialog()">🔗 关联项目</button>';
     html += '<button class="btn" style="font-size:11px;padding:5px 12px;color:var(--danger);border-color:var(--danger)" onclick="deleteCurrentProduct()">✕ 删除产品</button>';
   }
   html += '</div>';
 
   // Associated projects table
   html += '<div class="card" style="padding:0;overflow:hidden;margin-bottom:16px">';
-  html += '<div class="section-hd" style="padding:12px 16px"><div class="section-title">关联项目 (' + projects.length + ')</div></div>';
+  html += '<div class="section-hd" style="padding:12px 16px"><div class="section-title">关联项目 (' + projects.length + ')</div>' +
+    (canEdit ? '<button class="btn btn-primary" style="font-size:11px;padding:4px 10px" onclick="showProdLinkProjectsDialog()">+ 关联项目</button>' : '') +
+  '</div>';
   if (projects.length) {
     html += '<div class="table-scroll" style="max-height:400px"><table class="stage-table"><thead><tr>' +
       '<th>编号</th><th>项目名</th><th>客户</th><th>类型</th><th>状态</th><th>进度</th><th>计划完成</th>' +
@@ -650,7 +656,9 @@ function renderProdMaintenance(p) {
   // Customer info
   var customers = p.customers_from_desc || [];
   html += '<div class="card" style="padding:16px;margin-bottom:16px">';
-  html += '<div class="section-hd"><div class="section-title">关联客户 (' + customers.length + ')</div></div>';
+  html += '<div class="section-hd"><div class="section-title">关联客户 (' + customers.length + ')</div>' +
+    (canEdit ? '<button class="btn btn-primary" style="font-size:11px;padding:4px 10px" onclick="showProdCustomersDialog()">+ 关联客户</button>' : '') +
+  '</div>';
   if (customers.length) {
     html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">';
     customers.forEach(function(c) {
@@ -666,7 +674,7 @@ function renderProdMaintenance(p) {
   var tagsList = p.tags_list || [];
   html += '<div class="card" style="padding:16px;margin-bottom:16px">';
   html += '<div class="section-hd"><div class="section-title">产品标签 (' + (tagsList[0] && tagsList[0] !== '' ? tagsList.filter(function(t){return t!=='';}).length : 0) + ')</div>' +
-    (canEdit ? '<button class="btn" style="font-size:11px;padding:3px 10px" onclick="showProdTagsDialog()">+ 管理标签</button>' : '') +
+    (canEdit ? '<button class="btn btn-primary" style="font-size:11px;padding:4px 10px" onclick="showProdTagsDialog()">+ 管理标签</button>' : '') +
   '</div>';
   if (tagsList.length > 0 && tagsList[0] !== '') {
     html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">';
@@ -775,6 +783,36 @@ async function saveProdLinkProjects() {
   }
 }
 
+function showProdCustomersDialog() {
+  API.get('/customers').then(function(custs) {
+    var currentCusts = _prodDetail.customers_from_desc || [];
+    var listHtml = custs.map(function(c) {
+      var checked = currentCusts.indexOf(c.name) >= 0;
+      return '<label style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:13px;cursor:pointer">' +
+        '<input type="checkbox" value="' + escHtml(c.name) + '"' + (checked ? ' checked' : '') + ' class="prod-cust-cb">' + escHtml(c.name) +
+      '</label>';
+    }).join('');
+    openDialog('关联客户 — ' + escHtml(_prodDetail.name),
+      '<div style="max-height:300px;overflow-y:auto;margin-bottom:8px">' + listHtml + '</div>',
+      [{text: '取消', onclick: 'closeSharedDialog()'},
+       {text: '保存', cls: 'btn-primary', onclick: 'saveProdCustomers()'}],
+      {hideClose: true});
+  }).catch(function() { showToast('获取客户列表失败', 'error'); });
+}
+
+async function saveProdCustomers() {
+  var names = [];
+  document.querySelectorAll('.prod-cust-cb:checked').forEach(function(cb) { names.push(cb.value); });
+  closeSharedDialog();
+  try {
+    await API.put('/products/' + _prodDetailCurId, { pma_customer: names.join('、') });
+    showToast('关联客户已更新', 'success');
+    loadProductDetail(_prodDetailCurId);
+  } catch(e) {
+    showToast('更新失败: ' + (e.message || ''), 'error');
+  }
+}
+
 async function deleteCurrentProduct() {
   if (!confirm('确认删除产品「' + (_prodDetail.name || '') + '」？\n\n此操作不可撤销。')) return;
   var ok = await verifyPassword('删除产品', 'pw_verify_product_node_del');
@@ -789,7 +827,8 @@ async function deleteCurrentProduct() {
 }
 
 function showProdTagsDialog() {
-  API.get('/pma-tags?category=product').then(function(tags) {
+  API.get('/tags').then(function(allTags) {
+    var tags = (allTags || []).filter(function(t) { return !t.category || t.category === 'product'; });
     var currentTags = (_prodDetail.tags || '').split(',').filter(function(t) { return t; });
     var listHtml = tags.map(function(t) {
       var checked = currentTags.indexOf(t.name) >= 0;
