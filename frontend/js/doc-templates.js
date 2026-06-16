@@ -598,7 +598,10 @@ function renderProductTreePage() {
   rightHtml += '<div class="dt-right-head">';
   rightHtml += '<div class="section-title">' + titleHtml + '</div>';
   if (canEdit && isL2) {
-    rightHtml += '<button class="btn" style="font-size:11px;padding:4px 12px" onclick="showAddProductTemplateForm()">+ 添加文档</button>';
+    rightHtml += '<span style="display:flex;gap:4px">' +
+      '<button class="btn" style="font-size:11px;padding:4px 12px" onclick="showAddProductTemplateForm()">+ 添加文档</button>' +
+      '<button class="btn" style="font-size:11px;padding:4px 12px" onclick="showImportTemplatesDialog()">导入模板</button>' +
+    '</span>';
   }
   rightHtml += '</div>';
 
@@ -784,6 +787,92 @@ async function deleteProductTemplate(id) {
     showToast('删除失败: ' + (e.detail || e.message), 'error');
   }
 }
+
+// ── Import Templates from Another Node ──
+
+function showImportTemplatesDialog() {
+  if (!_selectedNodeId) { showToast('请先选择目标产品节点', 'error'); return; }
+
+  var selNode = _findNodeById(_selectedNodeId);
+  var currentName = selNode ? selNode.name : '';
+
+  // Collect all L2 nodes except current, with template counts
+  var l2Nodes = [];
+  function collectL2(nodes) {
+    nodes.forEach(function(n) {
+      if (n.level === 2 && n.id !== _selectedNodeId) {
+        l2Nodes.push({id: n.id, name: n.name, template_count: n.template_count || 0});
+      }
+      if (n.children && n.children.length) collectL2(n.children);
+    });
+  }
+  collectL2(_productTree);
+
+  if (!l2Nodes.length) {
+    showToast('没有其他产品系列可导入模板', 'info');
+    return;
+  }
+
+  var listHtml = l2Nodes.map(function(n) {
+    return '<div style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border)" onclick="selectImportSource(' + n.id + ', \'' + escHtml(n.name).replace(/'/g, "\\'") + '\', this)">' +
+      '<span style="font-weight:500">' + escHtml(n.name) + '</span>' +
+      '<span style="font-size:11px;color:var(--muted);margin-left:8px">（' + n.template_count + ' 个模板）</span>' +
+    '</div>';
+  }).join('');
+
+  var html =
+    '<div style="margin-bottom:12px">' +
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:6px">目标节点：<span style="color:var(--accent);font-weight:500">' + escHtml(currentName) + '</span></div>' +
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">选择源节点，将其文档模板覆盖到当前节点。目标节点现有模板将被全部清除后替换。</div>' +
+      '<div style="max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:6px" id="import-src-list">' + listHtml + '</div>' +
+      '<div id="import-src-selected" style="margin-top:8px;font-size:11px;color:var(--accent)"></div>' +
+    '</div>';
+
+  openDialog('导入文档模板 — ' + escHtml(currentName), html,
+    [
+      {text: '取消', onclick: 'document.querySelector(\".shared-dialog-overlay\").remove()'},
+      {text: '导入', cls: 'btn-primary', onclick: 'executeImportTemplates()', id: 'import-templates-btn'},
+    ],
+    {hideClose: true}
+  );
+
+  window._importSourceId = null;
+  var btn = document.getElementById('import-templates-btn');
+  if (btn) btn.disabled = true;
+}
+
+function selectImportSource(nodeId, name, el) {
+  window._importSourceId = nodeId;
+  document.querySelectorAll('#import-src-list > div').forEach(function(d) {
+    d.style.background = '';
+    d.style.borderLeft = '';
+  });
+  el.style.background = 'var(--accent-lt)';
+  el.style.borderLeft = '3px solid var(--accent)';
+  document.getElementById('import-src-selected').textContent = '已选择: ' + name;
+  var btn = document.getElementById('import-templates-btn');
+  if (btn) btn.disabled = false;
+}
+
+async function executeImportTemplates() {
+  if (!window._importSourceId || !_selectedNodeId) return;
+  document.querySelector('.shared-dialog-overlay').remove();
+
+  showToast('正在导入模板...', 'info');
+  try {
+    var res = await API.post('/product-doc-templates/import/' + _selectedNodeId, {
+      source_node_id: window._importSourceId,
+    });
+    window._importSourceId = null;
+    showToast(res.message || '导入完成', 'success');
+    _productTree = (await API.get('/product-doc-templates/product-tree')) || [];
+    if (_selectedNodeId) await _loadTemplatesForNode(_selectedNodeId);
+    renderProductTreePage();
+  } catch(e) {
+    showToast('导入失败: ' + (e.detail || e.message), 'error');
+  }
+}
+
 
 /* ═══════════════════════════════════════════════════
    TAGS TEMPLATE TAB

@@ -198,3 +198,69 @@ def delete_template(
         raise HTTPException(status_code=404, detail="Template not found")
     log_audit(db, user, "product_doc_template_del", f"删除模板: {tpl_name}", "产品", "high")
     return {"code": 0, "data": None, "message": "ok"}
+
+
+# ── Import Templates from Another Node ──
+
+class ImportTemplatesRequest(BaseModel):
+    source_node_id: int
+
+
+@router.post("/import/{target_node_id}", response_model=dict)
+def import_templates(
+    target_node_id: int,
+    body: ImportTemplatesRequest,
+    db: Session = Depends(get_db),
+    user=Depends(require_any_perm("doc_template", "product_link")),
+):
+    """Import all document templates from another node to the target node.
+    Existing templates on the target are fully replaced (cover mode)."""
+    if target_node_id == body.source_node_id:
+        raise HTTPException(status_code=400, detail="源节点和目标节点不能相同")
+
+    # Verify both nodes exist
+    src = db.query(ProductLine).filter(ProductLine.id == body.source_node_id).first()
+    tgt = db.query(ProductLine).filter(ProductLine.id == target_node_id).first()
+    if not src:
+        raise HTTPException(status_code=404, detail=f"源节点 {body.source_node_id} 不存在")
+    if not tgt:
+        raise HTTPException(status_code=404, detail=f"目标节点 {target_node_id} 不存在")
+
+    # Get source templates
+    src_templates = db.query(ProductDocTemplate).filter(
+        ProductDocTemplate.product_id == body.source_node_id
+    ).order_by(ProductDocTemplate.sort_order).all()
+
+    if not src_templates:
+        return {"code": 0, "data": {"imported": 0, "removed": 0}, "message": "源节点没有模板可导入"}
+
+    # Delete all existing templates on target
+    removed = db.query(ProductDocTemplate).filter(
+        ProductDocTemplate.product_id == target_node_id
+    ).delete()
+
+    # Import all source templates to target
+    imported = 0
+    for tpl in src_templates:
+        new_tpl = ProductDocTemplate(
+            product_id=target_node_id,
+            doc_name=tpl.doc_name,
+            sort_order=tpl.sort_order,
+            description=tpl.description,
+            responsible_role=tpl.responsible_role,
+        )
+        db.add(new_tpl)
+        imported += 1
+
+    db.commit()
+
+    detail = f"从「{src.name}」导入 {imported} 个模板覆盖到「{tgt.name}」"
+    if removed > 0:
+        detail += f"（清除原有 {removed} 个）"
+    log_audit(db, user, "product_doc_template_import", detail, "产品", "medium")
+
+    return {
+        "code": 0,
+        "data": {"imported": imported, "removed": removed},
+        "message": f"从「{src.name}」导入 {imported} 个模板" + (f"，清除了原有 {removed} 个模板" if removed > 0 else ""),
+    }
