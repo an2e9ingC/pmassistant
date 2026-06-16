@@ -260,7 +260,7 @@ function renderProdDetailHeader(p) {
         (p.is_local
           ? ' <span class="pm-src-badge local" style="vertical-align:middle;margin-left:6px">PMA本地</span>'
           : (p.synced_at ? ' <span class="pm-src-badge synced" style="vertical-align:middle;margin-left:6px" title="同步于 ' + escHtml(p.synced_at) + '">禅道同步</span>' : '')) +
-        (p.zentao_url ? '<a href="' + p.zentao_url + '" target="_blank" class="zentao-link" style="margin-left:10px;font-size:12px" title="在禅道中查看">&#x2197; 禅道</a>' : '') +
+        (!p.is_local && p.zentao_url ? '<a href="' + p.zentao_url + '" target="_blank" class="zentao-link" style="margin-left:10px;font-size:12px" title="在禅道中查看">&#x2197; 禅道</a>' : '') +
       '</div>' +
       (p.code ? '<div class="detail-subtitle" style="font-family:var(--mono);font-size:12px;color:var(--muted)">' + escHtml(p.code) + '</div>' : '') +
     '</div>';
@@ -288,7 +288,12 @@ function renderProdInfo(p) {
     '</div>';
 
   // Product Documents
-  html += '<div class="section-hd" style="margin-top:20px"><div class="section-title">产品文档</div></div>';
+  var nodeIds = (p.linked_node_ids && p.linked_node_ids.length) ? p.linked_node_ids : [];
+  var templateLink = '';
+  if (nodeIds.length) {
+    templateLink = '<a id="prod-docs-template-link" href="javascript:void(0)" onclick="gotoView(\'doc-templates\');_selectedNodeId=' + nodeIds[0] + ';setTimeout(function(){if(typeof initProductDocTemplates==\'function\'){initProductDocTemplates();}},200)" style="font-size:11px;color:var(--accent);text-decoration:none;margin-left:8px">查看文档模板详情 →</a>';
+  }
+  html += '<div class="section-hd" style="margin-top:20px"><div class="section-title">产品文档</div>' + templateLink + '</div>';
   html += '<div id="prod-docs-inline"><div class="loading-spinner" style="padding:20px">加载中...</div></div>';
 
   // Product Notes
@@ -377,10 +382,29 @@ async function deleteProductNote(noteId, el) {
 function _renderProdDocsInline(docs) {
   var el = document.getElementById('prod-docs-inline');
   if (!el) return;
+
+  // Update template link
+  var linkEl = document.getElementById('prod-docs-template-link');
+  if (linkEl) {
+    if (docs.length) {
+      linkEl.textContent = '查看文档模板详情 →';
+      linkEl.style.color = 'var(--accent)';
+    } else {
+      linkEl.textContent = '未找到匹配的文档模板';
+      linkEl.style.color = 'var(--muted)';
+      linkEl.style.cursor = 'default';
+      linkEl.onclick = function() { return false; };
+    }
+  }
+
   if (!docs.length) {
     el.innerHTML = '<div class="card" style="padding:20px"><div class="empty-state">该产品暂未关联文档模板。请先在「文档模板配置」页面为对应产品系列添加文档模板。</div></div>';
     return;
   }
+
+  var user = getCurrentUser();
+  var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+  var canEdit = user && (user.role === 'admin' || perms.indexOf('admin') >= 0 || perms.indexOf('product_link') >= 0);
 
   // Group by stage_type
   var stageOrder = ['硬件开发', '结构设计', 'BSP开发', '软件开发', '测试', '通用'];
@@ -394,7 +418,7 @@ function _renderProdDocsInline(docs) {
   var colorMap = { '硬件开发': 'var(--accent-lt)', '结构设计': '#e8f5e9', 'BSP开发': '#fff3e0', '软件开发': '#e3f2fd', '测试': '#fce4ec', '通用': 'var(--surface)' };
   var html = '<div class="card" style="padding:0;overflow:hidden">';
   html += '<div class="table-scroll" style="max-height:600px"><table class="stage-table"><thead><tr>' +
-    '<th style="width:80px">分类</th><th style="width:50px">序号</th><th>文档名称</th><th>责任人</th><th>路径</th><th>上传人</th><th>上传时间</th><th>操作</th>' +
+    '<th style="width:80px">分类</th><th style="width:50px">序号</th><th>文档名称</th><th>责任人</th><th style="width:90px">状态</th><th>路径</th><th>上传人</th><th>上传时间</th><th>操作</th>' +
     '</tr></thead><tbody>';
   stageOrder.forEach(function(st) {
     var items = grouped[st];
@@ -405,26 +429,42 @@ function _renderProdDocsInline(docs) {
     var cellStyle = 'background:' + bg + ';';
     items.forEach(function(d, i) {
       var isLast = i === items.length - 1;
-      var borderStyle = isLast ? '' : '';
       html += '<tr>';
       if (i === 0) {
-        html += '<td rowspan="' + items.length + '" style="vertical-align:middle;text-align:center;font-weight:600;' + cellStyle + 'color:var(--accent);font-size:12px;' + borderStyle + '">' + escHtml(st) + '<br><span style="font-size:10px;color:var(--muted)">' + items.length + ' 项</span></td>';
+        html += '<td rowspan="' + items.length + '" style="vertical-align:middle;text-align:center;font-weight:600;' + cellStyle + 'color:var(--accent);font-size:12px">' + escHtml(st) + '<br><span style="font-size:10px;color:var(--muted)">' + items.length + ' 项</span></td>';
       }
-      html += '<td style="font-family:var(--mono);color:var(--muted);text-align:center;' + cellStyle + borderStyle + '">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
-        '<td style="font-weight:500;' + cellStyle + borderStyle + '">' + escHtml(d.doc_name) + '</td>' +
-        '<td style="font-size:12px;white-space:nowrap;' + cellStyle + borderStyle + '">' + escHtml(d.responsible_role || '—') + '</td>' +
-        '<td style="font-size:12px;' + cellStyle + borderStyle + '">' + (d.doc_path
+      // Status pill
+      var statusHtml = d.done
+        ? '<span class="pill completed" style="cursor:' + (canEdit ? 'pointer' : 'default') + '" onclick="' + (canEdit ? 'toggleProdDocStatus(' + d.id + ',\'pending\')' : '') + '">已提交</span>' +
+          (d.completed_at ? '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px">' + escHtml(d.completed_at) + '</div>' : '')
+        : '<span class="pill blocked" style="cursor:' + (canEdit ? 'pointer' : 'default') + '" onclick="' + (canEdit ? 'toggleProdDocStatus(' + d.id + ',\'submitted\')' : '') + '">未提交</span>';
+
+      html += '<td style="font-family:var(--mono);color:var(--muted);text-align:center;' + cellStyle + '">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
+        '<td style="font-weight:500;' + cellStyle + '">' + escHtml(d.doc_name) + '</td>' +
+        '<td style="font-size:12px;white-space:nowrap;' + cellStyle + '">' + escHtml(d.responsible_role || '—') + '</td>' +
+        '<td style="' + cellStyle + '">' + statusHtml + '</td>' +
+        '<td style="font-size:12px;' + cellStyle + '">' + (d.doc_path
           ? '<a href="' + escHtml(d.doc_path) + '" target="_blank" style="color:var(--accent);text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">' + escHtml(d.doc_path) + '</a>'
           : '—') + '</td>' +
-        '<td style="font-size:12px;color:var(--muted);' + cellStyle + borderStyle + '">—</td>' +
-        '<td style="font-size:11px;color:var(--muted);' + cellStyle + borderStyle + '">—</td>' +
-        '<td style="white-space:nowrap;text-align:center;' + cellStyle + borderStyle + '"><span style="font-style:italic;color:var(--muted);font-size:11px">TODO：预览</span></td>' +
+        '<td style="font-size:12px;color:var(--muted);' + cellStyle + '">' + escHtml(d.uploaded_by || '—') + '</td>' +
+        '<td style="font-size:11px;color:var(--muted);' + cellStyle + '">' + escHtml(d.uploaded_at || '—') + '</td>' +
+        '<td style="white-space:nowrap;text-align:center;' + cellStyle + '"><span style="font-style:italic;color:var(--muted);font-size:11px">TODO：预览</span></td>' +
       '</tr>';
     });
   });
   html += '</tbody></table></div></div>';
 
   el.innerHTML = html;
+}
+
+async function toggleProdDocStatus(docId, newStatus) {
+  try {
+    await API.put('/products/' + _prodDetailCurId + '/documents/' + docId, { status: newStatus });
+    var docs = await API.get('/products/' + _prodDetailCurId + '/documents');
+    _renderProdDocsInline(docs || []);
+  } catch(e) {
+    showToast('操作失败: ' + (e.message || '未知错误'), 'error');
+  }
 }
 
 // ── Tab: 产品维护（项目关联、客户、标签） ──

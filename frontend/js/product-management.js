@@ -8,6 +8,7 @@ var _pmTree = [];              // [{id, name, parent_id, level, product_count, p
 var _pmSelectedNodeId = null;  // currently selected tree node ID
 var _pmNodeProducts = [];      // products linked to selected node (for L2 → products)
 var _pmNodeChildren = [];      // child nodes of selected node (for L1 → L2 list)
+var _pmNodeTemplates = [];     // doc templates for selected node
 var _pmAllProducts = [];       // all products (for dropdowns)
 var _pmAllProjects = [];       // all projects (for dropdowns)
 var _pmIsAdmin = false;
@@ -95,7 +96,7 @@ function _pmGetBreadcrumbNodeId(index) {
 
 async function _pmLoadContent() {
   var selNode = _pmFindNodeById(_pmSelectedNodeId);
-  if (!selNode) { _pmNodeProducts = []; _pmNodeChildren = []; return; }
+  if (!selNode) { _pmNodeProducts = []; _pmNodeChildren = []; _pmNodeTemplates = []; return; }
 
   // Child nodes (L2 children for L1, L3 children for L2)
   _pmNodeChildren = (selNode.children || []).slice();
@@ -105,6 +106,17 @@ async function _pmLoadContent() {
     _pmNodeProducts = (await API.get('/product-management/nodes/' + _pmSelectedNodeId + '/products')) || [];
   } catch (e) {
     _pmNodeProducts = [];
+  }
+
+  // Doc templates for this node (L2 only)
+  if (selNode.level === 2) {
+    try {
+      _pmNodeTemplates = (await API.get('/product-doc-templates/templates/' + _pmSelectedNodeId)) || [];
+    } catch (e) {
+      _pmNodeTemplates = [];
+    }
+  } else {
+    _pmNodeTemplates = [];
   }
 }
 
@@ -179,6 +191,21 @@ function renderProductManagementPage() {
     }
   } else if (isL2) {
     // L2 selected → Show products linked to this L2 node
+
+    // Doc templates quick view
+    if (_pmNodeTemplates && _pmNodeTemplates.length) {
+      var templateStages = {};
+      _pmNodeTemplates.forEach(function(t) { var s = t.stage_type || '通用'; templateStages[s] = (templateStages[s] || 0) + 1; });
+      var templateParts = [];
+      ['硬件开发', '结构设计', 'BSP开发', '软件开发', '测试', '通用'].forEach(function(st) {
+        if (templateStages[st]) templateParts.push(st + templateStages[st] + '个');
+      });
+      rightHtml += '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">文档模板：' +
+        templateParts.join('、') + '　' +
+        '<a href="javascript:void(0)" onclick="gotoView(\'doc-templates\');_selectedNodeId=' + _pmSelectedNodeId + ';setTimeout(function(){if(typeof initProductDocTemplates==\'function\'){initProductDocTemplates();}},200)" style="color:var(--accent);font-size:11px;text-decoration:none">查看详情 →</a>' +
+      '</div>';
+    }
+
     rightHtml += '<div style="display:flex;gap:6px;margin-bottom:12px">';
     if (_pmIsAdmin) {
       rightHtml += '<button class="btn btn-primary" style="font-size:11px;padding:5px 12px" onclick="_pmShowCreateProductDialog()">+ 添加三级产品</button>';

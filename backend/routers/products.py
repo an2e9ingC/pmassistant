@@ -187,35 +187,53 @@ def delete_product_note(
 
 @router.get("/{product_id}/documents", response_model=dict)
 def get_product_documents(product_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
-    """Return doc templates for the product's L2 node, with status."""
-    from backend.models.document import ProductDocTemplate, ProductLine
-    from backend.models.zentao import ProductNodeLink
-
-    # Find which L2 node(s) this product is linked to
-    links = db.query(ProductNodeLink).filter(ProductNodeLink.product_id == product_id).all()
-    if not links:
-        return {"code": 0, "data": [], "message": "ok"}
-
-    # Get templates from all linked L2 nodes
-    docs = []
-    for link in links:
-        node = db.query(ProductLine).filter(ProductLine.id == link.product_node_id).first()
-        if not node:
-            continue
-        templates = db.query(ProductDocTemplate).filter(
-            ProductDocTemplate.product_id == link.product_node_id
-        ).order_by(ProductDocTemplate.sort_order).all()
-        for t in templates:
-            docs.append({
-                "id": t.id,
-                "doc_name": t.doc_name,
-                "sort_order": t.sort_order,
-                "stage_type": t.stage_type or "通用",
-                "description": t.description or "",
-                "responsible_role": t.responsible_role or "",
-                "doc_path": t.doc_path or "",
-                "node_name": node.name,
-                "node_id": node.id,
-            })
-
+    """Return product document instances (synced from templates) with status and actual paths."""
+    from backend.services.document_service import get_or_init_product_documents
+    docs = get_or_init_product_documents(db, product_id)
     return {"code": 0, "data": docs, "message": "ok"}
+
+
+class DocUpdate(BaseModel):
+    status: Optional[str] = None  # "pending" | "submitted"
+    location: Optional[str] = None
+    uploaded_by: Optional[str] = None
+    uploaded_at: Optional[str] = None
+
+
+@router.put("/{product_id}/documents/{doc_id}", response_model=dict)
+def update_product_document(
+    product_id: int,
+    doc_id: int,
+    body: DocUpdate,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Update a product document's status/location."""
+    from backend.models.document import ProductDocument
+    from datetime import datetime as _dt
+
+    doc = db.query(ProductDocument).filter(
+        ProductDocument.id == doc_id,
+        ProductDocument.product_id == product_id,
+    ).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if body.status is not None:
+        doc.status = body.status
+        if body.status == "submitted" and not doc.completed_at:
+            doc.completed_at = _dt.now()
+        elif body.status == "pending":
+            doc.completed_at = None
+    if body.location is not None:
+        doc.location = body.location
+    if body.uploaded_by is not None:
+        doc.uploaded_by = body.uploaded_by
+    if body.uploaded_at is not None:
+        try:
+            doc.uploaded_at = _dt.fromisoformat(body.uploaded_at)
+        except ValueError:
+            pass
+    doc.updated_by = user.username
+    db.commit()
+    return {"code": 0, "data": {"id": doc.id, "status": doc.status}, "message": "ok"}

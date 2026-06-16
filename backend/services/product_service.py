@@ -235,7 +235,13 @@ def _product_detail(p: CachedProduct, db: Session) -> dict:
         "releases_list": _get_product_releases(db, p.id),
         "is_local": bool(p.is_local),
         "synced_at": to_local_str(p.synced_at) or None,
+        "linked_node_ids": _get_product_node_ids(db, p.id),
     }
+
+
+def _get_product_node_ids(db: Session, product_id: int) -> list[int]:
+    from backend.models.zentao import ProductNodeLink
+    return [l.product_node_id for l in db.query(ProductNodeLink).filter(ProductNodeLink.product_id == product_id).all()]
 
 
 def _get_product_releases(db: Session, product_id: int) -> list[dict]:

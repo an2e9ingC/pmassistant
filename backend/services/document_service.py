@@ -845,6 +845,106 @@ def _product_template_dict(t: ProductDocTemplate) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Product Documents — per-product doc instances from templates
+# ---------------------------------------------------------------------------
+
+def get_or_init_product_documents(db: Session, product_id: int) -> list[dict]:
+    """Sync product document instances from templates, return with status.
+    Each template generates one ProductDocument row for this product.
+    Existing rows preserve their status/location/upload info on re-sync."""
+    from backend.models.document import ProductDocTemplate, ProductDocument
+    from backend.models.zentao import CachedProduct, ProductNodeLink
+
+    # Find which L2 nodes this product is linked to
+    links = db.query(ProductNodeLink).filter(ProductNodeLink.product_id == product_id).all()
+    if not links:
+        return []
+
+    product = db.query(CachedProduct).filter(CachedProduct.id == product_id).first()
+    product_code = (product.code or "") if product else ""
+
+    results = []
+    for link in links:
+        templates = db.query(ProductDocTemplate).filter(
+            ProductDocTemplate.product_id == link.product_node_id
+        ).order_by(ProductDocTemplate.sort_order).all()
+
+        for tpl in templates:
+            # Derive actual product path: replace {code} placeholder if present
+            template_path = tpl.doc_path or ""
+            actual_path = template_path.replace("{code}", product_code) if product_code else template_path
+
+            # Find existing doc instance
+            existing = db.query(ProductDocument).filter(
+                ProductDocument.product_id == product_id,
+                ProductDocument.template_id == tpl.id,
+            ).first()
+
+            if not existing:
+                existing = ProductDocument(
+                    product_id=product_id,
+                    template_id=tpl.id,
+                    stage_type=tpl.stage_type or "通用",
+                    doc_name=tpl.doc_name,
+                    sort_order=tpl.sort_order,
+                    responsible_role=tpl.responsible_role,
+                    description=tpl.description,
+                    doc_path=actual_path,
+                    status="pending",
+                )
+                db.add(existing)
+                db.flush()
+            else:
+                # Update template-derived fields (but preserve user-set status/location)
+                existing.doc_name = tpl.doc_name
+                existing.stage_type = tpl.stage_type or "通用"
+                existing.sort_order = tpl.sort_order
+                existing.responsible_role = tpl.responsible_role
+                existing.description = tpl.description
+                existing.doc_path = actual_path
+
+            done = existing.status == "submitted"
+            warn = existing.status == "pending"
+            results.append({
+                "id": existing.id,
+                "template_id": tpl.id,
+                "doc_name": existing.doc_name,
+                "sort_order": existing.sort_order,
+                "stage_type": existing.stage_type or "通用",
+                "description": existing.description or "",
+                "responsible_role": existing.responsible_role or "",
+                "doc_path": actual_path,
+                "status": existing.status,
+                "done": done,
+                "warn": warn,
+                "location": existing.location or "",
+                "uploaded_by": existing.uploaded_by or "",
+                "uploaded_at": to_local_str(existing.uploaded_at) if existing.uploaded_at else "",
+                "completed_at": to_local_str(existing.completed_at) if existing.completed_at else "",
+                "updated_by": existing.updated_by or "",
+                "node_name": "",  # filled below if needed
+            })
+
+    # Cleanup: remove doc instances for templates that no longer exist
+    if links:
+        all_template_ids = set()
+        for link in links:
+            tpls = db.query(ProductDocTemplate).filter(
+                ProductDocTemplate.product_id == link.product_node_id
+            ).all()
+            for t in tpls:
+                all_template_ids.add(t.id)
+        if all_template_ids:
+            stale = db.query(ProductDocument).filter(
+                ProductDocument.product_id == product_id,
+                ~ProductDocument.template_id.in_(all_template_ids),
+            ).delete()
+
+    db.commit()
+    return results
+
+
+# ---------------------------------------------------------------------------
 # PMA Tags — label library for products and projects
 # ---------------------------------------------------------------------------
 

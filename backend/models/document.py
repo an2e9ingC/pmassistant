@@ -66,6 +66,30 @@ class ProductLine(Base):
     created_at = Column(DateTime, default=func.now())
 
 
+class ProductDocument(Base):
+    """Per-product document instance, initialized from ProductDocTemplate on first view.
+    Tracks actual document status, location, and upload info for each product."""
+    __tablename__ = "product_documents"
+
+    id = Column(Integer, primary_key=True)
+    product_id = Column(Integer, nullable=False, index=True)
+    template_id = Column(Integer, ForeignKey("product_doc_templates.id"), nullable=True, index=True)
+    stage_type = Column(String(64), nullable=False, default="通用")
+    doc_name = Column(String(256), nullable=False)
+    sort_order = Column(Integer, default=0)
+    status = Column(String(32), default="pending")
+    responsible_role = Column(String(128), nullable=True)
+    description = Column(String(512), nullable=True)
+    doc_path = Column(String(512), nullable=True)
+    location = Column(Text, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    uploaded_by = Column(String(64), nullable=True)
+    uploaded_at = Column(DateTime, nullable=True)
+    updated_by = Column(String(64), nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
 class PmaTag(Base):
     """Managed tags for products and projects. Configurable via admin UI."""
     __tablename__ = "pma_tags"
