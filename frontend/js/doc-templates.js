@@ -246,7 +246,7 @@ function showAddTemplateForm() {
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">说明（可选）</label>' +
       '<input class="search-inp" id="dt-desc" style="width:100%;box-sizing:border-box">' +
     '</div>',
-    [{text: '取消', cls: '', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
+    [{text: '取消', cls: '', onclick: 'closeSharedDialog()'},
      {text: '确定', cls: 'btn-primary', onclick: 'saveTemplate()'}], {hideClose: true});
 }
 
@@ -272,7 +272,7 @@ function showEditTemplateForm(id) {
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">说明（可选）</label>' +
       '<input class="search-inp" id="dt-desc" value="' + escHtml(d.description || '') + '" style="width:100%;box-sizing:border-box">' +
     '</div>',
-    [{text: '取消', cls: '', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
+    [{text: '取消', cls: '', onclick: 'closeSharedDialog()'},
      {text: '确定', cls: 'btn-primary', onclick: 'saveTemplate(' + id + ')'}], {hideClose: true});
 }
 
@@ -821,7 +821,7 @@ function showAddProductTemplateForm() {
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">说明（可选）</label>' +
       '<input class="search-inp" id="ptf-desc" style="width:100%;box-sizing:border-box">' +
     '</div>',
-    [{text: '取消', cls: '', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
+    [{text: '取消', cls: '', onclick: 'closeSharedDialog()'},
      {text: '确定', cls: 'btn-primary', onclick: 'saveProductTemplate()'}], {hideClose: true});
 }
 
@@ -849,7 +849,7 @@ function showEditProductTemplateForm(id) {
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">说明（可选）</label>' +
       '<input class="search-inp" id="ptf-desc" value="' + escHtml(tpl.description || '') + '" style="width:100%;box-sizing:border-box">' +
     '</div>',
-    [{text: '取消', cls: '', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
+    [{text: '取消', cls: '', onclick: 'closeSharedDialog()'},
      {text: '确定', cls: 'btn-primary', onclick: 'saveProductTemplate(' + id + ')'}], {hideClose: true});
 }
 
@@ -1033,7 +1033,7 @@ function showImportTemplatesDialog() {
 
   openDialog('导入文档模板 — ' + escHtml(currentName), html,
     [
-      {text: '取消', onclick: 'document.querySelector(\".shared-dialog-overlay\").remove()'},
+      {text: '取消', onclick: 'closeSharedDialog()'},
       {text: '导入', cls: 'btn-primary', onclick: 'executeImportTemplates()', id: 'import-templates-btn'},
     ],
     {hideClose: true}
@@ -1057,9 +1057,14 @@ function selectImportSource(nodeId, name, el) {
   if (btn) btn.disabled = false;
 }
 
+function closeSharedDialog() {
+  var overlay = document.querySelector('.shared-dialog-overlay');
+  if (overlay) overlay.remove();
+}
+
 function executeImportTemplates() {
   if (!window._importSourceId || !_selectedNodeId) return;
-  document.querySelector('.shared-dialog-overlay').remove();
+  closeSharedDialog();
 
   var sourceId = window._importSourceId;
   window._importSourceId = null;
@@ -1148,7 +1153,7 @@ function showAddTagDialog() {
         '<option value="product">产品</option>' +
       '</select>' +
     '</div>',
-    [{text: '取消', cls: '', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
+    [{text: '取消', cls: '', onclick: 'closeSharedDialog()'},
      {text: '确定', cls: 'btn-primary', onclick: 'saveTag()'}], {hideClose: true});
 }
 
@@ -1169,7 +1174,7 @@ function showEditTagDialog(id) {
         '<option value="product"' + (tag.category === 'product' ? ' selected' : '') + '>产品</option>' +
       '</select>' +
     '</div>',
-    [{text: '取消', cls: '', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
+    [{text: '取消', cls: '', onclick: 'closeSharedDialog()'},
      {text: '确定', cls: 'btn-primary', onclick: 'saveTag(' + id + ')'}],
     {hideClose: true, overlayClass: 'shared-dialog-overlay'});
 }
@@ -1182,7 +1187,7 @@ async function saveTag(id) {
   var cat = catEl ? catEl.value : '';
   if (!name) { showToast('请输入标签名', 'error'); return; }
 
-  document.querySelector('.shared-dialog-overlay').remove();
+  closeSharedDialog();
   try {
     if (id) {
       var updated = await API.put('/tags/' + id, {name: name, category: cat || null});
