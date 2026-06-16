@@ -39,6 +39,16 @@ NAS 文件 ───────────┘
 - 本地 JWT 认证
 - 暂不包含：产品-项目映射图、交付文档管理、统计报告、外包进度
 
+### 项目文档索引
+
+| 文档 | 路径 | 说明 |
+|------|------|------|
+| 开发指南 | `CLAUDE.md` | 本文档，AI/开发者必读 |
+| 数据库文档 | `doc/db.md` | 完整 schema、表关系、权限体系、数据保护方案 |
+| 开发计划 | `docs/dev-plan.md` | 版本历史与开发路线 |
+| UI 设计规范 | `docs/design-spec.md` | 加载状态、通知、徽章、主题规则 |
+| 部署运维 | `docs/deploy-guide.md` | 部署与运维参考 |
+
 ---
 
 ## 2. 并行开发约定（重要）
@@ -265,6 +275,13 @@ Co-Authored-By: <model-name> / <tool-name>
 - 修复 GitLab issue 时 body 加 `Closes #X`
 - **不要每改一行就 commit**，等用户确认后再提交
 - **每次 commit 必须包含数据库文件**：`git add data/pma-$PORT.db`（当前运行端口对应的 db 文件）。数据库是项目数据的一部分，需随代码一起版本管理
+- **数据层变更必须同步更新 `doc/db.md`**：涉及以下任一改动时，commit 前必须更新数据库文档：
+  - 新增/修改/删除 ORM 模型（`backend/models/*.py`）
+  - 新增/修改/删除 SQLAlchemy 表、列、约束、索引、关系
+  - `database.py` 中的 schema 迁移逻辑（`_migrate_*` 函数）
+  - 角色定义或权限配置变更（`init_db()` 种子数据）
+  - 新增 `pma_settings` 配置项
+  - 更新内容至少包括：第 2 章（表一览）、第 5 章（对应表的详细定义）、第 6 章（外键，如有变化）、第 7 章（唯一约束，如有变化）
 
 ### Co-Authored-By（AI 生成 commit 必须）
 
