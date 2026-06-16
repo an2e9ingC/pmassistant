@@ -179,14 +179,29 @@ def _product_item(p: CachedProduct, db: Session) -> dict:
     link_count = db.query(ProductProjectLink).filter(
         ProductProjectLink.product_id == p.id
     ).count()
-    # Use program_name from Zentao product line, fallback to PMA-local category
-    cat = p.program_name or p.category
+    # Build tree path from product_node_links
+    tree_path = ""
+    from backend.models.zentao import ProductNodeLink
+    from backend.models.document import ProductLine
+    node_links = db.query(ProductNodeLink).filter(ProductNodeLink.product_id == p.id).all()
+    if node_links:
+        node = db.query(ProductLine).filter(ProductLine.id == node_links[0].product_node_id).first()
+        if node:
+            parts = [node.name]
+            parent_id = node.parent_id
+            while parent_id:
+                parent = db.query(ProductLine).filter(ProductLine.id == parent_id).first()
+                if not parent: break
+                parts.insert(0, parent.name)
+                parent_id = parent.parent_id
+            tree_path = " > ".join(parts)
     tags_str = p.tags or ""
     return {
         "id": p.id, "code": p.code, "name": p.name,
         "type": p.type, "status": p.status,
-        "category": cat,
+        "category": p.program_name or p.category or "",
         "program_name": p.program_name,
+        "tree_path": tree_path,
         "project_count": link_count,
         "description": p.description or "",
         "tags": tags_str,

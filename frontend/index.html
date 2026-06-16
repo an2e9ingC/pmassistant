@@ -179,7 +179,7 @@
         <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle;margin-right:3px"><circle cx="8" cy="8" r="6"/><line x1="8" y1="5" x2="8" y2="9"/><circle cx="8" cy="12" r="0.8" fill="currentColor" stroke="none"/></svg>
         反馈 Bug
       </a>
-      <span id="app-version">v2026.06.17-beta11</span>
+      <span id="app-version">v2026.06.17-beta12</span>
     </div>
   </div>
 </aside>
@@ -766,59 +766,17 @@
 
     <!-- ══════════════════════ VIEW 6 — PRODUCT LIST ══════════════════════ -->
     <div class="view" id="view-product-list">
-
-      <div class="kpi-grid" id="prod-kpi-grid">
-        <div class="kpi-card active" data-prod-cat="" onclick="filterByProductLine('', this)">
-          <div class="kpi-label">全部产品</div>
-          <div class="kpi-value" id="prod-kpi-all">—</div>
-          <div class="kpi-meta">所有产品线</div>
+      <div class="pov-toolbar">
+        <div class="pov-search">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/>
+          </svg>
+          <input type="text" id="prod-search" placeholder="搜索型号、名称…（Ctrl+K 聚焦）" oninput="onProdSearch(this.value)">
         </div>
+        <span class="pov-shortcut-hint">Ctrl+K</span>
       </div>
-
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-        <span style="font-size:11px;color:var(--muted);font-weight:600;white-space:nowrap">状态:</span>
-        <span class="tabs" id="prod-status-filter" style="display:inline-flex">
-          <span class="tab active" data-st="" onclick="filterByProdStatus('',this)">全部</span>
-          <span class="tab" data-st="normal" onclick="filterByProdStatus('normal',this)">正常</span>
-          <span class="tab" data-st="closed" onclick="filterByProdStatus('closed',this)">已关闭</span>
-        </span>
-      </div>
-
-      <div class="section-hd">
-        <div class="section-title">产品列表</div>
-        <div class="section-acts">
-          <div class="search-wrap" style="max-width:260px">
-            <svg class="search-ico" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-              <circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/>
-            </svg>
-            <input class="search-inp" id="prod-search" placeholder="搜索产品名、标签…" oninput="onProdSearch(this.value)">
-            <button class="search-clear" onclick="clearSearch('prod-search',onProdSearch)" title="清除">&times;</button>
-          </div>
-        </div>
-      </div>
-      <div class="card table-scroll" style="max-height:calc(100vh - 380px)">
-        <table class="proj-table">
-          <thead>
-            <tr>
-              <th width="8%">产品编号</th>
-              <th>产品名</th>
-              <th width="10%">产品线</th>
-              <th width="8%">状态</th>
-              <th width="8%">关联项目</th>
-              <th width="18%">标签</th>
-              <th width="8%" style="cursor:pointer;user-select:none" onclick="filterByProdSource()" title="点击切换：全部 → 禅道 → 本地">
-                <span style="display:inline-flex;align-items:center;gap:3px">
-                  来源
-                  <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" opacity="0.4" id="prod-src-filter-icon"><path d="M1 2h8L5.5 6v3l-1-0.5V6z"/></svg>
-                </span>
-                <span id="prod-src-indicator" style="font-size:9px;font-weight:400;color:var(--accent)"></span>
-              </th>
-            </tr>
-          </thead>
-          <tbody id="prod-tbody">
-            <tr><td colspan="7"><div class="loading-spinner">加载中...</div></td></tr>
-          </tbody>
-        </table>
+      <div class="pov-l1-grid" id="pov-container">
+        <div class="loading-spinner">加载中...</div>
       </div>
     </div>
 
