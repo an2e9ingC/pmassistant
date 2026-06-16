@@ -374,6 +374,19 @@ class SyncService:
             products = await self.client.get_products()
             api_ids = {p["id"] for p in products}
             created, updated, deleted = 0, 0, 0
+
+            # Cleanup stale products first (Zentao-synced = is_local IS NOT TRUE)
+            stale = db.query(CachedProduct).filter(
+                ~CachedProduct.id.in_(api_ids),
+                CachedProduct.is_local != True,
+            ).all()
+            for sp in stale:
+                db.query(ProductProjectLink).filter(ProductProjectLink.product_id == sp.id).delete()
+                db.delete(sp)
+                deleted += 1
+            if deleted:
+                db.commit()
+
             for p in products:
                 pid = p.get("program", 0)
                 prog_name = prog_names.get(pid, "")
@@ -400,18 +413,12 @@ class SyncService:
                     obj.program_name = prog_name
                     db.add(obj)
                     created += 1
-            # Cleanup stale products
-            if api_ids:
-                stale = db.query(CachedProduct).filter(~CachedProduct.id.in_(api_ids)).all()
-                for sp in stale:
-                    db.query(ProductProjectLink).filter(ProductProjectLink.product_id == sp.id).delete()
-                    db.delete(sp)
-                    deleted += 1
             db.commit()
 
             # Auto-link synced products to product tree nodes by program_name matching
             try:
-                from backend.models.document import ProductLine, ProductNodeLink
+                from backend.models.zentao import ProductNodeLink
+                from backend.models.document import ProductLine
                 synced_products = db.query(CachedProduct).filter(
                     CachedProduct.is_local == False,
                     CachedProduct.program_name.isnot(None),
@@ -451,7 +458,10 @@ class SyncService:
             prog_map = {pr["id"]: pr.get("name", "") for pr in programs}
             # Filter by code prefix if configured
             from backend.config import settings
-            pf = getattr(settings, "ZENTAO_PROJECT_FILTER", "") or os.environ.get("ZENTAO_PROJECT_FILTER", "")
+            from backend.models.local import PmaSetting
+            pf = (PmaSetting.get(db, "project_filter", "") or
+                  getattr(settings, "ZENTAO_PROJECT_FILTER", "") or
+                  os.environ.get("ZENTAO_PROJECT_FILTER", ""))
             if pf:
                 prefixes = [x.strip() for x in pf.split(",") if x.strip()]
                 projects = [p for p in projects if any(p.get("code", "").startswith(px) for px in prefixes)]
@@ -460,6 +470,27 @@ class SyncService:
             _sync_progress["total"] = len(projects)
             api_ids = {p["id"] for p in projects}
             created, updated, deleted = 0, 0, 0
+
+            # Cleanup: delete Zentao-synced projects not matching current filter or stale in Zentao
+            all_synced = db.query(CachedProject).filter(CachedProject.is_local != True).all()
+            to_delete = []
+            for sp in all_synced:
+                keep = sp.id in api_ids
+                if pf and sp.code and not any(sp.code.startswith(px) for px in prefixes):
+                    keep = False  # doesn't match filter → delete
+                if not keep:
+                    to_delete.append(sp)
+            for sp in to_delete:
+                db.query(CachedTask).filter(CachedTask.project_id == sp.id).delete()
+                db.query(CachedExecution).filter(CachedExecution.project_id == sp.id).delete()
+                db.query(ProductProjectLink).filter(ProductProjectLink.project_id == sp.id).delete()
+                db.query(CustomerProjectLink).filter(CustomerProjectLink.project_id == sp.id).delete()
+                db.delete(sp)
+                deleted += 1
+            if deleted:
+                db.commit()
+                logger.info(f"Cleaned up {deleted} projects (filter={pf or 'none'})")
+
             for idx, p in enumerate(projects):
                 _sync_progress["current"] = idx + 1
                 _sync_progress["current_item"] = p.get("name", str(p["id"]))
@@ -472,17 +503,6 @@ class SyncService:
                 else:
                     db.add(self._build_project(p, pm, prog_name))
                     created += 1
-            # Cleanup: delete projects no longer in Zentao (skip if API returned none)
-            if api_ids:
-                stale = db.query(CachedProject).filter(~CachedProject.id.in_(api_ids)).all()
-                for sp in stale:
-                    # Cascade: delete related executions, tasks, and links
-                    db.query(CachedTask).filter(CachedTask.project_id == sp.id).delete()
-                    db.query(CachedExecution).filter(CachedExecution.project_id == sp.id).delete()
-                    db.query(ProductProjectLink).filter(ProductProjectLink.project_id == sp.id).delete()
-                    db.query(CustomerProjectLink).filter(CustomerProjectLink.project_id == sp.id).delete()
-                    db.delete(sp)
-                    deleted += 1
             db.commit()
 
             # Sync customer links from project customer_name
@@ -525,7 +545,10 @@ class SyncService:
             projects = db.query(CachedProject).all()
             # Apply project filter
             from backend.config import settings
-            pf = getattr(settings, "ZENTAO_PROJECT_FILTER", "") or os.environ.get("ZENTAO_PROJECT_FILTER", "")
+            from backend.models.local import PmaSetting
+            pf = (PmaSetting.get(db, "project_filter", "") or
+                  getattr(settings, "ZENTAO_PROJECT_FILTER", "") or
+                  os.environ.get("ZENTAO_PROJECT_FILTER", ""))
             if pf:
                 prefixes = [x.strip() for x in pf.split(",") if x.strip()]
                 projects = [p for p in projects if p.code and any(p.code.startswith(px) for px in prefixes)]
