@@ -416,7 +416,7 @@ function _renderProdDocsInline(docs) {
   });
 
   var colorMap = { '硬件开发': 'var(--accent-lt)', '结构设计': '#e8f5e9', 'BSP开发': '#fff3e0', '软件开发': '#e3f2fd', '测试': '#fce4ec', '通用': 'var(--surface)' };
-  var typeLabels = { gitlab: 'GitLab 发布链接', svn: 'SVN 文档链接', nas: 'NAS 文档链接', solidworks: 'SOLIDWORKS' };
+  var typeLabels = { gitlab: 'GitLab', svn: 'SVN', nas: 'NAS', solidworks: 'SOLIDWORKS' };
   var html = '<div class="card" style="padding:0;overflow:hidden">';
   html += '<div class="table-scroll" style="max-height:600px"><table class="stage-table"><thead><tr>' +
     '<th style="width:80px">分类</th><th style="width:50px">序号</th><th>文档名称</th><th>责任人</th><th style="width:90px">状态</th><th>类型</th><th>路径</th><th>上传人</th><th>上传时间</th><th>操作</th>' +
@@ -495,7 +495,7 @@ function _openUploadDialog(d) {
     nas: 'NAS 路径，如 \\\\192.168.0.x\\share\\...',
     solidworks: 'SOLIDWORKS 文件路径'
   };
-  var typeLabels = { gitlab: 'GitLab 发布链接', svn: 'SVN 文档链接', nas: 'NAS 文档链接', solidworks: 'SOLIDWORKS' };
+  var typeLabels = { gitlab: 'GitLab', svn: 'SVN', nas: 'NAS', solidworks: 'SOLIDWORKS' };
   var makeTypeBtn = function(type, label) {
     var active = type === defaultType;
     return '<button class="btn upload-type-btn" style="font-size:11px;padding:4px 10px' +
@@ -506,9 +506,9 @@ function _openUploadDialog(d) {
     '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">期望路径：' + escHtml(d.doc_path || '未配置') + '</div>' +
     '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:6px">文档类型</label>' +
     '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap" id="upload-type-btns">' +
-      makeTypeBtn('gitlab', 'GitLab 发布链接') +
-      makeTypeBtn('svn', 'SVN 文档链接') +
-      makeTypeBtn('nas', 'NAS 文档链接') +
+      makeTypeBtn('gitlab', 'GitLab') +
+      makeTypeBtn('svn', 'SVN') +
+      makeTypeBtn('nas', 'NAS') +
       makeTypeBtn('solidworks', 'SOLIDWORKS') +
     '</div>' +
     '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:6px">文档位置</label>' +

@@ -53,6 +53,16 @@ function switchDocTemplateTab(tab, el) {
   else if (tab === 'product') initProductDocTemplates();
   else if (tab === 'tags') initTags();
 }
+function _openDocDialog(title, bodyHtml, buttons, opts, defaultDocType) {
+  openDialog(title, bodyHtml, buttons, opts);
+  if (defaultDocType) {
+    setTimeout(function() {
+      var dialog = document.querySelector('.note-dialog');
+      if (dialog) _applyDocTypePlaceholder(dialog, defaultDocType);
+    }, 60);
+  }
+}
+
 var _currentTab = 'project';
 
 // ── Drag-and-drop reorder ──
@@ -238,7 +248,7 @@ function selectDocTemplateStage(stageType) {
 
 function showAddTemplateForm() {
   var nextSort = ((_templatesGrouped[_selectedStage] || []).length + 1);
-  openDialog('添加文档模板 — ' + escHtml(_selectedStage),
+  _openDocDialog('添加文档模板 — ' + escHtml(_selectedStage),
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名称</label>' +
       '<input class="search-inp" id="dt-doc-name" style="width:100%;box-sizing:border-box">' +
@@ -246,32 +256,32 @@ function showAddTemplateForm() {
     '<div style="display:flex;gap:10px;margin-bottom:10px">' +
       '<div style="width:80px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">序号</label>' +
         '<input class="search-inp" id="dt-sort" type="number" min="0" value="' + nextSort + '" style="width:100%;box-sizing:border-box;padding:8px 4px;text-align:center"></div>' +
-      '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">责任人（岗位）</label>' + _roleSelect('') + '</div>' +
+      '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">责任人（岗位） <span style="color:var(--danger)">*必填</span></label>' + _roleSelect('') + '</div>' +
     '</div>' +
-    '<input type="hidden" class="doc-type-value" id="dt-doctype" value="">' +
+    '<input type="hidden" class="doc-type-value" id="dt-doctype" value="gitlab">' +
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:6px">文档类型 <span style="color:var(--danger)">*必填</span></label>' +
       '<div style="display:flex;gap:6px;flex-wrap:wrap" id="dt-doctype-btns">' +
-        _docTypeButtons('') +
+        _docTypeButtons('gitlab') +
       '</div>' +
     '</div>' +
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">路径 <span style="color:var(--danger)">*必填</span></label>' +
-      '<input class="search-inp" id="dt-path" placeholder="文档索引路径（如 NAS 路径）" style="width:100%;box-sizing:border-box">' +
+      '<input class="search-inp" id="dt-path" placeholder="选择类型后自动提示" style="width:100%;box-sizing:border-box">' +
     '</div>' +
     '<div style="margin-bottom:4px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">说明（可选）</label>' +
       '<input class="search-inp" id="dt-desc" style="width:100%;box-sizing:border-box">' +
     '</div>',
     [{text: '取消', cls: '', onclick: 'closeSharedDialog()'},
-     {text: '确定', cls: 'btn-primary', onclick: 'saveTemplate()'}], {hideClose: true});
+     {text: '确定', cls: 'btn-primary', onclick: 'saveTemplate()'}], {hideClose: true}, 'gitlab');
 }
 
 function showEditTemplateForm(id) {
   var docs = _templatesGrouped[_selectedStage] || [];
   var d = docs.find(function(x) { return x.id === id; });
   if (!d) { showToast('未找到该模板数据，请刷新页面', 'error'); return; }
-  openDialog('编辑文档模板',
+  _openDocDialog('编辑文档模板',
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名称</label>' +
       '<input class="search-inp" id="dt-doc-name" value="' + escHtml(d.doc_name) + '" style="width:100%;box-sizing:border-box">' +
@@ -279,25 +289,25 @@ function showEditTemplateForm(id) {
     '<div style="display:flex;gap:10px;margin-bottom:10px">' +
       '<div style="width:80px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">序号</label>' +
         '<input class="search-inp" id="dt-sort" type="number" min="0" value="' + (d.sort_order != null ? d.sort_order : 1) + '" style="width:100%;box-sizing:border-box;padding:8px 4px;text-align:center"></div>' +
-      '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">责任人（岗位）</label>' + _roleSelect(d.responsible_role || '') + '</div>' +
+      '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">责任人（岗位） <span style="color:var(--danger)">*必填</span></label>' + _roleSelect(d.responsible_role || '') + '</div>' +
     '</div>' +
-    '<input type="hidden" class="doc-type-value" id="dt-doctype" value="' + escHtml(d.doc_type || '') + '">' +
+    '<input type="hidden" class="doc-type-value" id="dt-doctype" value="' + escHtml(d.doc_type || 'gitlab') + '">' +
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:6px">文档类型 <span style="color:var(--danger)">*必填</span></label>' +
       '<div style="display:flex;gap:6px;flex-wrap:wrap" id="dt-doctype-btns">' +
-        _docTypeButtons(d.doc_type || '') +
+        _docTypeButtons(d.doc_type || 'gitlab') +
       '</div>' +
     '</div>' +
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">路径 <span style="color:var(--danger)">*必填</span></label>' +
-      '<input class="search-inp" id="dt-path" value="' + escHtml(d.doc_path || '') + '" placeholder="文档索引路径" style="width:100%;box-sizing:border-box">' +
+      '<input class="search-inp" id="dt-path" value="' + escHtml(d.doc_path || '') + '" placeholder="选择类型后自动提示" style="width:100%;box-sizing:border-box">' +
     '</div>' +
     '<div style="margin-bottom:4px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">说明（可选）</label>' +
       '<input class="search-inp" id="dt-desc" value="' + escHtml(d.description || '') + '" style="width:100%;box-sizing:border-box">' +
     '</div>',
     [{text: '取消', cls: '', onclick: 'closeSharedDialog()'},
-     {text: '确定', cls: 'btn-primary', onclick: 'saveTemplate(' + id + ')'}], {hideClose: true});
+     {text: '确定', cls: 'btn-primary', onclick: 'saveTemplate(' + id + ')'}], {hideClose: true}, d.doc_type || 'gitlab');
 }
 
 function saveTemplate(id) {
@@ -319,6 +329,7 @@ function saveTemplate(id) {
   if (!name) { showToast('请输入文档名称', 'error'); return; }
   if (!path) { showToast('请输入路径', 'error'); return; }
   if (!docType) { showToast('请选择文档类型', 'error'); return; }
+  if (!role) { showToast('请选择责任人', 'error'); return; }
   if (isNaN(sort) || sort < 0) sort = 0;
 
   var stageType = _selectedStage;
@@ -658,9 +669,9 @@ var _productNextTempId = -1000;  // temp IDs for locally-added templates
 var PRODUCT_STAGE_TYPES = ['硬件开发', '结构设计', 'BSP开发', '软件开发', '测试', '通用'];
 
 var DOC_TYPES = [
-  { key: 'gitlab', label: 'GitLab 发布链接' },
-  { key: 'svn', label: 'SVN 文档链接' },
-  { key: 'nas', label: 'NAS 文档链接' },
+  { key: 'gitlab', label: 'GitLab' },
+  { key: 'svn', label: 'SVN' },
+  { key: 'nas', label: 'NAS' },
   { key: 'solidworks', label: 'SOLIDWORKS' },
 ];
 var DOC_TYPE_LABELS = {};
@@ -683,9 +694,23 @@ function _selectDocType(type, el) {
     btn.style.background = ''; btn.style.color = '';
   });
   el.style.background = 'var(--accent)'; el.style.color = '#fff';
-  // Set hidden input value
-  var hidden = container.parentElement.querySelector('.doc-type-value');
+  _applyDocTypePlaceholder(el.closest('.note-dialog'), type);
+}
+
+function _applyDocTypePlaceholder(dialog, type) {
+  if (!dialog || !type) return;
+  var hidden = dialog.querySelector('.doc-type-value');
   if (hidden) hidden.value = type;
+  var placeholders = {
+    gitlab: 'GitLab 发布链接，如 http://192.168.0.128/.../-/releases/...',
+    svn: 'SVN 地址，如 http://192.168.0.124:8443/svn/...',
+    nas: 'NAS 路径，如 \\\\192.168.0.x\\share\\...',
+    solidworks: 'SOLIDWORKS 文件路径'
+  };
+  var pathInput = dialog.querySelector('input[id*="path"]');
+  if (pathInput && placeholders[type]) {
+    pathInput.placeholder = placeholders[type];
+  }
 }
 var _dtBreadcrumbIds = [];       // cached breadcrumb node IDs for click nav
 
@@ -945,7 +970,7 @@ function showAddProductTemplateForm() {
   var selNode = _findNodeById(_selectedNodeId);
   var name = selNode ? selNode.name : '';
   var nextSort = _productStageDocs ? _productStageDocs.length + 1 : 1;
-  openDialog('添加文档模板 — ' + escHtml(name),
+  _openDocDialog('添加文档模板 — ' + escHtml(name),
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名称</label>' +
       '<input class="search-inp" id="ptf-name" style="width:100%;box-sizing:border-box">' +
@@ -959,25 +984,25 @@ function showAddProductTemplateForm() {
         '</select></div>' +
     '</div>' +
     '<div style="display:flex;gap:10px;margin-bottom:10px">' +
-      '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">责任人（岗位）</label>' + _roleSelect('') + '</div>' +
+      '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">责任人（岗位） <span style="color:var(--danger)">*必填</span></label>' + _roleSelect('') + '</div>' +
     '</div>' +
-    '<input type="hidden" class="doc-type-value" id="ptf-doctype" value="">' +
+    '<input type="hidden" class="doc-type-value" id="ptf-doctype" value="gitlab">' +
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:6px">文档类型 <span style="color:var(--danger)">*必填</span></label>' +
       '<div style="display:flex;gap:6px;flex-wrap:wrap" id="ptf-doctype-btns">' +
-        _docTypeButtons(_productStage ? '' : '') +
+        _docTypeButtons('gitlab') +
       '</div>' +
     '</div>' +
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">路径 <span style="color:var(--danger)">*必填</span></label>' +
-      '<input class="search-inp" id="ptf-path" placeholder="文档索引路径（如 NAS 路径）" style="width:100%;box-sizing:border-box">' +
+      '<input class="search-inp" id="ptf-path" placeholder="选择类型后自动提示" style="width:100%;box-sizing:border-box">' +
     '</div>' +
     '<div style="margin-bottom:4px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">说明（可选）</label>' +
       '<input class="search-inp" id="ptf-desc" style="width:100%;box-sizing:border-box">' +
     '</div>',
     [{text: '取消', cls: '', onclick: 'closeSharedDialog()'},
-     {text: '确定', cls: 'btn-primary', onclick: 'saveProductTemplate()'}], {hideClose: true});
+     {text: '确定', cls: 'btn-primary', onclick: 'saveProductTemplate()'}], {hideClose: true}, 'gitlab');
 }
 
 function showEditProductTemplateForm(id) {
@@ -987,7 +1012,7 @@ function showEditProductTemplateForm(id) {
   }
   if (!tpl) return;
   var tplStage = tpl.stage_type || '通用';
-  openDialog('编辑文档模板',
+  _openDocDialog('编辑文档模板',
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名称</label>' +
       '<input class="search-inp" id="ptf-name" value="' + escHtml(tpl.doc_name) + '" style="width:100%;box-sizing:border-box">' +
@@ -1001,7 +1026,7 @@ function showEditProductTemplateForm(id) {
         '</select></div>' +
     '</div>' +
     '<div style="display:flex;gap:10px;margin-bottom:10px">' +
-      '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">责任人（岗位）</label>' + _roleSelect(tpl.responsible_role || '') + '</div>' +
+      '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">责任人（岗位） <span style="color:var(--danger)">*必填</span></label>' + _roleSelect(tpl.responsible_role || '') + '</div>' +
     '</div>' +
     '<input type="hidden" class="doc-type-value" id="ptf-doctype" value="' + escHtml(tpl.doc_type || '') + '">' +
     '<div style="margin-bottom:10px">' +
@@ -1019,7 +1044,7 @@ function showEditProductTemplateForm(id) {
       '<input class="search-inp" id="ptf-desc" value="' + escHtml(tpl.description || '') + '" style="width:100%;box-sizing:border-box">' +
     '</div>',
     [{text: '取消', cls: '', onclick: 'closeSharedDialog()'},
-     {text: '确定', cls: 'btn-primary', onclick: 'saveProductTemplate(' + id + ')'}], {hideClose: true});
+     {text: '确定', cls: 'btn-primary', onclick: 'saveProductTemplate(' + id + ')'}], {hideClose: true}, tpl.doc_type || 'gitlab');
 }
 
 function renderProductAfterReorder() {
@@ -1058,6 +1083,7 @@ function saveProductTemplate(id) {
   if (!nameEl.value.trim()) { showToast('请输入文档名称', 'error'); return; }
   if (!path) { showToast('请输入路径', 'error'); return; }
   if (!docType) { showToast('请选择文档类型', 'error'); return; }
+  if (!role) { showToast('请选择责任人', 'error'); return; }
   var name = nameEl.value.trim();
 
   var overlay = document.querySelector('.shared-dialog-overlay');
