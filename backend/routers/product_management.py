@@ -106,8 +106,12 @@ def link_product_to_node(
     """Link a product to a tree node."""
     try:
         result = pm_service.link_product_to_node(db, body.product_id, body.node_id)
+        from backend.models.document import ProductLine
+        from backend.models.zentao import CachedProduct
+        prod = db.query(CachedProduct).filter(CachedProduct.id == body.product_id).first()
+        node = db.query(ProductLine).filter(ProductLine.id == body.node_id).first()
         log_audit(db, user, "product_node_link",
-                  f"product_id={body.product_id}, node_id={body.node_id}",
+                  f"关联产品「{prod.name if prod else body.product_id}」到节点「{node.name if node else body.node_id}」",
                   "产品", "medium")
         return {"code": 0, "data": result, "message": "ok"}
     except ValueError as e:
@@ -124,8 +128,12 @@ def unlink_product_from_node(
     """Remove a product-node link."""
     try:
         result = pm_service.unlink_product_from_node(db, product_id, node_id)
+        from backend.models.document import ProductLine
+        from backend.models.zentao import CachedProduct
+        prod = db.query(CachedProduct).filter(CachedProduct.id == product_id).first()
+        node = db.query(ProductLine).filter(ProductLine.id == node_id).first()
         log_audit(db, user, "product_node_unlink",
-                  f"product_id={product_id}, node_id={node_id}",
+                  f"取消关联「{prod.name if prod else product_id}」从节点「{node.name if node else node_id}」",
                   "产品", "medium")
         return {"code": 0, "data": result, "message": "ok"}
     except ValueError as e:
@@ -151,8 +159,10 @@ def create_local_product(
             description=body.description or "",
             project_ids=body.project_ids,
         )
+        from backend.models.document import ProductLine
+        node = db.query(ProductLine).filter(ProductLine.id == body.node_id).first()
         log_audit(db, user, "local_product_create",
-                  f"name={body.name}, code={body.code}, node_id={body.node_id}",
+                  f"创建PMA本地产品「{body.name}」（编号: {body.code}, 节点: {node.name if node else body.node_id}）",
                   "产品", "medium")
         return {"code": 0, "data": product, "message": "ok"}
     except ValueError as e:
@@ -168,13 +178,39 @@ def update_local_product(
 ):
     """Update a PMA-local product."""
     try:
+        old = pm_service.get_local_product(db, product_id)
         product = pm_service.update_local_product(
             db, product_id, body.model_dump(exclude_none=True)
         )
-        log_audit(db, user, "local_product_update",
-                  f"product_id={product_id}",
-                  "产品", "medium")
+        changes = []
+        if body.name and old and old.get("name") != body.name:
+            changes.append(f"名称: {old['name']} → {body.name}")
+        if body.code and old and old.get("code") != body.code:
+            changes.append(f"编号: {old['code']} → {body.code}")
+        if body.status and old and old.get("status") != body.status:
+            changes.append(f"状态: {old['status']} → {body.status}")
+        if body.description is not None and old and old.get("description") != body.description:
+            changes.append("描述已更新")
+        detail = f"编辑产品「{old['name'] if old else product_id}」: {'; '.join(changes)}" if changes else f"编辑产品「{old['name'] if old else product_id}」"
+        log_audit(db, user, "local_product_update", detail, "产品", "medium")
         return {"code": 0, "data": product, "message": "ok"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/products/{product_id}", response_model=dict)
+def delete_local_product(
+    product_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("product_link")),
+):
+    """Delete a PMA-local product and its related links."""
+    try:
+        result = pm_service.delete_local_product(db, product_id)
+        log_audit(db, user, "local_product_delete",
+                  f"product_id={product_id}, name={result.get('name', '?')}",
+                  "产品", "high")
+        return {"code": 0, "data": result, "message": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -275,8 +311,14 @@ def update_product_projects(
     """Replace all project associations for a product."""
     try:
         result = pm_service.update_product_projects(db, product_id, body.project_ids)
+        from backend.models.zentao import CachedProduct, CachedProject
+        prod = db.query(CachedProduct).filter(CachedProduct.id == product_id).first()
+        proj_names = []
+        if body.project_ids:
+            projs = db.query(CachedProject).filter(CachedProject.id.in_(body.project_ids)).all()
+            proj_names = [p.name for p in projs]
         log_audit(db, user, "product_projects_update",
-                  f"product_id={product_id}, projects={len(body.project_ids)}",
+                  f"更新产品「{prod.name if prod else product_id}」关联项目: {', '.join(proj_names) if proj_names else '清空'}（共{len(body.project_ids)}个）",
                   "产品", "medium")
         return {"code": 0, "data": result, "message": "ok"}
     except ValueError as e:

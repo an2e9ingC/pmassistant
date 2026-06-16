@@ -230,6 +230,14 @@ def create_local_product(
     return _product_item(product, db)
 
 
+def get_local_product(db: Session, product_id: int) -> Optional[dict]:
+    """Get a product (any source) as dict for comparison."""
+    product = db.query(CachedProduct).filter(CachedProduct.id == product_id).first()
+    if not product:
+        return None
+    return {"id": product.id, "name": product.name, "code": product.code, "status": product.status, "description": product.description or ""}
+
+
 def update_local_product(db: Session, product_id: int, data: dict) -> dict:
     """Update a PMA-local product."""
     product = db.query(CachedProduct).filter(
@@ -243,6 +251,28 @@ def update_local_product(db: Session, product_id: int, data: dict) -> dict:
             setattr(product, k, v)
     db.commit()
     return _product_item(product, db)
+
+
+def delete_local_product(db: Session, product_id: int) -> dict:
+    """Delete a PMA-local product and its related data."""
+    from backend.models.document import ProductDocument
+    product = db.query(CachedProduct).filter(
+        CachedProduct.id == product_id, CachedProduct.is_local == True
+    ).first()
+    if not product:
+        raise ValueError(f"本地产品不存在: {product_id}")
+
+    name = product.name or str(product_id)
+
+    # Delete related data
+    db.query(CustomerProductLink).filter(CustomerProductLink.product_id == product_id).delete()
+    db.query(ProductProjectLink).filter(ProductProjectLink.product_id == product_id).delete()
+    db.query(ProductNodeLink).filter(ProductNodeLink.product_id == product_id).delete()
+    db.query(ProductDocument).filter(ProductDocument.product_id == product_id).delete()
+
+    db.delete(product)
+    db.commit()
+    return {"id": product_id, "name": name}
 
 
 # ---------------------------------------------------------------------------

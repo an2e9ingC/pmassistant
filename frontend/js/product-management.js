@@ -234,8 +234,9 @@ function renderProductManagementPage() {
           '<td style="text-align:center">' + (p.project_count || 0) + '</td>' +
           '<td>' + (p.is_local ? '<span class="pm-src-badge local">PMA本地</span>' : (p.synced_at ? '<span class="pm-src-badge synced" title="同步于 ' + escHtml(p.synced_at) + '">禅道同步</span>' : '<span class="pm-src-badge unknown">未知</span>')) + '</td>' +
           (_pmIsAdmin ? '<td style="white-space:nowrap;text-align:center">' +
-            '<button class="btn" style="font-size:10px;padding:2px 6px;margin-right:3px" onclick="_pmShowManageProductProjects(' + p.id + ',\'' + escHtml(p.name).replace(/'/g, "\\'") + '\')">项目</button>' +
-            '<button class="btn" style="font-size:10px;padding:2px 6px;color:var(--danger)" onclick="_pmUnlinkProduct(' + p.id + ')">移除</button>' +
+            '<button class="btn" style="font-size:12px;padding:2px 6px;margin-right:2px" onclick="_pmShowManageProductProjects(' + p.id + ',\'' + escHtml(p.name).replace(/'/g, "\\'") + '\')" title="关联项目">🔗</button>' +
+            '<button class="btn" style="font-size:12px;padding:2px 6px;margin-right:2px" onclick="_pmShowEditProductDialog(' + p.id + ',\'' + escHtml(p.name).replace(/'/g, "\\'") + '\',\'' + escHtml(p.code || '').replace(/'/g, "\\'") + '\')" title="编辑产品">✎</button>' +
+            '<button class="btn" style="font-size:12px;padding:2px 6px;color:var(--danger)" onclick="_pmDeleteProduct(' + p.id + ',\'' + escHtml(p.name).replace(/'/g, "\\'") + '\')" title="删除产品">✕</button>' +
           '</td>' : '') +
         '</tr>';
       });
@@ -593,6 +594,69 @@ async function _pmUnlinkProduct(productId) {
     await refreshPMData();
   } catch (e) {
     showToast('移除失败: ' + (e.detail || e.message), 'error');
+  }
+}
+
+function _pmShowEditProductDialog(productId, productName, productCode) {
+  // Fetch product detail to get current values
+  API.get('/products/' + productId).then(function(p) {
+    openDialog('编辑产品 — ' + escHtml(productName),
+      '<div style="margin-bottom:10px">' +
+        '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">产品编号</label>' +
+        '<input class="search-inp" id="pm-edit-code" value="' + escHtml(p.code || '') + '" style="width:100%;box-sizing:border-box">' +
+      '</div>' +
+      '<div style="margin-bottom:10px">' +
+        '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">产品名称</label>' +
+        '<input class="search-inp" id="pm-edit-name" value="' + escHtml(p.name || '') + '" style="width:100%;box-sizing:border-box">' +
+      '</div>' +
+      '<div style="margin-bottom:10px">' +
+        '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">状态</label>' +
+        '<select class="search-inp" id="pm-edit-status" style="width:100%;box-sizing:border-box">' +
+          '<option value="normal"' + (p.status === 'normal' ? ' selected' : '') + '>正常</option>' +
+          '<option value="closed"' + (p.status === 'closed' ? ' selected' : '') + '>已关闭</option>' +
+        '</select>' +
+      '</div>' +
+      '<div style="margin-bottom:4px">' +
+        '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">描述（可选）</label>' +
+        '<input class="search-inp" id="pm-edit-desc" value="' + escHtml(p.description || '') + '" style="width:100%;box-sizing:border-box">' +
+      '</div>',
+      [{text: '取消', onclick: 'closeSharedDialog()'},
+       {text: '保存', cls: 'btn-primary', onclick: '_pmSaveEditProduct(' + productId + ')'}],
+      {hideClose: true});
+  }).catch(function(e) {
+    showToast('获取产品信息失败: ' + (e.message || ''), 'error');
+  });
+}
+
+async function _pmSaveEditProduct(productId) {
+  var code = document.getElementById('pm-edit-code').value.trim();
+  var name = document.getElementById('pm-edit-name').value.trim();
+  var status = document.getElementById('pm-edit-status').value;
+  var desc = document.getElementById('pm-edit-desc').value.trim();
+  if (!name) { showToast('请输入产品名称', 'error'); return; }
+
+  closeSharedDialog();
+  try {
+    await API.put('/product-management/products/' + productId, {
+      code: code, name: name, status: status, description: desc,
+    });
+    showToast('产品已更新', 'success');
+    await refreshPMData();
+  } catch (e) {
+    showToast('更新失败: ' + (e.detail || e.message), 'error');
+  }
+}
+
+async function _pmDeleteProduct(productId, productName) {
+  if (!confirm('确认删除产品「' + productName + '」？\n\n此操作不可撤销，将同时删除该产品的关联数据。')) return;
+  var ok = await verifyPassword('删除产品', 'pw_verify_product_node_del');
+  if (!ok) return;
+  try {
+    await API.del('/product-management/products/' + productId);
+    showToast('已删除产品「' + productName + '」', 'success');
+    await refreshPMData();
+  } catch (e) {
+    showToast('删除失败: ' + (e.detail || e.message), 'error');
   }
 }
 
