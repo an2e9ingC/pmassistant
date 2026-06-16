@@ -498,6 +498,37 @@ function deleteStageType(stageType) {
 
 async function saveAllChanges() {
   if (!_pendingOps.length) { showToast('没有待保存的更改', 'error'); return; }
+
+  // Normalize sort_order: renumber all templates sequentially per stage
+  var stageTypes = Object.keys(_templatesGrouped);
+  for (var si = 0; si < stageTypes.length; si++) {
+    var docs = _templatesGrouped[stageTypes[si]] || [];
+    docs.sort(function(a, b) { return (a.sort_order || 0) - (b.sort_order || 0); });
+    for (var di = 0; di < docs.length; di++) {
+      var newSort = di + 1;
+      if (docs[di].sort_order !== newSort) {
+        docs[di].sort_order = newSort;
+        // Add edit op if template is server-side
+        if (docs[di].id > 0) {
+          var found = false;
+          for (var oi = 0; oi < _pendingOps.length; oi++) {
+            if (_pendingOps[oi].type === 'edit' && _pendingOps[oi].id === docs[di].id) {
+              _pendingOps[oi].sort_order = newSort;
+              found = true;
+              break;
+            }
+          }
+          if (!found) {
+            _pendingOps.push({ type: 'edit', id: docs[di].id, stage_type: stageTypes[si],
+              doc_name: docs[di].doc_name, sort_order: newSort,
+              responsible_role: docs[di].responsible_role || '',
+              description: docs[di].description || '', doc_path: docs[di].doc_path || '' });
+          }
+        }
+      }
+    }
+  }
+
   var ops = _pendingOps.slice(); // snapshot
   var total = ops.length;
   var success = 0, fail = 0;
@@ -1050,6 +1081,36 @@ function deleteProductTemplate(id) {
 
 async function saveProductChanges() {
   if (!_productPendingOps.length) { showToast('没有待保存的更改', 'error'); return; }
+
+  // Normalize sort_order: renumber all templates sequentially per stage
+  PRODUCT_STAGE_TYPES.forEach(function(st) {
+    var docs = _productTemplates.filter(function(d) { return (d.stage_type || '通用') === st; });
+    docs.sort(function(a, b) { return (a.sort_order || 0) - (b.sort_order || 0); });
+    for (var di = 0; di < docs.length; di++) {
+      var newSort = di + 1;
+      if (docs[di].sort_order !== newSort) {
+        docs[di].sort_order = newSort;
+        if (docs[di].id > 0) {
+          var found = false;
+          for (var oi = 0; oi < _productPendingOps.length; oi++) {
+            if (_productPendingOps[oi].type === 'edit' && _productPendingOps[oi].id === docs[di].id) {
+              _productPendingOps[oi].sort_order = newSort;
+              found = true;
+              break;
+            }
+          }
+          if (!found) {
+            _productPendingOps.push({ type: 'edit', id: docs[di].id,
+              doc_name: docs[di].doc_name, sort_order: newSort,
+              stage_type: docs[di].stage_type || '通用',
+              responsible_role: docs[di].responsible_role || '',
+              description: docs[di].description || '', doc_path: docs[di].doc_path || '' });
+          }
+        }
+      }
+    }
+  });
+
   var ops = _productPendingOps.slice();
   var success = 0, fail = 0;
 
