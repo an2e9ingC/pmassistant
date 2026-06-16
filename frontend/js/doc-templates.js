@@ -64,6 +64,7 @@ function _trDragStart(e) {
   this.style.opacity = '0.4';
   e.dataTransfer.effectAllowed = 'move';
   e.dataTransfer.setData('text/plain', '');
+  e.stopPropagation();
 }
 
 function _trDragEnd(e) {
@@ -72,6 +73,7 @@ function _trDragEnd(e) {
 }
 
 function _trDragOver(e) {
+  if (_dragSourceIndex < 0) return;
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
   this.classList.add('dt-drag-over');
@@ -83,6 +85,7 @@ function _trDragLeave(e) {
 
 function _trDrop(e, list, renderFn) {
   e.preventDefault();
+  e.stopPropagation();
   this.classList.remove('dt-drag-over');
   var targetIndex = parseInt(this.getAttribute('data-drag-index'));
   if (_dragSourceIndex < 0 || _dragSourceIndex === targetIndex) return;
@@ -185,12 +188,12 @@ function renderTemplatesPage() {
     '</tr></thead><tbody>';
 
     docs.forEach(function(d, i) {
-      rightHtml += '<tr data-drag-index="' + i + '" draggable="true"' +
+      rightHtml += '<tr>' +
+        '<td data-drag-index="' + i + '" draggable="true"' +
         ' ondragstart="_trDragStart.call(this,event)" ondragend="_trDragEnd.call(this,event)"' +
         ' ondragover="_trDragOver.call(this,event)" ondragleave="_trDragLeave.call(this,event)"' +
         ' ondrop="_trDrop.call(this,event,_templatesGrouped[_selectedStage] || [],renderTemplatesAfterReorder)"' +
-        ' style="cursor:grab">' +
-        '<td style="font-family:var(--mono);color:var(--muted);text-align:center">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
+        ' style="font-family:var(--mono);color:var(--muted);text-align:center;cursor:grab" title="拖动排序">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
         '<td style="font-weight:500">' + escHtml(d.doc_name) + '</td>' +
         '<td style="font-size:12px;white-space:nowrap">' + escHtml(d.responsible_role || '—') + '</td>' +
         '<td style="font-size:11px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escHtml(d.doc_path || '') + '">' + escHtml(d.doc_path || '—') + '</td>' +
@@ -205,6 +208,7 @@ function renderTemplatesPage() {
       '</tr>';
     });
     rightHtml += '</tbody></table></div>';
+    rightHtml += '<div style="font-size:10.5px;color:var(--muted);margin-top:4px">💡 拖动序号列可调整文档顺序</div>';
   } else {
     rightHtml += '<div class="empty-state" style="padding:20px">该阶段类型暂无文档模板</div>';
   }
@@ -752,7 +756,7 @@ function renderProductTreePage() {
     _productStageDocs.sort(function(a, b) { return (a.sort_order || 0) - (b.sort_order || 0); });
 
     // Phase tab bar
-    rightHtml += '<div class="tabs" style="margin-bottom:10px">';
+    rightHtml += '<div class="tabs dt-product-tabs" style="margin-bottom:10px">';
     PRODUCT_STAGE_TYPES.forEach(function(st) {
       var count = _productTemplates.filter(function(d) { return (d.stage_type || '通用') === st; }).length;
       var active = st === _productStage ? ' active' : '';
@@ -767,12 +771,12 @@ function renderProductTreePage() {
         (canEdit ? '<th style="width:90px;white-space:nowrap">操作</th>' : '') +
       '</tr></thead><tbody>';
       _productStageDocs.forEach(function(d, i) {
-        rightHtml += '<tr data-drag-index="' + i + '" draggable="true"' +
+        rightHtml += '<tr>' +
+          '<td data-drag-index="' + i + '" draggable="true"' +
           ' ondragstart="_trDragStart.call(this,event)" ondragend="_trDragEnd.call(this,event)"' +
           ' ondragover="_trDragOver.call(this,event)" ondragleave="_trDragLeave.call(this,event)"' +
           ' ondrop="_trDrop.call(this,event,_productStageDocs,renderProductAfterReorder)"' +
-          ' style="cursor:grab">' +
-          '<td style="font-family:var(--mono);color:var(--muted);text-align:center">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
+          ' style="font-family:var(--mono);color:var(--muted);text-align:center;cursor:grab" title="拖动排序">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
           '<td style="font-weight:500">' + escHtml(d.doc_name) + '</td>' +
           '<td style="font-size:12px;white-space:nowrap">' + escHtml(d.responsible_role || '—') + '</td>' +
           '<td style="font-size:11px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escHtml(d.doc_path || '') + '">' + escHtml(d.doc_path || '—') + '</td>' +
@@ -785,6 +789,7 @@ function renderProductTreePage() {
         '</tr>';
       });
       rightHtml += '</tbody></table></div>';
+      rightHtml += '<div style="font-size:10.5px;color:var(--muted);margin-top:4px">💡 拖动序号列可调整文档顺序</div>';
     } else {
       rightHtml += '<div class="empty-state" style="padding:20px">暂无文档模板</div>';
     }
@@ -834,7 +839,7 @@ function _renderL1Node(l1) {
 
 async function selectProductNode(nodeId) {
   _selectedNodeId = nodeId;
-  _productStage = '通用';
+  _productStage = PRODUCT_STAGE_TYPES[0];
   await _loadTemplatesForNode(nodeId);
   renderProductTreePage();
 }

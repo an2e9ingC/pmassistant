@@ -178,6 +178,12 @@
   border-top: 2px dashed var(--accent) !important;
 }
 
+/* ── Product stage tabs ── */
+.dt-product-tabs .tab.active {
+  background: var(--accent);
+  color: #fff;
+}
+
 @media (max-width: 768px) {
   .dt-layout {
     grid-template-columns: 1fr;
