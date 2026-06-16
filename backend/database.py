@@ -128,12 +128,16 @@ def _migrate_sqlite():
                     col = Base.metadata.tables[table_name].columns[col_name]
                     col_type = str(col.type).upper()
                     nullable = "" if col.nullable else " NOT NULL"
-                    sql = f"ALTER TABLE `{table_name}` ADD COLUMN `{col_name}` {col_type}{nullable}"
+                    default_clause = ""
+                    if col.server_default is not None:
+                        default_val = str(col.server_default.arg) if hasattr(col.server_default, 'arg') else str(col.server_default)
+                        default_clause = f" DEFAULT '{default_val}'"
+                    sql = f"ALTER TABLE `{table_name}` ADD COLUMN `{col_name}` {col_type}{default_clause}{nullable}"
                     cursor.execute(sql)
         sqlite_conn.commit()
         sqlite_conn.close()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Migration warning: {e}")
 
 
 def _migrate_product_hierarchy():

@@ -32,6 +32,7 @@ class TemplateCreate(BaseModel):
     doc_name: str
     sort_order: int = 0
     doc_path: str
+    stage_type: str = "通用"
     responsible_role: Optional[str] = None
     description: Optional[str] = None
 
@@ -40,6 +41,7 @@ class TemplateUpdate(BaseModel):
     product_id: Optional[int] = None
     doc_name: Optional[str] = None
     sort_order: Optional[int] = None
+    stage_type: Optional[str] = None
     description: Optional[str] = None
     responsible_role: Optional[str] = None
     doc_path: Optional[str] = None
@@ -248,6 +250,7 @@ def import_templates(
             product_id=target_node_id,
             doc_name=tpl.doc_name,
             sort_order=tpl.sort_order,
+            stage_type=tpl.stage_type or "通用",
             description=tpl.description,
             responsible_role=tpl.responsible_role,
             doc_path=tpl.doc_path,

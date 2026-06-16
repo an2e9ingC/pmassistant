@@ -835,6 +835,7 @@ def _product_template_dict(t: ProductDocTemplate) -> dict:
         "id": t.id,
         "product_line": t.product_line,
         "product_id": t.product_id,
+        "stage_type": t.stage_type or "通用",
         "doc_name": t.doc_name,
         "sort_order": t.sort_order,
         "description": t.description,

@@ -197,8 +197,9 @@ function renderTemplatesPage() {
         '<td style="font-size:12px;color:var(--muted)">' + escHtml(d.description || '') + '</td>' +
         (canEdit
           ? '<td style="white-space:nowrap;text-align:center" ondragover="event.stopPropagation()" ondrop="event.stopPropagation()">' +
-              '<button class="btn" style="font-size:10px;padding:2px 8px;margin-right:4px" onclick="showEditTemplateForm(' + d.id + ')">编辑</button>' +
-              '<button class="btn" style="font-size:10px;padding:2px 8px;color:var(--danger)" onclick="deleteTemplate(' + d.id + ')">删除</button>' +
+              '<button class="btn" style="font-size:12px;padding:2px 6px;margin-right:2px" onclick="copyTemplate(' + d.id + ')" title="复制">📋</button>' +
+              '<button class="btn" style="font-size:12px;padding:2px 6px;margin-right:2px" onclick="showEditTemplateForm(' + d.id + ')" title="编辑">✎</button>' +
+              '<button class="btn" style="font-size:12px;padding:2px 6px;color:var(--danger)" onclick="deleteTemplate(' + d.id + ')" title="删除">✕</button>' +
             '</td>'
           : '') +
       '</tr>';
@@ -361,6 +362,29 @@ function renderTemplatesAfterReorder() {
         description: d.description || '', doc_path: d.doc_path || '' });
     }
   }
+  renderTemplatesPage();
+}
+
+function copyTemplate(id) {
+  var arr = _templatesGrouped[_selectedStage] || [];
+  var tpl = arr.find(function(x) { return x.id === id; });
+  if (!tpl) { showToast('未找到该模板', 'error'); return; }
+  var tempId = _nextTempId--;
+  var newDoc = {
+    id: tempId,
+    stage_type: _selectedStage,
+    doc_name: tpl.doc_name + '（副本）',
+    sort_order: arr.length + 1,
+    responsible_role: tpl.responsible_role || '',
+    description: tpl.description || '',
+    doc_path: tpl.doc_path || ''
+  };
+  arr.push(newDoc);
+  _pendingOps.push({ type: 'add', tempId: tempId, stage_type: _selectedStage,
+    doc_name: newDoc.doc_name, sort_order: newDoc.sort_order,
+    responsible_role: newDoc.responsible_role,
+    description: newDoc.description, doc_path: newDoc.doc_path });
+  showToast('已复制，请修改后保存', 'info');
   renderTemplatesPage();
 }
 
@@ -567,9 +591,12 @@ async function syncAllProjects() {
 
 var _productTree = [];           // [{id, name, parent_id, level, template_count, children[...]}]
 var _selectedNodeId = null;      // currently selected product node ID
-var _productTemplates = [];      // doc templates for selected node
+var _productTemplates = [];      // doc templates for selected node (all stages)
+var _productStage = '通用';       // currently selected stage filter
 var _productPendingOps = [];     // pending operations queue (add/edit/delete/reorder)
 var _productNextTempId = -1000;  // temp IDs for locally-added templates
+
+var PRODUCT_STAGE_TYPES = ['硬件开发', '结构设计', 'BSP开发', '软件开发', '测试', '通用'];
 var _dtBreadcrumbIds = [];       // cached breadcrumb node IDs for click nav
 
 var TREE_ICONS = ['', '📁', '📂', '📄'];  // level 1/2/3 icons
@@ -693,8 +720,8 @@ function renderProductTreePage() {
   rightHtml += '</div>';
   if (canEdit && isL2) {
     rightHtml += '<span style="display:flex;gap:4px">' +
-      '<button class="btn" style="font-size:11px;padding:4px 12px" onclick="showAddProductTemplateForm()">+ 添加文档</button>' +
-      '<button class="btn" style="font-size:11px;padding:4px 12px" onclick="showImportTemplatesDialog()">导入模板</button>' +
+      '<button class="btn btn-primary" style="font-size:11px;padding:4px 12px" onclick="showAddProductTemplateForm()">+ 添加文档</button>' +
+      '<button class="btn" style="font-size:11px;padding:4px 12px;color:var(--accent);border-color:var(--accent)" onclick="showImportTemplatesDialog()">导入模板</button>' +
     '</span>';
   }
   rightHtml += '</div>';
@@ -720,18 +747,30 @@ function renderProductTreePage() {
     }
     rightHtml += '<div class="empty-state" style="padding:12px;font-size:12px;color:var(--muted);font-style:italic">文档模板仅可添加到二级产品系列</div>';
   } else if (isL2) {
-    // L2 → show templates
-    rightHtml += '<div class="section-hd"><div class="section-title">文档模板 (' + _productTemplates.length + ')</div></div>';
-    if (_productTemplates.length) {
+    // L2 → show templates with phase tabs
+    _productStageDocs = _productTemplates.filter(function(d) { return (d.stage_type || '通用') === _productStage; });
+    _productStageDocs.sort(function(a, b) { return (a.sort_order || 0) - (b.sort_order || 0); });
+
+    // Phase tab bar
+    rightHtml += '<div class="tabs" style="margin-bottom:10px">';
+    PRODUCT_STAGE_TYPES.forEach(function(st) {
+      var count = _productTemplates.filter(function(d) { return (d.stage_type || '通用') === st; }).length;
+      var active = st === _productStage ? ' active' : '';
+      rightHtml += '<span class="tab' + active + '" onclick="_selectProductStage(\'' + escHtml(st) + '\')">' + escHtml(st) + (count > 0 ? ' (' + count + ')' : '') + '</span>';
+    });
+    rightHtml += '</div>';
+
+    rightHtml += '<div class="section-hd"><div class="section-title">' + escHtml(_productStage) + ' — 文档清单 (' + _productStageDocs.length + ')</div></div>';
+    if (_productStageDocs.length) {
       rightHtml += '<div class="table-scroll"><table class="stage-table"><thead><tr>' +
         '<th style="width:50px">序号</th><th>文档名称</th><th>责任人（岗位）</th><th style="width:140px">路径</th><th>说明</th>' +
         (canEdit ? '<th style="width:90px;white-space:nowrap">操作</th>' : '') +
       '</tr></thead><tbody>';
-      _productTemplates.forEach(function(d, i) {
+      _productStageDocs.forEach(function(d, i) {
         rightHtml += '<tr data-drag-index="' + i + '" draggable="true"' +
           ' ondragstart="_trDragStart.call(this,event)" ondragend="_trDragEnd.call(this,event)"' +
           ' ondragover="_trDragOver.call(this,event)" ondragleave="_trDragLeave.call(this,event)"' +
-          ' ondrop="_trDrop.call(this,event,_productTemplates,renderProductAfterReorder)"' +
+          ' ondrop="_trDrop.call(this,event,_productStageDocs,renderProductAfterReorder)"' +
           ' style="cursor:grab">' +
           '<td style="font-family:var(--mono);color:var(--muted);text-align:center">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
           '<td style="font-weight:500">' + escHtml(d.doc_name) + '</td>' +
@@ -739,8 +778,9 @@ function renderProductTreePage() {
           '<td style="font-size:11px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escHtml(d.doc_path || '') + '">' + escHtml(d.doc_path || '—') + '</td>' +
           '<td style="font-size:12px;color:var(--muted)">' + escHtml(d.description || '') + '</td>' +
           (canEdit ? '<td style="white-space:nowrap;text-align:center" ondragover="event.stopPropagation()" ondrop="event.stopPropagation()">' +
-            '<button class="btn" style="font-size:10px;padding:2px 8px;margin-right:4px" onclick="showEditProductTemplateForm(' + d.id + ')">编辑</button>' +
-            '<button class="btn" style="font-size:10px;padding:2px 8px;color:var(--danger)" onclick="deleteProductTemplate(' + d.id + ')">删除</button>' +
+            '<button class="btn" style="font-size:12px;padding:2px 6px;margin-right:2px" onclick="copyProductTemplate(' + d.id + ')" title="复制">📋</button>' +
+            '<button class="btn" style="font-size:12px;padding:2px 6px;margin-right:2px" onclick="showEditProductTemplateForm(' + d.id + ')" title="编辑">✎</button>' +
+            '<button class="btn" style="font-size:12px;padding:2px 6px;color:var(--danger)" onclick="deleteProductTemplate(' + d.id + ')" title="删除">✕</button>' +
           '</td>' : '') +
         '</tr>';
       });
@@ -794,7 +834,13 @@ function _renderL1Node(l1) {
 
 async function selectProductNode(nodeId) {
   _selectedNodeId = nodeId;
+  _productStage = '通用';
   await _loadTemplatesForNode(nodeId);
+  renderProductTreePage();
+}
+
+function _selectProductStage(stage) {
+  _productStage = stage;
   renderProductTreePage();
 }
 
@@ -803,6 +849,7 @@ async function selectProductNode(nodeId) {
 function showAddProductTemplateForm() {
   var selNode = _findNodeById(_selectedNodeId);
   var name = selNode ? selNode.name : '';
+  var nextSort = _productStageDocs ? _productStageDocs.length + 1 : 1;
   openDialog('添加文档模板 — ' + escHtml(name),
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名称</label>' +
@@ -810,7 +857,13 @@ function showAddProductTemplateForm() {
     '</div>' +
     '<div style="display:flex;gap:10px;margin-bottom:10px">' +
       '<div style="width:80px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">序号</label>' +
-        '<input class="search-inp" id="ptf-order" type="number" min="0" value="1" style="width:100%;box-sizing:border-box;padding:8px 4px;text-align:center"></div>' +
+        '<input class="search-inp" id="ptf-order" type="number" min="0" value="' + nextSort + '" style="width:100%;box-sizing:border-box;padding:8px 4px;text-align:center"></div>' +
+      '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">开发阶段</label>' +
+        '<select class="search-inp" id="ptf-stage" style="width:100%;box-sizing:border-box">' +
+          PRODUCT_STAGE_TYPES.map(function(s) { return '<option value="' + s + '"' + (s === _productStage ? ' selected' : '') + '>' + s + '</option>'; }).join('') +
+        '</select></div>' +
+    '</div>' +
+    '<div style="display:flex;gap:10px;margin-bottom:10px">' +
       '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">责任人（岗位）</label>' + _roleSelect('') + '</div>' +
     '</div>' +
     '<div style="margin-bottom:10px">' +
@@ -831,6 +884,7 @@ function showEditProductTemplateForm(id) {
     if (_productTemplates[i].id === id) { tpl = _productTemplates[i]; break; }
   }
   if (!tpl) return;
+  var tplStage = tpl.stage_type || '通用';
   openDialog('编辑文档模板',
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名称</label>' +
@@ -839,6 +893,12 @@ function showEditProductTemplateForm(id) {
     '<div style="display:flex;gap:10px;margin-bottom:10px">' +
       '<div style="width:80px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">序号</label>' +
         '<input class="search-inp" id="ptf-order" type="number" min="0" value="' + (tpl.sort_order || '') + '" style="width:100%;box-sizing:border-box;padding:8px 4px;text-align:center"></div>' +
+      '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">开发阶段</label>' +
+        '<select class="search-inp" id="ptf-stage" style="width:100%;box-sizing:border-box">' +
+          PRODUCT_STAGE_TYPES.map(function(s) { return '<option value="' + s + '"' + (s === tplStage ? ' selected' : '') + '>' + s + '</option>'; }).join('') +
+        '</select></div>' +
+    '</div>' +
+    '<div style="display:flex;gap:10px;margin-bottom:10px">' +
       '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">责任人（岗位）</label>' + _roleSelect(tpl.responsible_role || '') + '</div>' +
     '</div>' +
     '<div style="margin-bottom:10px">' +
@@ -854,13 +914,14 @@ function showEditProductTemplateForm(id) {
 }
 
 function renderProductAfterReorder() {
-  // Reorder is local-only; push pending ops for each template
-  for (var i = 0; i < _productTemplates.length; i++) {
-    var t = _productTemplates[i];
+  // Reorder within current stage — update sort_order and push pending ops
+  for (var i = 0; i < _productStageDocs.length; i++) {
+    var t = _productStageDocs[i];
     t.sort_order = i + 1;
     if (t.id > 0) {
       _productPendingOps.push({ type: 'edit', id: t.id,
         doc_name: t.doc_name, sort_order: t.sort_order,
+        stage_type: t.stage_type || '通用',
         responsible_role: t.responsible_role || '', description: t.description || '',
         doc_path: t.doc_path || '' });
     }
@@ -870,12 +931,20 @@ function renderProductAfterReorder() {
 
 function saveProductTemplate(id) {
   var nameEl = document.getElementById('ptf-name');
-  var order = parseInt(document.getElementById('ptf-order').value) || 0;
-  var desc = document.getElementById('ptf-desc').value.trim();
-  var role = document.getElementById('dt-role') ? document.getElementById('dt-role').value : '';
+  var orderEl = document.getElementById('ptf-order');
+  var descEl = document.getElementById('ptf-desc');
+  var roleEl = document.getElementById('dt-role');
   var pathEl = document.getElementById('ptf-path');
-  var path = pathEl ? pathEl.value.trim() : '';
-  if (!nameEl || !nameEl.value.trim()) { showToast('请输入文档名称', 'error'); return; }
+  var stageEl = document.getElementById('ptf-stage');
+
+  if (!nameEl || !orderEl || !descEl || !pathEl) { showToast('表单数据异常，请重新打开对话框', 'error'); return; }
+
+  var order = parseInt(orderEl.value) || 0;
+  var desc = descEl.value.trim();
+  var role = roleEl ? roleEl.value : '';
+  var path = pathEl.value.trim();
+  var stage = stageEl ? stageEl.value : (_productStage || '通用');
+  if (!nameEl.value.trim()) { showToast('请输入文档名称', 'error'); return; }
   if (!path) { showToast('请输入路径', 'error'); return; }
   var name = nameEl.value.trim();
 
@@ -888,11 +957,12 @@ function saveProductTemplate(id) {
     if (!tpl) { showToast('未找到该模板', 'error'); return; }
     tpl.doc_name = name;
     tpl.sort_order = order;
+    tpl.stage_type = stage;
     tpl.description = desc;
     tpl.responsible_role = role;
     tpl.doc_path = path;
     _productPendingOps.push({ type: 'edit', id: id,
-      doc_name: name, sort_order: order, responsible_role: role,
+      doc_name: name, sort_order: order, stage_type: stage, responsible_role: role,
       description: desc, doc_path: path });
   } else if (id && id < 0) {
     // Edit locally-added template
@@ -900,6 +970,7 @@ function saveProductTemplate(id) {
     if (tpl2) {
       tpl2.doc_name = name;
       tpl2.sort_order = order;
+      tpl2.stage_type = stage;
       tpl2.description = desc;
       tpl2.responsible_role = role;
       tpl2.doc_path = path;
@@ -909,6 +980,7 @@ function saveProductTemplate(id) {
       if (_productPendingOps[pi].tempId === id) {
         _productPendingOps[pi].doc_name = name;
         _productPendingOps[pi].sort_order = order;
+        _productPendingOps[pi].stage_type = stage;
         _productPendingOps[pi].responsible_role = role;
         _productPendingOps[pi].description = desc;
         _productPendingOps[pi].doc_path = path;
@@ -919,12 +991,36 @@ function saveProductTemplate(id) {
     // New template — add locally with temp ID
     var tempId = _productNextTempId--;
     var newDoc = { id: tempId, doc_name: name, sort_order: order,
-      responsible_role: role, description: desc, doc_path: path };
+      stage_type: stage, responsible_role: role, description: desc, doc_path: path };
     _productTemplates.push(newDoc);
     _productPendingOps.push({ type: 'add', tempId: tempId,
-      doc_name: name, sort_order: order, responsible_role: role,
+      doc_name: name, sort_order: order, stage_type: stage, responsible_role: role,
       description: desc, doc_path: path });
   }
+  renderProductTreePage();
+}
+
+function copyProductTemplate(id) {
+  var tpl = _productTemplates.find(function(x) { return x.id === id; });
+  if (!tpl) { showToast('未找到该模板', 'error'); return; }
+  var nextSort = _productStageDocs ? _productStageDocs.length + 1 : 1;
+  var tempId = _productNextTempId--;
+  var newDoc = {
+    id: tempId,
+    doc_name: tpl.doc_name + '（副本）',
+    sort_order: nextSort,
+    stage_type: tpl.stage_type || '通用',
+    responsible_role: tpl.responsible_role || '',
+    description: tpl.description || '',
+    doc_path: tpl.doc_path || ''
+  };
+  _productTemplates.push(newDoc);
+  _productPendingOps.push({ type: 'add', tempId: tempId,
+    doc_name: newDoc.doc_name, sort_order: newDoc.sort_order,
+    stage_type: newDoc.stage_type,
+    responsible_role: newDoc.responsible_role,
+    description: newDoc.description, doc_path: newDoc.doc_path });
+  showToast('已复制，请修改后保存', 'info');
   renderProductTreePage();
 }
 
@@ -952,10 +1048,10 @@ async function saveProductChanges() {
     var op = ops[i];
     try {
       if (op.type === 'add') {
-        await API.post('/product-doc-templates', { product_id: _selectedNodeId, doc_name: op.doc_name, sort_order: op.sort_order, responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '' });
+        await API.post('/product-doc-templates', { product_id: _selectedNodeId, doc_name: op.doc_name, sort_order: op.sort_order, stage_type: op.stage_type || '通用', responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '' });
         success++;
       } else if (op.type === 'edit') {
-        await API.put('/product-doc-templates/' + op.id, { doc_name: op.doc_name, sort_order: op.sort_order, responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '' });
+        await API.put('/product-doc-templates/' + op.id, { doc_name: op.doc_name, sort_order: op.sort_order, stage_type: op.stage_type || '通用', responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '' });
         success++;
       } else if (op.type === 'delete') {
         await API.del('/product-doc-templates/' + op.id);

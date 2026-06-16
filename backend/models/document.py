@@ -45,6 +45,7 @@ class ProductDocTemplate(Base):
     id = Column(Integer, primary_key=True)
     product_line = Column(String(128), nullable=False, default="", server_default="", index=True)  # legacy, migrated to product_id
     product_id = Column(Integer, ForeignKey("pma_product_lines.id"), nullable=True, index=True)
+    stage_type = Column(String(64), nullable=False, default="通用", server_default="通用", index=True)  # 开发阶段
     doc_name = Column(String(256), nullable=False)
     sort_order = Column(Integer, default=0)
     description = Column(String(512), nullable=True)
