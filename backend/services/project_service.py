@@ -123,10 +123,12 @@ def get_project_detail(db: Session, project_id: int) -> Optional[dict]:
     pending_map = _get_pending_doc_counts(db, pids)
     incomplete_task_map = _get_incomplete_task_counts(db, pids)
     stage_anomaly_map = _get_stage_anomaly_counts(db, pids)
-    return _project_detail(p,
+    result = _project_detail(p,
         pending_map.get(p.id, False),
         incomplete_task_map.get(p.id, False),
         stage_anomaly_map.get(p.id, False))
+    result["linked_products"] = get_project_products(db, project_id)
+    return result
 
 
 def get_project_stages(db: Session, project_id: int) -> dict:

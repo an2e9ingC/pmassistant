@@ -163,6 +163,11 @@ function buildDetailHeader(p) {
       '<div class="detail-title">' +
         '<span class="proj-code-tag">' + escHtml(projCode) + '</span> ' +
         escHtml(coreName) +
+        ((p.linked_products && p.linked_products.length)
+          ? ' ' + p.linked_products.map(function(prod) {
+              return '<span class="prod-link-chip" style="cursor:pointer;font-size:11px;padding:2px 8px;margin-right:3px;background:var(--accent-lt);color:var(--accent);border-radius:4px;vertical-align:middle" onclick="event.stopPropagation();openProductDetail(\'' + prod.id + '\')" title="' + escHtml(prod.code || '') + '">' + escHtml(prod.name) + '</span>';
+            }).join('')
+          : '') +
       '</div>' +
       '<div class="detail-sub">' +
         '<span class="meta-item">' +
