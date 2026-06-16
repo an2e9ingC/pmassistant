@@ -179,7 +179,7 @@
         <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle;margin-right:3px"><circle cx="8" cy="8" r="6"/><line x1="8" y1="5" x2="8" y2="9"/><circle cx="8" cy="12" r="0.8" fill="currentColor" stroke="none"/></svg>
         反馈 Bug
       </a>
-      <span id="app-version">v2026.06.17-beta10</span>
+      <span id="app-version">v2026.06.17-beta11</span>
     </div>
   </div>
 </aside>
@@ -657,18 +657,21 @@
     <div class="view" id="view-topology">
       <div class="topo-search-bar">
         <div class="search-wrap">
+          <span style="font-size:13px;color:var(--muted);white-space:nowrap;margin-right:4px;font-weight:500">项目</span>
           <svg class="search-ico" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>
-          <input class="search-inp" id="topo-proj" placeholder="项目编号/名称..." oninput="onTopoSearch()">
+          <input class="search-inp" id="topo-proj" placeholder="编号/名称..." oninput="onTopoSearch()">
           <button class="search-clear" onclick="clearSearch('topo-proj',onTopoSearch)" title="清除">&times;</button>
         </div>
         <div class="search-wrap">
+          <span style="font-size:13px;color:var(--muted);white-space:nowrap;margin-right:4px;font-weight:500">产品</span>
           <svg class="search-ico" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>
-          <input class="search-inp" id="topo-prod" placeholder="产品名称..." oninput="onTopoSearch()">
+          <input class="search-inp" id="topo-prod" placeholder="名称..." oninput="onTopoSearch()">
           <button class="search-clear" onclick="clearSearch('topo-prod',onTopoSearch)" title="清除">&times;</button>
         </div>
         <div class="search-wrap">
+          <span style="font-size:13px;color:var(--muted);white-space:nowrap;margin-right:4px;font-weight:500">客户</span>
           <svg class="search-ico" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>
-          <input class="search-inp" id="topo-cust" placeholder="客户名称..." oninput="onTopoSearch()">
+          <input class="search-inp" id="topo-cust" placeholder="名称..." oninput="onTopoSearch()">
           <button class="search-clear" onclick="clearSearch('topo-cust',onTopoSearch)" title="清除">&times;</button>
         </div>
       </div>

@@ -419,8 +419,10 @@
   display: flex; gap: 12px; margin-bottom: 4px;
 }
 .topo-search-bar .search-wrap {
-  flex: 1; max-width: none;
+  flex: 1; max-width: none; display: flex; align-items: center; gap: 4px;
 }
+.topo-search-bar .search-ico { position: static; transform: none; flex-shrink: 0; }
+.topo-search-bar .search-inp { padding: 8px 10px; }
 
 /* Note dialog */
 .note-dialog-overlay {
