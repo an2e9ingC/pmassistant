@@ -262,8 +262,9 @@ class SyncService:
                 logger.info("[禅道] 认证成功，开始同步...")
                 _sync_progress["phase"] = "用户"; t0 = time.time(); results["users"] = await self._sync_users(db); timings["users"] = round(time.time() - t0, 1)
                 logger.info(f"[禅道] 用户同步完成: {results['users']}")
-                _sync_progress["phase"] = "产品"; t0 = time.time(); results["products"] = await self._sync_products(db); timings["products"] = round(time.time() - t0, 1)
-                logger.info(f"[禅道] 产品同步完成: {results['products']}")
+                # Product sync disabled — all products managed via PMA local
+                results["products"] = {"fetched": 0, "created": 0, "updated": 0, "deleted": 0}
+                logger.info("[禅道] 产品同步已禁用（产品由PMA本地维护）")
                 _sync_progress["phase"] = "项目"; t0 = time.time(); results["projects"] = await self._sync_projects(db); timings["projects"] = round(time.time() - t0, 1)
                 logger.info(f"[禅道] 项目同步完成: {results['projects']}")
                 _sync_progress["phase"] = "执行与任务"; t0 = time.time(); results["executions_tasks"] = await self._sync_executions_and_tasks(db); timings["execs_tasks"] = round(time.time() - t0, 1)
@@ -271,7 +272,7 @@ class SyncService:
                 _sync_progress["phase"] = "Bug"; t0 = time.time(); results["bugs"] = await self._sync_bugs(db); timings["bugs"] = round(time.time() - t0, 1)
                 logger.info(f"[禅道] Bug同步完成: {results['bugs']}")
 
-                zs = {k: v for k, v in results.items() if k in ("users", "products", "projects", "executions_tasks", "bugs")}
+                zs = {k: v for k, v in results.items() if k in ("users", "projects", "executions_tasks", "bugs")}
                 z_total = sum(v.get("fetched", v.get("executions_fetched", 0)) + v.get("tasks_fetched", 0) for v in zs.values() if isinstance(v, dict))
                 zentao_summary = {
                     "status": "success",
@@ -286,13 +287,10 @@ class SyncService:
             # ── Source 2: GitLab (releases sync + URL validation) ──
             gitlab_summary = {}
             if settings.GITLAB_TOKEN:
+                # Releases sync disabled — all products managed via PMA local
+                results["releases"] = {"fetched": 0, "created": 0, "updated": 0, "deleted": 0, "failed_products": 0}
+                logger.info("[GitLab] 禅道发布版本同步已禁用（产品由PMA本地维护）")
                 try:
-                    _sync_progress["phase"] = "发布版本"
-                    t0 = time.time()
-                    results["releases"] = await self._sync_releases(db)
-                    timings["releases"] = round(time.time() - t0, 1)
-                    logger.info(f"[GitLab] 禅道发布版本同步完成: {results['releases']}")
-
                     _sync_progress["phase"] = "GitLab校验"
                     from backend.services.gitlab_service import validate_all_releases
                     t0 = time.time()

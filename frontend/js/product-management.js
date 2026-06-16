@@ -156,14 +156,19 @@ function renderProductManagementPage() {
   // Right panel
   var rightHtml = '<div class="dt-right">';
   rightHtml += '<div class="dt-right-head">';
-  rightHtml += '<div class="section-title">' + titleHtml + '</div>';
+  rightHtml += '<div class="section-title">' + titleHtml;
+  if (selNode && isL1) {
+    rightHtml += ' <span class="pm-src-badge synced" style="font-size:11px;vertical-align:middle">' + _pmNodeChildren.length + ' 个系列</span>';
+  } else if (selNode && isL2) {
+    rightHtml += ' <span class="pm-src-badge synced" style="font-size:11px;vertical-align:middle">' + _pmNodeProducts.length + ' 个产品</span>';
+  }
+  rightHtml += '</div>';
   rightHtml += '</div>';
 
   if (!selNode) {
     rightHtml += '<div class="empty-state" style="padding:20px">请从左侧选择产品节点</div>';
   } else if (isL1) {
     // L1 selected → Show L2 (产品系列) list
-    rightHtml += '<div class="section-hd" style="margin-top:10px"><div class="section-title">二级产品 · 产品系列 (' + _pmNodeChildren.length + ')</div></div>';
     if (_pmNodeChildren.length) {
       rightHtml += '<div class="table-scroll" style="max-height:400px"><table class="stage-table"><thead><tr>' +
         '<th>产品系列名称</th><th>型号数</th>' +
@@ -212,7 +217,6 @@ function renderProductManagementPage() {
       rightHtml += '<button class="btn btn-primary" style="font-size:11px;padding:5px 12px" onclick="_pmShowLinkProductDialog()">+ 关联已有三级产品</button>';
     }
     rightHtml += '</div>';
-    rightHtml += '<div class="section-hd"><div class="section-title">三级产品 · 产品型号 (' + _pmNodeProducts.length + ')</div></div>';
     if (_pmNodeProducts.length) {
       rightHtml += '<div class="table-scroll" style="max-height:400px"><table class="stage-table"><thead><tr>' +
         '<th>编号</th><th>产品名</th><th>状态</th><th>关联项目数</th><th>来源</th>' +
@@ -236,26 +240,8 @@ function renderProductManagementPage() {
       rightHtml += '<div class="empty-state" style="padding:16px;font-size:13px">该产品系列下暂无产品型号</div>';
     }
 
-    // Also show L3 nodes (product tree nodes) that are children of this L2
-    if (_pmNodeChildren.length) {
-      rightHtml += '<div class="section-hd" style="margin-top:18px"><div class="section-title">产品型号节点 (' + _pmNodeChildren.length + ')</div></div>';
-      rightHtml += '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">以下为产品架构中的三级节点，需关联禅道产品后才在此处显示为完整产品</div>';
-      rightHtml += '<div class="table-scroll" style="max-height:300px"><table class="stage-table"><thead><tr>' +
-        '<th>节点名称</th>' +
-        (_pmIsAdmin ? '<th style="width:100px">操作</th>' : '') +
-        '</tr></thead><tbody>';
-      _pmNodeChildren.forEach(function (l3) {
-        rightHtml += '<tr>' +
-          '<td>📄 ' + escHtml(l3.name) + '</td>' +
-          (_pmIsAdmin ? '<td style="white-space:nowrap;text-align:center">' +
-            '<button class="btn" style="font-size:10px;padding:2px 6px;margin-right:3px" onclick="_pmShowRenameNodeDialog(' + l3.id + ')">✎</button>' +
-            '<button class="btn" style="font-size:10px;padding:2px 6px;color:var(--danger)" onclick="_pmDeleteNode(' + l3.id + ')">✕</button>' +
-          '</td>' : '') +
-        '</tr>';
-      });
-      rightHtml += '</tbody></table></div>';
-    }
   }
+
 
   rightHtml += '</div>'; // .dt-right
 
