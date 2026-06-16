@@ -210,8 +210,10 @@ def get_product_documents(product_id: int, db: Session = Depends(get_db), _=Depe
                 "id": t.id,
                 "doc_name": t.doc_name,
                 "sort_order": t.sort_order,
+                "stage_type": t.stage_type or "通用",
                 "description": t.description or "",
                 "responsible_role": t.responsible_role or "",
+                "doc_path": t.doc_path or "",
                 "node_name": node.name,
                 "node_id": node.id,
             })

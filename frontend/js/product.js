@@ -381,20 +381,49 @@ function _renderProdDocsInline(docs) {
     el.innerHTML = '<div class="card" style="padding:20px"><div class="empty-state">该产品暂未关联文档模板。请先在「文档模板配置」页面为对应产品系列添加文档模板。</div></div>';
     return;
   }
-  var html = '<div class="card" style="padding:0;overflow:hidden">';
-  html += '<div class="table-scroll" style="max-height:400px"><table class="stage-table"><thead><tr>' +
-    '<th style="width:50px">序号</th><th>文档名称</th><th>责任人</th><th style="width:100px">产品系列</th><th>说明</th>' +
-    '</tr></thead><tbody>';
+
+  // Group by stage_type
+  var stageOrder = ['硬件开发', '结构设计', 'BSP开发', '软件开发', '测试', '通用'];
+  var grouped = {};
   docs.forEach(function(d) {
-    html += '<tr>' +
-      '<td style="font-family:var(--mono);color:var(--muted);text-align:center">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
-      '<td style="font-weight:500">' + escHtml(d.doc_name) + '</td>' +
-      '<td style="font-size:12px;white-space:nowrap">' + escHtml(d.responsible_role || '—') + '</td>' +
-      '<td style="font-size:11px;color:var(--muted)">' + escHtml(d.node_name || '') + '</td>' +
-      '<td style="font-size:12px;color:var(--muted)">' + escHtml(d.description || '') + '</td>' +
-    '</tr>';
+    var st = d.stage_type || '通用';
+    if (!grouped[st]) grouped[st] = [];
+    grouped[st].push(d);
+  });
+
+  var colorMap = { '硬件开发': 'var(--accent-lt)', '结构设计': '#e8f5e9', 'BSP开发': '#fff3e0', '软件开发': '#e3f2fd', '测试': '#fce4ec', '通用': 'var(--surface)' };
+  var html = '<div class="card" style="padding:0;overflow:hidden">';
+  html += '<div class="table-scroll" style="max-height:600px"><table class="stage-table"><thead><tr>' +
+    '<th style="width:80px">分类</th><th style="width:50px">序号</th><th>文档名称</th><th>责任人</th><th>路径</th><th>上传人</th><th>上传时间</th><th>操作</th>' +
+    '</tr></thead><tbody>';
+  stageOrder.forEach(function(st) {
+    var items = grouped[st];
+    if (!items || !items.length) return;
+    items.sort(function(a, b) { return (a.sort_order || 0) - (b.sort_order || 0); });
+
+    var bg = colorMap[st] || 'var(--surface)';
+    var cellStyle = 'background:' + bg + ';';
+    items.forEach(function(d, i) {
+      var isLast = i === items.length - 1;
+      var borderStyle = isLast ? '' : '';
+      html += '<tr>';
+      if (i === 0) {
+        html += '<td rowspan="' + items.length + '" style="vertical-align:middle;text-align:center;font-weight:600;' + cellStyle + 'color:var(--accent);font-size:12px;' + borderStyle + '">' + escHtml(st) + '<br><span style="font-size:10px;color:var(--muted)">' + items.length + ' 项</span></td>';
+      }
+      html += '<td style="font-family:var(--mono);color:var(--muted);text-align:center;' + cellStyle + borderStyle + '">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
+        '<td style="font-weight:500;' + cellStyle + borderStyle + '">' + escHtml(d.doc_name) + '</td>' +
+        '<td style="font-size:12px;white-space:nowrap;' + cellStyle + borderStyle + '">' + escHtml(d.responsible_role || '—') + '</td>' +
+        '<td style="font-size:12px;' + cellStyle + borderStyle + '">' + (d.doc_path
+          ? '<a href="' + escHtml(d.doc_path) + '" target="_blank" style="color:var(--accent);text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">' + escHtml(d.doc_path) + '</a>'
+          : '—') + '</td>' +
+        '<td style="font-size:12px;color:var(--muted);' + cellStyle + borderStyle + '">—</td>' +
+        '<td style="font-size:11px;color:var(--muted);' + cellStyle + borderStyle + '">—</td>' +
+        '<td style="white-space:nowrap;text-align:center;' + cellStyle + borderStyle + '"><span style="font-style:italic;color:var(--muted);font-size:11px">TODO：预览</span></td>' +
+      '</tr>';
+    });
   });
   html += '</tbody></table></div></div>';
+
   el.innerHTML = html;
 }
 
