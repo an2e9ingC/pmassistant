@@ -78,7 +78,7 @@ function renderProdOverview() {
             var statusCls = p.status === 'normal' ? 'prod' : (p.status === 'closed' ? 'ext' : '');
             var tagsHtml = '';
             if (p.tags_list && p.tags_list[0]) {
-              tagsHtml = '<div class="pov-l3-chips">' + p.tags_list.filter(function(t){return t;}).slice(0,3).map(function(t){return '<span class="pov-l3-tag">#' + escHtml(t) + '</span>';}).join('') + '</div>';
+              tagsHtml = '<div class="pov-l3-chips">' + p.tags_list.filter(function(t){return t;}).slice(0,3).map(function(t){return '<span class="tag-badge tag-' + (t.length % 5) + '">#' + escHtml(t) + '</span>';}).join('') + '</div>';
             }
             html += '<div class="pov-l3-chip" onclick="openProductDetail(\'' + p.id + '\')">' +
               '<div class="pov-l3-name">' + escHtml(p.code || '#' + p.id) + '</div>' +
