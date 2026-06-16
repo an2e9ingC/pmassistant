@@ -245,6 +245,7 @@ def _template_dict(t: DocumentTemplate) -> dict:
         "sort_order": t.sort_order,
         "description": t.description,
         "responsible_role": t.responsible_role,
+        "doc_path": t.doc_path or "",
     }
 
 
@@ -838,6 +839,7 @@ def _product_template_dict(t: ProductDocTemplate) -> dict:
         "sort_order": t.sort_order,
         "description": t.description,
         "responsible_role": t.responsible_role,
+        "doc_path": t.doc_path or "",
     }
 
 

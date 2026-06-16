@@ -16,8 +16,9 @@ class TemplateCreate(BaseModel):
     stage_type: str
     doc_name: str
     sort_order: int = 0
-    description: Optional[str] = None
+    doc_path: str
     responsible_role: Optional[str] = None
+    description: Optional[str] = None
 
 
 class TemplateUpdate(BaseModel):
@@ -26,6 +27,7 @@ class TemplateUpdate(BaseModel):
     sort_order: Optional[int] = None
     description: Optional[str] = None
     responsible_role: Optional[str] = None
+    doc_path: Optional[str] = None
 
 
 @router.get("/stage-types", response_model=dict)

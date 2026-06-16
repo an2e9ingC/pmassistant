@@ -15,6 +15,7 @@ class DocumentTemplate(Base):
     sort_order = Column(Integer, default=0)
     description = Column(String(512), nullable=True)
     responsible_role = Column(String(128), nullable=True)  # 责任人/岗位
+    doc_path = Column(String(512), nullable=True)  # 文档路径/NAS路径
 
 
 class ProjectDocument(Base):
@@ -48,6 +49,7 @@ class ProductDocTemplate(Base):
     sort_order = Column(Integer, default=0)
     description = Column(String(512), nullable=True)
     responsible_role = Column(String(128), nullable=True)  # 责任人/岗位
+    doc_path = Column(String(512), nullable=True)  # 文档路径/NAS路径
 
 
 class ProductLine(Base):

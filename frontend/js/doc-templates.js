@@ -134,6 +134,7 @@ function renderTemplatesPage() {
       '<th style="width:50px">序号</th>' +
       '<th>文档名称</th>' +
       '<th>责任人（岗位）</th>' +
+      '<th style="width:140px">路径</th>' +
       '<th>说明</th>' +
       (canEdit ? '<th style="width:90px;white-space:nowrap">操作</th>' : '') +
     '</tr></thead><tbody>';
@@ -143,6 +144,7 @@ function renderTemplatesPage() {
         '<td style="font-family:var(--mono);color:var(--muted);text-align:center">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
         '<td style="font-weight:500">' + escHtml(d.doc_name) + '</td>' +
         '<td style="font-size:12px;white-space:nowrap">' + escHtml(d.responsible_role || '—') + '</td>' +
+        '<td style="font-size:11px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escHtml(d.doc_path || '') + '">' + escHtml(d.doc_path || '—') + '</td>' +
         '<td style="font-size:12px;color:var(--muted)">' + escHtml(d.description || '') + '</td>' +
         (canEdit
           ? '<td style="white-space:nowrap;text-align:center">' +
@@ -187,6 +189,10 @@ function showAddTemplateForm() {
         '<input class="search-inp" id="dt-sort" type="number" min="0" value="' + nextSort + '" style="width:100%;box-sizing:border-box;padding:8px 4px;text-align:center"></div>' +
       '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">责任人（岗位）</label>' + _roleSelect('') + '</div>' +
     '</div>' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">路径 <span style="color:var(--danger)">*必填</span></label>' +
+      '<input class="search-inp" id="dt-path" placeholder="文档索引路径（如 NAS 路径）" style="width:100%;box-sizing:border-box">' +
+    '</div>' +
     '<div style="margin-bottom:4px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">说明（可选）</label>' +
       '<input class="search-inp" id="dt-desc" style="width:100%;box-sizing:border-box">' +
@@ -209,6 +215,10 @@ function showEditTemplateForm(id) {
         '<input class="search-inp" id="dt-sort" type="number" min="0" value="' + (d.sort_order != null ? d.sort_order : 1) + '" style="width:100%;box-sizing:border-box;padding:8px 4px;text-align:center"></div>' +
       '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">责任人（岗位）</label>' + _roleSelect(d.responsible_role || '') + '</div>' +
     '</div>' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">路径 <span style="color:var(--danger)">*必填</span></label>' +
+      '<input class="search-inp" id="dt-path" value="' + escHtml(d.doc_path || '') + '" placeholder="文档索引路径" style="width:100%;box-sizing:border-box">' +
+    '</div>' +
     '<div style="margin-bottom:4px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">说明（可选）</label>' +
       '<input class="search-inp" id="dt-desc" value="' + escHtml(d.description || '') + '" style="width:100%;box-sizing:border-box">' +
@@ -222,6 +232,7 @@ function saveTemplate(id) {
   var sortEl = document.getElementById('dt-sort');
   var roleEl = document.getElementById('dt-role');
   var descEl = document.getElementById('dt-desc');
+  var pathEl = document.getElementById('dt-path');
   if (!nameEl || !sortEl) { showToast('表单数据异常，请重新打开', 'error'); return; }
 
   var name = nameEl.value.trim();
@@ -229,7 +240,9 @@ function saveTemplate(id) {
   var sort = sortVal !== '' ? parseInt(sortVal) : 0;
   var role = roleEl ? roleEl.value.trim() : '';
   var desc = descEl ? descEl.value.trim() : '';
+  var path = pathEl ? pathEl.value.trim() : '';
   if (!name) { showToast('请输入文档名称', 'error'); return; }
+  if (!path) { showToast('请输入路径', 'error'); return; }
   if (isNaN(sort) || sort < 0) sort = 0;
 
   var stageType = _selectedStage;
@@ -244,8 +257,9 @@ function saveTemplate(id) {
     existing.sort_order = sort;
     existing.responsible_role = role || '';
     existing.description = desc;
+    existing.doc_path = path;
     _pendingOps.push({ type: 'edit', id: id, stage_type: stageType,
-      doc_name: name, sort_order: sort, responsible_role: role || '', description: desc });
+      doc_name: name, sort_order: sort, responsible_role: role || '', description: desc, doc_path: path });
   } else if (id && id < 0) {
     // Edit locally-added (not yet saved) template — update pending add op
     var arr = _templatesGrouped[stageType] || [];
@@ -255,6 +269,7 @@ function saveTemplate(id) {
       existing.sort_order = sort;
       existing.responsible_role = role || '';
       existing.description = desc;
+      existing.doc_path = path;
     }
     // Update the pending add op too
     for (var pi = 0; pi < _pendingOps.length; pi++) {
@@ -263,6 +278,7 @@ function saveTemplate(id) {
         _pendingOps[pi].sort_order = sort;
         _pendingOps[pi].responsible_role = role || '';
         _pendingOps[pi].description = desc;
+        _pendingOps[pi].doc_path = path;
         break;
       }
     }
@@ -270,9 +286,9 @@ function saveTemplate(id) {
     // New template — add locally with temp ID
     var tempId = _nextTempId--;
     var newDoc = { id: tempId, stage_type: stageType, doc_name: name,
-      sort_order: sort, responsible_role: role || '', description: desc };
+      sort_order: sort, responsible_role: role || '', description: desc, doc_path: path };
     _pendingOps.push({ type: 'add', tempId: tempId, stage_type: stageType,
-      doc_name: name, sort_order: sort, responsible_role: role || '', description: desc });
+      doc_name: name, sort_order: sort, responsible_role: role || '', description: desc, doc_path: path });
     var arr2 = _templatesGrouped[stageType];
     if (!arr2) { _templatesGrouped[stageType] = []; arr2 = _templatesGrouped[stageType]; }
     arr2.push(newDoc);
@@ -396,10 +412,10 @@ async function saveAllChanges() {
     var op = ops[i];
     try {
       if (op.type === 'add') {
-        await API.post('/doc-templates', { stage_type: op.stage_type, doc_name: op.doc_name, sort_order: op.sort_order, responsible_role: op.responsible_role || '', description: op.description || '' });
+        await API.post('/doc-templates', { stage_type: op.stage_type, doc_name: op.doc_name, sort_order: op.sort_order, responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '' });
         success++;
       } else if (op.type === 'edit') {
-        await API.put('/doc-templates/' + op.id, { doc_name: op.doc_name, sort_order: op.sort_order, responsible_role: op.responsible_role || '', description: op.description || '' });
+        await API.put('/doc-templates/' + op.id, { doc_name: op.doc_name, sort_order: op.sort_order, responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '' });
         success++;
       } else if (op.type === 'delete') {
         await API.del('/doc-templates/' + op.id);
@@ -630,7 +646,7 @@ function renderProductTreePage() {
     rightHtml += '<div class="section-hd"><div class="section-title">文档模板 (' + _productTemplates.length + ')</div></div>';
     if (_productTemplates.length) {
       rightHtml += '<div class="table-scroll"><table class="stage-table"><thead><tr>' +
-        '<th style="width:50px">序号</th><th>文档名称</th><th>责任人（岗位）</th><th>说明</th>' +
+        '<th style="width:50px">序号</th><th>文档名称</th><th>责任人（岗位）</th><th style="width:140px">路径</th><th>说明</th>' +
         (canEdit ? '<th style="width:90px;white-space:nowrap">操作</th>' : '') +
       '</tr></thead><tbody>';
       _productTemplates.forEach(function(d) {
@@ -638,6 +654,7 @@ function renderProductTreePage() {
           '<td style="font-family:var(--mono);color:var(--muted);text-align:center">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
           '<td style="font-weight:500">' + escHtml(d.doc_name) + '</td>' +
           '<td style="font-size:12px;white-space:nowrap">' + escHtml(d.responsible_role || '—') + '</td>' +
+          '<td style="font-size:11px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escHtml(d.doc_path || '') + '">' + escHtml(d.doc_path || '—') + '</td>' +
           '<td style="font-size:12px;color:var(--muted)">' + escHtml(d.description || '') + '</td>' +
           (canEdit ? '<td style="white-space:nowrap;text-align:center">' +
             '<button class="btn" style="font-size:10px;padding:2px 8px;margin-right:4px" onclick="showEditProductTemplateForm(' + d.id + ')">编辑</button>' +
@@ -714,6 +731,10 @@ function showAddProductTemplateForm() {
         '<input class="search-inp" id="ptf-order" type="number" min="0" value="1" style="width:100%;box-sizing:border-box;padding:8px 4px;text-align:center"></div>' +
       '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">责任人（岗位）</label>' + _roleSelect('') + '</div>' +
     '</div>' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">路径 <span style="color:var(--danger)">*必填</span></label>' +
+      '<input class="search-inp" id="ptf-path" placeholder="文档索引路径（如 NAS 路径）" style="width:100%;box-sizing:border-box">' +
+    '</div>' +
     '<div style="margin-bottom:4px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">说明（可选）</label>' +
       '<input class="search-inp" id="ptf-desc" style="width:100%;box-sizing:border-box">' +
@@ -738,6 +759,10 @@ function showEditProductTemplateForm(id) {
         '<input class="search-inp" id="ptf-order" type="number" min="0" value="' + (tpl.sort_order || '') + '" style="width:100%;box-sizing:border-box;padding:8px 4px;text-align:center"></div>' +
       '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">责任人（岗位）</label>' + _roleSelect(tpl.responsible_role || '') + '</div>' +
     '</div>' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">路径 <span style="color:var(--danger)">*必填</span></label>' +
+      '<input class="search-inp" id="ptf-path" value="' + escHtml(tpl.doc_path || '') + '" placeholder="文档索引路径" style="width:100%;box-sizing:border-box">' +
+    '</div>' +
     '<div style="margin-bottom:4px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">说明（可选）</label>' +
       '<input class="search-inp" id="ptf-desc" value="' + escHtml(tpl.description || '') + '" style="width:100%;box-sizing:border-box">' +
@@ -751,18 +776,23 @@ async function saveProductTemplate(id) {
   var order = parseInt(document.getElementById('ptf-order').value) || 0;
   var desc = document.getElementById('ptf-desc').value.trim();
   var role = document.getElementById('dt-role') ? document.getElementById('dt-role').value : '';
+  var pathEl = document.getElementById('ptf-path');
+  var path = pathEl ? pathEl.value.trim() : '';
   if (!nameEl || !nameEl.value.trim()) { showToast('请输入文档名称', 'error'); return; }
+  if (!path) { showToast('请输入路径', 'error'); return; }
   var name = nameEl.value.trim();
 
   var overlay = document.querySelector('.shared-dialog-overlay');
   if (overlay) overlay.remove();
 
   try {
+    var payload = {doc_name: name, sort_order: order, doc_path: path, description: desc, responsible_role: role};
     if (id && id > 0) {
-      await API.put('/product-doc-templates/' + id, {doc_name: name, sort_order: order, description: desc, responsible_role: role});
+      await API.put('/product-doc-templates/' + id, payload);
       showToast('模板已更新', 'ok');
     } else {
-      await API.post('/product-doc-templates', {product_id: _selectedNodeId, doc_name: name, sort_order: order, description: desc, responsible_role: role});
+      payload.product_id = _selectedNodeId;
+      await API.post('/product-doc-templates', payload);
       showToast('模板已添加', 'ok');
     }
     // Refresh

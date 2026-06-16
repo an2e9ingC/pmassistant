@@ -31,8 +31,9 @@ class TemplateCreate(BaseModel):
     product_id: int
     doc_name: str
     sort_order: int = 0
-    description: Optional[str] = None
+    doc_path: str
     responsible_role: Optional[str] = None
+    description: Optional[str] = None
 
 
 class TemplateUpdate(BaseModel):
@@ -41,6 +42,7 @@ class TemplateUpdate(BaseModel):
     sort_order: Optional[int] = None
     description: Optional[str] = None
     responsible_role: Optional[str] = None
+    doc_path: Optional[str] = None
 
 
 # ── Product Tree (read) ──
@@ -248,6 +250,7 @@ def import_templates(
             sort_order=tpl.sort_order,
             description=tpl.description,
             responsible_role=tpl.responsible_role,
+            doc_path=tpl.doc_path,
         )
         db.add(new_tpl)
         imported += 1
