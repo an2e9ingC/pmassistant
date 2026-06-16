@@ -16,6 +16,7 @@ class DocumentTemplate(Base):
     description = Column(String(512), nullable=True)
     responsible_role = Column(String(128), nullable=True)  # 责任人/岗位
     doc_path = Column(String(512), nullable=True)  # 文档路径/NAS路径
+    doc_type = Column(String(32), nullable=True)  # 文档类型: gitlab/svn/nas
 
 
 class ProjectDocument(Base):
@@ -51,6 +52,7 @@ class ProductDocTemplate(Base):
     description = Column(String(512), nullable=True)
     responsible_role = Column(String(128), nullable=True)  # 责任人/岗位
     doc_path = Column(String(512), nullable=True)  # 文档路径/NAS路径
+    doc_type = Column(String(32), nullable=True)  # 文档类型: gitlab/svn/nas
 
 
 class ProductLine(Base):

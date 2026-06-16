@@ -416,9 +416,10 @@ function _renderProdDocsInline(docs) {
   });
 
   var colorMap = { '硬件开发': 'var(--accent-lt)', '结构设计': '#e8f5e9', 'BSP开发': '#fff3e0', '软件开发': '#e3f2fd', '测试': '#fce4ec', '通用': 'var(--surface)' };
+  var typeLabels = { gitlab: 'GitLab 发布链接', svn: 'SVN 文档链接', nas: 'NAS 文档链接', solidworks: 'SOLIDWORKS' };
   var html = '<div class="card" style="padding:0;overflow:hidden">';
   html += '<div class="table-scroll" style="max-height:600px"><table class="stage-table"><thead><tr>' +
-    '<th style="width:80px">分类</th><th style="width:50px">序号</th><th>文档名称</th><th>责任人</th><th style="width:90px">状态</th><th>路径</th><th>上传人</th><th>上传时间</th><th>操作</th>' +
+    '<th style="width:80px">分类</th><th style="width:50px">序号</th><th>文档名称</th><th>责任人</th><th style="width:90px">状态</th><th>类型</th><th>路径</th><th>上传人</th><th>上传时间</th><th>操作</th>' +
     '</tr></thead><tbody>';
   stageOrder.forEach(function(st) {
     var items = grouped[st];
@@ -442,6 +443,7 @@ function _renderProdDocsInline(docs) {
         '<td style="font-weight:500;' + cellStyle + '">' + escHtml(d.doc_name) + '</td>' +
         '<td style="font-size:12px;white-space:nowrap;' + cellStyle + '">' + escHtml(d.responsible_role || '—') + '</td>' +
         '<td style="white-space:nowrap;' + cellStyle + '">' + statusHtml + '</td>' +
+        '<td style="font-size:11px;' + cellStyle + '">' + escHtml(typeLabels[d.doc_type] || '—') + '</td>' +
         '<td style="font-size:12px;' + cellStyle + '">' + (d.location
           ? '<a href="' + escHtml(d.location) + '" target="_blank" style="color:var(--accent);text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">' + escHtml(d.location) + '</a>'
           : (d.doc_path ? '<span style="color:var(--muted);font-style:italic">请提交到：' + escHtml(d.doc_path) + '</span>' : '—')) + '</td>' +
@@ -486,16 +488,31 @@ function showUploadDocDialog(docId) {
 function _openUploadDialog(d) {
   var currentUser = getCurrentUser();
   var uploadBy = currentUser ? (currentUser.display_name || currentUser.username) : '';
+  var defaultType = d.doc_type || 'gitlab';
+  var placeholderMap = {
+    svn: 'SVN 地址，如 http://192.168.0.124:8443/svn/...',
+    gitlab: 'GitLab 发布链接，如 http://192.168.0.128/.../-/releases/...',
+    nas: 'NAS 路径，如 \\\\192.168.0.x\\share\\...',
+    solidworks: 'SOLIDWORKS 文件路径'
+  };
+  var typeLabels = { gitlab: 'GitLab 发布链接', svn: 'SVN 文档链接', nas: 'NAS 文档链接', solidworks: 'SOLIDWORKS' };
+  var makeTypeBtn = function(type, label) {
+    var active = type === defaultType;
+    return '<button class="btn upload-type-btn" style="font-size:11px;padding:4px 10px' +
+      (active ? ';background:var(--accent);color:#fff' : '') +
+      '" onclick="setUploadType(\'' + type + '\')">' + label + '</button>';
+  };
   var html = '<div style="margin-bottom:10px">' +
     '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">期望路径：' + escHtml(d.doc_path || '未配置') + '</div>' +
     '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:6px">文档类型</label>' +
     '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap" id="upload-type-btns">' +
-      '<button class="btn upload-type-btn" style="font-size:11px;padding:4px 10px" onclick="setUploadType(\'svn\')">SVN</button>' +
-      '<button class="btn upload-type-btn" style="font-size:11px;padding:4px 10px;background:var(--accent);color:#fff" onclick="setUploadType(\'gitlab\')">GitLab 发布链接</button>' +
-      '<button class="btn upload-type-btn" style="font-size:11px;padding:4px 10px" onclick="setUploadType(\'nas\')">NAS 路径</button>' +
+      makeTypeBtn('gitlab', 'GitLab 发布链接') +
+      makeTypeBtn('svn', 'SVN 文档链接') +
+      makeTypeBtn('nas', 'NAS 文档链接') +
+      makeTypeBtn('solidworks', 'SOLIDWORKS') +
     '</div>' +
     '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:6px">文档位置</label>' +
-    '<input class="search-inp" id="upload-doc-location" value="' + escHtml(d.location || '') + '" placeholder="GitLab 发布链接，如 http://192.168.0.128/.../-/releases/..." style="width:100%;box-sizing:border-box;margin-bottom:10px">' +
+    '<input class="search-inp" id="upload-doc-location" value="' + escHtml(d.location || '') + '" placeholder="' + (placeholderMap[defaultType] || '') + '" style="width:100%;box-sizing:border-box;margin-bottom:10px">' +
     '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">上传人：<span style="color:var(--fg);font-weight:500">' + escHtml(uploadBy) + '</span></div>' +
   '</div>';
 
@@ -511,6 +528,7 @@ function setUploadType(type) {
   if (type === 'svn') { input.value = ''; input.placeholder = 'SVN 地址，如 http://192.168.0.124:8443/svn/...'; }
   else if (type === 'gitlab') { input.value = ''; input.placeholder = 'GitLab 发布链接，如 http://192.168.0.128/.../-/releases/...'; }
   else if (type === 'nas') { input.value = ''; input.placeholder = 'NAS 路径，如 \\\\192.168.0.x\\share\\...'; }
+  else if (type === 'solidworks') { input.value = ''; input.placeholder = 'SOLIDWORKS 文件路径'; }
   // Highlight selected
   document.querySelectorAll('#upload-type-btns .upload-type-btn').forEach(function(btn) {
     btn.style.background = ''; btn.style.color = '';

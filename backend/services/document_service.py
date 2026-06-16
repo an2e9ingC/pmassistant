@@ -246,6 +246,7 @@ def _template_dict(t: DocumentTemplate) -> dict:
         "description": t.description,
         "responsible_role": t.responsible_role,
         "doc_path": t.doc_path or "",
+        "doc_type": t.doc_type or "",
     }
 
 
@@ -841,6 +842,7 @@ def _product_template_dict(t: ProductDocTemplate) -> dict:
         "description": t.description,
         "responsible_role": t.responsible_role,
         "doc_path": t.doc_path or "",
+        "doc_type": t.doc_type or "",
     }
 
 
@@ -914,6 +916,7 @@ def get_or_init_product_documents(db: Session, product_id: int) -> list[dict]:
                 "description": existing.description or "",
                 "responsible_role": existing.responsible_role or "",
                 "doc_path": actual_path,
+                "doc_type": tpl.doc_type or "",
                 "status": existing.status,
                 "done": done,
                 "warn": warn,

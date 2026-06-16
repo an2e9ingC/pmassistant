@@ -33,6 +33,7 @@ class TemplateCreate(BaseModel):
     sort_order: int = 0
     doc_path: str
     stage_type: str = "通用"
+    doc_type: Optional[str] = None
     responsible_role: Optional[str] = None
     description: Optional[str] = None
 
@@ -45,6 +46,7 @@ class TemplateUpdate(BaseModel):
     description: Optional[str] = None
     responsible_role: Optional[str] = None
     doc_path: Optional[str] = None
+    doc_type: Optional[str] = None
 
 
 # ── Product Tree (read) ──

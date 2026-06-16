@@ -181,12 +181,14 @@ function renderTemplatesPage() {
     rightHtml += '<div class="table-scroll"><table class="stage-table"><thead><tr>' +
       '<th style="width:50px">序号</th>' +
       '<th>文档名称</th>' +
-      '<th>责任人（岗位）</th>' +
-      '<th style="width:140px">路径</th>' +
+      '<th style="width:80px">责任人</th>' +
+      '<th style="width:60px">类型</th>' +
+      '<th>路径</th>' +
       '<th>说明</th>' +
       (canEdit ? '<th style="width:90px;white-space:nowrap">操作</th>' : '') +
     '</tr></thead><tbody>';
 
+    var typeLabels = DOC_TYPE_LABELS;
     docs.forEach(function(d, i) {
       rightHtml += '<tr>' +
         '<td data-drag-index="' + i + '" draggable="true"' +
@@ -195,7 +197,8 @@ function renderTemplatesPage() {
         ' ondrop="_trDrop.call(this,event,_templatesGrouped[_selectedStage] || [],renderTemplatesAfterReorder)"' +
         ' style="font-family:var(--mono);color:var(--muted);text-align:center;cursor:grab" title="拖动排序">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
         '<td style="font-weight:500">' + escHtml(d.doc_name) + '</td>' +
-        '<td style="font-size:12px;white-space:nowrap">' + escHtml(d.responsible_role || '—') + '</td>' +
+        '<td style="font-size:12px;white-space:nowrap;width:80px">' + escHtml(d.responsible_role || '—') + '</td>' +
+        '<td style="font-size:11px">' + escHtml(typeLabels[d.doc_type] || '—') + '</td>' +
         '<td style="font-size:12px">' + (d.doc_path
           ? '<a href="' + escHtml(d.doc_path) + '" target="_blank" style="color:var(--accent);text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'" title="点击打开路径">' + escHtml(d.doc_path) + ' ↗</a>'
           : '—') + '</td>' +
@@ -245,6 +248,13 @@ function showAddTemplateForm() {
         '<input class="search-inp" id="dt-sort" type="number" min="0" value="' + nextSort + '" style="width:100%;box-sizing:border-box;padding:8px 4px;text-align:center"></div>' +
       '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">责任人（岗位）</label>' + _roleSelect('') + '</div>' +
     '</div>' +
+    '<input type="hidden" class="doc-type-value" id="dt-doctype" value="">' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:6px">文档类型 <span style="color:var(--danger)">*必填</span></label>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap" id="dt-doctype-btns">' +
+        _docTypeButtons('') +
+      '</div>' +
+    '</div>' +
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">路径 <span style="color:var(--danger)">*必填</span></label>' +
       '<input class="search-inp" id="dt-path" placeholder="文档索引路径（如 NAS 路径）" style="width:100%;box-sizing:border-box">' +
@@ -270,6 +280,13 @@ function showEditTemplateForm(id) {
       '<div style="width:80px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">序号</label>' +
         '<input class="search-inp" id="dt-sort" type="number" min="0" value="' + (d.sort_order != null ? d.sort_order : 1) + '" style="width:100%;box-sizing:border-box;padding:8px 4px;text-align:center"></div>' +
       '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">责任人（岗位）</label>' + _roleSelect(d.responsible_role || '') + '</div>' +
+    '</div>' +
+    '<input type="hidden" class="doc-type-value" id="dt-doctype" value="' + escHtml(d.doc_type || '') + '">' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:6px">文档类型 <span style="color:var(--danger)">*必填</span></label>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap" id="dt-doctype-btns">' +
+        _docTypeButtons(d.doc_type || '') +
+      '</div>' +
     '</div>' +
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">路径 <span style="color:var(--danger)">*必填</span></label>' +
@@ -297,8 +314,11 @@ function saveTemplate(id) {
   var role = roleEl ? roleEl.value.trim() : '';
   var desc = descEl ? descEl.value.trim() : '';
   var path = pathEl ? pathEl.value.trim() : '';
+  var typeEl = document.getElementById('dt-doctype');
+  var docType = typeEl ? typeEl.value : '';
   if (!name) { showToast('请输入文档名称', 'error'); return; }
   if (!path) { showToast('请输入路径', 'error'); return; }
+  if (!docType) { showToast('请选择文档类型', 'error'); return; }
   if (isNaN(sort) || sort < 0) sort = 0;
 
   var stageType = _selectedStage;
@@ -314,8 +334,9 @@ function saveTemplate(id) {
     existing.responsible_role = role || '';
     existing.description = desc;
     existing.doc_path = path;
+    existing.doc_type = docType;
     _pendingOps.push({ type: 'edit', id: id, stage_type: stageType,
-      doc_name: name, sort_order: sort, responsible_role: role || '', description: desc, doc_path: path });
+      doc_name: name, sort_order: sort, responsible_role: role || '', description: desc, doc_path: path, doc_type: docType });
   } else if (id && id < 0) {
     // Edit locally-added (not yet saved) template — update pending add op
     var arr = _templatesGrouped[stageType] || [];
@@ -342,9 +363,9 @@ function saveTemplate(id) {
     // New template — add locally with temp ID
     var tempId = _nextTempId--;
     var newDoc = { id: tempId, stage_type: stageType, doc_name: name,
-      sort_order: sort, responsible_role: role || '', description: desc, doc_path: path };
+      sort_order: sort, responsible_role: role || '', description: desc, doc_path: path, doc_type: docType };
     _pendingOps.push({ type: 'add', tempId: tempId, stage_type: stageType,
-      doc_name: name, sort_order: sort, responsible_role: role || '', description: desc, doc_path: path });
+      doc_name: name, sort_order: sort, responsible_role: role || '', description: desc, doc_path: path, doc_type: docType });
     var arr2 = _templatesGrouped[stageType];
     if (!arr2) { _templatesGrouped[stageType] = []; arr2 = _templatesGrouped[stageType]; }
     arr2.push(newDoc);
@@ -365,7 +386,7 @@ function renderTemplatesAfterReorder() {
     if (d.id > 0) {
       _pendingOps.push({ type: 'edit', id: d.id, stage_type: _selectedStage,
         doc_name: d.doc_name, sort_order: d.sort_order, responsible_role: d.responsible_role || '',
-        description: d.description || '', doc_path: d.doc_path || '' });
+        description: d.description || '', doc_path: d.doc_path || '', doc_type: d.doc_type || '' });
     }
   }
   renderTemplatesPage();
@@ -383,13 +404,14 @@ function copyTemplate(id) {
     sort_order: arr.length + 1,
     responsible_role: tpl.responsible_role || '',
     description: tpl.description || '',
-    doc_path: tpl.doc_path || ''
+    doc_path: tpl.doc_path || '',
+    doc_type: tpl.doc_type || ''
   };
   arr.push(newDoc);
   _pendingOps.push({ type: 'add', tempId: tempId, stage_type: _selectedStage,
     doc_name: newDoc.doc_name, sort_order: newDoc.sort_order,
     responsible_role: newDoc.responsible_role,
-    description: newDoc.description, doc_path: newDoc.doc_path });
+    description: newDoc.description, doc_path: newDoc.doc_path, doc_type: newDoc.doc_type });
   showToast('已复制，请修改后保存', 'info');
   renderTemplatesPage();
 }
@@ -522,7 +544,7 @@ async function saveAllChanges() {
             _pendingOps.push({ type: 'edit', id: docs[di].id, stage_type: stageTypes[si],
               doc_name: docs[di].doc_name, sort_order: newSort,
               responsible_role: docs[di].responsible_role || '',
-              description: docs[di].description || '', doc_path: docs[di].doc_path || '' });
+              description: docs[di].description || '', doc_path: docs[di].doc_path || '', doc_type: docs[di].doc_type || '' });
           }
         }
       }
@@ -537,10 +559,10 @@ async function saveAllChanges() {
     var op = ops[i];
     try {
       if (op.type === 'add') {
-        await API.post('/doc-templates', { stage_type: op.stage_type, doc_name: op.doc_name, sort_order: op.sort_order, responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '' });
+        await API.post('/doc-templates', { stage_type: op.stage_type, doc_name: op.doc_name, sort_order: op.sort_order, responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '', doc_type: op.doc_type || '' });
         success++;
       } else if (op.type === 'edit') {
-        await API.put('/doc-templates/' + op.id, { doc_name: op.doc_name, sort_order: op.sort_order, responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '' });
+        await API.put('/doc-templates/' + op.id, { doc_name: op.doc_name, sort_order: op.sort_order, responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '', doc_type: op.doc_type || '' });
         success++;
       } else if (op.type === 'delete') {
         await API.del('/doc-templates/' + op.id);
@@ -634,6 +656,37 @@ var _productPendingOps = [];     // pending operations queue (add/edit/delete/re
 var _productNextTempId = -1000;  // temp IDs for locally-added templates
 
 var PRODUCT_STAGE_TYPES = ['硬件开发', '结构设计', 'BSP开发', '软件开发', '测试', '通用'];
+
+var DOC_TYPES = [
+  { key: 'gitlab', label: 'GitLab 发布链接' },
+  { key: 'svn', label: 'SVN 文档链接' },
+  { key: 'nas', label: 'NAS 文档链接' },
+  { key: 'solidworks', label: 'SOLIDWORKS' },
+];
+var DOC_TYPE_LABELS = {};
+DOC_TYPES.forEach(function(t) { DOC_TYPE_LABELS[t.key] = t.label; });
+
+function _docTypeButtons(selected) {
+  selected = selected || '';
+  return DOC_TYPES.map(function(t) {
+    var active = t.key === selected;
+    return '<button class="btn doc-type-btn" style="font-size:11px;padding:4px 10px' +
+      (active ? ';background:var(--accent);color:#fff' : '') +
+      '" onclick="_selectDocType(\'' + t.key + '\',this)">' + t.label + '</button>';
+  }).join('');
+}
+
+function _selectDocType(type, el) {
+  var container = el.parentElement;
+  if (!container) return;
+  container.querySelectorAll('.doc-type-btn').forEach(function(btn) {
+    btn.style.background = ''; btn.style.color = '';
+  });
+  el.style.background = 'var(--accent)'; el.style.color = '#fff';
+  // Set hidden input value
+  var hidden = container.parentElement.querySelector('.doc-type-value');
+  if (hidden) hidden.value = type;
+}
 var _dtBreadcrumbIds = [];       // cached breadcrumb node IDs for click nav
 
 var TREE_ICONS = ['', '📁', '📂', '📄'];  // level 1/2/3 icons
@@ -800,9 +853,10 @@ function renderProductTreePage() {
     rightHtml += '<div class="section-hd"><div class="section-title">' + escHtml(_productStage) + ' — 文档清单 (' + _productStageDocs.length + ')</div></div>';
     if (_productStageDocs.length) {
       rightHtml += '<div class="table-scroll"><table class="stage-table"><thead><tr>' +
-        '<th>序号</th><th>文档名称</th><th>责任人（岗位）</th><th>路径</th><th>说明</th>' +
+        '<th>序号</th><th>文档名称</th><th style="width:80px">责任人</th><th style="width:60px">类型</th><th>路径</th><th>说明</th>' +
         (canEdit ? '<th style="white-space:nowrap">操作</th>' : '') +
       '</tr></thead><tbody>';
+      var typeLabels = DOC_TYPE_LABELS;
       _productStageDocs.forEach(function(d, i) {
         rightHtml += '<tr>' +
           '<td data-drag-index="' + i + '" draggable="true"' +
@@ -811,7 +865,8 @@ function renderProductTreePage() {
           ' ondrop="_trDrop.call(this,event,_productStageDocs,renderProductAfterReorder)"' +
           ' style="font-family:var(--mono);color:var(--muted);text-align:center;cursor:grab" title="拖动排序">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
           '<td style="font-weight:500">' + escHtml(d.doc_name) + '</td>' +
-          '<td style="font-size:12px;white-space:nowrap">' + escHtml(d.responsible_role || '—') + '</td>' +
+          '<td style="font-size:12px;white-space:nowrap;width:80px">' + escHtml(d.responsible_role || '—') + '</td>' +
+          '<td style="font-size:11px">' + escHtml(typeLabels[d.doc_type] || '—') + '</td>' +
           '<td style="font-size:12px">' + (d.doc_path
             ? '<a href="' + escHtml(d.doc_path) + '" target="_blank" style="color:var(--accent);text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'" title="点击打开路径">' + escHtml(d.doc_path) + ' ↗</a>'
             : '—') + '</td>' +
@@ -906,6 +961,13 @@ function showAddProductTemplateForm() {
     '<div style="display:flex;gap:10px;margin-bottom:10px">' +
       '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">责任人（岗位）</label>' + _roleSelect('') + '</div>' +
     '</div>' +
+    '<input type="hidden" class="doc-type-value" id="ptf-doctype" value="">' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:6px">文档类型 <span style="color:var(--danger)">*必填</span></label>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap" id="ptf-doctype-btns">' +
+        _docTypeButtons(_productStage ? '' : '') +
+      '</div>' +
+    '</div>' +
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">路径 <span style="color:var(--danger)">*必填</span></label>' +
       '<input class="search-inp" id="ptf-path" placeholder="文档索引路径（如 NAS 路径）" style="width:100%;box-sizing:border-box">' +
@@ -940,6 +1002,13 @@ function showEditProductTemplateForm(id) {
     '</div>' +
     '<div style="display:flex;gap:10px;margin-bottom:10px">' +
       '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">责任人（岗位）</label>' + _roleSelect(tpl.responsible_role || '') + '</div>' +
+    '</div>' +
+    '<input type="hidden" class="doc-type-value" id="ptf-doctype" value="' + escHtml(tpl.doc_type || '') + '">' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:6px">文档类型 <span style="color:var(--danger)">*必填</span></label>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap" id="ptf-doctype-btns">' +
+        _docTypeButtons(tpl.doc_type || '') +
+      '</div>' +
     '</div>' +
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">路径 <span style="color:var(--danger)">*必填</span></label>' +
@@ -984,8 +1053,11 @@ function saveProductTemplate(id) {
   var role = roleEl ? roleEl.value : '';
   var path = pathEl.value.trim();
   var stage = stageEl ? stageEl.value : (_productStage || '通用');
+  var typeEl = document.getElementById('ptf-doctype');
+  var docType = typeEl ? typeEl.value : '';
   if (!nameEl.value.trim()) { showToast('请输入文档名称', 'error'); return; }
   if (!path) { showToast('请输入路径', 'error'); return; }
+  if (!docType) { showToast('请选择文档类型', 'error'); return; }
   var name = nameEl.value.trim();
 
   var overlay = document.querySelector('.shared-dialog-overlay');
@@ -995,47 +1067,34 @@ function saveProductTemplate(id) {
     // Edit existing template
     var tpl = _productTemplates.find(function(x) { return x.id === id; });
     if (!tpl) { showToast('未找到该模板', 'error'); return; }
-    tpl.doc_name = name;
-    tpl.sort_order = order;
-    tpl.stage_type = stage;
-    tpl.description = desc;
-    tpl.responsible_role = role;
-    tpl.doc_path = path;
+    tpl.doc_name = name; tpl.doc_path = path; tpl.doc_type = docType;
+    tpl.sort_order = order; tpl.stage_type = stage; tpl.description = desc; tpl.responsible_role = role;
     _productPendingOps.push({ type: 'edit', id: id,
       doc_name: name, sort_order: order, stage_type: stage, responsible_role: role,
-      description: desc, doc_path: path });
+      description: desc, doc_path: path, doc_type: docType });
   } else if (id && id < 0) {
-    // Edit locally-added template
     var tpl2 = _productTemplates.find(function(x) { return x.id === id; });
     if (tpl2) {
-      tpl2.doc_name = name;
-      tpl2.sort_order = order;
-      tpl2.stage_type = stage;
-      tpl2.description = desc;
-      tpl2.responsible_role = role;
-      tpl2.doc_path = path;
+      tpl2.doc_name = name; tpl2.doc_path = path; tpl2.doc_type = docType;
+      tpl2.sort_order = order; tpl2.stage_type = stage; tpl2.description = desc; tpl2.responsible_role = role;
     }
-    // Update the pending add op
     for (var pi = 0; pi < _productPendingOps.length; pi++) {
       if (_productPendingOps[pi].tempId === id) {
-        _productPendingOps[pi].doc_name = name;
-        _productPendingOps[pi].sort_order = order;
-        _productPendingOps[pi].stage_type = stage;
-        _productPendingOps[pi].responsible_role = role;
+        _productPendingOps[pi].doc_name = name; _productPendingOps[pi].doc_path = path;
+        _productPendingOps[pi].doc_type = docType; _productPendingOps[pi].sort_order = order;
+        _productPendingOps[pi].stage_type = stage; _productPendingOps[pi].responsible_role = role;
         _productPendingOps[pi].description = desc;
-        _productPendingOps[pi].doc_path = path;
         break;
       }
     }
   } else {
-    // New template — add locally with temp ID
     var tempId = _productNextTempId--;
     var newDoc = { id: tempId, doc_name: name, sort_order: order,
-      stage_type: stage, responsible_role: role, description: desc, doc_path: path };
+      stage_type: stage, responsible_role: role, description: desc, doc_path: path, doc_type: docType };
     _productTemplates.push(newDoc);
     _productPendingOps.push({ type: 'add', tempId: tempId,
       doc_name: name, sort_order: order, stage_type: stage, responsible_role: role,
-      description: desc, doc_path: path });
+      description: desc, doc_path: path, doc_type: docType });
   }
   renderProductTreePage();
 }
@@ -1052,12 +1111,13 @@ function copyProductTemplate(id) {
     stage_type: tpl.stage_type || '通用',
     responsible_role: tpl.responsible_role || '',
     description: tpl.description || '',
-    doc_path: tpl.doc_path || ''
+    doc_path: tpl.doc_path || '',
+    doc_type: tpl.doc_type || ''
   };
   _productTemplates.push(newDoc);
   _productPendingOps.push({ type: 'add', tempId: tempId,
     doc_name: newDoc.doc_name, sort_order: newDoc.sort_order,
-    stage_type: newDoc.stage_type,
+    stage_type: newDoc.stage_type, doc_type: newDoc.doc_type,
     responsible_role: newDoc.responsible_role,
     description: newDoc.description, doc_path: newDoc.doc_path });
   showToast('已复制，请修改后保存', 'info');
@@ -1102,7 +1162,7 @@ async function saveProductChanges() {
           if (!found) {
             _productPendingOps.push({ type: 'edit', id: docs[di].id,
               doc_name: docs[di].doc_name, sort_order: newSort,
-              stage_type: docs[di].stage_type || '通用',
+              stage_type: docs[di].stage_type || '通用', doc_type: docs[di].doc_type || '',
               responsible_role: docs[di].responsible_role || '',
               description: docs[di].description || '', doc_path: docs[di].doc_path || '' });
           }
@@ -1118,10 +1178,10 @@ async function saveProductChanges() {
     var op = ops[i];
     try {
       if (op.type === 'add') {
-        await API.post('/product-doc-templates', { product_id: _selectedNodeId, doc_name: op.doc_name, sort_order: op.sort_order, stage_type: op.stage_type || '通用', responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '' });
+        await API.post('/product-doc-templates', { product_id: _selectedNodeId, doc_name: op.doc_name, sort_order: op.sort_order, stage_type: op.stage_type || '通用', doc_type: op.doc_type || '', responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '' });
         success++;
       } else if (op.type === 'edit') {
-        await API.put('/product-doc-templates/' + op.id, { doc_name: op.doc_name, sort_order: op.sort_order, stage_type: op.stage_type || '通用', responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '' });
+        await API.put('/product-doc-templates/' + op.id, { doc_name: op.doc_name, sort_order: op.sort_order, stage_type: op.stage_type || '通用', doc_type: op.doc_type || '', responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '' });
         success++;
       } else if (op.type === 'delete') {
         await API.del('/product-doc-templates/' + op.id);
