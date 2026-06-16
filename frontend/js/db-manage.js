@@ -33,8 +33,8 @@ function renderDbManage() {
     '<div class="config-section-title">导出数据库</div>' +
     '<div class="config-fields" style="padding:12px 16px">' +
       '<div style="font-size:11.5px;color:var(--muted);margin-bottom:10px">下载当前 PMA 数据库文件（SQLite），可用于备份或迁移。</div>' +
-      '<button class="btn btn-primary" onclick="exportDatabase()">' +
-        '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px">' +
+      '<button class="btn btn-primary" onclick="exportDatabase()" style="height:35px;">' +
+        '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;vertical-align:middle">' +
           '<path d="M14.5 10.5v3a1 1 0 0 1-1 1h-12a1 1 0 0 1-1-1v-3"/>' +
           '<polyline points="4.5 6.5 8 2.5 11.5 6.5"/>' +
           '<line x1="8" y1="2.5" x2="8" y2="10.5"/>' +
@@ -49,10 +49,16 @@ function renderDbManage() {
     '<div class="config-fields" style="padding:12px 16px">' +
       '<div style="font-size:11.5px;color:var(--muted);margin-bottom:8px">上传一个 SQLite 数据库文件（.db）。导入前会自动备份当前数据库。</div>' +
       '<div style="font-size:11px;color:var(--warn);margin-bottom:10px">&#9888; 导入会替换当前全部数据，请确认文件正确后再操作。</div>' +
-      '<div style="display:flex;align-items:center;gap:8px">' +
-        '<input type="file" id="db-import-file" accept=".db" style="font-size:12px;flex:1">' +
-        '<button class="btn btn-primary" onclick="importDatabase()">导入</button>' +
-      '</div>' +
+      '<input type="file" id="db-import-file" accept=".db" style="display:none" onchange="onImportFileSelected(this)">' +
+      '<button class="btn btn-primary" onclick="triggerImportFile()" style="height:35px;">' +
+        '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;vertical-align:middle">' +
+          '<path d="M2.5 10.5v3a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-3"/>' +
+          '<polyline points="11.5 6.5 8 10.5 4.5 6.5"/>' +
+          '<line x1="8" y1="10.5" x2="8" y2="2.5"/>' +
+        '</svg>' +
+        '选择文件并导入' +
+      '</button>' +
+      '<span id="db-import-file-name" style="font-size:11px;color:var(--muted);margin-left:8px"></span>' +
       '<div id="db-import-msg" style="margin-top:8px;font-size:11.5px"></div>' +
     '</div></div>';
 
@@ -75,7 +81,7 @@ function renderDbManage() {
             '<span style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">确认新密码</span>' +
             '<input type="password" id="db-rekey-confirm" placeholder="再次输入新 passphrase" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;box-sizing:border-box">' +
           '</label>' +
-          '<button class="btn btn-primary" onclick="rekeyDatabase()" style="height:35px">更换密码</button>' +
+          '<button class="btn btn-primary" onclick="rekeyDatabase()" style="height:35px;">更换密码</button>' +
         '</div>' +
         '<div id="db-rekey-msg" style="margin-top:8px;font-size:11.5px"></div>' +
         '<div style="font-size:10.5px;color:var(--muted);margin-top:6px">' +
@@ -100,7 +106,7 @@ function renderDbManage() {
           '<span style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">保留备份数量</span>' +
           '<input type="number" id="db-backup-retention" value="' + retention + '" min="1" max="100" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;box-sizing:border-box">' +
         '</label>' +
-        '<button class="btn btn-primary" onclick="saveBackupConfig()" style="height:35px">保存配置</button>' +
+        '<button class="btn btn-primary" onclick="saveBackupConfig()" style="height:35px;">保存配置</button>' +
       '</div>' +
       '<div id="db-backup-cfg-msg" style="margin-top:8px;font-size:11.5px"></div>' +
     '</div></div>';
@@ -112,17 +118,21 @@ function renderDbManage() {
   if (!_dbBackups.length) {
     html += '<div class="config-fields" style="padding:12px 16px;font-size:12px;color:var(--muted);font-style:italic">暂无备份文件</div>';
   } else {
-    html += '<div style="overflow-x:auto;max-height:360px;overflow-y:auto">' +
-      '<table class="data-table" style="font-size:12px;width:100%;table-layout:auto;border-collapse:collapse">' +
+    html += '<div style="overflow-x:auto;max-height:400px;overflow-y:auto">' +
+      '<table class="stage-table" style="font-size:12px;width:100%">' +
         '<thead><tr>' +
-          '<th>文件名</th><th>大小</th><th>时间</th><th>操作</th>' +
+          '<th style="width:50px;text-align:center">序号</th><th>文件名</th><th style="width:90px">大小</th><th style="width:160px">时间</th><th style="width:120px">操作</th>' +
         '</tr></thead><tbody>';
-    _dbBackups.forEach(function(b) {
+    _dbBackups.forEach(function(b, i) {
       html += '<tr>' +
+        '<td style="text-align:center;font-family:var(--mono);color:var(--muted);font-size:11px">' + (i + 1) + '</td>' +
         '<td style="font-family:monospace;font-size:11px">' + escHtml(b.name) + '</td>' +
-        '<td>' + escHtml(b.size_display) + '</td>' +
-        '<td>' + escHtml(b.created_at) + '</td>' +
-        '<td><button class="btn" style="font-size:10px;padding:3px 8px;color:var(--danger)" onclick="deleteBackup(\'' + escHtml(b.name) + '\')">删除</button></td>' +
+        '<td style="font-size:11px">' + escHtml(b.size_display) + '</td>' +
+        '<td style="font-size:11px">' + escHtml(b.created_at) + '</td>' +
+        '<td style="white-space:nowrap">' +
+          '<button class="btn" style="font-size:10px;padding:3px 8px;margin-right:4px" onclick="restoreBackup(\'' + escHtml(b.name) + '\')" title="恢复到此备份">恢复</button>' +
+          '<button class="btn" style="font-size:10px;padding:3px 8px;color:var(--danger)" onclick="deleteBackup(\'' + escHtml(b.name) + '\')" title="删除此备份">删除</button>' +
+        '</td>' +
       '</tr>';
     });
     html += '</tbody></table></div>';
@@ -136,22 +146,44 @@ function renderDbManage() {
 // ── Actions ──
 
 function exportDatabase() {
-  var a = document.createElement('a');
-  a.href = '/api/admin/db/export';
-  // Append token for auth
+  // Inline progress toast — same style as data sync
+  var progEl = document.createElement('div');
+  progEl.className = 'toast info';
+  progEl.style.padding = '6px 14px';
+  progEl.style.maxWidth = '480px';
+  progEl.id = 'db-export-progress';
+  progEl.innerHTML =
+    '<div style="display:flex;align-items:center;gap:8px">' +
+      '<div class="sync-spinner" style="width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;flex-shrink:0"></div>' +
+      '<span style="font-size:12px;font-weight:540;white-space:nowrap">正在导出数据库...</span>' +
+      '<span style="font-size:11px;color:var(--muted)" id="db-export-elapsed">0s</span>' +
+    '</div>';
+  document.getElementById('toast-container').appendChild(progEl);
+
+  var startTime = Date.now();
+  var elapsedTimer = setInterval(function() {
+    var et = document.getElementById('db-export-elapsed');
+    if (et) et.textContent = Math.round((Date.now() - startTime) / 1000) + 's';
+  }, 1000);
+
   var token = localStorage.getItem('pma_token');
   if (token) {
-    // Use fetch to get the file with auth header, then trigger download
     fetch('/api/admin/db/export', {
       headers: { 'Authorization': 'Bearer ' + token }
     }).then(function(res) {
-      if (!res.ok) { showToast('导出失败: HTTP ' + res.status, 'error'); return; }
+      if (!res.ok) {
+        clearInterval(elapsedTimer);
+        if (progEl.parentElement) progEl.remove();
+        showToast('导出失败: HTTP ' + res.status, 'error');
+        return null;
+      }
       return res.blob();
     }).then(function(blob) {
+      clearInterval(elapsedTimer);
+      if (progEl.parentElement) progEl.remove();
       if (!blob) return;
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
-      var disposition = blob.type;
       a.href = url;
       a.download = 'pma-backup-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' +
         new Date().toTimeString().slice(0,8).replace(/:/g,'') + '.db';
@@ -159,35 +191,65 @@ function exportDatabase() {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      showToast('数据库导出成功', 'success');
+      var elapsed = Math.round((Date.now() - startTime) / 1000);
+      showToast('数据库导出成功（' + elapsed + 's）', 'success');
     }).catch(function(e) {
+      clearInterval(elapsedTimer);
+      if (progEl.parentElement) progEl.remove();
       showToast('导出失败: ' + (e.message || '网络错误'), 'error');
     });
     return;
   }
-  // Fallback: direct link
+  // Fallback: direct link (for non-token environments)
+  clearInterval(elapsedTimer);
+  if (progEl.parentElement) progEl.remove();
+  var a = document.createElement('a');
+  a.href = '/api/admin/db/export';
   document.body.appendChild(a);
   a.click();
   a.remove();
 }
 
-async function importDatabase() {
+function triggerImportFile() {
   var fileInput = document.getElementById('db-import-file');
-  var msgEl = document.getElementById('db-import-msg');
-  if (!fileInput || !fileInput.files || !fileInput.files.length) {
-    showToast('请选择 .db 文件', 'error');
-    return;
-  }
-  var file = fileInput.files[0];
+  if (fileInput) fileInput.click();
+}
+
+function onImportFileSelected(input) {
+  var file = input.files && input.files[0];
+  if (!file) return;
   if (!file.name.endsWith('.db')) {
     showToast('请选择 .db 格式的 SQLite 数据库文件', 'error');
+    input.value = '';
     return;
   }
-  if (!confirm('确认导入数据库？\n\n当前数据库将被替换。系统会自动备份当前数据库后再执行导入。\n导入后请刷新页面以加载新数据。')) return;
+  document.getElementById('db-import-file-name').textContent = '已选择: ' + file.name;
+  importDatabase(file);
+}
 
-  msgEl.textContent = '导入中...';
-  msgEl.style.color = 'var(--muted)';
+async function importDatabase(file) {
+  if (!file) return;
 
+  if (!confirm('确认导入数据库？\n\n文件: ' + file.name + '\n导入后将替换当前全部数据。系统会自动备份当前数据库后再执行导入。\n导入后请刷新页面以加载新数据。')) {
+    document.getElementById('db-import-file').value = '';
+    document.getElementById('db-import-file-name').textContent = '';
+    return;
+  }
+
+  // Inline progress toast
+  var progEl = document.createElement('div');
+  progEl.className = 'toast info';
+  progEl.style.padding = '6px 14px';
+  progEl.style.maxWidth = '480px';
+  progEl.id = 'db-import-progress';
+  progEl.innerHTML =
+    '<div style="display:flex;align-items:center;gap:8px">' +
+      '<div class="sync-spinner" style="width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;flex-shrink:0"></div>' +
+      '<span style="font-size:12px;font-weight:540;white-space:nowrap">正在导入数据库...</span>' +
+    '</div>';
+  document.getElementById('toast-container').appendChild(progEl);
+
+  var startTime = Date.now();
   try {
     var formData = new FormData();
     formData.append('file', file);
@@ -198,24 +260,21 @@ async function importDatabase() {
       body: formData,
     });
     var json = await res.json();
+    if (progEl.parentElement) progEl.remove();
     if (json.code === 0) {
-      msgEl.textContent = json.message;
-      msgEl.style.color = 'var(--success)';
-      showToast('数据库导入成功，请刷新页面', 'success');
-      fileInput.value = '';
-      // Refresh backup list
+      var elapsed = Math.round((Date.now() - startTime) / 1000);
+      showToast(json.message + '（' + elapsed + 's）', 'success');
+      document.getElementById('db-import-file').value = '';
+      document.getElementById('db-import-file-name').textContent = '';
       setTimeout(async function() {
         try { _dbBackups = await API.get('/admin/db/backups') || []; renderDbManage(); } catch(e) {}
       }, 500);
     } else {
-      msgEl.textContent = json.message;
-      msgEl.style.color = 'var(--danger)';
       showToast('导入失败: ' + json.message, 'error');
     }
   } catch(e) {
-    msgEl.textContent = '导入失败: ' + (e.message || '网络错误');
-    msgEl.style.color = 'var(--danger)';
-    showToast('导入失败', 'error');
+    if (progEl.parentElement) progEl.remove();
+    showToast('导入失败: ' + (e.message || '网络错误'), 'error');
   }
 }
 
@@ -256,6 +315,41 @@ async function deleteBackup(name) {
   }
 }
 
+async function restoreBackup(name) {
+  if (!confirm('确认从备份 ' + name + ' 恢复数据库？\n\n当前数据库将被替换为备份的数据。恢复前会自动备份当前数据库。\n恢复后请刷新页面以加载恢复后的数据。')) return;
+
+  // Inline progress toast
+  var progEl = document.createElement('div');
+  progEl.className = 'toast info';
+  progEl.style.padding = '6px 14px';
+  progEl.style.maxWidth = '480px';
+  progEl.id = 'db-restore-progress';
+  progEl.innerHTML =
+    '<div style="display:flex;align-items:center;gap:8px">' +
+      '<div class="sync-spinner" style="width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;flex-shrink:0"></div>' +
+      '<span style="font-size:12px;font-weight:540;white-space:nowrap">正在恢复数据库...</span>' +
+    '</div>';
+  document.getElementById('toast-container').appendChild(progEl);
+
+  var startTime = Date.now();
+  try {
+    var res = await API.post('/admin/db/backups/' + encodeURIComponent(name) + '/restore');
+    if (progEl.parentElement) progEl.remove();
+    var elapsed = Math.round((Date.now() - startTime) / 1000);
+    if (res && res.code === 0) {
+      showToast('恢复成功（' + elapsed + 's）', 'success');
+      setTimeout(async function() {
+        try { _dbBackups = await API.get('/admin/db/backups') || []; renderDbManage(); } catch(e) {}
+      }, 500);
+    } else {
+      showToast('恢复失败: ' + ((res && res.message) || '未知错误'), 'error');
+    }
+  } catch(e) {
+    if (progEl.parentElement) progEl.remove();
+    showToast('恢复失败: ' + (e.message || '未知错误'), 'error');
+  }
+}
+
 async function rekeyDatabase() {
   var oldPass = document.getElementById('db-rekey-old-pass').value;
   var newPass = document.getElementById('db-rekey-new-pass').value;
@@ -269,30 +363,36 @@ async function rekeyDatabase() {
 
   if (!confirm('确认更换数据库密码？\n\n更换完成后密钥文件将自动更新。请务必记住新密码，丢失后数据库将无法解密。')) return;
 
-  msgEl.textContent = '正在更换密码...';
-  msgEl.style.color = 'var(--muted)';
+  // Inline progress toast
+  var progEl = document.createElement('div');
+  progEl.className = 'toast info';
+  progEl.style.padding = '6px 14px';
+  progEl.style.maxWidth = '480px';
+  progEl.innerHTML =
+    '<div style="display:flex;align-items:center;gap:8px">' +
+      '<div class="sync-spinner" style="width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;flex-shrink:0"></div>' +
+      '<span style="font-size:12px;font-weight:540;white-space:nowrap">正在更换密码...</span>' +
+    '</div>';
+  document.getElementById('toast-container').appendChild(progEl);
 
+  var startTime = Date.now();
   try {
     var res = await API.post('/admin/db/rekey', {
       old_passphrase: oldPass,
       new_passphrase: newPass,
     });
+    if (progEl.parentElement) progEl.remove();
+    var elapsed = Math.round((Date.now() - startTime) / 1000);
     if (res && res.code === 0) {
-      msgEl.textContent = '密码已更换成功！请妥善保管新密码。';
-      msgEl.style.color = 'var(--success)';
-      showToast('数据库密码已更换', 'success');
-      // Clear input fields
+      showToast('数据库密码已更换（' + elapsed + 's）', 'success');
       document.getElementById('db-rekey-old-pass').value = '';
       document.getElementById('db-rekey-new-pass').value = '';
       document.getElementById('db-rekey-confirm').value = '';
     } else {
-      msgEl.textContent = (res && res.message) || '更换失败';
-      msgEl.style.color = 'var(--danger)';
       showToast('更换失败: ' + ((res && res.message) || '未知错误'), 'error');
     }
   } catch(e) {
-    msgEl.textContent = '更换失败: ' + (e.message || '未知错误');
-    msgEl.style.color = 'var(--danger)';
-    showToast('更换密码失败', 'error');
+    if (progEl.parentElement) progEl.remove();
+    showToast('更换密码失败: ' + (e.message || '未知错误'), 'error');
   }
 }

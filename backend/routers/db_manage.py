@@ -204,6 +204,56 @@ def delete_backup(name: str, _=Depends(require_admin), cu=Depends(get_current_us
     return {"code": 0, "message": f"已删除 {safe_name}"}
 
 
+@router.post("/backups/{name}/restore", response_model=dict)
+def restore_backup(
+    name: str,
+    _=Depends(require_admin),
+    cu=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Restore the current database from a backup file."""
+    safe_name = os.path.basename(name)
+    if not safe_name.startswith("pma-backup-") or not safe_name.endswith(".db"):
+        return {"code": 1, "message": "无效的备份文件名"}
+    backup_path = BACKUP_DIR / safe_name
+    if not backup_path.exists():
+        return {"code": 1, "message": "备份文件不存在"}
+
+    # Verify backup file is a valid SQLite database
+    import sqlite3
+    try:
+        test_conn = sqlite3.connect(str(backup_path))
+        test_conn.execute("PRAGMA integrity_check")
+        test_conn.close()
+    except Exception as e:
+        return {"code": 1, "message": f"备份文件校验失败: {e}"}
+
+    # Create a backup of current database before restoring
+    t = datetime.now().strftime("%Y%m%d-%H%M%S")
+    pre_restore_path = BACKUP_DIR / f"pma-backup-{t}-before-restore.db"
+    try:
+        shutil.copy2(_db_path, pre_restore_path)
+    except Exception as e:
+        return {"code": 1, "message": f"备份当前数据库失败: {e}"}
+
+    # Restore from backup
+    try:
+        shutil.copy2(str(backup_path), _db_path)
+        os.chmod(_db_path, 0o666)
+    except Exception as e:
+        # Try to restore from the pre-restore backup
+        if pre_restore_path.exists():
+            shutil.copy2(str(pre_restore_path), _db_path)
+        return {"code": 1, "message": f"恢复失败，已回滚: {e}"}
+
+    log_audit(db, cu, "db_restore_backup", f"from={safe_name} pre_restore={pre_restore_path.name}", "管理", "high")
+    return {
+        "code": 0,
+        "data": {"pre_restore_backup": pre_restore_path.name},
+        "message": f"已从备份 {safe_name} 恢复数据库。恢复前的数据库已备份为 {pre_restore_path.name}。请刷新页面以加载恢复后的数据。",
+    }
+
+
 # ── Auto-backup task ──
 
 _last_backup_time = 0  # epoch seconds, reset on startup
