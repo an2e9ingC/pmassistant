@@ -561,11 +561,20 @@ async function submitUploadDoc(docId) {
   }
 }
 
-// ── Tab: 产品维护（项目关联、客户、标签） ──
+// ── Tab: 产品维护（编辑、删除、项目关联、客户、标签） ──
 
 function renderProdMaintenance(p) {
   var projects = p.projects || [];
-  var html = '';
+  var canEdit = isAdminLike() || hasPerm('product_link');
+
+  // Action buttons for edit/delete/link
+  var html = '<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">';
+  if (canEdit) {
+    html += '<button class="btn btn-primary" style="font-size:11px;padding:5px 12px" onclick="showProdEditDialog()">✎ 编辑产品</button>';
+    html += '<button class="btn btn-primary" style="font-size:11px;padding:5px 12px" onclick="showProdLinkProjectsDialog()">🔗 关联项目</button>';
+    html += '<button class="btn" style="font-size:11px;padding:5px 12px;color:var(--danger);border-color:var(--danger)" onclick="deleteCurrentProduct()">✕ 删除产品</button>';
+  }
+  html += '</div>';
 
   // Associated projects table
   html += '<div class="card" style="padding:0;overflow:hidden;margin-bottom:16px">';
@@ -611,10 +620,13 @@ function renderProdMaintenance(p) {
   // Tags
   var tagsList = p.tags_list || [];
   html += '<div class="card" style="padding:16px;margin-bottom:16px">';
-  html += '<div class="section-hd"><div class="section-title">产品标签 (' + (tagsList[0] ? tagsList.length : 0) + ')</div></div>';
+  html += '<div class="section-hd"><div class="section-title">产品标签 (' + (tagsList[0] && tagsList[0] !== '' ? tagsList.filter(function(t){return t!=='';}).length : 0) + ')</div>' +
+    (canEdit ? '<button class="btn" style="font-size:11px;padding:3px 10px" onclick="showProdTagsDialog()">+ 管理标签</button>' : '') +
+  '</div>';
   if (tagsList.length > 0 && tagsList[0] !== '') {
     html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">';
     tagsList.forEach(function(t) {
+      if (!t) return;
       html += '<span class="tag-badge tag-' + (t.length % 5) + '">#' + escHtml(t) + '</span>';
     });
     html += '</div>';
@@ -624,4 +636,124 @@ function renderProdMaintenance(p) {
   html += '</div>';
 
   document.getElementById('prodsec-maintenance').innerHTML = html;
+}
+
+function hasPerm(perm) {
+  var user = getCurrentUser();
+  var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+  return perms.indexOf(perm) >= 0;
+}
+
+function isAdminLike() {
+  var user = getCurrentUser();
+  return user && (user.role === 'admin' || hasPerm('admin'));
+}
+
+function showProdEditDialog() {
+  var p = _prodDetail;
+  openDialog('编辑产品 — ' + escHtml(p.name),
+    '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">产品名称</label>' +
+      '<input class="search-inp" id="prod-edit-name" value="' + escHtml(p.name) + '" style="width:100%;box-sizing:border-box"></div>' +
+    '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">产品编号</label>' +
+      '<input class="search-inp" id="prod-edit-code" value="' + escHtml(p.code || '') + '" style="width:100%;box-sizing:border-box"></div>' +
+    '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">状态</label>' +
+      '<select class="search-inp" id="prod-edit-status" style="width:100%;box-sizing:border-box">' +
+        '<option value="normal"' + (p.status === 'normal' ? ' selected' : '') + '>正常</option>' +
+        '<option value="closed"' + (p.status === 'closed' ? ' selected' : '') + '>已关闭</option>' +
+      '</select></div>' +
+    '<div style="margin-bottom:4px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">描述</label>' +
+      '<input class="search-inp" id="prod-edit-desc" value="' + escHtml(p.description || '') + '" style="width:100%;box-sizing:border-box"></div>',
+    [{text: '取消', onclick: 'closeSharedDialog()'},
+     {text: '保存', cls: 'btn-primary', onclick: 'saveProdEdit()'}],
+    {hideClose: true});
+}
+
+async function saveProdEdit() {
+  var name = document.getElementById('prod-edit-name').value.trim();
+  var code = document.getElementById('prod-edit-code').value.trim();
+  var status = document.getElementById('prod-edit-status').value;
+  var desc = document.getElementById('prod-edit-desc').value.trim();
+  if (!name) { showToast('请输入产品名称', 'error'); return; }
+  closeSharedDialog();
+  try {
+    await API.put('/products/' + _prodDetailCurId, { category: name, code: code, name: name, alias_name: name, description: desc });
+    showToast('产品已更新', 'success');
+    loadProductDetail(_prodDetailCurId);
+  } catch(e) {
+    showToast('更新失败: ' + (e.message || ''), 'error');
+  }
+}
+
+function showProdLinkProjectsDialog() {
+  API.get('/product-management/all-projects').then(function(projects) {
+    var projIds = (_prodDetail.projects || []).map(function(p) { return p.id; });
+    var listHtml = projects.map(function(proj) {
+      var checked = projIds.indexOf(proj.id) >= 0;
+      return '<label style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:13px;cursor:pointer">' +
+        '<input type="checkbox" value="' + proj.id + '"' + (checked ? ' checked' : '') + ' class="prod-link-proj-cb">' +
+        escHtml(proj.name) + ' <span style="font-size:10px;color:var(--muted)">' + escHtml(proj.code || '') + '</span>' +
+      '</label>';
+    }).join('');
+    openDialog('关联项目 — ' + escHtml(_prodDetail.name),
+      '<div style="max-height:300px;overflow-y:auto;margin-bottom:8px">' + listHtml + '</div>',
+      [{text: '取消', onclick: 'closeSharedDialog()'},
+       {text: '保存', cls: 'btn-primary', onclick: 'saveProdLinkProjects()'}],
+      {hideClose: true});
+  });
+}
+
+async function saveProdLinkProjects() {
+  var ids = [];
+  document.querySelectorAll('.prod-link-proj-cb:checked').forEach(function(cb) { ids.push(parseInt(cb.value)); });
+  closeSharedDialog();
+  try {
+    await API.put('/product-management/products/' + _prodDetailCurId + '/projects', { project_ids: ids });
+    showToast('关联项目已更新', 'success');
+    loadProductDetail(_prodDetailCurId);
+  } catch(e) {
+    showToast('更新失败: ' + (e.message || ''), 'error');
+  }
+}
+
+async function deleteCurrentProduct() {
+  if (!confirm('确认删除产品「' + (_prodDetail.name || '') + '」？\n\n此操作不可撤销。')) return;
+  var ok = await verifyPassword('删除产品', 'pw_verify_product_node_del');
+  if (!ok) return;
+  try {
+    await API.del('/product-management/products/' + _prodDetailCurId);
+    showToast('产品已删除', 'success');
+    gotoView('product-list');
+  } catch(e) {
+    showToast('删除失败: ' + (e.message || ''), 'error');
+  }
+}
+
+function showProdTagsDialog() {
+  API.get('/pma-tags?category=product').then(function(tags) {
+    var currentTags = (_prodDetail.tags || '').split(',').filter(function(t) { return t; });
+    var listHtml = tags.map(function(t) {
+      var checked = currentTags.indexOf(t.name) >= 0;
+      return '<label style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:13px;cursor:pointer">' +
+        '<input type="checkbox" value="' + escHtml(t.name) + '"' + (checked ? ' checked' : '') + ' class="prod-tag-cb">' +
+        escHtml(t.name) + '</label>';
+    }).join('');
+    openDialog('产品标签 — ' + escHtml(_prodDetail.name),
+      '<div style="max-height:300px;overflow-y:auto;margin-bottom:8px">' + listHtml + '</div>',
+      [{text: '取消', onclick: 'closeSharedDialog()'},
+       {text: '保存', cls: 'btn-primary', onclick: 'saveProdTags()'}],
+      {hideClose: true});
+  }).catch(function() { showToast('获取标签失败', 'error'); });
+}
+
+async function saveProdTags() {
+  var tags = [];
+  document.querySelectorAll('.prod-tag-cb:checked').forEach(function(cb) { tags.push(cb.value); });
+  closeSharedDialog();
+  try {
+    await API.put('/products/' + _prodDetailCurId, { tags: tags.join(',') });
+    showToast('标签已更新', 'success');
+    loadProductDetail(_prodDetailCurId);
+  } catch(e) {
+    showToast('更新失败: ' + (e.message || ''), 'error');
+  }
 }

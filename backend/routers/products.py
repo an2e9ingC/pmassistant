@@ -18,6 +18,11 @@ class ProductUpdate(BaseModel):
     git_url: Optional[str] = None
     pma_customer: Optional[str] = None
     alias_name: Optional[str] = None
+    name: Optional[str] = None
+    code: Optional[str] = None
+    status: Optional[str] = None
+    description: Optional[str] = None
+    tags: Optional[str] = None
 
 
 class ProductProjectLinkRequest(BaseModel):

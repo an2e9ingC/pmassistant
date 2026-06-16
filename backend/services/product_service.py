@@ -49,7 +49,7 @@ def update_product(db: Session, product_id: int, data: dict) -> Optional[dict]:
     p = db.query(CachedProduct).filter(CachedProduct.id == product_id).first()
     if not p:
         return None
-    for field in ("category", "nas_path", "git_url", "pma_customer", "alias_name"):
+    for field in ("category", "nas_path", "git_url", "pma_customer", "alias_name", "name", "code", "status", "description", "tags"):
         if field in data:
             setattr(p, field, data[field])
     db.commit()
