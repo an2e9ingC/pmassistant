@@ -1,8 +1,9 @@
 import os as _os
 import logging
 from datetime import datetime as _datetime, timedelta as _timedelta
+from urllib.parse import quote as _urlquote
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
 from backend.config import settings
@@ -20,6 +21,21 @@ def to_local_str(dt) -> str:
     if isinstance(dt, str):
         return dt[:19]
     return str((dt + _BEIJING_OFFSET).replace(tzinfo=None))[:19]
+
+
+# ── SQLCipher detection ──
+
+_HAS_SQLCIPHER = False
+try:
+    import pysqlcipher3.dbapi2  # noqa: F401
+    _HAS_SQLCIPHER = True
+except ImportError:
+    pass
+
+
+def _is_sqlcipher_enabled() -> bool:
+    """Check whether SQLCipher encryption is configured and available."""
+    return bool(settings.SQLCIPHER_KEY) and _HAS_SQLCIPHER
 
 
 def _resolve_db_path() -> str:
@@ -43,13 +59,36 @@ def _resolve_db_path() -> str:
 
 
 _db_path = _resolve_db_path()
-_db_url = f"sqlite:///{_db_path}" if not _db_path.startswith("sqlite:///") else _db_path
 
-engine = create_engine(
-    _db_url if _db_url.startswith("sqlite:///") else settings.DATABASE_URL,
-    connect_args={"check_same_thread": False} if "sqlite" in settings.DATABASE_URL else {},
-    echo=False,
-)
+# ── Engine creation ──
+
+if _is_sqlcipher_enabled():
+    # Use pysqlcipher3 driver for encrypted SQLite
+    _db_url = f"sqlite+pysqlcipher:///{_db_path}?cipher=aes-256-cbc&kdf_iter=256000"
+    logger.info("SQLCipher encryption enabled for database")
+else:
+    _db_url = f"sqlite:///{_db_path}"
+    if settings.SQLCIPHER_KEY and not _HAS_SQLCIPHER:
+        logger.warning(
+            "SQLCIPHER_KEY is configured but pysqlcipher3 is not installed. "
+            "Database will be UNENCRYPTED. Install with: pip install pysqlcipher3"
+        )
+
+_connect_args = {"check_same_thread": False}
+
+if _is_sqlcipher_enabled():
+    _connect_args["key"] = settings.SQLCIPHER_KEY
+
+engine = create_engine(_db_url, connect_args=_connect_args, echo=False)
+
+# ── PRAGMA key event (fallback for drivers that don't support connect_args key) ──
+
+if _is_sqlcipher_enabled():
+    @event.listens_for(engine, "connect")
+    def _set_sqlcipher_key(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute(f"PRAGMA key = \"{settings.SQLCIPHER_KEY}\"")
+        cursor.close()
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -196,6 +235,101 @@ def _migrate_product_hierarchy():
         sqlite_conn.close()
 
 
+def _migrate_to_sqlcipher():
+    """Convert an existing unencrypted SQLite DB to SQLCipher-encrypted.
+
+    Strategy:
+    1. Use sqlcipher CLI (if available): sqlcipher old.db "ATTACH ...; SELECT sqlcipher_export(...)"
+    2. Fallback: use Python sqlite3 + pysqlcipher3 to copy data page by page
+    """
+    if not _is_sqlcipher_enabled():
+        return
+
+    import sqlite3 as _stdlib_sqlite3
+
+    # Check if DB is already encrypted (try opening with standard sqlite3)
+    try:
+        test_conn = _stdlib_sqlite3.connect(f"file:{_db_path}?mode=ro", uri=True)
+        test_conn.execute("SELECT count(*) FROM sqlite_master")
+        test_conn.close()
+        # DB is readable with standard sqlite3 → it's unencrypted, needs migration
+    except Exception:
+        # DB is already encrypted or doesn't exist yet
+        return
+
+    # Try sqlcipher CLI first
+    import subprocess as _sp
+    import shutil as _shutil
+
+    encrypted_path = _db_path + ".encrypted"
+    sqlcipher_bin = _shutil.which("sqlcipher")
+
+    if sqlcipher_bin:
+        try:
+            # Use sqlcipher CLI to create encrypted copy
+            # sqlcipher old.db "PRAGMA key='...'; ATTACH 'encrypted.db' AS enc KEY '...'; SELECT sqlcipher_export('enc'); DETACH enc;"
+            _sp.run(
+                [sqlcipher_bin, _db_path],
+                input=f"PRAGMA key=\"{settings.SQLCIPHER_KEY}\";\n"
+                      f"ATTACH DATABASE '{encrypted_path}' AS enc KEY \"{settings.SQLCIPHER_KEY}\";\n"
+                      f"SELECT sqlcipher_export('enc');\n"
+                      f"DETACH DATABASE enc;\n"
+                      f".quit\n",
+                text=True, capture_output=True, timeout=120,
+            )
+            if _os.path.exists(encrypted_path) and _os.path.getsize(encrypted_path) > 0:
+                _os.replace(encrypted_path, _db_path)
+                logger.info("SQLCipher migration completed via sqlcipher CLI")
+                return
+        except Exception as e:
+            logger.warning(f"sqlcipher CLI migration failed: {e}")
+
+    # Fallback: use Python's pysqlcipher3 to migrate
+    if _HAS_SQLCIPHER:
+        import pysqlcipher3.dbapi2 as _sqlcipher
+        try:
+            # Read from unencrypted, write to encrypted
+            src = _stdlib_sqlite3.connect(_db_path)
+            dst = _sqlcipher.connect(encrypted_path)
+            dst.execute(f"PRAGMA key = \"{settings.SQLCIPHER_KEY}\"")
+
+            # Copy schema
+            for row in src.execute("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY type, name"):
+                dst.execute(row[0])
+
+            # Copy data
+            tables = [r[0] for r in src.execute("SELECT name FROM sqlite_master WHERE type='table'")]
+            for table in tables:
+                rows = list(src.execute(f"SELECT * FROM \"{table}\""))
+                if not rows:
+                    continue
+                cols = [d[0] for d in src.execute(f"PRAGMA table_info(\"{table}\")")]
+                placeholders = ",".join(["?" for _ in cols])
+                cols_q = ",".join(f'"{c}"' for c in cols)
+                dst.executemany(f"INSERT INTO {cols_q} VALUES ({placeholders})", rows)
+
+            dst.commit()
+            src.close()
+            dst.close()
+
+            if _os.path.exists(encrypted_path) and _os.path.getsize(encrypted_path) > 0:
+                backup = _db_path + ".pre-sqlcipher.bak"
+                _os.rename(_db_path, backup)
+                _os.rename(encrypted_path, _db_path)
+                logger.info(f"SQLCipher migration completed via pysqlcipher3 (backup: {backup})")
+                return
+        except Exception as e:
+            logger.warning(f"pysqlcipher3 migration failed: {e}")
+            if _os.path.exists(encrypted_path):
+                _os.remove(encrypted_path)
+
+    logger.warning(
+        "SQLCIPHER_KEY is configured but automatic migration failed. "
+        "Install sqlcipher CLI (apt install sqlcipher) and run manually: "
+        f"sqlcipher {_db_path} \"PRAGMA key='...'; SELECT sqlcipher_export('main');\""
+    )
+
+
 def init_db():
     from backend.models.local import LocalUser, Role, UserRole, ProjectNote, PmaSetting, AuditLog, ProjectActivity  # noqa: F401
     from backend.models.bug import CachedBug  # noqa: F401
@@ -221,6 +355,7 @@ def init_db():
     Base.metadata.create_all(bind=engine)
     _migrate_sqlite()
     _migrate_product_hierarchy()
+    _migrate_to_sqlcipher()  # Convert unencrypted DB to SQLCipher if key configured
 
     # Seed document templates on first startup
     from backend.services.document_service import seed_document_templates

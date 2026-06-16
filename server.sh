@@ -362,8 +362,17 @@ _print_server_row() {
         branch=$(curl -s --max-time 2 "http://localhost:${port}/api/health" 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('branch',''))" 2>/dev/null || true)
     fi
 
-    printf "  端口 %-6s PID %-8s 运行 %-10s 内存 %-6s 健康 %s\n" \
-        "$port" "$pid" "${elapsed:-?}" "$mem_mb" "$health"
+    # SQLCipher status
+    local sqlcipher_status="明文"
+    if [ -f "$SCRIPT_DIR/.env" ] && grep -q "^SQLCIPHER_KEY=" "$SCRIPT_DIR/.env" 2>/dev/null; then
+        local key_val=$(grep "^SQLCIPHER_KEY=" "$SCRIPT_DIR/.env" | head -1 | cut -d= -f2-)
+        if [ -n "$key_val" ] && [ "$key_val" != '""' ]; then
+            sqlcipher_status="🔒 加密"
+        fi
+    fi
+
+    printf "  端口 %-6s PID %-8s 运行 %-10s 内存 %-6s 健康 %s  加密 %s\n" \
+        "$port" "$pid" "${elapsed:-?}" "$mem_mb" "$health" "$sqlcipher_status"
     if [ -n "$branch" ]; then
         echo "         分支: $branch  |  $url"
     else

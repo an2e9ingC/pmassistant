@@ -953,102 +953,192 @@ JWT 密钥和参数来自 `backend/config.py`，可通过 `.env` 文件覆盖：
 | 密码存储 | bcrypt 哈希（12 轮），不存储明文 |
 | API 认证 | JWT Bearer Token（HS256, 8h 过期） |
 | 传输加密 | 无（HTTP 明文），建议前置 Nginx/Traefik 做 TLS 终止 |
-| 数据库文件 | **明文 SQLite 文件**，任何有文件系统读取权限的人可直接读取全部数据 |
-| 敏感字段 | **无加密**，ZenTao Token、API 密钥等若存在则明文存储 |
-| 备份文件 | 明文 `.db` 文件直接拷贝 |
+| 数据库文件 | **SQLCipher AES-256 加密**（需配置 `SQLCIPHER_KEY`） |
+| 敏感字段 | 随数据库整体加密 |
+| 备份文件 | 加密 `.db` 文件，直接拷贝即为加密状态 |
 
-### 12.2 风险分析
+> **已实现**: 在 `.env` 中设置 `SQLCIPHER_KEY` 即可启用全数据库加密。首次启动时自动检测未加密数据库并完成迁移。
 
-SQLite 是单文件数据库，`data/pma-$PORT.db` 包含所有业务数据（项目、产品、用户、Bug、交付记录、笔记等）。当前最大的安全风险是：**任何能访问服务器的用户，只需拷贝 `.db` 文件即可离线读取全部数据**。这对部署在共享服务器或多租户环境中的 PMA 实例尤其危险。
+### 12.2 SQLCipher 实施详情
 
-### 12.3 推荐方案：SQLCipher
+#### 密钥读取优先级
 
-[SQLCipher](https://www.zetetic.net/sqlcipher/) 是 SQLite 的加密扩展，提供透明的 256-bit AES 全数据库加密。它是 SQLite 数据保护的事实标准。
+`config.py` 按以下优先级读取密钥（高到低）：
 
-**优点**：
-- 全数据库透明加密，无需修改业务代码
-- 基于页的加密，性能损失极小（~5-10%）
-- 开源（BSD 许可证），社区活跃
-- 兼容 Python 的 `sqlcipher3` 包（`pysqlcipher3`）
+```
+1. Docker secrets 文件  →  SQLCIPHER_KEY_FILE=/run/secrets/sqlcipher_key
+2. 环境变量             →  SQLCIPHER_KEY=<hex-64>
+3. .env 文件            →  SQLCIPHER_KEY=<hex-64>
+```
 
-**实施步骤**：
+#### 密钥生成（Passphrase 派生）
+
+PMA 使用 passphrase 派生密钥，而非随机 hex key。这样即使 `sqlcipher_key.txt` 丢失，只要记得 passphrase 就能恢复。
 
 ```bash
-# 1. 安装 SQLCipher + Python 绑定
-pip install pysqlcipher3
+# 交互式输入 passphrase，派生 64 位 hex 密钥
+python3 gen-sqlcipher-key.py gen
 
-# 2. 修改 backend/database.py 中的数据库 URL
-# 原来：
-# DATABASE_URL = "sqlite:///data/pma.db"
-# 改为：
-# DATABASE_URL = "sqlite+pysqlcipher:///data/pma.db?cipher=aes-256-cbc&kdf_iter=256000"
+# 非交互（脚本中）
+echo "我的长口令" | python3 gen-sqlcipher-key.py gen
+
+# 写入 Docker secrets 文件
+python3 gen-sqlcipher-key.py gen > secrets/sqlcipher_key.txt
 ```
 
-```python
-# 3. 在 backend/config.py 中增加配置项
-SQLCIPHER_KEY: str = "your-secure-key-here"  # 从 .env 读取
+**派生原理**（Python 标准库，无外部依赖）：
+
+```
+passphrase ──► PBKDF2-HMAC-SHA512(iter=1,000,000, salt="pma-sqlcipher-salt-v1")
+                  │
+                  └──► 32 字节 (256-bit) hex key → SQLCIPHER_KEY
 ```
 
-```python
-# 4. 修改 backend/database.py engine 创建
-from sqlalchemy import create_engine, event
-from sqlalchemy.engine import Engine
+关键设计：
+- **100 万次 SHA-512 迭代**：即使拿到 `.db` 文件，暴力破解 passphrase 也极其昂贵（每次猜测需 100 万次哈希）
+- **固定 salt**：同样的 passphrase 永远产出同样的 hex key，丢失可重新派生
+- **可记忆恢复**：passphrase 记在脑中，不依赖文件备份
 
-@event.listens_for(Engine, "connect")
-def set_sqlite_pragma(dbapi_connection, connection_record):
-    cursor = dbapi_connection.cursor()
-    cursor.execute(f"PRAGMA key='{settings.SQLCIPHER_KEY}'")
-    cursor.close()
+> **警告**：如果修改 `gen-sqlcipher-key.py` 中的 `SALT` 变量，所有已加密数据库的密钥都会变化——已加密的数据库将无法解密。
 
-engine = create_engine(settings.DATABASE_URL)
+#### 更换密码（PRAGMA rekey）
+
+SQLCipher 支持在线更换密钥，无需导出/导入：
+
+```bash
+# 交互式：输入旧 passphrase + 新 passphrase
+python3 gen-sqlcipher-key.py rekey data/pma-8000.db
+
+# 非交互：
+echo -e "旧口令\n新口令" | python3 gen-sqlcipher-key.py rekey data/pma-8000.db
 ```
 
-**密钥管理**（关键）：
+执行流程：
+
+```
+旧 passphrase ──► PBKDF2 ──► old_key ──► PRAGMA key = old_key  (打开 DB)
+                                                  │
+新 passphrase ──► PBKDF2 ──► new_key ──► PRAGMA rekey = new_key (重新加密)
+                                                  │
+                                            .db 文件用新密钥重新加密完成
+```
+
+> **注意**：rekey 需要 sqlcipher CLI 或 pysqlcipher3。Docker 容器中已包含（`libsqlcipher-dev` + `pysqlcipher3`）。开发环境如未安装，可 `apt install sqlcipher` 后执行。
+
+#### 启用方式
+
+##### Docker Compose（生产推荐）
+
+```bash
+# 1. 生成密钥（从 passphrase 派生）
+python3 gen-sqlcipher-key.py gen > secrets/sqlcipher_key.txt
+
+# 2. 启动（docker-compose 自动挂载 secrets → /run/secrets/sqlcipher_key）
+docker compose up -d
+```
+
+##### 直接部署（开发环境）
+
+```bash
+# 1. 生成密钥并写入 .env
+echo "SQLCIPHER_KEY=$(python3 gen-sqlcipher-key.py gen)" >> .env
+
+# 2. 重启
+./server.sh restart
+```
+
+首次启动自动将未加密的 `.db` 文件迁移为加密数据库（原始文件保留为 `.pre-sqlcipher.bak`）。
+
+#### Docker Secrets 安全模型
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  宿主机                                                  │
+│  ./secrets/sqlcipher_key.txt  (文件权限 600, .gitignore) │
+└──────────────────┬──────────────────────────────────────┘
+                   │ docker compose 挂载
+                   ▼
+┌─────────────────────────────────────────────────────────┐
+│  容器内 /run/secrets/sqlcipher_key                       │
+│  tmpfs 内存文件系统 — 不落磁盘，容器停止后消失             │
+│  仅 root + 应用用户可读                                   │
+└──────────────────┬──────────────────────────────────────┘
+                   │ config.py 读取
+                   ▼
+┌─────────────────────────────────────────────────────────┐
+│  pysqlcipher3 → PRAGMA key → 解密 .db 文件               │
+└─────────────────────────────────────────────────────────┘
+```
+
+**防护效果**：
+- 代码仓库不包含密钥（`secrets/` 在 `.gitignore` 中）
+- 容器外无法通过 `docker inspect` 看到密钥（与 env 不同）
+- `.db` 文件即使被拷贝走也无法解密
+- 密钥仅在容器运行期间存在于内存中
+
+#### 技术架构
+
+```
+┌────────────────────────────────────────────────┐
+│  backend/config.py                             │
+│  SQLCIPHER_KEY_FILE → 从文件读取（Docker secrets）│
+│  SQLCIPHER_KEY      → 从环境变量读取（降级）      │
+│  优先级：文件 > 环境变量 > .env                   │
+└──────────────────┬─────────────────────────────┘
+                   │
+                   ▼
+┌────────────────────────────────────────────────┐
+│  backend/database.py                           │
+│  ┌──────────────────────────────────────────┐  │
+│  │ if SQLCIPHER_KEY:                        │  │
+│  │   driver = "sqlite+pysqlcipher:///"       │  │
+│  │   PRAGMA key = SQLCIPHER_KEY  (on connect)│  │
+│  │ else:                                     │  │
+│  │   driver = "sqlite:///" (plain)           │  │
+│  └──────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────┐  │
+│  │ _migrate_to_sqlcipher():                 │  │
+│  │   启动时检测未加密 DB → 自动导出加密副本   │  │
+│  │   → 替换原文件 + .pre-sqlcipher.bak 备份  │  │
+│  └──────────────────────────────────────────┘  │
+└────────────────────────────────────────────────┘
+```
+
+#### 迁移策略
+
+1. 检测 DB 是否已加密：用标准 `sqlite3` 尝试打开，成功则说明未加密
+2. 优先使用 `sqlcipher` CLI 工具导出（速度快，内存占用低）
+3. 降级使用 `pysqlcipher3` Python 包逐表复制数据
+4. 迁移成功后保留原始文件为 `.pre-sqlcipher.bak` 备份
+
+#### 密钥管理
 
 | 方案 | 适用场景 | 说明 |
 |------|---------|------|
+| **Docker secrets**（推荐） | Docker 生产 | `secrets/sqlcipher_key.txt` → `/run/secrets/sqlcipher_key`（tmpfs） |
 | `.env` 文件 | 开发/单机部署 | `SQLCIPHER_KEY=<hex-64>` → `config.py` 读取 |
-| Docker secrets | Docker 生产 | `echo "$KEY" \| docker secret create sqlcipher_key -` |
 | 环境变量 | 通用 | `export SQLCIPHER_KEY=$(openssl rand -hex 32)` |
 | HashiCorp Vault | 企业 | 通过 Vault Agent 自动注入 |
 
-### 12.4 备选方案
+> **警告**：密钥丢失将导致数据库永久无法解密。请妥善保管密钥，建议离线备份 `secrets/sqlcipher_key.txt` 到安全位置。
+
+### 12.3 备选方案参考
 
 | 方案 | 保护级别 | 改动量 | 适用场景 |
 |------|:---:|:---:|------|
-| **SQLCipher**（推荐） | 全库加密 | 中 | 需要完整数据保护的场景 |
+| **SQLCipher**（已实施） | 全库加密 | 中 | 需要完整数据保护的场景 |
 | 文件系统加密（LUKS/eCryptfs） | 全盘/目录 | 低（运维层面） | 已有加密基础设施的场景 |
 | 敏感字段加密（应用层 AES） | 字段级 | 高 | 只需保护部分字段（如 Token）的场景 |
 | WAL 模式 + 文件权限 `600` | 访问控制 | 极低 | 最低保护（限制文件读取权限） |
 
-### 12.5 最小保护措施（立即可做）
-
-即使不上 SQLCipher，以下措施应立即实施：
-
-```bash
-# 1. 收紧数据库文件权限
-chmod 600 data/pma-*.db
-
-# 2. 确保 data/ 目录不可被 web 直接访问（已在 FastAPI 静态文件范围外）
-# 3. 定期备份并加密存储
-gpg --symmetric --cipher-algo AES256 data/pma-8000.db
-
-# 4. 更换生产环境 JWT 密钥
-echo "JWT_SECRET_KEY=$(openssl rand -hex 32)" >> .env
-
-# 5. 前置 Nginx 并启用 HTTPS
-```
-
-### 12.6 安全建议优先级
+### 12.4 补充安全建议
 
 | 优先级 | 措施 | 难度 | 效果 |
 |:---:|------|:---:|------|
-| **P0** | 更换 JWT 密钥 + 收 tight 文件权限 | 极低 | 防止简单攻击 |
+| **P0** | 更换 JWT 密钥 + 收紧文件权限 | 极低 | 防止简单攻击 |
 | **P1** | 前置 HTTPS（Nginx/Traefik TLS 终止） | 低 | 防止传输层嗅探 |
-| **P2** | 引入 SQLCipher 加密数据库 | 中 | 防止数据文件泄露 |
+| **P2** | ~~SQLCipher 加密~~（已实施，配置即可） | 中 | 防止数据文件泄露 |
 | **P3** | 密钥管理基础设施（Vault/Docker secrets） | 高 | 企业级安全 |
-
-> **注意**：SQLite SEE（SQLite Encryption Extension）是官方商业加密方案，需付费授权。开源场景下 SQLCipher 是更实际的选择。`pysqlcipher3` 基于 `sqlcipher`，与现有 `sqlalchemy` 代码兼容性较好。
 
 ---
 

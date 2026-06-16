@@ -1,5 +1,6 @@
-"""Database management — export/import/backup (admin only)."""
+"""Database management — export/import/backup/rekey (admin only)."""
 
+import hashlib
 import os
 import shutil
 import time
@@ -13,7 +14,8 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from backend.database import get_db, _db_path
+from backend.config import settings
+from backend.database import get_db, _db_path, _is_sqlcipher_enabled, _HAS_SQLCIPHER
 from backend.middleware.auth import require_admin, get_current_user
 from backend.models.local import LocalUser, PmaSetting
 from backend.routers.logs import log_audit
@@ -24,11 +26,42 @@ router = APIRouter(prefix="/api/admin/db", tags=["db-manage"])
 
 BACKUP_DIR = Path(_db_path).parent / "backups"
 
+# Shared with gen-sqlcipher-key.py — keep in sync
+_SQLCIPHER_SALT = b"pma-sqlcipher-salt-v1"
+_SQLCIPHER_ITERATIONS = 1_000_000
+_SQLCIPHER_KEY_LENGTH = 32
+
+
+def _derive_sqlcipher_key(passphrase: str) -> str:
+    """Derive 64-char hex key from passphrase using PBKDF2."""
+    dk = hashlib.pbkdf2_hmac(
+        "sha512",
+        passphrase.encode("utf-8"),
+        _SQLCIPHER_SALT,
+        _SQLCIPHER_ITERATIONS,
+        dklen=_SQLCIPHER_KEY_LENGTH,
+    )
+    return dk.hex()
+
 # ── Backup Config ──
 
 class BackupConfig(BaseModel):
     interval_minutes: int = 0      # 0 = disabled
     retention_count: int = 5       # max backups to keep
+
+
+@router.get("/sqlcipher-status", response_model=dict)
+def get_sqlcipher_status(_=Depends(require_admin)):
+    """Check if SQLCipher encryption is available and enabled."""
+    return {
+        "code": 0,
+        "data": {
+            "enabled": _is_sqlcipher_enabled(),
+            "library_available": _HAS_SQLCIPHER,
+            "key_configured": bool(settings.SQLCIPHER_KEY),
+        },
+        "message": "ok",
+    }
 
 
 @router.get("/backup-config", response_model=dict)
@@ -220,6 +253,101 @@ def _do_backup(retention: int):
     for old in files[retention:]:
         old.unlink()
         logger.info(f"Auto-backup removed (retention={retention}): {old.name}")
+
+
+# ── SQLCipher Rekey ──
+
+class RekeyRequest(BaseModel):
+    old_passphrase: str
+    new_passphrase: str
+
+
+@router.post("/rekey", response_model=dict)
+def rekey_database(
+    payload: RekeyRequest,
+    cu=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Change the database passphrase (PRAGMA rekey)."""
+    if not _is_sqlcipher_enabled():
+        return {"code": 1, "message": "数据库未启用 SQLCipher 加密，无法更换密码。请先在 .env 中配置 SQLCIPHER_KEY。"}
+
+    if len(payload.old_passphrase) < 1:
+        return {"code": 1, "message": "请输入当前密码"}
+    if len(payload.new_passphrase) < 8:
+        return {"code": 1, "message": "新密码至少需要 8 个字符"}
+    if payload.old_passphrase == payload.new_passphrase:
+        return {"code": 1, "message": "新旧密码相同，无需更换"}
+
+    old_key = _derive_sqlcipher_key(payload.old_passphrase)
+    new_key = _derive_sqlcipher_key(payload.new_passphrase)
+
+    try:
+        import pysqlcipher3.dbapi2 as sqlcipher
+
+        conn = sqlcipher.connect(_db_path)
+        try:
+            # Verify old key is correct
+            conn.execute(f"PRAGMA key = \"{old_key}\"")
+            conn.execute("SELECT count(*) FROM sqlite_master").fetchone()
+            # Execute rekey
+            conn.execute(f"PRAGMA rekey = \"{new_key}\"")
+            conn.commit()
+        finally:
+            conn.close()
+
+        # Update the .env or secrets file with the new derived key
+        _update_sqlcipher_key_file(new_key)
+
+        log_audit(db, cu, "db_rekey", "数据库加密密码已更换", "管理", "high")
+        logger.info("Database rekey completed successfully")
+        return {"code": 0, "message": "数据库密码已更换成功。请妥善保管新密码。"}
+
+    except ImportError:
+        return {"code": 1, "message": "未安装 pysqlcipher3，无法执行 rekey。请安装: pip install pysqlcipher3"}
+    except Exception as e:
+        error_msg = str(e)
+        if "file is not a database" in error_msg.lower():
+            return {"code": 1, "message": "当前密码错误，无法打开数据库"}
+        logger.error(f"Rekey failed: {e}")
+        return {"code": 1, "message": f"更换密码失败: {error_msg}"}
+
+
+def _update_sqlcipher_key_file(new_key: str):
+    """Update the SQLCipher key file if it exists, so the server can restart with new key."""
+    # Try Docker secrets file first
+    if settings.SQLCIPHER_KEY_FILE and os.path.exists(settings.SQLCIPHER_KEY_FILE):
+        with open(settings.SQLCIPHER_KEY_FILE, "w") as f:
+            f.write(new_key + "\n")
+        settings.reload()
+        logger.info("Updated SQLCipher key in Docker secrets file")
+        return
+
+    # Try .env file
+    env_path = os.path.join(os.path.dirname(_db_path), "..", ".env")
+    if not os.path.exists(env_path):
+        env_path = ".env"
+    if os.path.exists(env_path):
+        lines = []
+        found = False
+        with open(env_path) as f:
+            for line in f:
+                if line.startswith("SQLCIPHER_KEY="):
+                    lines.append(f"SQLCIPHER_KEY={new_key}\n")
+                    found = True
+                else:
+                    lines.append(line)
+        if not found:
+            lines.append(f"SQLCIPHER_KEY={new_key}\n")
+        with open(env_path, "w") as f:
+            f.writelines(lines)
+        settings.reload()
+        logger.info("Updated SQLCIPHER_KEY in .env file")
+        return
+
+    # No file to update — just update settings in memory
+    settings.SQLCIPHER_KEY = new_key
+    logger.warning("No SQLCIPHER_KEY_FILE or .env found; key updated in memory only")
 
 
 def _format_size(size: int) -> str:

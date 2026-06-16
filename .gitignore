@@ -10,4 +10,4 @@ dist/
 .claude/settings.json
 .claude/worktrees/
 data/*.log
-data/backups/
+data/backups/secrets/

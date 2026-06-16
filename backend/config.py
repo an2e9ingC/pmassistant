@@ -33,6 +33,8 @@ class Settings:
     JWT_EXPIRE_MINUTES: int = 480
     SYNC_INTERVAL_MINUTES: int = 30
     LOG_LEVEL: str = "INFO"
+    SQLCIPHER_KEY: str = ""  # hex key for SQLCipher encryption (empty = disabled)
+    SQLCIPHER_KEY_FILE: str = ""  # path to Docker secrets file (/run/secrets/sqlcipher_key)
 
     def __init__(self):
         self.reload()
@@ -44,6 +46,10 @@ class Settings:
             if isinstance(default, int):
                 val = int(val)
             setattr(self, key, val)
+        # Docker secrets: if SQLCIPHER_KEY_FILE is set, read key from the file
+        if self.SQLCIPHER_KEY_FILE and os.path.exists(self.SQLCIPHER_KEY_FILE):
+            with open(self.SQLCIPHER_KEY_FILE) as f:
+                self.SQLCIPHER_KEY = f.read().strip()
 
     @classmethod
     def _defaults(cls):

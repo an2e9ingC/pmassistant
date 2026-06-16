@@ -4,6 +4,7 @@
 
 var _dbBackupConfig = null;
 var _dbBackups = [];
+var _dbSqlcipherEnabled = false;
 
 async function initDbManage() {
   var container = document.getElementById('view-db-manage');
@@ -14,6 +15,8 @@ async function initDbManage() {
     _dbBackupConfig = cfg;
     var backups = await API.get('/admin/db/backups');
     _dbBackups = backups || [];
+    var scStatus = await API.get('/admin/db/sqlcipher-status');
+    _dbSqlcipherEnabled = scStatus && scStatus.enabled;
   } catch(e) {
     container.innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '</div>';
     return;
@@ -52,6 +55,35 @@ function renderDbManage() {
       '</div>' +
       '<div id="db-import-msg" style="margin-top:8px;font-size:11.5px"></div>' +
     '</div></div>';
+
+  // ── SQLCipher Rekey Section (only when enabled) ──
+  if (_dbSqlcipherEnabled) {
+    html += '<div class="config-section">' +
+      '<div class="config-section-title">修改数据库密码 🔒</div>' +
+      '<div class="config-fields" style="padding:12px 16px">' +
+        '<div style="font-size:11.5px;color:var(--muted);margin-bottom:10px">更换 SQLCipher 加密数据库的 passphrase。修改后自动更新密钥文件，无需手动操作。</div>' +
+        '<div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">' +
+          '<label style="flex:1;min-width:160px">' +
+            '<span style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">当前密码</span>' +
+            '<input type="password" id="db-rekey-old-pass" placeholder="输入当前 passphrase" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;box-sizing:border-box">' +
+          '</label>' +
+          '<label style="flex:1;min-width:160px">' +
+            '<span style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">新密码</span>' +
+            '<input type="password" id="db-rekey-new-pass" placeholder="输入新 passphrase（≥8 字符）" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;box-sizing:border-box">' +
+          '</label>' +
+          '<label style="flex:1;min-width:160px">' +
+            '<span style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">确认新密码</span>' +
+            '<input type="password" id="db-rekey-confirm" placeholder="再次输入新 passphrase" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;box-sizing:border-box">' +
+          '</label>' +
+          '<button class="btn btn-primary" onclick="rekeyDatabase()" style="height:35px">更换密码</button>' +
+        '</div>' +
+        '<div id="db-rekey-msg" style="margin-top:8px;font-size:11.5px"></div>' +
+        '<div style="font-size:10.5px;color:var(--muted);margin-top:6px">' +
+          '密码通过 PBKDF2-HMAC-SHA512（100 万次迭代）派生为 256-bit 密钥。' +
+          '修改后密钥文件自动更新，无需手动替换。' +
+        '</div>' +
+      '</div></div>';
+  }
 
   // ── Auto-Backup Config ──
   var interval = _dbBackupConfig ? _dbBackupConfig.interval_minutes : 0;
@@ -221,5 +253,46 @@ async function deleteBackup(name) {
     showToast('已删除 ' + name, 'success');
   } catch(e) {
     showToast('删除失败: ' + (e.message || '未知错误'), 'error');
+  }
+}
+
+async function rekeyDatabase() {
+  var oldPass = document.getElementById('db-rekey-old-pass').value;
+  var newPass = document.getElementById('db-rekey-new-pass').value;
+  var confirmPass = document.getElementById('db-rekey-confirm').value;
+  var msgEl = document.getElementById('db-rekey-msg');
+
+  if (!oldPass) { msgEl.textContent = '请输入当前密码'; msgEl.style.color = 'var(--danger)'; return; }
+  if (newPass.length < 8) { msgEl.textContent = '新密码至少需要 8 个字符'; msgEl.style.color = 'var(--danger)'; return; }
+  if (newPass !== confirmPass) { msgEl.textContent = '两次输入的新密码不一致'; msgEl.style.color = 'var(--danger)'; return; }
+  if (oldPass === newPass) { msgEl.textContent = '新旧密码相同，无需更换'; msgEl.style.color = 'var(--muted)'; return; }
+
+  if (!confirm('确认更换数据库密码？\n\n更换完成后密钥文件将自动更新。请务必记住新密码，丢失后数据库将无法解密。')) return;
+
+  msgEl.textContent = '正在更换密码...';
+  msgEl.style.color = 'var(--muted)';
+
+  try {
+    var res = await API.post('/admin/db/rekey', {
+      old_passphrase: oldPass,
+      new_passphrase: newPass,
+    });
+    if (res && res.code === 0) {
+      msgEl.textContent = '密码已更换成功！请妥善保管新密码。';
+      msgEl.style.color = 'var(--success)';
+      showToast('数据库密码已更换', 'success');
+      // Clear input fields
+      document.getElementById('db-rekey-old-pass').value = '';
+      document.getElementById('db-rekey-new-pass').value = '';
+      document.getElementById('db-rekey-confirm').value = '';
+    } else {
+      msgEl.textContent = (res && res.message) || '更换失败';
+      msgEl.style.color = 'var(--danger)';
+      showToast('更换失败: ' + ((res && res.message) || '未知错误'), 'error');
+    }
+  } catch(e) {
+    msgEl.textContent = '更换失败: ' + (e.message || '未知错误');
+    msgEl.style.color = 'var(--danger)';
+    showToast('更换密码失败', 'error');
   }
 }

@@ -17,5 +17,12 @@ services:
       - TZ=Asia/Shanghai
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - SYNC_INTERVAL_MINUTES=${SYNC_INTERVAL_MINUTES:-60}
+      - SQLCIPHER_KEY_FILE=/run/secrets/sqlcipher_key
+    secrets:
+      - sqlcipher_key
     restart: unless-stopped
     command: uvicorn backend.main:app --host 0.0.0.0 --port 8000
+
+secrets:
+  sqlcipher_key:
+    file: ./secrets/sqlcipher_key.txt
