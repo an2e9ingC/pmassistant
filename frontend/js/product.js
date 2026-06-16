@@ -275,23 +275,42 @@ function renderProdDetailHeader(p) {
 // ── Tab: 基本信息 ──
 
 function renderProdInfo(p) {
-  // Get breadcrumb from product management tree
   var productType = p.tree_path || p.category || p.program_name || '未分类';
 
-  var html =
-    '<div class="card" style="padding:20px">' +
-      '<div style="display:flex;gap:24px;margin-bottom:16px">' +
-        '<div style="min-width:100px"><span style="font-size:11px;color:var(--muted)">产品编号</span><div style="font-family:var(--mono);font-size:13px;margin-top:2px">' + escHtml(p.code || '#' + p.id) + '</div></div>' +
-        '<div style="min-width:100px"><span style="font-size:11px;color:var(--muted)">所属分类</span><div style="font-size:13px;margin-top:2px">' + escHtml(productType) + '</div></div>' +
-        '<div style="min-width:80px"><span style="font-size:11px;color:var(--muted)">状态</span><div style="margin-top:2px">' + renderPill(p.status) + '</div></div>' +
-        '<div style="min-width:80px"><span style="font-size:11px;color:var(--muted)">发布次数</span><div style="font-size:18px;font-weight:600;color:var(--warn);margin-top:2px">' + (p.releases || 0) + '</div></div>' +
-        '<div style="min-width:80px"><span style="font-size:11px;color:var(--muted)">关联项目</span><div style="font-size:18px;font-weight:600;color:var(--accent);margin-top:2px">' + (p.project_count || 0) + '</div></div>' +
-      '</div>' +
-      '<div style="display:flex;gap:8px;margin-bottom:16px">' +
-        (p.nas_path ? '<a href="' + escHtml(p.nas_path) + '" target="_blank" class="prod-link-chip">&#x1F4C1; NAS</a>' : '') +
-        (p.git_url ? '<a href="' + escHtml(p.git_url) + '" target="_blank" class="prod-link-chip">&#x1F5C3; Git</a>' : '') +
-      '</div>' +
+  var html = '<div class="card" style="padding:20px">';
+
+  // KPI cards — delivery style, 4 columns
+  html += '<div class="delivery-kpi" style="grid-template-columns:repeat(4, 1fr);margin-bottom:16px">' +
+    '<div class="dkpi"><div class="dkpi-lbl">产品编号</div><div class="dkpi-val" style="font-size:15px;font-family:var(--mono);font-weight:600;color:var(--fg)">' + escHtml(p.code || '#' + p.id) + '</div></div>' +
+    '<div class="dkpi" style="cursor:pointer" onclick="gotoView(\'product-list\');_prodSearchVal=\'' + escHtml((p.tree_path || '').split(' > ')[0]) + '\';setTimeout(function(){if(typeof initProductList==\'function\')initProductList();},100)" title="点击查看该分类下的产品">' +
+      '<div class="dkpi-lbl">所属分类</div><div class="dkpi-val" style="font-size:15px;font-weight:600;color:var(--accent)">' + escHtml(productType) + '</div></div>' +
+    '<div class="dkpi"><div class="dkpi-lbl">状态</div><div class="dkpi-val" style="font-size:14px">' + renderPill(p.status) + '</div></div>' +
+    '<div class="dkpi"><div class="dkpi-lbl">描述</div><div class="dkpi-val" style="font-size:12px;color:var(--muted);line-height:1.4">' + (p.description ? escHtml(p.description) : '—') + '</div></div>' +
+  '</div>';
+
+  // Stats row — delivery kpi style, 4 equal columns
+  html += '<div class="delivery-kpi" style="grid-template-columns:repeat(4, 1fr)">';
+  var stats = [
+    { label: '关联项目', value: p.project_count || 0, color: 'var(--accent)', click: true },
+    { label: '发布次数', value: p.releases || 0, color: 'var(--warn)' },
+    { label: '需求总数', value: p.total_stories || 0, color: 'var(--success)' },
+    { label: 'Bug 总数', value: p.total_bugs || 0, color: 'var(--danger)' },
+  ];
+  stats.forEach(function(s) {
+    html += '<div class="dkpi"' + (s.click ? ' style="cursor:pointer" onclick="gotoView(\'topology\');document.getElementById(\'topo-prod\').value=\'' + escHtml(p.code || p.name) + '\';setTimeout(function(){if(typeof onTopoSearch==\'function\')onTopoSearch()},100)" title="点击查看关联项目"' : '') + '>' +
+      '<div class="dkpi-lbl">' + s.label + '</div><div class="dkpi-val" style="color:' + s.color + '">' + s.value + '</div></div>';
+  });
+  html += '</div>';
+
+  // Links
+  if (p.nas_path || p.git_url) {
+    html += '<div style="display:flex;gap:8px;margin-top:12px">' +
+      (p.nas_path ? '<a href="' + escHtml(p.nas_path) + '" target="_blank" class="prod-link-chip">📁 NAS</a>' : '') +
+      (p.git_url ? '<a href="' + escHtml(p.git_url) + '" target="_blank" class="prod-link-chip">🗃 Git</a>' : '') +
     '</div>';
+  }
+
+  html += '</div>';
 
   // Product Documents
   var nodeIds = (p.linked_node_ids && p.linked_node_ids.length) ? p.linked_node_ids : [];

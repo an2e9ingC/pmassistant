@@ -250,8 +250,28 @@ def _product_detail(p: CachedProduct, db: Session) -> dict:
         "releases_list": _get_product_releases(db, p.id),
         "is_local": bool(p.is_local),
         "synced_at": to_local_str(p.synced_at) or None,
+        "tree_path": _get_product_tree_path(db, p.id),
         "linked_node_ids": _get_product_node_ids(db, p.id),
     }
+
+
+def _get_product_tree_path(db: Session, product_id: int) -> str:
+    from backend.models.zentao import ProductNodeLink
+    from backend.models.document import ProductLine
+    links = db.query(ProductNodeLink).filter(ProductNodeLink.product_id == product_id).all()
+    if not links:
+        return ""
+    node = db.query(ProductLine).filter(ProductLine.id == links[0].product_node_id).first()
+    if not node:
+        return ""
+    parts = [node.name]
+    parent_id = node.parent_id
+    while parent_id:
+        parent = db.query(ProductLine).filter(ProductLine.id == parent_id).first()
+        if not parent: break
+        parts.insert(0, parent.name)
+        parent_id = parent.parent_id
+    return " > ".join(parts)
 
 
 def _get_product_node_ids(db: Session, product_id: int) -> list[int]:
