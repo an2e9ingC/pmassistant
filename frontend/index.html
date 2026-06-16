@@ -179,7 +179,7 @@
         <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle;margin-right:3px"><circle cx="8" cy="8" r="6"/><line x1="8" y1="5" x2="8" y2="9"/><circle cx="8" cy="12" r="0.8" fill="currentColor" stroke="none"/></svg>
         反馈 Bug
       </a>
-      <span id="app-version">v2026.06.15-beta8</span>
+      <span id="app-version">v2026.06.16-beta1</span>
     </div>
   </div>
 </aside>
@@ -844,27 +844,16 @@
         <div class="empty-state" style="padding:20px">请选择产品</div>
       </div>
 
-      <div id="prod-info-area">
-        <div class="empty-state" style="padding:20px">请选择产品</div>
+      <div class="detail-tabs">
+        <div class="dtab active" onclick="switchProdTab('info',this)">基本信息</div>
+        <div class="dtab" onclick="switchProdTab('maintenance',this)">产品维护</div>
       </div>
 
-      <div class="section-hd"><div class="section-title">交付资料</div></div>
-      <div class="card" id="prod-resources-card">
-        <div class="empty-state" style="padding:20px">请选择产品</div>
+      <div class="dsec active" id="prodsec-info">
+        <div class="card" style="padding:20px"><div class="empty-state">请选择产品</div></div>
       </div>
-
-      <div class="section-hd" style="margin-top:22px"><div class="section-title">关联项目</div></div>
-      <div class="card table-scroll" style="margin-bottom:20px">
-        <table class="proj-table">
-          <thead>
-            <tr>
-              <th>项目编号</th><th>项目名</th><th>客户</th><th>类型</th><th>当前阶段</th><th>状态</th><th>进度</th><th>计划完成</th><th>项目标签</th>
-            </tr>
-          </thead>
-          <tbody id="prod-projects-tbody">
-            <tr><td colspan="10"><div class="empty-state" style="padding:20px">请选择产品</div></td></tr>
-          </tbody>
-        </table>
+      <div class="dsec" id="prodsec-maintenance">
+        <div class="card" style="padding:20px"><div class="empty-state">请选择产品</div></div>
       </div>
     </div>
 

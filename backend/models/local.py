@@ -48,6 +48,16 @@ class UserRole(Base):
     role = relationship("Role", back_populates="user_roles")
 
 
+class ProductNote(Base):
+    __tablename__ = "product_notes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, nullable=False, index=True)
+    content = Column(Text, nullable=False)
+    recorded_by = Column(String(64), nullable=False, default="")
+    created_at = Column(DateTime, default=func.now())
+
+
 class ProjectNote(Base):
     __tablename__ = "project_notes"
 

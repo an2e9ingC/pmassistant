@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from backend.database import get_db
+from backend.database import get_db, to_local_str
 from backend.middleware.auth import get_current_user, require_admin
+from backend.models.local import ProductNote
 from backend.services import product_service
 
 router = APIRouter(prefix="/api/products", tags=["products"])
@@ -22,6 +23,10 @@ class ProductUpdate(BaseModel):
 class ProductProjectLinkRequest(BaseModel):
     product_id: int
     project_id: int
+
+
+class NoteCreate(BaseModel):
+    content: str
 
 
 @router.get("", response_model=dict)
@@ -105,3 +110,110 @@ def unlink_product_project(
 ):
     result = product_service.remove_product_project_link(db, product_id, project_id)
     return {"code": 0, "data": result, "message": "ok"}
+
+
+# ── Product Notes ──
+
+@router.get("/{product_id}/notes", response_model=dict)
+def get_product_notes(product_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    notes = (
+        db.query(ProductNote)
+        .filter(ProductNote.product_id == product_id)
+        .order_by(ProductNote.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    return {
+        "code": 0,
+        "data": [
+            {
+                "id": n.id,
+                "content": n.content,
+                "recorded_by": n.recorded_by,
+                "created_at": to_local_str(n.created_at),
+            }
+            for n in notes
+        ],
+        "message": "ok",
+    }
+
+
+@router.post("/{product_id}/notes", response_model=dict)
+def add_product_note(
+    product_id: int,
+    payload: NoteCreate,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    note = ProductNote(
+        product_id=product_id,
+        content=payload.content,
+        recorded_by=user.username,
+    )
+    db.add(note)
+    db.commit()
+    db.refresh(note)
+    return {
+        "code": 0,
+        "data": {
+            "id": note.id,
+            "content": note.content,
+            "recorded_by": note.recorded_by,
+            "created_at": to_local_str(note.created_at),
+        },
+        "message": "ok",
+    }
+
+
+@router.delete("/{product_id}/notes/{note_id}", response_model=dict)
+def delete_product_note(
+    product_id: int,
+    note_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_admin),
+):
+    note = db.query(ProductNote).filter(
+        ProductNote.id == note_id,
+        ProductNote.product_id == product_id,
+    ).first()
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    db.delete(note)
+    db.commit()
+    return {"code": 0, "message": "已删除"}
+
+
+# ── Product Documents (based on doc templates) ──
+
+@router.get("/{product_id}/documents", response_model=dict)
+def get_product_documents(product_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    """Return doc templates for the product's L2 node, with status."""
+    from backend.models.document import ProductDocTemplate, ProductLine
+    from backend.models.zentao import ProductNodeLink
+
+    # Find which L2 node(s) this product is linked to
+    links = db.query(ProductNodeLink).filter(ProductNodeLink.product_id == product_id).all()
+    if not links:
+        return {"code": 0, "data": [], "message": "ok"}
+
+    # Get templates from all linked L2 nodes
+    docs = []
+    for link in links:
+        node = db.query(ProductLine).filter(ProductLine.id == link.product_node_id).first()
+        if not node:
+            continue
+        templates = db.query(ProductDocTemplate).filter(
+            ProductDocTemplate.product_id == link.product_node_id
+        ).order_by(ProductDocTemplate.sort_order).all()
+        for t in templates:
+            docs.append({
+                "id": t.id,
+                "doc_name": t.doc_name,
+                "sort_order": t.sort_order,
+                "description": t.description or "",
+                "responsible_role": t.responsible_role or "",
+                "node_name": node.name,
+                "node_id": node.id,
+            })
+
+    return {"code": 0, "data": docs, "message": "ok"}

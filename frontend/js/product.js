@@ -219,38 +219,40 @@ document.addEventListener('click', function(e) {
   }
 });
 
+var _prodDetail = null;
+
+function switchProdTab(id, el) {
+  document.querySelectorAll('#view-product-detail .dsec').forEach(function(s) { s.classList.remove('active'); });
+  document.querySelectorAll('#view-product-detail .dtab').forEach(function(t) { t.classList.remove('active'); });
+  var sec = document.getElementById('prodsec-' + id);
+  if (sec) sec.classList.add('active');
+  if (el) el.classList.add('active');
+  if (id === 'maintenance' && _prodDetail) renderProdMaintenance(_prodDetail);
+}
+
 async function loadProductDetail(id) {
   _prodDetailCurId = id;
-  // Update combo input
   var selected = _prodComboAll.find(function(p) { return p.id === parseInt(id); });
   if (selected) {
     document.getElementById('prod-combo-input').value = selected.name;
   }
 
-  // Show loading
   document.getElementById('prod-detail-header').innerHTML = '<div class="loading-spinner">加载中...</div>';
-  document.getElementById('prod-info-area').innerHTML = '<div class="loading-spinner">加载中...</div>';
-  document.getElementById('prod-projects-tbody').innerHTML = '<tr><td colspan="4"><div class="loading-spinner">加载中...</div></td></tr>';
-  document.getElementById('prod-resources-card').innerHTML = '<div class="loading-spinner">加载中...</div>';
+  ['prodsec-info', 'prodsec-maintenance'].forEach(function(s) {
+    document.getElementById(s).innerHTML = '<div class="card" style="padding:20px"><div class="loading-spinner">加载中...</div></div>';
+  });
 
   try {
     var detail = await API.get('/products/' + id);
+    _prodDetail = detail;
     renderProdDetailHeader(detail);
-    renderProdDetailInfo(detail);
-    renderProdDetailProjects(detail);
-    renderProdDetailResources(detail);
+    renderProdInfo(detail);
   } catch(e) {
     document.getElementById('prod-detail-header').innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '</div>';
   }
 }
 
 function renderProdDetailHeader(p) {
-  var tagsHtml = '';
-  if (p.tags_list && p.tags_list.length > 0 && p.tags_list[0] !== '') {
-    tagsHtml = p.tags_list.map(function(t) {
-      return '<span class="tag-badge tag-' + (t.length % 5) + '">#' + escHtml(t) + '</span>';
-    }).join(' ');
-  }
   document.getElementById('prod-detail-header').innerHTML =
     '<div class="detail-meta">' +
       '<div class="detail-title">' +
@@ -261,148 +263,215 @@ function renderProdDetailHeader(p) {
         (p.zentao_url ? '<a href="' + p.zentao_url + '" target="_blank" class="zentao-link" style="margin-left:10px;font-size:12px" title="在禅道中查看">&#x2197; 禅道</a>' : '') +
       '</div>' +
       (p.code ? '<div class="detail-subtitle" style="font-family:var(--mono);font-size:12px;color:var(--muted)">' + escHtml(p.code) + '</div>' : '') +
-      (tagsHtml ? '<div style="margin-top:6px">' + tagsHtml + '</div>' : '') +
-      (p.description ? '<div style="margin-top:6px;font-size:13px;color:var(--muted);line-height:1.5">' + escHtml(stripHtml(p.description)) + '</div>' : '') +
     '</div>';
 }
 
-function renderProdDetailInfo(p) {
-  var linksHtml = '';
-  if (p.nas_path) {
-    linksHtml += '<a href="' + escHtml(p.nas_path) + '" target="_blank" class="prod-link-chip" title="NAS 路径">&#x1F4C1; NAS</a>';
-  }
-  if (p.git_url) {
-    linksHtml += '<a href="' + escHtml(p.git_url) + '" target="_blank" class="prod-link-chip" title="Git 仓库">&#x1F5C3; Git</a>';
-  }
+// ── Tab: 基本信息 ──
+
+function renderProdInfo(p) {
+  // Get breadcrumb from product management tree
+  var productType = p.category || p.program_name || '未分类';
+
   var html =
-    '<div class="section-hd"><div class="section-title">基本信息</div></div>' +
-    '<div class="prod-stats">' +
-      (p.zentao_url ? '<a href="' + p.zentao_url + '" target="_blank" class="prod-stat-link"><div class="prod-stat"><div class="prod-stat-val" style="color:var(--accent)">' + (p.total_stories || 0) + '</div><div class="prod-stat-lbl">需求数</div></div></a>' :
-        '<div class="prod-stat"><div class="prod-stat-val" style="color:var(--accent)">' + (p.total_stories || 0) + '</div><div class="prod-stat-lbl">需求数</div></div>') +
-      (p.zentao_bugs_url ? '<a href="' + p.zentao_bugs_url + '" target="_blank" class="prod-stat-link"><div class="prod-stat"><div class="prod-stat-val" style="color:' + (p.total_bugs > 0 ? 'var(--danger)' : 'var(--success)') + '">' + (p.total_bugs || 0) + '</div><div class="prod-stat-lbl">Bug 数</div></div></a>' :
-        '<div class="prod-stat"><div class="prod-stat-val" style="color:' + (p.total_bugs > 0 ? 'var(--danger)' : 'var(--success)') + '">' + (p.total_bugs || 0) + '</div><div class="prod-stat-lbl">Bug 数</div></div>') +
-      (p.zentao_releases_url ? '<a href="' + p.zentao_releases_url + '" target="_blank" class="prod-stat-link"><div class="prod-stat"><div class="prod-stat-val" style="color:var(--warn)">' + (p.releases || 0) + '</div><div class="prod-stat-lbl">发布次数</div></div></a>' :
-        '<div class="prod-stat"><div class="prod-stat-val" style="color:var(--warn)">' + (p.releases || 0) + '</div><div class="prod-stat-lbl">发布次数</div></div>') +
-      '<div class="prod-stat" onclick="document.querySelector(\'#prod-projects-tbody\').scrollIntoView({behavior:\'smooth\',block:\'center\'})" style="cursor:pointer"><div class="prod-stat-val">' + (p.project_count || 0) + '</div><div class="prod-stat-lbl">关联项目 &#x2193;</div></div>' +
-    '</div>' +
-    '<div class="prod-info-row">' +
-      '<span class="prod-info-row-label">产品线</span>' +
-      '<span class="tag-badge tag-0" style="font-size:12px;font-weight:520">' + escHtml(p.category || p.program_name || '未分类') + '</span>' +
-      '<span class="prod-info-row-label" style="margin-left:8px">状态</span>' + renderPill(p.status) +
-      (linksHtml ? '<span style="margin-left:auto">' + linksHtml + '</span>' : '') +
+    '<div class="card" style="padding:20px">' +
+      '<div style="display:flex;gap:24px;margin-bottom:16px">' +
+        '<div style="min-width:100px"><span style="font-size:11px;color:var(--muted)">产品编号</span><div style="font-family:var(--mono);font-size:13px;margin-top:2px">' + escHtml(p.code || '#' + p.id) + '</div></div>' +
+        '<div style="min-width:100px"><span style="font-size:11px;color:var(--muted)">所属分类</span><div style="font-size:13px;margin-top:2px">' + escHtml(productType) + '</div></div>' +
+        '<div style="min-width:80px"><span style="font-size:11px;color:var(--muted)">状态</span><div style="margin-top:2px">' + renderPill(p.status) + '</div></div>' +
+        '<div style="min-width:80px"><span style="font-size:11px;color:var(--muted)">发布次数</span><div style="font-size:18px;font-weight:600;color:var(--warn);margin-top:2px">' + (p.releases || 0) + '</div></div>' +
+        '<div style="min-width:80px"><span style="font-size:11px;color:var(--muted)">关联项目</span><div style="font-size:18px;font-weight:600;color:var(--accent);margin-top:2px">' + (p.project_count || 0) + '</div></div>' +
+      '</div>' +
+      '<div style="display:flex;gap:8px;margin-bottom:16px">' +
+        (p.nas_path ? '<a href="' + escHtml(p.nas_path) + '" target="_blank" class="prod-link-chip">&#x1F4C1; NAS</a>' : '') +
+        (p.git_url ? '<a href="' + escHtml(p.git_url) + '" target="_blank" class="prod-link-chip">&#x1F5C3; Git</a>' : '') +
+      '</div>' +
     '</div>';
-  document.getElementById('prod-info-area').innerHTML = html;
+
+  // Product Documents
+  html += '<div class="section-hd" style="margin-top:20px"><div class="section-title">产品文档</div></div>';
+  html += '<div id="prod-docs-inline"><div class="loading-spinner" style="padding:20px">加载中...</div></div>';
+
+  // Product Notes
+  html += '<div class="section-hd" style="margin-top:20px"><div class="section-title">产品笔记</div>' +
+    '<button class="btn" style="font-size:11px;padding:3px 10px" onclick="showAddProductNoteDialog()">+ 添加笔记</button></div>';
+  html += '<div class="card" style="padding:0;overflow:hidden" id="prod-notes-card">';
+  html += '<div style="max-height:400px;overflow-y:auto"><div id="prod-notes-list"><div class="loading-spinner" style="padding:20px">加载中...</div></div></div>';
+  html += '</div>';
+
+  document.getElementById('prodsec-info').innerHTML = html;
+
+  // Load documents
+  API.get('/products/' + p.id + '/documents').then(function(docs) {
+    _renderProdDocsInline(docs || []);
+  }).catch(function() {
+    _renderProdDocsInline([]);
+  });
+
+  // Load notes
+  API.get('/products/' + p.id + '/notes').then(function(notes) {
+    renderProductNotes(notes || []);
+  }).catch(function() {
+    renderProductNotes([]);
+  });
 }
 
-function renderProdDetailProjects(p) {
-  var projects = p.projects || [];
-  var tbody = document.getElementById('prod-projects-tbody');
-  if (!projects.length) {
-    tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state">暂无关联项目</div></td></tr>';
+function renderProductNotes(notes) {
+  var el = document.getElementById('prod-notes-list');
+  if (!el) return;
+  if (!notes.length) {
+    el.innerHTML = '<div class="empty-state" style="padding:20px">暂无笔记</div>';
     return;
   }
-  tbody.innerHTML = projects.map(function(proj) {
-    var projCode = extractProjectCode(proj.name);
-    var coreName = extractCoreName(proj.name);
-    var tagsList = proj.tags_list || [];
-    var tagsHtml = '';
-    if (tagsList.length > 0 && tagsList[0] !== '') {
-      tagsHtml = tagsList.slice(0, 3).map(function(t) {
-        return '<span class="tag-badge tag-' + (t.length % 5) + '">#' + escHtml(t) + '</span>';
-      }).join(' ');
-    } else {
-      tagsHtml = '<span style="font-size:11.5px;color:var(--muted)">无</span>';
-    }
-    return '<tr onclick="openProject(\'' + proj.id + '\')" style="cursor:pointer">' +
-      '<td>' + renderProjIcon(proj.project_type, projCode) + '</td>' +
-      '<td><div class="proj-name">' + escHtml(coreName) + '</div></td>' +
-      '<td><span onclick="event.stopPropagation();openCustomerByName(\'' + escHtml(proj.customer_name || '') + '\')" style="cursor:pointer">' + renderCustomerBadge(proj.customer_name) + '</span></td>' +
-      '<td>' + renderTypeBadge(proj.project_type) + '</td>' +
-      '<td style="font-size:13px">' + escHtml(proj.status || '—') + '</td>' +
-      '<td>' + renderPill(proj.status) + '</td>' +
-      '<td class="prog-cell">' + renderProgressBar(proj.progress, proj.status) + '</td>' +
-      '<td style="font-size:12px;color:' + (proj.end ? 'var(--muted)' : 'var(--warn)') + '">' + (proj.end ? formatDate(proj.end) : '长期') + '</td>' +
-      '<td>' + tagsHtml + '</td>' +
-    '</tr>';
+  el.innerHTML = notes.map(function(n) {
+    return '<div style="padding:12px 16px;border-bottom:1px solid var(--border)">' +
+      '<div style="font-size:12.5px;line-height:1.6;white-space:pre-wrap">' + escHtml(n.content) + '</div>' +
+      '<div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10.5px;color:var(--muted)">' +
+        '<span>' + escHtml(n.recorded_by) + '</span>' +
+        '<span>' + escHtml(n.created_at) + '</span>' +
+        '<span style="cursor:pointer;color:var(--danger)" onclick="deleteProductNote(' + n.id + ',this)">删除</span>' +
+      '</div>' +
+    '</div>';
   }).join('');
 }
 
-function renderProdDetailResources(p) {
-  var card = document.getElementById('prod-resources-card');
+function showAddProductNoteDialog() {
+  openDialog('添加产品笔记 — ' + escHtml((_prodDetail || {}).name || ''),
+    '<div style="margin-bottom:12px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">笔记内容</label>' +
+      '<textarea class="search-inp" id="prod-note-content" rows="4" placeholder="输入笔记..." style="width:100%;box-sizing:border-box;resize:vertical"></textarea>' +
+    '</div>',
+    [{text: '取消', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
+     {text: '添加', cls: 'btn-primary', onclick: 'addProductNote()'}],
+    {hideClose: true});
+}
+
+async function addProductNote() {
+  var content = document.getElementById('prod-note-content').value.trim();
+  if (!content) { showToast('请输入笔记内容', 'error'); return; }
+  document.querySelector('.shared-dialog-overlay').remove();
+  try {
+    await API.post('/products/' + _prodDetail.id + '/notes', {content: content});
+    showToast('已添加', 'ok');
+    // Reload notes
+    var notes = await API.get('/products/' + _prodDetail.id + '/notes');
+    renderProductNotes(notes || []);
+  } catch(e) {
+    showToast('添加失败: ' + (e.message || ''), 'error');
+  }
+}
+
+async function deleteProductNote(noteId, el) {
+  if (!confirm('确认删除此笔记？')) return;
+  try {
+    await API.del('/products/' + _prodDetail.id + '/notes/' + noteId);
+    showToast('已删除', 'ok');
+    var notes = await API.get('/products/' + _prodDetail.id + '/notes');
+    renderProductNotes(notes || []);
+  } catch(e) {
+    showToast('删除失败: ' + (e.message || ''), 'error');
+  }
+}
+
+// ── Inline: 产品文档（在基本信息中展示） ──
+
+function _renderProdDocsInline(docs) {
+  var el = document.getElementById('prod-docs-inline');
+  if (!el) return;
+  if (!docs.length) {
+    el.innerHTML = '<div class="card" style="padding:20px"><div class="empty-state">该产品暂未关联文档模板。请先在「文档模板配置」页面为对应产品系列添加文档模板。</div></div>';
+    return;
+  }
+  var html = '<div class="card" style="padding:0;overflow:hidden">';
+  html += '<div class="table-scroll" style="max-height:400px"><table class="stage-table"><thead><tr>' +
+    '<th style="width:50px">序号</th><th>文档名称</th><th>责任人</th><th style="width:100px">产品系列</th><th>说明</th>' +
+    '</tr></thead><tbody>';
+  docs.forEach(function(d) {
+    html += '<tr>' +
+      '<td style="font-family:var(--mono);color:var(--muted);text-align:center">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
+      '<td style="font-weight:500">' + escHtml(d.doc_name) + '</td>' +
+      '<td style="font-size:12px;white-space:nowrap">' + escHtml(d.responsible_role || '—') + '</td>' +
+      '<td style="font-size:11px;color:var(--muted)">' + escHtml(d.node_name || '') + '</td>' +
+      '<td style="font-size:12px;color:var(--muted)">' + escHtml(d.description || '') + '</td>' +
+    '</tr>';
+  });
+  html += '</tbody></table></div></div>';
+  el.innerHTML = html;
+}
+
+// ── Tab: 产品维护（项目关联、客户、标签） ──
+
+function renderProdMaintenance(p) {
+  var projects = p.projects || [];
   var html = '';
 
-  // ── 交付资料（NAS + Git 仓库链接） ──
-  html += '<div class="section-hd"><div class="section-title">交付资料</div></div>';
-  html += '<ul style="list-style:none;padding:16px;margin:0">';
-  var items = [];
-  if (p.nas_path) {
-    items.push('<li style="padding:6px 0;font-size:13px"><span style="color:var(--muted)">NAS路径: </span><code>' + escHtml(p.nas_path) + '</code></li>');
-  }
-  if (p.git_url) {
-    items.push('<li style="padding:6px 0;font-size:13px"><span style="color:var(--muted)">Git仓库: </span><a href="' + escHtml(p.git_url) + '" target="_blank" style="color:var(--accent)"><code>' + escHtml(p.git_url) + '</code> &#x2197;</a></li>');
-  }
-  if (!items.length) {
-    items.push('<li style="padding:6px 0;font-size:13px;color:var(--muted)">暂无交付资料信息</li>');
-  }
-  html += items.join('') + '</ul>';
-
-  // ── 发布版本（含 GitLab 链接校验） ──
-  var releases = p.releases_list || [];
-  html += '<div class="section-hd" style="margin-top:16px"><div class="section-title">发布版本</div>';
-  if (releases.length > 0) {
-    html += '<span style="font-size:12px;color:var(--muted);margin-left:8px">共 ' + releases.length + ' 个</span>';
-  }
-  html += '</div>';
-
-  if (releases.length > 0) {
-    html += '<div class="table-scroll" style="max-height:300px">';
-    html += '<table class="stage-table"><thead><tr>';
-    html += '<th>版本</th><th>发布日期</th><th>状态</th><th>GitLab 链接</th><th>校验</th>';
-    html += '</tr></thead><tbody>';
-
-    releases.forEach(function(r) {
-      var dateStr = r.date ? r.date : '—';
-      var statusPill = r.status === 'normal' ? '<span class="pill active">正常</span>' :
-                       r.status === 'terminated' ? '<span class="pill closed">已终止</span>' :
-                       '<span class="pill">' + escHtml(r.status || '未知') + '</span>';
-
-      // GitLab URL link
-      var urlHtml = '—';
-      if (r.gitlab_url) {
-        urlHtml = '<a href="' + escHtml(r.gitlab_url) + '" target="_blank" style="color:var(--accent);font-size:12px" title="' + escHtml(r.gitlab_url) + '">' +
-          (r.gitlab_url.length > 50 ? escHtml(r.gitlab_url.substring(0, 47)) + '...' : escHtml(r.gitlab_url)) +
-        ' &#x2197;</a>';
-      } else if (r.desc) {
-        urlHtml = '<span style="font-size:12px;color:var(--muted)">未填写</span>';
-      }
-
-      // Validation status
-      var validationHtml = '';
-      if (!r.gitlab_url) {
-        validationHtml = '<span style="font-size:12px;color:var(--muted)">—</span>';
-      } else if (r.gitlab_url_valid === true) {
-        validationHtml = '<span style="color:var(--success);font-weight:600" title="已校验: ' + (r.gitlab_url_checked_at || '') + '">&#x2713; 有效</span>';
-      } else if (r.gitlab_url_valid === false) {
-        validationHtml = '<span style="color:var(--danger);font-weight:600" title="已校验: ' + (r.gitlab_url_checked_at || '') + '">&#x2717; 无效</span>';
-      } else {
-        validationHtml = '<span style="color:var(--muted);font-size:12px" title="待同步后校验">待校验</span>';
-      }
-
-      // Row style: red-ish if invalid
-      var rowStyle = r.gitlab_url_valid === false ? ' style="background:var(--danger-lt)"' : '';
-
-      html += '<tr' + rowStyle + '>' +
-        '<td><strong>' + escHtml(r.name) + '</strong></td>' +
-        '<td style="font-size:12px">' + dateStr + '</td>' +
-        '<td>' + statusPill + '</td>' +
-        '<td>' + urlHtml + '</td>' +
-        '<td>' + validationHtml + '</td>' +
+  // Associated projects table
+  html += '<div class="card" style="padding:0;overflow:hidden;margin-bottom:16px">';
+  html += '<div class="section-hd" style="padding:12px 16px"><div class="section-title">关联项目 (' + projects.length + ')</div></div>';
+  if (projects.length) {
+    html += '<div class="table-scroll" style="max-height:400px"><table class="stage-table"><thead><tr>' +
+      '<th>编号</th><th>项目名</th><th>客户</th><th>类型</th><th>状态</th><th>进度</th><th>计划完成</th>' +
+      '</tr></thead><tbody>';
+    projects.forEach(function(proj) {
+      var projCode = extractProjectCode(proj.name);
+      var coreName = extractCoreName(proj.name);
+      html += '<tr onclick="openProject(\'' + proj.id + '\')" style="cursor:pointer">' +
+        '<td>' + renderProjIcon(proj.project_type, projCode) + '</td>' +
+        '<td><div class="proj-name">' + escHtml(coreName) + '</div></td>' +
+        '<td>' + (proj.customer_name ? '<span onclick="event.stopPropagation();openCustomerByName(\'' + escHtml(proj.customer_name) + '\')" style="cursor:pointer">' + renderCustomerBadge(proj.customer_name) + '</span>' : '—') + '</td>' +
+        '<td>' + renderTypeBadge(proj.project_type) + '</td>' +
+        '<td>' + renderPill(proj.status) + '</td>' +
+        '<td class="prog-cell">' + renderProgressBar(proj.progress, proj.status) + '</td>' +
+        '<td style="font-size:12px;color:' + (proj.end ? 'var(--muted)' : 'var(--warn)') + '">' + (proj.end ? formatDate(proj.end) : '长期') + '</td>' +
       '</tr>';
     });
     html += '</tbody></table></div>';
   } else {
-    html += '<div style="padding:16px;font-size:13px;color:var(--muted);font-style:italic">TODO: 同步禅道发布版本数据后将在此显示 GitLab 链接校验状态</div>';
+    html += '<div class="empty-state" style="padding:20px">暂无关联项目</div>';
   }
+  html += '</div>';
 
-  card.innerHTML = html;
+  // Customer info
+  var customers = p.customers_from_desc || [];
+  html += '<div class="card" style="padding:16px;margin-bottom:16px">';
+  html += '<div class="section-hd"><div class="section-title">关联客户 (' + customers.length + ')</div></div>';
+  if (customers.length) {
+    html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">';
+    customers.forEach(function(c) {
+      html += '<span class="tag-badge tag-1" style="font-size:12px;cursor:pointer" onclick="openCustomerByName(\'' + escHtml(c) + '\')">' + escHtml(c) + '</span>';
+    });
+    html += '</div>';
+  } else {
+    html += '<div style="font-size:12px;color:var(--muted);margin-top:8px">暂无关联客户</div>';
+  }
+  html += '</div>';
+
+  // Tags
+  var tagsList = p.tags_list || [];
+  html += '<div class="card" style="padding:16px;margin-bottom:16px">';
+  html += '<div class="section-hd"><div class="section-title">产品标签 (' + (tagsList[0] ? tagsList.length : 0) + ')</div></div>';
+  if (tagsList.length > 0 && tagsList[0] !== '') {
+    html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">';
+    tagsList.forEach(function(t) {
+      html += '<span class="tag-badge tag-' + (t.length % 5) + '">#' + escHtml(t) + '</span>';
+    });
+    html += '</div>';
+  } else {
+    html += '<div style="font-size:12px;color:var(--muted);margin-top:8px">暂无标签</div>';
+  }
+  html += '</div>';
+
+  // Delivery resources
+  html += '<div class="card" style="padding:16px">';
+  html += '<div class="section-hd"><div class="section-title">交付资料</div></div>';
+  var items = [];
+  if (p.nas_path) items.push('<div style="padding:4px 0;font-size:13px"><span style="color:var(--muted)">NAS路径: </span><code>' + escHtml(p.nas_path) + '</code></div>');
+  if (p.git_url) items.push('<div style="padding:4px 0;font-size:13px"><span style="color:var(--muted)">Git仓库: </span><a href="' + escHtml(p.git_url) + '" target="_blank" style="color:var(--accent)"><code>' + escHtml(p.git_url) + '</code> &#x2197;</a></div>');
+  if (items.length) {
+    html += '<div style="margin-top:8px">' + items.join('') + '</div>';
+  } else {
+    html += '<div style="font-size:12px;color:var(--muted);margin-top:8px">暂无交付资料</div>';
+  }
+  html += '</div>';
+
+  document.getElementById('prodsec-maintenance').innerHTML = html;
 }
