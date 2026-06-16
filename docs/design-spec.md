@@ -372,6 +372,40 @@ utils.js → api.js → auth.js → components.js → dashboard.js → detail.js
 </div>
 ```
 
+### 15.1 多选列表搜索规范
+
+**所有从已有数据中多选的对话框列表，必须支持实时搜索过滤。**
+
+实现模式：
+1. 列表容器添加 `class="searchable-list"`
+2. 每个列表项添加 `class="searchable-item"` 和 `data-search-text="小写搜索文本"`
+3. 搜索输入框调用通用函数 `_filterSearchableItems(this)`
+
+**通用函数（需在调用方 JS 文件中定义）：**
+```javascript
+function _filterSearchableItems(input) {
+  var q = (input.value || '').toLowerCase();
+  var list = input.nextElementSibling;  // 搜索框后的列表容器
+  if (!list) return;
+  list.querySelectorAll('.searchable-item').forEach(function(item) {
+    item.style.display = q
+      ? (item.getAttribute('data-search-text').indexOf(q) >= 0 ? '' : 'none')
+      : '';
+  });
+}
+```
+
+**示例（标签多选对话框）：**
+```javascript
+var listHtml = tags.map(function(t) {
+  return '<label class="searchable-item" data-search-text="' + escHtml(t.name).toLowerCase() + '" ...>' +
+    '<input type="checkbox" ...>' + escHtml(t.name) + '</label>';
+}).join('');
+// ...
+'<input class="search-inp" placeholder="搜索标签..." oninput="_filterSearchableItems(this)" style="margin-bottom:4px">' +
+'<div class="searchable-list" style="max-height:240px;overflow-y:auto">' + listHtml + '</div>'
+```
+
 ---
 
 ## 16. 单表格页面高度规范

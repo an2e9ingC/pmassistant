@@ -506,6 +506,15 @@ function _renderProdDocsInline(docs) {
   el.innerHTML = html;
 }
 
+function _filterSearchableItems(input) {
+  var q = (input.value || '').toLowerCase();
+  var list = input.nextElementSibling;
+  if (!list) return;
+  list.querySelectorAll('.searchable-item').forEach(function(item) {
+    item.style.display = q ? (item.getAttribute('data-search-text').indexOf(q) >= 0 ? '' : 'none') : '';
+  });
+}
+
 function switchToProdMaintenance() {
   var tab = document.querySelector('#view-product-detail .dtab[onclick*="maintenance"]');
   if (tab) switchProdTab('maintenance', tab);
@@ -709,7 +718,7 @@ function showProdEditDialog() {
     var tagCheckboxes = allTags && allTags.length
       ? allTags.filter(function(t) { return !t.category || t.category === 'product'; }).map(function(t) {
           var checked = currentTags.indexOf(t.name) >= 0;
-          return '<label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;cursor:pointer">' +
+          return '<label class="searchable-item" data-search-text="' + escHtml(t.name).toLowerCase() + '" style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;cursor:pointer">' +
             '<input type="checkbox" value="' + escHtml(t.name) + '"' + (checked ? ' checked' : '') + ' class="prod-edit-tag">' + escHtml(t.name) +
           '</label>';
         }).join('')
@@ -726,7 +735,8 @@ function showProdEditDialog() {
           '<option value="closed"' + (p.status === 'closed' ? ' selected' : '') + '>已关闭</option>' +
         '</select></div>' +
       '<div style="margin-bottom:4px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">产品标签 <span style="font-weight:400">（多选）</span></label>' +
-        '<div style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;background:var(--surface)">' + tagCheckboxes + '</div></div>',
+        '<input class="search-inp" placeholder="搜索标签..." oninput="_filterSearchableItems(this)" style="margin-bottom:4px">' +
+        '<div style="max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;background:var(--surface)" class="searchable-list">' + tagCheckboxes + '</div></div>',
       [{text: '取消', onclick: 'closeSharedDialog()'},
        {text: '保存', cls: 'btn-primary', onclick: 'saveProdEdit()'}],
       {hideClose: true});
@@ -757,13 +767,14 @@ function showProdLinkProjectsDialog() {
     var projIds = (_prodDetail.projects || []).map(function(p) { return p.id; });
     var listHtml = projects.map(function(proj) {
       var checked = projIds.indexOf(proj.id) >= 0;
-      return '<label style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:13px;cursor:pointer">' +
+      return '<label class="searchable-item" data-search-text="' + escHtml((proj.name + ' ' + (proj.code || '')).toLowerCase()) + '" style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:13px;cursor:pointer">' +
         '<input type="checkbox" value="' + proj.id + '"' + (checked ? ' checked' : '') + ' class="prod-link-proj-cb">' +
         escHtml(proj.name) + ' <span style="font-size:10px;color:var(--muted)">' + escHtml(proj.code || '') + '</span>' +
       '</label>';
     }).join('');
     openDialog('关联项目 — ' + escHtml(_prodDetail.name),
-      '<div style="max-height:300px;overflow-y:auto;margin-bottom:8px">' + listHtml + '</div>',
+      '<input class="search-inp" placeholder="搜索项目..." oninput="_filterSearchableItems(this)" style="margin-bottom:6px">' +
+      '<div style="max-height:280px;overflow-y:auto;margin-bottom:8px" class="searchable-list">' + listHtml + '</div>',
       [{text: '取消', onclick: 'closeSharedDialog()'},
        {text: '保存', cls: 'btn-primary', onclick: 'saveProdLinkProjects()'}],
       {hideClose: true});
@@ -788,12 +799,13 @@ function showProdCustomersDialog() {
     var currentCusts = _prodDetail.customers_from_desc || [];
     var listHtml = custs.map(function(c) {
       var checked = currentCusts.indexOf(c.name) >= 0;
-      return '<label style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:13px;cursor:pointer">' +
+      return '<label class="searchable-item" data-search-text="' + escHtml(c.name).toLowerCase() + '" style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:13px;cursor:pointer">' +
         '<input type="checkbox" value="' + escHtml(c.name) + '"' + (checked ? ' checked' : '') + ' class="prod-cust-cb">' + escHtml(c.name) +
       '</label>';
     }).join('');
     openDialog('关联客户 — ' + escHtml(_prodDetail.name),
-      '<div style="max-height:300px;overflow-y:auto;margin-bottom:8px">' + listHtml + '</div>',
+      '<input class="search-inp" placeholder="搜索客户..." oninput="_filterSearchableItems(this)" style="margin-bottom:6px">' +
+      '<div style="max-height:280px;overflow-y:auto;margin-bottom:8px" class="searchable-list">' + listHtml + '</div>',
       [{text: '取消', onclick: 'closeSharedDialog()'},
        {text: '保存', cls: 'btn-primary', onclick: 'saveProdCustomers()'}],
       {hideClose: true});
@@ -832,12 +844,13 @@ function showProdTagsDialog() {
     var currentTags = (_prodDetail.tags || '').split(',').filter(function(t) { return t; });
     var listHtml = tags.map(function(t) {
       var checked = currentTags.indexOf(t.name) >= 0;
-      return '<label style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:13px;cursor:pointer">' +
+      return '<label class="searchable-item" data-search-text="' + escHtml(t.name).toLowerCase() + '" style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:13px;cursor:pointer">' +
         '<input type="checkbox" value="' + escHtml(t.name) + '"' + (checked ? ' checked' : '') + ' class="prod-tag-cb">' +
         escHtml(t.name) + '</label>';
     }).join('');
     openDialog('产品标签 — ' + escHtml(_prodDetail.name),
-      '<div style="max-height:300px;overflow-y:auto;margin-bottom:8px">' + listHtml + '</div>',
+      '<input class="search-inp" placeholder="搜索标签..." oninput="_filterSearchableItems(this)" style="margin-bottom:6px">' +
+      '<div style="max-height:280px;overflow-y:auto;margin-bottom:8px" class="searchable-list">' + listHtml + '</div>',
       [{text: '取消', onclick: 'closeSharedDialog()'},
        {text: '保存', cls: 'btn-primary', onclick: 'saveProdTags()'}],
       {hideClose: true});

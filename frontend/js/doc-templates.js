@@ -1269,7 +1269,7 @@ function showImportTemplatesDialog() {
   }
 
   var listHtml = l2Nodes.map(function(n) {
-    return '<div style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border)" onclick="selectImportSource(' + n.id + ', \'' + escHtml(n.name).replace(/'/g, "\\'") + '\', this)">' +
+    return '<div class="searchable-item" data-search-text="' + escHtml(n.name).toLowerCase() + '" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border)" onclick="selectImportSource(' + n.id + ', \'' + escHtml(n.name).replace(/'/g, "\\'") + '\', this)">' +
       '<span style="font-weight:500">' + escHtml(n.name) + '</span>' +
       '<span style="font-size:11px;color:var(--muted);margin-left:8px">（' + n.template_count + ' 个模板）</span>' +
     '</div>';
@@ -1279,7 +1279,8 @@ function showImportTemplatesDialog() {
     '<div style="margin-bottom:12px">' +
       '<div style="font-size:11px;color:var(--muted);margin-bottom:6px">目标节点：<span style="color:var(--accent);font-weight:500">' + escHtml(currentName) + '</span></div>' +
       '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">选择源节点，将其文档模板覆盖到当前节点。目标节点现有模板将被全部清除后替换。</div>' +
-      '<div style="max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:6px" id="import-src-list">' + listHtml + '</div>' +
+      '<input class="search-inp" placeholder="搜索节点..." oninput="var q=this.value.toLowerCase();document.querySelectorAll(\'#import-src-list .searchable-item\').forEach(function(el){el.style.display=q?(el.getAttribute(\'data-search-text\').indexOf(q)>=0?\'\':\'none\'):\'\'})" style="margin-bottom:4px">' +
+      '<div style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:6px" id="import-src-list">' + listHtml + '</div>' +
       '<div id="import-src-selected" style="margin-top:8px;font-size:11px;color:var(--accent)"></div>' +
     '</div>';
 

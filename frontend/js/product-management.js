@@ -604,7 +604,7 @@ function _pmShowEditProductDialog(productId, productName, productCode) {
       var tagCheckboxes = allTags && allTags.length
         ? allTags.filter(function(t) { return !t.category || t.category === 'product'; }).map(function(t) {
             var checked = currentTags.indexOf(t.name) >= 0;
-            return '<label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;cursor:pointer">' +
+            return '<label class="searchable-item" data-search-text="' + escHtml(t.name).toLowerCase() + '" style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;cursor:pointer">' +
               '<input type="checkbox" value="' + escHtml(t.name) + '"' + (checked ? ' checked' : '') + ' class="pm-edit-tag">' + escHtml(t.name) +
             '</label>';
           }).join('')
@@ -621,7 +621,8 @@ function _pmShowEditProductDialog(productId, productName, productCode) {
             '<option value="closed"' + (p.status === 'closed' ? ' selected' : '') + '>已关闭</option>' +
           '</select></div>' +
         '<div style="margin-bottom:4px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">产品标签 <span style="font-weight:400">（多选）</span></label>' +
-          '<div style="max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;background:var(--surface)">' + tagCheckboxes + '</div></div>',
+          '<input class="search-inp" placeholder="搜索标签..." oninput="_filterSearchableItems(this)" style="margin-bottom:4px">' +
+          '<div style="max-height:120px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;background:var(--surface)" class="searchable-list">' + tagCheckboxes + '</div></div>',
         [{text: '取消', onclick: 'closeSharedDialog()'},
          {text: '保存', cls: 'btn-primary', onclick: '_pmSaveEditProduct(' + productId + ')'}],
         {hideClose: true});
@@ -665,6 +666,15 @@ async function _pmDeleteProduct(productId, productName) {
   }
 }
 
+function _filterSearchableItems(input) {
+  var q = (input.value || '').toLowerCase();
+  var list = input.nextElementSibling;
+  if (!list) return;
+  list.querySelectorAll('.searchable-item').forEach(function(item) {
+    item.style.display = q ? (item.getAttribute('data-search-text').indexOf(q) >= 0 ? '' : 'none') : '';
+  });
+}
+
 /* ── Create Local Product (PMA-local, for L2 → 三级产品) ── */
 
 function _pmShowCreateProductDialog() {
@@ -678,7 +688,7 @@ function _pmShowCreateProductDialog() {
 
   var projectCheckboxes = _pmAllProjects.length
     ? _pmAllProjects.slice(0, 50).map(function(proj) {
-        return '<label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;cursor:pointer">' +
+        return '<label class="searchable-item" data-search-text="' + escHtml((proj.name + ' ' + (proj.code || '')).toLowerCase()) + '" style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;cursor:pointer">' +
           '<input type="checkbox" value="' + proj.id + '" class="pm-newprod-proj">' +
           escHtml(proj.code || '') + ' ' + escHtml(proj.name) +
         '</label>';
@@ -705,9 +715,11 @@ function _pmShowCreateProductDialog() {
         '<option value="normal">正常</option><option value="closed">已关闭</option>' +
       '</select></div>' +
       '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">产品标签 <span style="font-weight:400">（可选，多选）</span></label>' +
-      '<div style="max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;margin-top:4px;background:var(--surface)">' + tagCheckboxes + '</div></div>' +
+      '<input class="search-inp" placeholder="搜索标签..." oninput="_filterSearchableItems(this)" style="margin-top:4px;margin-bottom:4px">' +
+      '<div style="max-height:120px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;background:var(--surface)" class="searchable-list">' + tagCheckboxes + '</div></div>' +
       '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">关联项目 <span style="font-weight:400">（可选，可多选）</span></label>' +
-      '<div style="max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;margin-top:4px;background:var(--surface)">' + projectCheckboxes + '</div></div>',
+      '<input class="search-inp" placeholder="搜索项目..." oninput="_filterSearchableItems(this)" style="margin-top:4px;margin-bottom:4px">' +
+      '<div style="max-height:120px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;background:var(--surface)" class="searchable-list">' + projectCheckboxes + '</div></div>',
       [{text: '取消', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
        {text: '添加', cls: 'btn-primary', onclick: '_pmCreateProduct()'}],
       {hideClose: true});
@@ -754,7 +766,7 @@ function _pmShowManageProductProjects(productId, productName) {
     var checkboxesHtml = _pmAllProjects.length
       ? _pmAllProjects.slice(0, 100).map(function(proj) {
           var checked = linkedIds[proj.id] ? ' checked' : '';
-          return '<label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;cursor:pointer">' +
+          return '<label class="searchable-item" data-search-text="' + escHtml((proj.name + ' ' + (proj.code || '')).toLowerCase()) + '" style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;cursor:pointer">' +
             '<input type="checkbox" value="' + proj.id + '" class="pm-prodproj-cb"' + checked + '>' +
             escHtml(proj.code || '') + ' ' + escHtml(proj.name) +
           '</label>';
@@ -764,7 +776,8 @@ function _pmShowManageProductProjects(productId, productName) {
     openDialog('管理项目关联 — ' + escHtml(productName),
       '<div style="margin-bottom:12px">' +
         '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">选择关联的项目（可多选）</label>' +
-        '<div style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;background:var(--surface)">' +
+        '<input class="search-inp" placeholder="搜索项目..." oninput="_filterSearchableItems(this)" style="margin-bottom:4px">' +
+        '<div style="max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;background:var(--surface)" class="searchable-list">' +
           checkboxesHtml +
         '</div>' +
         '<div style="font-size:10.5px;color:var(--muted);margin-top:4px">勾选即关联，取消勾选即解除关联。保存时会替换所有关联。</div>' +
