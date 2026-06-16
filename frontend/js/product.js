@@ -244,7 +244,7 @@ async function loadProductDetail(id) {
   }
 
   document.getElementById('prod-detail-header').innerHTML = '<div class="loading-spinner">加载中...</div>';
-  ['prodsec-info', 'prodsec-maintenance'].forEach(function(s) {
+  ['prodsec-info', 'prodsec-docs', 'prodsec-maintenance'].forEach(function(s) {
     document.getElementById(s).innerHTML = '<div class="card" style="padding:20px"><div class="loading-spinner">加载中...</div></div>';
   });
 
@@ -253,6 +253,7 @@ async function loadProductDetail(id) {
     _prodDetail = detail;
     renderProdDetailHeader(detail);
     renderProdInfo(detail);
+    renderProdDocs(detail);
   } catch(e) {
     document.getElementById('prod-detail-header').innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '</div>';
   }
@@ -279,26 +280,27 @@ function renderProdInfo(p) {
 
   var html = '<div class="card" style="padding:20px">';
 
-  // KPI cards — delivery style, 4 columns
+  // Info row — 4 columns, consistent style
   html += '<div class="delivery-kpi" style="grid-template-columns:repeat(4, 1fr);margin-bottom:16px">' +
-    '<div class="dkpi"><div class="dkpi-lbl">产品编号</div><div class="dkpi-val" style="font-size:15px;font-family:var(--mono);font-weight:600;color:var(--fg)">' + escHtml(p.code || '#' + p.id) + '</div></div>' +
+    '<div class="dkpi"><div class="dkpi-lbl">产品编号</div><div class="dkpi-val" style="font-family:var(--mono);font-size:16px;font-weight:600;color:var(--fg)">' + escHtml(p.code || '#' + p.id) + '</div></div>' +
     '<div class="dkpi" style="cursor:pointer" onclick="gotoView(\'product-list\');_prodSearchVal=\'' + escHtml((p.tree_path || '').split(' > ')[0]) + '\';setTimeout(function(){if(typeof initProductList==\'function\')initProductList();},100)" title="点击查看该分类下的产品">' +
-      '<div class="dkpi-lbl">所属分类</div><div class="dkpi-val" style="font-size:15px;font-weight:600;color:var(--accent)">' + escHtml(productType) + '</div></div>' +
-    '<div class="dkpi"><div class="dkpi-lbl">状态</div><div class="dkpi-val" style="font-size:14px">' + renderPill(p.status) + '</div></div>' +
-    '<div class="dkpi"><div class="dkpi-lbl">描述</div><div class="dkpi-val" style="font-size:12px;color:var(--muted);line-height:1.4">' + (p.description ? escHtml(p.description) : '—') + '</div></div>' +
+      '<div class="dkpi-lbl">所属分类</div><div class="dkpi-val" style="font-size:16px;font-weight:600;color:var(--accent)">' + escHtml(productType) + '</div></div>' +
+    '<div class="dkpi"><div class="dkpi-lbl">状态</div><div class="dkpi-val" style="font-size:16px;font-weight:600;color:' + (p.status === 'normal' ? 'var(--success)' : p.status === 'closed' ? 'var(--muted)' : 'var(--warn)') + '">' + (p.status === 'normal' ? '正常' : p.status === 'closed' ? '已关闭' : (p.status || '—')) + '</div></div>' +
+    '<div class="dkpi"><div class="dkpi-lbl">描述</div><div class="dkpi-val" style="font-size:13px;color:var(--muted);line-height:1.4">' + (p.description ? escHtml(p.description) : '—') + '</div></div>' +
   '</div>';
 
-  // Stats row — delivery kpi style, 4 equal columns
+  // Stats row — KPI numbers with status colors
   html += '<div class="delivery-kpi" style="grid-template-columns:repeat(4, 1fr)">';
   var stats = [
-    { label: '关联项目', value: p.project_count || 0, color: 'var(--accent)', click: true },
-    { label: '发布次数', value: p.releases || 0, color: 'var(--warn)' },
-    { label: '需求总数', value: p.total_stories || 0, color: 'var(--success)' },
-    { label: 'Bug 总数', value: p.total_bugs || 0, color: 'var(--danger)' },
+    { label: '关联项目', value: p.project_count || 0, color: 'var(--accent)', icon: '🔗', click: true },
+    { label: '发布次数', value: p.releases || 0, color: 'var(--warn)', icon: '🚀' },
+    { label: '需求总数', value: p.total_stories || 0, color: 'var(--success)', icon: '📋' },
+    { label: 'Bug 总数', value: p.total_bugs || 0, color: 'var(--danger)', icon: '🐛' },
   ];
   stats.forEach(function(s) {
     html += '<div class="dkpi"' + (s.click ? ' style="cursor:pointer" onclick="gotoView(\'topology\');document.getElementById(\'topo-prod\').value=\'' + escHtml(p.code || p.name) + '\';setTimeout(function(){if(typeof onTopoSearch==\'function\')onTopoSearch()},100)" title="点击查看关联项目"' : '') + '>' +
-      '<div class="dkpi-lbl">' + s.label + '</div><div class="dkpi-val" style="color:' + s.color + '">' + s.value + '</div></div>';
+      '<div class="dkpi-lbl">' + s.icon + ' ' + s.label + '</div>' +
+      '<div class="dkpi-val" style="color:' + s.color + '">' + s.value + '</div></div>';
   });
   html += '</div>';
 
@@ -312,15 +314,6 @@ function renderProdInfo(p) {
 
   html += '</div>';
 
-  // Product Documents
-  var nodeIds = (p.linked_node_ids && p.linked_node_ids.length) ? p.linked_node_ids : [];
-  var templateLink = '';
-  if (nodeIds.length) {
-    templateLink = '<a id="prod-docs-template-link" href="javascript:void(0)" onclick="gotoView(\'doc-templates\');_selectedNodeId=' + nodeIds[0] + ';setTimeout(function(){if(typeof initProductDocTemplates==\'function\'){initProductDocTemplates();}},200)" style="font-size:11px;color:var(--accent);text-decoration:none;margin-left:8px">查看文档模板详情 →</a>';
-  }
-  html += '<div class="section-hd" style="margin-top:20px"><div class="section-title">产品文档</div>' + templateLink + '</div>';
-  html += '<div id="prod-docs-inline"><div class="loading-spinner" style="padding:20px">加载中...</div></div>';
-
   // Product Notes
   html += '<div class="section-hd" style="margin-top:20px"><div class="section-title">产品笔记</div>' +
     '<button class="btn" style="font-size:11px;padding:3px 10px" onclick="showAddProductNoteDialog()">+ 添加笔记</button></div>';
@@ -330,18 +323,28 @@ function renderProdInfo(p) {
 
   document.getElementById('prodsec-info').innerHTML = html;
 
-  // Load documents
-  API.get('/products/' + p.id + '/documents').then(function(docs) {
-    _renderProdDocsInline(docs || []);
-  }).catch(function() {
-    _renderProdDocsInline([]);
-  });
-
   // Load notes
   API.get('/products/' + p.id + '/notes').then(function(notes) {
     renderProductNotes(notes || []);
   }).catch(function() {
     renderProductNotes([]);
+  });
+}
+
+function renderProdDocs(p) {
+  var nodeIds = (p.linked_node_ids && p.linked_node_ids.length) ? p.linked_node_ids : [];
+  var templateLink = '';
+  if (nodeIds.length) {
+    templateLink = '<a id="prod-docs-template-link" href="javascript:void(0)" onclick="gotoView(\'doc-templates\');_selectedNodeId=' + nodeIds[0] + ';setTimeout(function(){if(typeof initProductDocTemplates==\'function\'){initProductDocTemplates();}},200)" style="font-size:11px;color:var(--accent);text-decoration:none;margin-left:8px">查看文档模板详情 →</a>';
+  }
+  document.getElementById('prodsec-docs').innerHTML =
+    '<div class="section-hd"><div class="section-title">产品文档</div>' + templateLink + '</div>' +
+    '<div id="prod-docs-inline"><div class="loading-spinner" style="padding:20px">加载中...</div></div>';
+
+  API.get('/products/' + p.id + '/documents').then(function(docs) {
+    _renderProdDocsInline(docs || []);
+  }).catch(function() {
+    _renderProdDocsInline([]);
   });
 }
 

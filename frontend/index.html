@@ -179,7 +179,7 @@
         <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle;margin-right:3px"><circle cx="8" cy="8" r="6"/><line x1="8" y1="5" x2="8" y2="9"/><circle cx="8" cy="12" r="0.8" fill="currentColor" stroke="none"/></svg>
         反馈 Bug
       </a>
-      <span id="app-version">v2026.06.17-beta13</span>
+      <span id="app-version">v2026.06.17-beta14</span>
     </div>
   </div>
 </aside>
@@ -377,7 +377,7 @@
       <div class="detail-tabs">
         <div class="dtab active" onclick="switchDTab('gantt',this)">甘特图</div>
         <div class="dtab" onclick="switchDTab('stages',this)">阶段详情</div>
-        <div class="dtab" onclick="switchDTab('docs',this)">文档齐套</div>
+        <div class="dtab" onclick="switchDTab('docs',this)">项目文档</div>
         <div class="dtab" onclick="switchDTab('delivery',this)">交付状态</div>
         <div class="dtab" onclick="switchDTab('resources',this)">软硬件资料</div>
         <div class="dtab" onclick="switchDTab('activities',this)">项目进度明细</div>
@@ -807,10 +807,14 @@
 
       <div class="detail-tabs">
         <div class="dtab active" onclick="switchProdTab('info',this)">基本信息</div>
+        <div class="dtab" onclick="switchProdTab('docs',this)">产品文档</div>
         <div class="dtab" onclick="switchProdTab('maintenance',this)">产品维护</div>
       </div>
 
       <div class="dsec active" id="prodsec-info">
+        <div class="card" style="padding:20px"><div class="empty-state">请选择产品</div></div>
+      </div>
+      <div class="dsec" id="prodsec-docs">
         <div class="card" style="padding:20px"><div class="empty-state">请选择产品</div></div>
       </div>
       <div class="dsec" id="prodsec-maintenance">
