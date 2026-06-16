@@ -129,9 +129,13 @@ function renderProductManagementPage() {
 
   // Left panel: 2-level nav
   var leftHtml = '<div class="section-title" style="margin-bottom:10px">产品导航</div>';
-  _pmTree.forEach(function (l1) {
-    leftHtml += _pmRenderL1Node(l1);
+  _pmTree.forEach(function (l1, li) {
+    leftHtml += _pmRenderL1Node(l1, li);
   });
+  // Drag hint
+  if (_pmIsAdmin) {
+    leftHtml += '<div style="font-size:10.5px;color:var(--muted);padding:4px 4px">💡 拖动节点可调整顺序</div>';
+  }
   // Add product line button at bottom
   if (_pmIsAdmin) {
     leftHtml += '<div class="dt-tree-node" style="cursor:pointer;color:var(--accent);font-weight:500;padding:6px 12px" onclick="_pmShowAddProductLineDialog()">' +
@@ -254,12 +258,18 @@ function renderProductManagementPage() {
 
 /* ── Left Nav Rendering (2 levels only) ── */
 
-function _pmRenderL1Node(l1) {
+function _pmRenderL1Node(l1, index) {
   var isSelected = l1.id === _pmSelectedNodeId;
   var hasChildren = l1.children && l1.children.length > 0;
 
   var html = '<div class="dt-tree-node' + (isSelected ? ' selected' : '') +
-    '" style="padding-left:4px" onclick="_pmSelectNode(' + l1.id + ')">';
+    '" data-pm-node-id="' + l1.id + '" data-pm-node-level="1" data-pm-index="' + index + '"' +
+    (_pmIsAdmin ? ' draggable="true"' +
+    ' ondragstart="_pmTreeDragStart(event,' + l1.id + ',1)"' +
+    ' ondragover="_pmTreeDragOver(event)"' +
+    ' ondragleave="_pmTreeDragLeave(event)"' +
+    ' ondrop="_pmTreeDrop(event,' + l1.id + ',1)"' : '') +
+    ' style="padding-left:4px;' + (_pmIsAdmin ? 'cursor:grab' : '') + '" onclick="_pmSelectNode(' + l1.id + ')">';
 
   html += '<span style="width:16px;flex-shrink:0"></span>';
   html += '<span class="dt-tree-icon">📁</span>';
@@ -280,7 +290,13 @@ function _pmRenderL1Node(l1) {
     l1.children.forEach(function (l2) {
       var l2Selected = l2.id === _pmSelectedNodeId;
       html += '<div class="dt-tree-node' + (l2Selected ? ' selected' : '') +
-        '" style="padding-left:24px" onclick="_pmSelectNode(' + l2.id + ')">';
+        '" data-pm-node-id="' + l2.id + '" data-pm-node-level="2"' +
+        (_pmIsAdmin ? ' draggable="true"' +
+        ' ondragstart="_pmTreeDragStart(event,' + l2.id + ',2)"' +
+        ' ondragover="_pmTreeDragOver(event)"' +
+        ' ondragleave="_pmTreeDragLeave(event)"' +
+        ' ondrop="_pmTreeDrop(event,' + l2.id + ',2)"' : '') +
+        ' style="padding-left:24px;' + (_pmIsAdmin ? 'cursor:grab' : '') + '" onclick="_pmSelectNode(' + l2.id + ')">';
       html += '<span style="width:16px;flex-shrink:0"></span>';
       html += '<span class="dt-tree-icon">📂</span>';
       html += '<span class="dt-tree-label">' + escHtml(l2.name) + '</span>';
@@ -299,6 +315,83 @@ function _pmRenderL1Node(l1) {
   }
 
   return html;
+}
+
+/* ── Tree Drag-and-Drop Reorder ── */
+
+var _pmDragNodeId = null;
+var _pmDragLevel = null;
+
+function _pmTreeDragStart(e, nodeId, level) {
+  _pmDragNodeId = nodeId;
+  _pmDragLevel = level;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', '');
+  e.stopPropagation();
+}
+
+function _pmTreeDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  var target = e.currentTarget;
+  if (target) target.classList.add('dt-drag-over');
+}
+
+function _pmTreeDragLeave(e) {
+  e.currentTarget.classList.remove('dt-drag-over');
+}
+
+async function _pmTreeDrop(e, targetNodeId, targetLevel) {
+  e.preventDefault();
+  e.stopPropagation();
+  document.querySelectorAll('.dt-drag-over').forEach(function(el) { el.classList.remove('dt-drag-over'); });
+
+  if (!_pmDragNodeId || _pmDragNodeId === targetNodeId) return;
+  if (_pmDragLevel !== targetLevel) return; // Only reorder within same level
+
+  // Find the dragged node
+  var draggedNode = _pmFindNodeById(_pmDragNodeId);
+  var targetNode = _pmFindNodeById(targetNodeId);
+  if (!draggedNode || !targetNode) return;
+
+  // Determine parent and sibling list
+  var siblings;
+  if (_pmDragLevel === 1) {
+    siblings = _pmTree;
+  } else {
+    var parent = _pmFindNodeById(draggedNode.parent_id);
+    if (!parent || !parent.children) return;
+    siblings = parent.children;
+  }
+
+  // Reorder: find target index
+  var targetIdx = -1;
+  for (var i = 0; i < siblings.length; i++) {
+    if (siblings[i].id === targetNodeId) { targetIdx = i; break; }
+  }
+  if (targetIdx < 0) return;
+
+  // Remove dragged from old position
+  var draggedIdx = -1;
+  for (var j = 0; j < siblings.length; j++) {
+    if (siblings[j].id === _pmDragNodeId) { draggedIdx = j; break; }
+  }
+  if (draggedIdx < 0) return;
+  var moved = siblings.splice(draggedIdx, 1)[0];
+  siblings.splice(targetIdx, 0, moved);
+
+  // Update sort_order for all siblings
+  for (var k = 0; k < siblings.length; k++) {
+    siblings[k].sort_order = k + 1;
+    // Save to backend
+    try {
+      await API.put('/product-doc-templates/product-nodes/' + siblings[k].id, { sort_order: k + 1 });
+    } catch(e) {}
+  }
+
+  _pmDragNodeId = null;
+  _pmDragLevel = null;
+  renderProductManagementPage();
 }
 
 /* ── Selection ── */
