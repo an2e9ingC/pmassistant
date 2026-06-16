@@ -76,9 +76,14 @@ function renderProdOverview() {
           l2s.products.forEach(function(p) {
             var statusLabel = p.status === 'normal' ? '量产' : (p.status === 'closed' ? 'EOL' : '—');
             var statusCls = p.status === 'normal' ? 'prod' : (p.status === 'closed' ? 'ext' : '');
+            var tagsHtml = '';
+            if (p.tags_list && p.tags_list[0]) {
+              tagsHtml = '<div class="pov-l3-chips">' + p.tags_list.filter(function(t){return t;}).slice(0,3).map(function(t){return '<span class="pov-l3-tag">#' + escHtml(t) + '</span>';}).join('') + '</div>';
+            }
             html += '<div class="pov-l3-chip" onclick="openProductDetail(\'' + p.id + '\')">' +
               '<div class="pov-l3-name">' + escHtml(p.code || '#' + p.id) + '</div>' +
               '<div class="pov-l3-desc">' + escHtml(p.name) + '</div>' +
+              tagsHtml +
               '<div class="pov-l3-meta">' +
                 '<span class="pov-l3-ver">' + (p.is_local ? 'PMA本地' : '') + '</span>' +
                 (statusLabel !== '—' ? '<span class="pov-l3-status ' + statusCls + '">' + statusLabel + '</span>' : '') +
@@ -136,6 +141,8 @@ function onProdSearch(v) {
           }
           if (l2Visible) {
             tab.classList.remove('hidden'); cardVisible = true;
+            tab.classList.add('active');
+            if (panel) panel.classList.add('active');
           } else { tab.classList.add('hidden'); }
         });
         card.classList.toggle('hidden', !cardVisible);
@@ -150,14 +157,24 @@ function onProdSearch(v) {
 
 document.addEventListener('keydown', function(e) {
   if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+    e.preventDefault();
     var activeView = document.querySelector('.view.active');
     if (activeView && activeView.id === 'view-product-list') {
-      e.preventDefault();
       var searchEl = document.getElementById('prod-search');
       if (searchEl) { searchEl.focus(); searchEl.select(); }
     }
   }
 });
+
+// ESC in search box clears and resets (deferred to after DOM ready)
+setTimeout(function() {
+  var searchEl = document.getElementById('prod-search');
+  if (searchEl) {
+    searchEl.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') { this.value = ''; onProdSearch(''); }
+    });
+  }
+}, 500);
 
 function openProductDetail(id) {
   _prodDetailCurId = id;
@@ -286,7 +303,7 @@ function renderProdInfo(p) {
     '<div class="dkpi" style="cursor:pointer" onclick="gotoView(\'product-list\');_prodSearchVal=\'' + escHtml((p.tree_path || '').split(' > ')[0]) + '\';setTimeout(function(){if(typeof initProductList==\'function\')initProductList();},100)" title="点击查看该分类下的产品">' +
       '<div class="dkpi-lbl">所属分类</div><div class="dkpi-val" style="font-size:16px;font-weight:600;color:var(--accent)">' + escHtml(productType) + '</div></div>' +
     '<div class="dkpi"><div class="dkpi-lbl">状态</div><div class="dkpi-val" style="font-size:16px;font-weight:600;color:' + (p.status === 'normal' ? 'var(--success)' : p.status === 'closed' ? 'var(--muted)' : 'var(--warn)') + '">' + (p.status === 'normal' ? '正常' : p.status === 'closed' ? '已关闭' : (p.status || '—')) + '</div></div>' +
-    '<div class="dkpi"><div class="dkpi-lbl">描述</div><div class="dkpi-val" style="font-size:13px;color:var(--muted);line-height:1.4">' + (p.description ? escHtml(p.description) : '—') + '</div></div>' +
+    '<div class="dkpi"><div class="dkpi-lbl">描述</div><div class="dkpi-val" style="font-size:12px;line-height:1.6">' + (p.tags_list && p.tags_list[0] ? p.tags_list.filter(function(t){return t;}).map(function(t){return '<span class="tag-badge tag-' + (t.length % 5) + '">#' + escHtml(t) + '</span>';}).join(' ') : '<span style="color:var(--muted)">—</span>') + '</div></div>' +
   '</div>';
 
   // Stats row — KPI numbers with status colors
@@ -679,32 +696,47 @@ function isAdminLike() {
 
 function showProdEditDialog() {
   var p = _prodDetail;
-  openDialog('编辑产品 — ' + escHtml(p.name),
-    '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">产品名称</label>' +
-      '<input class="search-inp" id="prod-edit-name" value="' + escHtml(p.name) + '" style="width:100%;box-sizing:border-box"></div>' +
-    '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">产品编号</label>' +
-      '<input class="search-inp" id="prod-edit-code" value="' + escHtml(p.code || '') + '" style="width:100%;box-sizing:border-box"></div>' +
-    '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">状态</label>' +
-      '<select class="search-inp" id="prod-edit-status" style="width:100%;box-sizing:border-box">' +
-        '<option value="normal"' + (p.status === 'normal' ? ' selected' : '') + '>正常</option>' +
-        '<option value="closed"' + (p.status === 'closed' ? ' selected' : '') + '>已关闭</option>' +
-      '</select></div>' +
-    '<div style="margin-bottom:4px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">描述</label>' +
-      '<input class="search-inp" id="prod-edit-desc" value="' + escHtml(p.description || '') + '" style="width:100%;box-sizing:border-box"></div>',
-    [{text: '取消', onclick: 'closeSharedDialog()'},
-     {text: '保存', cls: 'btn-primary', onclick: 'saveProdEdit()'}],
-    {hideClose: true});
+  var currentTags = (p.tags || '').split(',').filter(function(t) { return t; });
+  API.get('/tags').then(function(allTags) {
+    var tagCheckboxes = allTags && allTags.length
+      ? allTags.filter(function(t) { return !t.category || t.category === 'product'; }).map(function(t) {
+          var checked = currentTags.indexOf(t.name) >= 0;
+          return '<label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;cursor:pointer">' +
+            '<input type="checkbox" value="' + escHtml(t.name) + '"' + (checked ? ' checked' : '') + ' class="prod-edit-tag">' + escHtml(t.name) +
+          '</label>';
+        }).join('')
+      : '<span style="font-size:12px;color:var(--muted)">暂无标签</span>';
+
+    openDialog('编辑产品 — ' + escHtml(p.name),
+      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">产品名称</label>' +
+        '<input class="search-inp" id="prod-edit-name" value="' + escHtml(p.name) + '" style="width:100%;box-sizing:border-box"></div>' +
+      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">产品编号</label>' +
+        '<input class="search-inp" id="prod-edit-code" value="' + escHtml(p.code || '') + '" style="width:100%;box-sizing:border-box"></div>' +
+      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">状态</label>' +
+        '<select class="search-inp" id="prod-edit-status" style="width:100%;box-sizing:border-box">' +
+          '<option value="normal"' + (p.status === 'normal' ? ' selected' : '') + '>正常</option>' +
+          '<option value="closed"' + (p.status === 'closed' ? ' selected' : '') + '>已关闭</option>' +
+        '</select></div>' +
+      '<div style="margin-bottom:4px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">产品标签 <span style="font-weight:400">（多选）</span></label>' +
+        '<div style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;background:var(--surface)">' + tagCheckboxes + '</div></div>',
+      [{text: '取消', onclick: 'closeSharedDialog()'},
+       {text: '保存', cls: 'btn-primary', onclick: 'saveProdEdit()'}],
+      {hideClose: true});
+  });
 }
 
 async function saveProdEdit() {
   var name = document.getElementById('prod-edit-name').value.trim();
   var code = document.getElementById('prod-edit-code').value.trim();
   var status = document.getElementById('prod-edit-status').value;
-  var desc = document.getElementById('prod-edit-desc').value.trim();
   if (!name) { showToast('请输入产品名称', 'error'); return; }
+
+  var tags = [];
+  document.querySelectorAll('.prod-edit-tag:checked').forEach(function(cb) { tags.push(cb.value); });
+
   closeSharedDialog();
   try {
-    await API.put('/products/' + _prodDetailCurId, { category: name, code: code, name: name, alias_name: name, description: desc });
+    await API.put('/products/' + _prodDetailCurId, { name: name, code: code, status: status, description: tags.join(','), tags: tags.join(',') });
     showToast('产品已更新', 'success');
     loadProductDetail(_prodDetailCurId);
   } catch(e) {

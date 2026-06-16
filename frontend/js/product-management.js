@@ -598,31 +598,34 @@ async function _pmUnlinkProduct(productId) {
 }
 
 function _pmShowEditProductDialog(productId, productName, productCode) {
-  // Fetch product detail to get current values
   API.get('/products/' + productId).then(function(p) {
-    openDialog('编辑产品 — ' + escHtml(productName),
-      '<div style="margin-bottom:10px">' +
-        '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">产品编号</label>' +
-        '<input class="search-inp" id="pm-edit-code" value="' + escHtml(p.code || '') + '" style="width:100%;box-sizing:border-box">' +
-      '</div>' +
-      '<div style="margin-bottom:10px">' +
-        '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">产品名称</label>' +
-        '<input class="search-inp" id="pm-edit-name" value="' + escHtml(p.name || '') + '" style="width:100%;box-sizing:border-box">' +
-      '</div>' +
-      '<div style="margin-bottom:10px">' +
-        '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">状态</label>' +
-        '<select class="search-inp" id="pm-edit-status" style="width:100%;box-sizing:border-box">' +
-          '<option value="normal"' + (p.status === 'normal' ? ' selected' : '') + '>正常</option>' +
-          '<option value="closed"' + (p.status === 'closed' ? ' selected' : '') + '>已关闭</option>' +
-        '</select>' +
-      '</div>' +
-      '<div style="margin-bottom:4px">' +
-        '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">描述（可选）</label>' +
-        '<input class="search-inp" id="pm-edit-desc" value="' + escHtml(p.description || '') + '" style="width:100%;box-sizing:border-box">' +
-      '</div>',
-      [{text: '取消', onclick: 'closeSharedDialog()'},
-       {text: '保存', cls: 'btn-primary', onclick: '_pmSaveEditProduct(' + productId + ')'}],
-      {hideClose: true});
+    var currentTags = (p.tags || '').split(',').filter(function(t) { return t; });
+    API.get('/tags').then(function(allTags) {
+      var tagCheckboxes = allTags && allTags.length
+        ? allTags.filter(function(t) { return !t.category || t.category === 'product'; }).map(function(t) {
+            var checked = currentTags.indexOf(t.name) >= 0;
+            return '<label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;cursor:pointer">' +
+              '<input type="checkbox" value="' + escHtml(t.name) + '"' + (checked ? ' checked' : '') + ' class="pm-edit-tag">' + escHtml(t.name) +
+            '</label>';
+          }).join('')
+        : '<span style="font-size:12px;color:var(--muted)">暂无标签</span>';
+
+      openDialog('编辑产品 — ' + escHtml(productName),
+        '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">产品编号</label>' +
+          '<input class="search-inp" id="pm-edit-code" value="' + escHtml(p.code || '') + '" style="width:100%;box-sizing:border-box"></div>' +
+        '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">产品名称</label>' +
+          '<input class="search-inp" id="pm-edit-name" value="' + escHtml(p.name || '') + '" style="width:100%;box-sizing:border-box"></div>' +
+        '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">状态</label>' +
+          '<select class="search-inp" id="pm-edit-status" style="width:100%;box-sizing:border-box">' +
+            '<option value="normal"' + (p.status === 'normal' ? ' selected' : '') + '>正常</option>' +
+            '<option value="closed"' + (p.status === 'closed' ? ' selected' : '') + '>已关闭</option>' +
+          '</select></div>' +
+        '<div style="margin-bottom:4px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">产品标签 <span style="font-weight:400">（多选）</span></label>' +
+          '<div style="max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;background:var(--surface)">' + tagCheckboxes + '</div></div>',
+        [{text: '取消', onclick: 'closeSharedDialog()'},
+         {text: '保存', cls: 'btn-primary', onclick: '_pmSaveEditProduct(' + productId + ')'}],
+        {hideClose: true});
+    });
   }).catch(function(e) {
     showToast('获取产品信息失败: ' + (e.message || ''), 'error');
   });
@@ -632,13 +635,15 @@ async function _pmSaveEditProduct(productId) {
   var code = document.getElementById('pm-edit-code').value.trim();
   var name = document.getElementById('pm-edit-name').value.trim();
   var status = document.getElementById('pm-edit-status').value;
-  var desc = document.getElementById('pm-edit-desc').value.trim();
   if (!name) { showToast('请输入产品名称', 'error'); return; }
+
+  var tags = [];
+  document.querySelectorAll('.pm-edit-tag:checked').forEach(function(cb) { tags.push(cb.value); });
 
   closeSharedDialog();
   try {
     await API.put('/product-management/products/' + productId, {
-      code: code, name: name, status: status, description: desc,
+      code: code, name: name, status: status, description: tags.join(','),
     });
     showToast('产品已更新', 'success');
     await refreshPMData();
@@ -680,33 +685,47 @@ function _pmShowCreateProductDialog() {
       }).join('')
     : '<span style="font-size:12px;color:var(--muted)">暂无可选项目</span>';
 
-  openDialog('添加三级产品 — ' + crumbTitle,
-    '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">产品编号 * <span style="font-weight:400">（如：LVX624M-V010，短横线前为产品主体，后为硬件版本 V010/V020）</span></label>' +
-    '<input class="search-inp" id="pm-newprod-code" placeholder="如：LVX624M-V010" style="width:100%;box-sizing:border-box;margin-top:4px"></div>' +
-    '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">产品名称 * <span style="font-weight:400">（通常与编号一致，也可不同如：手持频谱仪）</span></label>' +
-    '<input class="search-inp" id="pm-newprod-name" placeholder="如：LVX624M-V010 或 手持频谱仪" style="width:100%;box-sizing:border-box;margin-top:4px"></div>' +
-    '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">状态</label>' +
-    '<select id="pm-newprod-status" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);margin-top:4px">' +
-      '<option value="normal">正常</option><option value="closed">已关闭</option>' +
-    '</select></div>' +
-    '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">描述</label>' +
-    '<textarea class="search-inp" id="pm-newprod-desc" rows="2" placeholder="产品描述（可选）" style="width:100%;box-sizing:border-box;margin-top:4px;resize:vertical"></textarea></div>' +
-    '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">关联项目 <span style="font-weight:400">（可选，可多选）</span></label>' +
-    '<div style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;margin-top:4px;background:var(--surface)">' + projectCheckboxes + '</div></div>',
-    [{text: '取消', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
-     {text: '添加', cls: 'btn-primary', onclick: '_pmCreateProduct()'}],
-    {hideClose: true});
+  // Fetch product/通用 tags for description
+  API.get('/tags').then(function(allTags) {
+    var tagCheckboxes = allTags && allTags.length
+      ? allTags.filter(function(t) { return !t.category || t.category === 'product'; }).map(function(t) {
+          return '<label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;cursor:pointer">' +
+            '<input type="checkbox" value="' + escHtml(t.name) + '" class="pm-newprod-tag">' + escHtml(t.name) +
+          '</label>';
+        }).join('')
+      : '<span style="font-size:12px;color:var(--muted)">暂无标签，请先在文档模板中配置</span>';
+
+    openDialog('添加三级产品 — ' + crumbTitle,
+      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">产品编号 * <span style="font-weight:400">（如：LVX624M-V010）</span></label>' +
+      '<input class="search-inp" id="pm-newprod-code" placeholder="如：LVX624M-V010" style="width:100%;box-sizing:border-box;margin-top:4px"></div>' +
+      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">产品名称 * <span style="font-weight:400">（通常与编号一致）</span></label>' +
+      '<input class="search-inp" id="pm-newprod-name" placeholder="如：LVX624M-V010" style="width:100%;box-sizing:border-box;margin-top:4px"></div>' +
+      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">状态</label>' +
+      '<select id="pm-newprod-status" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);margin-top:4px">' +
+        '<option value="normal">正常</option><option value="closed">已关闭</option>' +
+      '</select></div>' +
+      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">产品标签 <span style="font-weight:400">（可选，多选）</span></label>' +
+      '<div style="max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;margin-top:4px;background:var(--surface)">' + tagCheckboxes + '</div></div>' +
+      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">关联项目 <span style="font-weight:400">（可选，可多选）</span></label>' +
+      '<div style="max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;margin-top:4px;background:var(--surface)">' + projectCheckboxes + '</div></div>',
+      [{text: '取消', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
+       {text: '添加', cls: 'btn-primary', onclick: '_pmCreateProduct()'}],
+      {hideClose: true});
+  });
 }
 
 async function _pmCreateProduct() {
   var name = document.getElementById('pm-newprod-name').value.trim();
   var code = document.getElementById('pm-newprod-code').value.trim();
   var status = document.getElementById('pm-newprod-status').value;
-  var desc = document.getElementById('pm-newprod-desc').value.trim();
 
   if (!name) { showToast('请输入产品名称', 'error'); return; }
   if (!code) { showToast('请输入产品编号', 'error'); return; }
 
+  var tags = [];
+  document.querySelectorAll('.pm-newprod-tag:checked').forEach(function(cb) {
+    tags.push(cb.value);
+  });
   var projectIds = [];
   document.querySelectorAll('.pm-newprod-proj:checked').forEach(function(cb) {
     projectIds.push(parseInt(cb.value));
@@ -716,7 +735,7 @@ async function _pmCreateProduct() {
   try {
     await API.post('/product-management/products', {
       name: name, code: code, node_id: _pmSelectedNodeId,
-      status: status, description: desc, project_ids: projectIds
+      status: status, description: tags.join(','), project_ids: projectIds
     });
     showToast('产品已创建: ' + name, 'ok');
     await refreshPMData();

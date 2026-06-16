@@ -278,6 +278,12 @@
 .pov-l3-status.dev { background: var(--accent-lt); color: var(--accent); }
 .pov-l3-status.ext { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
 
+.pov-l3-chips { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
+.pov-l3-tag {
+  font-size: 9.5px; padding: 1px 5px; border-radius: 3px;
+  background: var(--accent-lt); color: var(--accent); font-weight: 500;
+}
+
 .pov-card.hidden, .pov-l2-section.hidden, .pov-l3-chip.hidden { display: none; }
 .pov-empty {
   text-align: center; padding: 60px 20px; color: var(--muted); font-size: 14px;

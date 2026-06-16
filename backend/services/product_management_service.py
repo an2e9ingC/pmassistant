@@ -202,6 +202,7 @@ def create_local_product(
         type="normal",
         is_local=True,
         description=description,
+        tags=description or "",
         synced_at=None,  # mark as not synced
     )
     db.add(product)
@@ -249,6 +250,9 @@ def update_local_product(db: Session, product_id: int, data: dict) -> dict:
     for k, v in data.items():
         if hasattr(product, k) and v is not None:
             setattr(product, k, v)
+    # Sync description to tags for tag-based display
+    if "description" in data and data["description"] is not None:
+        product.tags = data["description"]
     db.commit()
     return _product_item(product, db)
 
