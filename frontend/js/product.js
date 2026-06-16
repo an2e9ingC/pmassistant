@@ -433,22 +433,24 @@ function _renderProdDocsInline(docs) {
       if (i === 0) {
         html += '<td rowspan="' + items.length + '" style="vertical-align:middle;text-align:center;font-weight:600;' + cellStyle + 'color:var(--accent);font-size:12px">' + escHtml(st) + '<br><span style="font-size:10px;color:var(--muted)">' + items.length + ' 项</span></td>';
       }
-      // Status pill
+      // Status pill — only submitted is clickable (toggle to pending)
       var statusHtml = d.done
-        ? '<span class="pill completed" style="cursor:' + (canEdit ? 'pointer' : 'default') + '" onclick="' + (canEdit ? 'toggleProdDocStatus(' + d.id + ',\'pending\')' : '') + '">已提交</span>' +
-          (d.completed_at ? '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px">' + escHtml(d.completed_at) + '</div>' : '')
-        : '<span class="pill blocked" style="cursor:' + (canEdit ? 'pointer' : 'default') + '" onclick="' + (canEdit ? 'toggleProdDocStatus(' + d.id + ',\'submitted\')' : '') + '">未提交</span>';
+        ? '<span class="pill completed" style="cursor:' + (canEdit ? 'pointer' : 'default') + '" onclick="' + (canEdit ? 'toggleProdDocStatus(' + d.id + ',\'pending\')' : '') + '" title="点击标记为未提交">已提交</span>'
+        : '<span class="pill blocked">未提交</span>';
 
       html += '<td style="font-family:var(--mono);color:var(--muted);text-align:center;' + cellStyle + '">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
         '<td style="font-weight:500;' + cellStyle + '">' + escHtml(d.doc_name) + '</td>' +
         '<td style="font-size:12px;white-space:nowrap;' + cellStyle + '">' + escHtml(d.responsible_role || '—') + '</td>' +
-        '<td style="' + cellStyle + '">' + statusHtml + '</td>' +
-        '<td style="font-size:12px;' + cellStyle + '">' + (d.doc_path
-          ? '<a href="' + escHtml(d.doc_path) + '" target="_blank" style="color:var(--accent);text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">' + escHtml(d.doc_path) + '</a>'
-          : '—') + '</td>' +
+        '<td style="white-space:nowrap;' + cellStyle + '">' + statusHtml + '</td>' +
+        '<td style="font-size:12px;' + cellStyle + '">' + (d.location
+          ? '<a href="' + escHtml(d.location) + '" target="_blank" style="color:var(--accent);text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">' + escHtml(d.location) + '</a>'
+          : (d.doc_path ? '<span style="color:var(--muted);font-style:italic">请提交到：' + escHtml(d.doc_path) + '</span>' : '—')) + '</td>' +
         '<td style="font-size:12px;color:var(--muted);' + cellStyle + '">' + escHtml(d.uploaded_by || '—') + '</td>' +
-        '<td style="font-size:11px;color:var(--muted);' + cellStyle + '">' + escHtml(d.uploaded_at || '—') + '</td>' +
-        '<td style="white-space:nowrap;text-align:center;' + cellStyle + '"><span style="font-style:italic;color:var(--muted);font-size:11px">TODO：预览</span></td>' +
+        '<td style="font-size:11px;color:var(--muted);white-space:nowrap;' + cellStyle + '">' + escHtml(d.uploaded_at || '—') + '</td>' +
+        '<td style="white-space:nowrap;text-align:center;' + cellStyle + '">' +
+          '<button class="btn" style="font-size:12px;padding:2px 6px" onclick="showToast(\'暂不支持\',\'info\')" title="预览">👁</button>' +
+          '<button class="btn" style="font-size:12px;padding:2px 6px;margin-left:2px" onclick="showUploadDocDialog(' + d.id + ')" title="上传文档">📤</button>' +
+        '</td>' +
       '</tr>';
     });
   });
@@ -464,6 +466,80 @@ async function toggleProdDocStatus(docId, newStatus) {
     _renderProdDocsInline(docs || []);
   } catch(e) {
     showToast('操作失败: ' + (e.message || '未知错误'), 'error');
+  }
+}
+
+function showUploadDocDialog(docId) {
+  var doc = null;
+  // Find doc data from the last rendered list
+  var el = document.getElementById('prod-docs-inline');
+  if (el) {
+    // Re-fetch to get doc info
+    API.get('/products/' + _prodDetailCurId + '/documents').then(function(docs) {
+      var d = (docs || []).find(function(x) { return x.id === docId; });
+      if (!d) { showToast('未找到文档信息', 'error'); return; }
+      _openUploadDialog(d);
+    });
+  }
+}
+
+function _openUploadDialog(d) {
+  var currentUser = getCurrentUser();
+  var uploadBy = currentUser ? (currentUser.display_name || currentUser.username) : '';
+  var html = '<div style="margin-bottom:10px">' +
+    '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">期望路径：' + escHtml(d.doc_path || '未配置') + '</div>' +
+    '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:6px">文档类型</label>' +
+    '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap" id="upload-type-btns">' +
+      '<button class="btn upload-type-btn" style="font-size:11px;padding:4px 10px" onclick="setUploadType(\'svn\')">SVN</button>' +
+      '<button class="btn upload-type-btn" style="font-size:11px;padding:4px 10px;background:var(--accent);color:#fff" onclick="setUploadType(\'gitlab\')">GitLab 发布链接</button>' +
+      '<button class="btn upload-type-btn" style="font-size:11px;padding:4px 10px" onclick="setUploadType(\'nas\')">NAS 路径</button>' +
+    '</div>' +
+    '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:6px">文档位置</label>' +
+    '<input class="search-inp" id="upload-doc-location" value="' + escHtml(d.location || '') + '" placeholder="GitLab 发布链接，如 http://192.168.0.128/.../-/releases/..." style="width:100%;box-sizing:border-box;margin-bottom:10px">' +
+    '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">上传人：<span style="color:var(--fg);font-weight:500">' + escHtml(uploadBy) + '</span></div>' +
+  '</div>';
+
+  openDialog('上传文档 — <span style="color:var(--accent)">' + escHtml(d.doc_name) + '</span>', html,
+    [{text: '取消', onclick: 'closeSharedDialog()'},
+     {text: '提交', cls: 'btn-primary', onclick: 'submitUploadDoc(' + d.id + ')'}],
+    {hideClose: true});
+}
+
+function setUploadType(type) {
+  var input = document.getElementById('upload-doc-location');
+  if (!input) return;
+  if (type === 'svn') { input.value = ''; input.placeholder = 'SVN 地址，如 http://192.168.0.124:8443/svn/...'; }
+  else if (type === 'gitlab') { input.value = ''; input.placeholder = 'GitLab 发布链接，如 http://192.168.0.128/.../-/releases/...'; }
+  else if (type === 'nas') { input.value = ''; input.placeholder = 'NAS 路径，如 \\\\192.168.0.x\\share\\...'; }
+  // Highlight selected
+  document.querySelectorAll('#upload-type-btns .upload-type-btn').forEach(function(btn) {
+    btn.style.background = ''; btn.style.color = '';
+  });
+  var selected = document.querySelector('#upload-type-btns .upload-type-btn[onclick*=\"' + type + '\"]');
+  if (selected) { selected.style.background = 'var(--accent)'; selected.style.color = '#fff'; }
+  input.focus();
+}
+
+async function submitUploadDoc(docId) {
+  var location = document.getElementById('upload-doc-location').value.trim();
+  if (!location) { showToast('请输入文档位置', 'error'); return; }
+
+  var currentUser = getCurrentUser();
+  var uploadBy = currentUser ? (currentUser.display_name || currentUser.username) : '';
+  var now = new Date().toISOString().slice(0, 19);
+  try {
+    await API.put('/products/' + _prodDetailCurId + '/documents/' + docId, {
+      status: 'submitted',
+      location: location,
+      uploaded_by: uploadBy,
+      uploaded_at: now,
+    });
+    closeSharedDialog();
+    var docs = await API.get('/products/' + _prodDetailCurId + '/documents');
+    _renderProdDocsInline(docs || []);
+    showToast('文档已提交', 'success');
+  } catch(e) {
+    showToast('提交失败: ' + (e.message || '未知错误'), 'error');
   }
 }
 
