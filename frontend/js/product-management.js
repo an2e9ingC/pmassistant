@@ -228,8 +228,8 @@ function renderProductManagementPage() {
         '</tr></thead><tbody>';
       _pmNodeProducts.forEach(function (p) {
         rightHtml += '<tr>' +
-          '<td style="font-family:var(--mono);font-size:12px">' + escHtml(p.code || '#' + p.id) + '</td>' +
-          '<td style="font-weight:500">' + escHtml(p.name) + '</td>' +
+          '<td><span class="pm-src-badge synced" style="cursor:pointer;font-family:var(--mono);font-size:11px" onclick="event.stopPropagation();openProductDetail(\'' + p.id + '\')" title="查看产品详情">' + escHtml(p.code || '#' + p.id) + '</span></td>' +
+          '<td style="font-weight:500;cursor:pointer" onclick="openProductDetail(\'' + p.id + '\')">' + escHtml(p.name) + '</td>' +
           '<td>' + renderPill(p.status) + '</td>' +
           '<td style="text-align:center">' + (p.project_count || 0) + '</td>' +
           '<td>' + (p.is_local ? '<span class="pm-src-badge local">PMA本地</span>' : (p.synced_at ? '<span class="pm-src-badge synced" title="同步于 ' + escHtml(p.synced_at) + '">禅道同步</span>' : '<span class="pm-src-badge unknown">未知</span>')) + '</td>' +
@@ -274,9 +274,6 @@ function _pmRenderL1Node(l1, index) {
   html += '<span style="width:16px;flex-shrink:0"></span>';
   html += '<span class="dt-tree-icon">📁</span>';
   html += '<span class="dt-tree-label">' + escHtml(l1.name) + '</span>';
-  if (hasChildren) {
-    html += '<span class="dt-tree-badge">' + l1.children.length + '</span>';
-  }
   if (_pmIsAdmin) {
     html += '<span class="dt-tree-acts">' +
       '<button class="btn" style="font-size:10px;padding:1px 5px" onclick="event.stopPropagation();_pmShowRenameNodeDialog(' + l1.id + ')" title="重命名">✎</button>' +
@@ -300,9 +297,9 @@ function _pmRenderL1Node(l1, index) {
       html += '<span style="width:16px;flex-shrink:0"></span>';
       html += '<span class="dt-tree-icon">📂</span>';
       html += '<span class="dt-tree-label">' + escHtml(l2.name) + '</span>';
-      var l3Count = (l2.children || []).length;
-      if (l3Count) {
-        html += '<span class="dt-tree-badge" style="background:var(--accent-lt);color:var(--accent)">' + l3Count + '</span>';
+      var prodCount = l2.product_count || 0;
+      if (prodCount) {
+        html += '<span class="dt-tree-badge" style="background:var(--accent-lt);color:var(--accent)">' + prodCount + '</span>';
       }
       if (_pmIsAdmin) {
         html += '<span class="dt-tree-acts">' +
