@@ -196,7 +196,9 @@ function renderTemplatesPage() {
         ' style="font-family:var(--mono);color:var(--muted);text-align:center;cursor:grab" title="拖动排序">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
         '<td style="font-weight:500">' + escHtml(d.doc_name) + '</td>' +
         '<td style="font-size:12px;white-space:nowrap">' + escHtml(d.responsible_role || '—') + '</td>' +
-        '<td style="font-size:11px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escHtml(d.doc_path || '') + '">' + escHtml(d.doc_path || '—') + '</td>' +
+        '<td style="font-size:12px">' + (d.doc_path
+          ? '<a href="' + escHtml(d.doc_path) + '" target="_blank" style="color:var(--accent);text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'" title="点击打开路径">' + escHtml(d.doc_path) + ' ↗</a>'
+          : '—') + '</td>' +
         '<td style="font-size:12px;color:var(--muted)">' + escHtml(d.description || '') + '</td>' +
         (canEdit
           ? '<td style="white-space:nowrap;text-align:center" ondragover="event.stopPropagation()" ondrop="event.stopPropagation()">' +
@@ -767,8 +769,8 @@ function renderProductTreePage() {
     rightHtml += '<div class="section-hd"><div class="section-title">' + escHtml(_productStage) + ' — 文档清单 (' + _productStageDocs.length + ')</div></div>';
     if (_productStageDocs.length) {
       rightHtml += '<div class="table-scroll"><table class="stage-table"><thead><tr>' +
-        '<th style="width:50px">序号</th><th>文档名称</th><th>责任人（岗位）</th><th style="width:140px">路径</th><th>说明</th>' +
-        (canEdit ? '<th style="width:90px;white-space:nowrap">操作</th>' : '') +
+        '<th>序号</th><th>文档名称</th><th>责任人（岗位）</th><th>路径</th><th>说明</th>' +
+        (canEdit ? '<th style="white-space:nowrap">操作</th>' : '') +
       '</tr></thead><tbody>';
       _productStageDocs.forEach(function(d, i) {
         rightHtml += '<tr>' +
@@ -779,7 +781,9 @@ function renderProductTreePage() {
           ' style="font-family:var(--mono);color:var(--muted);text-align:center;cursor:grab" title="拖动排序">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
           '<td style="font-weight:500">' + escHtml(d.doc_name) + '</td>' +
           '<td style="font-size:12px;white-space:nowrap">' + escHtml(d.responsible_role || '—') + '</td>' +
-          '<td style="font-size:11px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escHtml(d.doc_path || '') + '">' + escHtml(d.doc_path || '—') + '</td>' +
+          '<td style="font-size:12px">' + (d.doc_path
+            ? '<a href="' + escHtml(d.doc_path) + '" target="_blank" style="color:var(--accent);text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'" title="点击打开路径">' + escHtml(d.doc_path) + ' ↗</a>'
+            : '—') + '</td>' +
           '<td style="font-size:12px;color:var(--muted)">' + escHtml(d.description || '') + '</td>' +
           (canEdit ? '<td style="white-space:nowrap;text-align:center" ondragover="event.stopPropagation()" ondrop="event.stopPropagation()">' +
             '<button class="btn" style="font-size:12px;padding:2px 6px;margin-right:2px" onclick="copyProductTemplate(' + d.id + ')" title="复制">📋</button>' +
