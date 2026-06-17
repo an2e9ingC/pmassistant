@@ -238,8 +238,7 @@ function buildInfo(p, notes, delivery) {
     '<div class="dkpi"><div class="dkpi-lbl">计划结束</div><div class="dkpi-val" style="font-size:16px;font-weight:600">' + (p.end ? formatDate(p.end) : '<span style="color:var(--muted)">—</span>') + '</div></div>' +
     '<div class="dkpi"><div class="dkpi-lbl">交付数量</div><div class="dkpi-val" style="font-size:16px;font-weight:600">' +
       '<span style="color:var(--success)">' + (del.done || 0) + '</span>' +
-      (del.planned ? '<span style="color:var(--muted);font-weight:400"> / ' + del.planned + '</span>' : '') +
-      (del.remaining > 0 ? '<span style="font-size:10px;color:var(--warn);margin-left:4px">剩' + del.remaining + '</span>' : '') +
+      '<span style="color:var(--muted);font-weight:400"> / ' + (del.planned || 0) + '</span>' +
     '</div></div>' +
     // Description as PMA local tags
     '<div class="dkpi" style="grid-column:span 2"><div class="dkpi-lbl">项目描述</div><div class="dkpi-val" style="font-size:12px;line-height:1.6">' +
@@ -297,7 +296,7 @@ function buildInfo(p, notes, delivery) {
   var hasEdit = _hasProjectEditPerm();
   html += '<div class="section-hd" style="margin-top:20px"><div class="section-title">项目背景</div>';
   if (hasEdit) {
-    html += '<button class="btn" style="font-size:11px;padding:3px 10px" onclick="editProjectBackground()">编辑</button>';
+    html += '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="editProjectBackground()">编辑</button>';
   }
   html += '</div>';
   html += '<div class="card" style="padding:12px 16px;min-height:40px" id="proj-background-content">';
@@ -306,7 +305,7 @@ function buildInfo(p, notes, delivery) {
 
   // Notes section
   html += '<div class="section-hd" style="margin-top:20px"><div class="section-title">项目笔记</div>' +
-    '<button class="btn" style="font-size:11px;padding:3px 10px" onclick="openNoteDialog()">+ 添加笔记</button></div>';
+    '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openNoteDialog()">+ 添加笔记</button></div>';
   html += '<div class="card" style="padding:0;overflow:hidden">';
   html += '<div style="max-height:400px;overflow-y:auto"><div id="notes-content"></div></div>';
   html += '</div>';
@@ -1203,7 +1202,7 @@ function buildDelivery(data) {
     '<div class="card col-span" style="padding:20px;margin-top:16px">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">' +
         '<div class="section-title">交付记录明细 (' + records.length + ' 条)</div>' +
-        '<button class="btn" style="font-size:11px;padding:4px 10px" onclick="showDeliveryForm()">+ 添加记录</button>' +
+        '<button class="btn btn-primary" style="font-size:11px;padding:4px 10px" onclick="showDeliveryForm()">+ 添加记录</button>' +
       '</div>' +
       (records.length ? '<div class="table-scroll"><table class="stage-table"><thead><tr><th>交付日期</th><th>产品名</th><th>数量</th><th>产品编号</th><th>责任人</th><th>收货方</th><th>备注</th><th style="width:50px"></th></tr></thead><tbody>' +
       records.map(function(r) {
@@ -1632,16 +1631,23 @@ function buildMaintenance() {
 
 // ── Shared section renderer (badges + edit button only) ──
 
-function _renderMaintSection(containerId, linked, idKey, labelKey, type, labelName) {
+function _renderMaintSection(containerId, hdId, linked, idKey, labelKey, type, labelName) {
   var container = document.getElementById(containerId);
+  var hd = document.getElementById(hdId);
+
   var badgesHtml = linked.length ? linked.map(function(x) {
     return '<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:12px;background:var(--accent-lt);color:var(--accent)">' +
       escHtml(x[labelKey]) + ' <span onclick="maintRemove_' + type + '(' + x[idKey] + ')" style="cursor:pointer;opacity:0.5;font-size:14px" title="移除">&times;</span></span>';
   }).join('') : '<span style="font-size:12px;color:var(--muted)">暂无' + labelName + '</span>';
 
-  container.innerHTML =
-    '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">' + badgesHtml + '</div>' +
-    '<button class="btn btn-secondary" onclick="maintOpenDialog_' + type + '()" style="font-size:11px">编辑' + labelName + '</button>';
+  // Section header: title + count + edit button (top-right)
+  if (hd) {
+    hd.innerHTML = '<div class="section-title">' + labelName + ' (' + linked.length + ')</div>' +
+      '<button class="btn btn-primary" onclick="maintOpenDialog_' + type + '()" style="font-size:11px;padding:3px 10px">编辑' + labelName + '</button>';
+  }
+
+  // Card body: badges only
+  container.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:6px">' + badgesHtml + '</div>';
 }
 
 // ── Dialog helpers ──
@@ -1676,7 +1682,7 @@ async function loadMaintProjectProducts() {
     _maintLinkedProds = linked || [];
     var all = await API.get('/products?limit=200');
     _maintAllProds = (all.items || []).map(function(p) { return {id: p.id, name: p.name}; });
-    _renderMaintSection('maint-proj-products', _maintLinkedProds, 'id', 'name', 'prod', '产品');
+    _renderMaintSection('maint-proj-products', 'maint-hd-products', _maintLinkedProds, 'id', 'name', 'prod', '关联产品');
   } catch(e) {
     document.getElementById('maint-proj-products').innerHTML = '<div class="error-state">加载失败</div>';
   }
@@ -1720,7 +1726,7 @@ async function loadMaintProjectCustomers() {
     _maintLinkedCustomers = linked || [];
     var all = await API.get('/customers');
     _maintAllCustomers = (all || []).map(function(c) { return {id: c.id, name: c.name}; });
-    _renderMaintSection('maint-proj-customers', _maintLinkedCustomers, 'id', 'name', 'cust', '客户');
+    _renderMaintSection('maint-proj-customers', 'maint-hd-customers', _maintLinkedCustomers, 'id', 'name', 'cust', '关联客户');
   } catch(e) {
     document.getElementById('maint-proj-customers').innerHTML = '<div class="error-state">加载失败</div>';
   }
@@ -1756,7 +1762,7 @@ async function maintToggle_cust(cid) {
     await API.put('/maintenance/projects/' + _comboCurId + '/customers', { ids: linkedIds });
     _maintLinkedCustomers = _maintAllCustomers.filter(function(c) { return linkedIds.indexOf(c.id) >= 0; });
     _renderMaintCustDialogList();
-    _renderMaintSection('maint-proj-customers', _maintLinkedCustomers, 'id', 'name', 'cust', '客户');
+    _renderMaintSection('maint-proj-customers', 'maint-hd-customers', _maintLinkedCustomers, 'id', 'name', 'cust', '关联客户');
   } catch(e) {
     showToast('操作失败: ' + (e.message || '未知错误'), 'error');
   }
@@ -1809,6 +1815,7 @@ async function loadMaintProjectTags() {
 
 function _renderMaintTagSection() {
   var container = document.getElementById('maint-proj-tags');
+  var hd = document.getElementById('maint-hd-tags');
   var linkedNames = _maintLinkedTags.slice();
 
   var badgesHtml = linkedNames.length ? linkedNames.map(function(name) {
@@ -1818,9 +1825,14 @@ function _renderMaintTagSection() {
       ' <span data-tag-name="' + escHtml(name) + '" onclick="maintRemove_tag(this.getAttribute(\'data-tag-name\'))" style="cursor:pointer;opacity:0.5;font-size:14px;line-height:1" title="移除">&times;</span></span>';
   }).join('') : '<span style="font-size:12px;color:var(--muted)">暂无标签</span>';
 
-  container.innerHTML =
-    '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">' + badgesHtml + '</div>' +
-    '<button class="btn btn-secondary" onclick="maintOpenDialog_tag()" style="font-size:11px">编辑标签</button>';
+  // Section header: title + count + edit button (top-right)
+  if (hd) {
+    hd.innerHTML = '<div class="section-title">项目标签 (' + linkedNames.length + ')</div>' +
+      '<button class="btn btn-primary" onclick="maintOpenDialog_tag()" style="font-size:11px;padding:3px 10px">编辑标签</button>';
+  }
+
+  // Card body: badges only
+  container.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:6px">' + badgesHtml + '</div>';
 }
 
 function maintOpenDialog_tag() {

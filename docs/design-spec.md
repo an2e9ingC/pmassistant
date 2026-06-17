@@ -519,3 +519,33 @@ var listHtml = tags.map(function(t) {
 
 **修改记录：**
 - 2026-06-17：新增图标优先规范，统一 ✎/✕/📋/🔄 图标 + title 注释模式
+
+## 22. 区块操作按钮规范
+
+**详情页中各信息区块（项目背景、项目笔记、交付记录明细、关联产品、关联客户、项目标签等）的添加/编辑按钮，统一采用以下设计：**
+
+- **位置**：区块标题右侧（右上角），使用 `.section-hd` 容器（flex + space-between）
+- **样式**：蓝色按钮 `class="btn btn-primary"`
+- **尺寸**：`font-size: 11px; padding: 3px 10px`（紧凑型）/ `font-size: 11px; padding: 4px 10px`（标准型）
+- **权限控制**：无权限时不显示按钮（前端检查 + 后端拦截）
+
+**示例：**
+```html
+<div class="section-hd">
+  <div class="section-title">项目笔记</div>
+  <button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openNoteDialog()">+ 添加笔记</button>
+</div>
+```
+
+**适用场景（参照产品详情页 maintenance tab 设计）：**
+- 项目背景 → "编辑"按钮
+- 项目笔记 → "+ 添加笔记"按钮
+- 交付记录明细 → "+ 添加记录"按钮
+- 关联产品 → "编辑关联产品"按钮
+- 关联客户 → "编辑关联客户"按钮
+- 项目标签 → "编辑标签"按钮
+- 产品框图 → "+ 上传框图"按钮
+- 产品笔记 → "+ 添加笔记"按钮
+
+**修改记录：**
+- 2026-06-18：新增区块操作按钮规范，统一 btn-primary 蓝色按钮 + section-hd 右上角布局
