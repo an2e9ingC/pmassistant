@@ -491,7 +491,7 @@ function _renderProdDocsInline(docs) {
   });
 
   var colorMap = { '硬件开发': 'var(--accent-lt)', '结构设计': '#e8f5e9', 'BSP开发': '#fff3e0', '软件开发': '#e3f2fd', '测试': '#fce4ec', '通用': 'var(--surface)' };
-  var typeLabels = { gitlab: 'GitLab', svn: 'SVN', nas: 'NAS', solidworks: 'SOLIDWORKS' };
+  var typeLabels = { gitlab: 'GitLab', svn: 'SVN', nas: 'NAS', solidworks: 'SOLIDWORKS', pma: 'PMA' };
   var html = '<div class="card" style="padding:0;overflow:hidden">';
   html += '<div class="table-scroll" style="max-height:600px"><table class="stage-table"><thead><tr>' +
     '<th style="width:80px">分类</th><th style="width:50px">序号</th><th>文档名称</th><th>责任人</th><th style="width:90px">状态</th><th>类型</th><th>路径</th><th>上传人</th><th>上传时间</th><th>操作</th>' +
@@ -582,9 +582,10 @@ function _openUploadDialog(d) {
     svn: 'SVN 地址，如 http://192.168.0.124:8443/svn/...',
     gitlab: 'GitLab 发布链接，如 http://192.168.0.128/.../-/releases/...',
     nas: 'NAS 路径，如 \\\\192.168.0.x\\share\\...',
-    solidworks: 'SOLIDWORKS 文件路径'
+    solidworks: 'SOLIDWORKS 文件路径',
+    pma: 'PMA 系统内部链接'
   };
-  var typeLabels = { gitlab: 'GitLab', svn: 'SVN', nas: 'NAS', solidworks: 'SOLIDWORKS' };
+  var typeLabels = { gitlab: 'GitLab', svn: 'SVN', nas: 'NAS', solidworks: 'SOLIDWORKS', pma: 'PMA 链接' };
   var makeTypeBtn = function(type, label) {
     var active = type === defaultType;
     return '<button class="btn upload-type-btn" style="font-size:11px;padding:4px 10px' +
@@ -599,6 +600,7 @@ function _openUploadDialog(d) {
       makeTypeBtn('svn', 'SVN') +
       makeTypeBtn('nas', 'NAS') +
       makeTypeBtn('solidworks', 'SOLIDWORKS') +
+      makeTypeBtn('pma', 'PMA') +
     '</div>' +
     '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:6px">文档位置</label>' +
     '<input class="search-inp" id="upload-doc-location" value="' + escHtml(d.location || '') + '" placeholder="' + (placeholderMap[defaultType] || '') + '" style="width:100%;box-sizing:border-box;margin-bottom:10px">' +
@@ -618,6 +620,7 @@ function setUploadType(type) {
   else if (type === 'gitlab') { input.value = ''; input.placeholder = 'GitLab 发布链接，如 http://192.168.0.128/.../-/releases/...'; }
   else if (type === 'nas') { input.value = ''; input.placeholder = 'NAS 路径，如 \\\\192.168.0.x\\share\\...'; }
   else if (type === 'solidworks') { input.value = ''; input.placeholder = 'SOLIDWORKS 文件路径'; }
+  else if (type === 'pma') { input.value = ''; input.placeholder = 'PMA 系统内部链接'; }
   // Highlight selected
   document.querySelectorAll('#upload-type-btns .upload-type-btn').forEach(function(btn) {
     btn.style.background = ''; btn.style.color = '';

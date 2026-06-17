@@ -673,6 +673,7 @@ var DOC_TYPES = [
   { key: 'svn', label: 'SVN' },
   { key: 'nas', label: 'NAS' },
   { key: 'solidworks', label: 'SOLIDWORKS' },
+  { key: 'pma', label: 'PMA' },
 ];
 var DOC_TYPE_LABELS = {};
 DOC_TYPES.forEach(function(t) { DOC_TYPE_LABELS[t.key] = t.label; });
@@ -705,7 +706,8 @@ function _applyDocTypePlaceholder(dialog, type) {
     gitlab: 'GitLab 发布链接，如 http://192.168.0.128/.../-/releases/...',
     svn: 'SVN 地址，如 http://192.168.0.124:8443/svn/...',
     nas: 'NAS 路径，如 \\\\192.168.0.x\\share\\...',
-    solidworks: 'SOLIDWORKS 文件路径'
+    solidworks: 'SOLIDWORKS 文件路径',
+    pma: 'PMA 系统内部链接'
   };
   var pathInput = dialog.querySelector('input[id*="path"]');
   if (pathInput && placeholders[type]) {
