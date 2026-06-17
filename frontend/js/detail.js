@@ -93,7 +93,7 @@ async function loadProjectDetail(id) {
   document.getElementById('stages-tbody').innerHTML = '<tr><td colspan="8"><div class="loading-spinner">加载阶段数据...</div></td></tr>';
   document.getElementById('docs-tbody').innerHTML = '<tr><td colspan="4"><div class="loading-spinner">加载文档数据...</div></td></tr>';
   document.getElementById('delivery-content').innerHTML = '<div class="loading-spinner">加载交付数据...</div>';
-  document.getElementById('resources-content').innerHTML = '<div class="loading-spinner">加载资料链接...</div>';
+  document.getElementById('resources-content').innerHTML = '<div class="loading-spinner">加载产品文档...</div>';
 
   try {
     // Fetch all data in parallel
@@ -1437,24 +1437,31 @@ async function deleteDeliveryRecord(id) {
 /* Resources */
 
 function buildResources(resources, detail) {
-  var productNames = (detail && detail.products) ? detail.products.map(function(p) { return p.name; }).join(' · ') : '—';
-  var linksHtml = (resources || []).map(function(r) {
-    return '<a class="doc-link" href="' + escHtml(r.url) + '" target="_blank" style="padding:9px 14px">' +
-      '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="14" height="14" rx="2"/><polyline points="5,8 7.5,10.5 11,6"/></svg>' +
-      escHtml(r.label) + ' — ' + escHtml(r.description || '') +
-    '</a>';
-  }).join('');
+  var products = (detail && detail.linked_products) || (detail && detail.products) || [];
 
-  document.getElementById('resources-content').innerHTML =
-    '<div class="card" style="padding:20px">' +
-      '<div class="section-title" style="margin-bottom:14px">软硬件资料快速访问</div>' +
-      '<div style="display:flex;flex-direction:column;gap:9px">' +
-        linksHtml +
-      '</div>' +
-      '<div style="margin-top:12px;padding:10px 12px;background:var(--bg);border-radius:7px;font-size:12px;color:var(--muted);border:1px solid var(--border)">' +
-        '关联产品：<b>' + escHtml(productNames) + '</b>' +
-      '</div>' +
-    '</div>';
+  var html = '<div class="card" style="padding:20px">' +
+    '<div class="section-title" style="margin-bottom:14px">关联产品文档</div>' +
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:16px">以下为本项目关联的产品，点击可查看各产品的文档齐套情况。</div>';
+
+  if (products.length) {
+    products.forEach(function(prod) {
+      var prodUrl = '#view-product-detail';
+      var prodDocsLabel = '查看产品文档 →';
+      html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;margin-bottom:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px">' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-weight:560;font-size:13px;margin-bottom:2px">' + escHtml(prod.name) + '</div>' +
+          '<div style="font-size:11px;color:var(--muted);font-family:var(--mono)">' + escHtml(prod.code || '#' + prod.id) + '</div>' +
+        '</div>' +
+        '<button class="btn" style="font-size:11px;padding:4px 12px;flex-shrink:0;margin-left:12px" onclick="_prodDetailTargetTab=\'docs\';openProductDetail(' + prod.id + ')" title="查看产品文档">' + prodDocsLabel + '</button>' +
+      '</div>';
+    });
+  } else {
+    html += '<div style="font-size:12px;color:var(--muted);font-style:italic;padding:12px 0">暂无关联产品</div>';
+  }
+
+  html += '</div>';
+
+  document.getElementById('resources-content').innerHTML = html;
 }
 
 /* Notes */

@@ -214,6 +214,7 @@ function openProductDetail(id) {
 /* ---- Product Detail ---- */
 
 var _prodDetailCurId = null;
+var _prodDetailTargetTab = null;  // set before navigation to jump to a specific tab
 var _prodComboAll = [];
 
 async function initProductDetail() {
@@ -285,9 +286,11 @@ function switchProdTab(id, el) {
 
 async function loadProductDetail(id) {
   _prodDetailCurId = id;
-  // Reset to 基本信息 tab on entry
-  var infoTab = document.querySelector('#view-product-detail .dtab[onclick*="switchProdTab(\'info\'"]');
-  if (infoTab) switchProdTab('info', infoTab);
+  // Reset to 基本信息 tab on entry (unless a target tab is specified)
+  var targetTab = _prodDetailTargetTab || 'info';
+  _prodDetailTargetTab = null;
+  var tabEl = document.querySelector('#view-product-detail .dtab[onclick*="switchProdTab(\'' + targetTab + '\'"]');
+  if (tabEl) switchProdTab(targetTab, tabEl);
 
   var selected = _prodComboAll.find(function(p) { return p.id === parseInt(id); });
   if (selected) {
