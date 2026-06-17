@@ -983,64 +983,31 @@ async function saveProdEdit() {
 function showProdLinkProjectsDialog() {
   API.get('/product-management/all-projects').then(function(projects) {
     var projIds = (_prodDetail.projects || []).map(function(p) { return p.id; });
-    var listHtml = projects.map(function(proj) {
-      var checked = projIds.indexOf(proj.id) >= 0;
-      return '<label class="searchable-item" data-search-text="' + escHtml((proj.name + ' ' + (proj.code || '')).toLowerCase()) + '" style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:13px;cursor:pointer">' +
-        '<input type="checkbox" value="' + proj.id + '"' + (checked ? ' checked' : '') + ' class="prod-link-proj-cb">' +
-        escHtml(proj.name) + ' <span style="font-size:10px;color:var(--muted)">' + escHtml(proj.code || '') + '</span>' +
-      '</label>';
-    }).join('');
-    openDialog('关联项目 — ' + escHtml(_prodDetail.name),
-      '<input class="search-inp" placeholder="搜索项目..." oninput="_filterSearchableItems(this)" style="margin-bottom:6px">' +
-      '<div style="max-height:280px;overflow-y:auto;margin-bottom:8px" class="searchable-list">' + listHtml + '</div>',
-      [{text: '取消', onclick: 'closeSharedDialog()'},
-       {text: '保存', cls: 'btn-primary', onclick: 'saveProdLinkProjects()'}],
-      {hideClose: true});
+    multiSelectDialog('关联项目 — ' + escHtml(_prodDetail.name), projects, projIds, {
+      renderItem: function(proj) { return escHtml(proj.name) + ' <span style="font-size:10px;color:var(--muted)">' + escHtml(proj.code || '') + '</span>'; },
+      placeholder: '搜索项目...'
+    }, function(ids) {
+      API.put('/product-management/products/' + _prodDetailCurId + '/projects', { project_ids: ids }).then(function() {
+        showToast('关联项目已更新', 'success');
+        loadProductDetail(_prodDetailCurId);
+      }).catch(function(e) { showToast('更新失败: ' + (e.message || ''), 'error'); });
+    });
   });
-}
-
-async function saveProdLinkProjects() {
-  var ids = [];
-  document.querySelectorAll('.prod-link-proj-cb:checked').forEach(function(cb) { ids.push(parseInt(cb.value)); });
-  closeSharedDialog();
-  try {
-    await API.put('/product-management/products/' + _prodDetailCurId + '/projects', { project_ids: ids });
-    showToast('关联项目已更新', 'success');
-    loadProductDetail(_prodDetailCurId);
-  } catch(e) {
-    showToast('更新失败: ' + (e.message || ''), 'error');
-  }
 }
 
 function showProdCustomersDialog() {
   API.get('/customers').then(function(custs) {
     var currentCusts = _prodDetail.customers_from_desc || [];
-    var listHtml = custs.map(function(c) {
-      var checked = currentCusts.indexOf(c.name) >= 0;
-      return '<label class="searchable-item" data-search-text="' + escHtml(c.name).toLowerCase() + '" style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:13px;cursor:pointer">' +
-        '<input type="checkbox" value="' + escHtml(c.name) + '"' + (checked ? ' checked' : '') + ' class="prod-cust-cb">' + escHtml(c.name) +
-      '</label>';
-    }).join('');
-    openDialog('关联客户 — ' + escHtml(_prodDetail.name),
-      '<input class="search-inp" placeholder="搜索客户..." oninput="_filterSearchableItems(this)" style="margin-bottom:6px">' +
-      '<div style="max-height:280px;overflow-y:auto;margin-bottom:8px" class="searchable-list">' + listHtml + '</div>',
-      [{text: '取消', onclick: 'closeSharedDialog()'},
-       {text: '保存', cls: 'btn-primary', onclick: 'saveProdCustomers()'}],
-      {hideClose: true});
+    multiSelectDialog('关联客户 — ' + escHtml(_prodDetail.name), custs, currentCusts, {
+      idKey: 'name', labelKey: 'name', placeholder: '搜索客户...'
+    }, function(names) {
+      var nameStr = names.join('、');
+      API.put('/products/' + _prodDetailCurId, { pma_customer: nameStr }).then(function() {
+        showToast('关联客户已更新', 'success');
+        loadProductDetail(_prodDetailCurId);
+      }).catch(function(e) { showToast('更新失败: ' + (e.message || ''), 'error'); });
+    });
   }).catch(function() { showToast('获取客户列表失败', 'error'); });
-}
-
-async function saveProdCustomers() {
-  var names = [];
-  document.querySelectorAll('.prod-cust-cb:checked').forEach(function(cb) { names.push(cb.value); });
-  closeSharedDialog();
-  try {
-    await API.put('/products/' + _prodDetailCurId, { pma_customer: names.join('、') });
-    showToast('关联客户已更新', 'success');
-    loadProductDetail(_prodDetailCurId);
-  } catch(e) {
-    showToast('更新失败: ' + (e.message || ''), 'error');
-  }
 }
 
 async function deleteCurrentProduct() {

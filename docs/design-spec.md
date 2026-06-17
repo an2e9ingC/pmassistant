@@ -379,39 +379,47 @@ utils.js → api.js → auth.js → components.js → dashboard.js → detail.js
 
 **所有从已有数据中多选的对话框列表，必须支持实时搜索过滤。**
 
-实现模式：
-1. 列表容器添加 `class="searchable-list"`
-2. 每个列表项添加 `class="searchable-item"` 和 `data-search-text="小写搜索文本"`
-3. 搜索输入框调用通用函数 `_filterSearchableItems(this)`
+**首选实现方式：使用 `multiSelectDialog()` 工厂函数（`components.js`）。**
 
-**通用函数（需在调用方 JS 文件中定义）：**
 ```javascript
-function _filterSearchableItems(input) {
-  var q = (input.value || '').toLowerCase();
-  var list = input.nextElementSibling;  // 搜索框后的列表容器
-  if (!list) return;
-  list.querySelectorAll('.searchable-item').forEach(function(item) {
-    item.style.display = q
-      ? (item.getAttribute('data-search-text').indexOf(q) >= 0 ? '' : 'none')
-      : '';
-  });
-}
+// 标准调用 — 替代手动拼接 search-inp + searchable-list + openDialog
+multiSelectDialog(title, items, selectedIds, opts, onSave);
+
+// 示例：关联产品对话框
+multiSelectDialog('编辑关联产品', allProducts, linkedIds, {
+  placeholder: '搜索产品...', maxWidth: 500
+}, function(ids) { API.put('/api/...', {ids: ids}).then(refresh); });
+
+// opts 支持：
+//   idKey, labelKey — 从对象数组中提取 ID/标签的键名（默认 'id', 'name'）
+//   renderItem       — 自定义行渲染函数 (item) => html
+//   placeholder      — 搜索框占位文本（默认 '搜索...'）
+//   cbClass          — checkbox CSS class（默认 'multi-dlg-cb'）
+//   maxWidth         — 对话框最大宽度（默认 480）
 ```
 
-**示例（标签多选对话框）：**
-```javascript
-var listHtml = tags.map(function(t) {
-  return '<label class="searchable-item" data-search-text="' + escHtml(t.name).toLowerCase() + '" ...>' +
-    '<input type="checkbox" ...>' + escHtml(t.name) + '</label>';
-}).join('');
-// ...
-'<input class="search-inp" placeholder="搜索标签..." oninput="_filterSearchableItems(this)" style="margin-bottom:4px">' +
-'<div class="searchable-list" style="max-height:240px;overflow-y:auto">' + listHtml + '</div>'
-```
+**内部实现细节**（已封装在 `multiSelectDialog` 中，新增功能直接调用即可）：
+1. 列表容器使用 `class="searchable-list"`
+2. 每个列表项使用 `class="searchable-item"` + `data-search-text`
+3. 搜索过滤使用 `_filterSearchableItems(input)`（`utils.js` 或调用方）
+4. 对话框通过 `openDialog()` 渲染，按钮为 取消 + 保存(`btn-primary`)
+
+**适用场景**：关联产品、关联客户、关联项目、标签选择等所有多选对话框。
+
+**已迁移的调用方**：
+- `product.js`: `showProdLinkProjectsDialog()`, `showProdCustomersDialog()`
+- `detail.js`: `maintOpenDialog_prod()`, `maintOpenDialog_cust()`
+
+**修改记录：**
+- 2026-06-18：新增 `multiSelectDialog()` 工厂函数，4 个对话框统一迁移，禁止手动拼接
 
 ---
 
 ## 16. 单表格页面高度规范
+
+---
+
+## 16. 表格滚动规范
 
 **所有仅包含单表格的页面，表格容器必须使用 `max-height: calc(100vh - Npx)` 自适应屏幕高度。**
 

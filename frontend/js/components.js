@@ -110,6 +110,78 @@ function linkChip(name, onclick, title, bgColor, fgColor) {
 }
 
 /* ═══════════════════════════════════════════════════
+   MULTI-SELECT DIALOG (design spec §15.1)
+   Replaces 4 hand-rolled checkbox dialogs.
+   ───────────────────────────────────────────────────
+   multiSelectDialog(title, items, selectedIds, opts, onSave)
+     title       — dialog title string
+     items       — array of {id, name} or strings
+     selectedIds — array of currently-selected IDs
+     opts        — {idKey, labelKey, cbClass, placeholder, maxWidth}
+     onSave      — callback(selectedIds), dialog closed before call
+   ───────────────────────────────────────────────────
+   Usage:
+     multiSelectDialog('关联项目', projects, currentIds,
+       {placeholder:'搜索项目...'}, function(ids) {
+         API.put('/projects/1/linked', {ids:ids}).then(refresh);
+       });
+═══════════════════════════════════════════════════ */
+
+function multiSelectDialog(title, items, selectedIds, opts, onSave) {
+  opts = opts || {};
+  var idKey = opts.idKey || 'id';
+  var labelKey = opts.labelKey || 'name';
+  var cbClass = opts.cbClass || 'multi-dlg-cb';
+  var placeholder = opts.placeholder || '搜索...';
+  var maxWidth = opts.maxWidth || 480;
+  var selectedSet = {};
+  (selectedIds || []).forEach(function(id) { selectedSet[id] = true; });
+
+  var listHtml = (items || []).map(function(item) {
+    var val, label, searchText;
+    if (typeof item === 'object') {
+      val = item[idKey]; label = item[labelKey];
+      searchText = String(label).toLowerCase();
+    } else {
+      val = item; label = item; searchText = String(label).toLowerCase();
+    }
+    if (opts.renderItem) {
+      label = opts.renderItem(item, selectedSet[val]);
+      searchText = String(label).replace(/<[^>]+>/g, '').toLowerCase();
+    }
+    var checked = selectedSet[val] ? ' checked' : '';
+    return '<label class="searchable-item" data-search-text="' + escHtml(searchText) +
+      '" style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:13px;cursor:pointer">' +
+      '<input type="checkbox" value="' + escHtml(String(val)) + '"' + checked + ' class="' + cbClass + '">' + label +
+    '</label>';
+  }).join('');
+
+  openDialog(title,
+    '<input class="search-inp" placeholder="' + placeholder + '" oninput="_filterSearchableItems(this)" style="margin-bottom:6px">' +
+    '<div style="max-height:280px;overflow-y:auto;margin-bottom:8px" class="searchable-list">' + listHtml + '</div>',
+    [{text: '取消', onclick: 'closeSharedDialog()'},
+     {text: '保存', cls: 'btn-primary', onclick: '_multiSelectDialogSave(\'' + cbClass + '\')'}],
+    {hideClose: true, maxWidth: maxWidth});
+
+  // Store callback for save handler
+  window._multiSelectDialogCallback = onSave;
+}
+
+function _multiSelectDialogSave(cbClass) {
+  var ids = [];
+  document.querySelectorAll('.' + cbClass + ':checked').forEach(function(cb) {
+    var v = cb.value;
+    // Try to preserve numeric IDs
+    ids.push(/^\d+$/.test(v) ? parseInt(v) : v);
+  });
+  closeSharedDialog();
+  if (typeof window._multiSelectDialogCallback === 'function') {
+    window._multiSelectDialogCallback(ids);
+    window._multiSelectDialogCallback = null;
+  }
+}
+
+/* ═══════════════════════════════════════════════════
    SHARED DIALOG UTILITY
 ═══════════════════════════════════════════════════ */
 

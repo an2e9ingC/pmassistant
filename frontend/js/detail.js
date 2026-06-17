@@ -1644,25 +1644,6 @@ function _renderMaintSection(containerId, hdId, linked, idKey, labelKey, type, l
 
 // ── Dialog helpers ──
 
-function _maintBuildDialogCheckboxes(containerId, allItems, linked, idKey, labelKey, type) {
-  var linkedIds = (linked || []).map(function(x) { return x[idKey]; });
-  var html = allItems.map(function(item) {
-    var lid = item[idKey];
-    return '<label style="display:flex;align-items:center;gap:6px;padding:3px 6px;font-size:12px;cursor:pointer" class="maint-dlg-cb" data-filter="' + escHtml((item[labelKey] || '').toLowerCase()) + '">' +
-      '<input type="checkbox" value="' + lid + '" ' + (linkedIds.indexOf(lid) >= 0 ? 'checked' : '') + '>' +
-      escHtml(item[labelKey]) + '</label>';
-  }).join('');
-  document.getElementById(containerId).innerHTML = html;
-}
-
-function _maintDialogFilter(type, v) {
-  var q = (v || '').toLowerCase();
-  var dd = document.getElementById('maint-dlg-dd-' + type);
-  dd.querySelectorAll('[data-filter]').forEach(function(el) {
-    el.style.display = q ? (el.dataset.filter.indexOf(q) >= 0 ? '' : 'none') : '';
-  });
-}
-
 // ── Products ──
 
 var _maintLinkedProds = [];
@@ -1681,22 +1662,12 @@ async function loadMaintProjectProducts() {
 }
 
 function maintOpenDialog_prod() {
-  var bodyHtml =
-    '<input class="search-inp" placeholder="搜索产品..." oninput="_maintDialogFilter(\'prod\', this.value)" style="width:100%;padding:6px 8px;font-size:12px;margin-bottom:6px;box-sizing:border-box">' +
-    '<div style="max-height:240px;overflow-y:auto;overscroll-behavior:contain" id="maint-dlg-dd-prod"></div>';
-  openDialog('编辑关联产品', bodyHtml, [
-    {text: '取消', cls: '', onclick: 'document.querySelector(\'.note-dialog-overlay\').remove()'},
-    {text: '确定', cls: 'btn-primary', onclick: 'maintDialogSave_prod()'}
-  ], {maxWidth: 500});
-  _maintBuildDialogCheckboxes('maint-dlg-dd-prod', _maintAllProds, _maintLinkedProds, 'id', 'name', 'prod');
-}
-
-async function maintDialogSave_prod() {
-  var ids = [];
-  document.querySelectorAll('#maint-dlg-dd-prod .maint-dlg-cb input:checked').forEach(function(cb) { ids.push(parseInt(cb.value)); });
-  document.querySelector('.note-dialog-overlay').remove();
-  await API.put('/maintenance/projects/' + _comboCurId + '/products', { ids: ids });
-  loadMaintProjectProducts();
+  var linkedIds = (_maintLinkedProds || []).map(function(p) { return p.id; });
+  multiSelectDialog('编辑关联产品', _maintAllProds, linkedIds, {
+    placeholder: '搜索产品...', maxWidth: 500
+  }, function(ids) {
+    API.put('/maintenance/projects/' + _comboCurId + '/products', { ids: ids }).then(function() { loadMaintProjectProducts(); });
+  });
 }
 
 function maintRemove_prod(pid) {
@@ -1725,54 +1696,12 @@ async function loadMaintProjectCustomers() {
 }
 
 function maintOpenDialog_cust() {
-  var linkedIds = _maintLinkedCustomers.map(function(c) { return c.id; });
-  var listHtml = _maintAllCustomers.map(function(c) {
-    var sel = linkedIds.indexOf(c.id) >= 0;
-    return '<div class="maint-dlg-row" data-filter="' + escHtml(c.name.toLowerCase()) + '" ' +
-      'onclick="maintToggle_cust(' + c.id + ')" ' +
-      'style="display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:12px;cursor:pointer;border-radius:4px;' +
-      (sel ? 'background:var(--accent-lt);color:var(--accent);font-weight:540' : '') + '">' +
-      (sel ? '✓ ' : '<span style="visibility:hidden">✓ </span>') + escHtml(c.name) +
-    '</div>';
-  }).join('');
-
-  var bodyHtml =
-    '<input class="search-inp" placeholder="搜索客户..." oninput="_maintDialogFilter(\'cust\', this.value)" style="width:100%;padding:6px 8px;font-size:12px;margin-bottom:6px;box-sizing:border-box">' +
-    '<div style="max-height:300px;overflow-y:auto;overscroll-behavior:contain" id="maint-dlg-dd-cust">' + listHtml + '</div>';
-  openDialog('编辑关联客户', bodyHtml, [], {maxWidth: 450, hideClose: false});
-}
-
-async function maintToggle_cust(cid) {
-  var linkedIds = _maintLinkedCustomers.map(function(c) { return c.id; });
-  var idx = linkedIds.indexOf(cid);
-  if (idx >= 0) {
-    linkedIds.splice(idx, 1);
-  } else {
-    linkedIds.push(cid);
-  }
-  try {
-    await API.put('/maintenance/projects/' + _comboCurId + '/customers', { ids: linkedIds });
-    _maintLinkedCustomers = _maintAllCustomers.filter(function(c) { return linkedIds.indexOf(c.id) >= 0; });
-    _renderMaintCustDialogList();
-    _renderMaintSection('maint-proj-customers', 'maint-hd-customers', _maintLinkedCustomers, 'id', 'name', 'cust', '关联客户');
-  } catch(e) {
-    showToast('操作失败: ' + (e.message || '未知错误'), 'error');
-  }
-}
-
-function _renderMaintCustDialogList() {
-  var listEl = document.getElementById('maint-dlg-dd-cust');
-  if (!listEl) return;
-  var linkedIds = _maintLinkedCustomers.map(function(c) { return c.id; });
-  listEl.innerHTML = _maintAllCustomers.map(function(c) {
-    var sel = linkedIds.indexOf(c.id) >= 0;
-    return '<div class="maint-dlg-row" data-filter="' + escHtml(c.name.toLowerCase()) + '" ' +
-      'onclick="maintToggle_cust(' + c.id + ')" ' +
-      'style="display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:12px;cursor:pointer;border-radius:4px;' +
-      (sel ? 'background:var(--accent-lt);color:var(--accent);font-weight:540' : '') + '">' +
-      (sel ? '✓ ' : '<span style="visibility:hidden">✓ </span>') + escHtml(c.name) +
-    '</div>';
-  }).join('');
+  var linkedIds = (_maintLinkedCustomers || []).map(function(c) { return c.id; });
+  multiSelectDialog('编辑关联客户', _maintAllCustomers, linkedIds, {
+    placeholder: '搜索客户...', maxWidth: 450
+  }, function(ids) {
+    API.put('/maintenance/projects/' + _comboCurId + '/customers', { ids: ids }).then(function() { loadMaintProjectCustomers(); });
+  });
 }
 
 function maintRemove_cust(cid) {

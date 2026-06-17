@@ -387,6 +387,7 @@ Co-Authored-By: <model-name> / <tool-name>
 | `linkChip(name, onclick, title, bgColor, fgColor)` | 渲染可点击关联 chip | 关联产品/项目/客户 |
 | `chipTag(name, colorClass, onclick, removable, removeOnclick)` | 渲染标签 chip | 标签 badge |
 | `openDialog(title, bodyHtml, buttons, opts)` | 渲染对话框 | 所有弹窗 |
+| `multiSelectDialog(title, items, selectedIds, opts, onSave)` | 多选搜索对话框 | 关联产品/客户/项目等 checkbox 多选 |
 | `renderPill(status)` | 渲染状态圆点 | 项目/产品状态 |
 | `renderTypeBadge(type)` | 渲染类型 badge | 研发/生产项目 |
 | `renderProgressBar(percent, status)` | 渲染进度条 | 项目进度 |
