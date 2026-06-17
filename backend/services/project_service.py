@@ -623,7 +623,8 @@ def _project_detail(p: CachedProject, db: Session, has_pending_docs: bool = Fals
         "tags": tags_str,
         "tags_list": tags_list,
         "linked_projects": linked_projects,
-        "zentao_url": _zentao_url("project", p.id),
+        "is_local": bool(p.is_local),
+        "zentao_url": _zentao_url("project", p.id) if not p.is_local else None,
     }
 
 
