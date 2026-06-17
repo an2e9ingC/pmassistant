@@ -27,84 +27,108 @@ async function initProductList() {
 }
 
 function renderProdOverview() {
-  var container = document.getElementById('pov-container');
   var total = _allProducts.length;
-  var l1count = _prodTree.length;
-  var l2count = _prodTree.reduce(function(s, l1) { return s + (l1.children || []).length; }, 0);
   var colors = ['var(--accent)', 'var(--success)', 'var(--warn)', 'var(--danger)'];
   var bgColors = ['var(--accent-lt)', 'var(--success-lt)', 'var(--warn-lt)', 'var(--danger-lt)'];
   var ci = 0;
 
-  var html = '';
-  _prodTree.forEach(function(l1) {
-    var idx = ci % colors.length;
+  // Build L1 tab bar
+  var tabBar = document.getElementById('pov-tab-bar');
+  var tabHtml = '';
+  _prodTree.forEach(function(l1, li) {
+    var idx = li % colors.length;
     var c = colors[idx];
     var bg = bgColors[idx];
-    ci++;
-    var allL2 = l1.children || [];
-    var l2sections = [];
     var l1Total = 0;
-
-    allL2.forEach(function(l2) {
+    (l1.children || []).forEach(function(l2) {
       var key = l1.name + ' > ' + l2.name;
-      var l2products = _allProducts.filter(function(p) {
-        return (p.tree_path || '') === key;
-      });
-      l1Total += l2products.length;
-      l2sections.push({ id: l2.id, name: l2.name, products: l2products, color: c });
+      l1Total += _allProducts.filter(function(p) { return (p.tree_path || '') === key; }).length;
     });
+    tabHtml += '<span class="pov-l1-tab' + (li === 0 ? ' active' : '') + '" data-l1-idx="' + li + '" style="--tab-color:' + c + ';--tab-bg:' + bg + '" onclick="_povSwitchL1(' + li + ')">' +
+      escHtml(l1.name) + ' <span class="pov-l1-tab-count">' + l1Total + '</span></span>';
+  });
+  tabBar.innerHTML = tabHtml;
 
-    html += '<div class="pov-card" data-l1="' + l1.id + '" style="--card-bg:' + bg + '">' +
-      '<div class="pov-card-header" style="background:' + bg + '">' +
-        '<div class="pov-card-title" style="color:' + c + '">' + escHtml(l1.name) +
-        ' <span style="font-size:12px;font-weight:400;color:var(--muted)">[' + l1Total + ']</span></div>' +
-      '</div>' +
-      '<div class="pov-card-body">';
+  if (!_prodTree.length) {
+    document.getElementById('pov-container').innerHTML = '<div class="pov-empty">暂无产品数据</div>';
+    return;
+  }
 
-    if (l2sections.length > 0) {
-      html += '<div class="pov-tabs">';
-      l2sections.forEach(function(l2s, ti) {
-        html += '<span class="pov-tab' + (ti === 0 ? ' active' : '') + '" data-l2="' + l2s.id + '" onclick="_povSwitchTab(this,\'' + l1.id + '\',\'' + l2s.id + '\')">' +
-          escHtml(l2s.name) + ' <span class="pov-tab-count">' + l2s.products.length + '</span></span>';
-      });
-      html += '</div>';
+  // Render first L1 by default
+  _povRenderL1(0);
+}
 
-      l2sections.forEach(function(l2s, ti) {
-        html += '<div class="pov-tab-panel' + (ti === 0 ? ' active' : '') + '" data-l2-panel="' + l2s.id + '">' +
-          '<div class="pov-l3-list">';
-        if (l2s.products.length) {
-          l2s.products.forEach(function(p) {
-            var statusLabel = p.status === 'normal' ? '量产' : (p.status === 'closed' ? 'EOL' : '—');
-            var statusCls = p.status === 'normal' ? 'prod' : (p.status === 'closed' ? 'ext' : '');
-            var tagsHtml = '';
-            if (p.tags_list && p.tags_list[0]) {
-              tagsHtml = '<div class="pov-l3-chips">' + p.tags_list.filter(function(t){return t;}).slice(0,3).map(function(t){return '<span class="tag-badge tag-' + (t.length % 5) + '">#' + escHtml(t) + '</span>';}).join('') + '</div>';
-            }
-            html += '<div class="pov-l3-chip" onclick="openProductDetail(\'' + p.id + '\')">' +
-              '<div class="pov-l3-name">' + escHtml(p.code || '#' + p.id) + '</div>' +
-              '<div class="pov-l3-desc">' + escHtml(p.name) + '</div>' +
-              tagsHtml +
-              '<div class="pov-l3-meta">' +
-                '<span class="pov-l3-ver">' + (p.is_local ? 'PMA本地' : '') + '</span>' +
-                (statusLabel !== '—' ? '<span class="pov-l3-status ' + statusCls + '">' + statusLabel + '</span>' : '') +
-              '</div>' +
-            '</div>';
-          });
-        } else {
-          html += '<div style="font-size:12px;color:var(--muted);padding:8px">暂无产品</div>';
-        }
-        html += '</div></div>';
-      });
-    }
+function _povRenderL1(li) {
+  var container = document.getElementById('pov-container');
+  var l1 = _prodTree[li];
+  if (!l1) return;
 
-    html += '</div></div>';
+  var idx = li % 4;
+  var c = ['var(--accent)', 'var(--success)', 'var(--warn)', 'var(--danger)'][idx];
+  var bg = ['var(--accent-lt)', 'var(--success-lt)', 'var(--warn-lt)', 'var(--danger-lt)'][idx];
+
+  var allL2 = l1.children || [];
+  var l2sections = [];
+  var l1Total = 0;
+
+  allL2.forEach(function(l2) {
+    var key = l1.name + ' > ' + l2.name;
+    var l2products = _allProducts.filter(function(p) { return (p.tree_path || '') === key; });
+    l1Total += l2products.length;
+    l2sections.push({ id: l2.id, name: l2.name, products: l2products, color: c });
   });
 
-  if (!total) {
+  var html = '<div class="pov-card" style="--card-bg:' + bg + ';--card-color:' + c + '">' +
+    '<div class="pov-card-body">';
+
+  if (l2sections.length > 0) {
+    html += '<div class="pov-tabs">';
+    l2sections.forEach(function(l2s, ti) {
+      html += '<span class="pov-tab' + (ti === 0 ? ' active' : '') + '" data-l2="' + l2s.id + '" onclick="_povSwitchTab(this,\'' + l1.id + '\',\'' + l2s.id + '\')">' +
+        escHtml(l2s.name) + ' <span class="pov-tab-count">' + l2s.products.length + '</span></span>';
+    });
+    html += '</div>';
+
+    l2sections.forEach(function(l2s, ti) {
+      html += '<div class="pov-tab-panel' + (ti === 0 ? ' active' : '') + '" data-l2-panel="' + l2s.id + '">' +
+        '<div class="pov-l3-list">';
+      if (l2s.products.length) {
+        l2s.products.forEach(function(p) {
+          var statusLabel = p.status === 'normal' ? '量产' : (p.status === 'closed' ? 'EOL' : '—');
+          var statusCls = p.status === 'normal' ? 'prod' : (p.status === 'closed' ? 'ext' : '');
+          var tagsHtml = '';
+          if (p.tags_list && p.tags_list[0]) {
+            tagsHtml = '<div class="pov-l3-chips">' + p.tags_list.filter(function(t){return t;}).slice(0,3).map(function(t){return '<span class="tag-badge tag-' + (t.length % 5) + '">#' + escHtml(t) + '</span>';}).join('') + '</div>';
+          }
+          html += '<div class="pov-l3-chip" onclick="openProductDetail(\'' + p.id + '\')">' +
+            '<div class="pov-l3-name">' + escHtml(p.code || '#' + p.id) + '</div>' +
+            '<div class="pov-l3-desc">' + escHtml(p.name) + '</div>' +
+            tagsHtml +
+            '<div class="pov-l3-meta">' +
+              '<span class="pov-l3-ver">' + (p.is_local ? 'PMA本地' : '') + '</span>' +
+              (statusLabel !== '—' ? '<span class="pov-l3-status ' + statusCls + '">' + statusLabel + '</span>' : '') +
+            '</div>' +
+          '</div>';
+        });
+      } else {
+        html += '<div style="font-size:12px;color:var(--muted);padding:8px">暂无产品</div>';
+      }
+      html += '</div></div>';
+    });
+  }
+
+  html += '</div></div>';
+
+  if (!_allProducts.length) {
     html = '<div class="pov-empty">暂无产品数据</div>';
   }
 
   container.innerHTML = html;
+}
+
+function _povSwitchL1(li) {
+  document.querySelectorAll('#pov-tab-bar .pov-l1-tab').forEach(function(t, i) { t.classList.toggle('active', i === li); });
+  _povRenderL1(li);
 }
 
 function _povSwitchTab(tab, l1Id, l2Id) {
@@ -120,37 +144,43 @@ function onProdSearch(v) {
   _prodSearchVal = v;
   clearTimeout(_prodSearchTimer);
   _prodSearchTimer = setTimeout(function() {
-    renderProdOverview();
-    // After render, apply filter: expand matching L2 + hide non-matching chips
     if (_prodSearchVal) {
       var q = _prodSearchVal.toLowerCase();
-      var visibleTotal = 0;
-      var container = document.getElementById('pov-container');
-      container.querySelectorAll('.pov-card').forEach(function(card) {
-        var cardVisible = false;
-        card.querySelectorAll('.pov-tab').forEach(function(tab) {
+      var foundLi = -1;
+      _prodTree.forEach(function(l1, li) {
+        if (foundLi >= 0) return;
+        (l1.children || []).forEach(function(l2) {
+          if (foundLi >= 0) return;
+          var key = l1.name + ' > ' + l2.name;
+          var match = _allProducts.some(function(p) {
+            return (p.tree_path || '') === key &&
+              ((p.name || '').toLowerCase().indexOf(q) >= 0 || (p.code || '').toLowerCase().indexOf(q) >= 0 || (p.tags || '').toLowerCase().indexOf(q) >= 0);
+          });
+          if (match) foundLi = li;
+        });
+      });
+      if (foundLi >= 0) {
+        _povSwitchL1(foundLi);
+      }
+      // Apply filter after render
+      setTimeout(function() {
+        var container = document.getElementById('pov-container');
+        container.querySelectorAll('.pov-tab').forEach(function(tab) {
           var l2Id = tab.getAttribute('data-l2');
-          var panel = card.querySelector('[data-l2-panel="' + l2Id + '"]');
+          var panel = container.querySelector('[data-l2-panel="' + l2Id + '"]');
           var l2Visible = false;
           if (panel) {
             panel.querySelectorAll('.pov-l3-chip').forEach(function(chip) {
-              if (chip.textContent.toLowerCase().indexOf(q) >= 0) {
-                chip.classList.remove('hidden'); l2Visible = true; visibleTotal++;
-              } else { chip.classList.add('hidden'); }
+              if (chip.textContent.toLowerCase().indexOf(q) >= 0) { chip.classList.remove('hidden'); l2Visible = true; }
+              else { chip.classList.add('hidden'); }
             });
           }
-          if (l2Visible) {
-            tab.classList.remove('hidden'); cardVisible = true;
-            tab.classList.add('active');
-            if (panel) panel.classList.add('active');
-          } else { tab.classList.add('hidden'); }
+          if (l2Visible) { tab.classList.remove('hidden'); tab.classList.add('active'); if (panel) panel.classList.add('active'); }
+          else { tab.classList.add('hidden'); }
         });
-        card.classList.toggle('hidden', !cardVisible);
-      });
-      document.getElementById('pov-count').textContent = '搜索匹配 ' + visibleTotal + ' 个型号（共 ' + _allProducts.length + ' 个）';
+      }, 100);
     } else {
-      var container = document.getElementById('pov-container');
-      container.querySelectorAll('.pov-card.hidden, .pov-tab.hidden, .pov-l3-chip.hidden').forEach(function(el) { el.classList.remove('hidden'); });
+      _povSwitchL1(0);
     }
   }, 200);
 }
