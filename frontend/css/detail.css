@@ -620,3 +620,21 @@
 
 /* Documents tab sticky header */
 #dsec-docs .table-scroll { max-height: calc(100vh - 300px); }
+
+/* ── Product Block Diagrams ── */
+
+.block-diagram-item {
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+.block-diagram-item:hover {
+  box-shadow: var(--sh-sm);
+  border-color: var(--accent) !important;
+}
+
+.block-diagram-lightbox-overlay {
+  animation: bd-fade-in 0.2s ease;
+}
+@keyframes bd-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

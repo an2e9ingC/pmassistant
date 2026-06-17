@@ -1,12 +1,15 @@
+import os as _os
+
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from backend.database import get_db, to_local_str
-from backend.middleware.auth import get_current_user, require_admin
-from backend.models.local import ProductNote
+from backend.database import get_db, to_local_str, _db_path
+from backend.middleware.auth import get_current_user, require_admin, require_perm
+from backend.models.local import ProductNote, ProductBlockDiagram
 from backend.services import product_service
 
 router = APIRouter(prefix="/api/products", tags=["products"])
@@ -242,3 +245,144 @@ def update_product_document(
     doc.updated_by = user.username
     db.commit()
     return {"code": 0, "data": {"id": doc.id, "status": doc.status}, "message": "ok"}
+
+
+# ── Product Block Diagrams ──
+
+_UPLOAD_DIR = _os.path.join(_os.path.dirname(_db_path), "uploads", "block_diagrams")
+
+
+def _ensure_upload_dir():
+    _os.makedirs(_UPLOAD_DIR, exist_ok=True)
+
+
+@router.get("/{product_id}/block-diagrams", response_model=dict)
+def list_block_diagrams(product_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    """List all block diagram images for a product."""
+    items = (
+        db.query(ProductBlockDiagram)
+        .filter(ProductBlockDiagram.product_id == product_id)
+        .order_by(ProductBlockDiagram.created_at.desc())
+        .all()
+    )
+    return {
+        "code": 0,
+        "data": [
+            {
+                "id": bd.id,
+                "product_id": bd.product_id,
+                "filename": bd.filename,
+                "uploaded_by": bd.uploaded_by,
+                "created_at": to_local_str(bd.created_at),
+            }
+            for bd in items
+        ],
+        "message": "ok",
+    }
+
+
+@router.post("/{product_id}/block-diagrams", response_model=dict)
+def upload_block_diagram(
+    product_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("product_link")),
+):
+    """Upload a block diagram image for a product."""
+    _ensure_upload_dir()
+
+    # Validate file type
+    content_type = file.content_type or ""
+    if not content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="只支持图片文件")
+
+    # Validate extension
+    ext = _os.path.splitext(file.filename or "")[1].lower()
+    allowed = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}
+    if ext not in allowed:
+        raise HTTPException(status_code=400, detail=f"不支持的图片格式: {ext}")
+
+    # Generate unique filename to avoid collisions
+    import uuid
+    unique_name = f"{uuid.uuid4().hex}{ext}"
+    save_path = _os.path.join(_UPLOAD_DIR, unique_name)
+
+    # Write file
+    content = file.file.read()
+    with open(save_path, "wb") as f:
+        f.write(content)
+
+    # Create DB record
+    bd = ProductBlockDiagram(
+        product_id=product_id,
+        filename=file.filename or unique_name,
+        file_path=unique_name,
+        uploaded_by=user.username,
+    )
+    db.add(bd)
+    db.commit()
+    db.refresh(bd)
+
+    return {
+        "code": 0,
+        "data": {
+            "id": bd.id,
+            "product_id": bd.product_id,
+            "filename": bd.filename,
+            "uploaded_by": bd.uploaded_by,
+            "created_at": to_local_str(bd.created_at),
+        },
+        "message": "上传成功",
+    }
+
+
+@router.delete("/{product_id}/block-diagrams/{bd_id}", response_model=dict)
+def delete_block_diagram(
+    product_id: int,
+    bd_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_perm("product_link")),
+):
+    """Delete a block diagram image."""
+    bd = db.query(ProductBlockDiagram).filter(
+        ProductBlockDiagram.id == bd_id,
+        ProductBlockDiagram.product_id == product_id,
+    ).first()
+    if not bd:
+        raise HTTPException(status_code=404, detail="Block diagram not found")
+
+    # Delete the file from disk
+    file_path = _os.path.join(_UPLOAD_DIR, bd.file_path)
+    if _os.path.exists(file_path):
+        _os.remove(file_path)
+
+    db.delete(bd)
+    db.commit()
+    return {"code": 0, "message": "已删除"}
+
+
+@router.get("/block-diagrams/{bd_id}/image", response_model=None)
+def serve_block_diagram_image(bd_id: int, db: Session = Depends(get_db)):
+    """Serve the block diagram image file."""
+    bd = db.query(ProductBlockDiagram).filter(ProductBlockDiagram.id == bd_id).first()
+    if not bd:
+        raise HTTPException(status_code=404, detail="Block diagram not found")
+
+    file_path = _os.path.join(_UPLOAD_DIR, bd.file_path)
+    if not _os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Image file not found")
+
+    # Determine media type
+    ext = _os.path.splitext(bd.file_path)[1].lower()
+    media_types = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+        ".bmp": "image/bmp",
+        ".svg": "image/svg+xml",
+    }
+    media_type = media_types.get(ext, "application/octet-stream")
+
+    return FileResponse(file_path, media_type=media_type, filename=bd.filename)

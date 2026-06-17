@@ -368,6 +368,16 @@ function renderProdInfo(p) {
   html += '<div style="max-height:400px;overflow-y:auto"><div id="prod-notes-list"><div class="loading-spinner" style="padding:20px">加载中...</div></div></div>';
   html += '</div>';
 
+  // Product Block Diagrams
+  var bdCanEdit = _hasProductLinkPerm();
+  html += '<div class="section-hd" style="margin-top:20px"><div class="section-title">产品框图</div>' +
+    (bdCanEdit ? '<button class="btn" style="font-size:11px;padding:3px 10px" onclick="triggerBlockDiagramUpload()">+ 上传框图</button>' +
+    '<input type="file" id="block-diagram-file-input" accept="image/*" style="display:none" onchange="uploadBlockDiagram(this)">' : '') +
+    '</div>';
+  html += '<div class="card" style="padding:0;overflow:hidden" id="prod-block-diagrams-card">';
+  html += '<div id="prod-block-diagrams-list"><div class="loading-spinner" style="padding:20px">加载中...</div></div>';
+  html += '</div>';
+
   document.getElementById('prodsec-info').innerHTML = html;
 
   // Load notes
@@ -376,6 +386,9 @@ function renderProdInfo(p) {
   }).catch(function() {
     renderProductNotes([]);
   });
+
+  // Load block diagrams
+  loadBlockDiagrams();
 }
 
 function renderProdDocs(p) {
@@ -450,6 +463,161 @@ async function deleteProductNote(noteId, el) {
   } catch(e) {
     showToast('删除失败: ' + (e.message || ''), 'error');
   }
+}
+
+// ── Product Block Diagrams ──
+
+function _hasProductLinkPerm() {
+  var user = getCurrentUser();
+  var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+  return perms.indexOf('product_link') !== -1;
+}
+
+function triggerBlockDiagramUpload() {
+  document.getElementById('block-diagram-file-input').click();
+}
+
+async function uploadBlockDiagram(input) {
+  var file = input.files[0];
+  if (!file) return;
+
+  if (!file.type.startsWith('image/')) {
+    showToast('只支持图片文件', 'error');
+    input.value = '';
+    return;
+  }
+
+  var formData = new FormData();
+  formData.append('file', file);
+
+  var token = localStorage.getItem('pma_token');
+  try {
+    var res = await fetch('/api/products/' + _prodDetail.id + '/block-diagrams', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token },
+      body: formData,
+    });
+    var json = await res.json();
+    if (json.code === 0) {
+      showToast('上传成功', 'ok');
+      loadBlockDiagrams();
+    } else {
+      showToast('上传失败: ' + (json.message || json.detail || ''), 'error');
+    }
+  } catch (e) {
+    showToast('上传失败: ' + (e.message || '网络错误'), 'error');
+  }
+  input.value = '';
+}
+
+async function loadBlockDiagrams() {
+  try {
+    var diagrams = await API.get('/products/' + _prodDetail.id + '/block-diagrams');
+    renderBlockDiagrams(diagrams || []);
+  } catch (e) {
+    renderBlockDiagrams([]);
+  }
+}
+
+function renderBlockDiagrams(diagrams) {
+  var el = document.getElementById('prod-block-diagrams-list');
+  if (!el) return;
+  if (!diagrams.length) {
+    el.innerHTML = '<div class="empty-state" style="padding:20px">暂无系统框图</div>';
+    return;
+  }
+  var canEdit = _hasProductLinkPerm();
+  el.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:12px;padding:12px">' +
+    diagrams.map(function(d) {
+      var imgUrl = '/api/products/block-diagrams/' + d.id + '/image';
+      return '<div class="block-diagram-item" style="position:relative;width:200px;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--bg)">' +
+        '<img src="' + imgUrl + '" alt="' + escHtml(d.filename) + '" ' +
+          'onclick="showBlockDiagramLightboxById(' + d.id + ')" ' +
+          'style="width:100%;height:150px;object-fit:cover;cursor:pointer;display:block" ' +
+          'title="点击放大">' +
+        '<div style="padding:6px 8px;font-size:10.5px;color:var(--muted);display:flex;justify-content:space-between;align-items:center">' +
+          '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;margin-right:4px" title="' + escHtml(d.filename) + '">' + escHtml(d.filename) + '</span>' +
+          (canEdit ? '<span style="cursor:pointer;color:var(--danger);flex-shrink:0;font-size:11px" onclick="deleteBlockDiagram(' + d.id + ')" title="删除">✕</span>' : '') +
+        '</div>' +
+        '<div style="padding:0 8px 6px;font-size:10px;color:var(--muted);display:flex;justify-content:space-between">' +
+          '<span>' + escHtml(d.uploaded_by) + '</span>' +
+          '<span>' + escHtml(d.created_at) + '</span>' +
+        '</div>' +
+      '</div>';
+    }).join('') +
+  '</div>';
+}
+
+function deleteBlockDiagram(bdId) {
+  var user = getCurrentUser();
+  if (!user) { showToast('请先登录', 'error'); return; }
+  openDialog('删除框图确认',
+    '<div style="margin-bottom:12px">' +
+      '<div style="font-size:13px;color:var(--fg);margin-bottom:12px">确认删除此系统框图？此操作不可恢复。</div>' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">请输入 <b>' + escHtml(user.username) + '</b> 的登录密码确认：</label>' +
+      '<input type="password" id="bd-del-password" class="search-inp" placeholder="登录密码" style="width:100%;box-sizing:border-box">' +
+      '<div id="bd-del-err" style="font-size:11px;color:var(--danger);margin-top:6px;display:none"></div>' +
+    '</div>',
+    [
+      {text: '取消', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
+      {text: '确认删除', cls: 'btn-danger', onclick: 'confirmDeleteBlockDiagram(' + bdId + ')'},
+    ],
+    {hideClose: true});
+}
+
+async function confirmDeleteBlockDiagram(bdId) {
+  var user = getCurrentUser();
+  var pwInput = document.getElementById('bd-del-password');
+  var errEl = document.getElementById('bd-del-err');
+  var password = (pwInput && pwInput.value) || '';
+  if (!password) {
+    if (errEl) { errEl.textContent = '请输入密码'; errEl.style.display = 'block'; }
+    return;
+  }
+  // Verify password
+  try {
+    var res = await API.post('/auth/login', { username: user.username, password: password });
+    if (!res || !res.access_token) {
+      if (errEl) { errEl.textContent = '密码验证失败'; errEl.style.display = 'block'; }
+      return;
+    }
+  } catch (e) {
+    if (errEl) { errEl.textContent = '密码错误，请重试'; errEl.style.display = 'block'; }
+    return;
+  }
+  // Close dialog
+  document.querySelector('.shared-dialog-overlay') && document.querySelector('.shared-dialog-overlay').remove();
+  // Proceed with deletion
+  try {
+    await API.del('/products/' + _prodDetail.id + '/block-diagrams/' + bdId);
+    showToast('已删除', 'ok');
+    loadBlockDiagrams();
+  } catch (e) {
+    showToast('删除失败: ' + (e.message || ''), 'error');
+  }
+}
+
+function showBlockDiagramLightboxById(bdId) {
+  showBlockDiagramLightbox('/api/products/block-diagrams/' + bdId + '/image');
+}
+
+function showBlockDiagramLightbox(imgUrl) {
+  var overlay = document.createElement('div');
+  overlay.className = 'block-diagram-lightbox-overlay';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:10000;display:flex;align-items:center;justify-content:center;cursor:pointer';
+  overlay.onclick = function(e) {
+    if (e.target === overlay) overlay.remove();
+  };
+  var img = document.createElement('img');
+  img.src = imgUrl;
+  img.style.cssText = 'max-width:92vw;max-height:92vh;object-fit:contain;border-radius:6px;box-shadow:0 8px 40px rgba(0,0,0,0.5)';
+  var closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕';
+  closeBtn.style.cssText = 'position:absolute;top:16px;right:20px;background:none;border:none;color:#fff;font-size:28px;cursor:pointer;opacity:0.7;z-index:1';
+  closeBtn.onclick = function() { overlay.remove(); };
+  overlay.appendChild(closeBtn);
+  overlay.appendChild(img);
+  document.body.appendChild(overlay);
 }
 
 // ── Inline: 产品文档（在基本信息中展示） ──

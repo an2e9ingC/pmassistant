@@ -58,6 +58,19 @@ class ProductNote(Base):
     created_at = Column(DateTime, default=func.now())
 
 
+class ProductBlockDiagram(Base):
+    """Product system block diagram images uploaded by users."""
+
+    __tablename__ = "product_block_diagrams"
+
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, nullable=False, index=True)
+    filename = Column(String(256), nullable=False)
+    file_path = Column(String(512), nullable=False)
+    uploaded_by = Column(String(64), nullable=False, default="")
+    created_at = Column(DateTime, default=func.now())
+
+
 class ProjectNote(Base):
     __tablename__ = "project_notes"
 

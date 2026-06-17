@@ -335,7 +335,7 @@ def _migrate_to_sqlcipher():
 
 
 def init_db():
-    from backend.models.local import LocalUser, Role, UserRole, ProjectNote, PmaSetting, AuditLog, ProjectActivity  # noqa: F401
+    from backend.models.local import LocalUser, Role, UserRole, ProductBlockDiagram, ProductNote, ProjectNote, PmaSetting, AuditLog, ProjectActivity  # noqa: F401
     from backend.models.bug import CachedBug  # noqa: F401
     from backend.models.delivery import DeliveryRecord  # noqa: F401
     from backend.models.document import DocumentTemplate, ProjectDocument, ProductDocTemplate, ProductLine, PmaTag, ProductDocument  # noqa: F401
