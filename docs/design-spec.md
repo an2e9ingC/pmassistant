@@ -496,3 +496,26 @@ var listHtml = tags.map(function(t) {
 **补充规则（2026-06-08）：**
 - 列与列之间增加细微竖线分隔：`th` 和 `td` 添加 `border-right: 1px solid var(--border)`
 - 最后一列不显示右边框：`:last-child { border-right: none }`
+
+## 21. 操作按钮图标规范
+
+**列表/表格中的操作按钮，优先使用图标表示，鼠标悬停时显示操作注释。**
+
+| 操作 | 图标 | `title` 注释 | 示例 |
+|------|------|-------------|------|
+| 编辑 | ✎ | "编辑" | `<button title="编辑">✎</button>` |
+| 删除 | ✕ | "删除" | `<button title="删除" style="color:var(--danger)">✕</button>` |
+| 复制 | 📋 | "复制" | `<button title="复制">📋</button>` |
+| 恢复 | 🔄 | "恢复到此备份" | `<button title="恢复到此备份">🔄</button>` |
+| 上传 | 📤 | "上传" | — |
+| 添加 | ＋ | "添加" | — |
+
+**规则：**
+- 能用图标表示的按钮，**优先使用图标**替代文字
+- 鼠标悬停时通过 `title` 属性显示操作注释（中文）
+- 删除操作配色 `color: var(--danger)`，其他操作保持默认色
+- 图标按钮尺寸 `font-size: 13px; padding: 2px 6px`
+- 按钮之间间距 `margin-right: 4px`
+
+**修改记录：**
+- 2026-06-17：新增图标优先规范，统一 ✎/✕/📋/🔄 图标 + title 注释模式

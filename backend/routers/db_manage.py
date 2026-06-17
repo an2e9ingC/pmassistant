@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/admin/db", tags=["db-manage"])
 
 BACKUP_DIR = Path(_db_path).parent / "backups"
+PERMANENT_BACKUP_DIR = BACKUP_DIR / "permanent"
 
 # Shared with gen-sqlcipher-key.py — keep in sync
 _SQLCIPHER_SALT = b"pma-sqlcipher-salt-v1"
@@ -47,7 +48,8 @@ def _derive_sqlcipher_key(passphrase: str) -> str:
 
 class BackupConfig(BaseModel):
     interval_minutes: int = 0      # 0 = disabled
-    retention_count: int = 5       # max backups to keep
+    retention_count: int = 5       # max rolling backups to keep
+    keep_interval_hours: int = 0   # 0 = never keep; >0 = keep permanent copy every N hours
 
 
 @router.get("/sqlcipher-status", response_model=dict)
@@ -64,16 +66,34 @@ def get_sqlcipher_status(_=Depends(require_admin)):
     }
 
 
+# Migration map: old keep_interval strings → hours
+_KEEP_INTERVAL_MAP = {"none": 0, "daily": 24, "weekly": 168, "monthly": 720}
+
+
+def _parse_keep_hours(db, raw: str) -> int:
+    """Parse keep_interval value, migrating old string values to int hours."""
+    try:
+        return int(raw)
+    except (ValueError, TypeError):
+        hours = _KEEP_INTERVAL_MAP.get(raw, 0)
+        # Auto-migrate: update the setting to the new int format
+        PmaSetting.set(db, "db_backup_keep_interval", str(hours))
+        return hours
+
+
 @router.get("/backup-config", response_model=dict)
 def get_backup_config(_=Depends(require_admin), db: Session = Depends(get_db)):
     """Get auto-backup configuration."""
     interval = PmaSetting.get(db, "db_backup_interval", "0")
     retention = PmaSetting.get(db, "db_backup_retention", "5")
+    keep_raw = PmaSetting.get(db, "db_backup_keep_interval", "0")
+    keep_hours = _parse_keep_hours(db, keep_raw)
     return {
         "code": 0,
         "data": {
             "interval_minutes": int(interval),
             "retention_count": int(retention),
+            "keep_interval_hours": keep_hours,
         },
         "message": "ok",
     }
@@ -84,6 +104,7 @@ def update_backup_config(payload: BackupConfig, _=Depends(require_admin), db: Se
     """Update auto-backup configuration."""
     PmaSetting.set(db, "db_backup_interval", str(max(0, payload.interval_minutes)))
     PmaSetting.set(db, "db_backup_retention", str(max(1, payload.retention_count)))
+    PmaSetting.set(db, "db_backup_keep_interval", str(max(0, payload.keep_interval_hours)))
     return {"code": 0, "message": "备份配置已更新"}
 
 
@@ -174,29 +195,59 @@ async def import_database(
 
 @router.get("/backups", response_model=dict)
 def list_backups(_=Depends(require_admin)):
-    """List existing backup files."""
+    """List existing backup files (rolling + permanent)."""
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    files = sorted(BACKUP_DIR.glob("pma-backup-*.db"), key=lambda p: p.stat().st_mtime, reverse=True)
+    PERMANENT_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+
     items = []
-    for f in files:
+
+    # Rolling backups (excluding before-import/before-restore temp files)
+    rolling_files = sorted(
+        [f for f in BACKUP_DIR.glob("pma-backup-*.db")
+         if "-before-" not in f.name],
+        key=lambda p: p.stat().st_mtime, reverse=True,
+    )
+    for f in rolling_files:
         st = f.stat()
         items.append({
             "name": f.name,
             "size": st.st_size,
             "size_display": _format_size(st.st_size),
             "created_at": datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+            "permanent": False,
         })
+
+    # Permanent backups
+    perm_files = sorted(
+        PERMANENT_BACKUP_DIR.glob("pma-backup-*.db"),
+        key=lambda p: p.stat().st_mtime, reverse=True,
+    )
+    for f in perm_files:
+        st = f.stat()
+        items.append({
+            "name": f.name,
+            "size": st.st_size,
+            "size_display": _format_size(st.st_size),
+            "created_at": datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+            "permanent": True,
+        })
+
     return {"code": 0, "data": items, "message": "ok"}
 
 
 @router.delete("/backups/{name}", response_model=dict)
 def delete_backup(name: str, _=Depends(require_admin), cu=Depends(get_current_user), db: Session = Depends(get_db)):
-    """Delete a specific backup file."""
+    """Delete a specific backup file (rolling or permanent)."""
     # Prevent path traversal
     safe_name = os.path.basename(name)
     if not safe_name.startswith("pma-backup-") or not safe_name.endswith(".db"):
         return {"code": 1, "message": "无效的备份文件名"}
-    file_path = BACKUP_DIR / safe_name
+
+    # Check permanent dir first, then rolling dir
+    PERMANENT_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    file_path = PERMANENT_BACKUP_DIR / safe_name
+    if not file_path.exists():
+        file_path = BACKUP_DIR / safe_name
     if not file_path.exists():
         return {"code": 1, "message": "备份文件不存在"}
     file_path.unlink()
@@ -215,7 +266,12 @@ def restore_backup(
     safe_name = os.path.basename(name)
     if not safe_name.startswith("pma-backup-") or not safe_name.endswith(".db"):
         return {"code": 1, "message": "无效的备份文件名"}
-    backup_path = BACKUP_DIR / safe_name
+
+    # Check permanent dir first, then rolling dir
+    PERMANENT_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    backup_path = PERMANENT_BACKUP_DIR / safe_name
+    if not backup_path.exists():
+        backup_path = BACKUP_DIR / safe_name
     if not backup_path.exists():
         return {"code": 1, "message": "备份文件不存在"}
 
@@ -279,6 +335,8 @@ async def auto_backup_loop():
             try:
                 interval_str = PmaSetting.get(db, "db_backup_interval", "0")
                 retention_str = PmaSetting.get(db, "db_backup_retention", "5")
+                keep_hours_raw = PmaSetting.get(db, "db_backup_keep_interval", "0")
+                keep_hours = _parse_keep_hours(db, keep_hours_raw)
             finally:
                 db.close()
 
@@ -291,24 +349,60 @@ async def auto_backup_loop():
 
             if time.time() - _last_backup_time >= interval * 60:
                 _last_backup_time = time.time()
-                _do_backup(retention)
+                _do_backup(retention, keep_hours)
         except Exception as e:
             logger.error(f"Auto-backup check failed: {e}")
 
 
-def _do_backup(retention: int):
-    """Perform a database backup and clean up old ones."""
+def _do_backup(retention: int, keep_hours: int = 0):
+    """Perform a database backup, save permanent if needed, and clean up old ones."""
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    PERMANENT_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+
     t = datetime.now().strftime("%Y%m%d-%H%M%S")
     dest = BACKUP_DIR / f"pma-backup-{t}.db"
     shutil.copy2(_db_path, dest)
     logger.info(f"Auto-backup created: {dest.name}")
 
-    # Rotate: keep only the most recent N backups
-    files = sorted(BACKUP_DIR.glob("pma-backup-*.db"), key=lambda p: p.stat().st_mtime, reverse=True)
-    for old in files[retention:]:
+    # ── Permanent backup logic ──
+    if keep_hours > 0:
+        _maybe_save_permanent_backup(dest, keep_hours)
+
+    # ── Rotate rolling backups (never touch permanent dir) ──
+    rolling_files = sorted(
+        [f for f in BACKUP_DIR.glob("pma-backup-*.db")
+         if "-before-" not in f.name],
+        key=lambda p: p.stat().st_mtime, reverse=True,
+    )
+    for old in rolling_files[retention:]:
         old.unlink()
         logger.info(f"Auto-backup removed (retention={retention}): {old.name}")
+
+
+def _maybe_save_permanent_backup(src: Path, keep_hours: int):
+    """Save a permanent copy if no permanent backup exists within the last keep_hours.
+
+    Checks the modification time of the most recent permanent backup.
+    If it's newer than keep_hours ago, skip — another auto-backup already
+    saved one within this window.
+    """
+    # Find the most recent permanent backup
+    perm_files = sorted(
+        PERMANENT_BACKUP_DIR.glob("pma-backup-*-keep.db"),
+        key=lambda p: p.stat().st_mtime, reverse=True,
+    )
+    if perm_files:
+        newest_mtime = perm_files[0].stat().st_mtime
+        age_seconds = time.time() - newest_mtime
+        if age_seconds < keep_hours * 3600:
+            return  # Already have a permanent backup within this window
+
+    # Save permanent copy
+    t = datetime.now().strftime("%Y%m%d-%H%M%S")
+    perm_name = f"pma-backup-{t}-keep.db"
+    perm_path = PERMANENT_BACKUP_DIR / perm_name
+    shutil.copy2(src, perm_path)
+    logger.info(f"Permanent backup saved (every {keep_hours}h): {perm_name}")
 
 
 # ── SQLCipher Rekey ──

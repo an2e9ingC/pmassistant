@@ -94,6 +94,7 @@ function renderDbManage() {
   // ── Auto-Backup Config ──
   var interval = _dbBackupConfig ? _dbBackupConfig.interval_minutes : 0;
   var retention = _dbBackupConfig ? _dbBackupConfig.retention_count : 5;
+  var keepHours = (_dbBackupConfig && _dbBackupConfig.keep_interval_hours) ? _dbBackupConfig.keep_interval_hours : 0;
   html += '<div class="config-section">' +
     '<div class="config-section-title">自动备份配置</div>' +
     '<div class="config-fields" style="padding:12px 16px">' +
@@ -103,11 +104,16 @@ function renderDbManage() {
           '<input type="number" id="db-backup-interval" value="' + interval + '" min="0" step="5" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;box-sizing:border-box">' +
         '</label>' +
         '<label style="flex:1;min-width:140px">' +
-          '<span style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">保留备份数量</span>' +
+          '<span style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">滚动备份保留数量</span>' +
           '<input type="number" id="db-backup-retention" value="' + retention + '" min="1" max="100" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;box-sizing:border-box">' +
+        '</label>' +
+        '<label style="flex:1;min-width:140px">' +
+          '<span style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">永久保存间隔（小时，0=关闭）</span>' +
+          '<input type="number" id="db-backup-keep-hours" value="' + keepHours + '" min="0" step="1" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;box-sizing:border-box;height:35px">' +
         '</label>' +
         '<button class="btn btn-primary" onclick="saveBackupConfig()" style="height:35px;">保存配置</button>' +
       '</div>' +
+      '<div style="font-size:10.5px;color:var(--muted);margin-top:6px">永久保存的备份储存在 <code>data/backups/permanent/</code>，滚动清理时不会删除。如设 24 小时，则每 24 小时保留一份永久备份。</div>' +
       '<div id="db-backup-cfg-msg" style="margin-top:8px;font-size:11.5px"></div>' +
     '</div></div>';
 
@@ -124,14 +130,17 @@ function renderDbManage() {
           '<th style="width:50px;text-align:center">序号</th><th>文件名</th><th style="width:90px">大小</th><th style="width:160px">时间</th><th style="width:120px">操作</th>' +
         '</tr></thead><tbody>';
     _dbBackups.forEach(function(b, i) {
-      html += '<tr>' +
+      var isPermanent = b.permanent;
+      html += '<tr' + (isPermanent ? ' style="background:var(--accent-lt)"' : '') + '>' +
         '<td style="text-align:center;font-family:var(--mono);color:var(--muted);font-size:11px">' + (i + 1) + '</td>' +
-        '<td style="font-family:monospace;font-size:11px">' + escHtml(b.name) + '</td>' +
+        '<td style="font-family:monospace;font-size:11px">' + escHtml(b.name) +
+          (isPermanent ? ' <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:var(--success-lt);color:var(--success);font-weight:540">永久</span>' : '') +
+        '</td>' +
         '<td style="font-size:11px">' + escHtml(b.size_display) + '</td>' +
         '<td style="font-size:11px">' + escHtml(b.created_at) + '</td>' +
         '<td style="white-space:nowrap">' +
-          '<button class="btn" style="font-size:10px;padding:3px 8px;margin-right:4px" onclick="restoreBackup(\'' + escHtml(b.name) + '\')" title="恢复到此备份">恢复</button>' +
-          '<button class="btn" style="font-size:10px;padding:3px 8px;color:var(--danger)" onclick="deleteBackup(\'' + escHtml(b.name) + '\')" title="删除此备份">删除</button>' +
+          '<button class="btn" style="font-size:13px;padding:2px 6px;margin-right:4px" onclick="restoreBackup(\'' + escHtml(b.name) + '\')" title="恢复到此备份">🔄</button>' +
+          '<button class="btn" style="font-size:13px;padding:2px 6px;color:var(--danger)" onclick="deleteBackup(\'' + escHtml(b.name) + '\')" title="删除此备份">✕</button>' +
         '</td>' +
       '</tr>';
     });
@@ -281,8 +290,10 @@ async function importDatabase(file) {
 async function saveBackupConfig() {
   var interval = parseInt(document.getElementById('db-backup-interval').value) || 0;
   var retention = parseInt(document.getElementById('db-backup-retention').value) || 5;
+  var keepHours = parseInt(document.getElementById('db-backup-keep-hours').value) || 0;
   if (interval < 0) interval = 0;
   if (retention < 1) retention = 1;
+  if (keepHours < 0) keepHours = 0;
 
   var msgEl = document.getElementById('db-backup-cfg-msg');
   msgEl.textContent = '保存中...';
@@ -292,8 +303,9 @@ async function saveBackupConfig() {
     await API.put('/admin/db/backup-config', {
       interval_minutes: interval,
       retention_count: retention,
+      keep_interval_hours: keepHours,
     });
-    _dbBackupConfig = { interval_minutes: interval, retention_count: retention };
+    _dbBackupConfig = { interval_minutes: interval, retention_count: retention, keep_interval_hours: keepHours };
     msgEl.textContent = '已保存';
     msgEl.style.color = 'var(--success)';
     setTimeout(function() { if (msgEl) msgEl.textContent = ''; }, 2000);
