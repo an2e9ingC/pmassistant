@@ -35,6 +35,10 @@ class CachedProject(Base):
     # Delivery plan (PMA-local, not overwritten by sync)
     planned_delivery_qty = Column(Integer, default=0)
     delivery_note = Column(Text, nullable=True)
+    # PMA-local project background (not overwritten by sync)
+    background = Column(Text, nullable=True)
+    # PMA-local linked projects (comma-separated project IDs, not overwritten by sync)
+    linked_project_ids = Column(Text, nullable=True)
     # Extracted from Zentao project desc
     description = Column(Text, nullable=True)
     tags = Column(Text, nullable=True)  # comma-separated #tags extracted from desc

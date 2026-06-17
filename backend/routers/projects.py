@@ -287,3 +287,61 @@ def get_activities(
         ],
         "message": "ok",
     }
+
+
+class BackgroundUpdate(BaseModel):
+    background: str
+
+
+@router.put("/{project_id}/background", response_model=dict)
+def update_project_background(
+    project_id: int,
+    payload: BackgroundUpdate,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("project_edit")),
+):
+    """Update the PMA-local project background description."""
+    project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    project.background = payload.background
+    db.commit()
+    return {"code": 0, "data": {"background": payload.background}, "message": "ok"}
+
+
+class LinkedProjectsUpdate(BaseModel):
+    ids: list = []  # list of int project IDs
+
+
+@router.get("/{project_id}/linked-projects", response_model=dict)
+def get_linked_projects(project_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    """Get linked/sibling projects for a project."""
+    project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    ids_str = project.linked_project_ids or ""
+    ids = [int(x.strip()) for x in ids_str.split(",") if x.strip()]
+    if not ids:
+        return {"code": 0, "data": [], "message": "ok"}
+    rows = db.query(CachedProject).filter(CachedProject.id.in_(ids)).all()
+    return {
+        "code": 0,
+        "data": [{"id": r.id, "name": r.name, "code": r.code or ""} for r in rows],
+        "message": "ok",
+    }
+
+
+@router.put("/{project_id}/linked-projects", response_model=dict)
+def set_linked_projects(
+    project_id: int,
+    payload: LinkedProjectsUpdate,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("project_edit")),
+):
+    """Set linked/sibling projects."""
+    project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    project.linked_project_ids = ",".join(str(i) for i in payload.ids) if payload.ids else ""
+    db.commit()
+    return {"code": 0, "data": payload.ids, "message": "ok"}

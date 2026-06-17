@@ -123,7 +123,7 @@ def get_project_detail(db: Session, project_id: int) -> Optional[dict]:
     pending_map = _get_pending_doc_counts(db, pids)
     incomplete_task_map = _get_incomplete_task_counts(db, pids)
     stage_anomaly_map = _get_stage_anomaly_counts(db, pids)
-    result = _project_detail(p,
+    result = _project_detail(p, db,
         pending_map.get(p.id, False),
         incomplete_task_map.get(p.id, False),
         stage_anomaly_map.get(p.id, False))
@@ -581,21 +581,23 @@ def _resolve_customer(p: CachedProject) -> str:
     return ""
 
 
-def _project_detail(p: CachedProject, has_pending_docs: bool = False, has_incomplete_tasks: bool = False, has_stage_anomalies: bool = False) -> dict:
-    # Extract description and customer【...】from raw_json
-    desc = ""
-    customer_from_desc = ""
-    if p.raw_json:
+def _project_detail(p: CachedProject, db: Session, has_pending_docs: bool = False, has_incomplete_tasks: bool = False, has_stage_anomalies: bool = False) -> dict:
+    # Use PMA local tags instead of Zentao description
+    tags_str = p.tags or ""
+    tags_list = [t.strip() for t in tags_str.split(",") if t.strip()]
+
+    # Resolve linked project IDs to basic info
+    linked_projects = []
+    if p.linked_project_ids:
         try:
-            import json as _json
-            import re as _re
-            data = _json.loads(p.raw_json)
-            desc = data.get("desc", "") or ""
-            # Strip HTML tags before extracting customer
-            plain = _re.sub(r"<[^>]+>", "", desc)
-            m = _re.search(r"【([A-Z]{2,6})】", plain)
-            if m:
-                customer_from_desc = m.group(1).strip()
+            linked_ids = [int(x.strip()) for x in p.linked_project_ids.split(",") if x.strip()]
+            if linked_ids:
+                linked_rows = db.query(CachedProject).filter(CachedProject.id.in_(linked_ids)).all()
+                linked_map = {r.id: r for r in linked_rows}
+                linked_projects = [
+                    {"id": pid, "name": linked_map[pid].name, "code": linked_map[pid].code or ""}
+                    for pid in linked_ids if pid in linked_map
+                ]
         except Exception:
             pass
 
@@ -617,8 +619,10 @@ def _project_detail(p: CachedProject, has_pending_docs: bool = False, has_incomp
         "pm_account": p.pm_account,
         "customer_name": p.customer_name,
         "alias_name": p.alias_name,
-        "description": desc,
-        "customer_from_desc": customer_from_desc,
+        "background": p.background or "",
+        "tags": tags_str,
+        "tags_list": tags_list,
+        "linked_projects": linked_projects,
         "zentao_url": _zentao_url("project", p.id),
     }
 

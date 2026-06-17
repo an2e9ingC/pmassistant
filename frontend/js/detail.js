@@ -5,6 +5,7 @@
 /* Combo Box */
 
 var _comboCurId = null;
+var _projDetail = null;  // current project detail
 var _comboOpen  = false;
 var _comboProjects = [];
 var _projectProducts = [];
@@ -87,12 +88,12 @@ async function loadProjectDetail(id) {
 
   // Show loading state
   document.getElementById('detail-header').innerHTML = '<div class="loading-spinner">加载项目详情...</div>';
+  document.getElementById('info-content').innerHTML = '<div class="loading-spinner">加载基本信息...</div>';
   document.getElementById('gantt-root').innerHTML = '<div class="loading-spinner">加载甘特图...</div>';
   document.getElementById('stages-tbody').innerHTML = '<tr><td colspan="8"><div class="loading-spinner">加载阶段数据...</div></td></tr>';
   document.getElementById('docs-tbody').innerHTML = '<tr><td colspan="4"><div class="loading-spinner">加载文档数据...</div></td></tr>';
   document.getElementById('delivery-content').innerHTML = '<div class="loading-spinner">加载交付数据...</div>';
   document.getElementById('resources-content').innerHTML = '<div class="loading-spinner">加载资料链接...</div>';
-  document.getElementById('notes-content').innerHTML = '<div class="loading-spinner">加载笔记...</div>';
 
   try {
     // Fetch all data in parallel
@@ -110,6 +111,7 @@ async function loadProjectDetail(id) {
     ]);
 
     var detail = results[0];
+    _projDetail = detail;
     var ganttData = results[1];
     var stages = results[2];
     var docs = results[3];
@@ -126,13 +128,16 @@ async function loadProjectDetail(id) {
     if (customerNames.length) _customerNames = customerNames;
 
     buildDetailHeader(detail);
+    buildDelivery(delivery);
+    buildInfo(detail, notes, delivery);
     buildGantt(ganttData);
     buildStages(stages);
     buildDocs(docs);
-    buildDelivery(delivery);
     buildResources(resources, detail);
-    buildNotes(notes);
     buildMaintenance();
+
+    // Default to info tab when entering project detail
+    switchDTab('info');
   } catch(e) {
     document.getElementById('detail-header').innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '</div>';
   }
@@ -191,6 +196,163 @@ function buildDetailHeader(p) {
       '</svg>' +
       '<div><div class="ring-val">' + progress + '<span style="font-size:14px;font-weight:500">%</span></div><div class="ring-lbl">整体进度</div></div>' +
     '</div>';
+}
+
+/* Info Tab — Basic Info */
+
+function buildInfo(p, notes, delivery) {
+  if (!p) return;
+  var del = delivery || {};
+
+  // Status display mapping
+  var statusMap = {
+    active: { label: '进行中', color: 'var(--success)' },
+    completed: { label: '已完成', color: 'var(--accent)' },
+    blocked: { label: '已阻塞', color: 'var(--danger)' },
+    pending: { label: '待启动', color: 'var(--warn)' },
+    canceled: { label: '已取消', color: 'var(--muted)' },
+    incomplete: { label: '未完成', color: 'var(--muted)' },
+  };
+  var st = statusMap[p.status] || { label: p.status || '—', color: 'var(--muted)' };
+
+  var html = '<div class="card" style="padding:20px">';
+
+  // KPI row 1 — 4 columns
+  html += '<div class="delivery-kpi" style="grid-template-columns:repeat(4, 1fr);margin-bottom:16px">' +
+    '<div class="dkpi"><div class="dkpi-lbl">项目类型</div><div class="dkpi-val" style="font-size:16px;font-weight:600">' +
+      (p.project_type === 'RD'
+        ? '<span style="color:var(--accent);background:var(--accent-lt);padding:2px 10px;border-radius:4px;font-size:13px">研发项目</span>'
+        : p.project_type === 'SC'
+        ? '<span style="color:var(--success);background:var(--success-lt);padding:2px 10px;border-radius:4px;font-size:13px">生产项目</span>'
+        : '<span style="color:var(--muted)">—</span>') +
+    '</div></div>' +
+    '<div class="dkpi"><div class="dkpi-lbl">项目状态</div><div class="dkpi-val" style="font-size:16px;font-weight:600;color:' + st.color + '">' + st.label + '</div></div>' +
+    '<div class="dkpi"><div class="dkpi-lbl">项目经理</div><div class="dkpi-val" style="font-size:16px;font-weight:600">' + escHtml(p.pm_name || '—') + '</div></div>' +
+    '<div class="dkpi"><div class="dkpi-lbl">客户</div><div class="dkpi-val" style="font-size:16px;font-weight:600">' +
+      (p.customer_name ? '<span style="cursor:pointer" onclick="openCustomerByName(\'' + escHtml(p.customer_name) + '\')" title="查看客户详情">' + renderCustomerBadge(p.customer_name) + '</span>' : '<span style="color:var(--muted)">—</span>') +
+    '</div></div>' +
+  '</div>';
+
+  // KPI row 2 — key timeline + delivery + description tags
+  html += '<div class="delivery-kpi" style="grid-template-columns:repeat(4, 1fr);margin-bottom:16px">' +
+    '<div class="dkpi"><div class="dkpi-lbl">计划结束</div><div class="dkpi-val" style="font-size:16px;font-weight:600">' + (p.end ? formatDate(p.end) : '<span style="color:var(--muted)">—</span>') + '</div></div>' +
+    '<div class="dkpi"><div class="dkpi-lbl">交付数量</div><div class="dkpi-val" style="font-size:16px;font-weight:600">' +
+      '<span style="color:var(--success)">' + (del.done || 0) + '</span>' +
+      (del.planned ? '<span style="color:var(--muted);font-weight:400"> / ' + del.planned + '</span>' : '') +
+      (del.remaining > 0 ? '<span style="font-size:10px;color:var(--warn);margin-left:4px">剩' + del.remaining + '</span>' : '') +
+    '</div></div>' +
+    // Description as PMA local tags
+    '<div class="dkpi" style="grid-column:span 2"><div class="dkpi-lbl">项目描述</div><div class="dkpi-val" style="font-size:12px;line-height:1.6">' +
+    (p.tags_list && p.tags_list.length
+      ? p.tags_list.map(function(t, idx) { return '<span class="tag-badge tag-' + (idx % 5) + '" style="font-size:10px;margin-right:2px">#' + escHtml(t) + '</span>'; }).join('')
+      : '<span style="color:var(--muted)">—</span>') +
+    '</div></div>' +
+  '</div>';
+
+  // Linked products + Linked projects — side-by-side cards
+  var products = p.linked_products || [];
+  var linkedProjects = p.linked_projects || [];
+  html += '<div style="display:flex;gap:16px;margin-bottom:16px">' +
+    // Linked products card
+    '<div class="card" style="flex:1;padding:12px 14px;min-width:0">' +
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">关联产品（' + products.length + '）</div>';
+  if (products.length) {
+    html += '<div style="display:flex;flex-wrap:wrap;gap:4px">';
+    products.forEach(function(prod) {
+      html += '<span class="prod-link-chip" style="cursor:pointer;font-size:11px;padding:2px 8px;background:var(--accent-lt);color:var(--accent);border-radius:3px;font-weight:500;white-space:nowrap" onclick="openProductDetail(\'' + prod.id + '\')" title="' + escHtml(prod.code || '') + '">' + escHtml(prod.name) + '</span>';
+    });
+    html += '</div>';
+  } else {
+    html += '<div style="font-size:12px;color:var(--muted);font-style:italic">暂无</div>';
+  }
+  html += '</div>' +
+    // Linked projects card
+    '<div class="card" style="flex:1;padding:12px 14px;min-width:0">' +
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">关联项目（' + linkedProjects.length + '）</div>';
+  if (linkedProjects.length) {
+    html += '<div style="display:flex;flex-wrap:wrap;gap:4px">';
+    linkedProjects.forEach(function(lp) {
+      html += '<span style="cursor:pointer;font-size:11px;padding:2px 8px;background:var(--success-lt);color:var(--success);border-radius:3px;font-weight:500;white-space:nowrap" onclick="loadProjectDetail(' + lp.id + ')" title="' + escHtml(lp.code || '') + '">' + escHtml(lp.name) + '</span>';
+    });
+    html += '</div>';
+  } else {
+    html += '<div style="font-size:12px;color:var(--muted);font-style:italic">暂无</div>';
+  }
+  html += '</div>' +
+  '</div>';
+
+  // Additional info row (minimal)
+  var extras = [];
+  if (p.real_end) extras.push('实际结束: <b style="color:var(--fg)">' + formatDate(p.real_end) + '</b>');
+  if (p.alias_name) extras.push('别名: <b style="color:var(--fg)">' + escHtml(p.alias_name) + '</b>');
+  if (extras.length) {
+    html += '<div style="display:flex;gap:24px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:12px">' +
+      extras.map(function(e) { return '<span>' + e + '</span>'; }).join('') +
+    '</div>';
+  }
+
+  html += '</div>'; // .card
+
+  // Project Background (editable by project_edit permission)
+  var hasEdit = _hasProjectEditPerm();
+  html += '<div class="section-hd" style="margin-top:20px"><div class="section-title">项目背景</div>';
+  if (hasEdit) {
+    html += '<button class="btn" style="font-size:11px;padding:3px 10px" onclick="editProjectBackground()">编辑</button>';
+  }
+  html += '</div>';
+  html += '<div class="card" style="padding:12px 16px;min-height:40px" id="proj-background-content">';
+  html += (p.background ? '<div style="font-size:12.5px;line-height:1.7;white-space:pre-wrap">' + escHtml(p.background) + '</div>' : '<div style="color:var(--muted);font-size:12px;font-style:italic">暂无项目背景说明</div>');
+  html += '</div>';
+
+  // Notes section
+  html += '<div class="section-hd" style="margin-top:20px"><div class="section-title">项目笔记</div>' +
+    '<button class="btn" style="font-size:11px;padding:3px 10px" onclick="openNoteDialog()">+ 添加笔记</button></div>';
+  html += '<div class="card" style="padding:0;overflow:hidden">';
+  html += '<div style="max-height:400px;overflow-y:auto"><div id="notes-content"></div></div>';
+  html += '</div>';
+
+  document.getElementById('info-content').innerHTML = html;
+
+  // Populate notes
+  buildNotes(notes || []);
+}
+
+function _hasProjectEditPerm() {
+  var user = getCurrentUser();
+  var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+  return perms.indexOf('project_edit') !== -1 || (user && user.role === 'admin');
+}
+
+function editProjectBackground() {
+  if (!_comboCurId || !_projDetail) return;
+  var currentBg = (_projDetail && _projDetail.background) ? _projDetail.background : '';
+  openDialog('编辑项目背景 — ' + escHtml(_projDetail.name || ''),
+    '<div style="margin-bottom:12px">' +
+      '<textarea id="proj-bg-input" class="search-inp" rows="6" placeholder="输入项目背景说明..." style="width:100%;box-sizing:border-box;resize:vertical;font-size:13px">' + escHtml(currentBg) + '</textarea>' +
+    '</div>',
+    [
+      {text: '取消', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
+      {text: '保存', cls: 'btn-primary', onclick: 'saveProjectBackground()'},
+    ],
+    {hideClose: true});
+}
+
+async function saveProjectBackground() {
+  var input = document.getElementById('proj-bg-input');
+  var bg = (input && input.value) ? input.value : '';
+  document.querySelector('.shared-dialog-overlay').remove();
+  try {
+    await API.put('/projects/' + _comboCurId + '/background', { background: bg });
+    _projDetail.background = bg;
+    showToast('已保存', 'ok');
+    // Refresh the background display
+    var el = document.getElementById('proj-background-content');
+    if (el) {
+      el.innerHTML = bg ? '<div style="font-size:12.5px;line-height:1.7;white-space:pre-wrap">' + escHtml(bg) + '</div>' : '<div style="color:var(--muted);font-size:12px;font-style:italic">暂无项目背景说明</div>';
+    }
+  } catch(e) {
+    showToast('保存失败: ' + (e.message || '未知错误'), 'error');
+  }
 }
 
 /* Gantt Chart */
@@ -1395,7 +1557,7 @@ function switchDTab(id, el) {
     var tab = document.querySelector('.dtab[onclick*="' + id + '"]');
     if (tab) tab.classList.add('active');
   }
-  // Refresh maintenance tab content when switching to it
+  // Refresh tab content when switching to it
   if (id === 'maintenance') buildMaintenance();
   if (id === 'activities') loadActivities();
 }
