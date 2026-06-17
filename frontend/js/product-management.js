@@ -277,8 +277,8 @@ function _pmRenderL1Node(l1, index) {
   html += '<span class="dt-tree-label">' + escHtml(l1.name) + '</span>';
   if (_pmIsAdmin) {
     html += '<span class="dt-tree-acts">' +
-      '<button class="btn" style="font-size:10px;padding:1px 5px" onclick="event.stopPropagation();_pmShowRenameNodeDialog(' + l1.id + ')" title="重命名">✎</button>' +
-      '<button class="btn" style="font-size:10px;padding:1px 5px;color:var(--danger)" onclick="event.stopPropagation();_pmDeleteNode(' + l1.id + ')" title="删除">✕</button>' +
+      iconBtn('✎', '重命名', 'event.stopPropagation();_pmShowRenameNodeDialog(' + l1.id + ')') +
+      iconBtn('✕', '删除', 'event.stopPropagation();_pmDeleteNode(' + l1.id + ')', true) +
     '</span>';
   }
   html += '</div>';
@@ -304,8 +304,8 @@ function _pmRenderL1Node(l1, index) {
       }
       if (_pmIsAdmin) {
         html += '<span class="dt-tree-acts">' +
-          '<button class="btn" style="font-size:10px;padding:1px 5px" onclick="event.stopPropagation();_pmShowRenameNodeDialog(' + l2.id + ')" title="重命名">✎</button>' +
-          '<button class="btn" style="font-size:10px;padding:1px 5px;color:var(--danger)" onclick="event.stopPropagation();_pmDeleteNode(' + l2.id + ')" title="删除">✕</button>' +
+          iconBtn('✎', '重命名', 'event.stopPropagation();_pmShowRenameNodeDialog(' + l2.id + ')') +
+          iconBtn('✕', '删除', 'event.stopPropagation();_pmDeleteNode(' + l2.id + ')', true) +
         '</span>';
       }
       html += '</div>';

@@ -371,18 +371,19 @@ function renderProdInfo(p) {
   html += '</div>';
 
   // Product Notes
-  html += '<div class="section-hd" style="margin-top:20px"><div class="section-title">产品笔记</div>' +
-    '<button class="btn" style="font-size:11px;padding:3px 10px" onclick="showAddProductNoteDialog()">+ 添加笔记</button></div>';
+  html += '<div style="margin-top:20px">' + sectionHeader('产品笔记', null, '+ 添加笔记', 'showAddProductNoteDialog()') + '</div>';
   html += '<div class="card" style="padding:0;overflow:hidden" id="prod-notes-card">';
   html += '<div style="max-height:400px;overflow-y:auto"><div id="prod-notes-list"><div class="loading-spinner" style="padding:20px">加载中...</div></div></div>';
   html += '</div>';
 
   // Product Block Diagrams
   var bdCanEdit = _hasProductLinkPerm();
-  html += '<div class="section-hd" style="margin-top:20px"><div class="section-title">产品框图</div>' +
-    (bdCanEdit ? '<button class="btn" style="font-size:11px;padding:3px 10px" onclick="triggerBlockDiagramUpload()">+ 上传框图</button>' +
-    '<input type="file" id="block-diagram-file-input" accept="image/*" style="display:none" onchange="uploadBlockDiagram(this)">' : '') +
-    '</div>';
+  if (bdCanEdit) {
+    html += '<div style="margin-top:20px">' + sectionHeader('产品框图', null, '+ 上传框图', 'triggerBlockDiagramUpload()') + '</div>';
+    html += '<input type="file" id="block-diagram-file-input" accept="image/*" style="display:none" onchange="uploadBlockDiagram(this)">';
+  } else {
+    html += '<div class="section-hd" style="margin-top:20px"><div class="section-title">产品框图</div></div>';
+  }
   html += '<div class="card" style="padding:0;overflow:hidden" id="prod-block-diagrams-card">';
   html += '<div id="prod-block-diagrams-list"><div class="loading-spinner" style="padding:20px">加载中...</div></div>';
   html += '</div>';
@@ -702,7 +703,7 @@ function _renderProdDocsInline(docs) {
         '<td style="font-size:12px;color:var(--muted);' + cellStyle + '">' + escHtml(d.uploaded_by || '—') + '</td>' +
         '<td style="font-size:11px;color:var(--muted);white-space:nowrap;' + cellStyle + '">' + escHtml(d.uploaded_at || '—') + '</td>' +
         '<td style="white-space:nowrap;text-align:center;' + cellStyle + '">' +
-          '<button class="btn" style="font-size:12px;padding:2px 6px" onclick="showToast(\'暂不支持\',\'info\')" title="预览">👁</button>' +
+          iconBtn('👁', '预览', 'showToast(\'暂不支持\',\'info\')') +
           '<button class="btn" style="font-size:12px;padding:2px 6px;margin-left:2px" onclick="showUploadDocDialog(' + d.id + ')" title="上传文档">📤</button>' +
         '</td>' +
       '</tr>';
@@ -846,9 +847,11 @@ function renderProdMaintenance(p) {
 
   // Associated projects table
   html += '<div class="card" style="padding:0;overflow:hidden;margin-bottom:16px">';
-  html += '<div class="section-hd" style="padding:12px 16px"><div class="section-title">关联项目 (' + projects.length + ')</div>' +
-    (canEdit ? '<button class="btn btn-primary" style="font-size:11px;padding:4px 10px" onclick="showProdLinkProjectsDialog()">+ 关联项目</button>' : '') +
-  '</div>';
+  if (canEdit) {
+    html += '<div style="padding:12px 16px 0">' + sectionHeader('关联项目', projects.length, '+ 关联项目', 'showProdLinkProjectsDialog()') + '</div>';
+  } else {
+    html += '<div style="padding:12px 16px 0"><div class="section-hd"><div class="section-title">关联项目 (' + projects.length + ')</div></div></div>';
+  }
   if (projects.length) {
     html += '<div class="table-scroll" style="max-height:400px"><table class="stage-table"><thead><tr>' +
       '<th>编号</th><th>项目名</th><th>客户</th><th>类型</th><th>状态</th><th>进度</th><th>计划完成</th>' +
@@ -875,9 +878,11 @@ function renderProdMaintenance(p) {
   // Customer info
   var customers = p.customers_from_desc || [];
   html += '<div class="card" style="padding:16px;margin-bottom:16px">';
-  html += '<div class="section-hd"><div class="section-title">关联客户 (' + customers.length + ')</div>' +
-    (canEdit ? '<button class="btn btn-primary" style="font-size:11px;padding:4px 10px" onclick="showProdCustomersDialog()">+ 关联客户</button>' : '') +
-  '</div>';
+  if (canEdit) {
+    html += sectionHeader('关联客户', customers.length, '+ 关联客户', 'showProdCustomersDialog()');
+  } else {
+    html += '<div class="section-hd"><div class="section-title">关联客户 (' + customers.length + ')</div></div>';
+  }
   if (customers.length) {
     html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">';
     customers.forEach(function(c) {
@@ -892,9 +897,12 @@ function renderProdMaintenance(p) {
   // Tags
   var tagsList = p.tags_list || [];
   html += '<div class="card" style="padding:16px;margin-bottom:16px">';
-  html += '<div class="section-hd"><div class="section-title">产品标签 (' + (tagsList[0] && tagsList[0] !== '' ? tagsList.filter(function(t){return t!=='';}).length : 0) + ')</div>' +
-    (canEdit ? '<button class="btn btn-primary" style="font-size:11px;padding:4px 10px" onclick="showProdTagsDialog()">+ 管理标签</button>' : '') +
-  '</div>';
+  var activeTagCount = tagsList[0] && tagsList[0] !== '' ? tagsList.filter(function(t){return t!=='';}).length : 0;
+  if (canEdit) {
+    html += sectionHeader('产品标签', activeTagCount, '+ 管理标签', 'showProdTagsDialog()');
+  } else {
+    html += '<div class="section-hd"><div class="section-title">产品标签 (' + activeTagCount + ')</div></div>';
+  }
   if (tagsList.length > 0 && tagsList[0] !== '') {
     html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">';
     tagsList.forEach(function(t) {

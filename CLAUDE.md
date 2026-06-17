@@ -356,7 +356,52 @@ Co-Authored-By: <model-name> / <tool-name>
 
 ---
 
-## 8. Bug 分析流程
+## 8. 模块化 UI 组件规范
+
+### 8.1 核心理念
+
+**重复的内联样式和 HTML 字符串拼接必须收敛到 CSS class + JS 工厂函数。** 修改一个工厂函数，所有使用该模式的组件自动适配。
+
+### 8.2 CSS Class（`frontend/css/tokens.css`）
+
+在 tokens.css 中定义标准尺寸 class，**禁止**在 JS 或 HTML 中用内联 style 覆盖：
+
+| Class | 用途 | 替代的内联样式 |
+|-------|------|-------------|
+| `.btn-sm` | section-hd 操作按钮 | `style="font-size:11px;padding:3px 10px"` |
+| `.btn-xs` | 表格行内按钮 | `style="font-size:10px;padding:2px 6px"` |
+| `.btn-icon` | 纯图标按钮 | `style="font-size:13px;padding:2px 6px"`（自动间距 4px，末位 0） |
+| `.card-pad` | 标准 padding 卡片 | `style="padding:16px"` |
+| `.card-clip` | 溢出裁剪卡片 | `style="padding:0;overflow:hidden"` |
+
+全局已设置 `*, *::before, *::after { box-sizing: border-box; }`，无需在每个元素上单独写。
+
+### 8.3 JS 工厂函数（`frontend/js/components.js`）
+
+**新增 UI 模式前，先检查是否有现成工厂函数可用。** 如需新工厂函数，先在 components.js 定义，再调用。
+
+| 函数 | 签名 | 用途 |
+|------|------|------|
+| `sectionHeader(title, count, btnLabel, onclick)` | 渲染 section-hd 标题行 | 区块标题 + 计数 + 按钮 |
+| `iconBtn(icon, title, onclick, danger)` | 渲染图标按钮 | 表格操作列 |
+| `linkChip(name, onclick, title, bgColor, fgColor)` | 渲染可点击关联 chip | 关联产品/项目/客户 |
+| `chipTag(name, colorClass, onclick, removable, removeOnclick)` | 渲染标签 chip | 标签 badge |
+| `openDialog(title, bodyHtml, buttons, opts)` | 渲染对话框 | 所有弹窗 |
+| `renderPill(status)` | 渲染状态圆点 | 项目/产品状态 |
+| `renderTypeBadge(type)` | 渲染类型 badge | 研发/生产项目 |
+| `renderProgressBar(percent, status)` | 渲染进度条 | 项目进度 |
+
+### 8.4 开发检查点
+
+每次开发涉及 UI 组件时，检查：
+1. 按钮是否使用了 `.btn-sm` / `.btn-xs` / `.btn-icon` 而非内联 style？
+2. section-hd 标题行是否使用了 `sectionHeader()` 而非手动拼接？
+3. 关联 chip 是否使用了 `linkChip()` 而非 `<span style="...">` 内联？
+4. 变化的只是颜色时，是否可以用 factory 参数区分而非创建新分支？
+
+---
+
+## 9. Bug 分析流程（原 §8）
 
 1. 先查系统日志：`tail -50 data/pma-$PORT.log`
 2. 有堆栈 → 分析修复
@@ -366,7 +411,7 @@ Co-Authored-By: <model-name> / <tool-name>
 
 ---
 
-## 9. 工作流速查
+## 10. 工作流速查
 
 | 用户指令 | AI 执行 |
 |---------|--------|

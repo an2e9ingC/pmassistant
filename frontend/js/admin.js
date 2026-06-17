@@ -263,12 +263,12 @@ function renderRoleTable() {
       '<td style="font-family:var(--mono);font-size:12px;font-weight:500">' + escHtml(r.key) + '</td>' +
       '<td style="font-size:13px">' + escHtml(r.label) + '</td>' +
       '<td>' + permBadges + '</td>' +
-      '<td><button class="btn" style="font-size:11px;padding:3px 10px"' +
+      '<td><button class="btn btn-sm"' +
         ' onclick="showRoleUsers(' + r.id + ',\'' + escHtml(r.label) + '\')">' + userCount + ' 人</button></td>' +
       '<td style="white-space:nowrap">' +
         (r.key === 'admin' ? '<span style="font-size:11px;color:var(--muted)">系统内置</span>' :
-          '<button class="btn" onclick="openRoleCreateDialog(' + r.id + ')" style="font-size:11px;padding:3px 10px;margin-right:4px">编辑</button>' +
-          '<button class="btn" onclick="deleteRole(' + r.id + ',\'' + escHtml(r.label) + '\')" style="font-size:11px;padding:3px 10px;color:var(--danger)">删除</button>') +
+          '<button class="btn btn-sm" onclick="openRoleCreateDialog(' + r.id + ')" style="margin-right:4px">编辑</button>' +
+          '<button class="btn btn-sm" onclick="deleteRole(' + r.id + ',\'' + escHtml(r.label) + '\')" style="color:var(--danger)">删除</button>') +
       '</td>' +
     '</tr>';
   }).join('');
@@ -329,8 +329,8 @@ function showRoleUsers(roleId, roleLabel) {
   var bodyHtml = '<div style="padding:8px 0">' +
     '<div style="margin-bottom:6px;font-size:12px;color:var(--muted)">角色 <b>' + escHtml(roleLabel) + '</b> — 点击用户标签选择，已选 <span id="ru-count">' + Object.keys(_ruSelected).length + '</span> 人</div>' +
     '<div style="display:flex;gap:6px;margin-bottom:8px">' +
-      '<button class="btn" style="font-size:11px;padding:4px 10px" onclick="ruSelectAll()">全选</button>' +
-      '<button class="btn" style="font-size:11px;padding:4px 10px;color:var(--danger)" onclick="ruClearAll()">清空</button>' +
+      '<button class="btn btn-sm" onclick="ruSelectAll()">全选</button>' +
+      '<button class="btn btn-sm" style="color:var(--danger)" onclick="ruClearAll()">清空</button>' +
     '</div>' +
     '<div id="ru-all-tags" style="max-height:300px;overflow-y:auto;line-height:2">' + allTags + '</div>' +
   '</div>';
@@ -453,7 +453,7 @@ function openUserCreateDialog() {
       '<div style="margin-bottom:10px;font-size:12px;color:var(--muted)">每行填写一个用户，密码留空默认为 123456</div>' +
       '<div id="ud-rows" style="flex:1;overflow-y:auto;min-height:240px"></div>' +
       '<div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-shrink:0">' +
-        '<button class="btn" onclick="addUdRow()" style="font-size:11px;padding:4px 12px">+ 添加行</button>' +
+        '<button class="btn btn-sm" onclick="addUdRow()" style="padding-left:12px;padding-right:12px">+ 添加行</button>' +
       '</div>' +
       '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:14px;flex-shrink:0">' +
         '<span id="ud-msg" style="font-size:11px"></span>' +
@@ -837,7 +837,7 @@ function renderPermTable() {
           }).join('') : '<span style="color:var(--muted)">—</span>') +
         '</div>' +
       '</td>' +
-      '<td><button class="btn" style="font-size:10px;padding:2px 10px" onclick="openRoleMemberDialog(' + r.id + ',\'' + escHtml(r.label).replace(/'/g, "\\'") + '\')">管理成员</button></td>' +
+      '<td><button class="btn btn-xs" onclick="openRoleMemberDialog(' + r.id + ',\'' + escHtml(r.label).replace(/'/g, "\\'") + '\')">管理成员</button></td>' +
       '<td style="font-size:11px;color:var(--muted)">' + escHtml(r.description || '') + '</td>' +
     '</tr>';
   }).join('');

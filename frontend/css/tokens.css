@@ -45,3 +45,45 @@
   --sh:          0 1px 3px rgba(0,0,0,0.35), 0 1px 2px rgba(0,0,0,0.3);
   --sh-md:       0 4px 14px rgba(0,0,0,0.45);
 }
+
+/* ═══════════════════════════════════════════════════
+   GLOBAL RESET
+═══════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; }
+
+/* ═══════════════════════════════════════════════════
+   STANDARD BUTTON SIZES
+   Use these classes instead of inline style="font-size:xx;padding:xx"
+   to make all buttons consistently sized.
+   ───────────────────────────────────────────────────
+   .btn-sm   — section header action buttons
+   .btn-xs   — table row inline buttons
+   .btn-icon — icon-only buttons (edit/delete/copy)
+═══════════════════════════════════════════════════ */
+.btn-sm   { font-size: 11px; padding: 3px 10px; }
+.btn-xs   { font-size: 10px; padding: 2px 6px;  }
+.btn-icon { font-size: 13px; padding: 2px 6px; line-height: 1; margin-right: 4px; }
+.btn-icon:last-child { margin-right: 0; }
+
+/* ═══════════════════════════════════════════════════
+   BUTTON SIZE USAGE GUIDE
+   ───────────────────────────────────────────────────
+   btn-sm    section-hd actions, dialog footers
+   btn-xs    table-row inline buttons, compact toolbars
+   btn-icon  icon-only buttons in table operation columns
+═══════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════
+   STANDARD INPUT SIZE
+   Use .search-inp for consistent input styling.
+   Already defined in theme.css — this is a reminder.
+═══════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════
+   STANDARD CARD VARIANTS
+   Use .card for default card styling (already in theme.css).
+   .card-pad — card with standard padding
+   .card-clip — card with overflow:hidden (for tables/lists)
+═══════════════════════════════════════════════════ */
+.card-pad  { padding: 16px; }
+.card-clip { padding: 0; overflow: hidden; }

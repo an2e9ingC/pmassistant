@@ -46,6 +46,70 @@ function renderDeliverablesList(dels) {
 }
 
 /* ═══════════════════════════════════════════════════
+   FACTORY FUNCTIONS — Standardised HTML builders
+   Prefer these over raw string concatenation for
+   repeated UI patterns. See CLAUDE.md §10 for rules.
+═══════════════════════════════════════════════════ */
+
+/**
+ * sectionHeader(title, count, btnLabel, onclick, id)
+ * Renders a standard section-hd row:
+ *   [Title (count)]              [Blue action button]
+ *   - title + btnLabel are required; count can be null for no count display
+ *   - btnLabel includes the verb + noun, e.g. "编辑项目背景"
+ *   - onclick is the raw JS to execute (usually a function call)
+ *   - id (optional): sets the id attribute on the section-hd div.
+ *     Used with outerHTML to replace existing static section-hd elements
+ *     (e.g. project maintenance tab); omit for dynamically generated sections.
+ */
+function sectionHeader(title, count, btnLabel, onclick, id) {
+  var idAttr = id ? ' id="' + id + '"' : '';
+  return '<div class="section-hd"' + idAttr + '>' +
+    '<div class="section-title">' + title + (typeof count === 'number' ? ' (' + count + ')' : '') + '</div>' +
+    '<button class="btn btn-primary btn-sm" onclick="' + onclick + '">' + btnLabel + '</button>' +
+  '</div>';
+}
+
+/**
+ * iconBtn(icon, title, onclick, danger)
+ * Renders an icon-only button with tooltip.
+ *   - icon: Unicode character (e.g. '✎', '✕', '📋', '🔄')
+ *   - danger: if true, adds var(--danger) color
+ */
+function iconBtn(icon, title, onclick, danger) {
+  return '<button class="btn btn-icon" style="' + (danger ? 'color:var(--danger)' : '') + '" ' +
+    'onclick="' + onclick + '" title="' + title + '">' + icon + '</button>';
+}
+
+/**
+ * chipTag(name, colorClass, onclick, removable)
+ * Renders a small chip/tag badge.
+ *   - colorClass: e.g. 'tag-0', 'tag-1' (predefined tag colors)
+ *   - onclick: if provided, chip is clickable
+ *   - removable: if true, shows × to remove
+ */
+function chipTag(name, colorClass, onclick, removable, removeOnclick) {
+  return '<span class="tag-badge ' + (colorClass || '') + '"' +
+    (onclick ? ' style="cursor:pointer" onclick="' + onclick + '"' : '') +
+    '>#' + escHtml(name) +
+    (removable ? ' <span onclick="' + (removeOnclick || '') + '" style="cursor:pointer;opacity:0.5;font-size:14px;line-height:1" title="移除">&times;</span>' : '') +
+    '</span>';
+}
+
+/**
+ * linkChip(name, onclick, title, color)
+ * Renders a clickable chip for linked entities (products/projects/customers).
+ *   - color: CSS var string, defaults to accent
+ */
+function linkChip(name, onclick, title, bgColor, fgColor) {
+  var bg = bgColor || 'var(--accent-lt)';
+  var fg = fgColor || 'var(--accent)';
+  return '<span style="cursor:pointer;background:' + bg + ';color:' + fg +
+    ';padding:2px 8px;border-radius:3px;font-size:11px;font-weight:500;white-space:nowrap"' +
+    ' onclick="' + onclick + '" title="' + (title || '') + '">' + escHtml(name) + '</span>';
+}
+
+/* ═══════════════════════════════════════════════════
    SHARED DIALOG UTILITY
 ═══════════════════════════════════════════════════ */
 

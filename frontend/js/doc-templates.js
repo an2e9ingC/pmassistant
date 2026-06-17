@@ -158,8 +158,8 @@ function renderTemplatesPage() {
       '<span style="flex:1">' + escHtml(st) + '</span>' +
       '<span class="dt-stage-count">' + count + '</span>' +
       (canEdit ? '<span class="dt-stage-acts">' +
-        '<button class="btn" style="font-size:10px;padding:1px 5px" onclick="event.stopPropagation();showRenameStageDialog(\'' + escHtml(st) + '\')" title="重命名">✎</button>' +
-        '<button class="btn" style="font-size:10px;padding:1px 5px;color:var(--danger)" onclick="event.stopPropagation();deleteStageType(\'' + escHtml(st) + '\')" title="删除">✕</button>' +
+        iconBtn('✎', '重命名', 'event.stopPropagation();showRenameStageDialog(\'' + escHtml(st) + '\')') +
+        iconBtn('✕', '删除', 'event.stopPropagation();deleteStageType(\'' + escHtml(st) + '\')', true) +
       '</span>' : '') +
     '</div>';
   }).join('') +
@@ -169,13 +169,13 @@ function renderTemplatesPage() {
   var pendingCount = _pendingOps.length;
   var saveBtnHtml = '';
   if (canEdit && pendingCount > 0) {
-    saveBtnHtml = '<button class="btn btn-primary" style="font-size:11px;padding:4px 14px;margin-left:8px" onclick="saveAllChanges()">保存配置 (' + pendingCount + ')</button>' +
-      '<button class="btn" style="font-size:11px;padding:4px 10px;margin-left:4px;color:var(--warn);border-color:var(--warn)" onclick="discardChanges()">放弃</button>';
+    saveBtnHtml = '<button class="btn btn-primary btn-sm" style="padding-left:14px;padding-right:14px;margin-left:8px" onclick="saveAllChanges()">保存配置 (' + pendingCount + ')</button>' +
+      '<button class="btn btn-sm" style="margin-left:4px;color:var(--warn);border-color:var(--warn)" onclick="discardChanges()">放弃</button>';
   } else if (canEdit && pendingCount === 0) {
     saveBtnHtml = '<span style="font-size:11px;color:var(--muted);margin-left:8px"><span style="color:var(--muted)">✓ 已保存</span></span>';
   }
   var syncAllHtml = canEdit
-    ? '<button class="btn" style="font-size:11px;padding:4px 10px;margin-left:8px;color:var(--accent);border-color:var(--accent)" onclick="syncAllProjects()" title="将当前模板应用到全部项目的文档清单">↻ 应用到全部项目</button>'
+    ? '<button class="btn btn-sm" style="margin-left:8px;color:var(--accent);border-color:var(--accent)" onclick="syncAllProjects()" title="将当前模板应用到全部项目的文档清单">↻ 应用到全部项目</button>'
     : '';
   var rightHtml = '<div class="dt-right">' +
     '<div class="dt-right-head">' +
@@ -184,7 +184,7 @@ function renderTemplatesPage() {
         saveBtnHtml +
         syncAllHtml +
       '</div>' +
-      (canEdit ? '<button class="btn" style="font-size:11px;padding:4px 12px" onclick="showAddTemplateForm()">+ 添加文档</button>' : '') +
+      (canEdit ? '<button class="btn btn-sm" onclick="showAddTemplateForm()">+ 添加文档</button>' : '') +
     '</div>';
 
   if (docs.length) {
@@ -215,9 +215,9 @@ function renderTemplatesPage() {
         '<td style="font-size:12px;color:var(--muted)">' + escHtml(d.description || '') + '</td>' +
         (canEdit
           ? '<td style="white-space:nowrap;text-align:center" ondragover="event.stopPropagation()" ondrop="event.stopPropagation()">' +
-              '<button class="btn" style="font-size:12px;padding:2px 6px;margin-right:2px" onclick="copyTemplate(' + d.id + ')" title="复制">📋</button>' +
-              '<button class="btn" style="font-size:12px;padding:2px 6px;margin-right:2px" onclick="showEditTemplateForm(' + d.id + ')" title="编辑">✎</button>' +
-              '<button class="btn" style="font-size:12px;padding:2px 6px;color:var(--danger)" onclick="deleteTemplate(' + d.id + ')" title="删除">✕</button>' +
+              iconBtn('📋', '复制', 'copyTemplate(' + d.id + ')') +
+              iconBtn('✎', '编辑', 'showEditTemplateForm(' + d.id + ')') +
+              iconBtn('✕', '删除', 'deleteTemplate(' + d.id + ')', true) +
             '</td>'
           : '') +
       '</tr>';
@@ -823,8 +823,8 @@ function renderProductTreePage() {
   var pendingCount = _productPendingOps.length;
   var saveBtnHtml = '';
   if (canEdit && pendingCount > 0) {
-    saveBtnHtml = '<button class="btn btn-primary" style="font-size:11px;padding:4px 14px;margin-left:8px" onclick="saveProductChanges()">保存配置 (' + pendingCount + ')</button>' +
-      '<button class="btn" style="font-size:11px;padding:4px 10px;margin-left:4px;color:var(--warn);border-color:var(--warn)" onclick="discardProductChanges()">放弃</button>';
+    saveBtnHtml = '<button class="btn btn-primary btn-sm" style="padding-left:14px;padding-right:14px;margin-left:8px" onclick="saveProductChanges()">保存配置 (' + pendingCount + ')</button>' +
+      '<button class="btn btn-sm" style="margin-left:4px;color:var(--warn);border-color:var(--warn)" onclick="discardProductChanges()">放弃</button>';
   } else if (canEdit && pendingCount === 0 && _productTemplates.length >= 0 && _selectedNodeId) {
     // Only show "已保存" when we have loaded a node
     saveBtnHtml = '<span style="font-size:11px;color:var(--muted);margin-left:8px">✓ 已保存</span>';
@@ -837,8 +837,8 @@ function renderProductTreePage() {
   rightHtml += '</div>';
   if (canEdit && isL2) {
     rightHtml += '<span style="display:flex;gap:4px">' +
-      '<button class="btn btn-primary" style="font-size:11px;padding:4px 12px" onclick="showAddProductTemplateForm()">+ 添加文档</button>' +
-      '<button class="btn" style="font-size:11px;padding:4px 12px;color:var(--accent);border-color:var(--accent)" onclick="showImportTemplatesDialog()">导入模板</button>' +
+      '<button class="btn btn-primary btn-sm" onclick="showAddProductTemplateForm()">+ 添加文档</button>' +
+      '<button class="btn btn-sm" style="color:var(--accent);border-color:var(--accent)" onclick="showImportTemplatesDialog()">导入模板</button>' +
     '</span>';
   }
   rightHtml += '</div>';
@@ -899,9 +899,9 @@ function renderProductTreePage() {
             : '—') + '</td>' +
           '<td style="font-size:12px;color:var(--muted)">' + escHtml(d.description || '') + '</td>' +
           (canEdit ? '<td style="white-space:nowrap;text-align:center" ondragover="event.stopPropagation()" ondrop="event.stopPropagation()">' +
-            '<button class="btn" style="font-size:12px;padding:2px 6px;margin-right:2px" onclick="copyProductTemplate(' + d.id + ')" title="复制">📋</button>' +
-            '<button class="btn" style="font-size:12px;padding:2px 6px;margin-right:2px" onclick="showEditProductTemplateForm(' + d.id + ')" title="编辑">✎</button>' +
-            '<button class="btn" style="font-size:12px;padding:2px 6px;color:var(--danger)" onclick="deleteProductTemplate(' + d.id + ')" title="删除">✕</button>' +
+            iconBtn('📋', '复制', 'copyProductTemplate(' + d.id + ')') +
+            iconBtn('✎', '编辑', 'showEditProductTemplateForm(' + d.id + ')') +
+            iconBtn('✕', '删除', 'deleteProductTemplate(' + d.id + ')', true) +
           '</td>' : '') +
         '</tr>';
       });
@@ -1366,7 +1366,7 @@ function renderTagsPage() {
 
   var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
     '<div class="section-title">标签管理 <span style="font-size:11px;color:var(--muted);font-weight:400">（' + _tags.length + '）</span></div>' +
-    (canEdit ? '<button class="btn btn-primary" style="font-size:11px;padding:4px 12px" onclick="showAddTagDialog()">+ 添加标签</button>' : '') +
+    (canEdit ? '<button class="btn btn-primary btn-sm" onclick="showAddTagDialog()">+ 添加标签</button>' : '') +
   '</div>';
 
   sections.forEach(function(sec) {

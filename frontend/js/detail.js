@@ -252,28 +252,22 @@ function buildInfo(p, notes, delivery) {
   var products = p.linked_products || [];
   var linkedProjects = p.linked_projects || [];
   html += '<div style="display:flex;gap:16px;margin-bottom:16px">' +
-    // Linked products card
-    '<div class="card" style="flex:1;padding:12px 14px;min-width:0">' +
+    '<div class="card card-pad" style="flex:1;min-width:0">' +
       '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">关联产品（' + products.length + '）</div>';
   if (products.length) {
-    html += '<div style="display:flex;flex-wrap:wrap;gap:4px">';
-    products.forEach(function(prod) {
-      html += '<span class="prod-link-chip" style="cursor:pointer;font-size:11px;padding:2px 8px;background:var(--accent-lt);color:var(--accent);border-radius:3px;font-weight:500;white-space:nowrap" onclick="openProductDetail(\'' + prod.id + '\')" title="' + escHtml(prod.code || '') + '">' + escHtml(prod.name) + '</span>';
-    });
-    html += '</div>';
+    html += '<div style="display:flex;flex-wrap:wrap;gap:4px">' +
+      products.map(function(prod) { return linkChip(prod.name, 'openProductDetail(' + prod.id + ')', prod.code || ''); }).join('') +
+    '</div>';
   } else {
     html += '<div style="font-size:12px;color:var(--muted);font-style:italic">暂无</div>';
   }
   html += '</div>' +
-    // Linked projects card
-    '<div class="card" style="flex:1;padding:12px 14px;min-width:0">' +
+    '<div class="card card-pad" style="flex:1;min-width:0">' +
       '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">关联项目（' + linkedProjects.length + '）</div>';
   if (linkedProjects.length) {
-    html += '<div style="display:flex;flex-wrap:wrap;gap:4px">';
-    linkedProjects.forEach(function(lp) {
-      html += '<span style="cursor:pointer;font-size:11px;padding:2px 8px;background:var(--success-lt);color:var(--success);border-radius:3px;font-weight:500;white-space:nowrap" onclick="loadProjectDetail(' + lp.id + ')" title="' + escHtml(lp.code || '') + '">' + escHtml(lp.name) + '</span>';
-    });
-    html += '</div>';
+    html += '<div style="display:flex;flex-wrap:wrap;gap:4px">' +
+      linkedProjects.map(function(lp) { return linkChip(lp.name, 'loadProjectDetail(' + lp.id + ')', lp.code || '', 'var(--success-lt)', 'var(--success)'); }).join('') +
+    '</div>';
   } else {
     html += '<div style="font-size:12px;color:var(--muted);font-style:italic">暂无</div>';
   }
@@ -294,18 +288,17 @@ function buildInfo(p, notes, delivery) {
 
   // Project Background (editable by project_edit permission)
   var hasEdit = _hasProjectEditPerm();
-  html += '<div class="section-hd" style="margin-top:20px"><div class="section-title">项目背景</div>';
   if (hasEdit) {
-    html += '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="editProjectBackground()">编辑</button>';
+    html += '<div style="margin-top:20px">' + sectionHeader('项目背景', null, '编辑', 'editProjectBackground()') + '</div>';
+  } else {
+    html += '<div class="section-hd" style="margin-top:20px"><div class="section-title">项目背景</div></div>';
   }
-  html += '</div>';
   html += '<div class="card" style="padding:12px 16px;min-height:40px" id="proj-background-content">';
   html += (p.background ? '<div style="font-size:12.5px;line-height:1.7;white-space:pre-wrap">' + escHtml(p.background) + '</div>' : '<div style="color:var(--muted);font-size:12px;font-style:italic">暂无项目背景说明</div>');
   html += '</div>';
 
   // Notes section
-  html += '<div class="section-hd" style="margin-top:20px"><div class="section-title">项目笔记</div>' +
-    '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openNoteDialog()">+ 添加笔记</button></div>';
+  html += '<div style="margin-top:20px">' + sectionHeader('项目笔记', null, '+ 添加笔记', 'openNoteDialog()') + '</div>';
   html += '<div class="card" style="padding:0;overflow:hidden">';
   html += '<div style="max-height:400px;overflow-y:auto"><div id="notes-content"></div></div>';
   html += '</div>';
@@ -1200,10 +1193,7 @@ function buildDelivery(data) {
 
   var recHtml = '' +
     '<div class="card col-span" style="padding:20px;margin-top:16px">' +
-      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">' +
-        '<div class="section-title">交付记录明细 (' + records.length + ' 条)</div>' +
-        '<button class="btn btn-primary" style="font-size:11px;padding:4px 10px" onclick="showDeliveryForm()">+ 添加记录</button>' +
-      '</div>' +
+      sectionHeader('交付记录明细', records.length + ' 条', '+ 添加记录', 'showDeliveryForm()') +
       (records.length ? '<div class="table-scroll"><table class="stage-table"><thead><tr><th>交付日期</th><th>产品名</th><th>数量</th><th>产品编号</th><th>责任人</th><th>收货方</th><th>备注</th><th style="width:50px"></th></tr></thead><tbody>' +
       records.map(function(r) {
         return '<tr>' +
@@ -1214,7 +1204,7 @@ function buildDelivery(data) {
           '<td style="font-size:12px">' + escHtml(r.responsible_person || '—') + '</td>' +
           '<td style="font-size:12.5px">' + escHtml(r.receiver || '—') + '</td>' +
           '<td style="font-size:12px;color:var(--muted)">' + escHtml(r.note || '') + '</td>' +
-          '<td><button class="btn" style="font-size:10px;padding:2px 8px;color:var(--danger)" onclick="deleteDeliveryRecord(' + r.id + ')">删除</button></td>' +
+          '<td><button class="btn btn-xs" style="color:var(--danger)" onclick="deleteDeliveryRecord(' + r.id + ')">删除</button></td>' +
         '</tr>';
       }).join('') +
       '</tbody></table></div>' : '<div class="empty-state" style="padding:20px">暂无交付记录，点击上方按钮添加</div>') +
@@ -1309,7 +1299,7 @@ function showDeliveryForm(record) {
       '<div style="margin-bottom:10px">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
           '<label style="font-size:11px;color:var(--muted)">产品编号（每行一个）</label>' +
-          '<button class="btn" onclick="addSerialRow()" style="font-size:10px;padding:2px 10px">+ 添加编号</button>' +
+          '<button class="btn btn-xs" onclick="addSerialRow()">+ 添加编号</button>' +
         '</div>' +
         '<div id="df-serial-rows">' + serialRows + '</div>' +
       '</div>' +
@@ -1451,7 +1441,7 @@ function buildResources(resources, detail) {
           '<div style="font-weight:560;font-size:13px;margin-bottom:2px">' + escHtml(prod.name) + '</div>' +
           '<div style="font-size:11px;color:var(--muted);font-family:var(--mono)">' + escHtml(prod.code || '#' + prod.id) + '</div>' +
         '</div>' +
-        '<button class="btn" style="font-size:11px;padding:4px 12px;flex-shrink:0;margin-left:12px" onclick="_prodDetailTargetTab=\'docs\';openProductDetail(' + prod.id + ')" title="查看产品文档">' + prodDocsLabel + '</button>' +
+        '<button class="btn btn-primary btn-sm" style="flex-shrink:0;margin-left:12px" onclick="_prodDetailTargetTab=\'docs\';openProductDetail(' + prod.id + ')" title="查看产品文档">' + prodDocsLabel + '</button>' +
       '</div>';
     });
   } else {
@@ -1640,10 +1630,9 @@ function _renderMaintSection(containerId, hdId, linked, idKey, labelKey, type, l
       escHtml(x[labelKey]) + ' <span onclick="maintRemove_' + type + '(' + x[idKey] + ')" style="cursor:pointer;opacity:0.5;font-size:14px" title="移除">&times;</span></span>';
   }).join('') : '<span style="font-size:12px;color:var(--muted)">暂无' + labelName + '</span>';
 
-  // Section header: title + count + edit button (top-right)
+  // Section header: replace entire element to avoid nested section-hd
   if (hd) {
-    hd.innerHTML = '<div class="section-title">' + labelName + ' (' + linked.length + ')</div>' +
-      '<button class="btn btn-primary" onclick="maintOpenDialog_' + type + '()" style="font-size:11px;padding:3px 10px">编辑' + labelName + '</button>';
+    hd.outerHTML = sectionHeader(labelName, linked.length, '编辑' + labelName, 'maintOpenDialog_' + type + '()', hdId);
   }
 
   // Card body: badges only
@@ -1825,10 +1814,9 @@ function _renderMaintTagSection() {
       ' <span data-tag-name="' + escHtml(name) + '" onclick="maintRemove_tag(this.getAttribute(\'data-tag-name\'))" style="cursor:pointer;opacity:0.5;font-size:14px;line-height:1" title="移除">&times;</span></span>';
   }).join('') : '<span style="font-size:12px;color:var(--muted)">暂无标签</span>';
 
-  // Section header: title + count + edit button (top-right)
+  // Section header: replace entire element to avoid nested section-hd
   if (hd) {
-    hd.innerHTML = '<div class="section-title">项目标签 (' + linkedNames.length + ')</div>' +
-      '<button class="btn btn-primary" onclick="maintOpenDialog_tag()" style="font-size:11px;padding:3px 10px">编辑标签</button>';
+    hd.outerHTML = sectionHeader('项目标签', linkedNames.length, '编辑标签', 'maintOpenDialog_tag()', 'maint-hd-tags');
   }
 
   // Card body: badges only

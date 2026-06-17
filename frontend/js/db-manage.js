@@ -139,8 +139,8 @@ function renderDbManage() {
         '<td style="font-size:11px">' + escHtml(b.size_display) + '</td>' +
         '<td style="font-size:11px">' + escHtml(b.created_at) + '</td>' +
         '<td style="white-space:nowrap">' +
-          '<button class="btn" style="font-size:13px;padding:2px 6px;margin-right:4px" onclick="restoreBackup(\'' + escHtml(b.name) + '\')" title="恢复到此备份">🔄</button>' +
-          '<button class="btn" style="font-size:13px;padding:2px 6px;color:var(--danger)" onclick="deleteBackup(\'' + escHtml(b.name) + '\')" title="删除此备份">✕</button>' +
+          iconBtn('🔄', '恢复到此备份', 'restoreBackup(\'' + escHtml(b.name) + '\')') +
+          iconBtn('✕', '删除此备份', 'deleteBackup(\'' + escHtml(b.name) + '\')', true) +
         '</td>' +
       '</tr>';
     });

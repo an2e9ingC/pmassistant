@@ -42,7 +42,7 @@ function renderStandards() {
         '<td style="font-family:var(--mono);font-size:12px;font-weight:500">' + escHtml(s.key) + '</td>' +
         '<td><code style="font-size:12px;color:var(--accent);word-break:break-all">' + escHtml(s.value || '（未设置）') + '</code></td>' +
         '<td style="font-size:12px;color:var(--muted)">' + escHtml(s.description || '') + '</td>' +
-        (canEdit ? '<td><button class="btn" style="font-size:10px;padding:2px 8px" onclick="showStdEdit(' + s.id + ')">编辑</button></td>' : '') +
+        (canEdit ? '<td><button class="btn btn-xs" onclick="showStdEdit(' + s.id + ')">编辑</button></td>' : '') +
       '</tr>';
     });
     html += '</tbody></table></div>';
