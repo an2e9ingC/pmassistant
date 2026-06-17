@@ -285,6 +285,10 @@ function switchProdTab(id, el) {
 
 async function loadProductDetail(id) {
   _prodDetailCurId = id;
+  // Reset to 基本信息 tab on entry
+  var infoTab = document.querySelector('#view-product-detail .dtab[onclick*="switchProdTab(\'info\'"]');
+  if (infoTab) switchProdTab('info', infoTab);
+
   var selected = _prodComboAll.find(function(p) { return p.id === parseInt(id); });
   if (selected) {
     document.getElementById('prod-combo-input').value = selected.name;
