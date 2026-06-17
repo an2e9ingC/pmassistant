@@ -334,7 +334,9 @@ function renderProdInfo(p) {
   // Info row — 4 columns, consistent style
   html += '<div class="delivery-kpi" style="grid-template-columns:repeat(4, 1fr);margin-bottom:16px">' +
     '<div class="dkpi"><div class="dkpi-lbl">产品编号</div><div class="dkpi-val" style="font-family:var(--mono);font-size:16px;font-weight:600;color:var(--fg)">' + escHtml(p.code || '#' + p.id) + '</div></div>' +
-    '<div class="dkpi" style="cursor:pointer" onclick="gotoView(\'product-list\');_prodSearchVal=\'' + escHtml((p.tree_path || '').split(' > ')[0]) + '\';setTimeout(function(){if(typeof initProductList==\'function\')initProductList();},100)" title="点击查看该分类下的产品">' +
+    '<div class="dkpi" style="cursor:pointer" onclick="' +
+      (p.linked_node_ids && p.linked_node_ids.length ? 'gotoView(\'product-management\');_pmSelectedNodeId=' + p.linked_node_ids[0] + ';setTimeout(function(){if(typeof initProductManagement==\'function\')initProductManagement();},100)' : '') +
+      '" title="点击跳转到产品管理">' +
       '<div class="dkpi-lbl">所属分类</div><div class="dkpi-val" style="font-size:16px;font-weight:600;color:var(--accent)">' + escHtml(productType) + '</div></div>' +
     '<div class="dkpi"><div class="dkpi-lbl">状态</div><div class="dkpi-val" style="font-size:16px;font-weight:600;color:' + (p.status === 'normal' ? 'var(--success)' : p.status === 'closed' ? 'var(--muted)' : 'var(--warn)') + '">' + (p.status === 'normal' ? '正常' : p.status === 'closed' ? '已关闭' : (p.status || '—')) + '</div></div>' +
     '<div class="dkpi"><div class="dkpi-lbl">描述</div><div class="dkpi-val" style="font-size:12px;line-height:1.6">' + (p.tags_list && p.tags_list[0] ? p.tags_list.filter(function(t){return t;}).map(function(t){return '<span class="tag-badge tag-' + (t.length % 5) + '">#' + escHtml(t) + '</span>';}).join(' ') : '<span style="color:var(--muted)">—</span>') + '</div></div>' +
