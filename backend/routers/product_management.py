@@ -208,7 +208,7 @@ def delete_local_product(
     try:
         result = pm_service.delete_local_product(db, product_id)
         log_audit(db, user, "local_product_delete",
-                  f"product_id={product_id}, name={result.get('name', '?')}",
+                  f"删除产品「{result.get('name', '?')}」（ID: {product_id}）",
                   "产品", "high")
         return {"code": 0, "data": result, "message": "ok"}
     except ValueError as e:

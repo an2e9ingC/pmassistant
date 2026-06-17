@@ -94,7 +94,7 @@ def export_database(_=Depends(require_admin), cu=Depends(get_current_user), db: 
     """Download current database file."""
     t = datetime.now().strftime("%Y%m%d-%H%M%S")
     filename = f"pma-backup-{t}.db"
-    log_audit(db, cu, "db_export", f"file={filename}")
+    log_audit(db, cu, "db_export", f"导出数据库: {filename}")
     return FileResponse(
         path=_db_path,
         filename=filename,
@@ -162,7 +162,7 @@ async def import_database(
             os.unlink(tmp_path)
         return {"code": 1, "message": f"替换数据库失败，已从备份恢复: {e}"}
 
-    log_audit(db, cu, "db_import", f"file={file.filename} backup={backup_path.name}")
+    log_audit(db, cu, "db_import", f"导入数据库: {file.filename}（备份: {backup_path.name}）")
     return {
         "code": 0,
         "data": {"backup": backup_path.name},
@@ -200,7 +200,7 @@ def delete_backup(name: str, _=Depends(require_admin), cu=Depends(get_current_us
     if not file_path.exists():
         return {"code": 1, "message": "备份文件不存在"}
     file_path.unlink()
-    log_audit(db, cu, "db_delete_backup", f"file={safe_name}")
+    log_audit(db, cu, "db_delete_backup", f"删除备份: {safe_name}")
     return {"code": 0, "message": f"已删除 {safe_name}"}
 
 
@@ -229,7 +229,7 @@ def restore_backup(
         return {"code": 1, "message": f"备份文件校验失败: {e}"}
 
     # Log BEFORE replacing the database file (after which connections are invalid)
-    log_audit(db, cu, "db_restore_backup", f"from={safe_name}", "管理", "high")
+    log_audit(db, cu, "db_restore_backup", f"恢复数据库: 从备份「{safe_name}」", "管理", "high")
 
     # Create a backup of current database before restoring
     t = datetime.now().strftime("%Y%m%d-%H%M%S")

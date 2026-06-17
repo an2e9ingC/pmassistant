@@ -260,6 +260,7 @@ def update_local_product(db: Session, product_id: int, data: dict) -> dict:
 def delete_local_product(db: Session, product_id: int) -> dict:
     """Delete a PMA-local product and its related data."""
     from backend.models.document import ProductDocument
+    from backend.models.zentao import CustomerProductLink
     product = db.query(CachedProduct).filter(
         CachedProduct.id == product_id, CachedProduct.is_local == True
     ).first()
