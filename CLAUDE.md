@@ -44,7 +44,7 @@ NAS 文件 ───────────┘
 | 文档 | 路径 | 说明 |
 |------|------|------|
 | 开发指南 | `CLAUDE.md` | 本文档，AI/开发者必读 |
-| 数据库文档 | `doc/db.md` | 完整 schema、表关系、权限体系、数据保护方案 |
+| 数据库文档 | `docs/db.md` | 完整 schema、表关系、权限体系、数据保护方案 |
 | 开发计划 | `docs/dev-plan.md` | 版本历史与开发路线 |
 | UI 设计规范 | `docs/design-spec.md` | 加载状态、通知、徽章、主题规则 |
 | 部署运维 | `docs/deploy-guide.md` | 部署与运维参考 |
@@ -275,7 +275,7 @@ Co-Authored-By: <model-name> / <tool-name>
 - 修复 GitLab issue 时 body 加 `Closes #X`
 - **不要每改一行就 commit**，等用户确认后再提交
 - **每次 commit 必须包含数据库文件**：`git add data/pma-$PORT.db`（当前运行端口对应的 db 文件）。数据库是项目数据的一部分，需随代码一起版本管理
-- **数据层变更必须同步更新 `doc/db.md`**：涉及以下任一改动时，commit 前必须更新数据库文档：
+- **数据层变更必须同步更新 `docs/db.md`**：涉及以下任一改动时，commit 前必须更新数据库文档：
   - 新增/修改/删除 ORM 模型（`backend/models/*.py`）
   - 新增/修改/删除 SQLAlchemy 表、列、约束、索引、关系
   - `database.py` 中的 schema 迁移逻辑（`_migrate_*` 函数）
