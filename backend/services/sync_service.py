@@ -114,28 +114,6 @@ def _extract_tags_from_desc(desc: str) -> str:
     return ",".join(tags) if tags else ""
 
 
-def _extract_customer(name: str, desc: str) -> str:
-    """Extract customer abbreviation from project name or description.
-    Project name format: PE0406-CDLY-xxx  ->  CDLY
-    Description format: 【CDLY】xxx       ->  CDLY
-    Returns the extracted customer name or empty string."""
-    # Try project name pattern: PE0406-CDLY-xxx -> CDLY
-    if name:
-        parts = name.split("-")
-        if len(parts) >= 2:
-            second = parts[1].strip()
-            # Customer abbreviations are typically 2-4 uppercase letters
-            if re.match(r"^[A-Z]{2,6}$", second):
-                return second
-    # Fallback to 【...】 in description (strip HTML tags first)
-    if desc:
-        plain = re.sub(r"<[^>]+>", "", desc)
-        m = re.search(r"【([A-Z]{2,6})】", plain)
-        if m:
-            return m.group(1).strip()
-    return ""
-
-
 def _log_sync(db: Session, entity_type: str) -> SyncLog:
     log = SyncLog(
         started_at=datetime.now(timezone.utc),
@@ -503,36 +481,11 @@ class SyncService:
                     created += 1
             db.commit()
 
-            # Sync customer links from project customer_name
-            self._sync_customer_links(db)
-
             _finish_log(db, log, "success", len(projects), created + deleted, updated)
             return {"fetched": len(projects), "created": created, "updated": updated, "deleted": deleted}
         except Exception as e:
             _finish_log(db, log, "failed", error=str(e))
             raise
-
-    def _sync_customer_links(self, db: Session):
-        """Ensure Customer records and CustomerProjectLinks exist for all cached projects."""
-        projects = db.query(CachedProject).all()
-        for p in projects:
-            cname = (p.customer_name or "").strip()
-            if not cname:
-                continue
-            # Find or create customer
-            cust = db.query(CachedCustomer).filter(CachedCustomer.name == cname).first()
-            if not cust:
-                cust = CachedCustomer(name=cname)
-                db.add(cust)
-                db.flush()
-            # Ensure link exists
-            link = db.query(CustomerProjectLink).filter(
-                CustomerProjectLink.customer_id == cust.id,
-                CustomerProjectLink.project_id == p.id,
-            ).first()
-            if not link:
-                db.add(CustomerProjectLink(customer_id=cust.id, project_id=p.id))
-        db.commit()
 
     async def _sync_executions_and_tasks(self, db: Session) -> dict:
         log = _log_sync(db, "executions_tasks")
@@ -935,7 +888,7 @@ class SyncService:
             program_name=prog_name or None,
             pm_name=pm.get("realname") or pm.get("account", ""),
             pm_account=pm.get("account", ""),
-            customer_name=_extract_customer(name, desc),
+            customer_name="",
             description=desc,
             tags=_extract_tags_from_desc(desc),
             raw_json=json.dumps(p, ensure_ascii=False),
@@ -962,7 +915,7 @@ class SyncService:
         existing.consumed = _parse_float(p.get("consumed")) or existing.consumed
         existing.pm_name = pm.get("realname") or pm.get("account", existing.pm_name)
         existing.pm_account = pm.get("account", existing.pm_account)
-        existing.customer_name = _extract_customer(name, desc) or existing.customer_name
+        # customer_name is managed via PMA manual association only
         existing.description = desc
         existing.tags = _extract_tags_from_desc(desc)
         existing.raw_json = json.dumps(p, ensure_ascii=False)

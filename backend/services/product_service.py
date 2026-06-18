@@ -159,22 +159,6 @@ def get_mapping_overview(db: Session) -> dict:
     }
 
 
-def _extract_customers_from_desc(p: CachedProduct) -> list[str]:
-    """Extract customer names from 【...】 markers in product description."""
-    import re
-    if not p.raw_json:
-        return []
-    try:
-        import json as _json
-        data = _json.loads(p.raw_json)
-        desc = data.get("desc", "") or ""
-    except Exception:
-        return []
-    # Strip HTML tags, then find all 【...】 patterns
-    plain = re.sub(r"<[^>]+>", "", desc)
-    return re.findall(r"【(.+?)】", plain)
-
-
 def _product_item(p: CachedProduct, db: Session) -> dict:
     link_count = db.query(ProductProjectLink).filter(
         ProductProjectLink.product_id == p.id
@@ -224,7 +208,7 @@ def _product_detail(p: CachedProduct, db: Session) -> dict:
     customer_names = []
     if customer_ids:
         customer_names = [r[0] for r in db.query(CachedCustomer.name).filter(CachedCustomer.id.in_(customer_ids)).all()]
-    customers = list(set(customer_names + _extract_customers_from_desc(p)))
+    customers = list(set(customer_names))
     tags_str = p.tags or ""
     return {
         "id": p.id, "code": p.code, "name": p.name,

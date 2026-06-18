@@ -115,7 +115,7 @@ def _project_list_item(p, linked_customers=None, has_pending_docs: bool = False,
         active = [e for e in exc if e.status in ("doing",)]
         current_stage = (active[0].name if active else exc[-1].name) if exc else None
 
-    # Customer: merge stored value + linked customers + fallback extraction
+    # Customer: merge stored value + linked customers (PMA manual association only)
     cust_names = []
     if p.customer_name:
         cust_names.append(p.customer_name)
@@ -124,8 +124,6 @@ def _project_list_item(p, linked_customers=None, has_pending_docs: bool = False,
             if n not in cust_names:
                 cust_names.append(n)
     customer = "、".join(cust_names)
-    if not customer:
-        customer = _extract_customer_fallback(p)
 
     # Tags: prefer stored value, fallback to on-the-fly extraction from raw_json desc
     tags_str = p.tags or ""
@@ -152,30 +150,6 @@ def _project_list_item(p, linked_customers=None, has_pending_docs: bool = False,
         "risk_level": _calc_risk_level(p, has_pending_docs, has_incomplete_tasks, has_stage_anomalies),
     }
 
-
-def _extract_customer_fallback(p) -> str:
-    """Extract customer from project name or raw_json desc as fallback."""
-    import re as _re
-    # Try project name pattern: PE0406-CDLY-xxx -> CDLY
-    if p.name:
-        parts = p.name.split("-")
-        if len(parts) >= 2:
-            second = parts[1].strip()
-            if _re.match(r"^[A-Z]{2,6}$", second):
-                return second
-    # Fallback to 【...】 in raw_json desc (strip HTML tags first)
-    if p.raw_json:
-        try:
-            import json as _json
-            data = _json.loads(p.raw_json)
-            desc = data.get("desc", "") or ""
-            plain = _re.sub(r"<[^>]+>", "", desc)
-            m = _re.search(r"【([A-Z]{2,6})】", plain)
-            if m:
-                return m.group(1).strip()
-        except Exception:
-            pass
-    return ""
 
 
 def _extract_tags_fallback(p) -> str:

@@ -555,30 +555,8 @@ def _calc_risk_level(p: CachedProject, has_pending_docs: bool = False, has_incom
 
 
 def _resolve_customer(p: CachedProject) -> str:
-    """Resolve customer from stored field, with on-the-fly fallback."""
-    if p.customer_name:
-        return p.customer_name
-    # Fallback: parse project name PE0406-CDLY-xxx -> CDLY
-    if p.name:
-        parts = p.name.split("-")
-        if len(parts) >= 2:
-            import re
-            second = parts[1].strip()
-            if re.match(r"^[A-Z]{2,6}$", second):
-                return second
-    # Fallback: parse 【...】 from raw_json desc (strip HTML tags first)
-    if p.raw_json:
-        try:
-            import re, json as _json
-            data = _json.loads(p.raw_json)
-            desc = data.get("desc", "") or ""
-            plain = re.sub(r"<[^>]+>", "", desc)
-            m = re.search(r"【([A-Z]{2,6})】", plain)
-            if m:
-                return m.group(1).strip()
-        except Exception:
-            pass
-    return ""
+    """Return customer from stored field (PMA manual association only)."""
+    return p.customer_name or ""
 
 
 def _project_detail(p: CachedProject, db: Session, has_pending_docs: bool = False, has_incomplete_tasks: bool = False, has_stage_anomalies: bool = False) -> dict:
