@@ -8,6 +8,7 @@ import re
 from backend.config import settings, zentao_project_url, zentao_product_url
 from backend.models.zentao import (
     CachedProject, CachedExecution, CachedTask, CachedProduct, ProductProjectLink,
+    CustomerProjectLink, CachedCustomer,
 )
 from backend.models.document import ProjectDocument
 from backend.models.local import ProjectActivity
@@ -106,11 +107,14 @@ def get_projects(db: Session) -> list[dict]:
     pending_map = _get_pending_doc_counts(db, pids)
     incomplete_task_map = _get_incomplete_task_counts(db, pids)
     stage_anomaly_map = _get_stage_anomaly_counts(db, pids)
+    # Batch-load linked customers
+    cust_map = _batch_cust_map(db, pids)
     return [
         _project_brief(p,
             pending_map.get(p.id, False),
             incomplete_task_map.get(p.id, False),
-            stage_anomaly_map.get(p.id, False))
+            stage_anomaly_map.get(p.id, False),
+            cust_map.get(p.id, []))
         for p in projects
     ]
 
@@ -123,10 +127,12 @@ def get_project_detail(db: Session, project_id: int) -> Optional[dict]:
     pending_map = _get_pending_doc_counts(db, pids)
     incomplete_task_map = _get_incomplete_task_counts(db, pids)
     stage_anomaly_map = _get_stage_anomaly_counts(db, pids)
+    cust_map = _batch_cust_map(db, pids)
     result = _project_detail(p, db,
         pending_map.get(p.id, False),
         incomplete_task_map.get(p.id, False),
-        stage_anomaly_map.get(p.id, False))
+        stage_anomaly_map.get(p.id, False),
+        cust_map.get(p.id, []))
     result["linked_products"] = get_project_products(db, project_id)
     return result
 
@@ -508,13 +514,13 @@ def get_project_products(db: Session, project_id: int) -> list[dict]:
 
 # --- helpers ---
 
-def _project_brief(p: CachedProject, has_pending_docs: bool = False, has_incomplete_tasks: bool = False, has_stage_anomalies: bool = False) -> dict:
+def _project_brief(p: CachedProject, has_pending_docs: bool = False, has_incomplete_tasks: bool = False, has_stage_anomalies: bool = False, linked_customers: list = None) -> dict:
     return {
         "id": p.id,
         "code": p.code,
         "name": p.name,
         "project_type": p.project_type,
-        "customer_name": _resolve_customer(p),
+        "customer_name": _resolve_customer(p, linked_customers or []),
         "status": _map_status(p.status, has_pending_docs, has_incomplete_tasks, has_stage_anomalies),
         "progress": p.progress,
         "begin": str(p.begin) if p.begin else None,
@@ -554,12 +560,36 @@ def _calc_risk_level(p: CachedProject, has_pending_docs: bool = False, has_incom
     return "high"
 
 
-def _resolve_customer(p: CachedProject) -> str:
-    """Return customer from stored field (PMA manual association only)."""
-    return p.customer_name or ""
+def _resolve_customer(p: CachedProject, linked_customers: list = None) -> str:
+    """Return customer from stored field + linked customers (PMA manual association only)."""
+    names = []
+    if p.customer_name:
+        names.append(p.customer_name)
+    if linked_customers:
+        for n in linked_customers:
+            if n not in names:
+                names.append(n)
+    return "、".join(names) if names else ""
 
 
-def _project_detail(p: CachedProject, db: Session, has_pending_docs: bool = False, has_incomplete_tasks: bool = False, has_stage_anomalies: bool = False) -> dict:
+def _batch_cust_map(db: Session, project_ids: list[int]) -> dict:
+    """Batch-load linked customer names for multiple projects.
+    Returns {project_id: [customer_name, ...]}."""
+    cust_map = {}
+    if not project_ids:
+        return cust_map
+    links = db.query(CustomerProjectLink).filter(CustomerProjectLink.project_id.in_(project_ids)).all()
+    if links:
+        cids = set(l.customer_id for l in links)
+        cnames = {c.id: c.name for c in db.query(CachedCustomer).filter(CachedCustomer.id.in_(cids)).all()}
+        for l in links:
+            name = cnames.get(l.customer_id)
+            if name:
+                cust_map.setdefault(l.project_id, []).append(name)
+    return cust_map
+
+
+def _project_detail(p: CachedProject, db: Session, has_pending_docs: bool = False, has_incomplete_tasks: bool = False, has_stage_anomalies: bool = False, linked_customers: list = None) -> dict:
     # Use PMA local tags instead of Zentao description
     tags_str = p.tags or ""
     tags_list = [t.strip() for t in tags_str.split(",") if t.strip()]
@@ -595,7 +625,7 @@ def _project_detail(p: CachedProject, db: Session, has_pending_docs: bool = Fals
         "consumed": p.consumed,
         "pm_name": p.pm_name,
         "pm_account": p.pm_account,
-        "customer_name": p.customer_name,
+        "customer_name": _resolve_customer(p, linked_customers or []),
         "alias_name": p.alias_name,
         "background": p.background or "",
         "tags": tags_str,
