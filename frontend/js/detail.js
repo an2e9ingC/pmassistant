@@ -276,9 +276,8 @@ function buildInfo(p, notes, delivery) {
   html += '</div>' +
   '</div>';
 
-  // Additional info row (minimal) + source badge
+  // Additional info row (minimal)
   var extras = [];
-  if (p.is_local) extras.push('<span class="pm-src-badge local">PMA本地</span>');
   if (p.real_end) extras.push('实际结束: <b style="color:var(--fg)">' + formatDate(p.real_end) + '</b>');
   if (p.alias_name) extras.push('别名: <b style="color:var(--fg)">' + escHtml(p.alias_name) + '</b>');
   if (extras.length) {
