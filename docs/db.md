@@ -797,6 +797,59 @@ Base.metadata.create_all(bind=engine)   # backend/database.py
 
 ### 9.4 备份
 
+PMA 有两层备份机制：**自动定时备份** + **操作前安全快照**。
+
+#### 9.4.1 备份目录
+
+| 目录 | 用途 | 清理策略 |
+|------|------|---------|
+| `data/backups/` | 滚动备份 + 操作前安全快照 | 滚动备份按 `db_backup_retention`（默认 5）自动清理；`-before-*` 文件不自动清理 |
+| `data/backups/permanent/` | 永久备份 | 按 `db_backup_keep_interval`（小时）窗口保留，不会被滚动清理删除 |
+
+#### 9.4.2 自动定时备份
+
+后台任务 `auto_backup_loop()`（[backend/routers/db_manage.py](backend/routers/db_manage.py)）每 30 秒检查一次，到达设定的备份间隔后执行 `_do_backup()`：
+
+1. **滚动备份**：`data/backups/pma-backup-{时间}.db`，超过 `db_backup_retention` 数量后自动删除最旧的
+2. **永久备份**：若距上一个 `permanent/` 中的备份超过 `db_backup_keep_interval` 小时，则复制一份到 `data/backups/permanent/pma-backup-{时间}-keep.db`
+
+备份配置在数据库管理页面（需 admin 权限）设置：
+
+| 配置项 | 默认值 | 说明 |
+|--------|--------|------|
+| `db_backup_interval` | `0`（关闭） | 自动备份间隔（分钟） |
+| `db_backup_retention` | `5` | 滚动备份保留数量 |
+| `db_backup_keep_interval` | `0`（关闭） | 永久备份间隔（小时） |
+
+#### 9.4.3 操作前安全快照
+
+管理员在数据库管理页面执行**导入**或**从备份恢复**操作时，系统会在操作前自动创建当前数据库的快照，失败时自动回滚：
+
+**`-before-import.db`（导入前快照）**：
+
+```
+用户上传 .db 文件导入
+  → copy2 当前数据库 → data/backups/pma-backup-{时间}-before-import.db
+  → shutil.move 用上传文件替换当前数据库
+  → 若 move 失败 → 自动从 before-import 恢复 → 返回错误
+```
+
+**`-before-restore.db`（恢复前快照）**：
+
+```
+用户点击某个备份的"恢复"按钮
+  → engine.dispose() 关闭所有连接
+  → copy2 当前数据库 → data/backups/pma-backup-{时间}-before-restore.db
+  → shutil.copy2 用选中备份覆盖当前数据库
+  → 若 copy2 失败 → 自动从 before-restore 回滚 → 返回错误
+```
+
+> **注意**：自动回滚只覆盖文件系统层面的异常（磁盘 IO 错误、权限问题等）。如果文件替换成功但数据本身有问题（如恢复了损坏的备份），不会触发自动回滚——此时 `-before-*` 文件就是手动恢复的后路。
+
+`-before-*` 文件不会出现在备份列表页面中（代码明确过滤了含 `-before-` 的文件名），也不会被自动滚动清理删除。
+
+#### 9.4.4 手动备份
+
 ```bash
 cp data/pma-8000.db data/pma-8000.db.bak.$(date +%Y%m%d)
 ```
