@@ -11,6 +11,7 @@ from backend.database import get_db, to_local_str, _db_path
 from backend.middleware.auth import get_current_user, require_admin, require_perm
 from backend.models.local import ProductNote, ProductBlockDiagram
 from backend.services import product_service
+from backend.services.product_service import log_product_activity
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 
@@ -82,14 +83,19 @@ def update_product(
     product_id: int,
     body: ProductUpdate,
     db: Session = Depends(get_db),
-    _=Depends(require_admin),
+    user=Depends(require_admin),
 ):
     data = {k: v for k, v in body.model_dump().items() if v is not None}
     if not data:
         raise HTTPException(status_code=400, detail="No fields to update")
+    # Build change description
+    changes = []
+    for k, v in data.items():
+        changes.append(f"{k} → {v!r}")
     result = product_service.update_product(db, product_id, data)
     if not result:
         raise HTTPException(status_code=404, detail="Product not found")
+    log_product_activity(db, product_id, user.username, "编辑产品", "; ".join(changes))
     return {"code": 0, "data": result, "message": "ok"}
 
 
@@ -103,9 +109,10 @@ def get_product_projects(product_id: int, db: Session = Depends(get_db), _=Depen
 def link_product_project(
     body: ProductProjectLinkRequest,
     db: Session = Depends(get_db),
-    _=Depends(require_admin),
+    user=Depends(require_admin),
 ):
     result = product_service.add_product_project_link(db, body.product_id, body.project_id)
+    log_product_activity(db, body.product_id, user.username, "关联项目", f"关联项目 ID={body.project_id}")
     return {"code": 0, "data": result, "message": "ok"}
 
 
@@ -114,9 +121,10 @@ def unlink_product_project(
     product_id: int = Query(...),
     project_id: int = Query(...),
     db: Session = Depends(get_db),
-    _=Depends(require_admin),
+    user=Depends(require_admin),
 ):
     result = product_service.remove_product_project_link(db, product_id, project_id)
+    log_product_activity(db, product_id, user.username, "取消关联项目", f"取消关联项目 ID={project_id}")
     return {"code": 0, "data": result, "message": "ok"}
 
 
@@ -161,6 +169,7 @@ def add_product_note(
     db.add(note)
     db.commit()
     db.refresh(note)
+    log_product_activity(db, product_id, user.username, "添加笔记", payload.content[:100])
     return {
         "code": 0,
         "data": {
@@ -178,7 +187,7 @@ def delete_product_note(
     product_id: int,
     note_id: int,
     db: Session = Depends(get_db),
-    _=Depends(require_admin),
+    user=Depends(require_admin),
 ):
     note = db.query(ProductNote).filter(
         ProductNote.id == note_id,
@@ -188,6 +197,7 @@ def delete_product_note(
         raise HTTPException(status_code=404, detail="Note not found")
     db.delete(note)
     db.commit()
+    log_product_activity(db, product_id, user.username, "删除笔记", f"note_id={note_id}")
     return {"code": 0, "message": "已删除"}
 
 
@@ -244,6 +254,7 @@ def update_product_document(
             pass
     doc.updated_by = user.username
     db.commit()
+    log_product_activity(db, product_id, user.username, "更新文档", f"doc={doc.doc_name} status={doc.status}")
     return {"code": 0, "data": {"id": doc.id, "status": doc.status}, "message": "ok"}
 
 
@@ -322,6 +333,7 @@ def upload_block_diagram(
     db.add(bd)
     db.commit()
     db.refresh(bd)
+    log_product_activity(db, product_id, user.username, "上传框图", bd.filename)
 
     return {
         "code": 0,
@@ -341,7 +353,7 @@ def delete_block_diagram(
     product_id: int,
     bd_id: int,
     db: Session = Depends(get_db),
-    _=Depends(require_perm("product_link")),
+    user=Depends(require_perm("product_link")),
 ):
     """Delete a block diagram image."""
     bd = db.query(ProductBlockDiagram).filter(
@@ -358,6 +370,7 @@ def delete_block_diagram(
 
     db.delete(bd)
     db.commit()
+    log_product_activity(db, product_id, user.username, "删除框图", bd.filename)
     return {"code": 0, "message": "已删除"}
 
 
@@ -386,3 +399,40 @@ def serve_block_diagram_image(bd_id: int, db: Session = Depends(get_db)):
     media_type = media_types.get(ext, "application/octet-stream")
 
     return FileResponse(file_path, media_type=media_type, filename=bd.filename)
+
+
+# ── Product Activities ──
+
+@router.get("/{product_id}/activities", response_model=dict)
+def get_product_activities(
+    product_id: int,
+    sort: str = Query("desc"),
+    limit: int = Query(200, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    """Return activity log for a product (non-deletable audit trail)."""
+    from backend.models.local import ProductActivity
+
+    order = ProductActivity.id.desc() if sort == "desc" else ProductActivity.id.asc()
+    rows = (
+        db.query(ProductActivity)
+        .filter(ProductActivity.product_id == product_id)
+        .order_by(order)
+        .limit(limit)
+        .all()
+    )
+    return {
+        "code": 0,
+        "data": [
+            {
+                "id": r.id,
+                "username": r.username,
+                "action": r.action,
+                "detail": r.detail or "",
+                "created_at": to_local_str(r.created_at),
+            }
+            for r in rows
+        ],
+        "message": "ok",
+    }

@@ -279,7 +279,6 @@ function buildInfo(p, notes, delivery) {
   // Additional info row (minimal)
   var extras = [];
   if (p.real_end) extras.push('实际结束: <b style="color:var(--fg)">' + formatDate(p.real_end) + '</b>');
-  if (p.alias_name) extras.push('别名: <b style="color:var(--fg)">' + escHtml(p.alias_name) + '</b>');
   if (extras.length) {
     html += '<div style="display:flex;gap:24px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:12px">' +
       extras.map(function(e) { return '<span>' + e + '</span>'; }).join('') +
@@ -1616,9 +1615,207 @@ function buildMaintenance() {
   var dt = document.getElementById('dt-maintenance');
   if (dt) dt.style.display = hasPerm ? '' : 'none';
   if (!hasPerm) return;
+
+  // Render edit/delete action buttons
+  var actions = document.getElementById('maint-actions');
+  if (actions) {
+    actions.innerHTML =
+      '<button class="btn btn-primary" style="font-size:11px;padding:5px 12px" onclick="showProjectEditDialog()">✎ 编辑项目</button>' +
+      '<button class="btn" style="font-size:11px;padding:5px 12px;color:var(--danger);border-color:var(--danger)" onclick="deleteCurrentProject()">✕ 删除项目</button>';
+  }
+
   loadMaintProjectProducts();
   loadMaintProjectCustomers();
   loadMaintProjectTags();
+}
+
+// ── Project Edit Dialog ──
+
+function showProjectEditDialog() {
+  var p = _projDetail;
+  if (!p) return;
+
+  // Load all dropdown options in parallel
+  Promise.all([
+    API.get('/users/pm-names').catch(function() { return []; }),
+    API.get('/users/customers/names').catch(function() { return []; }),
+    API.get('/users/program-names').catch(function() { return []; }),
+    API.get('/tags').catch(function() { return []; }),
+    API.get('/users/project-options').catch(function() { return []; }),
+  ]).then(function(results) {
+    var pmNames = results[0] || [];
+    var custNames = results[1] || [];
+    var progNames = results[2] || [];
+    var allTags = results[3] || [];
+    var projectOpts = results[4] || [];
+
+    var tagNames = allTags.filter(function(t) { return t.category === 'project' || !t.category || t.category === ''; }).map(function(t) { return t.name; });
+
+    function dl(id, options, selected) {
+      var sel = selected || '';
+      return '<div style="position:relative">' +
+        '<input class="search-inp" id="' + id + '" list="' + id + '-list" value="' + escHtml(sel) + '" style="width:100%;box-sizing:border-box;padding-right:28px" autocomplete="off" placeholder="输入搜索或选择...">' +
+        '<span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--muted);font-size:10px">▼</span>' +
+        '<datalist id="' + id + '-list">' + options.map(function(o) {
+          var val = typeof o === 'string' ? o : o.name;
+          return '<option value="' + escHtml(val) + '">';
+        }).join('') + '</datalist></div>';
+    }
+
+    function dlIdName(id, options, selectedId) {
+      // For linked projects: show "name (id)" as option value, store id separately
+      var sel = selectedId || '';
+      return '<input class="search-inp" id="' + id + '" list="' + id + '-list" value="' + escHtml(sel) + '" style="width:100%;box-sizing:border-box" autocomplete="off">' +
+        '<datalist id="' + id + '-list">' + options.map(function(o) {
+          return '<option value="' + escHtml(o.name + ' (' + o.id + ')') + '">';
+        }).join('') + '</datalist>';
+    }
+
+    // Build project options for linked projects datalist
+    var linkedProjOpts = projectOpts.map(function(o) {
+      return o.name + ' (' + o.id + ')';
+    });
+    var rawStatus = p.raw_status || p.status || '';
+
+    var bodyHtml =
+      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">项目名称</label>' +
+      '<input class="search-inp" id="proj-edit-name" value="' + escHtml(p.name || '') + '" style="width:100%;box-sizing:border-box"></div>' +
+      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">项目编号</label>' +
+      '<input class="search-inp" id="proj-edit-code" value="' + escHtml(p.code || '') + '" style="width:100%;box-sizing:border-box"></div>' +
+      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">项目经理</label>' +
+      dl('proj-edit-pm-name', pmNames, p.pm_name) + '</div>' +
+      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">客户名称</label>' +
+      dl('proj-edit-customer', custNames, p.customer_name) + '</div>' +
+      '<div style="display:flex;gap:10px;margin-bottom:10px">' +
+        '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">项目类型</label>' +
+          '<select class="search-inp" id="proj-edit-type" style="width:100%;box-sizing:border-box">' +
+            '<option value="RD"' + (p.project_type === 'RD' ? ' selected' : '') + '>研发项目</option>' +
+            '<option value="SC"' + (p.project_type === 'SC' ? ' selected' : '') + '>生产项目</option>' +
+          '</select></div>' +
+        '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">状态</label>' +
+          '<select class="search-inp" id="proj-edit-status" style="width:100%;box-sizing:border-box">' +
+            '<option value="">不修改</option>' +
+            '<option value="wait"' + (rawStatus === 'wait' ? ' selected' : '') + '>待启动</option>' +
+            '<option value="doing"' + (rawStatus === 'doing' ? ' selected' : '') + '>进行中</option>' +
+            '<option value="done"' + (rawStatus === 'done' ? ' selected' : '') + '>已完成</option>' +
+            '<option value="closed"' + (rawStatus === 'closed' ? ' selected' : '') + '>已关闭</option>' +
+            '<option value="suspended"' + (rawStatus === 'suspended' ? ' selected' : '') + '>已挂起</option>' +
+          '</select></div>' +
+      '</div>' +
+      '<div style="display:flex;gap:10px;margin-bottom:10px">' +
+        '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">计划开始</label>' +
+          '<input class="search-inp" id="proj-edit-begin" type="date" value="' + (p.begin || '') + '" style="width:100%;box-sizing:border-box"></div>' +
+        '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">计划结束</label>' +
+          '<input class="search-inp" id="proj-edit-end" type="date" value="' + (p.end || '') + '" style="width:100%;box-sizing:border-box"></div>' +
+      '</div>' +
+      '<div style="display:flex;gap:10px;margin-bottom:10px">' +
+        '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">实际开始</label>' +
+          '<input class="search-inp" id="proj-edit-real-began" type="date" value="' + (p.real_began || '') + '" style="width:100%;box-sizing:border-box"></div>' +
+        '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">实际结束</label>' +
+          '<input class="search-inp" id="proj-edit-real-end" type="date" value="' + (p.real_end || '') + '" style="width:100%;box-sizing:border-box"></div>' +
+      '</div>' +
+      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">项目集</label>' +
+      dl('proj-edit-program', progNames, p.program_name) + '</div>' +
+      '<div style="display:flex;gap:10px;margin-bottom:10px">' +
+        '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">进度 (%)</label>' +
+          '<input class="search-inp" id="proj-edit-progress" value="' + escHtml(p.progress || '') + '" style="width:100%;box-sizing:border-box"></div>' +
+        '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">预估工时</label>' +
+          '<input class="search-inp" id="proj-edit-estimate" type="number" value="' + (p.estimate != null ? p.estimate : '') + '" style="width:100%;box-sizing:border-box"></div>' +
+      '</div>' +
+      '<div style="display:flex;gap:10px;margin-bottom:10px">' +
+        '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">已耗工时</label>' +
+          '<input class="search-inp" id="proj-edit-consumed" type="number" value="' + (p.consumed != null ? p.consumed : '') + '" style="width:100%;box-sizing:border-box"></div>' +
+        '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">计划交付数</label>' +
+          '<input class="search-inp" id="proj-edit-delivery-qty" type="number" value="' + (p.planned_delivery_qty != null ? p.planned_delivery_qty : '') + '" style="width:100%;box-sizing:border-box"></div>' +
+      '</div>' +
+      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">交付备注</label>' +
+      '<input class="search-inp" id="proj-edit-delivery-note" value="' + escHtml(p.delivery_note || '') + '" style="width:100%;box-sizing:border-box"></div>' +
+      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">项目背景</label>' +
+      '<textarea class="search-inp" id="proj-edit-background" rows="3" style="width:100%;box-sizing:border-box;resize:vertical">' + escHtml(p.background || '') + '</textarea></div>' +
+      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">标签（逗号分隔）</label>' +
+      dl('proj-edit-tags', tagNames, p.tags) + '</div>' +
+      '<div style="margin-bottom:4px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">关联项目（搜索选择，逗号分隔ID）</label>' +
+      dl('proj-edit-linked', linkedProjOpts, p.linked_project_ids) + '</div>';
+
+    openDialog('编辑项目 — ' + escHtml(p.name || ''),
+      '<div style="max-height:65vh;overflow-y:auto;padding-right:4px">' + bodyHtml + '</div>',
+      [
+        { text: '取消', onclick: 'closeSharedDialog()' },
+        { text: '保存', cls: 'btn-primary', onclick: 'saveProjectEdit()' }
+      ],
+      { hideClose: true }
+    );
+  });
+}
+
+async function saveProjectEdit() {
+  var payload = {};
+  var g = function(id) { return document.getElementById(id); };
+
+  payload.project_type = g('proj-edit-type').value;
+  var statusVal = g('proj-edit-status').value;
+  if (statusVal) payload.status = statusVal;
+
+  var textFields = ['proj-edit-name','proj-edit-code','proj-edit-pm-name',
+    'proj-edit-customer','proj-edit-program','proj-edit-progress','proj-edit-delivery-note',
+    'proj-edit-background','proj-edit-tags','proj-edit-linked'];
+  var keyMap = {
+    'proj-edit-name': 'name', 'proj-edit-code': 'code',
+    'proj-edit-pm-name': 'pm_name',
+    'proj-edit-customer': 'customer_name', 'proj-edit-program': 'program_name',
+    'proj-edit-progress': 'progress', 'proj-edit-delivery-note': 'delivery_note',
+    'proj-edit-background': 'background', 'proj-edit-tags': 'tags',
+    'proj-edit-linked': 'linked_project_ids'
+  };
+  textFields.forEach(function(fid) {
+    var el = g(fid);
+    if (el) payload[keyMap[fid]] = el.value;
+  });
+
+  var numFields = ['proj-edit-estimate','proj-edit-consumed','proj-edit-delivery-qty'];
+  var numKeys = { 'proj-edit-estimate': 'estimate', 'proj-edit-consumed': 'consumed', 'proj-edit-delivery-qty': 'planned_delivery_qty' };
+  numFields.forEach(function(fid) {
+    var el = g(fid);
+    if (el && el.value !== '') payload[numKeys[fid]] = parseFloat(el.value);
+  });
+
+  var dateFields = ['proj-edit-begin','proj-edit-end','proj-edit-real-began','proj-edit-real-end'];
+  var dateKeys = { 'proj-edit-begin': 'begin', 'proj-edit-end': 'end', 'proj-edit-real-began': 'real_began', 'proj-edit-real-end': 'real_end' };
+  dateFields.forEach(function(fid) {
+    var el = g(fid);
+    if (el && el.value) payload[dateKeys[fid]] = el.value;
+  });
+
+  try {
+    var result = await API.put('/projects/' + _comboCurId, payload);
+    closeSharedDialog();
+    showToast(result.message || '项目已更新', 'success');
+    loadProjectDetail(_comboCurId);
+  } catch(e) {
+    showToast('保存失败: ' + (e.message || '未知错误'), 'error');
+  }
+}
+
+// ── Project Delete ──
+
+async function deleteCurrentProject() {
+  var p = _projDetail;
+  if (!p) return;
+  if (!confirm('确认删除项目「' + (p.name || '') + '」？\n\n此操作将同时删除：\n- 项目所有执行/迭代/任务\n- 项目文档实例\n- 项目笔记\n- 关联产品/客户/标签\n- 交付记录\n- 操作活动记录\n\n此操作不可撤销！')) return;
+  var ok = await verifyPassword('删除项目', 'pw_verify_maint_remove');
+  if (!ok) return;
+  try {
+    await API.del('/projects/' + _comboCurId);
+    showToast('项目已删除', 'success');
+    // Navigate back to project list
+    if (typeof gotoView === 'function') {
+      gotoView('project-list');
+    } else {
+      location.reload();
+    }
+  } catch(e) {
+    showToast('删除失败: ' + (e.message || '未知错误'), 'error');
+  }
 }
 
 // ── Shared section renderer (badges + edit button only) ──

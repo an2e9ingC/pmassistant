@@ -282,6 +282,7 @@ function switchProdTab(id, el) {
   if (sec) sec.classList.add('active');
   if (el) el.classList.add('active');
   if (id === 'maintenance' && _prodDetail) renderProdMaintenance(_prodDetail);
+  if (id === 'activities') loadProdActivities();
 }
 
 async function loadProductDetail(id) {
@@ -301,6 +302,8 @@ async function loadProductDetail(id) {
   ['prodsec-info', 'prodsec-docs', 'prodsec-maintenance'].forEach(function(s) {
     document.getElementById(s).innerHTML = '<div class="card" style="padding:20px"><div class="loading-spinner">加载中...</div></div>';
   });
+  var actContainer = document.getElementById('prod-activities-content');
+  if (actContainer) actContainer.innerHTML = '<div class="loading-spinner">加载活动记录...</div>';
 
   try {
     var detail = await API.get('/products/' + id);
@@ -1053,4 +1056,54 @@ async function saveProdTags() {
   } catch(e) {
     showToast('更新失败: ' + (e.message || ''), 'error');
   }
+}
+
+// ── Tab: 产品进度明细 ──
+
+var _prodActivitySort = 'desc';
+
+async function loadProdActivities() {
+  if (!_prodDetailCurId) return;
+  var container = document.getElementById('prod-activities-content');
+  if (!container) return;
+  container.innerHTML = '<div class="loading-spinner">加载活动记录...</div>';
+  try {
+    var data = await API.get('/products/' + _prodDetailCurId + '/activities?sort=' + _prodActivitySort + '&limit=200');
+    buildProdActivities(data || []);
+  } catch(e) {
+    container.innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '</div>';
+  }
+}
+
+function buildProdActivities(items) {
+  var container = document.getElementById('prod-activities-content');
+  if (!container) return;
+
+  var sortBtn = '<button class="btn" style="font-size:11px;padding:4px 12px;margin-bottom:12px" onclick="toggleProdActivitySort()">' +
+    (_prodActivitySort === 'desc' ? '↓ 最新优先' : '↑ 最早优先') + '</button>';
+
+  if (!items || !items.length) {
+    container.innerHTML = sortBtn + '<div class="empty-state" style="padding:20px">暂无活动记录</div>';
+    return;
+  }
+
+  var html = sortBtn + '<div class="activity-list">';
+  items.forEach(function(a) {
+    var time = (a.created_at || '').replace('T', ' ');
+    html += '<div class="activity-item">' +
+      '<div class="activity-time">' + escHtml(time) + '</div>' +
+      '<div class="activity-body">' +
+        '<span class="activity-user">' + escHtml(a.username) + '</span>' +
+        ' <span class="activity-action pill" style="font-size:10px">' + escHtml(a.action) + '</span>' +
+        (a.detail ? ' <span class="activity-detail">' + escHtml(a.detail) + '</span>' : '') +
+      '</div>' +
+    '</div>';
+  });
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function toggleProdActivitySort() {
+  _prodActivitySort = _prodActivitySort === 'desc' ? 'asc' : 'desc';
+  loadProdActivities();
 }

@@ -29,9 +29,7 @@ class ProjectDetail(BaseModel):
     estimate: Optional[float] = None
     consumed: Optional[float] = None
     pm_name: Optional[str] = None
-    pm_account: Optional[str] = None
     customer_name: Optional[str] = None
-    alias_name: Optional[str] = None
 
 
 class GanttStage(BaseModel):

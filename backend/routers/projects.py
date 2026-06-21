@@ -1,4 +1,5 @@
-from typing import Optional
+from typing import Optional, List
+from datetime import date as DateType
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -32,6 +33,30 @@ def list_customer_names(db: Session = Depends(get_db), _=Depends(get_current_use
     from backend.models.zentao import CachedCustomer
     customers = db.query(CachedCustomer.name).order_by(CachedCustomer.name).all()
     return {"code": 0, "data": [c[0] for c in customers if c[0]], "message": "ok"}
+
+
+@user_router.get("/pm-names", response_model=dict)
+def list_pm_names(db: Session = Depends(get_db), _=Depends(get_current_user)):
+    """Return distinct PM names from cached projects for dropdown."""
+    from backend.models.zentao import CachedProject
+    names = db.query(CachedProject.pm_name).filter(CachedProject.pm_name != "", CachedProject.pm_name.isnot(None)).distinct().order_by(CachedProject.pm_name).all()
+    return {"code": 0, "data": [n[0] for n in names if n[0]], "message": "ok"}
+
+
+@user_router.get("/program-names", response_model=dict)
+def list_program_names(db: Session = Depends(get_db), _=Depends(get_current_user)):
+    """Return distinct program names from cached projects for dropdown."""
+    from backend.models.zentao import CachedProject
+    names = db.query(CachedProject.program_name).filter(CachedProject.program_name != "", CachedProject.program_name.isnot(None)).distinct().order_by(CachedProject.program_name).all()
+    return {"code": 0, "data": [n[0] for n in names if n[0]], "message": "ok"}
+
+
+@user_router.get("/project-options", response_model=dict)
+def list_project_options(db: Session = Depends(get_db), _=Depends(get_current_user)):
+    """Return all projects (id+name) for linked-projects dropdown."""
+    from backend.models.zentao import CachedProject
+    projects = db.query(CachedProject.id, CachedProject.name).order_by(CachedProject.id).all()
+    return {"code": 0, "data": [{"id": p[0], "name": p[1]} for p in projects], "message": "ok"}
 
 
 @router.get("", response_model=dict)
@@ -345,3 +370,121 @@ def set_linked_projects(
     project.linked_project_ids = ",".join(str(i) for i in payload.ids) if payload.ids else ""
     db.commit()
     return {"code": 0, "data": payload.ids, "message": "ok"}
+
+
+# ── Edit project (all PMA-managed fields) ──
+
+class ProjectUpdate(BaseModel):
+    name: Optional[str] = None
+    code: Optional[str] = None
+    project_type: Optional[str] = None
+    customer_name: Optional[str] = None
+    pm_name: Optional[str] = None
+    status: Optional[str] = None
+    begin: Optional[str] = None
+    end: Optional[str] = None
+    real_began: Optional[str] = None
+    real_end: Optional[str] = None
+    progress: Optional[str] = None
+    estimate: Optional[float] = None
+    consumed: Optional[float] = None
+    program_name: Optional[str] = None
+    planned_delivery_qty: Optional[int] = None
+    delivery_note: Optional[str] = None
+    background: Optional[str] = None
+    tags: Optional[str] = None
+    linked_project_ids: Optional[str] = None
+    description: Optional[str] = None
+    is_local: Optional[bool] = None
+
+
+@router.put("/{project_id}", response_model=dict)
+def update_project(
+    project_id: int,
+    payload: ProjectUpdate,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("project_edit")),
+):
+    """Update PMA-managed project fields."""
+    project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    changes = []
+    data = payload.model_dump(exclude_unset=True)
+    for field, value in data.items():
+        if field in ("begin", "end", "real_began", "real_end"):
+            if value is not None:
+                if isinstance(value, str) and not value.strip():
+                    value = None
+                else:
+                    try:
+                        value = DateType.fromisoformat(str(value))
+                    except (ValueError, TypeError):
+                        value = None
+        if hasattr(project, field):
+            old_val = getattr(project, field)
+            if str(old_val) != str(value):
+                changes.append(f"{field}: {old_val!r} → {value!r}")
+            setattr(project, field, value)
+
+    db.commit()
+    log_project_activity(db, project_id, user.username, "edit_project",
+                         "; ".join(changes) if changes else "no changes")
+
+    # Return updated project detail
+    detail = project_service.get_project_detail(db, project_id)
+    return {"code": 0, "data": detail, "message": f"已更新 {len(changes)} 个字段"}
+
+
+# ── Delete project ──
+
+@router.delete("/{project_id}", response_model=dict)
+def delete_project(
+    project_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("project_edit")),
+):
+    """Delete a project and all related data (executions, tasks, documents, notes, links, activities, delivery records)."""
+    project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    proj_name = project.name or str(project_id)
+
+    # Delete related records (cascade)
+    from backend.models.zentao import ProductProjectLink, CustomerProjectLink
+    from backend.models.document import ProjectDocument
+    from backend.models.local import ProjectNote, ProjectActivity
+    from backend.models.delivery import DeliveryRecord
+    from backend.models.bug import CachedBug
+    from backend.models.zentao import CachedTask
+
+    # Product-project links
+    db.query(ProductProjectLink).filter(ProductProjectLink.project_id == project_id).delete()
+    # Customer-project links
+    db.query(CustomerProjectLink).filter(CustomerProjectLink.project_id == project_id).delete()
+    # Tasks
+    db.query(CachedTask).filter(CachedTask.project_id == project_id).delete()
+    # Executions
+    db.query(CachedExecution).filter(CachedExecution.project_id == project_id).delete()
+    # Bugs
+    db.query(CachedBug).filter(CachedBug.project_id == project_id).delete()
+    # Documents
+    db.query(ProjectDocument).filter(ProjectDocument.project_id == project_id).delete()
+    # Notes
+    db.query(ProjectNote).filter(ProjectNote.project_id == project_id).delete()
+    # Activities
+    db.query(ProjectActivity).filter(ProjectActivity.project_id == project_id).delete()
+    # Delivery records
+    db.query(DeliveryRecord).filter(DeliveryRecord.project_id == project_id).delete()
+    # Sync logs (keep for audit, just remove project_id reference)
+    # Finally delete the project itself
+    db.delete(project)
+    db.commit()
+
+    # Log to audit
+    from backend.routers.logs import log_audit
+    log_audit(db, user, "project_delete", f"删除项目「{proj_name}」（ID: {project_id}）", "项目", "high")
+
+    return {"code": 0, "data": {"id": project_id, "name": proj_name}, "message": f"项目「{proj_name}」已删除"}

@@ -8,6 +8,16 @@ from backend.database import to_local_str
 from backend.models.zentao import (
     CachedProduct, CachedProject, ProductProjectLink,
 )
+from backend.models.local import ProductActivity
+
+
+def log_product_activity(db: Session, product_id: int, username: str, action: str, detail: str = ""):
+    """Log a product activity (non-deletable audit trail)."""
+    try:
+        db.add(ProductActivity(product_id=product_id, username=username, action=action, detail=detail or ""))
+        db.commit()
+    except Exception:
+        pass  # never fail the main operation
 
 
 def get_products(

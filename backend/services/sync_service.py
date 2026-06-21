@@ -887,7 +887,6 @@ class SyncService:
             program_id=parent_id if parent_id else None,
             program_name=prog_name or None,
             pm_name=pm.get("realname") or pm.get("account", ""),
-            pm_account=pm.get("account", ""),
             customer_name="",
             description=desc,
             tags=_extract_tags_from_desc(desc),
@@ -914,7 +913,6 @@ class SyncService:
         existing.estimate = _parse_float(p.get("estimate")) or existing.estimate
         existing.consumed = _parse_float(p.get("consumed")) or existing.consumed
         existing.pm_name = pm.get("realname") or pm.get("account", existing.pm_name)
-        existing.pm_account = pm.get("account", existing.pm_account)
         # customer_name is managed via PMA manual association only
         existing.description = desc
         existing.tags = _extract_tags_from_desc(desc)

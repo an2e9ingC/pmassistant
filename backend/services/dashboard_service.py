@@ -94,8 +94,7 @@ def get_project_list(
             (CachedProject.code.ilike(pattern)) |
             (CachedProject.name.ilike(pattern)) |
             (CachedProject.customer_name.ilike(pattern)) |
-            (CachedProject.pm_name.ilike(pattern)) |
-            (CachedProject.alias_name.ilike(pattern))
+            (CachedProject.pm_name.ilike(pattern))
         )
 
     if type_filter and type_filter in ("RD", "SC"):
