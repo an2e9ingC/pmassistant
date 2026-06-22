@@ -197,6 +197,13 @@ class GitLabClient:
             data["labels"] = labels
         return await self._request("POST", f"/projects/{pid}/issues", json=data)
 
+    async def get_issue(
+        self, project_path: str, issue_iid: int,
+    ) -> dict | None:
+        """Get a single issue by IID (project-internal ID, not global ID)."""
+        pid = quote(project_path, safe="")
+        return await self._request("GET", f"/projects/{pid}/issues/{issue_iid}")
+
     # ── Members ──
 
     async def get_members(self, project_path: str) -> list:

@@ -406,7 +406,7 @@ Co-Authored-By: <model-name> / <tool-name>
 
 ---
 
-## 9. Bug 分析流程（原 §8）
+## 9. Bug 分析流程
 
 1. 先查系统日志：`tail -50 data/pma-$PORT.log`
 2. 有堆栈 → 分析修复
@@ -416,11 +416,88 @@ Co-Authored-By: <model-name> / <tool-name>
 
 ---
 
-## 10. 工作流速查
+## 10. Issue 解决流程
+
+收到 `issue#N` 或 `issue#N: <描述>` 格式的 prompt 时，按以下标准流程处理：
+
+### 10.1 获取 Issue 详情（Fetch）
+
+**用户只提供 `issue#N` 时，先从 GitLab 自动获取 issue 详情：**
+
+```bash
+curl -s "http://localhost:8000/api/gitlab/issues/{N}" \
+  -H "Authorization: Bearer $(curl -s -X POST http://localhost:8000/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"徐川","password":"123456"}' | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['access_token'])")"
+```
+
+返回 JSON 包含 `title`、`description`、`labels` 等字段。
+
+- 如果 prompt 已包含描述（如 `issue#33: [问题反馈]提交bug反馈对话框...`），可直接跳过此步
+- 如果 prompt 仅为 `issue#N`，**必须**先调用此 API 获取完整信息后再继续
+- 从 title/description 提取关键词，确定涉及的功能模块
+
+### 10.2 定位代码（Locate）
+- `grep` 搜索关键词，找到所有相关文件和行号
+- Read 上下文代码，理解当前实现逻辑
+- 找到数据来源（API 响应、DOM 结构、硬编码数组等）
+
+### 10.3 诊断根因（Diagnose）
+- 对比当前实现 vs 预期行为
+- 识别问题类型：硬编码数据需改为动态获取 / 静态内容需与现有结构同步 / 权限需与现有逻辑一致
+
+### 10.4 设计方案（Design）
+- **动态优于静态**：如果信息已存在于系统某处（DOM、API、DB），从中提取而非硬编码
+- **权限感知**：尊重现有权限控制（隐藏的 DOM 元素、用户角色过滤）
+- **最少改动**：在最小范围内修改，不影响无关功能
+
+### 10.5 实现（Implement）
+- 修改代码
+- JS 语法检查：`node --check <file>`
+- Python 语法检查：`python3 -m py_compile <file>`
+- 搜索确保无旧引用残留：`grep -rn "old_symbol" --include="*.js" --include="*.py"`
+- 后端 `.py` 修改后执行 `./server.sh -p <PORT> restart`
+
+### 10.6 用户反馈迭代（Iterate）
+- 实现完成后**明确告知用户改了什么**
+- 用户提出补充要求时，精确调整，不扩大范围
+- **等待用户明确说 "commit" 才提交**，不擅自提交
+
+### 10.7 Commit
+- 遵循 Section 3 的 commit 规范
+- **必须**在 body 中加 `Closes #X`
+- 版本号更新（Section 4）
+
+### 示例
+
+```
+Prompt: issue#33: [问题反馈]提交bug反馈对话框中的组件按照web页面左侧导航栏提供选项
+
+Step 1:   prompt 已含描述，跳过 GitLab API 调用
+Step 2:   grep "bug|反馈" → 定位 app.js _FB_COMPONENTS
+Step 3:   硬编码 10 个技术模块名 vs 左侧 18 个导航项不匹配
+Step 4:   设计 buildFeedbackComponents() 从 sidebar DOM 动态提取
+Step 5:   实现 + node --check + grep 残留检查
+Step 6:   用户要求标题加 [组件名] 前缀 → _fbComponents 改为 {tag,label} + submit 拼接
+Step 7:   commit "feat(ui): 反馈对话框组件选项对齐左侧导航栏+标题[组件]前缀" Closes #33
+```
+
+```
+Prompt: issue#42
+
+Step 1:   调用 GET /api/gitlab/issues/42 → title="[产品管理] 产品列表搜索无响应"
+Step 2:   grep "产品列表\|搜索" → 定位 product.js + products.py
+Step 3:   ...
+```
+
+---
+
+## 11. 工作流速查
 
 | 用户指令 | AI 执行 |
 |---------|--------|
 | `worktree: <描述>` | EnterWorktree → 开发 → 等 merge |
+| `issue#N: <描述>` | 按 Section 10 流程：理解→定位→诊断→设计→实现→迭代→等 commit |
 | "commit" / "提交" | 更新版本号 → commit |
 | "merge" / "合并" | rebase+review(worktree) → 回主session → merge --no-ff → 等push |
 | `./server.sh status` | 查看所有运行实例概览 |

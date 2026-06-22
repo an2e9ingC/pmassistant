@@ -290,3 +290,46 @@ async def create_issue(
         return {"code": 1, "message": f"创建失败: {e}"}
     finally:
         await client.close()
+
+
+@router.get("/issues/{issue_iid}", response_model=dict)
+async def get_issue(
+    issue_iid: int,
+    _=Depends(get_current_user),
+):
+    """Fetch a GitLab issue by IID (project-internal ID).
+
+    Used by AI tools to automatically retrieve issue title/description/labels
+    when user only provides the issue number.
+    """
+    from backend.config import settings
+
+    project_path = getattr(settings, "GITLAB_PROJECT_PATH", None) or "bsp_dev/fake_it/pma"
+    token = getattr(settings, "GITLAB_TOKEN", None) or ""
+    if not token:
+        return {"code": 1, "message": "GitLab Token 未配置"}
+
+    from backend.services.gitlab_client import GitLabClient
+    client = GitLabClient()
+    try:
+        issue = await client.get_issue(project_path, issue_iid)
+        if not issue:
+            return {"code": 1, "message": f"Issue #{issue_iid} 不存在或无权限访问"}
+        return {
+            "code": 0,
+            "data": {
+                "iid": issue.get("iid"),
+                "title": issue.get("title"),
+                "description": issue.get("description"),
+                "state": issue.get("state"),
+                "labels": issue.get("labels", []),
+                "web_url": issue.get("web_url"),
+                "author": issue.get("author", {}).get("name") if issue.get("author") else None,
+                "created_at": issue.get("created_at"),
+            },
+            "message": "ok",
+        }
+    except Exception as e:
+        return {"code": 1, "message": f"获取失败: {e}"}
+    finally:
+        await client.close()

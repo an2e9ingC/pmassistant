@@ -14,3 +14,4 @@ data/backups/secrets/
 data/backups/pma-backup*.db
 data/backups/permanent/
 data/uploads/
+data/.shutdown-*
