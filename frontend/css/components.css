@@ -176,6 +176,7 @@
 }
 .table-scroll thead th {
   position: sticky; top: 0; z-index: 5;
+  background: var(--surface2);
 }
 
 .proj-table { width: 100%; border-collapse: collapse; }

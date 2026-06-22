@@ -237,6 +237,7 @@ PMA_SETTINGS = {
     "pw_verify_maint_remove": ("维护页移除关联密码验证", "1"),
     "pw_verify_product_node_del": ("产品节点删除密码验证", "1"),
     "pw_verify_product_node_edit": ("产品节点编辑密码验证", "1"),
+    "pw_verify_db_delete_backup": ("备份删除密码验证", "1"),
     "debug_perm": ("权限调试信息显示", "0"),
 }
 

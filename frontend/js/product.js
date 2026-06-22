@@ -187,9 +187,9 @@ function onProdSearch(v) {
 
 document.addEventListener('keydown', function(e) {
   if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-    e.preventDefault();
     var activeView = document.querySelector('.view.active');
     if (activeView && activeView.id === 'view-product-list') {
+      e.preventDefault();
       var searchEl = document.getElementById('prod-search');
       if (searchEl) { searchEl.focus(); searchEl.select(); }
     }
@@ -408,7 +408,7 @@ function renderProdDocs(p) {
   var nodeIds = (p.linked_node_ids && p.linked_node_ids.length) ? p.linked_node_ids : [];
   var templateLink = '';
   if (nodeIds.length) {
-    templateLink = '<a id="prod-docs-template-link" href="javascript:void(0)" onclick="gotoView(\'doc-templates\');_selectedNodeId=' + nodeIds[0] + ';setTimeout(function(){if(typeof initProductDocTemplates==\'function\'){initProductDocTemplates();}},200)" style="font-size:11px;color:var(--accent);text-decoration:none;margin-left:8px">查看文档模板详情 →</a>';
+    templateLink = '<a id="prod-docs-template-link" href="javascript:void(0)" onclick="gotoView(\'doc-templates\');_selectedNodeId=' + nodeIds[0] + ';setTimeout(function(){switchDocTemplateTab(\'product\',document.querySelector(\'#view-doc-templates .map-tab:nth-child(2)\'))},100)" style="font-size:11px;color:var(--accent);text-decoration:none;margin-left:8px">查看文档模板详情 →</a>';
   }
   document.getElementById('prodsec-docs').innerHTML =
     '<div class="section-hd"><div class="section-title">产品文档</div>' + templateLink + '</div>' +

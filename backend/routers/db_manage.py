@@ -115,7 +115,7 @@ def export_database(_=Depends(require_admin), cu=Depends(get_current_user), db: 
     """Download current database file."""
     t = datetime.now().strftime("%Y%m%d-%H%M%S")
     filename = f"pma-backup-{t}.db"
-    log_audit(db, cu, "db_export", f"导出数据库: {filename}")
+    log_audit(db, cu, "db_export", f"导出数据库: {filename}", "管理")
     return FileResponse(
         path=_db_path,
         filename=filename,
@@ -183,7 +183,7 @@ async def import_database(
             os.unlink(tmp_path)
         return {"code": 1, "message": f"替换数据库失败，已从备份恢复: {e}"}
 
-    log_audit(db, cu, "db_import", f"导入数据库: {file.filename}（备份: {backup_path.name}）")
+    log_audit(db, cu, "db_import", f"导入数据库: {file.filename}（备份: {backup_path.name}）", "管理")
     return {
         "code": 0,
         "data": {"backup": backup_path.name},
@@ -251,7 +251,7 @@ def delete_backup(name: str, _=Depends(require_admin), cu=Depends(get_current_us
     if not file_path.exists():
         return {"code": 1, "message": "备份文件不存在"}
     file_path.unlink()
-    log_audit(db, cu, "db_delete_backup", f"删除备份: {safe_name}")
+    log_audit(db, cu, "db_delete_backup", f"删除备份: {safe_name}", "管理")
     return {"code": 0, "message": f"已删除 {safe_name}"}
 
 

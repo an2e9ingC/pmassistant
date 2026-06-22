@@ -343,3 +343,15 @@ async function dashboardCreateProject() {
     showToast('创建失败: ' + (e.detail || e.message), 'error');
   }
 }
+
+// Ctrl+K shortcut: focus search on dashboard
+document.addEventListener('keydown', function(e) {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+    var activeView = document.querySelector('.view.active');
+    if (activeView && activeView.id === 'view-dashboard') {
+      e.preventDefault();
+      var searchEl = document.getElementById('proj-search');
+      if (searchEl) { searchEl.focus(); searchEl.select(); }
+    }
+  }
+});

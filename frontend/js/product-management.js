@@ -211,7 +211,7 @@ function renderProductManagementPage() {
       });
       rightHtml += '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">文档模板：' +
         templateParts.join('、') + '　' +
-        '<a href="javascript:void(0)" onclick="gotoView(\'doc-templates\');_selectedNodeId=' + _pmSelectedNodeId + ';setTimeout(function(){if(typeof initProductDocTemplates==\'function\'){initProductDocTemplates();}},200)" style="color:var(--accent);font-size:11px;text-decoration:none">查看详情 →</a>' +
+        '<a href="javascript:void(0)" onclick="gotoView(\'doc-templates\');_selectedNodeId=' + _pmSelectedNodeId + ';setTimeout(function(){switchDocTemplateTab(\'product\',document.querySelector(\'#view-doc-templates .map-tab:nth-child(2)\'))},100)" style="color:var(--accent);font-size:11px;text-decoration:none">查看详情 →</a>' +
       '</div>';
     }
 

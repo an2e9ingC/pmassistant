@@ -95,7 +95,7 @@
 .stage-table td .gs-ring { vertical-align: middle; }
 /* Within .table-scroll, use separate border model for sticky to work */
 .table-scroll .stage-table { border-collapse: separate; border-spacing: 0; }
-.table-scroll .stage-table th { border-bottom: 1px solid var(--border); }
+.table-scroll .stage-table th { position: sticky; top: 0; background: var(--surface2); z-index: 1; border-bottom: 1px solid var(--border); }
 .table-scroll .stage-table td { border-bottom: 1px solid var(--border); }
 .table-scroll .stage-table tr:last-child td { border-bottom: none; }
 

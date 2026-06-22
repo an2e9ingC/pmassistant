@@ -240,6 +240,13 @@ function buildFeedbackComponents() {
       groupIdx[groupName]++;
     });
   });
+
+  // Extra components beyond sidebar navigation
+  components.push({ label: '问题反馈',   tag: 'feedback',    color: '#f59e0b' });
+  components.push({ label: '顶部通知栏', tag: 'notification', color: '#ef4444' });
+  components.push({ label: '个人中心',   tag: 'profile',      color: '#10b981' });
+  components.push({ label: '其他',       tag: 'other',        color: 'var(--muted)' });
+
   return components;
 }
 

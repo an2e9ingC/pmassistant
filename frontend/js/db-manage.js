@@ -124,7 +124,7 @@ function renderDbManage() {
   if (!_dbBackups.length) {
     html += '<div class="config-fields" style="padding:12px 16px;font-size:12px;color:var(--muted);font-style:italic">暂无备份文件</div>';
   } else {
-    html += '<div style="overflow-x:auto;max-height:400px;overflow-y:auto">' +
+    html += '<div class="table-scroll" style="max-height:400px">' +
       '<table class="stage-table" style="font-size:12px;width:100%">' +
         '<thead><tr>' +
           '<th style="width:50px;text-align:center">序号</th><th>文件名</th><th style="width:90px">大小</th><th style="width:160px">时间</th><th style="width:120px">操作</th>' +
@@ -317,6 +317,8 @@ async function saveBackupConfig() {
 
 async function deleteBackup(name) {
   if (!confirm('确认删除备份 ' + name + ' ？')) return;
+  var ok = await verifyPassword('删除备份', 'pw_verify_db_delete_backup');
+  if (!ok) return;
   try {
     await API.del('/admin/db/backups/' + encodeURIComponent(name));
     _dbBackups = _dbBackups.filter(function(b) { return b.name !== name; });
