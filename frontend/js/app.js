@@ -204,18 +204,44 @@ window.addEventListener('popstate', function(e) {
 
 var _fbComponents = [];  // selected component labels
 
-var _FB_COMPONENTS = [
-  { label: '前端UI',     tag: 'frontend',     color: 'var(--accent)' },
-  { label: '后端API',    tag: 'backend',      color: 'var(--success)' },
-  { label: '甘特图',     tag: 'gantt',        color: 'var(--warn)' },
-  { label: '文档模板',   tag: 'doc-template', color: 'var(--danger)' },
-  { label: '数据同步',   tag: 'sync',         color: '#8b5cf6' },
-  { label: '权限',       tag: 'auth',         color: '#ec4899' },
-  { label: 'GitLab集成', tag: 'gitlab',       color: '#f97316' },
-  { label: '产品管理',   tag: 'product',      color: '#06b6d4' },
-  { label: '交付管理',   tag: 'delivery',     color: '#84cc16' },
-  { label: '统计报表',   tag: 'reports',      color: '#6366f1' },
-];
+// Color palette per nav group (cycled within group)
+var _FB_GROUP_COLORS = {
+  '项目': ['var(--accent)', '#3b82f6', '#2563eb'],
+  '产品': ['var(--success)', '#059669', '#0d9488'],
+  '客户': ['var(--warn)', '#d97706'],
+  '工具': ['#8b5cf6', '#6366f1', '#a855f7'],
+  '管理': ['#ec4899', '#f43f5e', '#14b8a6', '#f97316', '#84cc16', '#06b6d4', '#64748b'],
+};
+
+function buildFeedbackComponents() {
+  // Extract nav items from sidebar DOM to mirror the navigation
+  var components = [];
+  var groups = document.querySelectorAll('.sidebar-nav .nav-group');
+  var groupIdx = {};
+  groups.forEach(function(group) {
+    // Skip hidden groups (e.g. admin group for non-admin users)
+    if (group.style.display === 'none') return;
+    var label = group.querySelector('.nav-group-label');
+    var groupName = label ? label.textContent.trim() : '';
+    if (!groupName) return;
+    if (!(groupName in groupIdx)) groupIdx[groupName] = 0;
+    var items = group.querySelectorAll('.nav-item');
+    items.forEach(function(item) {
+      // Skip hidden items (e.g. admin-only nav for non-admin users)
+      if (item.style.display === 'none') return;
+      var id = item.id.replace('nav-', '');
+      var text = item.textContent.trim();
+      // Strip badge text from nav label
+      var badge = item.querySelector('.nav-badge');
+      if (badge) text = text.replace(badge.textContent, '').trim();
+      var colors = _FB_GROUP_COLORS[groupName] || ['var(--muted)'];
+      var color = colors[groupIdx[groupName] % colors.length];
+      components.push({ label: text, tag: id, color: color });
+      groupIdx[groupName]++;
+    });
+  });
+  return components;
+}
 
 function openFeedbackDialog() {
   _fbComponents = [];
@@ -237,8 +263,8 @@ function openFeedbackDialog() {
     styleEl.textContent = '.fb-chip{cursor:pointer;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:500;border:1.5px solid var(--border);color:var(--muted);transition:all 0.15s;user-select:none} .fb-chip:hover{border-color:var(--chip-color,var(--accent));color:var(--chip-color,var(--accent))} .fb-chip.active{background:var(--chip-color,var(--accent));color:#fff;border-color:var(--chip-color,var(--accent))}';
     document.head.appendChild(styleEl);
   }
-  var chipsHtml = _FB_COMPONENTS.map(function(c) {
-    return '<span class="fb-chip" data-tag="' + c.tag + '" onclick="toggleFbChip(this)" style="--chip-color:' + c.color + '">' + c.label + '</span>';
+  var chipsHtml = buildFeedbackComponents().map(function(c) {
+    return '<span class="fb-chip" data-tag="' + c.tag + '" data-label="' + escHtml(c.label) + '" onclick="toggleFbChip(this)" style="--chip-color:' + c.color + '">' + c.label + '</span>';
   }).join('');
 
   var html = '<div class="note-dialog-overlay">' +
@@ -292,12 +318,16 @@ function openFeedbackDialog() {
 
 function toggleFbChip(el) {
   var tag = el.getAttribute('data-tag');
-  var idx = _fbComponents.indexOf(tag);
+  var label = el.getAttribute('data-label') || tag;
+  var idx = -1;
+  for (var i = 0; i < _fbComponents.length; i++) {
+    if (_fbComponents[i].tag === tag) { idx = i; break; }
+  }
   if (idx >= 0) {
     _fbComponents.splice(idx, 1);
     el.classList.remove('active');
   } else {
-    _fbComponents.push(tag);
+    _fbComponents.push({ tag: tag, label: label });
     el.classList.add('active');
   }
 }
@@ -357,6 +387,12 @@ async function submitFeedback() {
   var versionInfo = versionEl ? versionEl.textContent : '';
   if (!title) { showToast('请输入标题', 'error'); return; }
 
+  // Prepend selected component labels to title as [标签] prefix
+  if (_fbComponents.length) {
+    var prefix = _fbComponents.map(function(c) { return '[' + c.label + ']'; }).join('');
+    title = prefix + ' ' + title;
+  }
+
   // Append version info to description
   var fullDesc = desc || '';
   if (versionInfo && versionInfo !== '加载中...') {
@@ -369,7 +405,7 @@ async function submitFeedback() {
   try {
     var assigneeEl = document.getElementById('fb-assignee');
     var assigneeId = assigneeEl ? parseInt(assigneeEl.value) || null : null;
-    var componentLabels = _fbComponents.length ? _fbComponents.join(',') : '';
+    var componentLabels = _fbComponents.length ? _fbComponents.map(function(c) { return c.tag; }).join(',') : '';
     var result = await API.post('/gitlab/issues', {
       issue_type: window._fbType || 'bug',
       title: title,
