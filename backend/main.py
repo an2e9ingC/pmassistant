@@ -9,13 +9,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-from backend.config import settings
+from backend.config import settings, SERVER_START_TIME
 from backend.database import init_db
 from backend.routers import auth, config, dashboard, projects, sync, products, delivery, reports, logs, topology, admin_users, maintenance, customers, document_template, product_doc_template, pma_tag, standards, gitlab, db_manage, product_management
 
 # File log handler — use same directory as database
 import backend.database as _db_module
 _log_dir = _os.path.dirname(getattr(_db_module, "_db_path", "data/pma-8800.db"))
+
+# Shutdown notice file path (written by server.sh before stop, cleared on start)
+_SHUTDOWN_NOTICE_FILE = _os.path.join(_os.path.dirname(getattr(_db_module, "_db_path", "data/pma.db")), ".shutdown-notice-" + _os.environ.get("PMA_PORT", "8000") + ".json")
 _port = _os.environ.get("PMA_PORT", "")
 _log_suffix = f"-{_port}" if _port else ""
 _log_file = _os.path.join(_log_dir, f"pma{_log_suffix}.log")
@@ -149,3 +152,25 @@ async def serve_login():
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/api/server-status")
+async def server_status():
+    """Return server status including shutdown notice and start time for frontend polling."""
+    import json as _json
+    from fastapi.responses import JSONResponse
+    notice = None
+    try:
+        if _os.path.exists(_SHUTDOWN_NOTICE_FILE):
+            with open(_SHUTDOWN_NOTICE_FILE, "r") as f:
+                notice = _json.load(f)
+    except Exception:
+        pass
+    return JSONResponse(
+        content={
+            "status": "shutting-down" if notice else "running",
+            "notice": notice,
+            "server_start_time": SERVER_START_TIME,
+        },
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )

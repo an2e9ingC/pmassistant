@@ -3,7 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
-from backend.config import settings
+from backend.config import settings, SERVER_START_TIME
 from backend.database import get_db
 from backend.models.local import LocalUser
 
@@ -20,6 +20,10 @@ def get_current_user(
         user_id = int(payload.get("sub", 0))
         if user_id is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        # Reject tokens issued before the current server process started (restart detection)
+        iat = payload.get("iat")
+        if iat and iat < SERVER_START_TIME:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Server restarted, please login again")
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 

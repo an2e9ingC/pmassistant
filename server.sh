@@ -77,6 +77,8 @@ do_start() {
     mkdir -p "$SCRIPT_DIR/data"
 
     echo -n "[PMA:$PORT] 启动服务器..."
+    # Clear shutdown notice on fresh start
+    rm -f "$NOTICE_FILE"
     TZ=Asia/Shanghai PMA_PORT="$PORT" DATABASE_URL="sqlite:///./data/pma-$PORT.db" nohup python3 -m uvicorn backend.main:app \
         --host "$HOST" \
         --port "$PORT" \
@@ -121,7 +123,12 @@ do_stop() {
     fi
 
     local pid=$(get_pid)
+    # Write shutdown notice so frontend can warn users
+    local notice_msg="服务器将在几秒后${reason:-停止}，请保存工作。重启后需重新登录。"
+    echo "{\"message\":\"$notice_msg\",\"time\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}" > "$NOTICE_FILE"
     echo -n "[PMA:$PORT] 停止服务器 (PID: $pid)..."
+    # Give SSE loop enough time to detect the notice file and push shutdown event to all clients
+    sleep 5
     kill "$pid" 2>/dev/null || true
 
     # Wait for graceful shutdown
@@ -435,6 +442,7 @@ fi
 PID_FILE="$SCRIPT_DIR/.pma-server-$PORT.pid"
 LOG_FILE="$SCRIPT_DIR/data/pma-$PORT.log"
 SERVER_LOG="$SCRIPT_DIR/data/server-$PORT.log"
+NOTICE_FILE="$SCRIPT_DIR/data/.shutdown-notice-$PORT.json"
 BASE_URL="${PMA_URL:-http://$(detect_ip):$PORT}"
 
 case "${1:-help}" in

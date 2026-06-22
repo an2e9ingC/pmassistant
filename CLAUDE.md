@@ -275,6 +275,10 @@ Co-Authored-By: <model-name> / <tool-name>
 - 修复 GitLab issue 时 body 加 `Closes #X`
 - **不要每改一行就 commit**，等用户确认后再提交
 - **每次 commit 必须包含数据库文件**：`git add data/pma-$PORT.db`（当前运行端口对应的 db 文件）。数据库是项目数据的一部分，需随代码一起版本管理
+- **提交前必须先停止服务**：运行中的服务持有 SQLite 连接，`git commit` 写入 db 文件会导致连接状态异常（readonly error）。正确流程：
+  1. `./server.sh -p <PORT> stop`
+  2. `git add ... && git commit -m "..."`（此时 db 文件可安全写入）
+  3. `./server.sh -p <PORT> restart`
 - **数据层变更必须同步更新 `docs/db.md`**：涉及以下任一改动时，commit 前必须更新数据库文档：
   - 新增/修改/删除 ORM 模型（`backend/models/*.py`）
   - 新增/修改/删除 SQLAlchemy 表、列、约束、索引、关系

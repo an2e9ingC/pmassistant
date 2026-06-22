@@ -81,3 +81,7 @@ def zentao_product_releases_url(product_id: int) -> str:
 
 
 settings = Settings()
+
+# ── Server start time (epoch) — used for restart detection ──
+import time as _time
+SERVER_START_TIME = int(_time.time())

@@ -44,3 +44,46 @@ const API = {
   put(path, body) { return this.request('PUT', path, body); },
   del(path) { return this.request('DELETE', path); },
 };
+
+// ── Server status poller (shutdown notice + restart detection) ──
+var _serverStartTime = null;
+
+(function pollServerStatus() {
+  fetch('/api/server-status')
+    .then(function(res) { return res.json(); })
+    .then(function(json) {
+      // Restart detection
+      if (json.server_start_time) {
+        if (_serverStartTime === null) {
+          _serverStartTime = json.server_start_time;
+        } else if (_serverStartTime !== json.server_start_time) {
+          localStorage.removeItem('pma_token');
+          localStorage.removeItem('pma_user');
+          window.location.href = '/login';
+          return;
+        }
+      }
+
+      // Shutdown banner
+      var banner = document.getElementById('shutdown-banner');
+      if (banner) {
+        if (json.status === 'shutting-down' && json.notice) {
+          document.getElementById('shutdown-banner-msg').textContent = json.notice.message;
+          banner.style.display = 'block';
+        } else {
+          banner.style.display = 'none';
+        }
+      }
+    })
+    .catch(function() {
+      // Server is down
+      var banner = document.getElementById('shutdown-banner');
+      if (banner) {
+        document.getElementById('shutdown-banner-msg').textContent = '服务器已离线，请等待恢复后刷新页面。';
+        banner.style.display = 'block';
+      }
+    })
+    .finally(function() {
+      setTimeout(pollServerStatus, 2000);
+    });
+})();
