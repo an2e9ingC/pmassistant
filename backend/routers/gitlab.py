@@ -245,7 +245,7 @@ async def create_issue(
     else:
         title = body.title or "功能建议"
         base_labels = "enhancement"
-        template = f"""## 问题背景
+        template = f"""## 详细描述
 
 {body.description or '（请描述期望的功能或改进）'}
 
