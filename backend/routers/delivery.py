@@ -56,7 +56,7 @@ def create_record(
     data["serial_numbers"] = body.serial_numbers or []
     record = delivery_service.create_delivery_record(db, project_id, data)
     log_project_activity(db, project_id, user.username, "交付记录",
-        f"新增: {body.product_name} x{body.quantity}")
+        f"新增:{body.product_name} x{body.quantity}")
     return {"code": 0, "data": delivery_service.record_dict(record), "message": "ok"}
 
 
@@ -67,14 +67,23 @@ def update_record(
     db: Session = Depends(get_db),
     user=Depends(require_admin),
 ):
+    from backend.models.delivery import DeliveryRecord as _DR
+    old_record = db.query(_DR).filter(_DR.id == record_id).first()
+    if not old_record:
+        raise HTTPException(status_code=404, detail="Record not found")
     data = {k: v for k, v in body.model_dump().items() if v is not None}
     if not data:
         raise HTTPException(status_code=400, detail="No fields to update")
+    del_changes = []
+    for k, v in data.items():
+        old_val = getattr(old_record, k, None)
+        if str(old_val) != str(v):
+            del_changes.append(f"{k}:'{old_val}'->'{v}'")
     record = delivery_service.update_delivery_record(db, record_id, data)
     if not record:
         raise HTTPException(status_code=404, detail="Record not found")
     log_project_activity(db, record.project_id, user.username, "交付记录编辑",
-        f"编辑: {record.product_name} x{record.quantity}")
+        "; ".join(del_changes) if del_changes else "无变更")
     return {"code": 0, "data": delivery_service.record_dict(record), "message": "ok"}
 
 

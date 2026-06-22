@@ -2059,46 +2059,119 @@ function maintRemove_tag(name) {
 /* ── Project Activities (进度明细) ── */
 
 var _activitySort = 'desc';
+var _activityFilterUser = '';
+var _activityFilterAction = '';
+var _activityOptions = null;  // {usernames: [...], actions: [...]}
 
 async function loadActivities() {
   var container = document.getElementById('activities-content');
   container.innerHTML = '<div class="loading-spinner">加载活动记录...</div>';
   try {
-    var data = await API.get('/projects/' + _comboCurId + '/activities?sort=' + _activitySort + '&limit=200');
-    buildActivities(data || []);
+    var params = 'sort=' + _activitySort + '&limit=200';
+    if (_activityFilterUser) params += '&username=' + encodeURIComponent(_activityFilterUser);
+    if (_activityFilterAction) params += '&action=' + encodeURIComponent(_activityFilterAction);
+    var resp = await API.get('/projects/' + _comboCurId + '/activities?' + params);
+    var items = resp && resp.items ? resp.items : (Array.isArray(resp) ? resp : []);
+    var opts = resp && resp.options ? resp.options : null;
+    buildActivities(items, opts);
   } catch(e) {
     container.innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '</div>';
   }
 }
 
-function buildActivities(items) {
+function buildActivities(items, opts) {
   var container = document.getElementById('activities-content');
 
-  var sortBtn = '<button class="btn" style="font-size:11px;padding:4px 12px;margin-bottom:12px" onclick="toggleActivitySort()">' +
-    (_activitySort === 'desc' ? '↓ 最新优先' : '↑ 最早优先') + '</button>';
+  // Keep filter options for dropdowns
+  if (opts) _activityOptions = opts;
+
+  // Filter badge (when active)
+  var filterBadge = '';
+  if (_activityFilterUser || _activityFilterAction) {
+    filterBadge = '<div style="margin-bottom:8px">' +
+      '<span class="activity-filter-badge">' +
+      '筛选: ' + [_activityFilterUser, _activityFilterAction].filter(Boolean).join(' + ') +
+      ' <a href="javascript:void(0)" onclick="clearActivityFilters()" style="color:var(--danger);text-decoration:none;margin-left:4px">✕</a>' +
+      '</span></div>';
+  }
+
+  // Sort indicator
+  var sortIcon = '<span id="act-sort-ind" style="color:var(--muted)">⇅</span>';
+
+  // Build filter dropdowns for header
+  var userOpts = (_activityOptions && _activityOptions.usernames) ? _activityOptions.usernames : [];
+  var userFilter = '<select id="act-filter-user" onchange="onActivityFilterUser(this.value)" class="activity-header-filter">' +
+    '<option value="">全部</option>';
+  userOpts.forEach(function(u) {
+    userFilter += '<option value="' + escHtml(u) + '"' + (_activityFilterUser === u ? ' selected' : '') + '>' + escHtml(u) + '</option>';
+  });
+  userFilter += '</select>';
+
+  var actionOpts = (_activityOptions && _activityOptions.actions) ? _activityOptions.actions : [];
+  var actionFilter = '<select id="act-filter-action" onchange="onActivityFilterAction(this.value)" class="activity-header-filter">' +
+    '<option value="">全部</option>';
+  actionOpts.forEach(function(a) {
+    actionFilter += '<option value="' + escHtml(a) + '"' + (_activityFilterAction === a ? ' selected' : '') + '>' + escHtml(a) + '</option>';
+  });
+  actionFilter += '</select>';
 
   if (!items || !items.length) {
-    container.innerHTML = sortBtn + '<div class="empty-state" style="padding:20px">暂无活动记录</div>';
+    container.innerHTML = filterBadge + '<div class="empty-state" style="padding:20px">暂无活动记录</div>';
     return;
   }
 
-  var html = sortBtn + '<div class="activity-list">';
+  var html = filterBadge;
+  html += '<div class="table-scroll" style="max-height:calc(100vh - 330px)">';
+  html += '<table class="stage-table activity-table">';
+  html += '<thead><tr>' +
+    '<th style="cursor:pointer;user-select:none;white-space:nowrap" onclick="toggleActivitySort()">时间 ' + sortIcon + '</th>' +
+    '<th style="white-space:nowrap">用户名 ' + userFilter + '</th>' +
+    '<th style="white-space:nowrap">操作类型 ' + actionFilter + '</th>' +
+    '<th>具体明细</th>' +
+    '</tr></thead><tbody>';
+
   items.forEach(function(a) {
     var time = (a.created_at || '').replace('T', ' ');
-    html += '<div class="activity-item">' +
-      '<div class="activity-time">' + escHtml(time) + '</div>' +
-      '<div class="activity-body">' +
-        '<span class="activity-user">' + escHtml(a.username) + '</span>' +
-        ' <span class="activity-action pill" style="font-size:10px">' + escHtml(a.action) + '</span>' +
-        (a.detail ? ' <span class="activity-detail">' + escHtml(a.detail) + '</span>' : '') +
-      '</div>' +
-    '</div>';
+    html += '<tr>' +
+      '<td class="act-td-time">' + escHtml(time) + '</td>' +
+      '<td class="act-td-user">' + escHtml(a.username) + '</td>' +
+      '<td style="white-space:nowrap"><span class="activity-action pill">' + escHtml(a.action) + '</span></td>' +
+      '<td class="act-td-detail">' + (a.detail ? escHtml(a.detail) : '') + '</td>' +
+      '</tr>';
   });
-  html += '</div>';
+
+  html += '</tbody></table></div>';
   container.innerHTML = html;
+
+  // Update sort indicator after render
+  updateActivitySortInd();
+}
+
+function updateActivitySortInd() {
+  var si = document.getElementById('act-sort-ind');
+  if (!si) return;
+  if (_activitySort === 'asc') { si.textContent = '▲'; si.style.color = ''; }
+  else if (_activitySort === 'desc') { si.textContent = '▼'; si.style.color = ''; }
+  else { si.textContent = '⇅'; si.style.color = 'var(--muted)'; }
 }
 
 function toggleActivitySort() {
   _activitySort = _activitySort === 'desc' ? 'asc' : 'desc';
+  loadActivities();
+}
+
+function onActivityFilterUser(val) {
+  _activityFilterUser = val || '';
+  loadActivities();
+}
+
+function onActivityFilterAction(val) {
+  _activityFilterAction = val || '';
+  loadActivities();
+}
+
+function clearActivityFilters() {
+  _activityFilterUser = '';
+  _activityFilterAction = '';
   loadActivities();
 }

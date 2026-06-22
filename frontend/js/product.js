@@ -1061,6 +1061,9 @@ async function saveProdTags() {
 // ── Tab: 产品进度明细 ──
 
 var _prodActivitySort = 'desc';
+var _prodActivityFilterUser = '';
+var _prodActivityFilterAction = '';
+var _prodActivityOptions = null;
 
 async function loadProdActivities() {
   if (!_prodDetailCurId) return;
@@ -1068,42 +1071,110 @@ async function loadProdActivities() {
   if (!container) return;
   container.innerHTML = '<div class="loading-spinner">加载活动记录...</div>';
   try {
-    var data = await API.get('/products/' + _prodDetailCurId + '/activities?sort=' + _prodActivitySort + '&limit=200');
-    buildProdActivities(data || []);
+    var params = 'sort=' + _prodActivitySort + '&limit=200';
+    if (_prodActivityFilterUser) params += '&username=' + encodeURIComponent(_prodActivityFilterUser);
+    if (_prodActivityFilterAction) params += '&action=' + encodeURIComponent(_prodActivityFilterAction);
+    var resp = await API.get('/products/' + _prodDetailCurId + '/activities?' + params);
+    var items = resp && resp.items ? resp.items : (Array.isArray(resp) ? resp : []);
+    var opts = resp && resp.options ? resp.options : null;
+    buildProdActivities(items, opts);
   } catch(e) {
     container.innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '</div>';
   }
 }
 
-function buildProdActivities(items) {
+function buildProdActivities(items, opts) {
   var container = document.getElementById('prod-activities-content');
   if (!container) return;
 
-  var sortBtn = '<button class="btn" style="font-size:11px;padding:4px 12px;margin-bottom:12px" onclick="toggleProdActivitySort()">' +
-    (_prodActivitySort === 'desc' ? '↓ 最新优先' : '↑ 最早优先') + '</button>';
+  if (opts) _prodActivityOptions = opts;
+
+  // Filter badge
+  var filterBadge = '';
+  if (_prodActivityFilterUser || _prodActivityFilterAction) {
+    filterBadge = '<div style="margin-bottom:8px">' +
+      '<span class="activity-filter-badge">' +
+      '筛选: ' + [_prodActivityFilterUser, _prodActivityFilterAction].filter(Boolean).join(' + ') +
+      ' <a href="javascript:void(0)" onclick="clearProdActivityFilters()" style="color:var(--danger);text-decoration:none;margin-left:4px">✕</a>' +
+      '</span></div>';
+  }
+
+  // Sort indicator
+  var sortIcon = '<span id="prod-act-sort-ind" style="color:var(--muted)">⇅</span>';
+
+  // Filter dropdowns for header
+  var userOpts = (_prodActivityOptions && _prodActivityOptions.usernames) ? _prodActivityOptions.usernames : [];
+  var userFilter = '<select id="prod-act-filter-user" onchange="onProdActivityFilterUser(this.value)" class="activity-header-filter">' +
+    '<option value="">全部</option>';
+  userOpts.forEach(function(u) {
+    userFilter += '<option value="' + escHtml(u) + '"' + (_prodActivityFilterUser === u ? ' selected' : '') + '>' + escHtml(u) + '</option>';
+  });
+  userFilter += '</select>';
+
+  var actionOpts = (_prodActivityOptions && _prodActivityOptions.actions) ? _prodActivityOptions.actions : [];
+  var actionFilter = '<select id="prod-act-filter-action" onchange="onProdActivityFilterAction(this.value)" class="activity-header-filter">' +
+    '<option value="">全部</option>';
+  actionOpts.forEach(function(a) {
+    actionFilter += '<option value="' + escHtml(a) + '"' + (_prodActivityFilterAction === a ? ' selected' : '') + '>' + escHtml(a) + '</option>';
+  });
+  actionFilter += '</select>';
 
   if (!items || !items.length) {
-    container.innerHTML = sortBtn + '<div class="empty-state" style="padding:20px">暂无活动记录</div>';
+    container.innerHTML = filterBadge + '<div class="empty-state" style="padding:20px">暂无活动记录</div>';
     return;
   }
 
-  var html = sortBtn + '<div class="activity-list">';
+  var html = filterBadge;
+  html += '<div class="table-scroll" style="max-height:calc(100vh - 330px)">';
+  html += '<table class="stage-table activity-table">';
+  html += '<thead><tr>' +
+    '<th style="cursor:pointer;user-select:none;white-space:nowrap" onclick="toggleProdActivitySort()">时间 ' + sortIcon + '</th>' +
+    '<th style="white-space:nowrap">用户名 ' + userFilter + '</th>' +
+    '<th style="white-space:nowrap">操作类型 ' + actionFilter + '</th>' +
+    '<th>具体明细</th>' +
+    '</tr></thead><tbody>';
+
   items.forEach(function(a) {
     var time = (a.created_at || '').replace('T', ' ');
-    html += '<div class="activity-item">' +
-      '<div class="activity-time">' + escHtml(time) + '</div>' +
-      '<div class="activity-body">' +
-        '<span class="activity-user">' + escHtml(a.username) + '</span>' +
-        ' <span class="activity-action pill" style="font-size:10px">' + escHtml(a.action) + '</span>' +
-        (a.detail ? ' <span class="activity-detail">' + escHtml(a.detail) + '</span>' : '') +
-      '</div>' +
-    '</div>';
+    html += '<tr>' +
+      '<td class="act-td-time">' + escHtml(time) + '</td>' +
+      '<td class="act-td-user">' + escHtml(a.username) + '</td>' +
+      '<td style="white-space:nowrap"><span class="activity-action pill">' + escHtml(a.action) + '</span></td>' +
+      '<td class="act-td-detail">' + (a.detail ? escHtml(a.detail) : '') + '</td>' +
+      '</tr>';
   });
-  html += '</div>';
+
+  html += '</tbody></table></div>';
   container.innerHTML = html;
+
+  updateProdActivitySortInd();
+}
+
+function updateProdActivitySortInd() {
+  var si = document.getElementById('prod-act-sort-ind');
+  if (!si) return;
+  if (_prodActivitySort === 'asc') { si.textContent = '▲'; si.style.color = ''; }
+  else if (_prodActivitySort === 'desc') { si.textContent = '▼'; si.style.color = ''; }
+  else { si.textContent = '⇅'; si.style.color = 'var(--muted)'; }
 }
 
 function toggleProdActivitySort() {
   _prodActivitySort = _prodActivitySort === 'desc' ? 'asc' : 'desc';
+  loadProdActivities();
+}
+
+function onProdActivityFilterUser(val) {
+  _prodActivityFilterUser = val || '';
+  loadProdActivities();
+}
+
+function onProdActivityFilterAction(val) {
+  _prodActivityFilterAction = val || '';
+  loadProdActivities();
+}
+
+function clearProdActivityFilters() {
+  _prodActivityFilterUser = '';
+  _prodActivityFilterAction = '';
   loadProdActivities();
 }

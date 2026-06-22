@@ -39,12 +39,18 @@ def get_project_products(project_id: int, db: Session = Depends(get_db), _=Depen
 
 @router.put("/projects/{project_id}/products", response_model=dict)
 def set_project_products(project_id: int, payload: LinkIds, db: Session = Depends(get_db), user=Depends(require_perm("project_edit"))):
+    # Get old names before deleting links
+    old_links = db.query(ProductProjectLink).filter(ProductProjectLink.project_id == project_id).all()
+    old_pids = [l.product_id for l in old_links]
+    old_names = [p.name for p in db.query(CachedProduct).filter(CachedProduct.id.in_(old_pids)).all()] if old_pids else []
     db.query(ProductProjectLink).filter(ProductProjectLink.project_id == project_id).delete()
     for pid in payload.ids:
         db.add(ProductProjectLink(product_id=pid, project_id=project_id))
     db.commit()
     names = [p.name for p in db.query(CachedProduct).filter(CachedProduct.id.in_(payload.ids)).all()]
-    log_project_activity(db, project_id, user.username, "关联产品", f"设置关联产品: {', '.join(names) if names else '清空'}")
+    old_str = ", ".join(old_names) if old_names else "无"
+    new_str = ", ".join(names) if names else "无"
+    log_project_activity(db, project_id, user.username, "关联产品", f"product:'{old_str}'->'{new_str}'")
     return {"code": 0, "data": payload.ids, "message": "ok"}
 
 
@@ -60,12 +66,17 @@ def get_project_customers(project_id: int, db: Session = Depends(get_db), _=Depe
 
 @router.put("/projects/{project_id}/customers", response_model=dict)
 def set_project_customers(project_id: int, payload: LinkIds, db: Session = Depends(get_db), user=Depends(require_perm("project_edit"))):
+    old_links = db.query(CustomerProjectLink).filter(CustomerProjectLink.project_id == project_id).all()
+    old_cids = [l.customer_id for l in old_links]
+    old_names = [c.name for c in db.query(CachedCustomer).filter(CachedCustomer.id.in_(old_cids)).all()] if old_cids else []
     db.query(CustomerProjectLink).filter(CustomerProjectLink.project_id == project_id).delete()
     for cid in payload.ids:
         db.add(CustomerProjectLink(customer_id=cid, project_id=project_id))
     db.commit()
     names = [c.name for c in db.query(CachedCustomer).filter(CachedCustomer.id.in_(payload.ids)).all()]
-    log_project_activity(db, project_id, user.username, "关联客户", f"设置关联客户: {', '.join(names) if names else '清空'}")
+    old_str = ", ".join(old_names) if old_names else "无"
+    new_str = ", ".join(names) if names else "无"
+    log_project_activity(db, project_id, user.username, "关联客户", f"customer:'{old_str}'->'{new_str}'")
     return {"code": 0, "data": payload.ids, "message": "ok"}
 
 
@@ -111,9 +122,13 @@ def set_project_tags(project_id: int, payload: TagList, db: Session = Depends(ge
     project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    old_tags_str = project.tags or ""
+    old_tags = [t.strip() for t in old_tags_str.split(",") if t.strip()]
     project.tags = ",".join(payload.tags) if payload.tags else ""
     db.commit()
-    log_project_activity(db, project_id, user.username, "项目标签", f"设置标签: {', '.join(payload.tags) if payload.tags else '清空'}")
+    old_str = ", ".join(old_tags) if old_tags else "无"
+    new_str = ", ".join(payload.tags) if payload.tags else "无"
+    log_project_activity(db, project_id, user.username, "项目标签", f"tags:'{old_str}'->'{new_str}'")
     return {"code": 0, "data": payload.tags, "message": "ok"}
 
 

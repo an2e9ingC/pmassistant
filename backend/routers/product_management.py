@@ -114,7 +114,7 @@ def link_product_to_node(
         log_audit(db, user, "product_node_link",
                   f"关联产品「{prod.name if prod else body.product_id}」到节点「{node.name if node else body.node_id}」",
                   "产品", "medium")
-        log_product_activity(db, body.product_id, user.username, "关联节点", node.name if node else str(body.node_id))
+        log_product_activity(db, body.product_id, user.username, "关联节点", f"node:{node.name if node else body.node_id}")
         return {"code": 0, "data": result, "message": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -137,7 +137,7 @@ def unlink_product_from_node(
         log_audit(db, user, "product_node_unlink",
                   f"取消关联「{prod.name if prod else product_id}」从节点「{node.name if node else node_id}」",
                   "产品", "medium")
-        log_product_activity(db, product_id, user.username, "取消关联节点", node.name if node else str(node_id))
+        log_product_activity(db, product_id, user.username, "取消关联节点", f"node:{node.name if node else node_id}")
         return {"code": 0, "data": result, "message": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -167,7 +167,7 @@ def create_local_product(
         log_audit(db, user, "local_product_create",
                   f"创建PMA本地产品「{body.name}」（编号: {body.code}, 节点: {node.name if node else body.node_id}）",
                   "产品", "medium")
-        log_product_activity(db, product["id"], user.username, "创建产品", f"{body.name} ({body.code})")
+        log_product_activity(db, product["id"], user.username, "创建产品", f"name:{body.name} code:{body.code}")
         return {"code": 0, "data": product, "message": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -188,14 +188,14 @@ def update_local_product(
         )
         changes = []
         if body.name and old and old.get("name") != body.name:
-            changes.append(f"名称: {old['name']} → {body.name}")
+            changes.append(f"name:'{old['name']}'->'{body.name}'")
         if body.code and old and old.get("code") != body.code:
-            changes.append(f"编号: {old['code']} → {body.code}")
+            changes.append(f"code:'{old['code']}'->'{body.code}'")
         if body.status and old and old.get("status") != body.status:
-            changes.append(f"状态: {old['status']} → {body.status}")
+            changes.append(f"status:'{old['status']}'->'{body.status}'")
         if body.description is not None and old and old.get("description") != body.description:
-            changes.append("描述已更新")
-        detail = f"编辑产品「{old['name'] if old else product_id}」: {'; '.join(changes)}" if changes else f"编辑产品「{old['name'] if old else product_id}」"
+            changes.append(f"description:'{old.get('description','')}'->'{body.description}'")
+        detail = "; ".join(changes) if changes else "无变更"
         log_audit(db, user, "local_product_update", detail, "产品", "medium")
         log_product_activity(db, product_id, user.username, "编辑产品", detail)
         return {"code": 0, "data": product, "message": "ok"}
@@ -316,9 +316,18 @@ def update_product_projects(
 ):
     """Replace all project associations for a product."""
     try:
-        result = pm_service.update_product_projects(db, product_id, body.project_ids)
         from backend.models.zentao import CachedProduct, CachedProject
         prod = db.query(CachedProduct).filter(CachedProduct.id == product_id).first()
+        # Get old linked project IDs for change tracking
+        from backend.models.local import ProductProjectLink as _PPL
+        old_links = db.query(_PPL).filter(_PPL.product_id == product_id).all()
+        old_ids = sorted([l.project_id for l in old_links])
+        result = pm_service.update_product_projects(db, product_id, body.project_ids)
+        new_ids = sorted(body.project_ids)
+        old_str = str(old_ids) if old_ids else "无"
+        new_str = str(new_ids) if new_ids else "无"
+        if old_str != new_str:
+            log_product_activity(db, product_id, user.username, "更新关联项目", f"project_ids:'{old_str}'->'{new_str}'")
         proj_names = []
         if body.project_ids:
             projs = db.query(CachedProject).filter(CachedProject.id.in_(body.project_ids)).all()
@@ -326,7 +335,6 @@ def update_product_projects(
         log_audit(db, user, "product_projects_update",
                   f"更新产品「{prod.name if prod else product_id}」关联项目: {', '.join(proj_names) if proj_names else '清空'}（共{len(body.project_ids)}个）",
                   "产品", "medium")
-        log_product_activity(db, product_id, user.username, "更新关联项目", f"关联 {len(body.project_ids)} 个项目")
         return {"code": 0, "data": result, "message": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

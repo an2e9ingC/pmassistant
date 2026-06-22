@@ -1,7 +1,7 @@
 from typing import Optional, List
 from datetime import date as DateType
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -130,7 +130,7 @@ async def sync_stage_name_to_zentao(
     e.stage_name = new_name
     db.commit()
     log_project_activity(db, project_id, user.username, "阶段映射",
-        f"{old_name} → {new_name}")
+        f"name:'{old_name}'->'{new_name}'")
 
     return {
         "code": 0,
@@ -170,7 +170,7 @@ def update_document(
     if not result:
         raise HTTPException(status_code=404, detail="Document not found")
     log_project_activity(db, project_id, user.username, "文档状态",
-        f"{result.get('doc_name','')} → {result.get('status','')}")
+        f"status:'{result.get('doc_name','')}'->'{result.get('status','')}'")
     return {"code": 0, "data": result, "message": "ok"}
 
 
@@ -201,13 +201,20 @@ def update_delivery_plan(
     project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    plan_changes = []
     if body.planned_delivery_qty is not None:
+        old_qty = project.planned_delivery_qty
+        if old_qty != body.planned_delivery_qty:
+            plan_changes.append(f"planned_delivery_qty:'{old_qty}'->'{body.planned_delivery_qty}'")
         project.planned_delivery_qty = body.planned_delivery_qty
     if body.delivery_note is not None:
+        old_note = project.delivery_note or ""
+        if old_note != body.delivery_note:
+            plan_changes.append(f"delivery_note:'{old_note}'->'{body.delivery_note}'")
         project.delivery_note = body.delivery_note
     db.commit()
     log_project_activity(db, project_id, user.username, "交付计划",
-        f"应交付总数={project.planned_delivery_qty}, 备注={project.delivery_note or ''}")
+        "; ".join(plan_changes) if plan_changes else "无变更")
     return {
         "code": 0,
         "data": {
@@ -290,26 +297,50 @@ def get_activities(
     project_id: int,
     sort: str = "desc",  # "asc" or "desc"
     limit: int = 200,
+    username: str = Query("", description="Filter by username"),
+    action: str = Query("", description="Filter by action type"),
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
     """Get project activity log (non-deletable audit trail)."""
     order = ProjectActivity.id.desc() if sort == "desc" else ProjectActivity.id.asc()
-    rows = db.query(ProjectActivity).filter(
+    q = db.query(ProjectActivity).filter(
         ProjectActivity.project_id == project_id
-    ).order_by(order).limit(limit).all()
+    )
+    if username:
+        q = q.filter(ProjectActivity.username == username)
+    if action:
+        q = q.filter(ProjectActivity.action == action)
+    rows = q.order_by(order).limit(limit).all()
+
+    # Distinct filter options (always all values for this project, ignoring current filter)
+    opts_q = db.query(ProjectActivity).filter(ProjectActivity.project_id == project_id)
+    usernames = sorted(set(
+        r[0] for r in db.query(ProjectActivity.username).filter(
+            ProjectActivity.project_id == project_id
+        ).distinct().all() if r[0]
+    ))
+    actions = sorted(set(
+        r[0] for r in db.query(ProjectActivity.action).filter(
+            ProjectActivity.project_id == project_id
+        ).distinct().all() if r[0]
+    ))
+
     return {
         "code": 0,
-        "data": [
-            {
-                "id": r.id,
-                "username": r.username,
-                "action": r.action,
-                "detail": r.detail or "",
-                "created_at": to_local_str(r.created_at),
-            }
-            for r in rows
-        ],
+        "data": {
+            "items": [
+                {
+                    "id": r.id,
+                    "username": r.username,
+                    "action": r.action,
+                    "detail": r.detail or "",
+                    "created_at": to_local_str(r.created_at),
+                }
+                for r in rows
+            ],
+            "options": {"usernames": usernames, "actions": actions},
+        },
         "message": "ok",
     }
 
@@ -425,11 +456,11 @@ def update_project(
         if hasattr(project, field):
             old_val = getattr(project, field)
             if str(old_val) != str(value):
-                changes.append(f"{field}: {old_val!r} → {value!r}")
+                changes.append(f"{field}:'{old_val}'->'{value}'")
             setattr(project, field, value)
 
     db.commit()
-    log_project_activity(db, project_id, user.username, "edit_project",
+    log_project_activity(db, project_id, user.username, "编辑项目",
                          "; ".join(changes) if changes else "no changes")
 
     # Return updated project detail

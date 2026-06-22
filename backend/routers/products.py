@@ -85,17 +85,22 @@ def update_product(
     db: Session = Depends(get_db),
     user=Depends(require_admin),
 ):
+    from backend.models.zentao import CachedProduct as _CP
+    old_prod = db.query(_CP).filter(_CP.id == product_id).first()
+    if not old_prod:
+        raise HTTPException(status_code=404, detail="Product not found")
     data = {k: v for k, v in body.model_dump().items() if v is not None}
     if not data:
         raise HTTPException(status_code=400, detail="No fields to update")
-    # Build change description
     changes = []
     for k, v in data.items():
-        changes.append(f"{k} → {v!r}")
+        old_val = getattr(old_prod, k, None)
+        if str(old_val) != str(v):
+            changes.append(f"{k}:'{old_val}'->'{v}'")
     result = product_service.update_product(db, product_id, data)
     if not result:
         raise HTTPException(status_code=404, detail="Product not found")
-    log_product_activity(db, product_id, user.username, "编辑产品", "; ".join(changes))
+    log_product_activity(db, product_id, user.username, "编辑产品", "; ".join(changes) if changes else "无变更")
     return {"code": 0, "data": result, "message": "ok"}
 
 
@@ -112,7 +117,7 @@ def link_product_project(
     user=Depends(require_admin),
 ):
     result = product_service.add_product_project_link(db, body.product_id, body.project_id)
-    log_product_activity(db, body.product_id, user.username, "关联项目", f"关联项目 ID={body.project_id}")
+    log_product_activity(db, body.product_id, user.username, "关联项目", f"project_id:{body.project_id}")
     return {"code": 0, "data": result, "message": "ok"}
 
 
@@ -124,7 +129,7 @@ def unlink_product_project(
     user=Depends(require_admin),
 ):
     result = product_service.remove_product_project_link(db, product_id, project_id)
-    log_product_activity(db, product_id, user.username, "取消关联项目", f"取消关联项目 ID={project_id}")
+    log_product_activity(db, product_id, user.username, "取消关联项目", f"project_id:{project_id}")
     return {"code": 0, "data": result, "message": "ok"}
 
 
@@ -169,7 +174,7 @@ def add_product_note(
     db.add(note)
     db.commit()
     db.refresh(note)
-    log_product_activity(db, product_id, user.username, "添加笔记", payload.content[:100])
+    log_product_activity(db, product_id, user.username, "添加笔记", f"content:{payload.content[:100]}")
     return {
         "code": 0,
         "data": {
@@ -197,7 +202,7 @@ def delete_product_note(
         raise HTTPException(status_code=404, detail="Note not found")
     db.delete(note)
     db.commit()
-    log_product_activity(db, product_id, user.username, "删除笔记", f"note_id={note_id}")
+    log_product_activity(db, product_id, user.username, "删除笔记", f"note_id:{note_id}")
     return {"code": 0, "message": "已删除"}
 
 
@@ -237,15 +242,25 @@ def update_product_document(
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
+    doc_changes = []
     if body.status is not None:
+        old_status = doc.status
+        if old_status != body.status:
+            doc_changes.append(f"status:'{old_status}'->'{body.status}'")
         doc.status = body.status
         if body.status == "submitted" and not doc.completed_at:
             doc.completed_at = _dt.now()
         elif body.status == "pending":
             doc.completed_at = None
     if body.location is not None:
+        old_loc = doc.location or ""
+        if old_loc != body.location:
+            doc_changes.append(f"location:'{old_loc}'->'{body.location}'")
         doc.location = body.location
     if body.uploaded_by is not None:
+        old_ub = doc.uploaded_by or ""
+        if old_ub != body.uploaded_by:
+            doc_changes.append(f"uploaded_by:'{old_ub}'->'{body.uploaded_by}'")
         doc.uploaded_by = body.uploaded_by
     if body.uploaded_at is not None:
         try:
@@ -254,7 +269,8 @@ def update_product_document(
             pass
     doc.updated_by = user.username
     db.commit()
-    log_product_activity(db, product_id, user.username, "更新文档", f"doc={doc.doc_name} status={doc.status}")
+    detail = "; ".join(doc_changes) if doc_changes else "无变更"
+    log_product_activity(db, product_id, user.username, "更新文档", f"doc_name:'{doc.doc_name}'; {detail}")
     return {"code": 0, "data": {"id": doc.id, "status": doc.status}, "message": "ok"}
 
 
@@ -333,7 +349,7 @@ def upload_block_diagram(
     db.add(bd)
     db.commit()
     db.refresh(bd)
-    log_product_activity(db, product_id, user.username, "上传框图", bd.filename)
+    log_product_activity(db, product_id, user.username, "上传框图", f"filename:{bd.filename}")
 
     return {
         "code": 0,
@@ -370,7 +386,7 @@ def delete_block_diagram(
 
     db.delete(bd)
     db.commit()
-    log_product_activity(db, product_id, user.username, "删除框图", bd.filename)
+    log_product_activity(db, product_id, user.username, "删除框图", f"filename:{bd.filename}")
     return {"code": 0, "message": "已删除"}
 
 
@@ -408,6 +424,8 @@ def get_product_activities(
     product_id: int,
     sort: str = Query("desc"),
     limit: int = Query(200, ge=1, le=500),
+    username: str = Query("", description="Filter by username"),
+    action: str = Query("", description="Filter by action type"),
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
@@ -415,24 +433,42 @@ def get_product_activities(
     from backend.models.local import ProductActivity
 
     order = ProductActivity.id.desc() if sort == "desc" else ProductActivity.id.asc()
-    rows = (
+    q = (
         db.query(ProductActivity)
         .filter(ProductActivity.product_id == product_id)
-        .order_by(order)
-        .limit(limit)
-        .all()
     )
+    if username:
+        q = q.filter(ProductActivity.username == username)
+    if action:
+        q = q.filter(ProductActivity.action == action)
+    rows = q.order_by(order).limit(limit).all()
+
+    # Distinct filter options
+    usernames = sorted(set(
+        r[0] for r in db.query(ProductActivity.username).filter(
+            ProductActivity.product_id == product_id
+        ).distinct().all() if r[0]
+    ))
+    actions = sorted(set(
+        r[0] for r in db.query(ProductActivity.action).filter(
+            ProductActivity.product_id == product_id
+        ).distinct().all() if r[0]
+    ))
+
     return {
         "code": 0,
-        "data": [
-            {
-                "id": r.id,
-                "username": r.username,
-                "action": r.action,
-                "detail": r.detail or "",
-                "created_at": to_local_str(r.created_at),
-            }
-            for r in rows
-        ],
+        "data": {
+            "items": [
+                {
+                    "id": r.id,
+                    "username": r.username,
+                    "action": r.action,
+                    "detail": r.detail or "",
+                    "created_at": to_local_str(r.created_at),
+                }
+                for r in rows
+            ],
+            "options": {"usernames": usernames, "actions": actions},
+        },
         "message": "ok",
     }
