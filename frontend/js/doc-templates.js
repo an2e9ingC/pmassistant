@@ -7,6 +7,8 @@ var _selectedStage = null;   // currently selected stage_type
 var _pendingOps = [];        // queued changes: {type, data...}
 var _nextTempId = -1;        // negative IDs for unsaved templates
 var _originalGrouped = null; // snapshot before edits, for "discard"
+var _currentProjectType = 'RD'; // selected project type tab
+var _projectTypes = [];      // [{id, label, stages, builtin}]
 
 // Fixed stage order matching the project lifecycle
 var STAGE_ORDER = [
@@ -117,18 +119,69 @@ async function initDocTemplates() {
   var container = document.getElementById('dtsec-project');
   container.innerHTML = '<div class="loading-spinner">加载模板配置...</div>';
   try {
-    var data = await API.get('/doc-templates');
-    _templatesGrouped = data || {};
-    if (!Object.keys(_templatesGrouped).length) {
-      container.innerHTML = '<div class="empty-state" style="padding:40px">暂无文档模板，请联系管理员通过种子数据初始化</div>';
-      return;
+    // Load project types first
+    var ptypes = await API.get('/doc-templates/project-types');
+    _projectTypes = ptypes || [];
+    if (!_projectTypes.length) {
+      _projectTypes = [{id: 'RD', label: '研发项目', stages: [], builtin: true}];
     }
-    // Default select first stage type
-    var types = _sortStageTypes(Object.keys(_templatesGrouped));
-    if (types.length && !_selectedStage) _selectedStage = types[0];
+    // Load templates for current project type
+    await loadTemplatesForType(_currentProjectType);
     renderTemplatesPage();
   } catch(e) {
     container.innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '<br><button class="btn" onclick="initDocTemplates()">重试</button></div>';
+  }
+}
+
+async function loadTemplatesForType(ptype) {
+  _currentProjectType = ptype;
+  _selectedStage = null;
+  try {
+    var data = await API.get('/doc-templates?project_type=' + encodeURIComponent(ptype));
+    _templatesGrouped = data || {};
+  } catch(e) {
+    _templatesGrouped = {};
+  }
+}
+
+function selectProjectTypeTab(ptype) {
+  if (ptype === _currentProjectType) return;
+  var container = document.getElementById('dtsec-project');
+  container.innerHTML = '<div class="loading-spinner">加载模板配置...</div>';
+  loadTemplatesForType(ptype).then(function() {
+    var types = _sortStageTypes(Object.keys(_templatesGrouped));
+    if (types.length && !_selectedStage) _selectedStage = types[0];
+    renderTemplatesPage();
+  });
+}
+
+function showAddProjectTypeDialog() {
+  var html = '<div style="margin-bottom:12px">' +
+    '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">项目类型 ID（英文标识）</label>' +
+    '<input class="search-inp" id="ptype-id" placeholder="如：SW" style="width:100%;box-sizing:border-box">' +
+    '</div>' +
+    '<div style="margin-bottom:12px">' +
+    '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">显示名称</label>' +
+    '<input class="search-inp" id="ptype-label" placeholder="如：软件迭代项目" style="width:100%;box-sizing:border-box">' +
+    '</div>';
+  openDialog('新增项目类型', html, [
+    { text: '取消', onclick: "document.querySelector('.note-dialog-overlay').remove()" },
+    { text: '创建', cls: 'btn-primary', onclick: 'createProjectType()' }
+  ]);
+}
+
+async function createProjectType() {
+  var id = document.getElementById('ptype-id').value.trim();
+  var label = document.getElementById('ptype-label').value.trim();
+  if (!id) { showToast('请输入项目类型 ID', 'error'); return; }
+  if (!label) { showToast('请输入显示名称', 'error'); return; }
+  try {
+    await API.post('/doc-templates/project-types?project_type=' + encodeURIComponent(id) + '&label=' + encodeURIComponent(label));
+    document.querySelector('.note-dialog-overlay').remove();
+    showToast('项目类型已创建: ' + label, 'success');
+    initDocTemplates();
+  } catch(e) {
+    showToast('创建失败: ' + (e.message || ''), 'error');
   }
 }
 
@@ -138,8 +191,22 @@ function renderTemplatesPage() {
   var canEdit = user && (user.role === 'admin' || perms.indexOf('doc_template') >= 0);
 
   var stageTypes = _sortStageTypes(Object.keys(_templatesGrouped));
+
+  // Project type tabs bar
+  var ptypeTabs = '<div class="map-tabs" style="margin-bottom:12px">';
+  _projectTypes.forEach(function(pt) {
+    ptypeTabs += '<div class="map-tab' + (pt.id === _currentProjectType ? ' active' : '') + '" onclick="selectProjectTypeTab(\'' + escHtml(pt.id) + '\')">' +
+      escHtml(pt.label) + (pt.builtin ? '' : ' <span style="font-size:9px;opacity:0.7">自定义</span>') +
+      '</div>';
+  });
+  if (canEdit) {
+    ptypeTabs += '<div class="map-tab" onclick="showAddProjectTypeDialog()" style="color:var(--accent);font-weight:600" title="新增项目类型">+</div>';
+  }
+  ptypeTabs += '</div>';
+
   if (!stageTypes.length) {
-    document.getElementById('dtsec-project').innerHTML = '<div class="empty-state" style="padding:40px">暂无文档模板配置</div>';
+    document.getElementById('dtsec-project').innerHTML = ptypeTabs +
+      '<div class="empty-state" style="padding:40px">暂无文档模板配置<br><span style="font-size:11px;color:var(--muted)">点击上方 + 新增项目类型，或切换到已有项目类型</span></div>';
     return;
   }
 
@@ -230,6 +297,7 @@ function renderTemplatesPage() {
   rightHtml += '</div>';
 
   document.getElementById('dtsec-project').innerHTML =
+    ptypeTabs +
     '<div class="dt-layout">' +
       '<div class="dt-left">' +
         '<div class="section-title" style="margin-bottom:10px">阶段类型</div>' +

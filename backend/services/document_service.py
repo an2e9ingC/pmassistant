@@ -64,42 +64,43 @@ def get_stage_types_for_project(project_type: str) -> list[str]:
 # These are inserted on first startup if the document_templates table is empty.
 # Users can then modify them via the admin config UI.
 SEED_TEMPLATES: list[dict] = [
+    # ==================== RD (研发项目) ====================
     # 售前 — 导入需求、组织评估、立项决议
-    {"stage_type": "售前", "doc_name": "技术需求书", "sort_order": 1, "responsible_role": "销售及售前", "description": "导入用户需求，整理技术需求文档，作为后续评估的基础输入"},
-    {"stage_type": "售前", "doc_name": "技术可行性报告", "sort_order": 2, "responsible_role": "CTO", "description": "评估技术能否实现，包括技术方案、开发周期、技术风险等"},
-    {"stage_type": "售前", "doc_name": "商务可行性报告", "sort_order": 3, "responsible_role": "CEO", "description": "评估项目投入产出比，判断是否具备商业可行性"},
-    {"stage_type": "售前", "doc_name": "立项决议书", "sort_order": 4, "responsible_role": "销售及售前", "description": "综合结论及原因，明确是否立项，确定项目交付节点和项目类型（研发/生产）"},
-    {"stage_type": "售前", "doc_name": "项目交付节点", "sort_order": 5, "responsible_role": "项目经理", "description": "明确各阶段交付时间节点，转研发项目或转生产项目的决策依据"},
+    {"project_type": "RD", "stage_type": "售前", "doc_name": "技术需求书", "sort_order": 1, "responsible_role": "销售及售前", "description": "导入用户需求，整理技术需求文档，作为后续评估的基础输入"},
+    {"project_type": "RD", "stage_type": "售前", "doc_name": "技术可行性报告", "sort_order": 2, "responsible_role": "CTO", "description": "评估技术能否实现，包括技术方案、开发周期、技术风险等"},
+    {"project_type": "RD", "stage_type": "售前", "doc_name": "商务可行性报告", "sort_order": 3, "responsible_role": "CEO", "description": "评估项目投入产出比，判断是否具备商业可行性"},
+    {"project_type": "RD", "stage_type": "售前", "doc_name": "立项决议书", "sort_order": 4, "responsible_role": "销售及售前", "description": "综合结论及原因，明确是否立项，确定项目交付节点和项目类型（研发/生产）"},
+    {"project_type": "RD", "stage_type": "售前", "doc_name": "项目交付节点", "sort_order": 5, "responsible_role": "项目经理", "description": "明确各阶段交付时间节点，转研发项目或转生产项目的决策依据"},
     # 项目立项 — 创建项目、实施方案、启动会
-    {"stage_type": "项目立项", "doc_name": "实施方案草案", "sort_order": 1, "responsible_role": "CTO", "description": "项目实施方案草案，包含技术路线、资源需求、风险评估"},
-    {"stage_type": "项目立项", "doc_name": "项目启动会纪要", "sort_order": 2, "responsible_role": "项目经理", "description": "项目启动会决议，确认人力资源排布、项目周期计划"},
+    {"project_type": "RD", "stage_type": "项目立项", "doc_name": "实施方案草案", "sort_order": 1, "responsible_role": "CTO", "description": "项目实施方案草案，包含技术路线、资源需求、风险评估"},
+    {"project_type": "RD", "stage_type": "项目立项", "doc_name": "项目启动会纪要", "sort_order": 2, "responsible_role": "项目经理", "description": "项目启动会决议，确认人力资源排布、项目周期计划"},
     # 需求分解 — 需求分解任务跟踪
-    {"stage_type": "需求分解", "doc_name": "需求分解结果", "sort_order": 1, "responsible_role": "项目经理", "description": "各方向需求分解结果，对应禅道开发任务，用于跟踪执行进度"},
+    {"project_type": "RD", "stage_type": "需求分解", "doc_name": "需求分解结果", "sort_order": 1, "responsible_role": "项目经理", "description": "各方向需求分解结果，对应禅道开发任务，用于跟踪执行进度"},
     # 硬件开发
-    {"stage_type": "硬件开发", "doc_name": "硬件方案设计", "sort_order": 1, "responsible_role": "硬件开发", "description": "硬件整体方案设计文档，包含架构框图、关键器件选型说明"},
-    {"stage_type": "硬件开发", "doc_name": "原理图", "sort_order": 2, "responsible_role": "硬件开发", "description": "电路原理图设计文件，需通过评审"},
-    {"stage_type": "硬件开发", "doc_name": "PCB Layout", "sort_order": 3, "responsible_role": "硬件开发", "description": "PCB版图设计文件，包含叠层、阻抗、布线等设计说明"},
-    {"stage_type": "硬件开发", "doc_name": "BOM清单", "sort_order": 4, "responsible_role": "硬件开发", "description": "物料清单，包含元器件型号、封装、数量、供应商等信息"},
-    {"stage_type": "硬件开发", "doc_name": "硬件测试报告", "sort_order": 5, "responsible_role": "硬件测试", "description": "硬件调试和测试结果报告，包含功能测试、性能测试、可靠性测试"},
+    {"project_type": "RD", "stage_type": "硬件开发", "doc_name": "硬件方案设计", "sort_order": 1, "responsible_role": "硬件开发", "description": "硬件整体方案设计文档，包含架构框图、关键器件选型说明"},
+    {"project_type": "RD", "stage_type": "硬件开发", "doc_name": "原理图", "sort_order": 2, "responsible_role": "硬件开发", "description": "电路原理图设计文件，需通过评审"},
+    {"project_type": "RD", "stage_type": "硬件开发", "doc_name": "PCB Layout", "sort_order": 3, "responsible_role": "硬件开发", "description": "PCB版图设计文件，包含叠层、阻抗、布线等设计说明"},
+    {"project_type": "RD", "stage_type": "硬件开发", "doc_name": "BOM清单", "sort_order": 4, "responsible_role": "硬件开发", "description": "物料清单，包含元器件型号、封装、数量、供应商等信息"},
+    {"project_type": "RD", "stage_type": "硬件开发", "doc_name": "硬件测试报告", "sort_order": 5, "responsible_role": "硬件测试", "description": "硬件调试和测试结果报告，包含功能测试、性能测试、可靠性测试"},
     # 软件开发
-    {"stage_type": "软件开发", "doc_name": "软件需求规格说明书", "sort_order": 1, "responsible_role": "业务软件开发", "description": "软件需求规格文档，定义功能需求、性能需求、接口需求等"},
-    {"stage_type": "软件开发", "doc_name": "概要设计说明书", "sort_order": 2, "responsible_role": "业务软件开发", "description": "软件架构设计文档，包含模块划分、接口定义、技术选型"},
-    {"stage_type": "软件开发", "doc_name": "详细设计说明书", "sort_order": 3, "responsible_role": "业务软件开发", "description": "模块级详细设计文档，包含算法描述、数据结构、流程图"},
-    {"stage_type": "软件开发", "doc_name": "测试用例", "sort_order": 4, "responsible_role": "测试交付", "description": "测试用例文档，覆盖功能测试、性能测试、异常测试等场景"},
-    {"stage_type": "软件开发", "doc_name": "测试报告", "sort_order": 5, "responsible_role": "测试交付", "description": "测试执行结果报告，包含缺陷统计、测试覆盖率、结论"},
+    {"project_type": "RD", "stage_type": "软件开发", "doc_name": "软件需求规格说明书", "sort_order": 1, "responsible_role": "业务软件开发", "description": "软件需求规格文档，定义功能需求、性能需求、接口需求等"},
+    {"project_type": "RD", "stage_type": "软件开发", "doc_name": "概要设计说明书", "sort_order": 2, "responsible_role": "业务软件开发", "description": "软件架构设计文档，包含模块划分、接口定义、技术选型"},
+    {"project_type": "RD", "stage_type": "软件开发", "doc_name": "详细设计说明书", "sort_order": 3, "responsible_role": "业务软件开发", "description": "模块级详细设计文档，包含算法描述、数据结构、流程图"},
+    {"project_type": "RD", "stage_type": "软件开发", "doc_name": "测试用例", "sort_order": 4, "responsible_role": "测试交付", "description": "测试用例文档，覆盖功能测试、性能测试、异常测试等场景"},
+    {"project_type": "RD", "stage_type": "软件开发", "doc_name": "测试报告", "sort_order": 5, "responsible_role": "测试交付", "description": "测试执行结果报告，包含缺陷统计、测试覆盖率、结论"},
     # 结构设计
-    {"stage_type": "结构设计", "doc_name": "结构设计报告", "sort_order": 1, "responsible_role": "结构设计及装配", "description": "结构设计方案文档，包含外观设计、散热方案、装配工艺等"},
-    {"stage_type": "结构设计", "doc_name": "热设计报告", "sort_order": 2, "responsible_role": "结构设计及装配", "description": "热仿真分析和散热设计报告，确保设备在目标温度范围内正常工作"},
+    {"project_type": "RD", "stage_type": "结构设计", "doc_name": "结构设计报告", "sort_order": 1, "responsible_role": "结构设计及装配", "description": "结构设计方案文档，包含外观设计、散热方案、装配工艺等"},
+    {"project_type": "RD", "stage_type": "结构设计", "doc_name": "热设计报告", "sort_order": 2, "responsible_role": "结构设计及装配", "description": "热仿真分析和散热设计报告，确保设备在目标温度范围内正常工作"},
     # BSP开发
-    {"stage_type": "BSP开发", "doc_name": "BSP移植说明", "sort_order": 1, "responsible_role": "BSP开发", "description": "BSP移植方案、驱动适配说明、内核配置等文档"},
-    {"stage_type": "BSP开发", "doc_name": "BSP测试报告", "sort_order": 2, "responsible_role": "BSP开发", "description": "BSP功能测试、驱动验证、稳定性测试结果"},
+    {"project_type": "RD", "stage_type": "BSP开发", "doc_name": "BSP移植说明", "sort_order": 1, "responsible_role": "BSP开发", "description": "BSP移植方案、驱动适配说明、内核配置等文档"},
+    {"project_type": "RD", "stage_type": "BSP开发", "doc_name": "BSP测试报告", "sort_order": 2, "responsible_role": "BSP开发", "description": "BSP功能测试、驱动验证、稳定性测试结果"},
     # 测试
-    {"stage_type": "测试", "doc_name": "测试计划", "sort_order": 1, "responsible_role": "测试交付", "description": "测试计划文档，包含测试策略、测试范围、资源安排、进度计划"},
-    {"stage_type": "测试", "doc_name": "测试报告", "sort_order": 2, "responsible_role": "测试交付", "description": "系统测试结果汇总，包含测试结论、遗留问题、交付建议"},
+    {"project_type": "RD", "stage_type": "测试", "doc_name": "测试计划", "sort_order": 1, "responsible_role": "测试交付", "description": "测试计划文档，包含测试策略、测试范围、资源安排、进度计划"},
+    {"project_type": "RD", "stage_type": "测试", "doc_name": "测试报告", "sort_order": 2, "responsible_role": "测试交付", "description": "系统测试结果汇总，包含测试结论、遗留问题、交付建议"},
     # 产品发货
-    {"stage_type": "产品发货", "doc_name": "发货清单", "sort_order": 1, "responsible_role": "项目经理", "description": "产品发货明细清单，包含产品编号、数量、收货方信息、发货日期"},
+    {"project_type": "RD", "stage_type": "产品发货", "doc_name": "发货清单", "sort_order": 1, "responsible_role": "项目经理", "description": "产品发货明细清单，包含产品编号、数量、收货方信息、发货日期"},
     # 项目总结
-    {"stage_type": "项目总结", "doc_name": "项目总结报告", "sort_order": 1, "responsible_role": "项目经理", "description": "项目总结报告，包含目标达成情况、经验教训、改进建议"},
+    {"project_type": "RD", "stage_type": "项目总结", "doc_name": "项目总结报告", "sort_order": 1, "responsible_role": "项目经理", "description": "项目总结报告，包含目标达成情况、经验教训、改进建议"},
 ]
 
 
@@ -115,6 +116,7 @@ def seed_document_templates(db: Session) -> int:
     count = 0
     for item in SEED_TEMPLATES:
         tpl = DocumentTemplate(
+            project_type=item.get("project_type", "RD"),
             stage_type=item["stage_type"],
             doc_name=item["doc_name"],
             sort_order=item.get("sort_order", 0),
@@ -127,20 +129,54 @@ def seed_document_templates(db: Session) -> int:
     return count
 
 
+# Project type definitions (display name + stage types)
+PROJECT_TYPE_DEFS: dict[str, dict] = {
+    "RD": {"label": "研发项目", "stages": RD_STAGE_TYPES},
+    "SC": {"label": "生产项目", "stages": SC_STAGE_TYPES},
+}
+
+
+def get_project_types(db: Session) -> list[dict]:
+    """Return all known project types (predefined + custom)."""
+    result = []
+    for ptype, info in PROJECT_TYPE_DEFS.items():
+        result.append({"id": ptype, "label": info["label"], "stages": info["stages"], "builtin": True})
+    # Include any project types that exist in the templates table
+    from sqlalchemy import distinct
+    extra = db.query(distinct(DocumentTemplate.project_type)).all()
+    for (pt,) in extra:
+        if pt not in PROJECT_TYPE_DEFS:
+            result.append({"id": pt, "label": pt, "stages": [], "builtin": False})
+    return result
+
+
+def get_stage_types_for_project_type(db: Session, project_type: str) -> list[str]:
+    """Return stage types for a given project_type."""
+    if project_type in PROJECT_TYPE_DEFS:
+        return list(PROJECT_TYPE_DEFS[project_type]["stages"])
+    # For custom types: derive from templates
+    from sqlalchemy import distinct
+    stages = [r[0] for r in db.query(distinct(DocumentTemplate.stage_type)).filter(
+        DocumentTemplate.project_type == project_type
+    ).all()]
+    return stages
+
+
 # ---------------------------------------------------------------------------
 # Template CRUD (for config UI)
 # ---------------------------------------------------------------------------
 
-def get_templates_grouped(db: Session) -> dict:
-    """Return all templates grouped by stage_type, sorted by sort_order.
-    Includes all known stage types even if they have 0 templates."""
-    templates = db.query(DocumentTemplate).order_by(
+def get_templates_grouped(db: Session, project_type: str = "RD") -> dict:
+    """Return all templates for a project_type, grouped by stage_type."""
+    templates = db.query(DocumentTemplate).filter(
+        DocumentTemplate.project_type == project_type
+    ).order_by(
         DocumentTemplate.stage_type, DocumentTemplate.sort_order
     ).all()
     grouped: dict[str, list[dict]] = {}
 
-    # Ensure all known stage types appear (even with empty list)
-    for st in get_stage_types(db):
+    # Ensure all known stage types for this project_type appear
+    for st in get_stage_types_for_project_type(db, project_type):
         grouped[st] = []
 
     for t in templates:
@@ -182,6 +218,7 @@ def get_stage_types(db: Session) -> list[str]:
 def create_template(db: Session, data: dict) -> dict:
     """Create a new document template."""
     tpl = DocumentTemplate(
+        project_type=data.get("project_type", "RD"),
         stage_type=data["stage_type"],
         doc_name=data["doc_name"],
         sort_order=data.get("sort_order", 0),

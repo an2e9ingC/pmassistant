@@ -6,10 +6,14 @@ from backend.database import Base
 
 
 class DocumentTemplate(Base):
-    """Global document template per stage type. Configurable via admin UI."""
+    """Global document template per stage type and project type. Configurable via admin UI.
+
+    project_type groups templates into tabs: 'RD' (研发项目), 'SC' (生产项目), custom types.
+    """
     __tablename__ = "document_templates"
 
     id = Column(Integer, primary_key=True)
+    project_type = Column(String(32), nullable=False, default="RD", server_default="RD", index=True)
     stage_type = Column(String(64), nullable=False, index=True)
     doc_name = Column(String(256), nullable=False)
     sort_order = Column(Integer, default=0)

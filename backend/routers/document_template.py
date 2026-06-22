@@ -13,10 +13,11 @@ router = APIRouter(prefix="/api/doc-templates", tags=["doc-templates"])
 
 
 class TemplateCreate(BaseModel):
+    project_type: str = "RD"
     stage_type: str
     doc_name: str
     sort_order: int = 0
-    doc_path: str
+    doc_path: str = ""
     doc_type: Optional[str] = None
     responsible_role: Optional[str] = None
     description: Optional[str] = None
@@ -32,15 +33,44 @@ class TemplateUpdate(BaseModel):
     doc_type: Optional[str] = None
 
 
+@router.get("/project-types", response_model=dict)
+def list_project_types(db: Session = Depends(get_db), _=Depends(get_current_user)):
+    types = document_service.get_project_types(db)
+    return {"code": 0, "data": types, "message": "ok"}
+
+
+@router.post("/project-types", response_model=dict)
+def create_project_type(
+    project_type: str = Query(..., description="Project type ID, e.g. SW"),
+    label: str = Query(..., description="Display name, e.g. 软件迭代项目"),
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("doc_template")),
+):
+    from backend.services.document_service import PROJECT_TYPE_DEFS
+    if project_type in PROJECT_TYPE_DEFS:
+        raise HTTPException(status_code=400, detail=f"项目类型 '{project_type}' 已存在")
+    PROJECT_TYPE_DEFS[project_type] = {"label": label, "stages": []}
+    log_audit(db, user, "doc_ptype_add", f"{project_type}: {label}", "管理", "medium")
+    return {"code": 0, "data": {"id": project_type, "label": label, "stages": [], "builtin": False}, "message": "ok"}
+
+
 @router.get("/stage-types", response_model=dict)
-def list_stage_types(db: Session = Depends(get_db), _=Depends(get_current_user)):
-    types = document_service.get_stage_types(db)
+def list_stage_types(
+    project_type: str = Query("RD"),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    types = document_service.get_stage_types_for_project_type(db, project_type)
     return {"code": 0, "data": types, "message": "ok"}
 
 
 @router.get("", response_model=dict)
-def list_templates(db: Session = Depends(get_db), _=Depends(get_current_user)):
-    grouped = document_service.get_templates_grouped(db)
+def list_templates(
+    project_type: str = Query("RD"),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    grouped = document_service.get_templates_grouped(db, project_type)
     return {"code": 0, "data": grouped, "message": "ok"}
 
 
@@ -50,8 +80,11 @@ def create_template(
     db: Session = Depends(get_db),
     user=Depends(require_perm("doc_template")),
 ):
-    tpl = document_service.create_template(db, body.model_dump())
-    log_audit(db, user, "doc_template_add", f"{body.stage_type}/{body.doc_name}", "管理", "medium")
+    data = body.model_dump()
+    if "project_type" not in data or not data["project_type"]:
+        data["project_type"] = "RD"
+    tpl = document_service.create_template(db, data)
+    log_audit(db, user, "doc_template_add", f"[{data['project_type']}] {body.stage_type}/{body.doc_name}", "管理", "medium")
     return {"code": 0, "data": tpl, "message": "ok"}
 
 
