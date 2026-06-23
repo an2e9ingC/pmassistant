@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from backend.config import settings
+from backend.config import settings, beijing_now
 from backend.database import get_db, _db_path, _is_sqlcipher_enabled, _HAS_SQLCIPHER
 from backend.middleware.auth import require_admin, get_current_user
 from backend.models.local import LocalUser, PmaSetting
@@ -117,7 +117,7 @@ def update_backup_config(payload: BackupConfig, _=Depends(require_admin), db: Se
 @router.get("/export", response_class=FileResponse)
 def export_database(_=Depends(require_admin), cu=Depends(get_current_user), db: Session = Depends(get_db)):
     """Download current database file."""
-    t = datetime.now().strftime("%Y%m%d-%H%M%S")
+    t = beijing_now().strftime("%Y%m%d-%H%M%S")
     filename = f"pma-backup-{t}.db"
     log_audit(db, cu, "db_export", f"导出数据库: {filename}", "管理")
     return FileResponse(
@@ -166,7 +166,7 @@ async def import_database(
 
     # Create backup of current database
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    t = datetime.now().strftime("%Y%m%d-%H%M%S")
+    t = beijing_now().strftime("%Y%m%d-%H%M%S")
     backup_path = BACKUP_DIR / f"pma-backup-{t}-before-import.db"
     try:
         shutil.copy2(_db_path, backup_path)
@@ -292,7 +292,7 @@ def restore_backup(
     log_audit(db, cu, "db_restore_backup", f"恢复数据库: 从备份「{safe_name}」", "管理", "high")
 
     # Create a backup of current database before restoring
-    t = datetime.now().strftime("%Y%m%d-%H%M%S")
+    t = beijing_now().strftime("%Y%m%d-%H%M%S")
     pre_restore_path = BACKUP_DIR / f"pma-backup-{t}-before-restore.db"
     try:
         shutil.copy2(_db_path, pre_restore_path)
@@ -365,7 +365,7 @@ def _do_backup(retention: int, keep_hours: int = 0, max_perm: int = 10):
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     PERMANENT_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 
-    t = datetime.now().strftime("%Y%m%d-%H%M%S")
+    t = beijing_now().strftime("%Y%m%d-%H%M%S")
     dest = BACKUP_DIR / f"pma-backup-{t}.db"
     shutil.copy2(_db_path, dest)
     logger.info(f"Auto-backup created: {dest.name}")
@@ -405,7 +405,7 @@ def _maybe_save_permanent_backup(src: Path, keep_hours: int, max_count: int = 10
             return  # Already have a permanent backup within this window
 
     # Save permanent copy
-    t = datetime.now().strftime("%Y%m%d-%H%M%S")
+    t = beijing_now().strftime("%Y%m%d-%H%M%S")
     perm_name = f"pma-backup-{t}-keep.db"
     perm_path = PERMANENT_BACKUP_DIR / perm_name
     shutil.copy2(src, perm_path)

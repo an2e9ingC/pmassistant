@@ -88,6 +88,30 @@ def zentao_product_releases_url(product_id: int) -> str:
 
 settings = Settings()
 
-# ── Server start time (epoch) — used for restart detection ──
+# ── Timezone — single source of truth for Beijing time (UTC+8) ──
 import time as _time
+from datetime import datetime as _datetime, timezone as _timezone, timedelta as _timedelta
+
+BEIJING_OFFSET = _timedelta(hours=8)
+BEIJING_TZ = _timezone(BEIJING_OFFSET)
+
+def beijing_now() -> _datetime:
+    """Return current datetime in Beijing timezone."""
+    return _datetime.now(_timezone.utc) + BEIJING_OFFSET
+
+def to_beijing_str(dt: _datetime) -> str:
+    """Convert a datetime to Beijing-time string (YYYY-MM-DD HH:MM:SS).
+    Handles both naive UTC datetimes (from SQLite func.now()) and timezone-aware datetimes.
+    """
+    if dt is None:
+        return ""
+    if isinstance(dt, str):
+        return dt[:19]
+    if dt.tzinfo is None:
+        # Naive datetime from SQLite func.now() — treat as UTC
+        return str((dt + BEIJING_OFFSET).replace(tzinfo=None))[:19]
+    # Timezone-aware — convert to Beijing
+    return str(dt.astimezone(BEIJING_TZ).replace(tzinfo=None))[:19]
+
+# ── Server start time (epoch) — used for restart detection ──
 SERVER_START_TIME = int(_time.time())

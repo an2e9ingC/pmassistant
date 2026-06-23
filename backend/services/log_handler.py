@@ -1,11 +1,10 @@
 import logging
 import traceback
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 
+from backend.config import BEIJING_TZ, beijing_now
 from backend.database import SessionLocal
 from backend.models.log_entry import LogEntry
-
-BEIJING_TZ = timezone(timedelta(hours=8))
 
 
 class DatabaseLogHandler(logging.Handler):

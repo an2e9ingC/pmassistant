@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import desc
 
-from backend.database import SessionLocal, get_db
+from backend.database import SessionLocal, get_db, to_local_str
 from backend.middleware.auth import require_admin, get_current_user
 from backend.models.local import AuditLog, LocalUser
 from backend.models.log_entry import LogEntry
@@ -58,7 +58,7 @@ def _read_from_db(db, level, search, tail):
 
     lines = []
     for e in reversed(entries):
-        ts = e.timestamp.strftime("%Y-%m-%d %H:%M:%S") if e.timestamp else ""
+        ts = to_local_str(e.timestamp) if e.timestamp else ""
         lines.append(f"{ts} {e.level:8s} {e.logger}: {e.message}")
     return lines
 
@@ -184,7 +184,7 @@ def view_audit_logs(
                     "category": e.category or "",
                     "level": e.level or "medium",
                     "detail": e.detail or "",
-                    "created_at": e.created_at.strftime("%Y-%m-%d %H:%M:%S") if e.created_at else "",
+                    "created_at": to_local_str(e.created_at) if e.created_at else "",
                 }
                 for e in entries
             ],

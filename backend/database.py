@@ -1,26 +1,17 @@
 import os as _os
 import logging
-from datetime import datetime as _datetime, timedelta as _timedelta
+from datetime import datetime as _datetime
 from urllib.parse import quote as _urlquote
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, func as _sql_func
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
-from backend.config import settings
+from backend.config import settings, BEIJING_OFFSET, BEIJING_TZ, beijing_now, to_beijing_str
 
 logger = logging.getLogger(__name__)
 
-# SQLite func.now() returns UTC; Beijing is UTC+8
-_BEIJING_OFFSET = _timedelta(hours=8)
-
-
-def to_local_str(dt) -> str:
-    """Convert a UTC datetime to Beijing-time string (YYYY-MM-DD HH:MM:SS)."""
-    if dt is None:
-        return ""
-    if isinstance(dt, str):
-        return dt[:19]
-    return str((dt + _BEIJING_OFFSET).replace(tzinfo=None))[:19]
+# Backward-compatible alias — prefer to_beijing_str() from config going forward
+to_local_str = to_beijing_str
 
 
 # ── SQLCipher detection ──
@@ -283,7 +274,7 @@ def _migrate_product_hierarchy():
                 pl_id = row[0]
             else:
                 # Create new root ProductLine
-                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                now = beijing_now().strftime("%Y-%m-%d %H:%M:%S")
                 cursor.execute(
                     "INSERT INTO `pma_product_lines` (`name`, `parent_id`, `sort_order`, `created_at`) VALUES (?, NULL, ?, ?)",
                     (product_line_name, 0, now),
