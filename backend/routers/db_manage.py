@@ -50,6 +50,7 @@ class BackupConfig(BaseModel):
     interval_minutes: int = 0      # 0 = disabled
     retention_count: int = 5       # max rolling backups to keep
     keep_interval_hours: int = 0   # 0 = never keep; >0 = keep permanent copy every N hours
+    max_permanent_count: int = 10  # max permanent backups to keep (oldest removed when exceeded)
 
 
 @router.get("/sqlcipher-status", response_model=dict)
@@ -88,12 +89,14 @@ def get_backup_config(_=Depends(require_admin), db: Session = Depends(get_db)):
     retention = PmaSetting.get(db, "db_backup_retention", "5")
     keep_raw = PmaSetting.get(db, "db_backup_keep_interval", "0")
     keep_hours = _parse_keep_hours(db, keep_raw)
+    max_perm = PmaSetting.get(db, "db_backup_max_permanent", "10")
     return {
         "code": 0,
         "data": {
             "interval_minutes": int(interval),
             "retention_count": int(retention),
             "keep_interval_hours": keep_hours,
+            "max_permanent_count": int(max_perm),
         },
         "message": "ok",
     }
@@ -105,6 +108,7 @@ def update_backup_config(payload: BackupConfig, _=Depends(require_admin), db: Se
     PmaSetting.set(db, "db_backup_interval", str(max(0, payload.interval_minutes)))
     PmaSetting.set(db, "db_backup_retention", str(max(1, payload.retention_count)))
     PmaSetting.set(db, "db_backup_keep_interval", str(max(0, payload.keep_interval_hours)))
+    PmaSetting.set(db, "db_backup_max_permanent", str(max(1, payload.max_permanent_count)))
     return {"code": 0, "message": "备份配置已更新"}
 
 
@@ -337,11 +341,13 @@ async def auto_backup_loop():
                 retention_str = PmaSetting.get(db, "db_backup_retention", "5")
                 keep_hours_raw = PmaSetting.get(db, "db_backup_keep_interval", "0")
                 keep_hours = _parse_keep_hours(db, keep_hours_raw)
+                max_perm_str = PmaSetting.get(db, "db_backup_max_permanent", "10")
             finally:
                 db.close()
 
             interval = int(interval_str) if interval_str else 0
             retention = int(retention_str) if retention_str else 5
+            max_perm = int(max_perm_str) if max_perm_str else 10
 
             if interval <= 0:
                 _last_backup_time = time.time()
@@ -349,12 +355,12 @@ async def auto_backup_loop():
 
             if time.time() - _last_backup_time >= interval * 60:
                 _last_backup_time = time.time()
-                _do_backup(retention, keep_hours)
+                _do_backup(retention, keep_hours, max_perm)
         except Exception as e:
             logger.error(f"Auto-backup check failed: {e}")
 
 
-def _do_backup(retention: int, keep_hours: int = 0):
+def _do_backup(retention: int, keep_hours: int = 0, max_perm: int = 10):
     """Perform a database backup, save permanent if needed, and clean up old ones."""
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     PERMANENT_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
@@ -366,7 +372,7 @@ def _do_backup(retention: int, keep_hours: int = 0):
 
     # ── Permanent backup logic ──
     if keep_hours > 0:
-        _maybe_save_permanent_backup(dest, keep_hours)
+        _maybe_save_permanent_backup(dest, keep_hours, max_perm)
 
     # ── Rotate rolling backups (never touch permanent dir) ──
     rolling_files = sorted(
@@ -379,12 +385,13 @@ def _do_backup(retention: int, keep_hours: int = 0):
         logger.info(f"Auto-backup removed (retention={retention}): {old.name}")
 
 
-def _maybe_save_permanent_backup(src: Path, keep_hours: int):
+def _maybe_save_permanent_backup(src: Path, keep_hours: int, max_count: int = 10):
     """Save a permanent copy if no permanent backup exists within the last keep_hours.
 
     Checks the modification time of the most recent permanent backup.
     If it's newer than keep_hours ago, skip — another auto-backup already
     saved one within this window.
+    Enforces max_count by removing oldest permanent backups when exceeded.
     """
     # Find the most recent permanent backup
     perm_files = sorted(
@@ -403,6 +410,15 @@ def _maybe_save_permanent_backup(src: Path, keep_hours: int):
     perm_path = PERMANENT_BACKUP_DIR / perm_name
     shutil.copy2(src, perm_path)
     logger.info(f"Permanent backup saved (every {keep_hours}h): {perm_name}")
+
+    # Enforce max permanent count: remove oldest when exceeded
+    perm_files_after = sorted(
+        PERMANENT_BACKUP_DIR.glob("pma-backup-*-keep.db"),
+        key=lambda p: p.stat().st_mtime, reverse=True,
+    )
+    for old in perm_files_after[max_count:]:
+        old.unlink()
+        logger.info(f"Permanent backup removed (max_count={max_count}): {old.name}")
 
 
 # ── SQLCipher Rekey ──
