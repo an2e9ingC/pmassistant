@@ -166,19 +166,19 @@ function toggleAdminLogin() {
   var localSection = document.getElementById('local-login-section');
   if (!gitlabSection || !localSection) return;
 
-  if (localSection.style.display === 'none' || !localSection.style.display) {
-    // Switch to local login
+  // Toggle based on which section is currently visible
+  if (gitlabSection.style.display !== 'none') {
+    // Currently showing GitLab → switch to local login
     gitlabSection.style.display = 'none';
     localSection.style.display = '';
     var usernameEl = document.getElementById('login-username');
     if (usernameEl) { usernameEl.required = true; usernameEl.focus(); }
     var passwordEl = document.getElementById('login-password');
     if (passwordEl) passwordEl.required = true;
-    // Clear any error
     var errorEl = document.getElementById('local-login-error');
     if (errorEl) errorEl.textContent = '';
   } else {
-    // Switch back to GitLab login
+    // Currently showing local → switch back to GitLab login
     localSection.style.display = 'none';
     gitlabSection.style.display = '';
     var usernameEl = document.getElementById('login-username');
