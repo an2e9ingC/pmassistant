@@ -115,6 +115,32 @@ function _trDrop(e, list, renderFn) {
   renderFn();
 }
 
+function _trDropStage(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  this.classList.remove('dt-drag-over');
+  var targetIndex = parseInt(this.getAttribute('data-drag-index'));
+  if (_dragSourceIndex < 0 || _dragSourceIndex === targetIndex) return;
+
+  // Reorder stage types in _templatesGrouped
+  var stageKeys = Object.keys(_templatesGrouped);
+  var moved = stageKeys.splice(_dragSourceIndex, 1)[0];
+  stageKeys.splice(targetIndex, 0, moved);
+
+  // Rebuild _templatesGrouped with new key order
+  var newGrouped = {};
+  stageKeys.forEach(function(k) {
+    newGrouped[k] = _templatesGrouped[k] || [];
+  });
+  _templatesGrouped = newGrouped;
+
+  // Track reorder in pending ops — save ALL stages for this project_type
+  _pendingOps.push({ type: 'reorder_stages', stages: stageKeys.slice() });
+
+  _dragSourceIndex = -1;
+  renderTemplatesPage();
+}
+
 async function initDocTemplates() {
   var container = document.getElementById('dtsec-project');
   container.innerHTML = '<div class="loading-spinner">加载模板配置...</div>';
@@ -190,7 +216,9 @@ function renderTemplatesPage() {
   var perms = (user && user.permissions) ? user.permissions.split(',') : [];
   var canEdit = user && (user.role === 'admin' || perms.indexOf('doc_template') >= 0);
 
-  var stageTypes = _sortStageTypes(Object.keys(_templatesGrouped));
+  // Use natural key order (server returns predfined in STAGE_ORDER and custom in saved order)
+  // _sortStageTypes is only used for initial default selection
+  var stageTypes = Object.keys(_templatesGrouped);
 
   // Project type tabs bar
   var ptypeTabs = '<div class="map-tabs" style="margin-bottom:12px">';
@@ -223,11 +251,16 @@ function renderTemplatesPage() {
 
   var docs = _templatesGrouped[_selectedStage] || [];
 
-  // Left panel: stage type list with edit/delete
-  var leftHtml = stageTypes.map(function(st) {
+  // Left panel: stage type list with drag-drop + edit/delete
+  var leftHtml = stageTypes.map(function(st, i) {
     var count = (_templatesGrouped[st] || []).length;
     var sel = st === _selectedStage ? ' selected' : '';
-    return '<div class="dt-stage-item' + sel + '" onclick="selectDocTemplateStage(\'' + escHtml(st) + '\')">' +
+    return '<div class="dt-stage-item' + sel + '" data-drag-index="' + i + '" draggable="true"' +
+      ' onclick="selectDocTemplateStage(\'' + escHtml(st) + '\')"' +
+      ' ondragstart="_trDragStart.call(this,event)" ondragend="_trDragEnd.call(this,event)"' +
+      ' ondragover="_trDragOver.call(this,event)" ondragleave="_trDragLeave.call(this,event)"' +
+      ' ondrop="_trDropStage.call(this,event)"' +
+      ' style="cursor:' + (sel ? 'default' : 'grab') + '">' +
       '<span style="flex:1">' + escHtml(st) + '</span>' +
       '<span class="dt-stage-count">' + count + '</span>' +
       (canEdit ? '<span class="dt-stage-acts">' +
@@ -661,6 +694,9 @@ async function saveAllChanges() {
       } else if (op.type === 'add_stage') {
         await API.post('/doc-templates/stage-types?stage_type=' + encodeURIComponent(op.stage_type) + '&project_type=' + encodeURIComponent(_currentProjectType), {});
         success++;
+      } else if (op.type === 'reorder_stages') {
+        await API.put('/doc-templates/stage-types/reorder', { project_type: _currentProjectType, stages: op.stages });
+        success++;
       }
     } catch(e) {
       fail++;
@@ -678,9 +714,9 @@ async function saveAllChanges() {
   if (affectedTypes.length) {
     try { await API.post('/doc-templates/reset-project-docs', { stage_types: affectedTypes }); } catch(e) {}
   }
-  // Full refresh from server
+  // Full refresh from server for current project type
   try {
-    var fresh = await API.get('/doc-templates');
+    var fresh = await API.get('/doc-templates?project_type=' + encodeURIComponent(_currentProjectType));
     if (fresh && Object.keys(fresh).length) {
       _templatesGrouped = fresh;
     }
@@ -692,8 +728,8 @@ async function saveAllChanges() {
 function discardChanges() {
   if (!confirm('放弃所有未保存的更改？此操作不可撤销。')) return;
   _pendingOps = [];
-  // Re-fetch from server
-  API.get('/doc-templates').then(function(fresh) {
+  // Re-fetch from server for current project type
+  API.get('/doc-templates?project_type=' + encodeURIComponent(_currentProjectType)).then(function(fresh) {
     if (fresh && Object.keys(fresh).length) {
       _templatesGrouped = fresh;
     }

@@ -207,6 +207,33 @@ def add_stage_type(
     return {"code": 0, "data": {"stage_type": stage_type}, "message": "ok"}
 
 
+class StageReorderRequest(BaseModel):
+    project_type: str = "RD"
+    stages: List[str] = []
+
+
+@router.put("/stage-types/reorder", response_model=dict)
+def reorder_stage_types(
+    body: StageReorderRequest,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("doc_template")),
+):
+    """Persist the new order of stage types for a project type."""
+    from backend.services.document_service import _save_custom_stage_types, PROJECT_TYPE_DEFS
+    import logging
+    logger = logging.getLogger(__name__)
+    # For predefined types, filter out predefined stages (their order is fixed)
+    if body.project_type in PROJECT_TYPE_DEFS:
+        predefined = set(PROJECT_TYPE_DEFS[body.project_type]["stages"])
+        custom_stages = [s for s in body.stages if s not in predefined]
+    else:
+        custom_stages = body.stages
+    _save_custom_stage_types(db, body.project_type, custom_stages)
+    log_audit(db, user, "doc_stage_reorder", f"[{body.project_type}] {' → '.join(custom_stages)}", "管理", "medium")
+    logger.info("doc_stage_reorder: [%s] %s stages by %s", body.project_type, len(custom_stages), user.username)
+    return {"code": 0, "data": {"stages": custom_stages}, "message": "ok"}
+
+
 class ResetProjectDocsRequest(BaseModel):
     stage_types: List[str] = []
 
