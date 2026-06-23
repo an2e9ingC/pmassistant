@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/logs", tags=["logs"])
 def log_audit(db: Session, user: LocalUser, action: str, detail: str = "", category: str = "", level: str = "medium"):
     """Write an audit log entry.
 
-    category: 项目/产品/客户/工具/管理
+    category: dynamic—query /api/logs/audit/categories for available values
     level: high(删除/权限)/medium(编辑/新增)/low(配置/查看)
     """
     import logging
@@ -143,10 +143,19 @@ def clear_logs(db: Session = Depends(get_db), _=Depends(require_admin), cu = Dep
 
 # ── Audit Logs (separate from system logs, admin-only delete) ──
 
+@router.get("/audit/categories", response_model=dict)
+def audit_categories(db: Session = Depends(get_db), _=Depends(require_admin)):
+    """Return distinct categories from existing audit logs (dynamic, not hardcoded)."""
+    from backend.models.local import AuditLog
+    rows = db.query(AuditLog.category).filter(AuditLog.category != "").distinct().all()
+    categories = sorted([r[0] for r in rows if r[0]])
+    return {"code": 0, "data": categories, "message": "ok"}
+
+
 @router.get("/audit", response_model=dict)
 def view_audit_logs(
     tail: int = Query(100, ge=10, le=500),
-    category: str = Query("", description="Filter by category (项目/产品/客户/工具/管理)"),
+    category: str = Query("", description="Filter by category (动态获取自 /audit/categories)"),
     level: str = Query("", description="Filter by level (high/medium/low)"),
     search: str = Query("", description="Search in action and detail"),
     page: int = Query(1, ge=1),

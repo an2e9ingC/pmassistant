@@ -172,6 +172,7 @@ var _auditCategory = '';
 var _auditLevel = '';
 var _auditSearch = '';
 var _auditPage = 1;
+var _auditCategories = null;  // fetched dynamically from /api/logs/audit/categories
 
 async function loadAuditLogs() {
   var container = document.getElementById('audit-content');
@@ -185,11 +186,16 @@ async function loadAuditLogs() {
     var items = data.items || [];
     var total = data.total || 0;
 
-    // Category filter buttons
-    var catBtns = ['', '项目', '产品', '客户', '工具', '管理'].map(function(c) {
+    // Category filter buttons — fetched dynamically
+    if (!_auditCategories) {
+      try { _auditCategories = await API.get('/logs/audit/categories') || []; }
+      catch(e) { _auditCategories = []; }
+    }
+    var catBtns = [''].concat(_auditCategories).map(function(c) {
       var label = c || '全部';
       var cls = _auditCategory === c ? 'tab active' : 'tab';
-      return '<span class="' + cls + '" onclick="_auditCategory=\'' + c + '\';_auditPage=1;loadAuditLogs()">' + label + '</span>';
+      var escapedC = c.replace(/'/g, "\\'");
+      return '<span class="' + cls + '" onclick="_auditCategory=\'' + escapedC + '\';_auditPage=1;loadAuditLogs()">' + label + '</span>';
     }).join('');
 
     var lvlBtns = ['', 'high', 'medium', 'low'].map(function(l) {

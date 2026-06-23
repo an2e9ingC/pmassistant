@@ -112,7 +112,7 @@ class AuditLog(Base):
     id = Column(Integer, primary_key=True)
     username = Column(String(64), nullable=False)
     action = Column(String(64), nullable=False)  # delete_user, delete_cust, clear_db, etc.
-    category = Column(String(32), nullable=True)   # 项目/产品/客户/工具/管理
+    category = Column(String(32), nullable=True)   # dynamic—derived from actual usage
     level = Column(String(16), nullable=True, default="medium")     # high/medium/low
     detail = Column(String(512), nullable=True)
     created_at = Column(DateTime, default=func.now())
