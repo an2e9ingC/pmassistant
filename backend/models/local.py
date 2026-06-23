@@ -154,3 +154,15 @@ class SyncLog(Base):
     items_created = Column(Integer, default=0)
     items_updated = Column(Integer, default=0)
     error_message = Column(Text, nullable=True)
+
+
+class PmaNotification(Base):
+    """Admin-published broadcast notifications displayed in the top bar."""
+    __tablename__ = "pma_notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    level = Column(String(16), nullable=False, default="general")  # severe / important / general
+    content = Column(String(128), nullable=False)
+    created_by = Column(String(64), nullable=False)  # publisher username
+    is_active = Column(Boolean, default=True)  # False = dismissed
+    created_at = Column(DateTime, default=func.now())

@@ -116,6 +116,14 @@
         </svg>
         统计报告
       </div>
+      <div class="nav-item" id="nav-notif-manage" onclick="gotoView('notif-manage')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2 4v6a2 2 0 0 0 2 2h2l3 3V1L6 4H4a2 2 0 0 0-2 2z"/>
+          <path d="M12 4.5a4 4 0 0 1 0 7"/>
+          <path d="M10 6a2 2 0 0 1 0 4"/>
+        </svg>
+        通知管理
+      </div>
     </div>
     <div class="nav-group" id="nav-group-admin" style="display:none">
       <div class="nav-group-label">管理</div>
@@ -183,7 +191,7 @@
         <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle;margin-right:3px"><circle cx="8" cy="8" r="6"/><line x1="8" y1="5" x2="8" y2="9"/><circle cx="8" cy="12" r="0.8" fill="currentColor" stroke="none"/></svg>
         问题反馈
       </a>
-      <span id="app-version">v2026.06.23-beta9</span>
+      <span id="app-version">v2026.06.23-beta10</span>
     </div>
   </div>
 </aside>
@@ -239,7 +247,16 @@
           <span class="bell-badge" id="bell-badge"></span>
         </button>
         <div class="notif-dropdown" id="notif-dropdown">
-          <div class="notif-dropdown-hd">告警通知</div>
+          <div class="notif-dropdown-hd">
+            <span>告警通知</span>
+            <button class="icon-btn" id="btn-publish-notif" title="发布通知" onclick="openPublishNotifDialog()" style="display:none;margin-left:auto">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 4v6a2 2 0 0 0 2 2h2l3 3V1L6 4H4a2 2 0 0 0-2 2z"/>
+                <path d="M12 4.5a4 4 0 0 1 0 7"/>
+                <path d="M10 6a2 2 0 0 1 0 4"/>
+              </svg>
+            </button>
+          </div>
           <div class="notif-dropdown-list" id="notif-dropdown-list">
             <div class="loading-spinner" style="padding:20px">加载中...</div>
           </div>
@@ -545,6 +562,27 @@
 
     <!-- ══════════════════════ VIEW — DB MANAGE ══════════════════════ -->
     <div class="view" id="view-db-manage"></div>
+
+    <!-- ══════════════════════ VIEW — NOTIF-MANAGE ══════════════════════ -->
+    <div class="view" id="view-notif-manage">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div style="font-size:13px;color:var(--muted)">
+          筛选：<select id="notif-manage-scope" onchange="loadNotifManage()" style="font-size:12px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);margin-left:6px">
+            <option value="mine">我的通知</option>
+            <option value="all" id="notif-scope-all">所有通知</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" onclick="openPublishNotifDialog()" style="font-size:12px;padding:5px 16px">发布通知</button>
+      </div>
+      <div class="card table-scroll">
+        <table class="proj-table">
+          <thead><tr>
+            <th style="width:60px">级别</th><th>内容</th><th style="width:100px">发布者</th><th style="width:60px">状态</th><th style="width:130px">发布时间</th><th style="width:60px">操作</th>
+          </tr></thead>
+          <tbody id="notif-manage-tbody"><tr><td colspan="6"><div class="loading-spinner">加载中...</div></td></tr></tbody>
+        </table>
+      </div>
+    </div>
 
     <!-- ══════════════════════ VIEW — USERS ══════════════════════ -->
     <div class="view" id="view-users">
@@ -1086,5 +1124,7 @@ async function triggerSync() {
   if (btn) { btn.disabled = false; btn.style.opacity = ''; }
 }
 </script>
+<!-- Broadcast notification bar -->
+<div id="notif-bar" style="display:none"></div>
 </body>
 </html>

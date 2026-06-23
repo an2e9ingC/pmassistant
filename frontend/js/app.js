@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════
    MAIN APP
 ═══════════════════════════════════════════════════ */
-var VIEW_TITLES = { dashboard: '项目总览', detail: '项目详情', topology: '快速检索', reports: '统计报告', logs: '系统日志', users: '用户管理', permissions: '权限管理', config: '数据源配置', 'doc-templates': '项目&模板管理', 'standards': '流程规范', 'product-management': '产品管理', 'product-list': '产品总览', 'product-detail': '产品详情', 'gitlab-releases': 'GitLab 发布', 'db-manage': '数据库管理', customers: '客户管理', 'customer-detail': '客户详情' };
+var VIEW_TITLES = { dashboard: '项目总览', detail: '项目详情', topology: '快速检索', reports: '统计报告', logs: '系统日志', users: '用户管理', permissions: '权限管理', config: '数据源配置', 'doc-templates': '项目&模板管理', 'standards': '流程规范', 'product-management': '产品管理', 'product-list': '产品总览', 'product-detail': '产品详情', 'gitlab-releases': 'GitLab 发布', 'db-manage': '数据库管理', customers: '客户管理', 'customer-detail': '客户详情', 'notif-manage': '通知管理' };
 
 // Permission requirements per view (for debug display)
 var VIEW_PERMS = {
@@ -177,6 +177,9 @@ function gotoView(view, pushState) {
   }
   if (view === 'customer-detail') {
     initCustomerDetail();
+  }
+  if (view === 'notif-manage') {
+    initNotifManage();
   }
   localStorage.setItem('pm_view', view);
 
@@ -619,6 +622,319 @@ document.addEventListener('click', function(e) {
   }
 });
 
+/* ═══════════════════════════════════════════════════
+   BROADCAST NOTIFICATION BAR
+═══════════════════════════════════════════════════ */
+
+function showPublishNotifButton(user) {
+  var btn = document.getElementById('btn-publish-notif');
+  if (!btn) return;
+  var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+  var canPublish = perms.indexOf('admin') >= 0 || perms.indexOf('project_edit') >= 0;
+  btn.style.display = canPublish ? '' : 'none';
+}
+
+function openPublishNotifDialog() {
+  var user = getCurrentUser();
+  if (!user) return;
+  var perms = (user.permissions || '').split(',');
+  var isAdmin = perms.indexOf('admin') >= 0;
+
+  var levelOpts = [
+    '<option value="general" style="color:#3b82f6">● 一般（蓝色，可关闭）</option>',
+    '<option value="important" style="color:#e6a817">● 重要（黄色，可关闭）</option>',
+  ];
+  if (isAdmin) {
+    levelOpts.push('<option value="severe" style="color:var(--danger)">● 严重（红色常驻，不可关闭）</option>');
+  }
+
+  var levelHints = {
+    general: '一般通知：蓝色，用户可自行关闭',
+    important: '重要通知：黄色，用户可自行关闭',
+    severe: '严重通知：红色常驻，用户不可关闭',
+  };
+
+  var levelColors = {
+    general: '#3b82f6',
+    important: '#e6a817',
+    severe: '#e53e3e',
+  };
+
+  var html = '<div class="note-dialog-overlay">' +
+    '<div class="note-dialog" style="max-width:480px">' +
+      '<div class="note-dialog-head"><span class="note-dialog-title">发布通知</span>' +
+        '<button class="note-dialog-close" onclick="closePwDialog()">&times;</button></div>' +
+      '<div style="padding:4px 0">' +
+        '<div class="user-form-field">' +
+          '<label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">通知级别</label>' +
+          '<select class="config-input" id="notif-level" onchange="updateNotifLevelHint()" style="width:100%;box-sizing:border-box">' +
+            levelOpts.join('') +
+          '</select>' +
+        '</div>' +
+        '<div class="user-form-field">' +
+          '<label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">通知内容</label>' +
+          '<input class="config-input" id="notif-content" type="text" maxlength="32" placeholder="请输入通知内容，最多32字" oninput="updateNotifCharCount()" style="width:100%;box-sizing:border-box">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">' +
+            '<span id="notif-level-hint" style="font-size:11px;color:var(--muted)">' + levelHints.general + '</span>' +
+            '<span id="notif-char-count" style="font-size:11px;color:var(--muted)">0/32</span>' +
+          '</div>' +
+        '</div>' +
+        '<div id="notif-preview" style="margin-top:8px;padding:6px 12px;border-radius:6px;font-size:12px;color:#fff;background:var(--accent);display:none"></div>' +
+      '</div>' +
+      '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:12px">' +
+        '<span id="notif-msg" style="font-size:11px"></span>' +
+        '<button class="btn" onclick="closePwDialog()">取消</button>' +
+        '<button class="btn btn-primary" id="notif-submit-btn" onclick="submitPublishNotif()">发布</button></div>' +
+    '</div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+  updateNotifLevelHint();
+}
+
+function updateNotifLevelHint() {
+  var level = document.getElementById('notif-level');
+  var hint = document.getElementById('notif-level-hint');
+  var preview = document.getElementById('notif-preview');
+  if (!level || !hint) return;
+  var colors = {
+    general: '#3b82f6',
+    important: '#e6a817',
+    severe: '#e53e3e',
+  };
+  var hints = {
+    general: '一般通知：蓝色，用户可自行关闭',
+    important: '重要通知：黄色，用户可自行关闭',
+    severe: '严重通知：红色常驻，用户不可关闭，只能由发布者或管理员关闭',
+  };
+  // Style select with level color
+  var c = colors[level.value] || '#3b82f6';
+  level.style.color = c;
+  level.style.borderColor = c;
+  hint.textContent = hints[level.value] || '';
+  hint.style.color = c;
+  if (preview) {
+    preview.style.background = c;
+  }
+  updateNotifCharCount();
+}
+
+function updateNotifCharCount() {
+  var input = document.getElementById('notif-content');
+  var count = document.getElementById('notif-char-count');
+  var preview = document.getElementById('notif-preview');
+  if (!input || !count) return;
+  var len = input.value.length;
+  count.textContent = len + '/32';
+  count.style.color = len > 32 ? 'var(--danger)' : 'var(--muted)';
+  if (preview) {
+    if (input.value) {
+      preview.style.display = '';
+      var user = getCurrentUser();
+      preview.textContent = input.value + ' [@' + (user ? user.username : '') + ']';
+    } else {
+      preview.style.display = 'none';
+    }
+  }
+}
+
+async function submitPublishNotif() {
+  var level = document.getElementById('notif-level').value;
+  var content = document.getElementById('notif-content').value.trim();
+  var msg = document.getElementById('notif-msg');
+  var btn = document.getElementById('notif-submit-btn');
+
+  if (!content) { msg.innerHTML = '<span style="color:var(--danger)">请输入通知内容</span>'; return; }
+  if (content.length > 32) { msg.innerHTML = '<span style="color:var(--danger)">通知内容不能超过32字</span>'; return; }
+
+  btn.disabled = true;
+  btn.textContent = '发布中...';
+  msg.innerHTML = '';
+
+  try {
+    await API.post('/notifications', { level: level, content: content });
+    closePwDialog();
+    showToast('通知已发布', 'success');
+    loadNotifBar();
+  } catch(e) {
+    msg.innerHTML = '<span style="color:var(--danger)">' + escHtml(e.message) + '</span>';
+    btn.disabled = false;
+    btn.textContent = '发布';
+  }
+}
+
+function _dismissedNotifIds() {
+  try {
+    return JSON.parse(localStorage.getItem('pma_dismissed_notifs') || '[]');
+  } catch(e) { return []; }
+}
+
+function _addDismissedNotifId(id) {
+  var ids = _dismissedNotifIds();
+  if (ids.indexOf(id) < 0) ids.push(id);
+  // Keep only last 100 to avoid unlimited growth
+  if (ids.length > 100) ids = ids.slice(-100);
+  localStorage.setItem('pma_dismissed_notifs', JSON.stringify(ids));
+}
+
+async function loadNotifBar() {
+  try {
+    var data = await API.get('/notifications');
+    var bar = document.getElementById('notif-bar');
+    if (!bar) return;
+    // Filter out personally dismissed notifications
+    var dismissedIds = _dismissedNotifIds();
+    data = (data || []).filter(function(n) { return dismissedIds.indexOf(n.id) < 0; });
+    if (!data || data.length === 0) {
+      bar.style.display = 'none';
+      bar.innerHTML = '';
+      return;
+    }
+    bar.style.display = '';
+    bar.innerHTML = data.map(function(n) {
+      var closable = n.level !== 'severe';
+      var cls = 'notif-bar-item notif-bar-' + n.level;
+      var closeBtn = closable
+        ? '<button class="notif-close" onclick="dismissNotif(' + n.id + ')" title="关闭">&times;</button>'
+        : '';
+      var timeStr = n.created_at ? n.created_at.substr(0, 16) : '';  // YYYY-MM-DD HH:mm
+      return '<div class="' + cls + '">' +
+        '<span>' + escHtml(n.content) + ' <span class="notif-bar-author">[@' + escHtml(n.created_by) + ']</span>' +
+        (timeStr ? ' <span class="notif-bar-author" style="opacity:0.7;font-size:11px">' + timeStr + '</span>' : '') + '</span>' +
+        closeBtn +
+      '</div>';
+    }).join('');
+  } catch(e) {
+    console.error('Failed to load notifications:', e);
+  }
+}
+
+function dismissNotif(id) {
+  // Personal dismiss — hides notification for current user only,
+  // does NOT change the notification's active state in the database.
+  _addDismissedNotifId(id);
+  loadNotifBar();
+}
+
+var _notifPollTimer = null;
+
+function startNotifPoll() {
+  loadNotifBar();
+  if (_notifPollTimer) clearInterval(_notifPollTimer);
+  _notifPollTimer = setInterval(loadNotifBar, 30000);  // poll every 30s
+}
+
+/* ── Notification Management View ── */
+
+function initNotifManage() {
+  var user = getCurrentUser();
+  var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+  var isAdmin = user && (user.role === 'admin' || perms.indexOf('admin') >= 0);
+  // Show/hide "all" scope option for admin
+  var scopeAll = document.getElementById('notif-scope-all');
+  if (scopeAll) scopeAll.style.display = isAdmin ? '' : 'none';
+  loadNotifManage();
+}
+
+function loadNotifManage() {
+  var scope = document.getElementById('notif-manage-scope');
+  var scopeVal = scope ? scope.value : 'mine';
+  var tbody = document.getElementById('notif-manage-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="6"><div class="loading-spinner">加载中...</div></td></tr>';
+
+  API.get('/notifications/manage?scope=' + scopeVal).then(function(data) {
+    if (!data || data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">暂无通知</div></td></tr>';
+      return;
+    }
+    var levelLabels = { general: '一般', important: '重要', severe: '严重' };
+    var levelColors = { general: '#3b82f6', important: '#e6a817', severe: '#e53e3e' };
+    tbody.innerHTML = data.map(function(n) {
+      var color = levelColors[n.level] || '#3b82f6';
+      return '<tr>' +
+        '<td><span style="display:inline-block;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:600;color:#fff;background:' + color + '">' + escHtml(levelLabels[n.level] || n.level) + '</span></td>' +
+        '<td style="font-size:13px">' + escHtml(n.content) + '</td>' +
+        '<td style="font-size:12px;font-family:var(--mono)">@' + escHtml(n.created_by) + '</td>' +
+        '<td><label class="toggle-switch" style="vertical-align:middle">' +
+          '<input type="checkbox" ' + (n.is_active ? 'checked' : '') + ' onchange="toggleNotifStatus(' + n.id + ',this)">' +
+          '<span class="toggle-slider"></span></label></td>' +
+        '<td style="font-size:12px;color:var(--muted)">' + escHtml(n.created_at || '') + '</td>' +
+        '<td style="white-space:nowrap">' +
+          '<button class="btn-icon" onclick="editNotifDialog(' + n.id + ',\'' + escJs(n.content) + '\')" title="编辑" style="margin-right:4px">' +
+            '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2l3 3-9 9H2v-3l9-9z"/><path d="M10 5l1 1"/></svg></button>' +
+          '<button class="btn-icon" onclick="deleteNotif(' + n.id + ')" title="删除" style="color:var(--danger)">' +
+            '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h12M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1M6 7v5M10 7v5M3 4l1 10a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-10"/></svg></button>' +
+        '</td>' +
+      '</tr>';
+    }).join('');
+  }).catch(function(e) {
+    tbody.innerHTML = '<tr><td colspan="6"><div class="error-state">加载失败: ' + escHtml(e.message) + '</div></td></tr>';
+  });
+}
+
+async function toggleNotifStatus(id, cb) {
+  try {
+    var result = await API.put('/notifications/' + id + '/toggle');
+    cb.checked = result.is_active;
+    showToast('通知已' + (result.is_active ? '开启' : '关闭'), 'success');
+    loadNotifBar();
+  } catch(e) {
+    cb.checked = !cb.checked;  // revert
+    showToast('操作失败: ' + e.message, 'error');
+  }
+}
+
+function editNotifDialog(id, content) {
+  var html = '<div class="note-dialog-overlay">' +
+    '<div class="note-dialog" style="max-width:400px">' +
+      '<div class="note-dialog-head"><span class="note-dialog-title">编辑通知</span>' +
+        '<button class="note-dialog-close" onclick="closePwDialog()">&times;</button></div>' +
+      '<div style="padding:4px 0">' +
+        '<div class="user-form-field">' +
+          '<label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">通知内容</label>' +
+          '<input class="config-input" id="edit-notif-content" type="text" maxlength="32" value="' + escHtml(content) + '" style="width:100%;box-sizing:border-box">' +
+          '<div style="text-align:right;margin-top:4px"><span id="edit-notif-count" style="font-size:11px;color:var(--muted)">' + content.length + '/32</span></div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:12px">' +
+        '<span id="edit-notif-msg" style="font-size:11px"></span>' +
+        '<button class="btn" onclick="closePwDialog()">取消</button>' +
+        '<button class="btn btn-primary" onclick="submitEditNotif(' + id + ')">保存</button></div>' +
+    '</div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+  var inp = document.getElementById('edit-notif-content');
+  inp.oninput = function() {
+    document.getElementById('edit-notif-count').textContent = inp.value.length + '/32';
+  };
+}
+
+async function submitEditNotif(id) {
+  var content = document.getElementById('edit-notif-content').value.trim();
+  var msg = document.getElementById('edit-notif-msg');
+  if (!content) { msg.innerHTML = '<span style="color:var(--danger)">内容不能为空</span>'; return; }
+  if (content.length > 32) { msg.innerHTML = '<span style="color:var(--danger)">不能超过32字</span>'; return; }
+  try {
+    await API.put('/notifications/' + id, { content: content });
+    closePwDialog();
+    showToast('通知已更新', 'success');
+    loadNotifManage();
+    loadNotifBar();
+  } catch(e) {
+    msg.innerHTML = '<span style="color:var(--danger)">' + escHtml(e.message) + '</span>';
+  }
+}
+
+async function deleteNotif(id) {
+  if (!confirm('确定删除此通知？')) return;
+  try {
+    await API.del('/notifications/' + id);
+    showToast('通知已删除', 'success');
+    loadNotifManage();
+    loadNotifBar();
+  } catch(e) {
+    showToast('删除失败: ' + e.message, 'error');
+  }
+}
+
 /* Init */
 
 async function init() {
@@ -699,6 +1015,12 @@ async function init() {
     sessionStorage.removeItem('pma_new_user');
     showNewUserWelcomeDialog();
   }
+
+  // Show publish notification button if user has permission
+  showPublishNotifButton(user);
+
+  // Start notification bar polling
+  startNotifPoll();
 
   // Data source status — render defaults immediately, then update
   renderSourceTags();
