@@ -205,8 +205,14 @@ function renderTemplatesPage() {
   ptypeTabs += '</div>';
 
   if (!stageTypes.length) {
-    document.getElementById('dtsec-project').innerHTML = ptypeTabs +
-      '<div class="empty-state" style="padding:40px">暂无文档模板配置<br><span style="font-size:11px;color:var(--muted)">点击上方 + 新增项目类型，或切换到已有项目类型</span></div>';
+    var emptyHtml = ptypeTabs +
+      '<div class="empty-state" style="padding:40px">暂无阶段类型<br><span style="font-size:11px;color:var(--muted)">请先添加阶段类型，再配置文档模板</span></div>';
+    if (canEdit) {
+      emptyHtml += '<div style="text-align:center;margin-top:12px">' +
+        '<button class="btn btn-primary btn-sm" onclick="showAddStageDialog()">+ 新增阶段类型</button>' +
+        '</div>';
+    }
+    document.getElementById('dtsec-project').innerHTML = emptyHtml;
     return;
   }
 
@@ -638,7 +644,7 @@ async function saveAllChanges() {
     var op = ops[i];
     try {
       if (op.type === 'add') {
-        await API.post('/doc-templates', { stage_type: op.stage_type, doc_name: op.doc_name, sort_order: op.sort_order, responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '', doc_type: op.doc_type || '' });
+        await API.post('/doc-templates', { project_type: _currentProjectType, stage_type: op.stage_type, doc_name: op.doc_name, sort_order: op.sort_order, responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '', doc_type: op.doc_type || '' });
         success++;
       } else if (op.type === 'edit') {
         await API.put('/doc-templates/' + op.id, { doc_name: op.doc_name, sort_order: op.sort_order, responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '', doc_type: op.doc_type || '' });
@@ -650,10 +656,10 @@ async function saveAllChanges() {
         await API.put('/doc-templates/stage-types/rename', { old_name: op.old_name, new_name: op.new_name });
         success++;
       } else if (op.type === 'delete_stage') {
-        await API.del('/doc-templates/stage-types/' + encodeURIComponent(op.stage_type));
+        await API.del('/doc-templates/stage-types/' + encodeURIComponent(op.stage_type) + '?project_type=' + encodeURIComponent(_currentProjectType));
         success++;
       } else if (op.type === 'add_stage') {
-        await API.post('/doc-templates/stage-types?stage_type=' + encodeURIComponent(op.stage_type), {});
+        await API.post('/doc-templates/stage-types?stage_type=' + encodeURIComponent(op.stage_type) + '&project_type=' + encodeURIComponent(_currentProjectType), {});
         success++;
       }
     } catch(e) {

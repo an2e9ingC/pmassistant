@@ -136,29 +136,58 @@ PROJECT_TYPE_DEFS: dict[str, dict] = {
 }
 
 
+CUSTOM_PROJECT_TYPES_KEY = "custom_project_types"  # PmaSetting key, JSON: {"SW": "软件迭代项目", ...}
+
+
+def _get_custom_project_types(db: Session) -> dict:
+    """Read persisted custom project types from PmaSetting."""
+    from backend.models.local import PmaSetting
+    import json as _json
+    val = PmaSetting.get(db, CUSTOM_PROJECT_TYPES_KEY, "")
+    if val:
+        try:
+            return _json.loads(val)
+        except Exception:
+            pass
+    return {}
+
+
+def _save_custom_project_types(db: Session, types: dict):
+    """Persist custom project types to PmaSetting as JSON."""
+    from backend.models.local import PmaSetting
+    import json as _json
+    PmaSetting.set(db, CUSTOM_PROJECT_TYPES_KEY, _json.dumps(types, ensure_ascii=False))
+
+
 def get_project_types(db: Session) -> list[dict]:
-    """Return all known project types (predefined + custom)."""
+    """Return all known project types (predefined + persisted custom)."""
     result = []
     for ptype, info in PROJECT_TYPE_DEFS.items():
         result.append({"id": ptype, "label": info["label"], "stages": info["stages"], "builtin": True})
-    # Include any project types that exist in the templates table
-    from sqlalchemy import distinct
-    extra = db.query(distinct(DocumentTemplate.project_type)).all()
-    for (pt,) in extra:
-        if pt not in PROJECT_TYPE_DEFS:
-            result.append({"id": pt, "label": pt, "stages": [], "builtin": False})
+    # Include persisted custom project types
+    customs = _get_custom_project_types(db)
+    for ptype, label in customs.items():
+        result.append({"id": ptype, "label": label, "stages": [], "builtin": False})
     return result
 
 
 def get_stage_types_for_project_type(db: Session, project_type: str) -> list[str]:
-    """Return stage types for a given project_type."""
+    """Return stage types for a given project_type (predefined + persisted custom stages)."""
     if project_type in PROJECT_TYPE_DEFS:
-        return list(PROJECT_TYPE_DEFS[project_type]["stages"])
-    # For custom types: derive from templates
+        stages = list(PROJECT_TYPE_DEFS[project_type]["stages"])
+    else:
+        stages = []
+    # Include persisted custom stage types for this project_type
+    for st in _get_custom_stage_types(db, project_type):
+        if st not in stages:
+            stages.append(st)
+    # For custom types, also derive from existing templates in the DB
     from sqlalchemy import distinct
-    stages = [r[0] for r in db.query(distinct(DocumentTemplate.stage_type)).filter(
+    for (st,) in db.query(distinct(DocumentTemplate.stage_type)).filter(
         DocumentTemplate.project_type == project_type
-    ).all()]
+    ).all():
+        if st and st not in stages:
+            stages.append(st)
     return stages
 
 
@@ -184,21 +213,23 @@ def get_templates_grouped(db: Session, project_type: str = "RD") -> dict:
     return grouped
 
 
-CUSTOM_STAGE_TYPES_KEY = "custom_stage_types"  # PmaSetting key, comma-separated
+CUSTOM_STAGE_TYPES_PREFIX = "custom_stage_types"  # PmaSetting key prefix, per-type: custom_stage_types_RD, etc.
 
 
-def _get_custom_stage_types(db: Session) -> list[str]:
-    """Read persisted custom stage types from PmaSetting."""
+def _get_custom_stage_types(db: Session, project_type: str = "") -> list[str]:
+    """Read persisted custom stage types for a project_type from PmaSetting."""
     from backend.models.local import PmaSetting
-    val = PmaSetting.get(db, CUSTOM_STAGE_TYPES_KEY, "")
+    key = f"{CUSTOM_STAGE_TYPES_PREFIX}_{project_type}" if project_type else CUSTOM_STAGE_TYPES_PREFIX
+    val = PmaSetting.get(db, key, "")
     return [s.strip() for s in val.split(",") if s.strip()]
 
 
-def _save_custom_stage_types(db: Session, stage_types: list[str]):
-    """Persist custom stage types to PmaSetting."""
+def _save_custom_stage_types(db: Session, project_type: str, stage_types: list[str]):
+    """Persist custom stage types for a project_type to PmaSetting."""
     from backend.models.local import PmaSetting
+    key = f"{CUSTOM_STAGE_TYPES_PREFIX}_{project_type}"
     val = ",".join(stage_types)
-    PmaSetting.set(db, CUSTOM_STAGE_TYPES_KEY, val)
+    PmaSetting.set(db, key, val)
 
 
 def get_stage_types(db: Session) -> list[str]:
@@ -207,10 +238,11 @@ def get_stage_types(db: Session) -> list[str]:
     independently of whether any document templates are configured for them."""
     all_stages = list(dict.fromkeys(RD_STAGE_TYPES + SC_STAGE_TYPES))  # dedup preserving order
 
-    # Include persisted custom stage types
-    for st in _get_custom_stage_types(db):
-        if st not in all_stages:
-            all_stages.append(st)
+    # Include persisted custom stage types (all project types)
+    for pt in PROJECT_TYPE_DEFS:
+        for st in _get_custom_stage_types(db, pt):
+            if st not in all_stages:
+                all_stages.append(st)
 
     return all_stages
 

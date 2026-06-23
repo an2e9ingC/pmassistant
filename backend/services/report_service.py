@@ -17,12 +17,14 @@ def get_project_summary(db: Session) -> dict:
     done = sum(1 for p in projects if p.status in ("done", "closed"))
     blocked = sum(1 for p in projects if p.status == "suspended")
 
-    rd_count = sum(1 for p in projects if p.project_type == "RD")
-    sc_count = sum(1 for p in projects if p.project_type == "SC")
+    type_all = {}
+    for p in projects:
+        pt = p.project_type or "RD"
+        type_all[pt] = type_all.get(pt, 0) + 1
 
     return {
         "total": total, "active": active, "done": done, "blocked": blocked,
-        "rd_count": rd_count, "sc_count": sc_count,
+        "type_all": type_all,
     }
 
 

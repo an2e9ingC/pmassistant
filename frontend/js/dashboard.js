@@ -39,11 +39,24 @@ async function loadKpiCards() {
       filterInfo.title = pf ? '数据源配置中设定的项目编号前缀过滤' : '未设置项目编号前缀过滤';
     }
     document.getElementById('kpi-active-count').textContent = data.active_count;
-    document.getElementById('kpi-meta-types').innerHTML = '研发 <b>' + data.rd_count + '</b> &nbsp;·&nbsp; 生产 <b>' + data.sc_count + '</b>';
-    // Update filter tabs with counts
+    document.getElementById('kpi-meta-types').innerHTML = Object.keys(data.type_active || {}).map(function(t) {
+      return getProjectTypeLabel(t) + ' <b>' + data.type_active[t] + '</b>';
+    }).join(' &nbsp;·&nbsp; ');
+    // Update filter tabs with counts, dynamic per project type
     document.getElementById('tab-all').textContent = '全部 ' + data.total_projects;
-    document.getElementById('tab-rd').textContent = '研发项目 ' + (data.rd_all || data.rd_count);
-    document.getElementById('tab-sc').textContent = '生产项目 ' + (data.sc_all || data.sc_count);
+    var typeFilterEl = document.getElementById('type-filter');
+    if (typeFilterEl && data.type_all) {
+      // Remove old type tabs (keep only "全部")
+      typeFilterEl.querySelectorAll('.tab[data-ptype]').forEach(function(t) { t.remove(); });
+      Object.keys(data.type_all).sort().forEach(function(pt) {
+        var tab = document.createElement('span');
+        tab.className = 'tab' + (curTypeFilter === pt ? ' active' : '');
+        tab.setAttribute('data-ptype', pt);
+        tab.onclick = function() { filterTable(pt, this); };
+        tab.textContent = getProjectTypeLabel(pt) + ' ' + data.type_all[pt];
+        typeFilterEl.appendChild(tab);
+      });
+    }
     document.getElementById('kpi-completed-count').textContent = data.completed_count;
     document.getElementById('kpi-high-risk-count').textContent = data.high_risk_count;
     document.getElementById('kpi-incomplete-docs-count').textContent = data.incomplete_docs_count;
@@ -279,6 +292,12 @@ async function showDashboardCreateProjectDialog() {
   if (!_dashAllProjects.length) {
     try { _dashAllProjects = (await API.get('/product-management/all-projects')) || []; } catch(e) {}
   }
+  // Load project types for dropdown (includes custom types from 项目&模板管理)
+  var projectTypes = [{id: 'RD', label: '研发项目'}, {id: 'SC', label: '生产项目'}];
+  try { var pts = await API.get('/doc-templates/project-types'); if (pts && pts.length) projectTypes = pts; } catch(e) {}
+  var typeOptions = projectTypes.map(function(pt) {
+    return '<option value="' + escHtml(pt.id) + '">' + escHtml(pt.label) + '</option>';
+  }).join('');
 
   var productCheckboxes = _dashAllProducts.length
     ? _dashAllProducts.slice(0, 100).map(function(p) {
@@ -297,7 +316,7 @@ async function showDashboardCreateProjectDialog() {
     '<div style="display:flex;gap:10px;margin-bottom:10px">' +
       '<div style="flex:1"><label style="font-size:11px;color:var(--muted)">类型</label>' +
       '<select id="dash-newproj-type" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);margin-top:4px">' +
-        '<option value="RD">研发项目</option><option value="SC">生产项目</option>' +
+        typeOptions +
       '</select></div>' +
       '<div style="flex:1"><label style="font-size:11px;color:var(--muted)">状态</label>' +
       '<select id="dash-newproj-status" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);margin-top:4px">' +
