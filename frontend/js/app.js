@@ -629,9 +629,7 @@ document.addEventListener('click', function(e) {
 function showPublishNotifButton(user) {
   var btn = document.getElementById('btn-publish-notif');
   if (!btn) return;
-  var perms = (user && user.permissions) ? user.permissions.split(',') : [];
-  var canPublish = perms.indexOf('admin') >= 0 || perms.indexOf('project_edit') >= 0;
-  btn.style.display = canPublish ? '' : 'none';
+  btn.style.display = user ? '' : 'none';
 }
 
 function openPublishNotifDialog() {

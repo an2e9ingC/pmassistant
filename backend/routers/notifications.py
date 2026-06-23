@@ -64,14 +64,10 @@ def publish_notification(
     user: LocalUser = Depends(get_current_user),
 ):
     """Publish a broadcast notification.
-    Requires project_edit permission.
-    severe level requires admin permission.
+    general/important: any authenticated user.
+    severe: admin only.
     """
     perms = _get_perms(user)
-
-    # Permission check: project_edit or admin
-    if "admin" not in perms and "project_edit" not in perms:
-        raise HTTPException(status_code=403, detail="需要项目编辑或管理员权限才能发布通知")
 
     # Severe level only for admin
     if payload.level == "severe" and "admin" not in perms:
