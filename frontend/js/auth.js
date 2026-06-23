@@ -134,7 +134,28 @@ async function loginWithGitlab() {
       if (btn) { btn.disabled = false; btn.textContent = '使用 GitLab 登录'; }
       return;
     }
-    window.location.href = json.data.authorize_url;
+    // Open OAuth flow in a centered popup instead of full-page redirect
+    var w = 600, h = 700;
+    var left = (screen.width - w) / 2, top = (screen.height - h) / 2;
+    var popup = window.open(json.data.authorize_url, 'gitlab-oauth',
+      'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top);
+    if (!popup || popup.closed) {
+      // Popup blocked — fall back to full-page redirect
+      window.location.href = json.data.authorize_url;
+      return;
+    }
+    // Poll: if logged in → redirect; if popup closed without login → re-enable button
+    var pollTimer = setInterval(function() {
+      if (isLoggedIn()) {
+        clearInterval(pollTimer);
+        window.location.href = '/';
+        return;
+      }
+      if (popup.closed) {
+        clearInterval(pollTimer);
+        if (btn) { btn.disabled = false; btn.textContent = '使用 GitLab 登录'; }
+      }
+    }, 500);
   } catch(e) {
     if (errorEl) errorEl.textContent = '无法连接 GitLab OAuth 服务';
     if (btn) { btn.disabled = false; btn.textContent = '使用 GitLab 登录'; }
@@ -148,11 +169,22 @@ function handleGitlabCallback() {
     if (token) {
       API.token = token;
       localStorage.setItem('pma_token', token);
-      // Mark new user for welcome dialog on main page
       if (params.get('new_user') === '1') {
         sessionStorage.setItem('pma_new_user', '1');
       }
-      // Clean URL
+      // If opened as popup, redirect opener and close self
+      if (window.opener && window.opener !== window) {
+        try {
+          window.opener.location.href = '/';
+        } catch(e) {
+          // Cross-origin — fall through to redirect self
+          window.location.href = '/';
+          return;
+        }
+        window.close();
+        return;
+      }
+      // Full-page redirect fallback
       if (window.history && window.history.replaceState) {
         window.history.replaceState({}, document.title, '/login');
       }
