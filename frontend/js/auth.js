@@ -17,7 +17,7 @@ async function onLogin(e) {
   e.preventDefault();
   const username = document.getElementById('login-username').value;
   const password = document.getElementById('login-password').value;
-  const errorEl = document.getElementById('login-error');
+  const errorEl = document.getElementById('local-login-error');
   const btn = document.getElementById('login-btn');
 
   btn.disabled = true;
@@ -66,3 +66,129 @@ function logout() {
   localStorage.removeItem('pma_user');
   window.location.href = '/login';
 }
+
+/* ── GitLab OAuth ── */
+
+var _gitlabOAuthEnabled = false;
+
+async function checkGitlabOAuthConfig() {
+  var gitlabSection = document.getElementById('gitlab-login-section');
+  var localSection = document.getElementById('local-login-section');
+  if (!gitlabSection || !localSection) return;
+
+  try {
+    var res = await fetch('/api/auth/gitlab/config');
+    var json = await res.json();
+    if (json.code === 0 && json.data && json.data.enabled) {
+      _gitlabOAuthEnabled = true;
+      gitlabSection.style.display = '';
+      localSection.style.display = 'none';
+      // Focus handling for OAuth callback
+      handleGitlabCallback();
+      return;
+    }
+  } catch(e) {
+    console.warn('Failed to check GitLab OAuth config:', e);
+  }
+
+  // OAuth not enabled — show local login form directly
+  _gitlabOAuthEnabled = false;
+  gitlabSection.style.display = 'none';
+  localSection.style.display = '';
+  var usernameEl = document.getElementById('login-username');
+  if (usernameEl) { usernameEl.required = true; usernameEl.focus(); }
+  var passwordEl = document.getElementById('login-password');
+  if (passwordEl) passwordEl.required = true;
+  // Check for error params from failed OAuth callback
+  var urlParams = new URLSearchParams(window.location.search);
+  var error = urlParams.get('error');
+  if (error) {
+    var errorEl = document.getElementById('local-login-error');
+    if (error === 'gitlab_unreachable') {
+      errorEl.textContent = 'GitLab 服务暂时不可用，请稍后重试';
+    } else if (error === 'admin_must_use_local_login') {
+      errorEl.textContent = '管理员请使用本地密码登录';
+    } else if (error === 'invalid_state') {
+      errorEl.textContent = '登录已过期，请重新发起';
+    } else {
+      errorEl.textContent = '登录失败，请重试';
+    }
+    // Clean URL
+    if (window.history && window.history.replaceState) {
+      window.history.replaceState({}, document.title, '/login');
+    }
+  }
+}
+
+async function loginWithGitlab() {
+  var btn = document.getElementById('gitlab-login-btn');
+  var errorEl = document.getElementById('login-error');
+  if (btn) { btn.disabled = true; btn.textContent = '正在跳转...'; }
+  if (errorEl) errorEl.textContent = '';
+
+  try {
+    var res = await fetch('/api/auth/gitlab/authorize');
+    var json = await res.json();
+    if (json.code !== 0 || !json.data || !json.data.authorize_url) {
+      if (errorEl) errorEl.textContent = json.message || 'GitLab OAuth 未配置或不可用';
+      if (btn) { btn.disabled = false; btn.textContent = '使用 GitLab 登录'; }
+      return;
+    }
+    window.location.href = json.data.authorize_url;
+  } catch(e) {
+    if (errorEl) errorEl.textContent = '无法连接 GitLab OAuth 服务';
+    if (btn) { btn.disabled = false; btn.textContent = '使用 GitLab 登录'; }
+  }
+}
+
+function handleGitlabCallback() {
+  var params = new URLSearchParams(window.location.search);
+  if (params.get('gitlab_auth') === '1') {
+    var token = params.get('token');
+    if (token) {
+      API.token = token;
+      localStorage.setItem('pma_token', token);
+      // Mark new user for welcome dialog on main page
+      if (params.get('new_user') === '1') {
+        sessionStorage.setItem('pma_new_user', '1');
+      }
+      // Clean URL
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState({}, document.title, '/login');
+      }
+      window.location.href = '/';
+    }
+  }
+}
+
+function toggleAdminLogin() {
+  var gitlabSection = document.getElementById('gitlab-login-section');
+  var localSection = document.getElementById('local-login-section');
+  if (!gitlabSection || !localSection) return;
+
+  if (localSection.style.display === 'none' || !localSection.style.display) {
+    // Switch to local login
+    gitlabSection.style.display = 'none';
+    localSection.style.display = '';
+    var usernameEl = document.getElementById('login-username');
+    if (usernameEl) { usernameEl.required = true; usernameEl.focus(); }
+    var passwordEl = document.getElementById('login-password');
+    if (passwordEl) passwordEl.required = true;
+    // Clear any error
+    var errorEl = document.getElementById('local-login-error');
+    if (errorEl) errorEl.textContent = '';
+  } else {
+    // Switch back to GitLab login
+    localSection.style.display = 'none';
+    gitlabSection.style.display = '';
+    var usernameEl = document.getElementById('login-username');
+    if (usernameEl) usernameEl.required = false;
+    var passwordEl = document.getElementById('login-password');
+    if (passwordEl) passwordEl.required = false;
+  }
+}
+
+// Auto-check OAuth config on page load
+document.addEventListener('DOMContentLoaded', function() {
+  checkGitlabOAuthConfig();
+});

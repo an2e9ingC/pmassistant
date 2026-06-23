@@ -236,6 +236,73 @@ class GitLabClient:
             return resp.content
         return None
 
+    # ── OAuth 2.0 ──
+
+    @property
+    def _gitlab_root_url(self) -> str:
+        """Derive GitLab root URL from the API base URL.
+        e.g. http://192.168.0.128/api/v4 -> http://192.168.0.128
+        """
+        return self.base_url.rsplit("/api", 1)[0]
+
+    async def exchange_code_for_token(self, code: str, redirect_uri: str) -> dict:
+        """Exchange OAuth authorization code for an access token.
+
+        POST {gitlab}/oauth/token with client_id, client_secret, code, grant_type, redirect_uri.
+        Returns the token response dict: {access_token, token_type, refresh_token, scope, created_at}.
+        """
+        from backend.config import settings as current_settings
+
+        url = f"{self._gitlab_root_url}/oauth/token"
+        data = {
+            "client_id": current_settings.GITLAB_APP_ID,
+            "client_secret": current_settings.GITLAB_APP_SECRET,
+            "code": code,
+            "grant_type": "authorization_code",
+            "redirect_uri": redirect_uri,
+        }
+
+        client = await self._get_client()
+        # OAuth token endpoint uses form data, NOT the PRIVATE-TOKEN header
+        try:
+            resp = await client.post(url, data=data)
+            if resp.status_code == 200:
+                return resp.json()
+            if resp.status_code == 400:
+                error_detail = ""
+                try:
+                    error_detail = resp.json().get("error_description", resp.text)
+                except Exception:
+                    error_detail = resp.text
+                raise RuntimeError(f"GitLab OAuth token exchange failed: {error_detail}")
+            resp.raise_for_status()
+            return resp.json()
+        except RuntimeError:
+            raise
+        except Exception as e:
+            raise RuntimeError(f"GitLab OAuth token exchange failed: {e}")
+
+    async def get_oauth_user(self, access_token: str) -> dict:
+        """Get GitLab user info using an OAuth access token (Bearer auth).
+
+        GET {gitlab}/api/v4/user with Authorization: Bearer {access_token}.
+        Returns the GitLab user dict: {id, username, name, email, state, ...}.
+        """
+        url = f"{self.base_url}/user"
+        headers = {"Authorization": f"Bearer {access_token}"}
+
+        client = await self._get_client()
+        try:
+            resp = await client.get(url, headers=headers)
+            if resp.status_code == 401:
+                raise RuntimeError("GitLab OAuth access token is invalid or expired")
+            resp.raise_for_status()
+            return resp.json()
+        except RuntimeError:
+            raise
+        except Exception as e:
+            raise RuntimeError(f"GitLab OAuth user fetch failed: {e}")
+
     async def close(self):
         if self._client:
             await self._client.aclose()

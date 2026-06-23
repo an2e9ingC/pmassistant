@@ -28,6 +28,10 @@ class Settings:
     ZENTAO_AUTH_PASSWORD: str = ""
     GITLAB_BASE_URL: str = "http://192.168.0.128/api/v4"
     GITLAB_TOKEN: str = ""
+    GITLAB_APP_ID: str = ""             # GitLab OAuth Application ID
+    GITLAB_APP_SECRET: str = ""         # GitLab OAuth Application Secret
+    GITLAB_OAUTH_ENABLED: bool = False  # Enable GitLab OAuth login
+    GITLAB_OAUTH_REDIRECT_URI: str = "" # OAuth callback URL
     JWT_SECRET_KEY: str = "dev-secret-change-in-production"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 480
@@ -43,7 +47,9 @@ class Settings:
         """Re-read settings from os.environ (called after config changes)."""
         for key, default in self._defaults().items():
             val = os.environ.get(key, default)
-            if isinstance(default, int):
+            if isinstance(default, bool):
+                val = str(val).lower() in ("1", "true", "yes")
+            elif isinstance(default, int):
                 val = int(val)
             setattr(self, key, val)
         # Docker secrets: if SQLCIPHER_KEY_FILE is set, read key from the file

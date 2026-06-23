@@ -28,7 +28,11 @@ function renderConfigForm(cfg) {
     ]},
     { key: 'gitlab', title: 'GitLab', fields: [
       { key: 'base_url', label: 'API 地址', type: 'url', ph: 'http://192.168.0.128/api/v4' },
-      { key: 'token', label: 'Access Token', type: 'password', ph: '' },
+      { key: 'token', label: 'Access Token (数据同步)', type: 'password', ph: '' },
+      { key: 'app_id', label: 'OAuth Application ID', type: 'text', ph: '' },
+      { key: 'app_secret', label: 'OAuth Application Secret', type: 'password', ph: '' },
+      { key: 'oauth_enabled', label: '启用 GitLab OAuth 登录', type: 'checkbox', ph: '' },
+      { key: 'oauth_redirect_uri', label: 'OAuth 回调地址', type: 'url', ph: 'http://192.168.1.x:8000/api/auth/gitlab/callback' },
     ]},
     { key: 'nas', title: 'NAS 存储', fields: [
       { key: 'host', label: '主机地址', type: 'text', ph: '192.168.x.x' },
@@ -44,24 +48,39 @@ function renderConfigForm(cfg) {
       '<div class="config-section-title">' + sec.title + '</div>' +
       '<div class="config-fields">';
     sec.fields.forEach(function(f) {
-      var val = (cfg[sec.key] && cfg[sec.key][f.key]) || '';
+      var rawVal = cfg[sec.key] && cfg[sec.key][f.key];
+      var val = (f.type === 'checkbox') ? '' : (rawVal || '');
       var isPw = f.type === 'password';
+      var isCb = f.type === 'checkbox';
       var uid = 'cfg-' + sec.key + '-' + f.key;
-      html += '<label class="config-field">' +
-        '<span class="config-field-label">' + f.label + '</span>' +
-        '<span class="config-input-wrap">' +
-          '<input id="' + uid + '" class="config-input" type="' + (isPw ? 'password' : f.type) +
-            '" data-section="' + sec.key + '" data-field="' + f.key + '"' +
-            ' value="' + escHtml(val) + '" placeholder="' + escHtml(f.ph) + '"' +
-            (isPw ? ' autocomplete="new-password" onkeyup="checkCapsLock(event,\'' + uid + '-caps\')"' : '') + '>' +
-          (isPw ? '<button type="button" class="config-pw-toggle" onclick="togglePwVis(\'' + uid + '\',this)" title="显示密码">' +
-            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-              '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>' +
-              '<circle cx="12" cy="12" r="3"/>' +
-            '</svg></button>' : '') +
-          (isPw ? '<span id="' + uid + '-caps" class="config-caps-warn" style="display:none">&#x21E7; 大写锁定已开</span>' : '') +
-        '</span>' +
-      '</label>';
+
+      if (isCb) {
+        var checked = (rawVal === true || rawVal === 'true' || rawVal === '1' || rawVal === 1);
+        html += '<label class="config-field config-field-checkbox">' +
+          '<span class="config-input-wrap">' +
+            '<input id="' + uid + '" class="config-input config-checkbox" type="checkbox"' +
+              ' data-section="' + sec.key + '" data-field="' + f.key + '"' +
+              (checked ? ' checked' : '') + ' value="1">' +
+          '</span>' +
+          '<span class="config-field-label config-checkbox-label">' + f.label + '</span>' +
+        '</label>';
+      } else {
+        html += '<label class="config-field">' +
+          '<span class="config-field-label">' + f.label + '</span>' +
+          '<span class="config-input-wrap">' +
+            '<input id="' + uid + '" class="config-input" type="' + (isPw ? 'password' : f.type) +
+              '" data-section="' + sec.key + '" data-field="' + f.key + '"' +
+              ' value="' + escHtml(val) + '" placeholder="' + escHtml(f.ph) + '"' +
+              (isPw ? ' autocomplete="new-password" onkeyup="checkCapsLock(event,\'' + uid + '-caps\')"' : '') + '>' +
+            (isPw ? '<button type="button" class="config-pw-toggle" onclick="togglePwVis(\'' + uid + '\',this)" title="显示密码">' +
+              '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>' +
+                '<circle cx="12" cy="12" r="3"/>' +
+              '</svg></button>' : '') +
+            (isPw ? '<span id="' + uid + '-caps" class="config-caps-warn" style="display:none">&#x21E7; 大写锁定已开</span>' : '') +
+          '</span>' +
+        '</label>';
+      }
     });
     html += '</div></div>';
   });
@@ -108,7 +127,11 @@ async function saveConfig() {
   document.querySelectorAll('.config-input').forEach(function(inp) {
     var sec = inp.dataset.section;
     var field = inp.dataset.field;
-    payload[sec][field] = inp.value;
+    if (inp.type === 'checkbox') {
+      payload[sec][field] = inp.checked;
+    } else {
+      payload[sec][field] = inp.value;
+    }
   });
 
   try {
@@ -181,8 +204,8 @@ function switchUserTab(tab) {
 
 async function initUserManagement() {
   _userList = [];
-  document.getElementById('users-tbody').innerHTML = '<tr><td colspan="6"><div class="loading-spinner">加载中...</div></td></tr>';
-  document.getElementById('roles-tbody').innerHTML = '<tr><td colspan="6"><div class="loading-spinner">加载中...</div></td></tr>';
+  document.getElementById('users-tbody').innerHTML = '<tr><td colspan="7"><div class="loading-spinner">加载中...</div></td></tr>';
+  document.getElementById('roles-tbody').innerHTML = '<tr><td colspan="7"><div class="loading-spinner">加载中...</div></td></tr>';
   try {
     var rolesPromise = API.get('/admin/users/roles');
     var usersPromise = API.get('/admin/users');
@@ -194,7 +217,7 @@ async function initUserManagement() {
     renderUserKPIs();
     renderRoleKPIs();
   } catch(e) {
-    document.getElementById('users-tbody').innerHTML = '<tr><td colspan="6"><div class="error-state">加载失败: ' + escHtml(e.message) + '</div></td></tr>';
+    document.getElementById('users-tbody').innerHTML = '<tr><td colspan="7"><div class="error-state">加载失败: ' + escHtml(e.message) + '</div></td></tr>';
   }
 }
 
@@ -243,7 +266,7 @@ function renderRoleTable() {
   if (_roleFilter === 'withPerms') roles = roles.filter(function(r) { return (r.permissions || []).length > 0; });
   else if (_roleFilter === 'public') roles = roles.filter(function(r) { return (r.permissions || []).length === 0; });
   if (!roles.length) {
-    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state" style="padding:16px">暂无匹配角色</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state" style="padding:16px">暂无匹配角色</div></td></tr>';
     return;
   }
   // Sort: public first, then alphabetically by key
@@ -405,7 +428,7 @@ function renderUserTable() {
   if (_userFilter === 'active') users = users.filter(function(u) { return u.is_active; });
   else if (_userFilter === 'disabled') users = users.filter(function(u) { return !u.is_active; });
   if (!users.length) {
-    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state" style="padding:16px">暂无匹配用户</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state" style="padding:16px">暂无匹配用户</div></td></tr>';
     return;
   }
   tbody.innerHTML = users.map(function(u, idx) {
@@ -427,9 +450,14 @@ function renderUserTable() {
       var r = _permRoles.find(function(x) { return x.id === rid; });
       return r ? '<span style="display:inline-block;margin:1px 2px;padding:1px 6px;border-radius:3px;font-size:10.5px;background:var(--accent-lt);color:var(--accent)">' + escHtml(r.label) + '</span>' : '';
     }).join('');
+    var authSourceHtml = '<span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;background:' +
+      (u.auth_source === 'gitlab' ? 'var(--accent-lt)' : 'var(--muted-lt)') + ';color:' +
+      (u.auth_source === 'gitlab' ? 'var(--accent)' : 'var(--muted)') + '">' +
+      (u.auth_source === 'gitlab' ? 'GitLab' : '本地') + '</span>';
     return '<tr>' +
       '<td style="font-family:var(--mono);color:var(--muted);text-align:center">' + (idx + 1) + '</td>' +
       '<td style="font-size:13px;font-weight:500">' + escHtml(u.username) + '</td>' +
+      '<td style="font-size:12px">' + authSourceHtml + '</td>' +
       '<td>' + (roleBadges || '<span style="font-size:11px;color:var(--muted)">未分配</span>') + '</td>' +
       '<td>' + statusHtml + '</td>' +
       '<td style="font-size:12px;color:var(--muted)">' + escHtml(u.created_at || '') + '</td>' +
@@ -630,13 +658,20 @@ async function submitUserCreate() {
 function openUserEditDialog(id) {
   var u = _userList.find(function(x) { return x.id === id; });
   if (!u) return;
+  var isGitlab = u.auth_source === 'gitlab';
+  var passwordField = isGitlab
+    ? '<div class="user-form-field"><label>密码</label><div style="font-size:12px;color:var(--muted);padding:6px 0">GitLab 用户无需本地密码</div></div>'
+    : '<div class="user-form-field"><label>新密码（留空不修改）</label><input class="config-input" id="ue-password" type="password" placeholder="留空则不修改密码"></div>';
+  var authBadge = isGitlab
+    ? ' <span style="display:inline-block;margin-left:8px;padding:1px 8px;border-radius:3px;font-size:11px;background:var(--accent-lt);color:var(--accent);vertical-align:middle">GitLab</span>'
+    : '';
   var html = '<div class="note-dialog-overlay">' +
     '<div class="note-dialog">' +
-      '<div class="note-dialog-head"><span class="note-dialog-title">编辑用户: ' + escHtml(u.username) + '</span>' +
+      '<div class="note-dialog-head"><span class="note-dialog-title">编辑用户: ' + escHtml(u.username) + authBadge + '</span>' +
         '<button class="note-dialog-close" onclick="closeUserDialog()">&times;</button></div>' +
       '<div class="user-form">' +
         '<div class="user-form-field"><label>角色组（可多选）</label><div id="ue-role-cbs">' + _roleCheckboxes(u.role_ids || []) + '</div></div>' +
-        '<div class="user-form-field"><label>新密码（留空不修改）</label><input class="config-input" id="ue-password" type="password" placeholder="留空则不修改密码"></div>' +
+        passwordField +
       '</div>' +
       '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:14px">' +
         '<span id="ue-msg" style="font-size:11px"></span>' +

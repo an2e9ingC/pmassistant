@@ -654,7 +654,12 @@ async function init() {
   if (user) {
     var initials = (user.username || '').substring(0, 2).toUpperCase();
     document.getElementById('user-avatar').textContent = initials;
-    document.getElementById('user-name').textContent = user.username + ' · ' + user.role;
+    document.getElementById('user-name').textContent = (user.display_name || user.username) + ' · ' + user.role;
+    // Hide "修改密码" menu item for GitLab users
+    var pwMenuItem = document.getElementById('menu-change-password');
+    if (pwMenuItem) {
+      pwMenuItem.style.display = (user.auth_source === 'gitlab') ? 'none' : '';
+    }
     // Show admin nav items based on permissions
     var perms = (user && user.permissions) ? user.permissions.split(',') : [];
     var isAdmin = user && (user.role === 'admin' || perms.indexOf('admin') >= 0);
@@ -687,6 +692,12 @@ async function init() {
     if (syncBtn && (isAdmin || perms.indexOf('sync') >= 0)) {
       syncBtn.style.display = 'flex';
     }
+  }
+
+  // Show welcome dialog for first-time GitLab users
+  if (sessionStorage.getItem('pma_new_user') === '1') {
+    sessionStorage.removeItem('pma_new_user');
+    showNewUserWelcomeDialog();
   }
 
   // Data source status — render defaults immediately, then update
@@ -848,6 +859,11 @@ document.addEventListener('click', function(e) {
 });
 
 function changePassword() {
+  var user = getCurrentUser();
+  if (user && user.auth_source === 'gitlab') {
+    showToast('GitLab 用户请前往 GitLab 管理密码', 'warning');
+    return;
+  }
   var html = '<div class="note-dialog-overlay">' +
     '<div class="note-dialog">' +
       '<div class="note-dialog-head"><span class="note-dialog-title">修改密码</span>' +
@@ -862,6 +878,145 @@ function changePassword() {
         '<button class="btn btn-primary" onclick="submitPassword()">保存</button></div>' +
     '</div></div>';
   document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function openUserCenter() {
+  var user = getCurrentUser();
+  if (!user) return;
+  var isGitlab = user.auth_source === 'gitlab';
+  var authLabel = isGitlab ? 'GitLab' : '本地';
+  var authBadge = isGitlab
+    ? '<span style="display:inline-block;margin-left:8px;padding:2px 8px;border-radius:3px;font-size:11px;background:var(--accent-lt);color:var(--accent);vertical-align:middle">GitLab</span>'
+    : '<span style="display:inline-block;margin-left:8px;padding:2px 8px;border-radius:3px;font-size:11px;background:var(--muted-lt);color:var(--muted);vertical-align:middle">本地</span>';
+  var perms = (user.permissions || '').split(',').filter(Boolean);
+  var permLabels = {
+    'admin': '系统管理', 'sync': '数据同步', 'project_edit': '项目维护',
+    'product_link': '产品维护', 'customer_link': '客户维护',
+    'doc_template': '文档模板配置', 'stage_mapping': '阶段映射',
+  };
+  var permBadges = perms.length
+    ? perms.map(function(p) { return '<span style="display:inline-block;margin:1px 3px;padding:2px 8px;border-radius:3px;font-size:11px;background:var(--accent-lt);color:var(--accent)">' + escHtml(permLabels[p] || p) + '</span>'; }).join('')
+    : '<span style="font-size:12px;color:var(--muted)">无特殊权限</span>';
+
+  var html = '<div class="note-dialog-overlay">' +
+    '<div class="note-dialog" style="max-width:480px">' +
+      '<div class="note-dialog-head"><span class="note-dialog-title">用户中心</span>' +
+        '<button class="note-dialog-close" onclick="closePwDialog()">&times;</button></div>' +
+      '<div style="padding:4px 0">' +
+        // User info section
+        '<div style="margin-bottom:20px">' +
+          '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">个人信息</div>' +
+          '<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">' +
+            '<div style="width:48px;height:48px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600">' +
+              escHtml((user.display_name || user.username).charAt(0).toUpperCase()) +
+            '</div>' +
+            '<div>' +
+              '<div style="font-size:15px;font-weight:600">' + escHtml(user.display_name || user.username) + authBadge + '</div>' +
+              '<div style="font-size:12px;color:var(--muted);font-family:var(--mono)">@' + escHtml(user.username) + '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div style="font-size:12px;color:var(--muted)">认证来源: ' + authLabel + '</div>' +
+        '</div>' +
+        // Permissions section
+        '<div style="margin-bottom:20px">' +
+          '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">角色与权限</div>' +
+          '<div style="line-height:2">' + permBadges + '</div>' +
+        '</div>' +
+        // Personalization section
+        '<div style="margin-bottom:20px">' +
+          '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">个性化配置</div>' +
+          '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0">' +
+            '<span style="font-size:13px">主题模式</span>' +
+            '<span>' +
+              '<label style="margin-right:8px;font-size:12px;cursor:pointer"><input type="radio" name="uc-theme" value="light" onchange="setThemeMode(\"light\")"' + ((localStorage.getItem("pm_theme") || "light") === "light" ? " checked" : "") + '> 浅色</label>' +
+              '<label style="margin-right:8px;font-size:12px;cursor:pointer"><input type="radio" name="uc-theme" value="dark" onchange="setThemeMode(\"dark\")"' + (localStorage.getItem("pm_theme") === "dark" ? " checked" : "") + '> 深色</label>' +
+              '<label style="font-size:12px;cursor:pointer"><input type="radio" name="uc-theme" value="auto" onchange="setThemeMode(\"auto\")"' + ((localStorage.getItem("pm_theme") || "") === "" ? "" : "") + '> 跟随系统</label>' +
+            '</span>' +
+          '</div>' +
+        '</div>' +
+        // Security section (local users only)
+        (isGitlab
+          ? '<div style="margin-bottom:8px">' +
+              '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">安全设置</div>' +
+              '<div style="font-size:12px;color:var(--muted);padding:6px 0">GitLab 用户，请前往 GitLab 管理密码</div>' +
+            '</div>'
+          : '<div style="margin-bottom:8px">' +
+              '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">安全设置</div>' +
+              '<button class="btn btn-sm" onclick="closePwDialog();changePassword()">修改密码</button>' +
+            '</div>') +
+      '</div>' +
+      '<div style="display:flex;justify-content:flex-end;margin-top:8px">' +
+        '<button class="btn" onclick="closePwDialog()">关闭</button></div>' +
+    '</div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+async function showNewUserWelcomeDialog() {
+  var user = getCurrentUser();
+  if (!user) return;
+
+  // Fetch admin contacts
+  var contactsHtml = '<span style="color:var(--muted);font-size:12px">加载中...</span>';
+  try {
+    var resp = await fetch('/api/auth/gitlab/admin-contacts');
+    var json = await resp.json();
+    if (json.code === 0 && json.data && json.data.contacts && json.data.contacts.length > 0) {
+      contactsHtml = json.data.contacts.map(function(c) {
+        return '<span style="display:inline-block;margin:2px 4px;padding:2px 8px;border-radius:3px;font-size:11px;background:var(--accent-lt);color:var(--accent)">' +
+          escHtml(c.display_name || c.username) + ' (@' + escHtml(c.username) + ')</span>';
+      }).join('');
+    } else {
+      contactsHtml = '<span style="font-size:12px;color:var(--muted)">暂无管理员信息</span>';
+    }
+  } catch(e) {
+    contactsHtml = '<span style="font-size:12px;color:var(--muted)">获取管理员列表失败</span>';
+  }
+
+  // Build current permissions display
+  var perms = (user.permissions || '').split(',').filter(Boolean);
+  var permLabels = {
+    'admin': '系统管理', 'sync': '数据同步', 'project_edit': '项目维护',
+    'product_link': '产品维护', 'customer_link': '客户维护',
+    'doc_template': '文档模板配置', 'stage_mapping': '阶段映射',
+  };
+  var permBadges = perms.length
+    ? perms.map(function(p) { return '<span style="display:inline-block;margin:1px 3px;padding:2px 8px;border-radius:3px;font-size:11px;background:var(--accent-lt);color:var(--accent)">' + escHtml(permLabels[p] || p) + '</span>'; }).join('')
+    : '<span style="font-size:12px;color:var(--muted)">无特殊权限（基础 public 角色）</span>';
+
+  var html = '<div class="note-dialog-overlay" style="z-index:9999">' +
+    '<div class="note-dialog" style="max-width:480px">' +
+      '<div class="note-dialog-head"><span class="note-dialog-title">欢迎使用 PMA</span>' +
+        '<button class="note-dialog-close" onclick="closePwDialog()">&times;</button></div>' +
+      '<div style="padding:4px 0">' +
+        '<p style="font-size:13px;margin-bottom:16px;line-height:1.6">' +
+          '你已通过 GitLab 账户 <strong>' + escHtml(user.username) + '</strong> 首次登录 PMA。' +
+        '</p>' +
+        '<div style="margin-bottom:16px">' +
+          '<div style="font-size:11px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">当前权限</div>' +
+          '<div style="line-height:2">' + permBadges + '</div>' +
+        '</div>' +
+        '<div style="margin-bottom:16px;padding:12px;background:var(--bg);border-radius:8px;border:1px solid var(--border)">' +
+          '<div style="font-size:12px;line-height:1.6">' +
+            '<strong>需要更多权限？</strong>请联系以下管理员为你分配相应角色：' +
+          '</div>' +
+          '<div style="margin-top:8px;line-height:2">' + contactsHtml + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="display:flex;justify-content:flex-end;margin-top:8px">' +
+        '<button class="btn btn-primary" onclick="closePwDialog()">知道了</button></div>' +
+    '</div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function setThemeMode(mode) {
+  if (mode === 'auto') {
+    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    mode = prefersDark ? 'dark' : 'light';
+  }
+  localStorage.setItem('pm_theme', mode);
+  document.documentElement.setAttribute('data-theme', mode);
+  updateThemeLabel();
+  showToast('主题已更新', 'success');
 }
 
 function closePwDialog() {

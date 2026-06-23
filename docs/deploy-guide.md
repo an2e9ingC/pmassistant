@@ -51,6 +51,61 @@ SYNC_INTERVAL_MINUTES=30
 需要一个有 API 访问权限的禅道账号（推荐创建专用只读账号）。最低权限：
 - 查看项目、任务、Bug、用户、产品
 
+### 1.4 GitLab OAuth 用户认证（可选）
+
+PMA 支持通过 GitLab OAuth 2.0 登录，用户无需创建本地密码。
+
+#### 前置条件
+
+- 已部署 GitLab 实例（`http://192.168.0.128`）
+- 拥有 GitLab 管理员权限（用于注册 OAuth Application）
+
+#### 步骤 1：注册 GitLab OAuth Application
+
+1. 登录 GitLab → **Admin Area** → **Applications**（或 User Settings → Applications）
+2. 填写：
+   - **Name**: `PMA`
+   - **Redirect URI**: `http://<PMA-服务器地址>:8000/api/auth/gitlab/callback`
+   - **Scopes**: 勾选 `read_user`（最小权限，仅读取用户基本信息）
+3. 点击 **Save application**，记录 **Application ID** 和 **Secret**
+
+#### 步骤 2：配置 PMA
+
+**方式 A：通过数据源配置页面**（推荐）
+
+1. 以 admin 用户登录 PMA
+2. 进入「管理 → 数据源配置」
+3. 在 GitLab 区域填写：
+   - **OAuth Application ID**: 步骤 1 获取的 Application ID
+   - **OAuth Application Secret**: 步骤 1 获取的 Secret
+   - **启用 GitLab OAuth 登录**: 勾选
+   - **OAuth 回调地址**: `http://<PMA-服务器地址>:8000/api/auth/gitlab/callback`
+4. 保存配置
+
+**方式 B：通过 .env 文件**
+
+```ini
+GITLAB_APP_ID=<Application ID>
+GITLAB_APP_SECRET=<Secret>
+GITLAB_OAUTH_ENABLED=true
+GITLAB_OAUTH_REDIRECT_URI=http://<PMA-服务器地址>:8000/api/auth/gitlab/callback
+```
+
+#### 用户体验
+
+- 配置完成后，用户访问登录页将看到「使用 GitLab 登录」按钮
+- 首次登录：点击按钮 → 跳转 GitLab 授权 → 自动创建 PMA 账户 → 进入系统
+- 后续登录：直接点击「使用 GitLab 登录」即可
+- 管理员仍可通过「管理员登录」入口使用用户名+密码登录
+- **注意**：admin 用户必须使用本地密码登录，不能通过 GitLab OAuth 登录
+
+#### 验证
+
+1. 访问 PMA 登录页 `/login`，确认「使用 GitLab 登录」按钮可见
+2. 点击按钮，检查是否正确跳转到 GitLab 授权页
+3. 完成授权，检查是否正确返回 PMA 并登录成功
+4. 进入「管理 → 用户管理」，确认新用户显示「GitLab」认证来源
+
 ---
 
 ## 二、运行

@@ -208,11 +208,13 @@ def list_users(db: Session = Depends(get_db), _=Depends(require_admin)):
             {
                 "id": u.id,
                 "username": u.username,
+                "display_name": u.display_name or u.username,
                 "role": u.role,
                 "role_label": ROLE_LABELS.get(u.role, u.role),
                 "role_ids": [ur.role_id for ur in (u.user_roles or [])],
                 "permissions": sorted(_get_perms(u)),
                 "is_active": u.is_active,
+                "auth_source": u.auth_source or "local",
                 "created_at": to_local_str(u.created_at),
             }
             for u in users
@@ -223,33 +225,8 @@ def list_users(db: Session = Depends(get_db), _=Depends(require_admin)):
 
 @router.post("", response_model=dict)
 def create_user(payload: UserCreate, db: Session = Depends(get_db), _=Depends(require_admin)):
-    if payload.role not in ROLES:
-        raise HTTPException(status_code=400, detail=f"无效角色，可选: {', '.join(ROLES)}")
-    existing = db.query(LocalUser).filter(LocalUser.username == payload.username).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="用户名已存在")
-    try:
-        user = LocalUser(
-            username=payload.username,
-            display_name=payload.username,
-            password_hash=hash_password(payload.password),
-            role=payload.role,
-            is_active=True,
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-        # Auto-assign public role to every new user
-        public_role = db.query(Role).filter(Role.key == "public").first()
-        if public_role:
-            db.add(UserRole(user_id=user.id, role_id=public_role.id))
-            db.commit()
-        logger.info(f"User created: id={user.id} username={user.username!r} role={user.role}")
-        return {"code": 0, "data": {"id": user.id, "username": user.username}, "message": "用户已创建"}
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Failed to create user {payload.username!r}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    # Only admin uses local password auth; all other users come from GitLab OAuth
+    raise HTTPException(status_code=403, detail="请通过 GitLab 登录自动创建用户")
 
 
 @router.put("/{user_id}", response_model=dict)
@@ -262,6 +239,8 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
             raise HTTPException(status_code=400, detail=f"无效角色，可选: {', '.join(ROLES)}")
         user.role = payload.role
     if payload.password:
+        if user.auth_source == "gitlab":
+            raise HTTPException(status_code=400, detail="GitLab 用户无需本地密码")
         user.password_hash = hash_password(payload.password)
     if payload.is_active is not None:
         user.is_active = payload.is_active
@@ -291,6 +270,8 @@ def reset_user_password(user_id: int, payload: PasswordReset, db: Session = Depe
     user = db.query(LocalUser).filter(LocalUser.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
+    if user.auth_source == "gitlab":
+        raise HTTPException(status_code=400, detail="GitLab 用户无需本地密码")
     user.password_hash = hash_password(payload.password)
     db.commit()
     return {"code": 0, "message": "密码已重置"}

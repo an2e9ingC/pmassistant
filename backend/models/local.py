@@ -11,10 +11,12 @@ class LocalUser(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(64), unique=True, nullable=False, index=True)
-    password_hash = Column(String(256), nullable=False)
-    display_name = Column(String(128), nullable=True)  # deprecated, use username
+    password_hash = Column(String(256), nullable=True)  # NULL for GitLab users
+    display_name = Column(String(128), nullable=True)
     role = Column(String(32), default="viewer")  # primary role (legacy)
     zentao_account = Column(String(64), nullable=True)
+    auth_source = Column(String(16), default="local")  # 'local' or 'gitlab'
+    gitlab_user_id = Column(Integer, nullable=True, index=True)  # GitLab user ID
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

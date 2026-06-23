@@ -140,6 +140,73 @@ def _migrate_sqlite():
         logger.warning(f"Migration warning: {e}")
 
 
+def _migrate_password_hash_nullable():
+    """Make local_users.password_hash nullable for GitLab OAuth users.
+
+    SQLite does not support ALTER COLUMN DROP NOT NULL, so we recreate the table.
+    """
+    import sqlite3
+
+    sqlite_conn = sqlite3.connect(_db_path)
+    cursor = sqlite_conn.cursor()
+
+    try:
+        # Check if password_hash is NOT NULL
+        cursor.execute("PRAGMA table_info(`local_users`)")
+        cols = {row[1]: row for row in cursor.fetchall()}
+        pw_col = cols.get("password_hash")
+        if pw_col is None:
+            return  # Column doesn't exist yet — will be created correctly by SQLAlchemy
+        if not pw_col[3]:  # notnull flag is 0 = nullable, 1 = NOT NULL
+            return  # Already nullable
+
+        logger.info("Migrating local_users.password_hash to allow NULL...")
+
+        # Get the CREATE TABLE SQL
+        cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='local_users'")
+        create_sql = cursor.fetchone()[0]
+
+        # Build column list from PRAGMA
+        col_defs = []
+        col_names = []
+        for row in cursor.execute("PRAGMA table_info(`local_users`)").fetchall():
+            cid, name, ctype, notnull, default_val, pk = row
+            col_names.append(name)
+            parts = [f"`{name}`", ctype]
+            if pk:
+                parts.append("PRIMARY KEY")
+            if name == "password_hash":
+                # Make nullable: omit NOT NULL
+                pass
+            elif notnull:
+                parts.append("NOT NULL")
+            if default_val is not None:
+                parts.append(f"DEFAULT {default_val}")
+            col_defs.append(" ".join(parts))
+
+        new_table_sql = f"CREATE TABLE `local_users_new` ({', '.join(col_defs)})"
+
+        # Execute migration in a transaction
+        cursor.execute("PRAGMA foreign_keys=OFF")
+        cursor.execute(new_table_sql)
+        col_list = ", ".join(f"`{c}`" for c in col_names)
+        cursor.execute(f"INSERT INTO `local_users_new` ({col_list}) SELECT {col_list} FROM `local_users`")
+        cursor.execute("DROP TABLE `local_users`")
+        cursor.execute("ALTER TABLE `local_users_new` RENAME TO `local_users`")
+
+        # Recreate indexes
+        cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS `ix_local_users_username` ON `local_users` (`username`)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS `ix_local_users_gitlab_user_id` ON `local_users` (`gitlab_user_id`)")
+
+        sqlite_conn.commit()
+        logger.info("local_users.password_hash is now nullable")
+    except Exception as e:
+        sqlite_conn.rollback()
+        logger.warning(f"password_hash migration warning: {e}")
+    finally:
+        sqlite_conn.close()
+
+
 def _migrate_product_hierarchy():
     """Migrate flat product lines to 3-level tree structure.
 
@@ -358,6 +425,7 @@ def init_db():
     logger.info(f"Database path: {_db_path}")
     Base.metadata.create_all(bind=engine)
     _migrate_sqlite()
+    _migrate_password_hash_nullable()
     _migrate_product_hierarchy()
     _migrate_to_sqlcipher()  # Convert unencrypted DB to SQLCipher if key configured
 

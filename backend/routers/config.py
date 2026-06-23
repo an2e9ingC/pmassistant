@@ -35,6 +35,10 @@ class ZentaoConfig(BaseModel):
 class GitLabConfig(BaseModel):
     base_url: str = ""
     token: str = ""
+    app_id: str = ""              # GitLab OAuth Application ID
+    app_secret: str = ""          # GitLab OAuth Application Secret
+    oauth_enabled: bool = False   # Enable GitLab OAuth login
+    oauth_redirect_uri: str = ""  # OAuth callback URL
 
 
 class NasConfig(BaseModel):
@@ -65,6 +69,10 @@ def _load_config() -> dict:
         "gitlab": {
             "base_url": os.environ.get("GITLAB_BASE_URL", ""),
             "token": os.environ.get("GITLAB_TOKEN", ""),
+            "app_id": os.environ.get("GITLAB_APP_ID", ""),
+            "app_secret": os.environ.get("GITLAB_APP_SECRET", ""),
+            "oauth_enabled": os.environ.get("GITLAB_OAUTH_ENABLED", "").lower() in ("1", "true", "yes"),
+            "oauth_redirect_uri": os.environ.get("GITLAB_OAUTH_REDIRECT_URI", ""),
         },
         "nas": {
             "host": os.environ.get("NAS_HOST", ""),
@@ -100,6 +108,10 @@ def _save_config(cfg: dict) -> None:
         "zentao.sync_interval": "SYNC_INTERVAL_MINUTES",
         "gitlab.base_url": "GITLAB_BASE_URL",
         "gitlab.token": "GITLAB_TOKEN",
+        "gitlab.app_id": "GITLAB_APP_ID",
+        "gitlab.app_secret": "GITLAB_APP_SECRET",
+        "gitlab.oauth_enabled": "GITLAB_OAUTH_ENABLED",
+        "gitlab.oauth_redirect_uri": "GITLAB_OAUTH_REDIRECT_URI",
         "nas.host": "NAS_HOST",
         "nas.path": "NAS_PATH",
         "nas.username": "NAS_USERNAME",
@@ -115,6 +127,8 @@ def _save_config(cfg: dict) -> None:
     for key_path, env_key in env_map.items():
         section, field = key_path.split(".")
         val = cfg.get(section, {}).get(field, "")
+        if isinstance(val, bool):
+            val = "true" if val else "false"
         _set_env_line(lines, env_key, val)
 
     with open(ENV_FILE, "w") as f:
@@ -124,8 +138,10 @@ def _save_config(cfg: dict) -> None:
     for key_path, env_key in env_map.items():
         section, field = key_path.split(".")
         val = cfg.get(section, {}).get(field, "")
+        if isinstance(val, bool):
+            val = "true" if val else "false"
         if val:
-            os.environ[env_key] = val
+            os.environ[env_key] = str(val)
         elif env_key in os.environ:
             del os.environ[env_key]
 
