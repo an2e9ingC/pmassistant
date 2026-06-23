@@ -712,7 +712,7 @@ async function toggleUserActive(id, currentActive) {
 
 async function deleteUser(id, username) {
   if (!confirm('确定删除用户 "' + username + '"？此操作不可撤销。')) return;
-  var ok = await verifyPassword('删除用户', 'pw_verify_delete_user');
+  var ok = await verifyPassword('删除用户: ' + username, 'pw_verify_delete_user');
   if (!ok) return;
   try {
     await API.del('/admin/users/' + id);

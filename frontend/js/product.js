@@ -1015,7 +1015,7 @@ function showProdCustomersDialog() {
 
 async function deleteCurrentProduct() {
   if (!confirm('确认删除产品「' + (_prodDetail.name || '') + '」？\n\n此操作不可撤销。')) return;
-  var ok = await verifyPassword('删除产品', 'pw_verify_product_node_del');
+  var ok = await verifyPassword('删除产品: ' + (_prodDetail.name || ''), 'pw_verify_product_node_del');
   if (!ok) return;
   try {
     await API.del('/product-management/products/' + _prodDetailCurId);

@@ -66,17 +66,39 @@ function isPwVerifyEnabled(settingKey) {
 }
 
 function verifyPassword(action, settingKey) {
-  // Check if password verification is enabled for this operation
+  // Check if confirmation is enabled for this operation
   if (settingKey && !isPwVerifyEnabled(settingKey)) return Promise.resolve(true);
-  var pw = prompt('⚠ ' + (action || '此操作') + '，请输入登录密码确认：');
-  if (!pw) return Promise.resolve(false);
-  var user = getCurrentUser();
-  if (!user) return Promise.resolve(false);
-  return API.post('/auth/login', { username: user.username, password: pw }).then(function() {
-    return true;
-  }).catch(function() {
-    showToast('密码验证失败', 'error');
-    return false;
+  var confirmStr = action || '此操作';
+  return new Promise(function(resolve) {
+    var id = 'confirm-dlg-' + Date.now();
+    // Store confirm string + resolve on window so inline handlers can access them
+    window['_cd_' + id] = { str: confirmStr, resolve: resolve };
+    var html = '<div class="note-dialog-overlay" id="' + id + '">' +
+      '<div class="note-dialog" style="max-width:440px">' +
+        '<div class="note-dialog-head"><span class="note-dialog-title">操作确认</span>' +
+          '<button class="note-dialog-close" onclick="_confirmClose(\'' + id + '\',false)">&times;</button></div>' +
+        '<div style="padding:4px 0">' +
+          '<p style="font-size:13px;margin-bottom:12px">' + escHtml(action) + '</p>' +
+          '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px">' +
+            '<code style="flex:1;font-size:15px;font-weight:700;color:var(--danger);word-break:break-all;font-family:var(--mono)" id="' + id + '-code">' + escHtml(confirmStr) + '</code>' +
+            '<button class="btn-icon" title="复制" onclick="_copyConfirmText(\'' + id + '\')" style="flex-shrink:0">' +
+              '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="9" height="11" rx="1"/><path d="M11 2H3a1 1 0 0 0-1 1v9"/></svg></button>' +
+          '</div>' +
+          '<div class="user-form-field">' +
+            '<label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">请输入上方红色文字确认</label>' +
+            '<input class="config-input" id="' + id + '-input" type="text" placeholder="输入确认文字..." style="width:100%;box-sizing:border-box;font-family:var(--mono)" onkeydown="if(event.key===\'Enter\')_confirmSubmit(\'' + id + '\')">' +
+            '<div id="' + id + '-msg" style="font-size:11px;min-height:16px;margin-top:4px"></div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:8px">' +
+          '<button class="btn" onclick="_confirmClose(\'' + id + '\',false)">取消</button>' +
+          '<button class="btn btn-primary" id="' + id + '-btn" onclick="_confirmSubmit(\'' + id + '\')">确认</button>' +
+        '</div></div></div>';
+    document.body.insertAdjacentHTML('beforeend', html);
+    setTimeout(function() {
+      var inp = document.getElementById(id + '-input');
+      if (inp) inp.focus();
+    }, 100);
   });
 }
 
@@ -114,6 +136,61 @@ function escHtml(str) {
 function escJs(str) {
   if (!str) return '';
   return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n');
+}
+
+/* ── Confirm dialog helpers ── */
+
+function _confirmClose(id, result) {
+  var dlg = document.getElementById(id);
+  if (dlg) dlg.remove();
+  var data = window['_cd_' + id];
+  if (data && data.resolve) data.resolve(result);
+  delete window['_cd_' + id];
+}
+
+function _confirmSubmit(id) {
+  var data = window['_cd_' + id];
+  var input = document.getElementById(id + '-input');
+  var msg = document.getElementById(id + '-msg');
+  var val = (input.value || '').trim();
+  if (!val) { msg.innerHTML = '<span style="color:var(--danger)">请输入确认文字</span>'; return; }
+  if (val !== data.str) { msg.innerHTML = '<span style="color:var(--danger)">输入不匹配</span>'; return; }
+  _confirmClose(id, true);
+}
+
+function _copyConfirmText(id) {
+  var code = document.getElementById(id + '-code');
+  if (!code) return;
+  var text = code.textContent || '';
+  try {
+    // Try modern clipboard API first
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function() {
+        showToast('已复制到剪贴板', 'success');
+      }).catch(function() {
+        _fallbackCopy(text);
+      });
+    } else {
+      _fallbackCopy(text);
+    }
+  } catch(e) {
+    _fallbackCopy(text);
+  }
+}
+
+function _fallbackCopy(text) {
+  var ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed'; ta.style.left = '-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand('copy');
+    showToast('已复制到剪贴板', 'success');
+  } catch(e) {
+    showToast('复制失败，请手动复制', 'error');
+  }
+  document.body.removeChild(ta);
 }
 
 // Notification queue (shared between toast + bell)

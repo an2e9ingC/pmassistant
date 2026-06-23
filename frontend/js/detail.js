@@ -1410,7 +1410,7 @@ async function saveDeliveryRecord(recordId) {
 
 async function deleteDeliveryRecord(id) {
   if (!confirm('确认删除此交付记录？')) return;
-  var ok = await verifyPassword('删除交付记录', 'pw_verify_delete_delivery');
+  var ok = await verifyPassword('删除交付记录 #' + id, 'pw_verify_delete_delivery');
   if (!ok) return;
   try {
     await API.del('/delivery/records/' + id);
@@ -1801,7 +1801,7 @@ async function deleteCurrentProject() {
   var p = _projDetail;
   if (!p) return;
   if (!confirm('确认删除项目「' + (p.name || '') + '」？\n\n此操作将同时删除：\n- 项目所有执行/迭代/任务\n- 项目文档实例\n- 项目笔记\n- 关联产品/客户/标签\n- 交付记录\n- 操作活动记录\n\n此操作不可撤销！')) return;
-  var ok = await verifyPassword('删除项目', 'pw_verify_maint_remove');
+  var ok = await verifyPassword('删除项目: ' + (p.name || ''), 'pw_verify_maint_remove');
   if (!ok) return;
   try {
     await API.del('/projects/' + _comboCurId);
@@ -1866,7 +1866,9 @@ function maintOpenDialog_prod() {
 }
 
 function maintRemove_prod(pid) {
-  verifyPassword('移除产品关联', 'pw_verify_maint_remove').then(function(ok) {
+  var prod = _maintLinkedProds.find(function(p) { return p.id === pid; });
+  var name = prod ? (prod.name || '') : '';
+  verifyPassword('移除产品关联: ' + name, 'pw_verify_maint_remove').then(function(ok) {
     if (!ok) return;
     var ids = _maintLinkedProds.map(function(p) { return p.id; }).filter(function(id) { return id !== pid; });
     API.put('/maintenance/projects/' + _comboCurId + '/products', { ids: ids }).then(function() { loadMaintProjectProducts(); });
@@ -1900,7 +1902,9 @@ function maintOpenDialog_cust() {
 }
 
 function maintRemove_cust(cid) {
-  verifyPassword('移除客户关联', 'pw_verify_maint_remove').then(function(ok) {
+  var cust = _maintLinkedCustomers.find(function(c) { return c.id === cid; });
+  var name = cust ? (cust.name || '') : '';
+  verifyPassword('移除客户关联: ' + name, 'pw_verify_maint_remove').then(function(ok) {
     if (!ok) return;
     var ids = _maintLinkedCustomers.map(function(c) { return c.id; }).filter(function(id) { return id !== cid; });
     API.put('/maintenance/projects/' + _comboCurId + '/customers', { ids: ids }).then(function() { loadMaintProjectCustomers(); });

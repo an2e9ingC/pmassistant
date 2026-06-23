@@ -325,7 +325,7 @@ async function saveBackupConfig() {
 
 async function deleteBackup(name) {
   if (!confirm('确认删除备份 ' + name + ' ？')) return;
-  var ok = await verifyPassword('删除备份', 'pw_verify_db_delete_backup');
+  var ok = await verifyPassword('删除备份: ' + name, 'pw_verify_db_delete_backup');
   if (!ok) return;
   try {
     await API.del('/admin/db/backups/' + encodeURIComponent(name));
