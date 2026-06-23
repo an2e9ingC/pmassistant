@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import BaseModel
 
 
@@ -9,11 +10,11 @@ class LoginRequest(BaseModel):
 class UserInfo(BaseModel):
     id: int
     username: str
-    display_name: str = ""
+    display_name: Optional[str] = ""
     role: str
     permissions: str = ""  # comma-separated permission keys
-    auth_source: str = "local"  # 'local' or 'gitlab'
-    gitlab_user_id: int = None
+    auth_source: Optional[str] = "local"  # 'local' or 'gitlab'
+    gitlab_user_id: Optional[int] = None
 
     model_config = {"from_attributes": True}
 

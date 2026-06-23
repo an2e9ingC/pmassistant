@@ -197,6 +197,8 @@ def _migrate_password_hash_nullable():
         # Recreate indexes
         cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS `ix_local_users_username` ON `local_users` (`username`)")
         cursor.execute("CREATE INDEX IF NOT EXISTS `ix_local_users_gitlab_user_id` ON `local_users` (`gitlab_user_id`)")
+        # Backfill NULL auth_source for existing users
+        cursor.execute("UPDATE `local_users` SET `auth_source` = 'local' WHERE `auth_source` IS NULL")
 
         sqlite_conn.commit()
         logger.info("local_users.password_hash is now nullable")
