@@ -46,10 +46,14 @@ def create_project_type(
     db: Session = Depends(get_db),
     user=Depends(require_perm("doc_template")),
 ):
-    from backend.services.document_service import PROJECT_TYPE_DEFS
+    from backend.services.document_service import PROJECT_TYPE_DEFS, _get_custom_project_types, _save_custom_project_types
     if project_type in PROJECT_TYPE_DEFS:
         raise HTTPException(status_code=400, detail=f"项目类型 '{project_type}' 已存在")
-    PROJECT_TYPE_DEFS[project_type] = {"label": label, "stages": []}
+    customs = _get_custom_project_types(db)
+    if project_type in customs:
+        raise HTTPException(status_code=400, detail=f"项目类型 '{project_type}' 已存在")
+    customs[project_type] = label
+    _save_custom_project_types(db, customs)
     log_audit(db, user, "doc_ptype_add", f"{project_type}: {label}", "管理", "medium")
     return {"code": 0, "data": {"id": project_type, "label": label, "stages": [], "builtin": False}, "message": "ok"}
 
@@ -155,39 +159,51 @@ def sync_all_projects(
 @router.delete("/stage-types/{stage_type}", response_model=dict)
 def delete_stage_type(
     stage_type: str,
+    project_type: str = Query("RD"),
     db: Session = Depends(get_db),
     user=Depends(require_perm("doc_template")),
 ):
     count = document_service.delete_stage_type(db, stage_type)
-    # Also remove from persisted custom stage types
+    # Also remove from persisted custom stage types (per project_type)
     from backend.services.document_service import _get_custom_stage_types, _save_custom_stage_types
-    customs = _get_custom_stage_types(db)
+    customs = _get_custom_stage_types(db, project_type)
     if stage_type in customs:
         customs.remove(stage_type)
-        _save_custom_stage_types(db, customs)
-    log_audit(db, user, "doc_stage_del", f"{stage_type} ({count} docs)", "管理", "high")
+        _save_custom_stage_types(db, project_type, customs)
+    log_audit(db, user, "doc_stage_del", f"[{project_type}] {stage_type} ({count} docs)", "管理", "high")
     return {"code": 0, "data": {"deleted": count}, "message": "ok"}
 
 
 @router.post("/stage-types", response_model=dict)
 def add_stage_type(
     stage_type: str = Query(...),
+    project_type: str = Query("RD"),
     db: Session = Depends(get_db),
     user=Depends(require_perm("doc_template")),
 ):
-    """Persist a new custom stage type (independent of document templates)."""
-    from backend.services.document_service import _get_custom_stage_types, _save_custom_stage_types, RD_STAGE_TYPES, SC_STAGE_TYPES
-    predefined = set(RD_STAGE_TYPES + SC_STAGE_TYPES)
-    if stage_type in predefined:
-        return {"code": 1, "message": f"'{stage_type}' 是预定义阶段，无需添加"}
+    """Persist a new custom stage type for a project type."""
+    import logging
+    logger = logging.getLogger(__name__)
+    from backend.services.document_service import _get_custom_stage_types, _save_custom_stage_types, PROJECT_TYPE_DEFS
+    # Only check predefined for this specific project_type
+    if project_type in PROJECT_TYPE_DEFS:
+        predefined = set(PROJECT_TYPE_DEFS[project_type]["stages"])
+        if stage_type in predefined:
+            msg = f"'{stage_type}' 是 {PROJECT_TYPE_DEFS[project_type]['label']} 预定义阶段，无需添加"
+            logger.warning("doc_stage_add blocked: %s", msg)
+            return {"code": 1, "message": msg}
 
-    customs = _get_custom_stage_types(db)
+    customs = _get_custom_stage_types(db, project_type)
     if stage_type in customs:
-        return {"code": 1, "message": f"阶段类型 '{stage_type}' 已存在"}
+        msg = f"阶段类型 '{stage_type}' 在 {project_type} 中已存在"
+        logger.warning("doc_stage_add blocked: %s", msg)
+        return {"code": 1, "message": msg}
 
     customs.append(stage_type)
-    _save_custom_stage_types(db, customs)
-    log_audit(db, user, "doc_stage_add", stage_type, "管理", "medium")
+    _save_custom_stage_types(db, project_type, customs)
+    detail = f"[{project_type}] {stage_type}"
+    log_audit(db, user, "doc_stage_add", detail, "管理", "medium")
+    logger.info("doc_stage_add: %s by %s", detail, user.username)
     return {"code": 0, "data": {"stage_type": stage_type}, "message": "ok"}
 
 

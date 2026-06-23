@@ -631,6 +631,8 @@ async function init() {
   // Refresh user data from server (permissions may have been updated by admin)
   if (isLoggedIn()) {
     await refreshCurrentUser();
+    // Load project type labels once after auth (supports custom types from 项目&模板管理)
+    if (typeof initProjectTypeLabels === 'function') initProjectTypeLabels();
   }
 
   // Theme — prefer saved, fallback to system preference

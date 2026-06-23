@@ -9,7 +9,7 @@ function renderProjIcon(type, code) {
 
 function renderTypeBadge(type) {
   var t = (type || 'RD').toLowerCase();
-  return '<span class="badge badge-' + t + '">' + (TYPE_TXT[type] || type) + '项目</span>';
+  return '<span class="badge badge-' + t + '">' + getProjectTypeLabel(type) + '项目</span>';
 }
 
 function renderPill(status) {

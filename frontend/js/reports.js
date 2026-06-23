@@ -73,7 +73,7 @@ async function loadReportMonthly() {
     container.innerHTML =
       '<div class="section-title" style="margin-bottom:14px">月报 ' + escHtml(data.period) + '</div>' +
       '<div class="kpi-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:16px">' +
-        '<div class="kpi-card"><div class="kpi-label">项目总数</div><div class="kpi-value" style="font-size:26px">' + s.total + '</div><div class="kpi-meta">研发' + s.rd_count + ' · 生产' + s.sc_count + '</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">项目总数</div><div class="kpi-value" style="font-size:26px">' + s.total + '</div><div class="kpi-meta">' + Object.keys(s.type_all || {}).sort().map(function(t) { return getProjectTypeLabel(t) + s.type_all[t]; }).join(' · ') + '</div></div>' +
         '<div class="kpi-card"><div class="kpi-label">进行中</div><div class="kpi-value" style="font-size:26px;color:var(--accent)">' + s.active + '</div></div>' +
         '<div class="kpi-card"><div class="kpi-label">本月完成任务</div><div class="kpi-value" style="font-size:26px;color:var(--success)">' + data.tasks_completed_this_month + '</div></div>' +
         '<div class="kpi-card"><div class="kpi-label">新增/解决Bug</div><div class="kpi-value" style="font-size:26px;color:var(--warn)">' + data.new_bugs_this_month + '<span style="font-size:16px;color:var(--muted)">/' + data.resolved_bugs_this_month + '</span></div></div>' +

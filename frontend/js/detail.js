@@ -34,7 +34,7 @@ function renderComboOptions(q) {
 
   return list.map(function(p) {
     var cls = p.id == _comboCurId ? 'combo-opt selected' : 'combo-opt';
-    var typeTxt = TYPE_TXT[p.project_type] || p.project_type || '研发';
+    var typeTxt = getProjectTypeLabel(p.project_type);
     var projCode = extractProjectCode(p.name);
     var coreName = extractCoreName(p.name);
     return '<div class="' + cls + '" onclick="selectComboProject(' + p.id + ')">' +
@@ -222,11 +222,9 @@ function buildInfo(p, notes, delivery) {
   // KPI row 1 — 4 columns
   html += '<div class="delivery-kpi" style="grid-template-columns:repeat(4, 1fr);margin-bottom:16px">' +
     '<div class="dkpi"><div class="dkpi-lbl">项目类型</div><div class="dkpi-val" style="font-size:16px;font-weight:600">' +
-      (p.project_type === 'RD'
-        ? '<span style="color:var(--accent);background:var(--accent-lt);padding:2px 10px;border-radius:4px;font-size:13px">研发项目</span>'
-        : p.project_type === 'SC'
-        ? '<span style="color:var(--success);background:var(--success-lt);padding:2px 10px;border-radius:4px;font-size:13px">生产项目</span>'
-        : '<span style="color:var(--muted)">—</span>') +
+      '<span style="color:' + (p.project_type === 'RD' ? 'var(--accent)' : p.project_type === 'SC' ? 'var(--success)' : '#8b5cf6') +
+      ';background:' + (p.project_type === 'RD' ? 'var(--accent-lt)' : p.project_type === 'SC' ? 'var(--success-lt)' : 'var(--accent-lt)') +
+      ';padding:2px 10px;border-radius:4px;font-size:13px">' + escHtml(getProjectTypeLabel(p.project_type)) + '</span>' +
     '</div></div>' +
     '<div class="dkpi"><div class="dkpi-lbl">项目状态</div><div class="dkpi-val" style="font-size:16px;font-weight:600;color:' + st.color + '">' + st.label + '</div></div>' +
     '<div class="dkpi"><div class="dkpi-lbl">项目经理</div><div class="dkpi-val" style="font-size:16px;font-weight:600">' + escHtml(p.pm_name || '—') + '</div></div>' +
@@ -1689,8 +1687,9 @@ function showProjectEditDialog() {
       '<div style="display:flex;gap:10px;margin-bottom:10px">' +
         '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">项目类型</label>' +
           '<select class="search-inp" id="proj-edit-type" style="width:100%;box-sizing:border-box">' +
-            '<option value="RD"' + (p.project_type === 'RD' ? ' selected' : '') + '>研发项目</option>' +
-            '<option value="SC"' + (p.project_type === 'SC' ? ' selected' : '') + '>生产项目</option>' +
+            Object.keys(TYPE_TXT).map(function(k) {
+              return '<option value="' + k + '"' + (p.project_type === k ? ' selected' : '') + '>' + TYPE_TXT[k] + '</option>';
+            }).join('') +
           '</select></div>' +
         '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">状态</label>' +
           '<select class="search-inp" id="proj-edit-status" style="width:100%;box-sizing:border-box">' +

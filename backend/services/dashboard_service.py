@@ -14,12 +14,16 @@ def get_kpi(db: Session) -> dict:
 
     # Active = only truly in-progress (doing), not wait
     active = [p for p in projects if p.status == "doing"]
-    active_rd = sum(1 for p in active if p.project_type == "RD")
-    active_sc = sum(1 for p in active if p.project_type == "SC")
 
-    # All-project type counts (for filter tab labels)
-    rd_all = sum(1 for p in projects if p.project_type == "RD")
-    sc_all = sum(1 for p in projects if p.project_type == "SC")
+    # Per-project-type counts (for filter tabs + KPI)
+    type_active: dict[str, int] = {}
+    type_all: dict[str, int] = {}
+    for p in projects:
+        pt = p.project_type or "RD"
+        type_all[pt] = type_all.get(pt, 0) + 1
+    for p in active:
+        pt = p.project_type or "RD"
+        type_active[pt] = type_active.get(pt, 0) + 1
 
     # Average progress of active projects
     progresses = []
@@ -59,10 +63,8 @@ def get_kpi(db: Session) -> dict:
         "project_filter": pf,
         "active_projects": len(active),
         "total_projects": len(projects),
-        "rd_count": active_rd,
-        "sc_count": active_sc,
-        "rd_all": rd_all,
-        "sc_all": sc_all,
+        "type_active": type_active,
+        "type_all": type_all,
         "pending_alerts": alert_count,
         "delivered_this_month": delivered_this_month,
         "avg_progress": round(avg_progress, 1),
@@ -97,7 +99,7 @@ def get_project_list(
             (CachedProject.pm_name.ilike(pattern))
         )
 
-    if type_filter and type_filter in ("RD", "SC"):
+    if type_filter and type_filter != "all":
         q = q.filter(CachedProject.project_type == type_filter)
 
     if status:
