@@ -17,7 +17,8 @@ async function initStandards() {
 
 function renderStandards() {
   var user = getCurrentUser();
-  var canEdit = user && (user.role === 'admin' || user.role === 'pm' || user.role === 'test_delivery');
+  var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+  var canEdit = perms.indexOf('doc_template') >= 0 || perms.indexOf('admin') >= 0;
 
   var categories = Object.keys(_standardsGrouped).sort();
   if (!categories.length) {

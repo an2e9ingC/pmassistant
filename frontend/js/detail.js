@@ -311,7 +311,7 @@ function buildInfo(p, notes, delivery) {
 function _hasProjectEditPerm() {
   var user = getCurrentUser();
   var perms = (user && user.permissions) ? user.permissions.split(',') : [];
-  return perms.indexOf('project_edit') !== -1 || (user && user.role === 'admin');
+  return perms.indexOf('project_edit') !== -1 || perms.indexOf('admin') >= 0;
 }
 
 function editProjectBackground() {
@@ -997,7 +997,8 @@ function buildStages(stages) {
 
 function buildDocs(data) {
   var user = getCurrentUser();
-  var canEdit = user && (user.role === 'admin' || user.role === 'pm' || user.role === 'test_delivery');
+  var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+  var canEdit = perms.indexOf('doc_template') >= 0 || perms.indexOf('admin') >= 0 || perms.indexOf('project_edit') >= 0;
 
   // New format: { documents: [...], standard_stages: [...] }
   var stageList = (data && data.documents) ? data.documents : data;
@@ -1157,7 +1158,8 @@ function buildDelivery(data) {
   var records = data.records || [];
   var hasPlan = planned > 0;
   var user = getCurrentUser();
-  var canEdit = user && (user.role === 'admin' || user.role === 'pm' || user.role === 'test_delivery');
+  var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+  var canEdit = perms.indexOf('doc_template') >= 0 || perms.indexOf('admin') >= 0 || perms.indexOf('project_edit') >= 0;
 
   var kpiHtml =
     '<div class="delivery-kpi">' +
@@ -1609,7 +1611,8 @@ async function saveStageNameMapping(presetName) {
 function buildMaintenance() {
   if (!_comboCurId) return;
   var user = getCurrentUser();
-  var hasPerm = user && (user.role === 'admin' || user.role === 'pm' || user.role === 'manager');
+  var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+  var hasPerm = perms.indexOf('project_edit') >= 0 || perms.indexOf('admin') >= 0;
   var dt = document.getElementById('dt-maintenance');
   if (dt) dt.style.display = hasPerm ? '' : 'none';
   if (!hasPerm) return;

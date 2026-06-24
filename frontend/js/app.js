@@ -47,10 +47,16 @@ function gotoView(view, pushState) {
   // Permission debug overlay (globally toggled via permissions page)
   if (window._debugPermEnabled) {
     var user = getCurrentUser();
-    // 当前: user's role label
-    var roleKey = user ? (user.role || '?') : '未登录';
-    var roleLabels = window._roleLabels || {};
-    var currentLabel = roleLabels[roleKey] || roleKey;
+    // 当前: user's effective permissions (derived from all assigned roles)
+    var userPerms = user ? (user.permissions || '').split(',').filter(Boolean) : [];
+    var permLabels = {
+      'admin': '系统管理', 'sync': '数据同步', 'project_edit': '项目维护',
+      'product_link': '产品维护', 'customer_link': '客户维护',
+      'doc_template': '文档模板', 'stage_mapping': '阶段映射',
+    };
+    var currentLabel = userPerms.length
+      ? userPerms.map(function(p) { return permLabels[p] || p; }).join(', ')
+      : (user ? '仅登录' : '未登录');
     // 需: roles that have the required permission
     var permKey = VIEW_PERMS[view] || '?';
     var permRoles = window._permRoles || {};
@@ -474,7 +480,7 @@ function updateLinkStatus() {
     var user = getCurrentUser();
     var perms = (user && user.permissions) ? user.permissions.split(',') : [];
     var isAdmin = user && (user.role === 'admin' || perms.indexOf('admin') >= 0);
-    var canSeeDetail = isAdmin || (user && user.role === 'pm');
+    var canSeeDetail = isAdmin || perms.indexOf('project_edit') >= 0 || perms.indexOf('doc_template') >= 0;
     sources.forEach(function(s) {
       var tip = document.getElementById('src-' + s.key + '-tip');
       if (tip) {
@@ -495,7 +501,7 @@ function toggleSrcTip(key, e) {
     var user = getCurrentUser();
     var perms = (user && user.permissions) ? user.permissions.split(',') : [];
     var isAdmin = user && (user.role === 'admin' || perms.indexOf('admin') >= 0);
-    var canSeeDetail = isAdmin || (user && user.role === 'pm');
+    var canSeeDetail = isAdmin || perms.indexOf('project_edit') >= 0 || perms.indexOf('doc_template') >= 0;
     API.get('/sync/sources').then(function(sources) {
       var s = sources.find(function(x) { return x.key === key; });
       if (!s) { tip.textContent = '暂无信息'; return; }
