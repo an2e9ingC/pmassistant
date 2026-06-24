@@ -191,7 +191,7 @@
         <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle;margin-right:3px"><circle cx="8" cy="8" r="6"/><line x1="8" y1="5" x2="8" y2="9"/><circle cx="8" cy="12" r="0.8" fill="currentColor" stroke="none"/></svg>
         问题反馈
       </a>
-      <span id="app-version">v2026.06.24-beta2</span>
+      <span id="app-version">v2026.06.24-beta3</span>
     </div>
   </div>
 </aside>
@@ -262,6 +262,12 @@
           </div>
         </div>
       </div>
+      <!-- Theme toggle -->
+      <button class="icon-btn" id="theme-toggle-btn" title="切换主题" onclick="toggleTheme()">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" stroke="none">
+          <path d="M6 .278a.768.768 0 0 1 .08.858 7.208 7.208 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 0 1 .81.316.733.733 0 0 1-.031.893A8.349 8.349 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 0 1 6 .278z"/>
+        </svg>
+      </button>
       <div style="position:relative">
         <div class="user-pill" onclick="toggleUserMenu(event)" title="用户菜单">
           <div class="avatar" id="user-avatar">--</div>
@@ -270,10 +276,6 @@
         <div class="user-menu" id="user-menu">
           <div class="user-menu-item" onclick="gotoView('user-center');closeUserMenu()">用户中心</div>
           <div class="user-menu-divider"></div>
-          <div class="user-menu-item" onclick="toggleTheme();closeUserMenu()" style="display:flex;align-items:center;gap:8px">
-            <span id="theme-menu-icon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.2 3.2l1 1M11.8 11.8l1 1M11.8 3.2l-1 1M4.2 11.8l-1 1M5 8a3 3 0 1 0 6 0 3 3 0 0 0-6 0z"/></svg></span>
-            <span id="theme-menu-lbl">切换深色主题</span>
-          </div>
           <div class="user-menu-item" onclick="changePassword();closeUserMenu()" id="menu-change-password">修改密码</div>
           <div class="user-menu-divider"></div>
           <div class="user-menu-item" onclick="switchAccount()" style="color:var(--warn)">切换账号</div>

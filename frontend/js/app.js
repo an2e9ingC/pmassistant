@@ -1226,19 +1226,6 @@ function initUserCenter() {
       '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">角色与权限</div>' +
       '<div style="line-height:2.2">' + permBadges + '</div>' +
     '</div>' +
-    // Personalization section
-    '<div style="margin-bottom:24px">' +
-      '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">个性化配置</div>' +
-      '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0">' +
-        '<span style="font-size:13px">主题模式</span>' +
-        '<span>' +
-          '<label style="margin-right:10px;font-size:12px;cursor:pointer"><input type="radio" name="uc-theme" value="light"' + ((localStorage.getItem("pm_theme_mode") || "light") === "light" ? " checked" : "") + '> 浅色</label>' +
-          '<label style="margin-right:10px;font-size:12px;cursor:pointer"><input type="radio" name="uc-theme" value="dark"' + (localStorage.getItem("pm_theme_mode") === "dark" ? " checked" : "") + '> 深色</label>' +
-          '<label style="font-size:12px;cursor:pointer"><input type="radio" name="uc-theme" value="auto"' + (localStorage.getItem("pm_theme_mode") === "auto" ? " checked" : "") + '> 跟随系统</label>' +
-        '</span>' +
-      '</div>' +
-      '<button class="btn btn-primary" onclick="saveThemeConfig()" style="margin-top:8px;font-size:12px;padding:5px 16px">保存配置</button>' +
-    '</div>' +
     // Security section (local users only)
     (isGitlab
       ? '<div>' +
@@ -1322,24 +1309,13 @@ function _applyTheme(theme) {
   localStorage.setItem('pm_theme', theme);
   document.documentElement.setAttribute('data-theme', theme);
 
-  var themeIcon = document.getElementById('theme-menu-icon');
-  var themeLbl = document.getElementById('theme-menu-lbl');
-  var themeTgl = document.getElementById('theme-toggle');
-  if (themeLbl) themeLbl.textContent = theme === 'dark' ? '切换浅色主题' : '切换深色主题';
-  if (themeTgl) themeTgl.classList.toggle('on', theme === 'dark');
-}
-
-function saveThemeConfig() {
-  var radio = document.querySelector('input[name="uc-theme"]:checked');
-  if (!radio) return;
-  setThemeMode(radio.value);
-}
-
-function setThemeMode(mode) {
-  // mode: 'light', 'dark', or 'auto'
-  localStorage.setItem('pm_theme_mode', mode);
-  _applyTheme(_getEffectiveTheme());
-  showToast('主题已更新', 'success');
+  var themeBtn = document.getElementById('theme-toggle-btn');
+  if (themeBtn) {
+    themeBtn.innerHTML = theme === 'dark'
+      ? '<svg width="15" height="15" viewBox="0 0 16 16" fill="#f5c542" stroke="none"><path d="M6 .278a.768.768 0 0 1 .08.858 7.208 7.208 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 0 1 .81.316.733.733 0 0 1-.031.893A8.349 8.349 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 0 1 6 .278z"/></svg>'
+      : '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.2 3.2l1 1M11.8 11.8l1 1M11.8 3.2l-1 1M4.2 11.8l-1 1M5 8a3 3 0 1 0 6 0 3 3 0 0 0-6 0z"/></svg>';
+    themeBtn.title = theme === 'dark' ? '切换浅色主题' : '切换深色主题';
+  }
 }
 
 // Re-evaluate auto theme when system preference changes
