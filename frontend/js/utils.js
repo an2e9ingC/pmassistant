@@ -104,10 +104,19 @@ function verifyPassword(action, settingKey) {
 
 async function openCustomerByName(name) {
   if (!name) return;
+  // If multiple names separated by "、", try each one individually
+  var names = name.split('、').filter(Boolean);
+  var found = null;
   try {
-    var customers = await API.get('/customers?search=' + encodeURIComponent(name));
-    if (customers && customers.length) {
-      localStorage.setItem('pm_cust_id', customers[0].id);
+    for (var i = 0; i < names.length; i++) {
+      var customers = await API.get('/customers?search=' + encodeURIComponent(names[i].trim()));
+      if (customers && customers.length) {
+        found = customers[0];
+        break;
+      }
+    }
+    if (found) {
+      localStorage.setItem('pm_cust_id', found.id);
       gotoView('customer-detail');
     } else {
       showToast('未找到客户: ' + name, 'warn');
