@@ -132,13 +132,17 @@ body {
 <script>
 // Detect system theme preference and apply as default
 (function() {
-  var saved = localStorage.getItem('pm_theme');
-  if (!saved) {
-    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    saved = prefersDark ? 'dark' : 'light';
-    localStorage.setItem('pm_theme', saved);
+  var mode = localStorage.getItem('pm_theme_mode') || localStorage.getItem('pm_theme');
+  if (!mode || (mode !== 'light' && mode !== 'dark' && mode !== 'auto')) {
+    mode = 'auto';
+    localStorage.setItem('pm_theme_mode', 'auto');
   }
-  document.documentElement.setAttribute('data-theme', saved);
+  if (mode !== 'auto') localStorage.setItem('pm_theme_mode', mode);
+  var theme = mode === 'auto'
+    ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    : mode;
+  localStorage.setItem('pm_theme', theme);
+  document.documentElement.setAttribute('data-theme', theme);
 })();
 </script>
 <script src="/js/utils.js"></script>

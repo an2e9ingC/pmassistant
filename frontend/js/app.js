@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════
    MAIN APP
 ═══════════════════════════════════════════════════ */
-var VIEW_TITLES = { dashboard: '项目总览', detail: '项目详情', topology: '快速检索', reports: '统计报告', logs: '系统日志', users: '用户管理', permissions: '权限管理', config: '数据源配置', 'doc-templates': '项目&模板管理', 'standards': '流程规范', 'product-management': '产品管理', 'product-list': '产品总览', 'product-detail': '产品详情', 'gitlab-releases': 'GitLab 发布', 'db-manage': '数据库管理', customers: '客户管理', 'customer-detail': '客户详情', 'notif-manage': '通知管理' };
+var VIEW_TITLES = { dashboard: '项目总览', detail: '项目详情', topology: '快速检索', reports: '统计报告', logs: '系统日志', users: '用户管理', permissions: '权限管理', config: '数据源配置', 'doc-templates': '项目&模板管理', 'standards': '流程规范', 'product-management': '产品管理', 'product-list': '产品总览', 'product-detail': '产品详情', 'gitlab-releases': 'GitLab 发布', 'db-manage': '数据库管理', customers: '客户管理', 'customer-detail': '客户详情', 'notif-manage': '通知管理', 'user-center': '用户中心' };
 
 // Permission requirements per view (for debug display)
 var VIEW_PERMS = {
@@ -180,6 +180,9 @@ function gotoView(view, pushState) {
   }
   if (view === 'notif-manage') {
     initNotifManage();
+  }
+  if (view === 'user-center') {
+    initUserCenter();
   }
   localStorage.setItem('pm_view', view);
 
@@ -440,22 +443,8 @@ async function submitFeedback() {
 function toggleTheme() {
   var dark = document.documentElement.getAttribute('data-theme') === 'dark';
   var next = dark ? 'light' : 'dark';
-  document.documentElement.setAttribute('data-theme', next);
-  // Sidebar (kept for backward compat, may be null after move to user menu)
-  var lbl = document.getElementById('theme-lbl');
-  if (lbl) lbl.textContent = next === 'dark' ? '深色' : '浅色';
-  var tgl = document.getElementById('theme-toggle');
-  if (tgl) tgl.classList.toggle('on', next === 'dark');
-  // User menu
-  var menuLbl = document.getElementById('theme-menu-lbl');
-  if (menuLbl) menuLbl.textContent = next === 'dark' ? '切换浅色主题' : '切换深色主题';
-  var menuIcon = document.getElementById('theme-menu-icon');
-  if (menuIcon && next === 'dark') {
-    menuIcon.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1a7 7 0 1 0 0 14 5.5 5.5 0 0 1 0-11z"/></svg>';
-  } else if (menuIcon) {
-    menuIcon.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.2 3.2l1 1M11.8 11.8l1 1M11.8 3.2l-1 1M4.2 11.8l-1 1M5 8a3 3 0 1 0 6 0 3 3 0 0 0-6 0z"/></svg>';
-  }
-  localStorage.setItem('pm_theme', next);
+  localStorage.setItem('pm_theme_mode', next);
+  _applyTheme(next);
 }
 
 /* Data Source Status — topbar tags */
@@ -949,26 +938,23 @@ async function init() {
     if (typeof initProjectTypeLabels === 'function') initProjectTypeLabels();
   }
 
-  // Theme — prefer saved, fallback to system preference
-  var t = localStorage.getItem('pm_theme');
-  if (!t) {
-    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    t = prefersDark ? 'dark' : 'light';
-    localStorage.setItem('pm_theme', t);
+  // Theme — compute effective theme from saved preference
+  if (!localStorage.getItem('pm_theme_mode')) {
+    var saved = localStorage.getItem('pm_theme'); // legacy key
+    localStorage.setItem('pm_theme_mode', saved === 'dark' ? 'dark' : saved === 'light' ? 'light' : 'auto');
   }
-  document.documentElement.setAttribute('data-theme', t);
-  // Theme toggle moved to user menu — update if elements exist
-  var themeLbl = document.getElementById('theme-lbl');
-  if (themeLbl) themeLbl.textContent = t === 'dark' ? '深色' : '浅色';
+  _applyTheme(_getEffectiveTheme());
   var themeTgl = document.getElementById('theme-toggle');
-  if (themeTgl) themeTgl.classList.toggle('on', t === 'dark');
+  var themeLbl = document.getElementById('theme-lbl');
+  if (themeLbl) themeLbl.textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? '深色' : '浅色';
+  if (themeTgl) themeTgl.classList.toggle('on', document.documentElement.getAttribute('data-theme') === 'dark');
 
   // User display
   var user = getCurrentUser();
   if (user) {
     var initials = (user.username || '').substring(0, 2).toUpperCase();
     document.getElementById('user-avatar').textContent = initials;
-    document.getElementById('user-name').textContent = (user.display_name || user.username) + ' · ' + user.role;
+    document.getElementById('user-name').textContent = user.display_name || user.username;
     // Hide "修改密码" menu item for GitLab users
     var pwMenuItem = document.getElementById('menu-change-password');
     if (pwMenuItem) {
@@ -1200,9 +1186,11 @@ function changePassword() {
   document.body.insertAdjacentHTML('beforeend', html);
 }
 
-function openUserCenter() {
+function initUserCenter() {
+  var container = document.getElementById('user-center-content');
+  if (!container) return;
   var user = getCurrentUser();
-  if (!user) return;
+  if (!user) { container.innerHTML = '<div class="error-state">未登录</div>'; return; }
   var isGitlab = user.auth_source === 'gitlab';
   var authLabel = isGitlab ? 'GitLab' : '本地';
   var authBadge = isGitlab
@@ -1218,57 +1206,49 @@ function openUserCenter() {
     ? perms.map(function(p) { return '<span style="display:inline-block;margin:1px 3px;padding:2px 8px;border-radius:3px;font-size:11px;background:var(--accent-lt);color:var(--accent)">' + escHtml(permLabels[p] || p) + '</span>'; }).join('')
     : '<span style="font-size:12px;color:var(--muted)">无特殊权限</span>';
 
-  var html = '<div class="note-dialog-overlay">' +
-    '<div class="note-dialog" style="max-width:480px">' +
-      '<div class="note-dialog-head"><span class="note-dialog-title">用户中心</span>' +
-        '<button class="note-dialog-close" onclick="closePwDialog()">&times;</button></div>' +
-      '<div style="padding:4px 0">' +
-        // User info section
-        '<div style="margin-bottom:20px">' +
-          '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">个人信息</div>' +
-          '<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">' +
-            '<div style="width:48px;height:48px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600">' +
-              escHtml((user.display_name || user.username).charAt(0).toUpperCase()) +
-            '</div>' +
-            '<div>' +
-              '<div style="font-size:15px;font-weight:600">' + escHtml(user.display_name || user.username) + authBadge + '</div>' +
-              '<div style="font-size:12px;color:var(--muted);font-family:var(--mono)">@' + escHtml(user.username) + '</div>' +
-            '</div>' +
-          '</div>' +
-          '<div style="font-size:12px;color:var(--muted)">认证来源: ' + authLabel + '</div>' +
+  container.innerHTML =
+    // User info section
+    '<div style="margin-bottom:24px">' +
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">个人信息</div>' +
+      '<div style="display:flex;align-items:center;gap:14px;margin-bottom:10px">' +
+        '<div style="width:56px;height:56px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:600">' +
+          escHtml((user.display_name || user.username).charAt(0).toUpperCase()) +
         '</div>' +
-        // Permissions section
-        '<div style="margin-bottom:20px">' +
-          '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">角色与权限</div>' +
-          '<div style="line-height:2">' + permBadges + '</div>' +
+        '<div>' +
+          '<div style="font-size:16px;font-weight:600;margin-bottom:2px">' + escHtml(user.display_name || user.username) + authBadge + '</div>' +
+          '<div style="font-size:12px;color:var(--muted);font-family:var(--mono)">@' + escHtml(user.username) + '</div>' +
         '</div>' +
-        // Personalization section
-        '<div style="margin-bottom:20px">' +
-          '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">个性化配置</div>' +
-          '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0">' +
-            '<span style="font-size:13px">主题模式</span>' +
-            '<span>' +
-              '<label style="margin-right:8px;font-size:12px;cursor:pointer"><input type="radio" name="uc-theme" value="light" onchange="setThemeMode(\"light\")"' + ((localStorage.getItem("pm_theme") || "light") === "light" ? " checked" : "") + '> 浅色</label>' +
-              '<label style="margin-right:8px;font-size:12px;cursor:pointer"><input type="radio" name="uc-theme" value="dark" onchange="setThemeMode(\"dark\")"' + (localStorage.getItem("pm_theme") === "dark" ? " checked" : "") + '> 深色</label>' +
-              '<label style="font-size:12px;cursor:pointer"><input type="radio" name="uc-theme" value="auto" onchange="setThemeMode(\"auto\")"' + ((localStorage.getItem("pm_theme") || "") === "" ? "" : "") + '> 跟随系统</label>' +
-            '</span>' +
-          '</div>' +
-        '</div>' +
-        // Security section (local users only)
-        (isGitlab
-          ? '<div style="margin-bottom:8px">' +
-              '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">安全设置</div>' +
-              '<div style="font-size:12px;color:var(--muted);padding:6px 0">GitLab 用户，请前往 GitLab 管理密码</div>' +
-            '</div>'
-          : '<div style="margin-bottom:8px">' +
-              '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">安全设置</div>' +
-              '<button class="btn btn-sm" onclick="closePwDialog();changePassword()">修改密码</button>' +
-            '</div>') +
       '</div>' +
-      '<div style="display:flex;justify-content:flex-end;margin-top:8px">' +
-        '<button class="btn" onclick="closePwDialog()">关闭</button></div>' +
-    '</div></div>';
-  document.body.insertAdjacentHTML('beforeend', html);
+      '<div style="font-size:12px;color:var(--muted)">认证来源: ' + authLabel + '</div>' +
+    '</div>' +
+    // Permissions section
+    '<div style="margin-bottom:24px">' +
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">角色与权限</div>' +
+      '<div style="line-height:2.2">' + permBadges + '</div>' +
+    '</div>' +
+    // Personalization section
+    '<div style="margin-bottom:24px">' +
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">个性化配置</div>' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0">' +
+        '<span style="font-size:13px">主题模式</span>' +
+        '<span>' +
+          '<label style="margin-right:10px;font-size:12px;cursor:pointer"><input type="radio" name="uc-theme" value="light"' + ((localStorage.getItem("pm_theme_mode") || "light") === "light" ? " checked" : "") + '> 浅色</label>' +
+          '<label style="margin-right:10px;font-size:12px;cursor:pointer"><input type="radio" name="uc-theme" value="dark"' + (localStorage.getItem("pm_theme_mode") === "dark" ? " checked" : "") + '> 深色</label>' +
+          '<label style="font-size:12px;cursor:pointer"><input type="radio" name="uc-theme" value="auto"' + (localStorage.getItem("pm_theme_mode") === "auto" ? " checked" : "") + '> 跟随系统</label>' +
+        '</span>' +
+      '</div>' +
+      '<button class="btn btn-primary" onclick="saveThemeConfig()" style="margin-top:8px;font-size:12px;padding:5px 16px">保存配置</button>' +
+    '</div>' +
+    // Security section (local users only)
+    (isGitlab
+      ? '<div>' +
+          '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">安全设置</div>' +
+          '<div style="font-size:12px;color:var(--muted);padding:6px 0">GitLab 用户，请前往 GitLab 管理密码</div>' +
+        '</div>'
+      : '<div>' +
+          '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">安全设置</div>' +
+          '<button class="btn btn-sm" onclick="changePassword()">修改密码</button>' +
+        '</div>');
 }
 
 async function showNewUserWelcomeDialog() {
@@ -1328,16 +1308,46 @@ async function showNewUserWelcomeDialog() {
   document.body.insertAdjacentHTML('beforeend', html);
 }
 
-function setThemeMode(mode) {
+function _getEffectiveTheme() {
+  var mode = localStorage.getItem('pm_theme_mode') || 'light';
   if (mode === 'auto') {
     var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    mode = prefersDark ? 'dark' : 'light';
+    return prefersDark ? 'dark' : 'light';
   }
-  localStorage.setItem('pm_theme', mode);
-  document.documentElement.setAttribute('data-theme', mode);
-  updateThemeLabel();
+  return mode;
+}
+
+function _applyTheme(theme) {
+  // theme is the effective value: 'light' or 'dark'
+  localStorage.setItem('pm_theme', theme);
+  document.documentElement.setAttribute('data-theme', theme);
+
+  var themeIcon = document.getElementById('theme-menu-icon');
+  var themeLbl = document.getElementById('theme-menu-lbl');
+  var themeTgl = document.getElementById('theme-toggle');
+  if (themeLbl) themeLbl.textContent = theme === 'dark' ? '切换浅色主题' : '切换深色主题';
+  if (themeTgl) themeTgl.classList.toggle('on', theme === 'dark');
+}
+
+function saveThemeConfig() {
+  var radio = document.querySelector('input[name="uc-theme"]:checked');
+  if (!radio) return;
+  setThemeMode(radio.value);
+}
+
+function setThemeMode(mode) {
+  // mode: 'light', 'dark', or 'auto'
+  localStorage.setItem('pm_theme_mode', mode);
+  _applyTheme(_getEffectiveTheme());
   showToast('主题已更新', 'success');
 }
+
+// Re-evaluate auto theme when system preference changes
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function() {
+  if (localStorage.getItem('pm_theme_mode') === 'auto') {
+    _applyTheme(_getEffectiveTheme());
+  }
+});
 
 function closePwDialog() {
   var overlay = document.querySelector('.note-dialog-overlay');

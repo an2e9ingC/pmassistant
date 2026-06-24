@@ -191,7 +191,7 @@
         <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle;margin-right:3px"><circle cx="8" cy="8" r="6"/><line x1="8" y1="5" x2="8" y2="9"/><circle cx="8" cy="12" r="0.8" fill="currentColor" stroke="none"/></svg>
         问题反馈
       </a>
-      <span id="app-version">v2026.06.23-beta16</span>
+      <span id="app-version">v2026.06.24-beta1</span>
     </div>
   </div>
 </aside>
@@ -268,7 +268,7 @@
           <span class="user-label" id="user-name">用户</span>
         </div>
         <div class="user-menu" id="user-menu">
-          <div class="user-menu-item" onclick="openUserCenter();closeUserMenu()">用户中心</div>
+          <div class="user-menu-item" onclick="gotoView('user-center');closeUserMenu()">用户中心</div>
           <div class="user-menu-divider"></div>
           <div class="user-menu-item" onclick="toggleTheme();closeUserMenu()" style="display:flex;align-items:center;gap:8px">
             <span id="theme-menu-icon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.2 3.2l1 1M11.8 11.8l1 1M11.8 3.2l-1 1M4.2 11.8l-1 1M5 8a3 3 0 1 0 6 0 3 3 0 0 0-6 0z"/></svg></span>
@@ -582,6 +582,11 @@
           <tbody id="notif-manage-tbody"><tr><td colspan="6"><div class="loading-spinner">加载中...</div></td></tr></tbody>
         </table>
       </div>
+    </div>
+
+    <!-- ══════════════════════ VIEW — USER-CENTER ══════════════════════ -->
+    <div class="view" id="view-user-center">
+      <div id="user-center-content" class="card" style="max-width:600px;margin:0 auto;padding:28px 32px"></div>
     </div>
 
     <!-- ══════════════════════ VIEW — USERS ══════════════════════ -->
