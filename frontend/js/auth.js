@@ -67,6 +67,27 @@ function logout() {
   window.location.href = '/login';
 }
 
+function switchAccount() {
+  var html = '<div class="note-dialog-overlay">' +
+    '<div class="note-dialog" style="max-width:420px">' +
+      '<div class="note-dialog-head"><span class="note-dialog-title">切换到其他账号</span>' +
+        '<button class="note-dialog-close" onclick="closePwDialog()">&times;</button></div>' +
+      '<div style="padding:4px 0;font-size:13px;line-height:1.8">' +
+        '<p style="margin-bottom:12px">如需使用<strong>其他 GitLab 账号</strong>登录，请：</p>' +
+        '<ol style="margin-bottom:16px;padding-left:18px">' +
+          '<li style="margin-bottom:6px">点击下方按钮打开 GitLab</li>' +
+          '<li style="margin-bottom:6px">在 GitLab 页面点击<strong>右上角头像 → 退出</strong></li>' +
+          '<li>重新打开PMA登陆页面「使用 GitLab 登录」重新登录</li>' +
+        '</ol>' +
+      '</div>' +
+      '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:8px">' +
+        '<button class="btn" onclick="closePwDialog()">取消</button>' +
+        '<a href="http://192.168.0.128" target="_blank" class="btn" style="text-decoration:none;background:var(--warn);color:#fff" onclick="localStorage.clear();sessionStorage.clear();closePwDialog();window.location.href=\'/login\'">打开 GitLab 退出当前账号</a>' +
+      '</div>' +
+    '</div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
 /* ── GitLab OAuth ── */
 
 var _gitlabOAuthEnabled = false;
