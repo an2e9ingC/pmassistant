@@ -1,7 +1,7 @@
 ---
 name: pma-bug-analysis
 description: Bug 分析流程 — 优先查日志定位，日志不足则完善日志再修复。触发词：bug/报错/异常/错误
-user-invocable: false
+user-invocable: true
 allowed-tools: Read, Write, Edit, Bash, LSP
 ---
 

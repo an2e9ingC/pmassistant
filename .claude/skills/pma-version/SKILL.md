@@ -1,7 +1,7 @@
 ---
 name: pma-version
 description: PMA 版本号管理 — vYYYY.MM.DD-betaN 格式、dev-plan.md + index.html 同步更新
-user-invocable: false
+user-invocable: true
 allowed-tools: Read, Write, Edit, Bash
 ---
 

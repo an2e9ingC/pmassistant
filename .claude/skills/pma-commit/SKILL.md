@@ -1,7 +1,7 @@
 ---
 name: pma-commit
 description: PMA Git 提交规范 — type(scope): subject 格式、scope 表格、Co-Authored-By、提交前停服务
-user-invocable: false
+user-invocable: true
 allowed-tools: Read, Write, Edit, Bash
 ---
 

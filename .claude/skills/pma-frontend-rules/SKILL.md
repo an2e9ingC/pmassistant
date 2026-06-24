@@ -1,7 +1,7 @@
 ---
 name: pma-frontend-rules
 description: 前端开发规范 — 主题兼容（CSS变量）、TODO占位符格式、UI组件工厂函数
-user-invocable: false
+user-invocable: true
 allowed-tools: Read, Write, Edit, Bash
 ---
 
