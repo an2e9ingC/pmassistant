@@ -1203,10 +1203,6 @@ function initUserCenter() {
   var user = getCurrentUser();
   if (!user) { container.innerHTML = '<div class="error-state">未登录</div>'; return; }
   var isGitlab = user.auth_source === 'gitlab';
-  var authLabel = isGitlab ? 'GitLab' : '本地';
-  var authBadge = isGitlab
-    ? '<span style="display:inline-block;margin-left:8px;padding:2px 8px;border-radius:3px;font-size:11px;background:var(--accent-lt);color:var(--accent);vertical-align:middle">GitLab</span>'
-    : '<span style="display:inline-block;margin-left:8px;padding:2px 8px;border-radius:3px;font-size:11px;background:var(--muted-lt);color:var(--muted);vertical-align:middle">本地</span>';
   var perms = (user.permissions || '').split(',').filter(Boolean);
   var permLabels = {
     'admin': '系统管理', 'sync': '数据同步', 'project_edit': '项目维护',
@@ -1221,39 +1217,48 @@ function initUserCenter() {
     // User info section
     '<div style="margin-bottom:24px">' +
       '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">个人信息</div>' +
-      '<div style="display:flex;align-items:center;gap:14px;margin-bottom:10px">' +
+      '<div style="display:flex;align-items:center;gap:14px;margin-bottom:12px">' +
         '<div style="width:56px;height:56px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:600">' +
           escHtml((user.display_name || user.username).charAt(0).toUpperCase()) +
         '</div>' +
         '<div>' +
-          '<div style="font-size:16px;font-weight:600;margin-bottom:2px">' + escHtml(user.display_name || user.username) + authBadge + '</div>' +
+          '<div style="font-size:16px;font-weight:600;margin-bottom:2px">' + escHtml(user.display_name || user.username) + '</div>' +
           '<div style="font-size:12px;color:var(--muted);font-family:var(--mono)">@' + escHtml(user.username) + '</div>' +
         '</div>' +
       '</div>' +
-      '<div style="font-size:12px;color:var(--muted)">认证来源: ' + authLabel + '</div>' +
+      // GitLab account section (consolidated)
       (isGitlab
-        ? '<div style="font-size:12px;margin-top:4px">GitLab Token: ' +
-            (user.gitlab_token_valid
-              ? '<span style="color:var(--success);font-weight:600">有效</span>'
-              : '<span style="color:var(--danger);font-weight:600">无效/过期（需重新登录）</span>') +
+        ? '<div style="padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin-bottom:4px">' +
+            '<div style="font-size:12px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:6px">' +
+              '<svg width="14" height="14" viewBox="0 0 380 380" fill="#e24329"><path d="M282.83 170.73l-.27-.69-26.14-68.22a6.81 6.81 0 00-2.69-3.24 7 7 0 00-8 .43 7 7 0 00-2.32 3.52l-17.65 54H154.07l-17.65-54a6.86 6.86 0 00-2.32-3.53 7 7 0 00-8-.43 6.87 6.87 0 00-2.69 3.24L97.44 170l-.26.69a48.54 48.54 0 0016.1 56.1l.09.07.24.17 39.82 30.2 19.7 15.11 12 9.08a7.07 7.07 0 004.33 1.58 7.09 7.09 0 004.33-1.58l12-9.08 19.7-15.11 40.06-30.35.09-.07a48.63 48.63 0 0016.08-56.1z"/></svg>' +
+              'GitLab 账户' +
+            '</div>' +
+            '<div style="font-size:12px;line-height:2">' +
+              '<div>用户名: <span style="color:var(--fg);font-weight:500">@' + escHtml(user.username) + '</span></div>' +
+              '<div>Token 状态: ' +
+                (user.gitlab_token_valid
+                  ? '<span style="color:var(--success);font-weight:600">有效</span>'
+                  : '<span style="color:var(--danger);font-weight:600">无效/过期（需重新登录）</span>') +
+              '</div>' +
+              '<a href="http://192.168.0.128/' + escHtml(user.username) + '" target="_blank" style="color:var(--accent);text-decoration:none">GitLab 个人主页 ↗</a>' +
+            '</div>' +
           '</div>'
-        : '') +
+        : '<div style="font-size:12px;color:var(--muted)">认证来源: 本地</div>') +
     '</div>' +
     // Permissions section
-    '<div style="margin-bottom:24px">' +
+    '<div style="margin-bottom:16px">' +
       '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">角色与权限</div>' +
-      '<div style="line-height:2.2">' + permBadges + '</div>' +
+      '<div style="padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;line-height:2.2">' + permBadges + '</div>' +
     '</div>' +
     // Security section (local users only)
-    (isGitlab
-      ? '<div>' +
-          '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">安全设置</div>' +
-          '<div style="font-size:12px;color:var(--muted);padding:6px 0">GitLab 用户，请前往 GitLab 管理密码</div>' +
-        '</div>'
-      : '<div>' +
-          '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">安全设置</div>' +
-          '<button class="btn btn-sm" onclick="changePassword()">修改密码</button>' +
-        '</div>');
+    '<div>' +
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">安全设置</div>' +
+      '<div style="padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:13px">' +
+        (isGitlab
+          ? '<span style="color:var(--muted)">GitLab 用户，请前往 <a href="http://192.168.0.128/-/profile/password/edit" target="_blank" style="color:var(--accent)">GitLab 管理密码 ↗</a></span>'
+          : '<button class="btn btn-sm" onclick="changePassword()">修改密码</button>') +
+      '</div>' +
+    '</div>';
 }
 
 async function showNewUserWelcomeDialog() {

@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-> 当前版本：v2026.06.25-beta3 | 最后更新：2026-06-25
+> 当前版本：v2026.06.25-beta4 | 最后更新：2026-06-25
 
 ---
 
@@ -415,7 +415,8 @@
 | 2026-06-17 | v2026.06.17-beta6 | feat: 产品导航树L1/L2节点拖拽排序+管理员权限+同级内限制 |
 | 2026-06-17 | v2026.06.17-beta5 | feat: 删除禅道产品+禁用产品同步+标题数量徽章+清除L3空节点 |
 | 2026-06-17 | v2026.06.17-beta4 | feat: 文档类型默认GitLab+placeholder联动+责任人必填+对话框风格统一 |
-| 2026-06-24 | v2026.06.25-beta3 | fix(auth): 反馈Issue以登录用户身份提交+个人token+Bearer认证
+| 2026-06-24 | v2026.06.25-beta4 | feat(ui): 用户中心优化—GitLab账户卡片+权限安全卡片
+| 2026-06-25 | v2026.06.25-beta3 | fix(auth): 反馈Issue以登录用户身份提交+个人token+Bearer认证
 | 2026-06-25 | v2026.06.25-beta2 | chore(security): 敏感配置gitignore+env.example清理
 | 2026-06-25 | v2026.06.25-beta1 | feat(docs): 文档在线预览
 | 2026-06-24 | v2026.06.24-beta6 | docs(skills): CLAUDE.md强化skill触发规则+4个skill改为user-invocable
