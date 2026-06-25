@@ -4,185 +4,221 @@
 
 /* ---- Product List (Overview) ── Card Layout ── */
 
-var _prodCurCategory = '';
+var _prodActiveL1 = null;  // null = all
+var _prodActiveL2 = null;
 var _prodSearchVal = '';
 var _prodSearchTimer = null;
 var _allProducts = [];
 var _prodTree = [];
-var _prodExpandedL2 = {};  // { l2key: true }
+
+var _prodCatColors = ['var(--accent)', 'var(--success)', 'var(--warn)', 'var(--danger)'];
+var _prodCatCls = ['pov-self', 'pov-integ', 'pov-purch', 'pov-inner'];
+var _prodCatIcons = ['⊞', '⊡', '⊕', '⊟'];
 
 async function initProductList() {
   _allProducts = [];
   try {
     var data = await API.get('/products?limit=200');
     _allProducts = data.items || [];
-  } catch(e) {
-    console.error('Failed to load products:', e);
-  }
+  } catch(e) { console.error('Failed to load products:', e); }
   try {
     _prodTree = (await API.get('/product-doc-templates/product-tree')) || [];
   } catch(e) { _prodTree = []; }
 
+  _prodActiveL1 = null;
+  _prodActiveL2 = null;
   renderProdOverview();
 }
 
-function renderProdOverview() {
-  var total = _allProducts.length;
-  var colors = ['var(--accent)', 'var(--success)', 'var(--warn)', 'var(--danger)'];
-  var bgColors = ['var(--accent-lt)', 'var(--success-lt)', 'var(--warn-lt)', 'var(--danger-lt)'];
-  var ci = 0;
-
-  // Build L1 tab bar
-  var tabBar = document.getElementById('pov-tab-bar');
-  var tabHtml = '';
-  _prodTree.forEach(function(l1, li) {
-    var idx = li % colors.length;
-    var c = colors[idx];
-    var bg = bgColors[idx];
-    var l1Total = 0;
-    (l1.children || []).forEach(function(l2) {
-      var key = l1.name + ' > ' + l2.name;
-      l1Total += _allProducts.filter(function(p) { return (p.tree_path || '') === key; }).length;
-    });
-    tabHtml += '<span class="pov-l1-tab' + (li === 0 ? ' active' : '') + '" data-l1-idx="' + li + '" style="--tab-color:' + c + ';--tab-bg:' + bg + '" onclick="_povSwitchL1(' + li + ')">' +
-      escHtml(l1.name) + ' <span class="pov-l1-tab-count">' + l1Total + '</span></span>';
+function _prodTotal(l1, l2) {
+  var key = l1.name + ' > ' + (l2 ? l2.name : '');
+  if (l2) {
+    return _allProducts.filter(function(p) { return (p.tree_path || '') === key; }).length;
+  }
+  var total = 0;
+  (l1.children || []).forEach(function(c) {
+    total += _allProducts.filter(function(p) { return (p.tree_path || '') === (l1.name + ' > ' + c.name); }).length;
   });
-  tabBar.innerHTML = tabHtml;
+  return total;
+}
 
+function renderProdOverview() {
   if (!_prodTree.length) {
-    document.getElementById('pov-container').innerHTML = '<div class="pov-empty">暂无产品数据</div>';
+    document.getElementById('pov-container').innerHTML = '<div class="pov-empty-state"><p>暂无产品数据</p></div>';
     return;
   }
 
-  // Render first L1 by default
-  _povRenderL1(0);
+  // L1 category cards
+  var catGrid = document.getElementById('pov-cat-grid');
+  var favCount = getFavProducts().length;
+  catGrid.innerHTML = '<div class="pov-cat-card' + (_prodActiveL1 === null ? ' active' : '') + '" onclick="_povSelectL1(null)">' +
+    '<div class="pov-cat-icon" style="background:var(--warn-lt);color:var(--warn)">★</div>' +
+    '<div class="pov-cat-info"><div class="pov-cat-name">关注产品</div><div class="pov-cat-desc">用户收藏的产品</div></div>' +
+    '<div class="pov-cat-count" style="color:var(--warn)">' + favCount + '</div></div>' +
+    _prodTree.map(function(l1, i) {
+      var idx = i % _prodCatColors.length;
+      var c = _prodCatColors[idx];
+      var total = _prodTotal(l1);
+      return '<div class="pov-cat-card' + (_prodActiveL1 === l1.id ? ' active' : '') + '" onclick="_povSelectL1(' + l1.id + ')" style="--accent:' + c + '">' +
+        '<div class="pov-cat-icon" style="background:color-mix(in srgb,' + c + ' 12%,transparent);color:' + c + '">' + _prodCatIcons[idx] + '</div>' +
+        '<div class="pov-cat-info"><div class="pov-cat-name">' + escHtml(l1.name) + '</div><div class="pov-cat-desc">' + total + ' 个产品</div></div>' +
+        '<div class="pov-cat-count" style="color:' + c + '">' + total + '</div></div>';
+    }).join('');
+
+  // L2 chips + products
+  _povRenderContent();
 }
 
-function _povRenderL1(li) {
-  var container = document.getElementById('pov-container');
-  var l1 = _prodTree[li];
-  if (!l1) return;
+function _povSelectL1(l1Id) {
+  _prodActiveL1 = l1Id;
+  _prodActiveL2 = null;
+  renderProdOverview();
+}
 
-  var idx = li % 4;
-  var c = ['var(--accent)', 'var(--success)', 'var(--warn)', 'var(--danger)'][idx];
-  var bg = ['var(--accent-lt)', 'var(--success-lt)', 'var(--warn-lt)', 'var(--danger-lt)'][idx];
-
-  var allL2 = l1.children || [];
-  var l2sections = [];
-  var l1Total = 0;
-
-  allL2.forEach(function(l2) {
-    var key = l1.name + ' > ' + l2.name;
-    var l2products = _allProducts.filter(function(p) { return (p.tree_path || '') === key; });
-    l1Total += l2products.length;
-    l2sections.push({ id: l2.id, name: l2.name, products: l2products, color: c });
+function _povSelectL2(l2Id) {
+  _prodActiveL2 = l2Id;
+  document.querySelectorAll('.pov-l2-chip').forEach(function(c) {
+    c.classList.toggle('active', c.getAttribute('data-l2-id') === String(l2Id));
   });
+  _povRenderProducts();
+}
 
-  var html = '<div class="pov-card" style="--card-bg:' + bg + ';--card-color:' + c + '">' +
-    '<div class="pov-card-body">';
+function _povRenderContent() {
+  var l1 = _prodActiveL1 ? _prodTree.find(function(t) { return t.id === _prodActiveL1; }) : null;
+  var l2Bar = document.getElementById('pov-l2-bar');
+  var prodGrid = document.getElementById('pov-prod-grid');
+  var searchBar = document.getElementById('pov-search-bar');
 
-  if (l2sections.length > 0) {
-    html += '<div class="pov-tabs">';
-    l2sections.forEach(function(l2s, ti) {
-      html += '<span class="pov-tab' + (ti === 0 ? ' active' : '') + '" data-l2="' + l2s.id + '" onclick="_povSwitchTab(this,\'' + l1.id + '\',\'' + l2s.id + '\')">' +
-        escHtml(l2s.name) + ' <span class="pov-tab-count">' + l2s.products.length + '</span></span>';
+  // L2 chips: for L1 categories or favorites, show subcategories with counts
+  if (_prodActiveL1) {
+    var l2s = l1 ? (l1.children || []) : [];
+    var allActive = _prodActiveL2 === null;
+    var total = l1 ? _prodTotal(l1) : _allProducts.length;
+    l2Bar.innerHTML = (l2s.length ? '<span class="pov-l2-label">子类：</span>' : '') +
+      '<span class="pov-l2-chip' + (allActive ? ' active' : '') + '" onclick="_povSelectL2(null)">全部<span class="pov-l2-count">' + total + '</span></span>' +
+      l2s.map(function(l2) {
+        var cnt = _prodTotal(l1, l2);
+        var active = _prodActiveL2 === l2.id;
+        return '<span class="pov-l2-chip' + (active ? ' active' : '') + '" data-l2-id="' + l2.id + '" onclick="_povSelectL2(' + l2.id + ')">' + escHtml(l2.name) + '<span class="pov-l2-count">' + cnt + '</span></span>';
+      }).join('');
+  } else {
+    // Favorites: show L2 chips with counts from favorited products only
+    var favIds = getFavProducts();
+    var favProducts = _allProducts.filter(function(p) { return favIds.indexOf(p.id) >= 0; });
+    // Collect unique L2 keys with counts
+    var l2Map = {};
+    _prodTree.forEach(function(l1) {
+      (l1.children || []).forEach(function(l2) {
+        var key = l1.name + ' > ' + l2.name;
+        var cnt = favProducts.filter(function(p) { return (p.tree_path || '') === key; }).length;
+        if (cnt > 0) l2Map[l2.name] = { id: l2.id, name: l2.name, count: (l2Map[l2.name] ? l2Map[l2.name].count + cnt : cnt) };
+      });
     });
-    html += '</div>';
+    var l2Arr = Object.values(l2Map);
+    var totalFav = favProducts.length;
+    var allActive = _prodActiveL2 === null;
+    l2Bar.innerHTML = (l2Arr.length ? '<span class="pov-l2-label">子类：</span>' : '') +
+      '<span class="pov-l2-chip' + (allActive ? ' active' : '') + '" onclick="_povSelectL2(null)">全部<span class="pov-l2-count">' + totalFav + '</span></span>' +
+      l2Arr.map(function(l2) {
+        var active = _prodActiveL2 === l2.id;
+        return '<span class="pov-l2-chip' + (active ? ' active' : '') + '" data-l2-id="' + l2.id + '" onclick="_povSelectL2(' + l2.id + ')">' + escHtml(l2.name) + '<span class="pov-l2-count">' + l2.count + '</span></span>';
+      }).join('');
+  }
 
-    l2sections.forEach(function(l2s, ti) {
-      html += '<div class="pov-tab-panel' + (ti === 0 ? ' active' : '') + '" data-l2-panel="' + l2s.id + '">' +
-        '<div class="pov-l3-list">';
-      if (l2s.products.length) {
-        l2s.products.forEach(function(p) {
-          var statusLabel = p.status === 'normal' ? '量产' : (p.status === 'closed' ? 'EOL' : '—');
-          var statusCls = p.status === 'normal' ? 'prod' : (p.status === 'closed' ? 'ext' : '');
-          var tagsHtml = '';
-          if (p.tags_list && p.tags_list[0]) {
-            tagsHtml = '<div class="pov-l3-chips">' + p.tags_list.filter(function(t){return t;}).slice(0,3).map(function(t){return '<span class="tag-badge tag-' + (t.length % 5) + '">#' + escHtml(t) + '</span>';}).join('') + '</div>';
-          }
-          html += '<div class="pov-l3-chip" onclick="openProductDetail(\'' + p.id + '\')">' +
-            '<div class="pov-l3-name">' + escHtml(p.code || '#' + p.id) + '</div>' +
-            '<div class="pov-l3-desc">' + escHtml(p.name) + '</div>' +
-            tagsHtml +
-            '<div class="pov-l3-meta">' +
-              '<span class="pov-l3-ver">' + (p.is_local ? 'PMA本地' : '') + '</span>' +
-              (statusLabel !== '—' ? '<span class="pov-l3-status ' + statusCls + '">' + statusLabel + '</span>' : '') +
-            '</div>' +
-          '</div>';
-        });
-      } else {
-        html += '<div style="font-size:12px;color:var(--muted);padding:8px">暂无产品</div>';
-      }
-      html += '</div></div>';
+  _povRenderProducts();
+}
+
+function _povRenderProducts() {
+  var grid = document.getElementById('pov-prod-grid');
+  var products = _allProducts;
+
+  // Filter by L1 (null = favorites)
+  if (_prodActiveL1) {
+    var l1 = _prodTree.find(function(t) { return t.id === _prodActiveL1; });
+    if (l1) {
+      products = products.filter(function(p) {
+        var path = p.tree_path || '';
+        return path.indexOf(l1.name + ' > ') === 0 || path === l1.name;
+      });
+    } else {
+      products = [];
+    }
+  }
+  // Filter by L2
+  if (_prodActiveL2) {
+    var l2Key = null;
+    _prodTree.forEach(function(t) {
+      (t.children || []).forEach(function(c) {
+        if (c.id === _prodActiveL2) l2Key = t.name + ' > ' + c.name;
+      });
+    });
+    if (l2Key) {
+      products = products.filter(function(p) { return (p.tree_path || '') === l2Key; });
+    }
+  }
+  // Filter favorites (when "关注产品" is active, _prodActiveL1 === null)
+  if (_prodActiveL1 === null) {
+    var favIds = getFavProducts();
+    products = products.filter(function(p) { return favIds.indexOf(p.id) >= 0; });
+  }
+
+  // Search
+  if (_prodSearchVal) {
+    var q = _prodSearchVal.toLowerCase();
+    products = products.filter(function(p) {
+      return (p.code || '').toLowerCase().indexOf(q) >= 0 ||
+        (p.name || '').toLowerCase().indexOf(q) >= 0 ||
+        (p.tags || '').toLowerCase().indexOf(q) >= 0;
     });
   }
 
-  html += '</div></div>';
-
-  if (!_allProducts.length) {
-    html = '<div class="pov-empty">暂无产品数据</div>';
+  // Count
+  var cnt = document.getElementById('pov-search-count');
+  if (_prodSearchVal) {
+    cnt.innerHTML = '找到 <strong>' + products.length + '</strong> 个匹配产品';
+    cnt.style.display = '';
+  } else {
+    cnt.style.display = 'none';
   }
 
-  container.innerHTML = html;
+  if (!products.length) {
+    grid.innerHTML = '<div class="pov-empty-state" style="grid-column:1/-1"><p>没有匹配的产品</p></div>';
+    return;
+  }
+
+  grid.innerHTML = products.map(function(p) {
+    var tagsHtml = '';
+    var tagTexts = (p.tags_list || []).filter(function(t){return t;});
+    if (tagTexts.length) {
+      tagsHtml = '<div class="prod-tags">' + tagTexts.slice(0,4).map(function(t,j){ return '<span class="prod-tag t' + (j%5) + '">' + escHtml(t) + '</span>'; }).join('') + '</div>';
+    }
+    var fav = isFavProduct(p.id);
+    return '<div class="pov-prod-card" style="position:relative" onclick="openProductDetail(\'' + p.id + '\')">' +
+      '<button class="btn-icon" style="position:absolute;top:10px;right:10px;font-size:20px;z-index:1;' + (fav ? 'color:var(--warn)' : '') + '" onclick="event.stopPropagation();_toggleProdFav(' + p.id + ',this)" title="' + (fav ? '取消收藏' : '收藏') + '">' + (fav ? '★' : '☆') + '</button>' +
+      '<div class="pov-prod-header"><div>' +
+        '<div class="prod-code">' + escHtml(p.code || '#' + p.id) + '</div>' +
+        '<div class="prod-name">' + escHtml(p.name) + '</div>' +
+      '</div></div>' +
+      (tagsHtml || '') +
+      '<div class="prod-footer">' +
+        '<span class="prod-src ' + (p.is_local ? 'local' : 'synced') + '">' + (p.is_local ? 'PMA 本地' : '禅道同步') + '</span>' +
+      '</div>' +
+    '</div>';
+  }).join('');
 }
 
-function _povSwitchL1(li) {
-  document.querySelectorAll('#pov-tab-bar .pov-l1-tab').forEach(function(t, i) { t.classList.toggle('active', i === li); });
-  _povRenderL1(li);
-}
-
-function _povSwitchTab(tab, l1Id, l2Id) {
-  var card = tab.closest('.pov-card');
-  card.querySelectorAll('.pov-tab').forEach(function(t) { t.classList.remove('active'); });
-  tab.classList.add('active');
-  card.querySelectorAll('.pov-tab-panel').forEach(function(p) { p.classList.remove('active'); });
-  var panel = card.querySelector('[data-l2-panel="' + l2Id + '"]');
-  if (panel) panel.classList.add('active');
+function _toggleProdFav(id, btn) {
+  var added = toggleFavProduct(id);
+  btn.innerHTML = added ? '★' : '☆';
+  btn.title = added ? '取消收藏' : '收藏';
+  btn.style.color = added ? 'var(--warn)' : '';
+  renderProdOverview();
 }
 
 function onProdSearch(v) {
   _prodSearchVal = v;
   clearTimeout(_prodSearchTimer);
-  _prodSearchTimer = setTimeout(function() {
-    if (_prodSearchVal) {
-      var q = _prodSearchVal.toLowerCase();
-      var foundLi = -1;
-      _prodTree.forEach(function(l1, li) {
-        if (foundLi >= 0) return;
-        (l1.children || []).forEach(function(l2) {
-          if (foundLi >= 0) return;
-          var key = l1.name + ' > ' + l2.name;
-          var match = _allProducts.some(function(p) {
-            return (p.tree_path || '') === key &&
-              ((p.name || '').toLowerCase().indexOf(q) >= 0 || (p.code || '').toLowerCase().indexOf(q) >= 0 || (p.tags || '').toLowerCase().indexOf(q) >= 0);
-          });
-          if (match) foundLi = li;
-        });
-      });
-      if (foundLi >= 0) {
-        _povSwitchL1(foundLi);
-      }
-      // Apply filter after render
-      setTimeout(function() {
-        var container = document.getElementById('pov-container');
-        container.querySelectorAll('.pov-tab').forEach(function(tab) {
-          var l2Id = tab.getAttribute('data-l2');
-          var panel = container.querySelector('[data-l2-panel="' + l2Id + '"]');
-          var l2Visible = false;
-          if (panel) {
-            panel.querySelectorAll('.pov-l3-chip').forEach(function(chip) {
-              if (chip.textContent.toLowerCase().indexOf(q) >= 0) { chip.classList.remove('hidden'); l2Visible = true; }
-              else { chip.classList.add('hidden'); }
-            });
-          }
-          if (l2Visible) { tab.classList.remove('hidden'); tab.classList.add('active'); if (panel) panel.classList.add('active'); }
-          else { tab.classList.add('hidden'); }
-        });
-      }, 100);
-    } else {
-      _povSwitchL1(0);
-    }
-  }, 200);
+  _prodSearchTimer = setTimeout(function() { _povRenderProducts(); }, 300);
 }
 
 document.addEventListener('keydown', function(e) {
@@ -321,6 +357,7 @@ function renderProdDetailHeader(p) {
     '<div class="detail-meta">' +
       '<div class="detail-title">' +
         escHtml(p.name) +
+        '<button class="btn-icon" style="font-size:22px;vertical-align:middle;margin-left:4px;' + (isFavProduct(p.id) ? 'color:var(--warn)' : '') + '" onclick="_toggleProdFav(' + p.id + ',this)" title="' + (isFavProduct(p.id) ? '取消收藏' : '收藏') + '">' + (isFavProduct(p.id) ? '★' : '☆') + '</button>' +
         (p.is_local
           ? ' <span class="pm-src-badge local" style="vertical-align:middle;margin-left:6px">PMA本地</span>'
           : (p.synced_at ? ' <span class="pm-src-badge synced" style="vertical-align:middle;margin-left:6px" title="同步于 ' + escHtml(p.synced_at) + '">禅道同步</span>' : '')) +
@@ -983,7 +1020,7 @@ async function saveProdEdit() {
 
   closeSharedDialog();
   try {
-    await API.put('/products/' + _prodDetailCurId, { name: name, code: code, status: status, description: tags.join(','), tags: tags.join(',') });
+    await API.put('/products/' + _prodDetailCurId, { name: name, code: code, status: status, tags: tags.join(',') });
     showToast('产品已更新', 'success');
     loadProductDetail(_prodDetailCurId);
   } catch(e) {

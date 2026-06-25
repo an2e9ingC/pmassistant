@@ -22,6 +22,8 @@
   --warn-lt:     #FEF3C7;
   --danger:      #DC2626;
   --danger-lt:   #FEE2E2;
+  --fav:         #7C3AED;
+  --fav-lt:      #F3EEFF;
   --sidebar-w:   228px;
   --header-h:    54px;
   --font:        'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
@@ -112,6 +114,7 @@ button { font: inherit; cursor: pointer; }
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 .content { padding: 24px 28px 40px; flex: 1; min-width: 0; }
+.content-sticky { position: sticky; top: var(--header-h); z-index: 99; background: var(--bg); padding-bottom: 8px; }
 
 /* ═══════════════════════════════════════════ page header ═════════════════════════════════ */
 .page-hd { margin-bottom: 20px; display: flex; align-items: flex-start; justify-content: space-between; }
@@ -141,7 +144,7 @@ button { font: inherit; cursor: pointer; }
 
 /* ═══════════════════════════════════════════ L1 category cards ═════════════════════════════ */
 .cat-grid {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px;
   margin-bottom: 20px;
 }
 .cat-card {
@@ -159,6 +162,7 @@ button { font: inherit; cursor: pointer; }
 .cat-card.l1-integ::before { background: var(--success); }
 .cat-card.l1-purch::before { background: var(--warn); }
 .cat-card.l1-inner::before { background: var(--danger); }
+.cat-card.l1-fav::before   { background: var(--fav); }
 .cat-icon {
   width: 40px; height: 40px; border-radius: 10px; display: flex;
   align-items: center; justify-content: center; flex-shrink: 0;
@@ -168,6 +172,7 @@ button { font: inherit; cursor: pointer; }
 .cat-icon.integ { background: var(--success-lt); color: var(--success); }
 .cat-icon.purch { background: var(--warn-lt); color: var(--warn); }
 .cat-icon.inner { background: var(--danger-lt); color: var(--danger); }
+.cat-icon.fav   { background: var(--fav-lt);   color: var(--fav); }
 .cat-info { flex: 1; min-width: 0; }
 .cat-name { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
 .cat-desc { font-size: 11px; color: var(--muted); }
@@ -252,6 +257,7 @@ button { font: inherit; cursor: pointer; }
   --success: #34D399; --success-lt: #0A2218;
   --warn: #FBBF24; --warn-lt: #201800;
   --danger: #F87171; --danger-lt: #1E0808;
+  --fav: #A78BFA; --fav-lt: #1C1535;
 }
 </style>
 </head>
@@ -317,11 +323,12 @@ button { font: inherit; cursor: pointer; }
   </header>
 
   <div class="content">
+    <div class="content-sticky">
     <!-- page header -->
     <div class="page-hd">
       <div>
         <h1>产品总览</h1>
-        <p class="sub">共 26 个产品 · 覆盖 4 个产品大类</p>
+        <p class="sub">共 26 个产品 · 覆盖 5 个产品大类</p>
       </div>
     </div>
 
@@ -338,6 +345,7 @@ button { font: inherit; cursor: pointer; }
 
     <!-- L2 subcategory chips -->
     <div class="l2-bar" id="l2Bar"></div>
+    </div>
 
     <!-- product grid -->
     <div class="prod-grid" id="prodGrid"></div>
@@ -351,6 +359,7 @@ button { font: inherit; cursor: pointer; }
 <script>
 /* ═══════════════════════════════════════════ data ═══════════════════════════════════════ */
 const L1_CATEGORIES = [
+  { id:'fav',   name:'收藏产品', desc:'用户收藏的常用产品', icon:'★', cls:'fav',   accent:'var(--fav)',    count:6, l2:[] },
   { id:'self',  name:'自研单板', desc:'自主研发的电路板卡', icon:'⊞', cls:'self',  accent:'var(--accent)',  count:15, l2:[
     { name:'FMC 子卡',    count:4 },
     { name:'高速存储板',  count:3 },
@@ -373,36 +382,36 @@ const L1_CATEGORIES = [
 ];
 
 const PRODUCTS = [
-  { code:'LVX624M',  name:'LVX624M',  l1:'self', l2:'高速存储板',  desc:'基于 E2000 的高速 NVMe 存储板，支持 PCIe Gen3 x4',  tags:['E2000','FT','全国产'], src:'local', status:'prod' },
-  { code:'LVX43324', name:'LVX43324', l1:'self', l2:'高速存储板',  desc:'大容量 SATA 存储板，8 通道，支持 RAID 0/1/5',          tags:['SATA','RAID'],         src:'local', status:'prod' },
-  { code:'EPE3321C', name:'EPE3321C', l1:'self', l2:'FMC 子卡',    desc:'双通道 14-bit 250MSPS ADC FMC 子卡',               tags:['ADC','FMC'],           src:'local', status:'prod' },
-  { code:'EPE4402',  name:'EPE4402',  l1:'self', l2:'FMC 子卡',    desc:'四通道 16-bit DAC 输出子卡，支持任意波形生成',        tags:['DAC','FMC'],           src:'local', status:'trial' },
-  { code:'EPE5501',  name:'EPE5501',  l1:'self', l2:'FMC 子卡',    desc:'高速串行收发子卡，支持 10Gbps × 4 通道',             tags:['SerDes','10G'],        src:'synced', status:'prod' },
-  { code:'EPE2288',  name:'EPE2288',  l1:'self', l2:'FMC 子卡',    desc:'多通道低速采集子卡，16 通道同步采样',                  tags:['DAQ','同步'],          src:'local', status:'dev' },
-  { code:'EVP3390',  name:'EVP3390',  l1:'self', l2:'信号处理板',  desc:'基于 Zynq UltraScale+ 的通用信号处理平台',          tags:['Zynq','FPGA'],         src:'local', status:'prod' },
-  { code:'EVP4412',  name:'EVP4412',  l1:'self', l2:'信号处理板',  desc:'多核 DSP 阵列处理板，8 × C6678',                    tags:['DSP','C6678'],         src:'synced', status:'prod' },
-  { code:'EVP5500',  name:'EVP5500',  l1:'self', l2:'信号处理板',  desc:'AI 推理加速板，集成 4 颗 NPU',                      tags:['NPU','AI'],            src:'local', status:'dev' },
-  { code:'EVP6103',  name:'EVP6103',  l1:'self', l2:'信号处理板',  desc:'实时信号采集与预处理板，FPGA + ARM 异构',            tags:['FPGA','ARM'],          src:'local', status:'trial' },
-  { code:'EIF2201',  name:'EIF2201',  l1:'self', l2:'接口扩展板',  desc:'多协议接口扩展板，支持 1553B / CAN / RS422',         tags:['1553B','CAN'],         src:'local', status:'prod' },
-  { code:'EIF3300',  name:'EIF3300',  l1:'self', l2:'接口扩展板',  desc:'高速数据交换板，支持 PCIe Switch + 10G Ethernet',    tags:['PCIe','交换'],         src:'synced', status:'prod' },
-  { code:'EBP1101',  name:'EBP1101',  l1:'self', l2:'背板',        desc:'6U VPX 背板，12 槽位，支持高速差分信号',              tags:['VPX','6U'],            src:'local', status:'prod' },
-  { code:'EBP2200',  name:'EBP2200',  l1:'self', l2:'背板',        desc:'3U OpenVPX 背板，8 槽位，兼容 VITA 65',              tags:['VPX','3U','VITA65'],   src:'local', status:'prod' },
-  { code:'EHS8801',  name:'EHS8801',  l1:'self', l2:'高速存储板',  desc:'加固型 NVMe 存储阵列，容量 32TB，支持加密',           tags:['NVMe','加密','加固'],  src:'synced', status:'trial' },
-  { code:'ISYS-001', name:'通用信号处理机柜', l1:'integ', l2:'整机平台', desc:'19 英寸标准机柜，集成信号处理、存储与网络交换',   tags:['机柜','集成'],         src:'local', status:'prod' },
-  { code:'ISYS-002', name:'便携式测试平台',   l1:'integ', l2:'整机平台', desc:'便携式 PXIe 测试平台，8 槽位，内置控制器',          tags:['PXIe','便携'],         src:'synced', status:'prod' },
-  { code:'ISYS-003', name:'车载加固计算机',   l1:'integ', l2:'整机平台', desc:'车载环境用加固计算机，宽温 -40°C ~ +85°C',         tags:['车载','加固','宽温'],  src:'local', status:'prod' },
-  { code:'ISYS-004', name:'舰载综合处理平台', l1:'integ', l2:'整机平台', desc:'舰载环境综合信息处理平台，冗余电源设计',            tags:['舰载','冗余'],         src:'synced', status:'trial' },
-  { code:'ISUB-101', name:'数据采集子系统',   l1:'integ', l2:'子系统',   desc:'多通道同步数据采集与预处理子系统',                  tags:['采集','同步'],         src:'local', status:'prod' },
-  { code:'ISUB-102', name:'通信处理子系统',   l1:'integ', l2:'子系统',   desc:'软件无线电通信处理子系统，支持多种波形',            tags:['SDR','通信'],          src:'synced', status:'prod' },
-  { code:'ISUB-103', name:'存储与备份子系统', l1:'integ', l2:'子系统',   desc:'集中存储与自动备份子系统，支持异地容灾',            tags:['存储','容灾'],         src:'local', status:'dev' },
-  { code:'ITST-201', name:'自动化测试台',     l1:'integ', l2:'测试设备', desc:'板卡级自动化功能测试台，支持批量测试',              tags:['ATE','批量'],          src:'local', status:'prod' },
-  { code:'ITST-202', name:'环境应力筛选设备', l1:'integ', l2:'测试设备', desc:'温度循环与振动筛选设备，满足 GJB 要求',              tags:['ESS','GJB'],           src:'synced', status:'prod' },
-  { code:'IN-ADMIN', name:'PMA 项目管理平台', l1:'inner', l2:'管理平台', desc:'PM Assistant — 项目管理、产品管理、文档齐套一体化平台', tags:['Web','Python'],     src:'local', status:'prod' },
-  { code:'IN-CI',    name:'持续集成平台',     l1:'inner', l2:'管理平台', desc:'基于 GitLab CI 的嵌入式软件持续集成平台',             tags:['CI/CD','GitLab'],  src:'local', status:'dev' },
+  { code:'LVX624M',  name:'LVX624M',  l1:'self', l2:'高速存储板',  desc:'基于 E2000 的高速 NVMe 存储板，支持 PCIe Gen3 x4',  tags:['E2000','FT','全国产'], src:'local', status:'prod', fav:true },
+  { code:'LVX43324', name:'LVX43324', l1:'self', l2:'高速存储板',  desc:'大容量 SATA 存储板，8 通道，支持 RAID 0/1/5',          tags:['SATA','RAID'],         src:'local', status:'prod', fav:false },
+  { code:'EPE3321C', name:'EPE3321C', l1:'self', l2:'FMC 子卡',    desc:'双通道 14-bit 250MSPS ADC FMC 子卡',               tags:['ADC','FMC'],           src:'local', status:'prod', fav:false },
+  { code:'EPE4402',  name:'EPE4402',  l1:'self', l2:'FMC 子卡',    desc:'四通道 16-bit DAC 输出子卡，支持任意波形生成',        tags:['DAC','FMC'],           src:'local', status:'trial', fav:false },
+  { code:'EPE5501',  name:'EPE5501',  l1:'self', l2:'FMC 子卡',    desc:'高速串行收发子卡，支持 10Gbps × 4 通道',             tags:['SerDes','10G'],        src:'synced', status:'prod', fav:true },
+  { code:'EPE2288',  name:'EPE2288',  l1:'self', l2:'FMC 子卡',    desc:'多通道低速采集子卡，16 通道同步采样',                  tags:['DAQ','同步'],          src:'local', status:'dev', fav:false },
+  { code:'EVP3390',  name:'EVP3390',  l1:'self', l2:'信号处理板',  desc:'基于 Zynq UltraScale+ 的通用信号处理平台',          tags:['Zynq','FPGA'],         src:'local', status:'prod', fav:true },
+  { code:'EVP4412',  name:'EVP4412',  l1:'self', l2:'信号处理板',  desc:'多核 DSP 阵列处理板，8 × C6678',                    tags:['DSP','C6678'],         src:'synced', status:'prod', fav:false },
+  { code:'EVP5500',  name:'EVP5500',  l1:'self', l2:'信号处理板',  desc:'AI 推理加速板，集成 4 颗 NPU',                      tags:['NPU','AI'],            src:'local', status:'dev', fav:false },
+  { code:'EVP6103',  name:'EVP6103',  l1:'self', l2:'信号处理板',  desc:'实时信号采集与预处理板，FPGA + ARM 异构',            tags:['FPGA','ARM'],          src:'local', status:'trial', fav:false },
+  { code:'EIF2201',  name:'EIF2201',  l1:'self', l2:'接口扩展板',  desc:'多协议接口扩展板，支持 1553B / CAN / RS422',         tags:['1553B','CAN'],         src:'local', status:'prod', fav:false },
+  { code:'EIF3300',  name:'EIF3300',  l1:'self', l2:'接口扩展板',  desc:'高速数据交换板，支持 PCIe Switch + 10G Ethernet',    tags:['PCIe','交换'],         src:'synced', status:'prod', fav:false },
+  { code:'EBP1101',  name:'EBP1101',  l1:'self', l2:'背板',        desc:'6U VPX 背板，12 槽位，支持高速差分信号',              tags:['VPX','6U'],            src:'local', status:'prod', fav:true },
+  { code:'EBP2200',  name:'EBP2200',  l1:'self', l2:'背板',        desc:'3U OpenVPX 背板，8 槽位，兼容 VITA 65',              tags:['VPX','3U','VITA65'],   src:'local', status:'prod', fav:false },
+  { code:'EHS8801',  name:'EHS8801',  l1:'self', l2:'高速存储板',  desc:'加固型 NVMe 存储阵列，容量 32TB，支持加密',           tags:['NVMe','加密','加固'],  src:'synced', status:'trial', fav:false },
+  { code:'ISYS-001', name:'通用信号处理机柜', l1:'integ', l2:'整机平台', desc:'19 英寸标准机柜，集成信号处理、存储与网络交换',   tags:['机柜','集成'],         src:'local', status:'prod', fav:false },
+  { code:'ISYS-002', name:'便携式测试平台',   l1:'integ', l2:'整机平台', desc:'便携式 PXIe 测试平台，8 槽位，内置控制器',          tags:['PXIe','便携'],         src:'synced', status:'prod', fav:true },
+  { code:'ISYS-003', name:'车载加固计算机',   l1:'integ', l2:'整机平台', desc:'车载环境用加固计算机，宽温 -40°C ~ +85°C',         tags:['车载','加固','宽温'],  src:'local', status:'prod', fav:false },
+  { code:'ISYS-004', name:'舰载综合处理平台', l1:'integ', l2:'整机平台', desc:'舰载环境综合信息处理平台，冗余电源设计',            tags:['舰载','冗余'],         src:'synced', status:'trial', fav:false },
+  { code:'ISUB-101', name:'数据采集子系统',   l1:'integ', l2:'子系统',   desc:'多通道同步数据采集与预处理子系统',                  tags:['采集','同步'],         src:'local', status:'prod', fav:false },
+  { code:'ISUB-102', name:'通信处理子系统',   l1:'integ', l2:'子系统',   desc:'软件无线电通信处理子系统，支持多种波形',            tags:['SDR','通信'],          src:'synced', status:'prod', fav:false },
+  { code:'ISUB-103', name:'存储与备份子系统', l1:'integ', l2:'子系统',   desc:'集中存储与自动备份子系统，支持异地容灾',            tags:['存储','容灾'],         src:'local', status:'dev', fav:false },
+  { code:'ITST-201', name:'自动化测试台',     l1:'integ', l2:'测试设备', desc:'板卡级自动化功能测试台，支持批量测试',              tags:['ATE','批量'],          src:'local', status:'prod', fav:false },
+  { code:'ITST-202', name:'环境应力筛选设备', l1:'integ', l2:'测试设备', desc:'温度循环与振动筛选设备，满足 GJB 要求',              tags:['ESS','GJB'],           src:'synced', status:'prod', fav:false },
+  { code:'IN-ADMIN', name:'PMA 项目管理平台', l1:'inner', l2:'管理平台', desc:'PM Assistant — 项目管理、产品管理、文档齐套一体化平台', tags:['Web','Python'],     src:'local', status:'prod', fav:true },
+  { code:'IN-CI',    name:'持续集成平台',     l1:'inner', l2:'管理平台', desc:'基于 GitLab CI 的嵌入式软件持续集成平台',             tags:['CI/CD','GitLab'],  src:'local', status:'dev', fav:false },
 ];
 
 /* ═══════════════════════════════════════════ state ═══════════════════════════════════════ */
-let activeL1 = 'self';
+let activeL1 = 'fav';
 let activeL2 = null;  // null = all L2s within activeL1
 let searchQuery = '';
 
@@ -437,7 +446,12 @@ function renderL2Chips() {
 
 /* ═══════════════════════════════════════════ render products ═════════════════════════════ */
 function renderProducts() {
-  let filtered = PRODUCTS.filter(p => p.l1 === activeL1);
+  let filtered;
+  if (activeL1 === 'fav') {
+    filtered = PRODUCTS.filter(p => p.fav);
+  } else {
+    filtered = PRODUCTS.filter(p => p.l1 === activeL1);
+  }
   if (activeL2) filtered = filtered.filter(p => p.l2 === activeL2);
   if (searchQuery) {
     const q = searchQuery.toLowerCase();

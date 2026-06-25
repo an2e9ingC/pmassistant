@@ -644,7 +644,7 @@ async function _pmSaveEditProduct(productId) {
   closeSharedDialog();
   try {
     await API.put('/product-management/products/' + productId, {
-      code: code, name: name, status: status, description: tags.join(','),
+      code: code, name: name, status: status,
     });
     showToast('产品已更新', 'success');
     await refreshPMData();
@@ -747,7 +747,7 @@ async function _pmCreateProduct() {
   try {
     await API.post('/product-management/products', {
       name: name, code: code, node_id: _pmSelectedNodeId,
-      status: status, description: tags.join(','), project_ids: projectIds
+      status: status, project_ids: projectIds
     });
     showToast('产品已创建: ' + name, 'ok');
     await refreshPMData();

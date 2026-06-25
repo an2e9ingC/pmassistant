@@ -44,6 +44,29 @@ function iconRestore(onclick, title) {
   return iconBtn('🔄', title || '恢复', onclick);
 }
 
+/* ── Favorite helpers ── */
+
+function getFavProducts() {
+  try { return JSON.parse(localStorage.getItem('pma_fav_products') || '[]'); }
+  catch(e) { return []; }
+}
+function isFavProduct(id) {
+  return getFavProducts().indexOf(id) >= 0;
+}
+function toggleFavProduct(id) {
+  var favs = getFavProducts();
+  var idx = favs.indexOf(id);
+  if (idx >= 0) { favs.splice(idx, 1); }
+  else { favs.push(id); }
+  localStorage.setItem('pma_fav_products', JSON.stringify(favs));
+  return idx < 0; // true = added, false = removed
+}
+
+function iconFav(onclick, active, title) {
+  return '<button class="btn-icon" onclick="' + onclick + '" title="' + (title || '收藏') + '" style="font-size:16px;' + (active ? 'color:var(--warn)' : '') + '">' +
+    (active ? '★' : '☆') + '</button>';
+}
+
 function renderProjIcon(type, code) {
   if (code) return projCodeTag(code);
   var t = (type || 'RD').toLowerCase();
