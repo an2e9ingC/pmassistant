@@ -24,16 +24,17 @@ logger = logging.getLogger(__name__)
 class GitLabClient:
     """Lightweight async GitLab API v4 client for PMA read-only integration."""
 
-    def __init__(self):
+    def __init__(self, token: str = None):
         self.base_url = settings.GITLAB_BASE_URL.rstrip("/")
-        self._token = settings.GITLAB_TOKEN
+        self._token = token or settings.GITLAB_TOKEN
         self._client: Optional[httpx.AsyncClient] = None
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:
+            # Use Bearer auth (works for both PAT and OAuth tokens)
             self._client = httpx.AsyncClient(
                 timeout=15.0,
-                headers={"PRIVATE-TOKEN": self._token},
+                headers={"Authorization": f"Bearer {self._token}"},
             )
         return self._client
 

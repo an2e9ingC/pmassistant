@@ -394,6 +394,22 @@ def _migrate_to_sqlcipher():
     )
 
 
+def _clear_gitlab_tokens():
+    """Clear all GitLab OAuth access tokens on server restart.
+    Forces users to re-authenticate via GitLab after a restart.
+    """
+    import sqlite3
+    try:
+        conn = sqlite3.connect(_db_path)
+        count = conn.execute("UPDATE local_users SET gitlab_access_token = NULL WHERE gitlab_access_token IS NOT NULL").rowcount
+        conn.commit()
+        conn.close()
+        if count > 0:
+            logger.info(f"Cleared GitLab tokens for {count} user(s) — re-auth required")
+    except Exception as e:
+        logger.warning(f"Failed to clear GitLab tokens: {e}")
+
+
 def init_db():
     from backend.models.local import LocalUser, Role, UserRole, ProductBlockDiagram, ProductNote, ProjectNote, PmaSetting, AuditLog, ProjectActivity, ProductActivity  # noqa: F401
     from backend.models.bug import CachedBug  # noqa: F401
@@ -421,6 +437,7 @@ def init_db():
     _migrate_password_hash_nullable()
     _migrate_product_hierarchy()
     _migrate_to_sqlcipher()  # Convert unencrypted DB to SQLCipher if key configured
+    _clear_gitlab_tokens()   # Force re-auth on server restart
 
     # Seed document templates on first startup
     from backend.services.document_service import seed_document_templates

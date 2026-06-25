@@ -265,7 +265,7 @@ function buildFeedbackComponents() {
 function openFeedbackDialog() {
   _fbComponents = [];
   var user = getCurrentUser();
-  var reporterName = user ? (user.username || '') : '';
+  var reporterName = user ? (user.display_name || user.username || '') : '';
   // Fetch version info for diagnostic context
   var versionInfo = '';
   API.get('/admin/system-info').then(function(info) {
@@ -311,7 +311,7 @@ function openFeedbackDialog() {
       '</div>' +
       '<div style="margin-bottom:12px">' +
         '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">反馈人 <span style="font-weight:400">（默认当前登录用户）</span></label>' +
-        '<input class="search-inp" id="fb-reporter" value="' + escHtml(reporterName) + '" placeholder="请输入反馈人姓名..." style="width:100%;box-sizing:border-box">' +
+        '<input class="search-inp" id="fb-reporter" value="' + escHtml(reporterName) + '" readonly style="width:100%;box-sizing:border-box;background:var(--bg);cursor:not-allowed">' +
       '</div>' +
       '<div style="margin-bottom:12px">' +
         '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">版本信息</label>' +
@@ -435,7 +435,12 @@ async function submitFeedback() {
     });
     closeFeedbackDialog();
     if (result && result.web_url) {
-      showToast('反馈已提交：<a href="' + result.web_url + '" target="_blank" style="color:var(--success);text-decoration:underline">' + result.web_url + '</a>', 'success', 6000, true, '反馈已提交: ' + result.web_url);
+      showToast('反馈已提交：<a href="' + result.web_url + '" target="_blank" style="color:var(--success);text-decoration:underline">' + result.web_url + '</a>', 'success', 8000, true, '反馈已提交: ' + result.web_url);
+      if (result.fallback) {
+        setTimeout(function() {
+          showToast('你的 GitLab 授权已过期，Issue 以系统账户提交。<br>请<a href="javascript:void(0)" onclick="switchAccount()" style="color:var(--warn);text-decoration:underline">重新登录</a>以本人身份提交', 'warn', 8000, true);
+        }, 1000);
+      }
     } else {
       showToast('反馈已提交', 'success');
     }
@@ -1226,6 +1231,13 @@ function initUserCenter() {
         '</div>' +
       '</div>' +
       '<div style="font-size:12px;color:var(--muted)">认证来源: ' + authLabel + '</div>' +
+      (isGitlab
+        ? '<div style="font-size:12px;margin-top:4px">GitLab Token: ' +
+            (user.gitlab_token_valid
+              ? '<span style="color:var(--success);font-weight:600">有效</span>'
+              : '<span style="color:var(--danger);font-weight:600">无效/过期（需重新登录）</span>') +
+          '</div>'
+        : '') +
     '</div>' +
     // Permissions section
     '<div style="margin-bottom:24px">' +

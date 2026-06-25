@@ -66,7 +66,7 @@ PMA 支持通过 GitLab OAuth 2.0 登录，用户无需创建本地密码。
 2. 填写：
    - **Name**: `PMA`
    - **Redirect URI**: `http://<PMA-服务器地址>:8000/api/auth/gitlab/callback`
-   - **Scopes**: 勾选 `read_user`（最小权限，仅读取用户基本信息）
+   - **Scopes**: 勾选 `read_user` + `api`（读取用户信息 + 创建 Issue 等 API 操作）
 3. 点击 **Save application**，记录 **Application ID** 和 **Secret**
 
 #### 步骤 2：配置 PMA

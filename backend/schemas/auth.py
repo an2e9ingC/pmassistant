@@ -15,6 +15,7 @@ class UserInfo(BaseModel):
     permissions: str = ""  # comma-separated permission keys
     auth_source: Optional[str] = "local"  # 'local' or 'gitlab'
     gitlab_user_id: Optional[int] = None
+    gitlab_token_valid: bool = False  # OAuth token present and usable
 
     model_config = {"from_attributes": True}
 

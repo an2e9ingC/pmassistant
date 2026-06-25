@@ -29,6 +29,7 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     token = create_access_token(user.id)
     user_info = UserInfo.model_validate(user).model_dump()
     user_info["permissions"] = ",".join(get_user_perms(user))
+    user_info["gitlab_token_valid"] = bool(user.auth_source == "gitlab" and user.gitlab_access_token)
     return {
         "code": 0,
         "data": {
@@ -44,6 +45,7 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
 def me(user: LocalUser = Depends(get_current_user)):
     user_info = UserInfo.model_validate(user).model_dump()
     user_info["permissions"] = ",".join(get_user_perms(user))
+    user_info["gitlab_token_valid"] = bool(user.auth_source == "gitlab" and user.gitlab_access_token)
     return {
         "code": 0,
         "data": user_info,
@@ -117,7 +119,7 @@ def gitlab_oauth_authorize():
         f"?client_id={settings.GITLAB_APP_ID}"
         f"&redirect_uri={settings.GITLAB_OAUTH_REDIRECT_URI}"
         f"&response_type=code"
-        f"&scope=read_user"
+        f"&scope=read_user+api"
         f"&state={state}"
     )
 
@@ -211,6 +213,7 @@ async def gitlab_oauth_callback(code: str, state: str, db: Session = Depends(get
         # Update user info from GitLab on each login
         local_user.display_name = gitlab_name
         local_user.is_active = (gitlab_state == "active")
+        local_user.gitlab_access_token = access_token
     else:
         # Create new user
         is_new_user = True
@@ -221,6 +224,7 @@ async def gitlab_oauth_callback(code: str, state: str, db: Session = Depends(get
             role="viewer",
             auth_source="gitlab",
             gitlab_user_id=gitlab_user_id,
+            gitlab_access_token=access_token,
             is_active=(gitlab_state == "active"),
         )
         db.add(local_user)

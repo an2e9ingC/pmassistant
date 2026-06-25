@@ -17,6 +17,7 @@ class LocalUser(Base):
     zentao_account = Column(String(64), nullable=True)
     auth_source = Column(String(16), default="local")  # 'local' or 'gitlab'
     gitlab_user_id = Column(Integer, nullable=True, index=True)  # GitLab user ID
+    gitlab_access_token = Column(String(256), nullable=True)  # OAuth access token (for API calls as user)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

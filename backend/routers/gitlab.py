@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.middleware.auth import get_current_user, require_admin
+from backend.models.local import LocalUser
 from backend.models.zentao import CachedRelease, CachedProduct
 from backend.config import settings
 
@@ -223,10 +224,18 @@ async def get_project_members(_=Depends(get_current_user)):
 @router.post("/issues", response_model=dict)
 async def create_issue(
     body: IssueCreate,
-    _=Depends(get_current_user),
+    user: LocalUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """Create a GitLab issue (bug report or feature request) in the PMA project."""
-    if not settings.GITLAB_TOKEN:
+    # GitLab OAuth users must use their own token to create issues
+    if user.auth_source == "gitlab":
+        if not user.gitlab_access_token:
+            return {"code": 1, "message": "GitLab 授权已过期，请重新登录后再提交反馈"}
+        effective_token = user.gitlab_access_token
+    else:
+        effective_token = settings.GITLAB_TOKEN
+    if not effective_token:
         return {"code": 1, "message": "GitLab Token 未配置，无法创建 Issue"}
 
     # Build issue content using templates
@@ -257,7 +266,8 @@ async def create_issue(
         all_labels += "," + body.labels
 
     from backend.services.gitlab_client import GitLabClient
-    client = GitLabClient()
+
+    client = GitLabClient(token=effective_token)
     try:
         result = await client.create_issue(
             project_path="bsp_dev/fake_it/pma",
@@ -266,7 +276,6 @@ async def create_issue(
             labels=all_labels,
         )
         if result:
-            # Assign the issue if assignee_id is provided
             issue_iid = result.get("iid")
             if body.assignee_id and issue_iid:
                 try:
@@ -286,7 +295,7 @@ async def create_issue(
                 "message": f"Issue 已创建: {web_url}",
             }
         return {"code": 1, "message": "GitLab API 返回空，请检查 Token 权限（需 api scope）"}
-    except Exception as e:
+    except RuntimeError as e:
         return {"code": 1, "message": f"创建失败: {e}"}
     finally:
         await client.close()
