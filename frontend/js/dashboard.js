@@ -171,13 +171,13 @@ async function loadProjectTable(filter) {
         tagsHtml = '<span style="font-size:11.5px;color:var(--muted)">无</span>';
       }
       var rowClick = 'onclick="filterAlertsByProject(\'' + p.id + '\', \'' + escHtml(projCode + ' ' + coreName).replace(/'/g, "\\'") + '\')"';
-      var projIconHtml = renderProjIcon(p.type, projCode).replace('<div class=', '<div onclick="event.stopPropagation();openProject(\'' + p.id + '\')" class=');
+      var projIconHtml = projCode ? projCodeTag(projCode, 'event.stopPropagation();openProject(\'' + p.id + '\')') : projCodeTag('RD');
       var riskLevel = p.risk_level || 'normal';
       var riskLabel = { normal: '正常', low: '较低', medium: '中等', high: '高', overdue: '已超期', incomplete: '资料不全' }[riskLevel] || '正常';
       var riskColor = { normal: 'var(--success)', low: 'var(--muted)', medium: 'var(--warn)', high: 'var(--danger)', overdue: 'var(--danger)', incomplete: 'var(--warn)' }[riskLevel] || 'var(--muted)';
       var riskBg = { normal: 'var(--success-lt)', low: 'var(--bg)', medium: 'var(--warn-lt)', high: 'var(--danger-lt)', overdue: 'var(--danger-lt)', incomplete: 'var(--warn-lt)' }[riskLevel] || 'var(--bg)';
 
-      return '<tr ' + rowClick + '>' +
+      return '<tr id="proj-row-' + p.id + '" ' + rowClick + '>' +
         '<td>' + projIconHtml + '</td>' +
         '<td><div class="proj-name">' + escHtml(coreName) + '</div></td>' +
         '<td><span onclick="event.stopPropagation();openCustomerByName(\'' + escHtml(p.customer_name || '') + '\')" style="cursor:pointer">' + renderCustomerBadge(p.customer_name) + '</span></td>' +
@@ -223,7 +223,7 @@ async function loadAlertList(projectId) {
       var dot = a.severity === 'red' ? 'r' : 'y';
       return '<div class="alert-row">' +
         '<div class="alert-dot ' + dot + '"></div>' +
-        (a.project_code ? '<button class="gs-btn" onclick="event.stopPropagation();openProject(\'' + a.project_id + '\')" title="跳转到项目详情">' + escHtml(a.project_code) + '</button>' : '') +
+        (a.project_code ? projCodeTag(a.project_code, 'event.stopPropagation();openProject(\'' + a.project_id + '\')') : '') +
         '<div class="alert-body">' +
           '<div class="alert-msg">' + escHtml(a.message) + '</div>' +
           (a.sub_message ? '<div class="alert-sub">' + escHtml(a.sub_message) + '</div>' : '') +
@@ -275,6 +275,7 @@ function toggleSortCode() {
 }
 
 function openProject(id) {
+  sessionStorage.setItem('pm_last_proj_id', id);
   selectComboProject(id);
   gotoView('detail');
 }

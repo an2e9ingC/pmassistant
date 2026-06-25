@@ -76,6 +76,15 @@ function gotoView(view, pushState) {
       dashNewProjBtn.style.display = isAdmin ? '' : 'none';
     }
     renderDashboard();
+    // Restore scroll to previously viewed project row
+    var lastPid = sessionStorage.getItem('pm_last_proj_id');
+    if (lastPid) {
+      sessionStorage.removeItem('pm_last_proj_id');
+      setTimeout(function() {
+        var row = document.getElementById('proj-row-' + lastPid);
+        if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 300);
+    }
   }
   if (view === 'detail') {
     loadComboProjects().then(function() {

@@ -2,9 +2,10 @@
    REUSABLE RENDERING FUNCTIONS
 ═══════════════════════════════════════════════════ */
 function renderProjIcon(type, code) {
+  if (code) return projCodeTag(code);
   var t = (type || 'RD').toLowerCase();
-  var label = code || (t === 'sc' ? 'SC' : 'RD');
-  return '<div class="proj-icon ' + t + '">' + escHtml(label) + '</div>';
+  var label = t === 'sc' ? 'SC' : 'RD';
+  return projCodeTag(label);
 }
 
 function renderTypeBadge(type) {

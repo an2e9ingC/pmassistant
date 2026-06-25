@@ -166,7 +166,7 @@ function buildDetailHeader(p) {
   document.getElementById('detail-header').innerHTML =
     '<div class="detail-meta">' +
       '<div class="detail-title">' +
-        '<span class="proj-code-tag">' + escHtml(projCode) + '</span> ' +
+        projCodeTag(projCode) + ' ' +
         escHtml(coreName) +
         ((p.linked_products && p.linked_products.length)
           ? ' ' + p.linked_products.map(function(prod) {
