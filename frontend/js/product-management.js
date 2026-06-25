@@ -184,8 +184,8 @@ function renderProductManagementPage() {
           '<td style="font-weight:500">📂 ' + escHtml(l2.name) + '</td>' +
           '<td style="text-align:center">' + modelCount + '</td>' +
           (_pmIsAdmin ? '<td style="white-space:nowrap;text-align:center">' +
-            '<button class="btn" style="font-size:10px;padding:2px 6px;margin-right:3px" onclick="event.stopPropagation();_pmShowRenameNodeDialog(' + l2.id + ')">✎</button>' +
-            '<button class="btn" style="font-size:10px;padding:2px 6px;color:var(--danger)" onclick="event.stopPropagation();_pmDeleteNode(' + l2.id + ')">✕</button>' +
+            iconEdit('event.stopPropagation();_pmShowRenameNodeDialog(' + l2.id + ')', '重命名') +
+            iconDelete('event.stopPropagation();_pmDeleteNode(' + l2.id + ')', '删除') +
           '</td>' : '') +
         '</tr>';
       });
@@ -234,9 +234,9 @@ function renderProductManagementPage() {
           '<td style="text-align:center">' + (p.project_count || 0) + '</td>' +
           '<td>' + (p.is_local ? '<span class="pm-src-badge local">PMA本地</span>' : (p.synced_at ? '<span class="pm-src-badge synced" title="同步于 ' + escHtml(p.synced_at) + '">禅道同步</span>' : '<span class="pm-src-badge unknown">未知</span>')) + '</td>' +
           (_pmIsAdmin ? '<td style="white-space:nowrap;text-align:center">' +
-            '<button class="btn" style="font-size:12px;padding:2px 6px;margin-right:2px" onclick="_pmShowManageProductProjects(' + p.id + ',\'' + escHtml(p.name).replace(/'/g, "\\'") + '\')" title="关联项目">🔗</button>' +
-            '<button class="btn" style="font-size:12px;padding:2px 6px;margin-right:2px" onclick="_pmShowEditProductDialog(' + p.id + ',\'' + escHtml(p.name).replace(/'/g, "\\'") + '\',\'' + escHtml(p.code || '').replace(/'/g, "\\'") + '\')" title="编辑产品">✎</button>' +
-            '<button class="btn" style="font-size:12px;padding:2px 6px;color:var(--danger)" onclick="_pmDeleteProduct(' + p.id + ',\'' + escHtml(p.name).replace(/'/g, "\\'") + '\')" title="删除产品">✕</button>' +
+            iconLink('_pmShowManageProductProjects(' + p.id + ',\'' + escHtml(p.name).replace(/'/g, "\\'") + '\')', '关联项目') +
+            iconEdit('_pmShowEditProductDialog(' + p.id + ',\'' + escHtml(p.name).replace(/'/g, "\\'") + '\',\'' + escHtml(p.code || '').replace(/'/g, "\\'") + '\')', '编辑产品') +
+            iconDelete('_pmDeleteProduct(' + p.id + ',\'' + escHtml(p.name).replace(/'/g, "\\'") + '\')', '删除产品') +
           '</td>' : '') +
         '</tr>';
       });
@@ -277,8 +277,8 @@ function _pmRenderL1Node(l1, index) {
   html += '<span class="dt-tree-label">' + escHtml(l1.name) + '</span>';
   if (_pmIsAdmin) {
     html += '<span class="dt-tree-acts">' +
-      iconBtn('✎', '重命名', 'event.stopPropagation();_pmShowRenameNodeDialog(' + l1.id + ')') +
-      iconBtn('✕', '删除', 'event.stopPropagation();_pmDeleteNode(' + l1.id + ')', true) +
+      iconEdit('event.stopPropagation();_pmShowRenameNodeDialog(' + l1.id + ')', '重命名') +
+      iconDelete('event.stopPropagation();_pmDeleteNode(' + l1.id + ')', '删除') +
     '</span>';
   }
   html += '</div>';

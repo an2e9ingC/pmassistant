@@ -264,8 +264,8 @@ function renderTemplatesPage() {
       '<span style="flex:1">' + escHtml(st) + '</span>' +
       '<span class="dt-stage-count">' + count + '</span>' +
       (canEdit ? '<span class="dt-stage-acts">' +
-        iconBtn('✎', '重命名', 'event.stopPropagation();showRenameStageDialog(\'' + escHtml(st) + '\')') +
-        iconBtn('✕', '删除', 'event.stopPropagation();deleteStageType(\'' + escHtml(st) + '\')', true) +
+        iconEdit('event.stopPropagation();showRenameStageDialog(\'' + escHtml(st) + '\')', '重命名') +
+        iconDelete('event.stopPropagation();deleteStageType(\'' + escHtml(st) + '\')', '删除') +
       '</span>' : '') +
     '</div>';
   }).join('') +
@@ -321,9 +321,9 @@ function renderTemplatesPage() {
         '<td style="font-size:12px;color:var(--muted)">' + escHtml(d.description || '') + '</td>' +
         (canEdit
           ? '<td style="white-space:nowrap;text-align:center" ondragover="event.stopPropagation()" ondrop="event.stopPropagation()">' +
-              iconBtn('📋', '复制', 'copyTemplate(' + d.id + ')') +
-              iconBtn('✎', '编辑', 'showEditTemplateForm(' + d.id + ')') +
-              iconBtn('✕', '删除', 'deleteTemplate(' + d.id + ')', true) +
+              iconCopy('copyTemplate(' + d.id + ')') +
+              iconEdit('showEditTemplateForm(' + d.id + ')') +
+              iconDelete('deleteTemplate(' + d.id + ')') +
             '</td>'
           : '') +
       '</tr>';
@@ -1009,9 +1009,9 @@ function renderProductTreePage() {
             : '—') + '</td>' +
           '<td style="font-size:12px;color:var(--muted)">' + escHtml(d.description || '') + '</td>' +
           (canEdit ? '<td style="white-space:nowrap;text-align:center" ondragover="event.stopPropagation()" ondrop="event.stopPropagation()">' +
-            iconBtn('📋', '复制', 'copyProductTemplate(' + d.id + ')') +
-            iconBtn('✎', '编辑', 'showEditProductTemplateForm(' + d.id + ')') +
-            iconBtn('✕', '删除', 'deleteProductTemplate(' + d.id + ')', true) +
+            iconCopy('copyProductTemplate(' + d.id + ')') +
+            iconEdit('showEditProductTemplateForm(' + d.id + ')') +
+            iconDelete('deleteProductTemplate(' + d.id + ')') +
           '</td>' : '') +
         '</tr>';
       });

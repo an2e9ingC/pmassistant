@@ -900,10 +900,8 @@ function loadNotifManage() {
           '<span class="toggle-slider"></span></label></td>' +
         '<td style="font-size:12px;color:var(--muted)">' + escHtml(n.created_at || '') + '</td>' +
         '<td style="white-space:nowrap">' +
-          '<button class="btn-icon" onclick="editNotifDialog(' + n.id + ',\'' + escJs(n.content) + '\')" title="编辑" style="margin-right:4px">' +
-            '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2l3 3-9 9H2v-3l9-9z"/><path d="M10 5l1 1"/></svg></button>' +
-          '<button class="btn-icon" onclick="deleteNotif(' + n.id + ')" title="删除" style="color:var(--danger)">' +
-            '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h12M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1M6 7v5M10 7v5M3 4l1 10a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-10"/></svg></button>' +
+          iconEdit('editNotifDialog(' + n.id + ',\'' + escJs(n.content) + '\')') +
+          iconDelete('deleteNotif(' + n.id + ')') +
         '</td>' +
       '</tr>';
     }).join('');

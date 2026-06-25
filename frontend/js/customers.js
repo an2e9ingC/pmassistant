@@ -24,8 +24,8 @@ function renderCustTable() {
       '<td><span style="padding:2px 8px;border-radius:10px;font-size:12px;font-weight:540;background:var(--accent-lt);color:var(--accent)">' + (c.project_count || 0) + '</span></td>' +
       '<td><span style="padding:2px 8px;border-radius:10px;font-size:12px;font-weight:540;background:var(--success-lt);color:var(--success)">' + (c.product_count || 0) + '</span></td>' +
       '<td style="white-space:nowrap">' +
-        '<button class="btn" onclick="openCustEditDialog(' + c.id + ')" style="font-size:11px;padding:3px 10px;margin-right:4px">编辑</button>' +
-        '<button class="btn" onclick="deleteCust(' + c.id + ',\'' + escHtml(c.name) + '\')" style="font-size:11px;padding:3px 10px;color:var(--danger)">删除</button>' +
+        iconEdit('openCustEditDialog(' + c.id + ')') +
+        iconDelete('deleteCust(' + c.id + ',\'' + escHtml(c.name) + '\')') +
       '</td>' +
     '</tr>';
   }).join('');

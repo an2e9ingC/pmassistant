@@ -289,8 +289,7 @@ function renderRoleTable() {
         ' onclick="showRoleUsers(' + r.id + ',\'' + escHtml(r.label) + '\')">' + userCount + ' 人</button></td>' +
       '<td style="white-space:nowrap">' +
         (r.key === 'admin' ? '<span style="font-size:11px;color:var(--muted)">系统内置</span>' :
-          '<button class="btn btn-sm" onclick="openRoleCreateDialog(' + r.id + ')" style="margin-right:4px">编辑</button>' +
-          '<button class="btn btn-sm" onclick="deleteRole(' + r.id + ',\'' + escHtml(r.label) + '\')" style="color:var(--danger)">删除</button>') +
+          iconEdit('openRoleCreateDialog(' + r.id + ')') + iconDelete('deleteRole(' + r.id + ',\'' + escHtml(r.label) + '\')')) +
       '</td>' +
     '</tr>';
   }).join('');
@@ -461,9 +460,9 @@ function renderUserTable() {
       '<td>' + statusHtml + '</td>' +
       '<td style="font-size:12px;color:var(--muted)">' + escHtml(u.created_at || '') + '</td>' +
       '<td style="white-space:nowrap">' +
-        '<button class="btn" onclick="openUserEditDialog(' + u.id + ')" style="font-size:11px;padding:3px 10px;margin-right:4px">编辑</button>' +
-        '<button class="btn" onclick="toggleUserActive(' + u.id + ',' + u.is_active + ')" style="font-size:11px;padding:3px 10px;margin-right:4px">' + toggleLabel + '</button>' +
-        '<button class="btn" onclick="deleteUser(' + u.id + ',\'' + escHtml(u.username) + '\')" style="font-size:11px;padding:3px 10px;color:var(--danger)">删除</button>' +
+        iconEdit('openUserEditDialog(' + u.id + ')') +
+        iconToggle('toggleUserActive(' + u.id + ',' + u.is_active + ')', toggleLabel) +
+        iconDelete('deleteUser(' + u.id + ',\'' + escHtml(u.username) + '\')') +
       '</td>' +
     '</tr>';
   }).join('');

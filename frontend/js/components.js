@@ -1,6 +1,49 @@
 /* ═══════════════════════════════════════════════════
    REUSABLE RENDERING FUNCTIONS
 ═══════════════════════════════════════════════════ */
+
+/* ── Standard Icon Buttons (emoji style, consistent with doc-templates) ── */
+
+function iconEdit(onclick, title) {
+  return iconBtn('✎', title || '编辑', onclick);
+}
+
+function iconDelete(onclick, title) {
+  return iconBtn('✕', title || '删除', onclick, true);
+}
+
+function iconToggle(onclick, title) {
+  return iconBtn('↻', title || '切换', onclick);
+}
+
+function iconEye(onclick, title) {
+  return iconBtn('👁', title || '预览', onclick);
+}
+
+function iconCopy(onclick, title) {
+  return iconBtn('📋', title || '复制', onclick);
+}
+
+function iconUpload(onclick, title) {
+  return iconBtn('📤', title || '上传', onclick);
+}
+
+function iconDownload(onclick, title) {
+  return iconBtn('📥', title || '下载', onclick);
+}
+
+function iconAdd(onclick, title) {
+  return iconBtn('＋', title || '添加', onclick);
+}
+
+function iconLink(onclick, title) {
+  return iconBtn('↗', title || '打开', onclick);
+}
+
+function iconRestore(onclick, title) {
+  return iconBtn('🔄', title || '恢复', onclick);
+}
+
 function renderProjIcon(type, code) {
   if (code) return projCodeTag(code);
   var t = (type || 'RD').toLowerCase();

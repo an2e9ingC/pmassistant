@@ -144,8 +144,8 @@ function renderDbManage() {
         '<td style="font-size:11px">' + escHtml(b.size_display) + '</td>' +
         '<td style="font-size:11px">' + escHtml(b.created_at) + '</td>' +
         '<td style="white-space:nowrap">' +
-          iconBtn('🔄', '恢复到此备份', 'restoreBackup(\'' + escHtml(b.name) + '\')') +
-          iconBtn('✕', '删除此备份', 'deleteBackup(\'' + escHtml(b.name) + '\')', true) +
+          iconRestore('restoreBackup(\'' + escHtml(b.name) + '\')', '恢复到此备份') +
+          iconDelete('deleteBackup(\'' + escHtml(b.name) + '\')', '删除此备份') +
         '</td>' +
       '</tr>';
     });

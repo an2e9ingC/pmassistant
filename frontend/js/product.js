@@ -707,10 +707,9 @@ function _renderProdDocsInline(docs) {
         '<td style="font-size:11px;color:var(--muted);white-space:nowrap;' + cellStyle + '">' + escHtml(d.uploaded_at || '—') + '</td>' +
         '<td style="white-space:nowrap;text-align:center;' + cellStyle + '">' +
           (d.location && isPreviewableUrl(d.location)
-            ? iconBtn('👁', '预览', "previewDocument('" + encodeURIComponent(d.location) + "','" + escJs(d.doc_name || '') + "')")
+            ? iconEye("previewDocument('" + encodeURIComponent(d.location) + "','" + escJs(d.doc_name || '') + "')")
             : '') +
-          '<button class="btn-icon" onclick="showUploadDocDialog(' + d.id + ')" title="上传文档">' +
-            '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12V2M4 5l4-4 4 4M2 8v5a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8"/></svg></button>' +
+          iconUpload('showUploadDocDialog(' + d.id + ')', '上传文档') +
         '</td>' +
       '</tr>';
     });

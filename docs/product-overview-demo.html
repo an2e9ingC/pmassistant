@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>产品总览 · PM Assistant</title>
+<style>
+/* ═══════════════════════════════════════════ tokens ═══════════════════════════════════════ */
+:root {
+  --bg:          #F4F6FB;
+  --surface:     #FFFFFF;
+  --surface2:    #F8FAFD;
+  --fg:          #17191F;
+  --muted:       #6B7694;
+  --border:      #E3E8F4;
+  --accent:      #2D6FEC;
+  --accent-h:    #2260D8;
+  --accent-lt:   #EDF2FE;
+  --success:     #15803D;
+  --success-lt:  #DCFCE7;
+  --warn:        #B45309;
+  --warn-lt:     #FEF3C7;
+  --danger:      #DC2626;
+  --danger-lt:   #FEE2E2;
+  --sidebar-w:   228px;
+  --header-h:    54px;
+  --font:        'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --mono:        'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --r:           8px;
+  --r-lg:        12px;
+  --sh:          0 1px 3px rgba(16,24,48,0.06), 0 1px 2px rgba(16,24,48,0.04);
+  --sh-md:       0 4px 14px rgba(16,24,48,0.09);
+}
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: var(--font); font-size: 14px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; text-decoration: none; }
+button { font: inherit; cursor: pointer; }
+
+/* ═══════════════════════════════════════════ sidebar (shared) ═════════════════════════════ */
+.sidebar {
+  width: var(--sidebar-w); height: 100vh; background: var(--surface);
+  border-right: 1px solid var(--border); display: flex; flex-direction: column;
+  position: fixed; top: 0; left: 0; z-index: 200;
+}
+.sidebar-brand {
+  padding: 14px 16px; display: flex; align-items: center; gap: 10px;
+  border-bottom: 1px solid var(--border); cursor: pointer; user-select: none;
+  transition: background 0.12s;
+}
+.sidebar-brand:hover { background: var(--bg); }
+.sidebar-brand svg { width: 24px; height: 24px; flex-shrink: 0; }
+.brand-text { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; }
+.brand-sub  { font-size: 10px; color: var(--muted); font-weight: 400; }
+
+.sidebar-nav { padding: 8px 8px; flex: 1; overflow-y: auto; }
+.nav-group { margin-bottom: 6px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.nav-group:last-child { border-bottom: none; }
+.nav-group-label {
+  font-size: 10.5px; font-weight: 650; color: var(--muted);
+  letter-spacing: 0.05em; text-transform: uppercase; padding: 6px 10px 4px;
+}
+.nav-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; border-radius: 7px; cursor: pointer;
+  color: var(--muted); font-size: 13px; font-weight: 450;
+  transition: background 0.12s, color 0.12s; user-select: none;
+  position: relative;
+}
+.nav-item:hover { background: var(--bg); color: var(--fg); }
+.nav-item.active { background: var(--accent-lt); color: var(--accent); font-weight: 540; }
+.nav-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--border);
+  flex-shrink: 0; transition: background 0.15s;
+}
+.nav-item.active .nav-dot { background: var(--accent); }
+.nav-item:hover .nav-dot { background: var(--muted); }
+.nav-badge {
+  margin-left: auto; background: var(--danger); color: #fff;
+  font-size: 10px; font-weight: 600; padding: 0 5px; height: 16px;
+  line-height: 16px; border-radius: 8px; min-width: 16px; text-align: center;
+}
+.sidebar-footer {
+  padding: 8px; border-top: 1px solid var(--border); flex-shrink: 0;
+}
+.theme-row {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+  border-radius: 7px; cursor: pointer; color: var(--muted);
+  font-size: 12px; transition: background 0.12s; user-select: none;
+}
+.theme-row:hover { background: var(--bg); color: var(--fg); }
+.theme-row svg { width: 15px; height: 15px; flex-shrink: 0; }
+
+/* ═══════════════════════════════════════════ topbar ═══════════════════════════════════════ */
+.main { margin-left: var(--sidebar-w); min-height: 100vh; display: flex; flex-direction: column; }
+.topbar {
+  height: var(--header-h); background: var(--surface);
+  border-bottom: 1px solid var(--border); display: flex; align-items: center;
+  padding: 0 24px; gap: 12px; position: sticky; top: 0; z-index: 100;
+}
+.topbar-breadcrumb { display: flex; align-items: center; gap: 6px; }
+.topbar-breadcrumb span { font-size: 12px; color: var(--muted); }
+.topbar-breadcrumb .current { color: var(--fg); font-weight: 600; font-size: 14px; }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+.avatar {
+  width: 30px; height: 30px; border-radius: 50%; background: var(--accent);
+  color: #fff; font-size: 11px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.content { padding: 24px 28px 40px; flex: 1; min-width: 0; }
+
+/* ═══════════════════════════════════════════ page header ═════════════════════════════════ */
+.page-hd { margin-bottom: 20px; display: flex; align-items: flex-start; justify-content: space-between; }
+.page-hd h1 { font-size: 22px; font-weight: 650; margin: 0 0 2px; letter-spacing: -0.015em; }
+.page-hd .sub { font-size: 13px; color: var(--muted); }
+
+/* ═══════════════════════════════════════════ search bar ═════════════════════════════════ */
+.search-bar {
+  display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg);
+  margin-bottom: 18px; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.search-bar:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-lt); }
+.search-bar svg { width: 16px; height: 16px; color: var(--muted); flex-shrink: 0; }
+.search-bar input {
+  flex: 1; border: 0; outline: 0; background: transparent;
+  font: inherit; font-size: 14px; color: var(--fg);
+}
+.search-bar input::placeholder { color: var(--muted); }
+.search-bar kbd {
+  font-family: var(--mono); font-size: 10px; padding: 2px 6px;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 4px; color: var(--muted);
+}
+.search-result-count { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+.search-result-count strong { color: var(--fg); }
+
+/* ═══════════════════════════════════════════ L1 category cards ═════════════════════════════ */
+.cat-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
+  margin-bottom: 20px;
+}
+.cat-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-lg); padding: 18px 20px; cursor: pointer;
+  transition: box-shadow 0.15s, border-color 0.15s, transform 0.1s;
+  display: flex; align-items: center; gap: 14px; position: relative; overflow: hidden;
+}
+.cat-card:hover { box-shadow: var(--sh-md); transform: translateY(-1px); }
+.cat-card.active { border-color: var(--accent); background: var(--accent-lt); }
+.cat-card::before {
+  content: ''; position: absolute; top: 0; left: 0; bottom: 0; width: 3px;
+}
+.cat-card.l1-self::before  { background: var(--accent); }
+.cat-card.l1-integ::before { background: var(--success); }
+.cat-card.l1-purch::before { background: var(--warn); }
+.cat-card.l1-inner::before { background: var(--danger); }
+.cat-icon {
+  width: 40px; height: 40px; border-radius: 10px; display: flex;
+  align-items: center; justify-content: center; flex-shrink: 0;
+  font-size: 18px;
+}
+.cat-icon.self  { background: var(--accent-lt); color: var(--accent); }
+.cat-icon.integ { background: var(--success-lt); color: var(--success); }
+.cat-icon.purch { background: var(--warn-lt); color: var(--warn); }
+.cat-icon.inner { background: var(--danger-lt); color: var(--danger); }
+.cat-info { flex: 1; min-width: 0; }
+.cat-name { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+.cat-desc { font-size: 11px; color: var(--muted); }
+.cat-count {
+  font-family: var(--mono); font-size: 24px; font-weight: 700;
+  letter-spacing: -0.02em; flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════ L2 subcategory chips ═════════════════════════ */
+.l2-bar {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 18px;
+  flex-wrap: wrap; padding: 10px 0;
+}
+.l2-label { font-size: 12px; color: var(--muted); font-weight: 550; flex-shrink: 0; }
+.l2-chip {
+  padding: 5px 14px; border-radius: 16px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--muted); font-size: 12px; font-weight: 500;
+  cursor: pointer; transition: background 0.12s, color 0.12s, border-color 0.12s;
+  white-space: nowrap;
+}
+.l2-chip:hover { border-color: var(--accent); color: var(--fg); }
+.l2-chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.l2-count { font-size: 10px; opacity: 0.7; margin-left: 3px; }
+
+/* ═══════════════════════════════════════════ product grid ═════════════════════════════════ */
+.prod-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 14px;
+}
+.prod-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-lg); padding: 18px; cursor: pointer;
+  transition: box-shadow 0.15s, border-color 0.15s, transform 0.1s;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.prod-card:hover { box-shadow: var(--sh-md); border-color: var(--accent); transform: translateY(-1px); }
+.prod-card-header { display: flex; justify-content: space-between; align-items: flex-start; }
+.prod-code {
+  font-family: var(--mono); font-size: 14px; font-weight: 650; color: var(--accent);
+  letter-spacing: -0.01em;
+}
+.prod-name { font-size: 13px; color: var(--fg); font-weight: 500; margin-top: 2px; }
+.prod-desc { font-size: 12px; color: var(--muted); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.prod-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+.prod-tag {
+  padding: 2px 8px; border-radius: 4px; font-size: 10.5px; font-weight: 500;
+  border: 1px solid var(--border); background: var(--bg); color: var(--muted);
+  white-space: nowrap;
+}
+.prod-tag.t0 { border-color: var(--accent); color: var(--accent); background: var(--accent-lt); }
+.prod-tag.t1 { border-color: var(--success); color: var(--success); background: var(--success-lt); }
+.prod-tag.t2 { border-color: var(--warn); color: var(--warn); background: var(--warn-lt); }
+.prod-footer {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-top: 8px; border-top: 1px solid var(--border);
+}
+.prod-src {
+  font-size: 10.5px; padding: 2px 8px; border-radius: 10px; font-weight: 500;
+}
+.prod-src.local  { background: var(--warn-lt); color: var(--warn); }
+.prod-src.synced { background: var(--accent-lt); color: var(--accent); }
+.prod-status {
+  font-size: 11px; font-weight: 550; display: flex; align-items: center; gap: 4px;
+}
+.prod-status-dot { width: 6px; height: 6px; border-radius: 50%; }
+.prod-status-dot.prod   { background: var(--success); }
+.prod-status-dot.trial  { background: var(--accent); }
+.prod-status-dot.dev    { background: var(--warn); }
+.prod-status-dot.eol    { background: var(--muted); }
+
+/* ═══════════════════════════════════════════ empty state ═════════════════════════════════ */
+.empty-state {
+  text-align: center; padding: 48px 24px; color: var(--muted);
+}
+.empty-state svg { width: 48px; height: 48px; margin-bottom: 12px; opacity: 0.3; }
+.empty-state p { font-size: 14px; }
+
+/* dark mode */
+[data-theme="dark"] {
+  --bg: #0B0E14; --surface: #141820; --surface2: #1A1F2C;
+  --fg: #E4E9F6; --muted: #717DA0; --border: #232839;
+  --accent: #4D86F7; --accent-h: #5E93FF; --accent-lt: #151E35;
+  --success: #34D399; --success-lt: #0A2218;
+  --warn: #FBBF24; --warn-lt: #201800;
+  --danger: #F87171; --danger-lt: #1E0808;
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════ sidebar ═══════════════════════════════════════ -->
+<aside class="sidebar">
+  <div class="sidebar-brand" onclick="location.href='index.html'" title="PM Assistant">
+    <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8">
+      <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+      <rect x="14" y="3" width="7" height="7" rx="1.5"/>
+      <rect x="3" y="14" width="7" height="7" rx="1.5"/>
+      <rect x="14" y="14" width="7" height="7" rx="1.5"/>
+    </svg>
+    <div><div class="brand-text">PM Assistant</div><div class="brand-sub">项目管理助手</div></div>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-group">
+      <div class="nav-group-label">项目</div>
+      <a class="nav-item" href="project-overview.html"><span class="nav-dot"></span>项目总览</a>
+      <a class="nav-item" href="#"><span class="nav-dot"></span>项目详情</a>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-label">产品</div>
+      <a class="nav-item active" href="product-overview.html"><span class="nav-dot"></span>产品总览</a>
+      <a class="nav-item" href="#"><span class="nav-dot"></span>产品详情</a>
+      <a class="nav-item" href="#"><span class="nav-dot"></span>产品管理</a>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-label">客户</div>
+      <a class="nav-item" href="#"><span class="nav-dot"></span>客户管理</a>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-label">工具</div>
+      <a class="nav-item" href="#"><span class="nav-dot"></span>快速检索</a>
+      <a class="nav-item" href="#"><span class="nav-dot"></span>GitLab 发布</a>
+      <a class="nav-item" href="#"><span class="nav-dot"></span>统计报告</a>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-label">管理</div>
+      <a class="nav-item" href="#"><span class="nav-dot"></span>数据源配置</a>
+      <a class="nav-item" href="#"><span class="nav-dot"></span>流程规范</a>
+      <a class="nav-item" href="#"><span class="nav-dot"></span>系统日志</a>
+    </div>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="theme-row" onclick="toggleTheme()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      <span id="theme-label">暗色模式</span>
+    </div>
+  </div>
+</aside>
+
+<!-- ═══════════════════════════════════════════ main ═══════════════════════════════════════ -->
+<div class="main">
+  <header class="topbar">
+    <div class="topbar-breadcrumb">
+      <span>产品</span><span>/</span><span class="current">产品总览</span>
+    </div>
+    <div class="topbar-right">
+      <div class="avatar">管</div>
+    </div>
+  </header>
+
+  <div class="content">
+    <!-- page header -->
+    <div class="page-hd">
+      <div>
+        <h1>产品总览</h1>
+        <p class="sub">共 26 个产品 · 覆盖 4 个产品大类</p>
+      </div>
+    </div>
+
+    <!-- search -->
+    <div class="search-bar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input type="text" id="searchInput" placeholder="搜索产品型号、名称或标签…" oninput="doSearch()" />
+      <kbd>Ctrl+K</kbd>
+    </div>
+    <div class="search-result-count" id="resultCount"></div>
+
+    <!-- L1 category cards -->
+    <div class="cat-grid" id="catGrid"></div>
+
+    <!-- L2 subcategory chips -->
+    <div class="l2-bar" id="l2Bar"></div>
+
+    <!-- product grid -->
+    <div class="prod-grid" id="prodGrid"></div>
+    <div class="empty-state" id="emptyState" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 13h6M9 17h4"/></svg>
+      <p>没有匹配的产品</p>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════ data ═══════════════════════════════════════ */
+const L1_CATEGORIES = [
+  { id:'self',  name:'自研单板', desc:'自主研发的电路板卡', icon:'⊞', cls:'self',  accent:'var(--accent)',  count:15, l2:[
+    { name:'FMC 子卡',    count:4 },
+    { name:'高速存储板',  count:3 },
+    { name:'信号处理板',  count:4 },
+    { name:'接口扩展板',  count:2 },
+    { name:'背板',        count:2 },
+  ]},
+  { id:'integ', name:'集成产品', desc:'系统集成与整机产品', icon:'⊡', cls:'integ', accent:'var(--success)', count:9, l2:[
+    { name:'整机平台',   count:4 },
+    { name:'子系统',     count:3 },
+    { name:'测试设备',   count:2 },
+  ]},
+  { id:'purch', name:'外购模块', desc:'外部采购的功能模块', icon:'⊕', cls:'purch', accent:'var(--warn)',  count:0, l2:[
+    { name:'电源模块',   count:0 },
+    { name:'射频模块',   count:0 },
+  ]},
+  { id:'inner', name:'内部系统', desc:'内部使用的软件系统', icon:'⊟', cls:'inner', accent:'var(--danger)', count:2, l2:[
+    { name:'管理平台',   count:2 },
+  ]},
+];
+
+const PRODUCTS = [
+  { code:'LVX624M',  name:'LVX624M',  l1:'self', l2:'高速存储板',  desc:'基于 E2000 的高速 NVMe 存储板，支持 PCIe Gen3 x4',  tags:['E2000','FT','全国产'], src:'local', status:'prod' },
+  { code:'LVX43324', name:'LVX43324', l1:'self', l2:'高速存储板',  desc:'大容量 SATA 存储板，8 通道，支持 RAID 0/1/5',          tags:['SATA','RAID'],         src:'local', status:'prod' },
+  { code:'EPE3321C', name:'EPE3321C', l1:'self', l2:'FMC 子卡',    desc:'双通道 14-bit 250MSPS ADC FMC 子卡',               tags:['ADC','FMC'],           src:'local', status:'prod' },
+  { code:'EPE4402',  name:'EPE4402',  l1:'self', l2:'FMC 子卡',    desc:'四通道 16-bit DAC 输出子卡，支持任意波形生成',        tags:['DAC','FMC'],           src:'local', status:'trial' },
+  { code:'EPE5501',  name:'EPE5501',  l1:'self', l2:'FMC 子卡',    desc:'高速串行收发子卡，支持 10Gbps × 4 通道',             tags:['SerDes','10G'],        src:'synced', status:'prod' },
+  { code:'EPE2288',  name:'EPE2288',  l1:'self', l2:'FMC 子卡',    desc:'多通道低速采集子卡，16 通道同步采样',                  tags:['DAQ','同步'],          src:'local', status:'dev' },
+  { code:'EVP3390',  name:'EVP3390',  l1:'self', l2:'信号处理板',  desc:'基于 Zynq UltraScale+ 的通用信号处理平台',          tags:['Zynq','FPGA'],         src:'local', status:'prod' },
+  { code:'EVP4412',  name:'EVP4412',  l1:'self', l2:'信号处理板',  desc:'多核 DSP 阵列处理板，8 × C6678',                    tags:['DSP','C6678'],         src:'synced', status:'prod' },
+  { code:'EVP5500',  name:'EVP5500',  l1:'self', l2:'信号处理板',  desc:'AI 推理加速板，集成 4 颗 NPU',                      tags:['NPU','AI'],            src:'local', status:'dev' },
+  { code:'EVP6103',  name:'EVP6103',  l1:'self', l2:'信号处理板',  desc:'实时信号采集与预处理板，FPGA + ARM 异构',            tags:['FPGA','ARM'],          src:'local', status:'trial' },
+  { code:'EIF2201',  name:'EIF2201',  l1:'self', l2:'接口扩展板',  desc:'多协议接口扩展板，支持 1553B / CAN / RS422',         tags:['1553B','CAN'],         src:'local', status:'prod' },
+  { code:'EIF3300',  name:'EIF3300',  l1:'self', l2:'接口扩展板',  desc:'高速数据交换板，支持 PCIe Switch + 10G Ethernet',    tags:['PCIe','交换'],         src:'synced', status:'prod' },
+  { code:'EBP1101',  name:'EBP1101',  l1:'self', l2:'背板',        desc:'6U VPX 背板，12 槽位，支持高速差分信号',              tags:['VPX','6U'],            src:'local', status:'prod' },
+  { code:'EBP2200',  name:'EBP2200',  l1:'self', l2:'背板',        desc:'3U OpenVPX 背板，8 槽位，兼容 VITA 65',              tags:['VPX','3U','VITA65'],   src:'local', status:'prod' },
+  { code:'EHS8801',  name:'EHS8801',  l1:'self', l2:'高速存储板',  desc:'加固型 NVMe 存储阵列，容量 32TB，支持加密',           tags:['NVMe','加密','加固'],  src:'synced', status:'trial' },
+  { code:'ISYS-001', name:'通用信号处理机柜', l1:'integ', l2:'整机平台', desc:'19 英寸标准机柜，集成信号处理、存储与网络交换',   tags:['机柜','集成'],         src:'local', status:'prod' },
+  { code:'ISYS-002', name:'便携式测试平台',   l1:'integ', l2:'整机平台', desc:'便携式 PXIe 测试平台，8 槽位，内置控制器',          tags:['PXIe','便携'],         src:'synced', status:'prod' },
+  { code:'ISYS-003', name:'车载加固计算机',   l1:'integ', l2:'整机平台', desc:'车载环境用加固计算机，宽温 -40°C ~ +85°C',         tags:['车载','加固','宽温'],  src:'local', status:'prod' },
+  { code:'ISYS-004', name:'舰载综合处理平台', l1:'integ', l2:'整机平台', desc:'舰载环境综合信息处理平台，冗余电源设计',            tags:['舰载','冗余'],         src:'synced', status:'trial' },
+  { code:'ISUB-101', name:'数据采集子系统',   l1:'integ', l2:'子系统',   desc:'多通道同步数据采集与预处理子系统',                  tags:['采集','同步'],         src:'local', status:'prod' },
+  { code:'ISUB-102', name:'通信处理子系统',   l1:'integ', l2:'子系统',   desc:'软件无线电通信处理子系统，支持多种波形',            tags:['SDR','通信'],          src:'synced', status:'prod' },
+  { code:'ISUB-103', name:'存储与备份子系统', l1:'integ', l2:'子系统',   desc:'集中存储与自动备份子系统，支持异地容灾',            tags:['存储','容灾'],         src:'local', status:'dev' },
+  { code:'ITST-201', name:'自动化测试台',     l1:'integ', l2:'测试设备', desc:'板卡级自动化功能测试台，支持批量测试',              tags:['ATE','批量'],          src:'local', status:'prod' },
+  { code:'ITST-202', name:'环境应力筛选设备', l1:'integ', l2:'测试设备', desc:'温度循环与振动筛选设备，满足 GJB 要求',              tags:['ESS','GJB'],           src:'synced', status:'prod' },
+  { code:'IN-ADMIN', name:'PMA 项目管理平台', l1:'inner', l2:'管理平台', desc:'PM Assistant — 项目管理、产品管理、文档齐套一体化平台', tags:['Web','Python'],     src:'local', status:'prod' },
+  { code:'IN-CI',    name:'持续集成平台',     l1:'inner', l2:'管理平台', desc:'基于 GitLab CI 的嵌入式软件持续集成平台',             tags:['CI/CD','GitLab'],  src:'local', status:'dev' },
+];
+
+/* ═══════════════════════════════════════════ state ═══════════════════════════════════════ */
+let activeL1 = 'self';
+let activeL2 = null;  // null = all L2s within activeL1
+let searchQuery = '';
+
+/* ═══════════════════════════════════════════ render L1 cards ═════════════════════════════ */
+function renderL1Cards() {
+  const grid = document.getElementById('catGrid');
+  grid.innerHTML = L1_CATEGORIES.map(c => `
+    <div class="cat-card l1-${c.cls}${activeL1 === c.id ? ' active' : ''}" onclick="selectL1('${c.id}')">
+      <div class="cat-icon ${c.cls}">${c.icon}</div>
+      <div class="cat-info">
+        <div class="cat-name">${c.name}</div>
+        <div class="cat-desc">${c.desc}</div>
+      </div>
+      <div class="cat-count" style="color:${c.accent}">${c.count}</div>
+    </div>
+  `).join('');
+}
+
+/* ═══════════════════════════════════════════ render L2 chips ═════════════════════════════ */
+function renderL2Chips() {
+  const cat = L1_CATEGORIES.find(c => c.id === activeL1);
+  if (!cat || cat.l2.length === 0) { document.getElementById('l2Bar').innerHTML = ''; return; }
+  const bar = document.getElementById('l2Bar');
+  const allActive = activeL2 === null;
+  bar.innerHTML = `<span class="l2-label">子类：</span>
+    <span class="l2-chip${allActive ? ' active' : ''}" onclick="selectL2(null)">全部<span class="l2-count">${cat.count}</span></span>
+    ${cat.l2.map(l => {
+      const active = activeL2 === l.name;
+      return `<span class="l2-chip${active ? ' active' : ''}" onclick="selectL2('${l.name}')">${l.name}<span class="l2-count">${l.count}</span></span>`;
+    }).join('')}`;
+}
+
+/* ═══════════════════════════════════════════ render products ═════════════════════════════ */
+function renderProducts() {
+  let filtered = PRODUCTS.filter(p => p.l1 === activeL1);
+  if (activeL2) filtered = filtered.filter(p => p.l2 === activeL2);
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    filtered = filtered.filter(p =>
+      p.code.toLowerCase().includes(q) ||
+      p.name.toLowerCase().includes(q) ||
+      p.tags.some(t => t.toLowerCase().includes(q))
+    );
+  }
+
+  const grid = document.getElementById('prodGrid');
+  const empty = document.getElementById('emptyState');
+  const count = document.getElementById('resultCount');
+
+  if (searchQuery) {
+    count.innerHTML = `找到 <strong>${filtered.length}</strong> 个匹配产品`;
+    count.style.display = '';
+  } else {
+    count.style.display = 'none';
+  }
+
+  if (filtered.length === 0) {
+    grid.innerHTML = '';
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+
+  const statusLabel = { prod:'量产', trial:'试产', dev:'研发中', eol:'已停产' };
+  grid.innerHTML = filtered.map((p, i) => `
+    <div class="prod-card" onclick="openDetail('${p.code}')">
+      <div class="prod-card-header">
+        <div>
+          <div class="prod-code">${p.code}</div>
+          <div class="prod-name">${p.name}</div>
+        </div>
+        <span class="prod-status">
+          <span class="prod-status-dot ${p.status}"></span>${statusLabel[p.status]}
+        </span>
+      </div>
+      <div class="prod-desc">${p.desc}</div>
+      <div class="prod-tags">${p.tags.map((t,j) => `<span class="prod-tag t${j%5}">${t}</span>`).join('')}</div>
+      <div class="prod-footer">
+        <span class="prod-src ${p.src}">${p.src === 'local' ? 'PMA 本地' : '禅道同步'}</span>
+        <span style="font-size:11px;color:var(--muted);">${L1_CATEGORIES.find(c=>c.id===p.l1).name} · ${p.l2}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+/* ═══════════════════════════════════════════ actions ═════════════════════════════════════ */
+function selectL1(id) {
+  activeL1 = id;
+  activeL2 = null;
+  renderL1Cards();
+  renderL2Chips();
+  renderProducts();
+}
+
+function selectL2(name) {
+  activeL2 = name;
+  renderL2Chips();
+  renderProducts();
+}
+
+function doSearch() {
+  searchQuery = document.getElementById('searchInput').value.trim();
+  renderProducts();
+}
+
+function openDetail(code) {
+  alert('打开产品详情：' + code + '\n（实际应用中导航到产品详情页）');
+}
+
+function toggleTheme() {
+  const html = document.documentElement;
+  const isDark = html.getAttribute('data-theme') === 'dark';
+  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  document.getElementById('theme-label').textContent = isDark ? '暗色模式' : '亮色模式';
+}
+
+/* ═══════════════════════════════════════════ init ═══════════════════════════════════════ */
+renderL1Cards();
+renderL2Chips();
+renderProducts();
+</script>
+
+</body>
+</html>

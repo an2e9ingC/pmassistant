@@ -1076,7 +1076,7 @@ function buildDocs(data) {
           '<td>' + statusCell + '</td><td id="doc-loc-cell-' + d.id + '">' + locHtml + '</td>' +
           '<td style="white-space:nowrap;text-align:center">' +
             (d.location && isPreviewableUrl(d.location)
-              ? '<button class="btn-icon" title="预览" onclick="previewDocument(\'' + encodeURIComponent(d.location) + '\',\'' + escJs(d.doc_name || '') + '\')"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="3"/><path d="M1 8s3-6 7-6 7 6 7 6-3 6-7 6-7-6-7-6z"/></svg></button>'
+              ? iconEye('previewDocument(\'' + encodeURIComponent(d.location) + '\',\'' + escJs(d.doc_name || '') + '\')')
               : '') +
           '</td>' +
         '</tr>';
