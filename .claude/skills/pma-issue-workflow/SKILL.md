@@ -11,10 +11,11 @@ allowed-tools: Read, Write, Edit, Bash, LSP, Agent, WebFetch
 
 - `issue#N: <描述>` — 含描述，可跳过 GitLab API 调用
 - `issue#N` — 仅编号，**必须**先调用 API 获取详情
+- `#N` — 仅编号，**必须**先调用 API 获取详情
 
 ## 标准步骤
 
-### 0. 获取 Issue 详情（仅 `issue#N` 无描述时）
+### 0. 获取 Issue 详情（仅 `issue#N` 或 `#N` 无描述时）
 
 ```bash
 curl -s "http://localhost:8000/api/gitlab/issues/{N}" \
