@@ -6,7 +6,7 @@ Endpoints for:
 - Trigger GitLab URL validation
 - Create GitLab issues (bug/feature feedback)
 """
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -342,3 +342,37 @@ async def get_issue(
         return {"code": 1, "message": f"获取失败: {e}"}
     finally:
         await client.close()
+
+
+@router.post("/upload")
+async def upload_file(
+    request: Request,
+    user: LocalUser = Depends(get_current_user),
+):
+    """Proxy file upload to GitLab API (for pasting images in feedback)."""
+    form = await request.form()
+    file = form.get("file")
+    if not file:
+        return {"code": 1, "message": "未选择文件"}
+
+    # Use user's token if GitLab user, else system token
+    from backend.services.gitlab_client import GitLabClient
+    import httpx
+
+    token = user.gitlab_access_token if user.auth_source == "gitlab" else settings.GITLAB_TOKEN
+    if not token:
+        return {"code": 1, "message": "GitLab Token 未配置"}
+
+    url = f"{settings.GITLAB_BASE_URL.rstrip('/')}/projects/bsp_dev%2Ffake_it%2Fpma/uploads"
+    files = {"file": (file.filename, await file.read(), file.content_type)}
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(
+            url,
+            headers={"Authorization": f"Bearer {token}"},
+            files=files,
+        )
+        if resp.status_code in (200, 201):
+            data = resp.json()
+            return {"code": 0, "data": {"url": data.get("url", ""), "markdown": data.get("markdown", "")}, "message": "ok"}
+        return {"code": 1, "message": f"上传失败: HTTP {resp.status_code}"}

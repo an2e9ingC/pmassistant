@@ -316,7 +316,7 @@ function openFeedbackDialog() {
       '</div>' +
       '<div style="margin-bottom:12px">' +
         '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">详细描述 <span style="font-weight:400">（可选）</span></label>' +
-        '<textarea class="search-inp" id="fb-desc" rows="4" placeholder="请详细描述遇到的问题或期望的功能（可选）..." style="width:100%;box-sizing:border-box;resize:vertical"></textarea>' +
+        '<textarea class="search-inp" id="fb-desc" rows="4" placeholder="请详细描述遇到的问题或期望的功能（可选）... 支持粘贴图片" style="width:100%;box-sizing:border-box;resize:vertical" onpaste="handleDescPaste(event)"></textarea>' +
       '</div>' +
       '<div style="margin-bottom:12px">' +
         '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">反馈人 <span style="font-weight:400">（默认当前登录用户）</span></label>' +
@@ -380,6 +380,40 @@ async function loadFeedbackMembers() {
     }
   } catch (e) {
     sel.innerHTML = '<option value="">— 加载失败 —</option>';
+  }
+}
+
+async function handleDescPaste(e) {
+  var items = (e.clipboardData || window.clipboardData).items;
+  if (!items) return;
+  for (var i = 0; i < items.length; i++) {
+    if (items[i].type.indexOf('image') === 0) {
+      e.preventDefault();
+      var blob = items[i].getAsFile();
+      var ta = document.getElementById('fb-desc');
+      var cursorPos = ta.selectionStart;
+      var before = ta.value.substring(0, cursorPos);
+      var after = ta.value.substring(cursorPos);
+      ta.value = before + '[上传图片中...]' + after;
+      try {
+        var formData = new FormData();
+        formData.append('file', blob, 'paste-' + Date.now() + '.png');
+        var resp = await fetch('/api/gitlab/upload', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + (localStorage.getItem('pma_token') || '') },
+          body: formData,
+        });
+        if (!resp.ok) throw new Error('Upload failed');
+        var data = await resp.json();
+        var imgUrl = (data.data && data.data.url) || data.url || '';
+        if (imgUrl && !imgUrl.startsWith('http')) imgUrl = 'http://192.168.0.128' + imgUrl;
+        var mdImg = '\n' + (data.data && data.data.markdown ? data.data.markdown : '![image](' + imgUrl + ')') + '\n';
+        ta.value = ta.value.replace('[上传图片中...]', mdImg);
+      } catch(err) {
+        ta.value = ta.value.replace('[上传图片中...]', '[upload failed]');
+      }
+      break;
+    }
   }
 }
 
