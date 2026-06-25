@@ -683,7 +683,8 @@ async function submitUserEdit(id) {
   var roleIds = [];
   document.querySelectorAll('#ue-role-cbs .ue-role-cb:checked').forEach(function(cb) { roleIds.push(parseInt(cb.value)); });
   var role = roleIds.length > 0 ? _permRoles.find(function(r) { return r.id === roleIds[0]; }) : null;
-  var password = document.getElementById('ue-password').value;
+  var pwEl = document.getElementById('ue-password');
+  var password = pwEl ? pwEl.value : '';
   var msg = document.getElementById('ue-msg');
   var payload = { role: role ? role.key : 'viewer' };
   if (password) payload.password = password;
