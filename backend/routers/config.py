@@ -43,7 +43,6 @@ class GitLabConfig(BaseModel):
 
 class NasConfig(BaseModel):
     host: str = ""
-    path: str = ""
     username: str = ""
     password: str = ""
 
@@ -76,7 +75,6 @@ def _load_config() -> dict:
         },
         "nas": {
             "host": os.environ.get("NAS_HOST", ""),
-            "path": os.environ.get("NAS_PATH", ""),
             "username": os.environ.get("NAS_USERNAME", ""),
             "password": os.environ.get("NAS_PASSWORD", ""),
         },
@@ -113,7 +111,6 @@ def _save_config(cfg: dict) -> None:
         "gitlab.oauth_enabled": "GITLAB_OAUTH_ENABLED",
         "gitlab.oauth_redirect_uri": "GITLAB_OAUTH_REDIRECT_URI",
         "nas.host": "NAS_HOST",
-        "nas.path": "NAS_PATH",
         "nas.username": "NAS_USERNAME",
         "nas.password": "NAS_PASSWORD",
     }

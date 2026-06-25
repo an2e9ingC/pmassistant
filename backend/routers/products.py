@@ -219,6 +219,7 @@ def get_product_documents(product_id: int, db: Session = Depends(get_db), _=Depe
 class DocUpdate(BaseModel):
     status: Optional[str] = None  # "pending" | "submitted"
     location: Optional[str] = None
+    doc_type: Optional[str] = None  # gitlab/svn/nas/solidworks/pma
     uploaded_by: Optional[str] = None
     uploaded_at: Optional[str] = None
 
@@ -257,6 +258,8 @@ def update_product_document(
         if old_loc != body.location:
             doc_changes.append(f"location:'{old_loc}'->'{body.location}'")
         doc.location = body.location
+    if body.doc_type is not None:
+        doc.doc_type = body.doc_type
     if body.uploaded_by is not None:
         old_ub = doc.uploaded_by or ""
         if old_ub != body.uploaded_by:

@@ -91,7 +91,7 @@ async function loadProjectDetail(id) {
   document.getElementById('info-content').innerHTML = '<div class="loading-spinner">加载基本信息...</div>';
   document.getElementById('gantt-root').innerHTML = '<div class="loading-spinner">加载甘特图...</div>';
   document.getElementById('stages-tbody').innerHTML = '<tr><td colspan="8"><div class="loading-spinner">加载阶段数据...</div></td></tr>';
-  document.getElementById('docs-tbody').innerHTML = '<tr><td colspan="4"><div class="loading-spinner">加载文档数据...</div></td></tr>';
+  document.getElementById('docs-tbody').innerHTML = '<tr><td colspan="6"><div class="loading-spinner">加载文档数据...</div></td></tr>';
   document.getElementById('delivery-content').innerHTML = '<div class="loading-spinner">加载交付数据...</div>';
   document.getElementById('resources-content').innerHTML = '<div class="loading-spinner">加载产品文档...</div>';
 
@@ -1003,7 +1003,7 @@ function buildDocs(data) {
   // New format: { documents: [...], standard_stages: [...] }
   var stageList = (data && data.documents) ? data.documents : data;
   if (!stageList || !stageList.length) {
-    document.getElementById('docs-tbody').innerHTML = '<tr><td colspan="5"><div style="text-align:center;padding:30px;font-style:italic;color:var(--muted)">暂无文档清单<br><span style="font-size:11px">项目阶段尚未匹配到文档模板，请先配置文档模板</span></div></td></tr>';
+    document.getElementById('docs-tbody').innerHTML = '<tr><td colspan="6"><div style="text-align:center;padding:30px;font-style:italic;color:var(--muted)">暂无文档清单<br><span style="font-size:11px">项目阶段尚未匹配到文档模板，请先配置文档模板</span></div></td></tr>';
     return;
   }
 
@@ -1038,13 +1038,13 @@ function buildDocs(data) {
       // Standard stage with no execution and no documents
       rows += '<tr style="background:' + bg + ';opacity:0.5">' +
         '<td style="vertical-align:middle;font-weight:540;border-right:1px solid var(--border)">' + stageNameHtml + '</td>' +
-        '<td colspan="4" style="color:var(--muted);font-style:italic;font-size:12px">暂无文档（阶段未匹配到禅道数据或文档模板）</td>' +
+        '<td colspan="6" style="color:var(--muted);font-style:italic;font-size:12px">暂无文档（阶段未匹配到禅道数据或文档模板）</td>' +
       '</tr>';
     } else if (!hasDocs && hasExec) {
       // Has execution but no documents initialized yet
       rows += '<tr style="background:' + bg + ';opacity:0.5">' +
         '<td style="vertical-align:middle;font-weight:540;border-right:1px solid var(--border)">' + stageNameHtml + '</td>' +
-        '<td colspan="4" style="color:var(--muted);font-style:italic;font-size:12px">暂无文档（文档尚未初始化，请先配置文档模板）</td>' +
+        '<td colspan="6" style="color:var(--muted);font-style:italic;font-size:12px">暂无文档（文档尚未初始化，请先配置文档模板）</td>' +
       '</tr>';
     } else {
       items.forEach(function(d, i) {
@@ -1074,6 +1074,11 @@ function buildDocs(data) {
           '<td><span style="display:flex;align-items:center;gap:6px" title="' + escHtml(d.description || '') + '">' + delIcon + escHtml(d.doc_name) + '</span></td>' +
           '<td style="font-size:12px;color:' + (d.responsible_role ? 'var(--fg)' : 'var(--muted)') + '">' + escHtml(d.responsible_role || '—') + '</td>' +
           '<td>' + statusCell + '</td><td id="doc-loc-cell-' + d.id + '">' + locHtml + '</td>' +
+          '<td style="white-space:nowrap;text-align:center">' +
+            (d.location && isPreviewableUrl(d.location)
+              ? '<button class="btn-icon" title="预览" onclick="previewDocument(\'' + encodeURIComponent(d.location) + '\',\'' + escJs(d.doc_name || '') + '\')"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="3"/><path d="M1 8s3-6 7-6 7 6 7 6-3 6-7 6-7-6-7-6z"/></svg></button>'
+              : '') +
+          '</td>' +
         '</tr>';
       });
     }

@@ -985,7 +985,7 @@ def get_or_init_product_documents(db: Session, product_id: int) -> list[dict]:
                 "description": existing.description or "",
                 "responsible_role": existing.responsible_role or "",
                 "doc_path": actual_path,
-                "doc_type": tpl.doc_type or "",
+                "doc_type": existing.doc_type or tpl.doc_type or "",
                 "status": existing.status,
                 "done": done,
                 "warn": warn,

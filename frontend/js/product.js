@@ -706,8 +706,11 @@ function _renderProdDocsInline(docs) {
         '<td style="font-size:12px;color:var(--muted);' + cellStyle + '">' + escHtml(d.uploaded_by || '—') + '</td>' +
         '<td style="font-size:11px;color:var(--muted);white-space:nowrap;' + cellStyle + '">' + escHtml(d.uploaded_at || '—') + '</td>' +
         '<td style="white-space:nowrap;text-align:center;' + cellStyle + '">' +
-          iconBtn('👁', '预览', 'showToast(\'暂不支持\',\'info\')') +
-          '<button class="btn" style="font-size:12px;padding:2px 6px;margin-left:2px" onclick="showUploadDocDialog(' + d.id + ')" title="上传文档">📤</button>' +
+          (d.location && isPreviewableUrl(d.location)
+            ? iconBtn('👁', '预览', "previewDocument('" + encodeURIComponent(d.location) + "','" + escJs(d.doc_name || '') + "')")
+            : '') +
+          '<button class="btn-icon" onclick="showUploadDocDialog(' + d.id + ')" title="上传文档">' +
+            '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12V2M4 5l4-4 4 4M2 8v5a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8"/></svg></button>' +
         '</td>' +
       '</tr>';
     });
@@ -773,6 +776,7 @@ function _openUploadDialog(d) {
       (active ? ';background:var(--accent);color:#fff' : '') +
       '" onclick="setUploadType(\'' + type + '\')">' + label + '</button>';
   };
+  var currentUploadType = d.doc_type || 'gitlab';
   var html = '<div style="margin-bottom:10px">' +
     '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">期望路径：' + escHtml(d.doc_path || '未配置') + '</div>' +
     '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:6px">文档类型</label>' +
@@ -814,6 +818,10 @@ function setUploadType(type) {
 async function submitUploadDoc(docId) {
   var location = document.getElementById('upload-doc-location').value.trim();
   if (!location) { showToast('请输入文档位置', 'error'); return; }
+  // Get selected doc_type from the active button
+  var activeBtn = document.querySelector('#upload-type-btns .upload-type-btn[style*=\"background\"]');
+  var docType = (activeBtn && activeBtn.getAttribute('onclick') || '').match(/setUploadType\('(\w+)'\)/);
+  docType = (docType && docType[1]) || currentUploadType || 'gitlab';
 
   var currentUser = getCurrentUser();
   var uploadBy = currentUser ? (currentUser.display_name || currentUser.username) : '';
@@ -822,6 +830,7 @@ async function submitUploadDoc(docId) {
     await API.put('/products/' + _prodDetailCurId + '/documents/' + docId, {
       status: 'submitted',
       location: location,
+      doc_type: docType,
       uploaded_by: uploadBy,
       uploaded_at: now,
     });

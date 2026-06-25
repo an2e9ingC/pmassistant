@@ -269,3 +269,83 @@ function showStageMismatchDialog(execId, stageName, suggestedName, event) {
   openDialog('⚠ 请修改禅道阶段名为标准名字', bodyHtml, buttons, { overlayClass: 'stage-mismatch-dialog-overlay' });
 }
 
+/* ── Document Preview ── */
+
+var _PREVIEWABLE_EXTS = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'md', 'txt', 'docx'];
+
+function isPreviewableUrl(url) {
+  if (!url) return false;
+  var u = url.split('?')[0].split('#')[0];
+  var ext = u.split('.').pop().toLowerCase();
+  return _PREVIEWABLE_EXTS.indexOf(ext) >= 0;
+}
+
+function previewDocument(url, filename) {
+  // Decode URL if passed through onclick (to avoid JS escape sequence issues with backslashes)
+  try { url = decodeURIComponent(url); } catch(e) {}
+  if (!isPreviewableUrl(url)) {
+    showToast('不支持预览此链接（仅支持 ' + _PREVIEWABLE_EXTS.join('/') + ' 格式）', 'info');
+    return;
+  }
+  var u = url.split('?')[0].split('#')[0];
+  var ext = u.split('.').pop().toLowerCase();
+  var token = localStorage.getItem('pma_token') || '';
+  var fetchUrl = '/api/documents/fetch?url=' + encodeURIComponent(url) + '&token=' + encodeURIComponent(token);
+  var title = filename || u.split('/').pop() || u.split('\\').pop() || '文档预览';
+  var isHttp = /^https?:\/\//.test(url);
+
+  // Build dialog
+  var dlgId = 'preview-dlg-' + Date.now();
+  var html = '<div class="note-dialog-overlay" id="' + dlgId + '" style="z-index:9999">' +
+    '<div class="note-dialog" style="max-width:90vw;width:90vw;max-height:90vh;display:flex;flex-direction:column">' +
+      '<div class="note-dialog-head" style="flex-shrink:0">' +
+        '<span class="note-dialog-title">' + escHtml(title) + '</span>' +
+        '<span style="display:flex;align-items:center;gap:8px">' +
+          (isHttp ? '<a href="' + escHtml(url) + '" target="_blank" style="font-size:11px;color:var(--accent);text-decoration:none;margin-right:12px">在新窗口打开</a>' : '') +
+          '<button class="note-dialog-close" onclick="document.getElementById(\'' + dlgId + '\').remove()">&times;</button>' +
+        '</span>' +
+      '</div>' +
+      '<div id="' + dlgId + '-body" style="flex:1;overflow:auto;min-height:300px;display:flex;align-items:center;justify-content:center">' +
+        '<div class="loading-spinner">加载中...</div>' +
+      '</div>' +
+    '</div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+
+  // ESC to close
+  var escHandler = function(e) { if (e.key === 'Escape') { document.getElementById(dlgId).remove(); document.removeEventListener('keydown', escHandler); } };
+  document.addEventListener('keydown', escHandler);
+
+  var body = document.getElementById(dlgId + '-body');
+
+  // PDF / Images: direct iframe/img
+  if (['pdf'].indexOf(ext) >= 0) {
+    body.innerHTML = '<iframe src="' + fetchUrl + '" style="width:100%;height:100%;min-height:70vh;border:none"></iframe>';
+    return;
+  }
+  if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].indexOf(ext) >= 0) {
+    body.innerHTML = '<div style="text-align:center;padding:20px"><img src="' + fetchUrl + '" style="max-width:100%;max-height:80vh" onerror="this.parentElement.innerHTML=\'<div class=error-state>图片加载失败</div>\'"></div>';
+    return;
+  }
+
+  // MD / TXT / DOCX: fetch content
+  fetch(fetchUrl).then(function(res) {
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    if (ext === 'docx') return res.arrayBuffer();
+    return res.text();
+  }).then(function(data) {
+    if (ext === 'md') {
+      body.innerHTML = '<div style="padding:20px;max-width:900px;margin:0 auto;line-height:1.7">' + marked.parse(data) + '</div>';
+    } else if (ext === 'docx') {
+      mammoth.convertToHtml({ arrayBuffer: data }).then(function(result) {
+        body.innerHTML = '<div style="padding:20px;max-width:900px;margin:0 auto;line-height:1.7">' + result.value + '</div>';
+      }).catch(function() {
+        body.innerHTML = '<div class="error-state">文档解析失败</div>';
+      });
+    } else {
+      body.innerHTML = '<pre style="padding:20px;white-space:pre-wrap;font-size:13px;line-height:1.6">' + escHtml(data || '') + '</pre>';
+    }
+  }).catch(function(e) {
+    body.innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '</div>';
+  });
+}
+

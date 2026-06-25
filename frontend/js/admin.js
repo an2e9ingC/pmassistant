@@ -36,7 +36,6 @@ function renderConfigForm(cfg) {
     ]},
     { key: 'nas', title: 'NAS 存储', fields: [
       { key: 'host', label: '主机地址', type: 'text', ph: '192.168.x.x' },
-      { key: 'path', label: '挂载路径', type: 'text', ph: '/mnt/nas/pre-sales/' },
       { key: 'username', label: '用户名', type: 'text', ph: '' },
       { key: 'password', label: '密码', type: 'password', ph: '' },
     ]},

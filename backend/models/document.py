@@ -88,6 +88,7 @@ class ProductDocument(Base):
     description = Column(String(512), nullable=True)
     doc_path = Column(String(512), nullable=True)
     location = Column(Text, nullable=True)
+    doc_type = Column(String(32), nullable=True)  # gitlab/svn/nas/solidworks/pma
     completed_at = Column(DateTime, nullable=True)
     uploaded_by = Column(String(64), nullable=True)
     uploaded_at = Column(DateTime, nullable=True)

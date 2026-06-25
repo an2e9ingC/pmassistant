@@ -106,6 +106,30 @@ GITLAB_OAUTH_REDIRECT_URI=http://<PMA-服务器地址>:8000/api/auth/gitlab/call
 3. 完成授权，检查是否正确返回 PMA 并登录成功
 4. 进入「管理 → 用户管理」，确认新用户显示「GitLab」认证来源
 
+### 1.5 NAS/SMB 文件访问（可选，文档预览需要）
+
+PMA 支持预览 NAS 上的 PDF/图片/Office 等文件，需配置 SMB 凭据并安装依赖。
+
+#### 依赖安装
+
+```bash
+pip install pysmb
+```
+
+> 如 pip 不可用，先修复：`apt install --reinstall python3-pip`
+
+#### 配置
+
+进入「管理 → 数据源配置 → NAS 存储」，填写：
+
+| 字段 | 说明 | 示例 |
+|------|------|------|
+| 主机地址 | SMB 服务器 IP | `192.168.0.180` |
+| 用户名 | SMB 登录账号 | `your_account` |
+| 密码 | SMB 登录密码 | `your_password` |
+
+文档 URL 格式：`\\192.168.0.180\共享名\路径\文件.pdf`，无需额外挂载。
+
 ---
 
 ## 二、运行
