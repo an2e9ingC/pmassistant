@@ -1047,8 +1047,8 @@ async function init() {
   }
 
   // Show welcome dialog for first-time GitLab users
-  if (sessionStorage.getItem('pma_new_user') === '1') {
-    sessionStorage.removeItem('pma_new_user');
+  if (localStorage.getItem('pma_new_user') === '1') {
+    localStorage.removeItem('pma_new_user');
     showNewUserWelcomeDialog();
   }
 
