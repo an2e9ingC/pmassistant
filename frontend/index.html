@@ -191,7 +191,7 @@
         <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle;margin-right:3px"><circle cx="8" cy="8" r="6"/><line x1="8" y1="5" x2="8" y2="9"/><circle cx="8" cy="12" r="0.8" fill="currentColor" stroke="none"/></svg>
         问题反馈
       </a>
-      <span id="app-version">v2026.06.26-beta1</span>
+      <span id="app-version">v2026.06.26-beta2</span>
     </div>
   </div>
 </aside>
@@ -341,7 +341,7 @@
           </div>
         </div>
       </div>
-      <div class="card table-scroll" style="margin-bottom:28px">
+      <div class="card table-scroll" id="proj-table-wrap" style="margin-bottom:8px">
         <table class="proj-table clickable">
           <thead>
             <tr>
@@ -363,11 +363,11 @@
         </table>
       </div>
 
-      <div class="section-hd">
-        <div class="section-title">需关注告警</div>
+      <div class="section-hd" style="cursor:pointer" onclick="toggleAlertSection()">
+        <div class="section-title">需关注告警 <span id="alert-toggle-icon" style="font-size:14px;vertical-align:middle">▶</span></div>
         <div class="section-acts"><span style="font-size:12px;color:var(--muted)" id="alert-count">共 0 条</span></div>
       </div>
-      <div class="card alert-list table-scroll" id="alert-list">
+      <div class="card alert-list table-scroll" id="alert-list" style="display:none">
         <div class="loading-spinner">加载告警...</div>
       </div>
     </div>

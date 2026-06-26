@@ -21,7 +21,6 @@ async function renderDashboard() {
   await Promise.all([
     loadKpiCards(),
     loadProjectTable(curTypeFilter),
-    loadAlertList(),
   ]);
   _dashboardLoading = false;
 }
@@ -197,6 +196,37 @@ async function loadProjectTable(filter) {
 /* Alert List */
 
 var _alertProjectFilter = null; // { id, label } when filtered by project
+
+async function _resizeProjTable() {
+  var wrap = document.getElementById('proj-table-wrap');
+  if (!wrap) return;
+  var top = wrap.getBoundingClientRect().top;
+  var avail = window.innerHeight - top - 32;  // 32px bottom margin
+  wrap.style.maxHeight = Math.max(200, avail) + 'px';
+}
+
+function toggleAlertSection() {
+  var list = document.getElementById('alert-list');
+  var icon = document.getElementById('alert-toggle-icon');
+  if (!list || !icon) return;
+  if (list.style.display === 'none') {
+    list.style.display = '';
+    icon.textContent = '▼';
+    loadAlertList();
+  } else {
+    list.style.display = 'none';
+    icon.textContent = '▶';
+  }
+  setTimeout(_resizeProjTable, 100);
+}
+
+window.addEventListener('resize', _resizeProjTable);
+// Call after table render
+var _origRenderDashboard = renderDashboard;
+renderDashboard = function() {
+  _origRenderDashboard();
+  setTimeout(_resizeProjTable, 200);
+};
 
 async function loadAlertList(projectId) {
   var container = document.getElementById('alert-list');
