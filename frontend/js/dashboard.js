@@ -157,7 +157,6 @@ async function loadProjectTable(filter) {
     }
 
     tbody.innerHTML = list.map(function(p) {
-      var fc = p.status === 'blocked' ? 'red' : (parseFloat(p.progress) >= 100 ? 'green' : 'blue');
       var projCode = extractProjectCode(p.name);
       var coreName = extractCoreName(p.name);
       // Tags: show max 3, or "无" if none
@@ -185,7 +184,7 @@ async function loadProjectTable(filter) {
         '<td style="font-size:13px">' + escHtml(p.current_stage || '—') + '</td>' +
         '<td style="font-size:12.5px;color:' + (p.end ? 'var(--muted)' : 'var(--warn)') + '">' + (p.end ? formatDate(p.end) : '长期') + '</td>' +
         '<td>' + renderPill(p.status) + '</td>' +
-        '<td class="prog-cell">' + renderProgressBar(p.progress, p.status) + '</td>' +
+        '<td style="text-align:center">' + renderProgressCircle(parseFloat(p.progress) || 0, 32, { label: '' }) + '</td>' +
         '<td><span class="risk-tag" style="--risk-color:' + riskColor + ';background:' + riskBg + ';font-size:11px">' + riskLabel + '</span></td>' +
         '<td>' + tagsHtml + '</td>' +
       '</tr>';

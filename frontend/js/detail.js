@@ -148,9 +148,6 @@ async function loadProjectDetail(id) {
 function buildDetailHeader(p) {
   if (!p) return;
   var progress = parseFloat(p.progress) || 0;
-  var pctArc = (progress / 100) * 138.2;
-  var gap = 138.2 - pctArc;
-  var rc = p.status === 'blocked' ? 'var(--danger)' : progress > 75 ? 'var(--success)' : 'var(--accent)';
 
   var dateHtml = '';
   if (p.begin && p.end) {
@@ -190,14 +187,7 @@ function buildDetailHeader(p) {
           : (p.zentao_url ? ' <a href="' + p.zentao_url + '" target="_blank" class="zentao-link" title="在禅道中查看">&#x2197; 禅道</a>' : '')) +
       '</div>' +
     '</div>' +
-    '<div class="ring-wrap">' +
-      '<svg width="56" height="56" viewBox="0 0 56 56">' +
-        '<circle cx="28" cy="28" r="22" fill="none" stroke="var(--border)" stroke-width="5"/>' +
-        '<circle cx="28" cy="28" r="22" fill="none" stroke="' + rc + '" stroke-width="5"' +
-                ' stroke-dasharray="' + pctArc + ' ' + gap + '" stroke-linecap="round" transform="rotate(-90 28 28)"/>' +
-      '</svg>' +
-      '<div><div class="ring-val">' + progress + '<span style="font-size:14px;font-weight:500">%</span></div><div class="ring-lbl">整体进度</div></div>' +
-    '</div>';
+    renderProgressCircle(progress, 56, { label: "整体进度" });
 }
 
 /* Info Tab — Basic Info */

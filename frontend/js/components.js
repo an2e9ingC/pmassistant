@@ -62,6 +62,37 @@ function toggleFavProduct(id) {
   return idx < 0; // true = added, false = removed
 }
 
+function renderProgressCircle(percent, size, opts) {
+  // Standard circular progress ring. opts: { color, label }
+  // Percentage inside the ring, label below.
+  opts = opts || {};
+  var s = size || 56;
+  var sw = Math.max(3, Math.round(s * 0.1));  // stroke: 10% of size
+  var r = (s / 2) - sw;  // radius
+  var cx = s / 2;
+  var pct = Math.round(Math.min(100, Math.max(0, percent || 0)));
+  var circumference = 2 * Math.PI * r;
+  var dash = (pct / 100) * circumference;
+  var gap = circumference - dash;
+  var color = opts.color || (pct >= 100 ? 'var(--success)' : pct >= 75 ? 'var(--success)' : pct >= 50 ? 'var(--warn)' : pct > 0 ? 'var(--accent)' : 'var(--border)');
+  var textSize = Math.round(s * 0.32);
+  var labelSize = Math.round(s * 0.16);
+  var label = opts.label !== undefined ? opts.label : '';
+  var html = '<div class="ring-wrap" style="display:inline-flex;flex-direction:column;align-items:center;gap:4px">' +
+    '<div style="position:relative;width:' + s + 'px;height:' + s + 'px">' +
+    '<svg width="' + s + '" height="' + s + '" viewBox="0 0 ' + s + ' ' + s + '">' +
+      '<circle cx="' + cx + '" cy="' + cx + '" r="' + r + '" fill="none" stroke="var(--border)" stroke-width="' + sw + '"/>' +
+      '<circle cx="' + cx + '" cy="' + cx + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + sw + '"' +
+        ' stroke-dasharray="' + dash.toFixed(1) + ' ' + gap.toFixed(1) + '" stroke-linecap="round" transform="rotate(-90 ' + cx + ' ' + cx + ')"/>' +
+    '</svg>' +
+    '<div style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:' + textSize + 'px;font-weight:600;font-family:var(--mono);line-height:1">' +
+      pct + '<span style="font-size:' + Math.round(textSize * 0.5) + 'px">%</span></div>' +
+    '</div>';
+  if (label) html += '<div style="font-size:' + labelSize + 'px;color:var(--muted);font-weight:500">' + label + '</div>';
+  html += '</div>';
+  return html;
+}
+
 function iconFav(onclick, active, title) {
   return '<button class="btn-icon" onclick="' + onclick + '" title="' + (title || '收藏') + '" style="font-size:16px;' + (active ? 'color:var(--warn)' : '') + '">' +
     (active ? '★' : '☆') + '</button>';

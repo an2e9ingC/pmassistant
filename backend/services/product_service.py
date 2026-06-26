@@ -202,7 +202,18 @@ def _product_item(p: CachedProduct, db: Session) -> dict:
         "tags_list": tags_str.split(",") if tags_str else [],
         "is_local": bool(p.is_local),
         "synced_at": to_local_str(p.synced_at) or None,
+        "doc_completion": _doc_completion(p.id, db),
     }
+
+
+def _doc_completion(product_id: int, db: Session) -> int:
+    """Calculate document completion percentage for a product."""
+    from backend.models.document import ProductDocument
+    docs = db.query(ProductDocument).filter(ProductDocument.product_id == product_id).all()
+    if not docs:
+        return 0
+    submitted = sum(1 for d in docs if d.status == "submitted")
+    return round(submitted / len(docs) * 100)
 
 
 def _product_detail(p: CachedProduct, db: Session) -> dict:
@@ -242,6 +253,7 @@ def _product_detail(p: CachedProduct, db: Session) -> dict:
         "projects": projects,
         "project_count": len(projects),
         "releases_list": _get_product_releases(db, p.id),
+        "doc_completion": _doc_completion(p.id, db),
         "is_local": bool(p.is_local),
         "synced_at": to_local_str(p.synced_at) or None,
         "tree_path": _get_product_tree_path(db, p.id),
