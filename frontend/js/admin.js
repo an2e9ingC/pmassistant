@@ -768,13 +768,14 @@ async function toggleDebugPerm() {
     if (toggle) toggle.classList.toggle('on', next);
     // Refresh current page title
     var view = localStorage.getItem('pm_view') || 'dashboard';
-    var title = VIEW_TITLES[view] || '';
+    var entry = VIEW_REGISTRY[view];
+    var title = entry ? entry.title : '';
     if (next) {
       var user = getCurrentUser();
       var roleKey = user ? (user.role || '?') : '未登录';
       var roleLabels = window._roleLabels || {};
       var currentLabel = roleLabels[roleKey] || roleKey;
-      var permKey = VIEW_PERMS[view] || '?';
+      var permKey = entry ? (entry.perm || '登录即可') : '?';
       var permRoles = window._permRoles || {};
       var requiredLabel = (permRoles[permKey] || []).join(', ') || permKey;
       title += ' <span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:8px">[需: ' + requiredLabel + ' | 当前: ' + currentLabel + ']</span>';

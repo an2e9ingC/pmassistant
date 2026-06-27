@@ -1,17 +1,126 @@
 /* ═══════════════════════════════════════════════════
    MAIN APP
 ═══════════════════════════════════════════════════ */
-var VIEW_TITLES = { dashboard: '项目总览', detail: '项目详情', topology: '快速检索', reports: '统计报告', logs: '系统日志', users: '用户管理', permissions: '权限管理', config: '数据源配置', 'doc-templates': '项目&模板管理', 'standards': '流程规范', 'product-management': '产品管理', 'product-list': '产品总览', 'product-detail': '产品详情', 'gitlab-releases': 'GitLab 发布', 'db-manage': '数据库管理', customers: '客户管理', 'customer-detail': '客户详情', 'notif-manage': '通知管理', 'user-center': '用户中心' };
-
-// Permission requirements per view (for debug display)
-var VIEW_PERMS = {
-  dashboard: '登录即可', detail: '登录即可', topology: '登录即可', reports: '登录即可',
-  logs: 'admin', users: 'admin', permissions: 'admin', config: 'admin',
-  'doc-templates': 'doc_template', standards: 'doc_template',
-  'db-manage': 'admin', 'product-management': 'product_link', 'product-list': '登录即可', 'product-detail': '登录即可',
-  customers: 'customer_link', 'customer-detail': '登录即可',
-  'gitlab-releases': '登录即可', 'notif-manage': '登录即可', 'user-center': '登录即可',
+// Human-readable permission labels for error toasts
+var TOAST_PERM_LABELS = {
+  admin: '管理员',
+  doc_template: '文档模板配置',
+  product_link: '产品维护',
+  customer_link: '客户维护',
 };
+
+// ── View init wrappers (complex init logic extracted from gotoView) ──
+
+function initDashboard() {
+  var dashNewProjBtn = document.getElementById('dash-new-proj-btn');
+  if (dashNewProjBtn) {
+    var user = getCurrentUser();
+    var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+    var isAdmin = user && (user.role === 'admin' || perms.indexOf('admin') >= 0);
+    dashNewProjBtn.style.display = isAdmin ? '' : 'none';
+  }
+  renderDashboard();
+  var lastPid = sessionStorage.getItem('pm_last_proj_id');
+  if (lastPid) {
+    sessionStorage.removeItem('pm_last_proj_id');
+    setTimeout(function() {
+      var row = document.getElementById('proj-row-' + lastPid);
+      if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 300);
+  }
+}
+
+function initDetailView() {
+  loadComboProjects().then(function() {
+    if (_comboCurId) { loadProjectDetail(_comboCurId); }
+  });
+}
+
+function initLogsView() {
+  clearLogAutoRefresh();
+  renderLogs();
+}
+
+// ── View Registry (single source of truth for all views) ──
+
+var VIEW_REGISTRY = {
+  dashboard:        { title: '项目总览',    label: '项目总览',    perm: null,            init: initDashboard },
+  detail:           { title: '项目详情',    label: '项目详情',    perm: null,            init: initDetailView,         js: '/js/detail.js?v=250625' },
+  'product-list':   { title: '产品总览',    label: '产品总览',    perm: null,            init: initProductList },
+  'product-detail': { title: '产品详情',    label: '产品详情',    perm: null,            init: initProductDetail },
+  'product-management': { title: '产品管理', label: '产品管理',  perm: 'product_link',  initName: 'initProductManagement', js: '/js/product-management.js?v=250625' },
+  customers:        { title: '客户管理',    label: '客户管理',    perm: 'customer_link', initName: 'initCustomerManagement', js: '/js/customers.js?v=250625' },
+  'customer-detail':{ title: '客户详情',    label: '客户详情',    perm: null,            initName: 'initCustomerDetail',   js: '/js/customers.js?v=250625' },
+  topology:         { title: '快速检索',    label: '快速检索',    perm: null,            initName: 'initTopology',         js: '/js/topology.js?v=250625' },
+  'gitlab-releases':{ title: 'GitLab 发布', label: 'GitLab 发布', perm: null,            initName: 'initGitLabReleases',   js: '/js/gitlab-releases.js?v=250625' },
+  reports:          { title: '统计报告',    label: '统计报告',    perm: null,            initName: 'renderReports',        js: '/js/reports.js?v=250625' },
+  'notif-manage':   { title: '通知管理',    label: '通知管理',    perm: null,            init: initNotifManage },
+  logs:             { title: '系统日志',    label: '系统日志',    perm: 'admin',         init: initLogsView,           js: '/js/logs.js?v=250625' },
+  users:            { title: '用户管理',    label: '用户管理',    perm: 'admin',         initName: 'initUserManagement',   js: '/js/admin.js?v=250625' },
+  permissions:      { title: '权限管理',    label: '权限管理',    perm: 'admin',         initName: 'initPermissions',      js: '/js/admin.js?v=250625' },
+  config:           { title: '数据源配置',  label: '数据源配置',  perm: 'admin',         initName: 'initAdmin',            js: '/js/admin.js?v=250625' },
+  'doc-templates':  { title: '项目&模板管理', label: '项目&模板管理', perm: 'doc_template', initName: 'initDocTemplates',  js: '/js/doc-templates.js?v=250625' },
+  standards:        { title: '流程规范',    label: '流程规范',    perm: 'doc_template',  initName: 'initStandards',        js: '/js/standards.js?v=250625' },
+  'db-manage':      { title: '数据库管理',  label: '数据库管理',  perm: 'admin',         initName: 'initDbManage',         js: '/js/db-manage.js?v=250625' },
+  'user-center':    { title: '用户中心',    label: '用户中心',    perm: null,            init: initUserCenter },
+};
+
+// ── Lazy script loader ──
+
+var _loadedScripts = {};
+var _loadingScripts = {};
+
+function loadViewScript(url, callback) {
+  if (_loadedScripts[url]) { callback(); return; }
+  if (_loadingScripts[url]) { _loadingScripts[url].push(callback); return; }
+  _loadingScripts[url] = [callback];
+  var script = document.createElement('script');
+  script.src = url;
+  script.onload = function() {
+    _loadedScripts[url] = true;
+    var cbs = _loadingScripts[url] || [];
+    delete _loadingScripts[url];
+    for (var i = 0; i < cbs.length; i++) { cbs[i](); }
+  };
+  script.onerror = function() {
+    delete _loadingScripts[url];
+    showToast('页面加载失败，请刷新重试', 'error');
+  };
+  document.head.appendChild(script);
+}
+
+// ── Nav visibility ──
+
+function updateNavVisibility() {
+  var user = getCurrentUser();
+  if (!user) return;
+
+  var perms = (user.permissions || '').split(',').filter(Boolean);
+  var isAdmin = user.role === 'admin' || perms.indexOf('admin') >= 0;
+
+  // Show/hide each nav item based on VIEW_REGISTRY permission
+  document.querySelectorAll('.nav-item').forEach(function(item) {
+    var viewName = item.id.replace('nav-', '');
+    var entry = VIEW_REGISTRY[viewName];
+    if (!entry) return; // not a view-linked item (e.g., user menu items)
+
+    if (!entry.perm) {
+      item.style.display = '';
+    } else {
+      item.style.display = (isAdmin || perms.indexOf(entry.perm) >= 0) ? '' : 'none';
+    }
+  });
+
+  // Hide empty nav groups (including the admin group)
+  document.querySelectorAll('.sidebar-nav .nav-group').forEach(function(group) {
+    var items = group.querySelectorAll('.nav-item');
+    var hasVisible = false;
+    items.forEach(function(item) {
+      if (item.style.display !== 'none') hasVisible = true;
+    });
+    group.style.display = hasVisible ? '' : 'none';
+  });
+}
 
 var _pageDirty = false;
 function markPageDirty() { _pageDirty = true; }
@@ -21,7 +130,7 @@ function isPageDirty() { return _pageDirty; }
 var _navigatingBack = false;
 
 function gotoView(view, pushState) {
-  // Check auth
+  // Auth guard
   if (!isLoggedIn()) {
     window.location.href = '/login';
     return;
@@ -33,22 +142,30 @@ function gotoView(view, pushState) {
     _pageDirty = false;
   }
 
-  // Update views
+  // Lookup registry
+  var entry = VIEW_REGISTRY[view];
+  if (!entry) return;
+
+  // Permission check
+  if (entry.perm) {
+    var permLabel = TOAST_PERM_LABELS[entry.perm] || entry.perm;
+    if (!canAccess(entry.perm, entry.label + '需要 ' + permLabel + ' 权限')) return;
+  }
+
+  // Activate view DOM
   document.querySelectorAll('.view').forEach(function(v) { v.classList.remove('active'); });
   var viewEl = document.getElementById('view-' + view);
   if (viewEl) viewEl.classList.add('active');
 
-  // Update nav
+  // Activate nav
   document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
   var navEl = document.getElementById('nav-' + view);
   if (navEl) navEl.classList.add('active');
 
-  // Update title
-  var title = VIEW_TITLES[view] || '';
-  // Permission debug overlay (globally toggled via permissions page)
+  // Title with optional debug overlay
+  var title = entry.title || '';
   if (window._debugPermEnabled) {
     var user = getCurrentUser();
-    // 当前: user's effective permissions (derived from all assigned roles)
     var userPerms = user ? (user.permissions || '').split(',').filter(Boolean) : [];
     var permLabels = {
       'admin': '系统管理', 'sync': '数据同步', 'project_edit': '项目维护',
@@ -58,111 +175,31 @@ function gotoView(view, pushState) {
     var currentLabel = userPerms.length
       ? userPerms.map(function(p) { return permLabels[p] || p; }).join(', ')
       : (user ? '仅登录' : '未登录');
-    // 需: roles that have the required permission
-    var permKey = VIEW_PERMS[view] || '?';
+    var permKey = entry.perm || '登录即可';
     var permRoles = window._permRoles || {};
     var requiredLabel = (permRoles[permKey] || []).join(', ') || permKey;
     title += ' <span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:8px">[需: ' + requiredLabel + ' | 当前: ' + currentLabel + ']</span>';
   }
   document.getElementById('topbar-title').innerHTML = title;
 
-  // View-specific init
-  if (view === 'dashboard') {
-    // Show/hide 新建项目 button based on permissions
-    var dashNewProjBtn = document.getElementById('dash-new-proj-btn');
-    if (dashNewProjBtn) {
-      var user = getCurrentUser();
-      var perms = (user && user.permissions) ? user.permissions.split(',') : [];
-      var isAdmin = user && (user.role === 'admin' || perms.indexOf('admin') >= 0);
-      dashNewProjBtn.style.display = isAdmin ? '' : 'none';
-    }
-    renderDashboard();
-    // Restore scroll to previously viewed project row
-    var lastPid = sessionStorage.getItem('pm_last_proj_id');
-    if (lastPid) {
-      sessionStorage.removeItem('pm_last_proj_id');
-      setTimeout(function() {
-        var row = document.getElementById('proj-row-' + lastPid);
-        if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }, 300);
-    }
-  }
-  if (view === 'detail') {
-    loadComboProjects().then(function() {
-      if (_comboCurId) {
-        loadProjectDetail(_comboCurId);
+  // Init — lazy-load JS if needed, then init
+  var doInit = function() {
+    var initFn = entry.init;
+    if (!initFn && entry.initName) initFn = window[entry.initName];
+    if (initFn) initFn();
+    localStorage.setItem('pm_view', view);
+    if (pushState !== false && !_navigatingBack) {
+      var url = '#/' + view;
+      if (window.location.hash !== url) {
+        history.pushState({ view: view }, '', url);
       }
-    });
-  }
-  if (view === 'topology') {
-    initTopology();
-  }
-  if (view === 'reports') {
-    renderReports();
-  }
-  if (view === 'logs') {
-    if (!canAccess('admin', '系统日志仅限管理员访问')) return;
-    clearLogAutoRefresh();
-    renderLogs();
-  }
-  if (view === 'config') {
-    if (!canAccess('admin', '数据源配置仅限管理员访问')) return;
-    initAdmin();
-  }
-  if (view === 'doc-templates') {
-    if (!canAccess('doc_template', '项目&模板管理需要 doc_template 权限')) return;
-    initDocTemplates();
-  }
-  if (view === 'standards') {
-    if (!canAccess('doc_template', '流程规范需要 doc_template 权限')) return;
-    initStandards();
-  }
-  if (view === 'db-manage') {
-    if (!canAccess('admin', '数据库管理仅限管理员访问')) return;
-    initDbManage();
-  }
-  if (view === 'users') {
-    if (!canAccess('admin', '用户管理仅限管理员访问')) return;
-    initUserManagement();
-  }
-  if (view === 'permissions') {
-    if (!canAccess('admin', '权限管理仅限管理员访问')) return;
-    initPermissions();
-  }
-  if (view === 'gitlab-releases') {
-    initGitLabReleases();
-  }
-  if (view === 'product-list') {
-    initProductList();
-  }
-  if (view === 'product-detail') {
-    initProductDetail();
-  }
-  if (view === 'product-management') {
-    if (!canAccess('product_link', '产品管理需要 product_link 权限')) return;
-    initProductManagement();
-  }
-  if (view === 'customers') {
-    if (!canAccess('customer_link', '客户管理需要 customer_link 权限')) return;
-    initCustomerManagement();
-  }
-  if (view === 'customer-detail') {
-    initCustomerDetail();
-  }
-  if (view === 'notif-manage') {
-    initNotifManage();
-  }
-  if (view === 'user-center') {
-    initUserCenter();
-  }
-  localStorage.setItem('pm_view', view);
-
-  // Browser history: push state unless navigating back/forward or initial load
-  if (pushState !== false && !_navigatingBack) {
-    var url = '#/' + view;
-    if (window.location.hash !== url) {
-      history.pushState({ view: view }, '', url);
     }
+  };
+
+  if (entry.js) {
+    loadViewScript(entry.js, doInit);
+  } else {
+    doInit();
   }
 }
 
@@ -968,34 +1005,12 @@ async function init() {
     if (pwMenuItem) {
       pwMenuItem.style.display = (user.auth_source === 'gitlab') ? 'none' : '';
     }
-    // Show admin nav items based on permissions
-    var perms = (user && user.permissions) ? user.permissions.split(',') : [];
-    var isAdmin = user && (user.role === 'admin' || perms.indexOf('admin') >= 0);
-    var hasAdminAccess = user && (isAdmin || perms.indexOf('doc_template') >= 0);
-    if (hasAdminAccess) {
-      var adminGroup = document.getElementById('nav-group-admin');
-      if (adminGroup) adminGroup.style.display = '';
-      // Non-admin: hide admin-only items
-      if (!isAdmin) {
-        var adminOnlyIds = ['nav-users', 'nav-permissions', 'nav-config', 'nav-logs', 'nav-db-manage'];
-        adminOnlyIds.forEach(function(id) {
-          var el = document.getElementById(id);
-          if (el) el.style.display = 'none';
-        });
-      }
-    }
-
-    // Hide nav items for pages user lacks permission to access
-    if (!isAdmin && perms.indexOf('customer_link') < 0) {
-      var custNav = document.getElementById('nav-customers');
-      if (custNav) custNav.style.display = 'none';
-    }
-    if (!isAdmin && perms.indexOf('product_link') < 0) {
-      var pmNav = document.getElementById('nav-product-management');
-      if (pmNav) pmNav.style.display = 'none';
-    }
+    // Show/hide nav items based on user permissions (driven by VIEW_REGISTRY)
+    updateNavVisibility();
 
     // Show sync button only for users with sync permission
+    var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+    var isAdmin = user && (user.role === 'admin' || perms.indexOf('admin') >= 0);
     var syncBtn = document.getElementById('src-sync-btn');
     if (syncBtn && (isAdmin || perms.indexOf('sync') >= 0)) {
       syncBtn.style.display = 'flex';
