@@ -100,67 +100,32 @@ function gotoView(view, pushState) {
     renderReports();
   }
   if (view === 'logs') {
-    var user = getCurrentUser();
-    var perms = (user && user.permissions) ? user.permissions.split(',') : [];
-    if (!user || (user.role !== 'admin' && perms.indexOf('admin') < 0)) {
-      showToast('系统日志仅限管理员访问', 'error');
-      return;
-    }
+    if (!canAccess('admin', '系统日志仅限管理员访问')) return;
     clearLogAutoRefresh();
     renderLogs();
   }
   if (view === 'config') {
-    var user = getCurrentUser();
-    var perms = (user && user.permissions) ? user.permissions.split(',') : [];
-    if (!user || (user.role !== 'admin' && perms.indexOf('admin') < 0)) {
-      showToast('数据源配置仅限管理员访问', 'error');
-      return;
-    }
+    if (!canAccess('admin', '数据源配置仅限管理员访问')) return;
     initAdmin();
   }
   if (view === 'doc-templates') {
-    var user = getCurrentUser();
-    var perms = (user && user.permissions) ? user.permissions.split(',') : [];
-    if (!user || (user.role !== 'admin' && perms.indexOf('doc_template') < 0)) {
-      showToast('项目&模板管理需要 doc_template 权限', 'error');
-      return;
-    }
+    if (!canAccess('doc_template', '项目&模板管理需要 doc_template 权限')) return;
     initDocTemplates();
   }
   if (view === 'standards') {
-    var user = getCurrentUser();
-    var perms = (user && user.permissions) ? user.permissions.split(',') : [];
-    if (!user || (user.role !== 'admin' && perms.indexOf('doc_template') < 0)) {
-      showToast('流程规范需要 doc_template 权限', 'error');
-      return;
-    }
+    if (!canAccess('doc_template', '流程规范需要 doc_template 权限')) return;
     initStandards();
   }
   if (view === 'db-manage') {
-    var user = getCurrentUser();
-    var perms = (user && user.permissions) ? user.permissions.split(',') : [];
-    if (!user || (user.role !== 'admin' && perms.indexOf('admin') < 0)) {
-      showToast('数据库管理仅限管理员访问', 'error');
-      return;
-    }
+    if (!canAccess('admin', '数据库管理仅限管理员访问')) return;
     initDbManage();
   }
   if (view === 'users') {
-    var user = getCurrentUser();
-    var perms = (user && user.permissions) ? user.permissions.split(',') : [];
-    if (!user || (user.role !== 'admin' && perms.indexOf('admin') < 0)) {
-      showToast('用户管理仅限管理员访问', 'error');
-      return;
-    }
+    if (!canAccess('admin', '用户管理仅限管理员访问')) return;
     initUserManagement();
   }
   if (view === 'permissions') {
-    var user = getCurrentUser();
-    var perms = (user && user.permissions) ? user.permissions.split(',') : [];
-    if (!user || (user.role !== 'admin' && perms.indexOf('admin') < 0)) {
-      showToast('权限管理仅限管理员访问', 'error');
-      return;
-    }
+    if (!canAccess('admin', '权限管理仅限管理员访问')) return;
     initPermissions();
   }
   if (view === 'gitlab-releases') {
@@ -173,21 +138,11 @@ function gotoView(view, pushState) {
     initProductDetail();
   }
   if (view === 'product-management') {
-    var user = getCurrentUser();
-    var perms = (user && user.permissions) ? user.permissions.split(',') : [];
-    if (!user || (user.role !== 'admin' && perms.indexOf('product_link') < 0)) {
-      showToast('产品管理需要 product_link 权限', 'error');
-      return;
-    }
+    if (!canAccess('product_link', '产品管理需要 product_link 权限')) return;
     initProductManagement();
   }
   if (view === 'customers') {
-    var user = getCurrentUser();
-    var perms = (user && user.permissions) ? user.permissions.split(',') : [];
-    if (!user || (user.role !== 'admin' && perms.indexOf('customer_link') < 0)) {
-      showToast('客户管理需要 customer_link 权限', 'error');
-      return;
-    }
+    if (!canAccess('customer_link', '客户管理需要 customer_link 权限')) return;
     initCustomerManagement();
   }
   if (view === 'customer-detail') {

@@ -13,6 +13,23 @@ function getCurrentUser() {
   }
 }
 
+/**
+ * Check if current user has the required permission.
+ * Admin users (role=admin or with admin perm) always pass.
+ * @param {string} perm - Permission key to check
+ * @param {string} errorMsg - Error message shown via toast on denial
+ * @returns {boolean}
+ */
+function canAccess(perm, errorMsg) {
+  var user = getCurrentUser();
+  var perms = (user && user.permissions) ? user.permissions.split(',').filter(Boolean) : [];
+  if (!user) return false;
+  if (user.role === 'admin' || perms.indexOf('admin') >= 0) return true;
+  if (perms.indexOf(perm) >= 0) return true;
+  showToast(errorMsg, 'error');
+  return false;
+}
+
 async function onLogin(e) {
   e.preventDefault();
   const username = document.getElementById('login-username').value;
