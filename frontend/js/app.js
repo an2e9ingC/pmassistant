@@ -1331,7 +1331,7 @@ async function showNewUserWelcomeDialog() {
 }
 
 function _getEffectiveTheme() {
-  var mode = localStorage.getItem('pm_theme_mode') || 'light';
+  var mode = localStorage.getItem('pm_theme_mode') || 'auto';
   if (mode === 'auto') {
     var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
     return prefersDark ? 'dark' : 'light';
