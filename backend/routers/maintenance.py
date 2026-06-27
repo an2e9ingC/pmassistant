@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
-from backend.middleware.auth import require_perm
+from backend.middleware.auth import get_current_user, require_perm
 from backend.models.zentao import ProductProjectLink, CustomerProjectLink, CustomerProductLink, CachedProduct, CachedProject, CachedCustomer
 from backend.services.project_service import log_project_activity
 
@@ -21,7 +21,7 @@ class LinkIds(BaseModel):
 # ── Customer List ──
 
 @router.get("/customers", response_model=dict)
-def list_customers(db: Session = Depends(get_db)):
+def list_customers(db: Session = Depends(get_db), _=Depends(get_current_user)):
     """List all cached customers for dropdown selection."""
     customers = db.query(CachedCustomer).order_by(CachedCustomer.name).all()
     return {"code": 0, "data": [{"id": c.id, "name": c.name} for c in customers], "message": "ok"}

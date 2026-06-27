@@ -10,6 +10,7 @@ var VIEW_PERMS = {
   'doc-templates': 'doc_template', standards: 'doc_template',
   'db-manage': 'admin', 'product-management': 'product_link', 'product-list': '登录即可', 'product-detail': '登录即可',
   customers: 'customer_link', 'customer-detail': '登录即可',
+  'gitlab-releases': '登录即可', 'notif-manage': '登录即可', 'user-center': '登录即可',
 };
 
 var _pageDirty = false;
