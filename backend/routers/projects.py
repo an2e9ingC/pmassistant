@@ -509,7 +509,13 @@ def delete_project(
     db.query(ProjectActivity).filter(ProjectActivity.project_id == project_id).delete()
     # Delivery records
     db.query(DeliveryRecord).filter(DeliveryRecord.project_id == project_id).delete()
-    # Sync logs (keep for audit, just remove project_id reference)
+    # PMA tasks + worklogs + comments
+    from backend.models.task import Task as PmaTask, WorkLog, TaskComment
+    pma_task_ids = [r[0] for r in db.query(PmaTask.id).filter(PmaTask.project_id == project_id).all()]
+    if pma_task_ids:
+        db.query(WorkLog).filter(WorkLog.task_id.in_(pma_task_ids)).delete()
+        db.query(TaskComment).filter(TaskComment.task_id.in_(pma_task_ids)).delete()
+        db.query(PmaTask).filter(PmaTask.project_id == project_id).delete()
     # Finally delete the project itself
     db.delete(project)
     db.commit()

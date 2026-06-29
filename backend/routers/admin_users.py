@@ -45,7 +45,7 @@ ROLES = [
 ]
 
 # Available permissions
-ALL_PERMISSIONS = ["admin", "sync", "project_edit", "product_link", "customer_link", "doc_template", "stage_mapping"]
+ALL_PERMISSIONS = ["admin", "sync", "project_edit", "product_link", "customer_link", "doc_template", "stage_mapping", "task_edit", "worklog_edit"]
 
 ROLE_LABELS = {
     "public": "普通用户",
@@ -60,6 +60,7 @@ PERM_LABELS = {
     "admin": "系统管理", "sync": "数据同步", "project_edit": "项目维护",
     "product_link": "产品维护", "customer_link": "客户维护",
     "doc_template": "文档模板配置", "stage_mapping": "阶段映射",
+    "task_edit": "任务管理", "worklog_edit": "工时填报",
 }
 
 

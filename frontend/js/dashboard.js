@@ -305,7 +305,7 @@ function toggleSortCode() {
 
 function openProject(id) {
   sessionStorage.setItem('pm_last_proj_id', id);
-  selectComboProject(id);
+  window._pendingProjectId = id;  // detail.js may not be loaded yet — initDetailView will pick this up
   gotoView('detail');
 }
 

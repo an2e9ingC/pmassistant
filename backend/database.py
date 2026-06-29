@@ -416,6 +416,7 @@ def init_db():
     from backend.models.delivery import DeliveryRecord  # noqa: F401
     from backend.models.document import DocumentTemplate, ProjectDocument, ProductDocTemplate, ProductLine, PmaTag, ProductDocument  # noqa: F401
     from backend.models.standard import ProcessStandard  # noqa: F401
+    from backend.models.task import Task, WorkLog, TaskComment  # noqa: F401
     from backend.models.log_entry import LogEntry  # noqa: F401
     from backend.models.zentao import (  # noqa: F401
         CachedProject,
@@ -465,7 +466,7 @@ def init_db():
             ("admin", "管理员", "admin,sync,project_edit,product_link,customer_link,doc_template,stage_mapping", "系统完整管理权限（不可修改）"),
             ("ceo", "CEO", "", "查看所有项目数据"),
             ("cto", "CTO", "", "查看所有项目数据"),
-            ("pm", "项目经理", "sync,project_edit,product_link,customer_link,doc_template,stage_mapping", "项目管理+同步+产客关系维护+文档模板+阶段映射"),
+            ("pm", "项目经理", "sync,project_edit,product_link,customer_link,doc_template,stage_mapping,task_edit,worklog_edit", "项目管理+同步+产客关系维护+文档模板+阶段映射+任务+工时"),
             ("sales", "销售及售前", "", "查看售前+分配项目"),
             ("hw_dev", "硬件开发", "", "查看分配项目"),
             ("structure", "结构设计及装配", "", "查看分配项目"),

@@ -72,6 +72,15 @@
 .pill.planning::before { background: var(--warn); }
 .pill.canceled { background: var(--bg); color: var(--muted); border: 1px solid var(--border); text-decoration: line-through; }
 .pill.canceled::before { background: var(--muted); }
+/* PMA task statuses */
+.pill.todo { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+.pill.todo::before { background: var(--muted); }
+.pill.in_progress { background: var(--accent-lt); color: var(--accent); }
+.pill.in_progress::before { background: var(--accent); }
+.pill.review { background: var(--warn-lt); color: var(--warn); }
+.pill.review::before { background: var(--warn); }
+.pill.done { background: var(--success-lt); color: var(--success); }
+.pill.done::before { background: var(--success); }
 
 .progress-bar {
   height: 6px; background: var(--border);
