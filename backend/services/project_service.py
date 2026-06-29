@@ -78,7 +78,7 @@ def _get_stage_anomaly_counts(db: Session, project_ids: list[int]) -> dict:
     # Check each project's executions for non-exact matches and overdue
     projects = db.query(CachedProject).filter(CachedProject.id.in_(project_ids)).all()
     for p in projects:
-        standard_stages = get_stage_types_for_project(p.project_type or "RD")
+        standard_stages = get_stage_types_for_project(p.project_type or "RD", db)
         executions = db.query(CachedExecution).filter(
             CachedExecution.project_id == p.id
         ).all()
@@ -149,7 +149,7 @@ def get_project_stages(db: Session, project_id: int) -> dict:
     # Sync project documents with latest templates (add/remove/update)
     from backend.services.document_service import _sync_from_templates
     _sync_from_templates(db, project_id, project.project_type or "RD")
-    standard_stages = get_stage_types_for_project(project.project_type or "RD")
+    standard_stages = get_stage_types_for_project(project.project_type or "RD", db)
 
     executions = (
         db.query(CachedExecution)
@@ -289,7 +289,7 @@ def get_project_documents(db: Session, project_id: int) -> dict:
 
     project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
     project_type = project.project_type if project else "RD"
-    standard_stages = get_stage_types_for_project(project_type)
+    standard_stages = get_stage_types_for_project(project_type, db)
 
     # Init documents for matched stages (incremental)
     docs_list = get_or_init_project_documents(db, project_id, project_type)
@@ -345,7 +345,7 @@ def get_project_gantt(db: Session, project_id: int) -> dict:
     Matched executions fill in real data; missing stages show placeholders.
     """
     project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
-    standard_stages = get_stage_types_for_project(project.project_type or "RD")
+    standard_stages = get_stage_types_for_project(project.project_type or "RD", db)
 
     executions = (
         db.query(CachedExecution)

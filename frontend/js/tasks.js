@@ -479,7 +479,7 @@ function _showTaskForm(title, task) {
         inputId: 'tf-project-input',
         dropdownId: 'tf-proj-dropdown',
         selectedIdFn: function() { return _tfProjectId; },
-        onSelect: function(p) { _tfProjectId = p.id; }
+        onSelect: function(p) { _tfProjectId = p.id; _loadTfExecutions(p.id); }
       }) + '</div>' +
     '</div>' +
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
@@ -553,6 +553,23 @@ function _showTaskForm(title, task) {
     var tfInput = document.getElementById('tf-project-input');
     if (tfInput && _taskProjectName) tfInput.value = _taskProjectName;
   }, 100);
+
+function _loadTfExecutions(projectId) {
+  API.get('/projects/' + projectId + '/gantt').then(function(data) {
+    var sel = document.getElementById('tf-execution');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">选择阶段...</option>';
+    if (data && data.stages) {
+      data.stages.forEach(function(s) {
+        var eid = s.execution_id || s.id || '';
+        var opt = document.createElement('option');
+        opt.value = eid;
+        opt.textContent = s.name || s.standard_stage || '';
+        sel.appendChild(opt);
+      });
+    }
+  }).catch(function() {});
+}
 
   // Async: load executions for project (pre-fill from detail tab)
   if (_taskProjectId) {
@@ -739,7 +756,21 @@ function _renderBatchForm(rows) {
 function _loadBatchExecs(projectId) {
   API.get('/projects/' + projectId + '/gantt').then(function(data) {
     _batchExecutions = (data && data.stages) ? data.stages : [];
-  }).catch(function() { _batchExecutions = []; });
+    // Refresh all existing stage dropdowns
+    _refreshBatchExecSelects();
+  }).catch(function() { _batchExecutions = []; _refreshBatchExecSelects(); });
+}
+
+function _refreshBatchExecSelects() {
+  var opts = '<option value="">选择阶段</option>' +
+    _batchExecutions.map(function(s) {
+      return '<option value="' + (s.execution_id || s.id || '') + '">' + escHtml(s.name || s.standard_stage || '') + '</option>';
+    }).join('');
+  document.querySelectorAll('[id^="bt-exec-"]').forEach(function(sel) {
+    var prev = sel.value;
+    sel.innerHTML = opts;
+    if (prev) sel.value = prev; // preserve previous selection if still valid
+  });
 }
 
 function _batchAddRow() {

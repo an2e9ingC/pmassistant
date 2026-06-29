@@ -54,11 +54,21 @@ STAGE_TYPES = [
 ]
 
 
-def get_stage_types_for_project(project_type: str) -> list[str]:
-    """Return the standard stage list for a given project type."""
-    if project_type == "SC":
-        return SC_STAGE_TYPES
-    return RD_STAGE_TYPES  # default: R&D
+def get_stage_types_for_project(project_type: str, db=None) -> list[str]:
+    """Return the standard stage list for a given project type.
+
+    Checks custom stage types from pma_settings when db is available.
+    Falls back to hardcoded RD/SC lists for built-in types or when db is None.
+    """
+    if not project_type or project_type in ("RD", "SC"):
+        return SC_STAGE_TYPES if project_type == "SC" else RD_STAGE_TYPES
+    # Custom project type: check for saved custom stages
+    if db:
+        custom = _get_custom_stage_types(db, project_type)
+        if custom:
+            return custom
+    # Fallback: use RD stages as superset for unknown/custom types
+    return RD_STAGE_TYPES
 
 # Seed data: default document templates per stage type.
 # These are inserted on first startup if the document_templates table is empty.
