@@ -1257,8 +1257,7 @@ function initUserCenter() {
         '<div class="panel"><div class="task-table-wrap"><table class="task-table"><thead id="uc-table-head"></thead><tbody id="uc-table-tbody"></tbody></table></div></div>' +
       '</div>' +
       '<div>' +
-        '<div class="sec-hd"><h2>看板 & 工时</h2></div>' +
-        '<div class="panel panel-pad" id="uc-calendar"></div>' +
+        '<div id="uc-calendar"></div>' +
       '</div>' +
     '</div>';
 
@@ -1369,7 +1368,7 @@ function _ucLoadCalendar(user) {
     var totalTasks = tasks.length;
     var html = '';
 
-    // Pie charts
+    // Pie charts card
     if (totalTasks > 0 && typeof _buildPieChart === 'function') {
       var cols = [
         {key:'todo',label:'待办',color:'var(--muted)'},
@@ -1380,19 +1379,33 @@ function _ucLoadCalendar(user) {
       var byStatus = {}; cols.forEach(function(c){byStatus[c.key]=0;});
       tasks.forEach(function(t){var s=t.status||'todo';byStatus[s]=(byStatus[s]||0)+1;});
       var statusCounts = {}; cols.forEach(function(c){statusCounts[c.key]=byStatus[c.key]||0;});
-      var byProj = {}, projColors = ['var(--accent)','var(--success)','var(--warn)','var(--danger)','#8b5cf6','#ec4899','#06b6d4','#f97316','#84cc16'];
+
+      // Project distribution: top 3 by count, show project code only, fill missing with —
+      var byProj = {}, projColors = ['var(--accent)','var(--success)','var(--warn)'];
       var projList = [];
       tasks.forEach(function(t){var pn=t.project_name||'未知';if(!byProj[pn]){byProj[pn]=0;projList.push({key:pn,label:pn});}byProj[pn]++;});
-      projList.forEach(function(s,i){s.color=projColors[i%projColors.length];});
-      html += '<div style="display:flex;gap:8px;margin-bottom:10px">' +
-        _buildPieChart(cols,statusCounts,totalTasks,'状态分布') +
-        _buildPieChart(projList,byProj,totalTasks,'项目分布') + '</div>';
+      projList.sort(function(a,b){return byProj[b.key]-byProj[a.key];});
+      projList = projList.slice(0,3);
+      while (projList.length < 3) { var dummy = '—'; projList.push({key:dummy+projList.length,label:dummy}); byProj[dummy+projList.length]=0; }
+      projList.forEach(function(s,i){s.color=projColors[i];s.label=(typeof extractProjectCode==='function'?extractProjectCode(s.label):s.label);});
+
+      // Filter to only active groups for status pie
+      var activeCols = cols.filter(function(c){return (statusCounts[c.key]||0)>0;});
+      html += '<div class="panel panel-pad" style="margin-bottom:18px">' +
+        '<div class="sec-hd"><h2>任务统计</h2></div>' +
+        '<div style="display:flex;gap:8px">' +
+          _buildPieChart(activeCols,statusCounts,totalTasks,'状态分布') +
+          _buildPieChart(projList,byProj,totalTasks,'项目分布') +
+        '</div></div>';
     }
 
-    // Monthly calendar with intensity colors
+    // Calendar card
+    html += '<div class="panel panel-pad">' +
+      '<div class="sec-hd"><h2>工时</h2></div>';
     if (typeof _renderMonthCalendar === 'function') {
       html += _renderMonthCalendar(now, dailyMap, data);
     }
+    html += '</div>';
     cal.innerHTML = html;
   }).catch(function(){});
 }

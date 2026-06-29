@@ -690,47 +690,51 @@ document.addEventListener('click', function(e) {
    ═══════════════════════════════════════════════════ */
 
 function _buildPieChart(groups, counts, total, title) {
-  var cx = 45, cy = 45, radius = 36, strokeWidth = 14;
-  var circumference = 2 * Math.PI * radius;
-  var accumulated = 0;
-  var paths = '';
-
+  // conic-gradient for accurate visual, transparent SVG for hover tooltips
+  var pieParts = [];
+  var acc = 0;
   groups.forEach(function(g) {
     var cnt = counts[g.key] || 0;
     if (cnt <= 0) return;
-    var pct = cnt / total;
-    var dashLen = pct * circumference;
-    var dashOffset = circumference - accumulated / total * circumference;
-    var color = g.color;
-    if (color.indexOf('var(') === 0) color = _resolveCSSVar(color);
-    paths += '<circle cx="'+cx+'" cy="'+cy+'" r="'+radius+'" fill="none" stroke="'+color+'" stroke-width="'+strokeWidth+'" ' +
-      'stroke-dasharray="'+dashLen.toFixed(1)+' '+(circumference-dashLen).toFixed(1)+'" ' +
-      'stroke-dashoffset="'+(-dashOffset).toFixed(1)+'" ' +
-      'style="transform:rotate(-90deg);transform-origin:'+cx+'px '+cy+'px;cursor:pointer;transition:opacity 0.15s" ' +
+    var pct = cnt/total;
+    pieParts.push(g.color+' '+Math.round(acc*100)+'% '+Math.round((acc+pct)*100)+'%');
+    acc += pct;
+  });
+  var gradient = pieParts.length ? 'conic-gradient('+pieParts.join(',')+')' : '';
+
+  // Transparent SVG overlay for tooltips
+  var cx=45, cy=45, r=36, sw=14, C=2*Math.PI*r;
+  var a=0, svgPaths='';
+  groups.forEach(function(g) {
+    var cnt = counts[g.key] || 0;
+    if (cnt <= 0) return;
+    var pct = cnt/total;
+    var len = pct*C;
+    svgPaths += '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="transparent" stroke-width="'+sw+'" ' +
+      'stroke-dasharray="'+len.toFixed(1)+' '+(C-len).toFixed(1)+'" stroke-dashoffset="'+(-a).toFixed(1)+'" ' +
+      'style="transform:rotate(-90deg);transform-origin:'+cx+'px '+cy+'px;cursor:pointer" ' +
       'onmouseover="_showPieTooltip(event,\''+escHtml(g.label)+'\','+cnt+','+Math.round(pct*100)+')" ' +
-      'onmouseout="_hidePieTooltip()">' +
-      '<title>'+escHtml(g.label)+': '+cnt+' ('+Math.round(pct*100)+'%)</title></circle>';
-    accumulated += cnt;
+      'onmouseout="_hidePieTooltip()"><title>'+escHtml(g.label)+': '+cnt+' ('+Math.round(pct*100)+'%)</title></circle>';
+    a += len;
   });
 
-  var svg = '<svg width="90" height="90" viewBox="0 0 90 90" style="flex-shrink:0">' +
-    '<circle cx="'+cx+'" cy="'+cy+'" r="'+radius+'" fill="none" stroke="var(--border)" stroke-width="'+strokeWidth+'"/>' +
-    paths + '</svg>';
+  var svg = '<svg width="90" height="90" viewBox="0 0 90 90" style="position:absolute;top:0;left:0">'+svgPaths+'</svg>';
 
   return '<div style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:14px;display:flex;flex-direction:column;align-items:center;gap:12px">' +
-    '<div style="font-weight:620;font-size:13px">' + title + '</div>' +
-    '<div style="position:relative;width:90px;height:90px">' + svg +
-      '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none">' +
-        '<span style="font-size:18px;font-weight:700;font-family:var(--mono);line-height:1">' + total + '</span>' +
-        '<span style="font-size:10px;color:var(--muted)">个任务</span></div></div>' +
+    '<div style="font-weight:620;font-size:13px">'+title+'</div>' +
+    '<div style="position:relative;width:90px;height:90px">' +
+      '<div style="width:72px;height:72px;border-radius:50%;background:'+gradient+';margin:9px"></div>' +
+      '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:54px;height:54px;border-radius:50%;background:var(--surface);display:flex;flex-direction:column;align-items:center;justify-content:center">' +
+        '<span style="font-size:18px;font-weight:700;font-family:var(--mono);line-height:1">'+total+'</span></div>' +
+      svg +
+    '</div>' +
     '<div style="width:100%;font-size:11px;line-height:1.6">' +
       groups.map(function(g) {
         var cnt = counts[g.key] || 0;
-        if (!cnt) return '';
-        var pct = Math.round(cnt/total*100);
+        if (!cnt) { if(g.label==='—')return '<div style="display:flex;align-items:center;justify-content:space-between;padding:2px 0"><span style="color:var(--muted)">—</span><span style="color:var(--muted)">—</span></div>'; return ''; }
         return '<div style="display:flex;align-items:center;justify-content:space-between;padding:2px 0">' +
           '<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+g.color+';margin-right:6px;vertical-align:middle"></span>'+escHtml(g.label)+'</span>' +
-          '<span style="font-family:var(--mono);color:var(--muted)">'+cnt+' ('+pct+'%)</span></div>';
+          '<span style="font-family:var(--mono);color:var(--muted)">'+cnt+' ('+Math.round(cnt/total*100)+'%)</span></div>';
       }).join('') +
     '</div></div>';
 }
