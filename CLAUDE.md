@@ -131,3 +131,15 @@ CSS class（`tokens.css`）：`.btn-sm` / `.btn-xs` / `.btn-icon` / `.card-pad` 
 JS 工厂函数（`components.js`）：`sectionHeader()` / `iconBtn()` / `linkChip()` / `chipTag()` / `openDialog()` / `multiSelectDialog()` / `renderPill()` / `renderTypeBadge()` / `renderProgressBar()`
 
 详见 `.claude/skills/pma-frontend-rules/SKILL.md`。
+
+---
+
+## 7. 开发调试规则
+
+### 版本号
+
+**每次修改代码前**更新 `frontend/index.html#app-version`。文档版本号仅在 commit 时同步，不额外 +1，允许非连续。详见 `Skill("pma-version")`。
+
+### 前端组件
+
+**禁止复制粘贴后修改。** 搜索下拉、对话框、状态标签、进度条等统一使用 `components.js` 中的工厂函数。新增状态需同步 `STATUS_TXT` + CSS。详见 `Skill("pma-frontend-rules")`。

@@ -1,6 +1,6 @@
 ---
 name: pma-frontend-rules
-description: 前端开发规范 — 主题兼容（CSS变量）、TODO占位符格式、UI组件工厂函数
+description: 前端开发规范 — 主题兼容（CSS变量）、TODO占位符格式、UI组件工厂函数、组件复用原则、开发教训
 user-invocable: true
 allowed-tools: Read, Write, Edit, Bash
 ---
@@ -46,6 +46,10 @@ allowed-tools: Read, Write, Edit, Bash
 | `renderPill(status)` | 状态圆点 |
 | `renderTypeBadge(type)` | 类型 badge |
 | `renderProgressBar(percent, status)` | 进度条 |
+| `renderProgressRing(percent, size, opts)` | 环形进度 |
+| `createProjectCombo(opts)` | 项目搜索下拉（新建HTML+注册函数） |
+| `initProjectCombo(opts)` | 项目搜索下拉（已有HTML，仅注册函数） |
+| `initSearchCombo(opts)` | 通用搜索下拉（自定义数据源） |
 
 ### 开发检查点
 
@@ -53,3 +57,30 @@ allowed-tools: Read, Write, Edit, Bash
 2. section-hd 是否使用了 `sectionHeader()`？
 3. 关联 chip 是否使用了 `linkChip()`？
 4. 颜色变化是否可以用 factory 参数区分？
+
+## 组件复用原则
+
+**优先复用已有组件，禁止复制粘贴后修改。**
+
+1. **搜索下拉**：统一使用 `createProjectCombo()` / `initProjectCombo()` / `initSearchCombo()`。新页面需要项目/产品搜索时，勿手写下拉逻辑。
+2. **对话框**：使用 `openDialog()`，禁止手写 overlay HTML。
+3. **状态标签**：使用 `renderPill()`，需先在 `utils.js` 的 `STATUS_TXT` 和 `components.css` 中注册新状态的 CSS 类。
+4. **进度条**：使用 `renderProgressBar()` / `renderProgressRing()`。
+5. **颜色**：必须使用 CSS 变量（`var(--xxx)`），禁止硬编码 hex 值。
+6. **新增 UI 模式**：先检查 `components.js` 是否已有可复用函数；如无，提取为公共组件而非内联实现。
+
+### 正确工作流
+
+```
+1. 在现有页面找到类似功能 → 复制粘贴 → 修改定制 → 验证可行
+2. 提取公共组件到 components.js
+3. 逐页迁移 → 逐页验证（不要边迁移边重构边改 API）
+4. 删除旧代码
+```
+
+## 开发教训（本项目的踩坑记录）
+
+1. **API 字段名以实际返回为准**：`/api/dashboard/projects` 返回 `data.items` 而非 `data.projects`。需查看后端实际 `return` 语句确认 key 名。
+2. **JS 函数名不能含连字符**：`task-proj-comboOpen()` 被解析为 `task - proj - comboOpen()`。通过 `onclick` 属性调用的函数名必须转驼峰。
+3. **提取组件时同步更新 HTML 中的 onclick**：`onfocus="oldFunc()"` 和 JS 里 `window.newFunc = ...` 要一起改。
+4. **删变量定义时检查所有引用**：简化函数时删了变量定义但漏删使用处 → `ReferenceError`。
