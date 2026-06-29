@@ -447,3 +447,163 @@ function previewDocument(url, filename) {
   });
 }
 
+/* ═══════════════════════════════════════════════════
+   PROJECT COMBO — reusable searchable project selector
+   Usage: createProjectCombo({ comboId, inputId, dropdownId, placeholder, onSelect })
+   Generates global functions: {comboId}Open(), {comboId}Filter(q), {comboId}Select(id)
+   ═══════════════════════════════════════════════════ */
+
+var _allProjects = [];
+var _allProjectsLoaded = false;
+
+async function loadAllProjects() {
+  if (_allProjectsLoaded) return;
+  try {
+    var data = await API.get('/projects');
+    if (data) _allProjects = data;
+    _allProjectsLoaded = true;
+  } catch(e) {}
+}
+
+function _fnName(comboId, suffix) {
+  // Convert 'task-proj-combo' + 'Open' -> 'taskProjComboOpen'
+  return comboId.replace(/-([a-z])/g, function(m, c) { return c.toUpperCase(); }) + suffix;
+}
+
+function _setupComboFunctions(opts) {
+  var comboId = opts.comboId;
+  var inputId = opts.inputId;
+  var dropdownId = opts.dropdownId;
+  var onSelect = opts.onSelect;
+  var selectedIdFn = opts.selectedIdFn || function() { return null; };
+
+  var openFn = _fnName(comboId, 'Open');
+  var filterFn = _fnName(comboId, 'Filter');
+  var selectFn = _fnName(comboId, 'Select');
+
+  window[openFn] = function() {
+    loadAllProjects().then(function() {
+      var wrap = document.getElementById(comboId);
+      if (!wrap) { console.error(comboId + ' not found'); return; }
+      wrap.classList.add('open');
+      var input = document.getElementById(inputId);
+      if (input) input.select();
+      _renderComboDropdown(dropdownId, selectedIdFn(), '', selectFn);
+    }).catch(function(e) { console.error(comboId + ' load error:', e); });
+  };
+
+  window[filterFn] = function(q) {
+    _renderComboDropdown(dropdownId, selectedIdFn(), q, selectFn);
+  };
+
+  window[selectFn] = function(id) {
+    var wrap = document.getElementById(comboId);
+    if (wrap) wrap.classList.remove('open');
+    var p = _allProjects.find(function(x) { return x.id == id; });
+    if (p) {
+      document.getElementById(inputId).value = p.name;
+      if (onSelect) onSelect(p);
+    }
+  };
+}
+
+function createProjectCombo(opts) {
+  _setupComboFunctions(opts);
+  var openFn = _fnName(opts.comboId, 'Open');
+  var filterFn = _fnName(opts.comboId, 'Filter');
+  return '<div class="proj-combo" id="' + opts.comboId + '">' +
+    '<input class="proj-combo-input" id="' + opts.inputId + '" type="text" autocomplete="off" placeholder="' + escHtml(opts.placeholder || '搜索或选择项目…') + '" ' +
+      'onfocus="' + openFn + '()" oninput="' + filterFn + '(this.value)">' +
+    '<svg class="proj-combo-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2,5 7,10 12,5"/></svg>' +
+    '<div class="proj-combo-dropdown" id="' + opts.dropdownId + '"></div>' +
+  '</div>';
+}
+
+// For existing HTML (e.g., detail page, product page) — just wire up the functions
+function initProjectCombo(opts) {
+  _setupComboFunctions(opts);
+}
+
+// Generic search combo: accepts custom dataSource (array or async function returning array)
+function initSearchCombo(opts) {
+  var comboId = opts.comboId;
+  var inputId = opts.inputId;
+  var dropdownId = opts.dropdownId;
+  var onSelect = opts.onSelect;
+  var getData = opts.dataSource;
+  var selectedIdFn = opts.selectedIdFn || function() { return null; };
+
+  var openFn = _fnName(comboId, 'Open');
+  var filterFn = _fnName(comboId, 'Filter');
+  var selectFn = _fnName(comboId, 'Select');
+
+  window[openFn] = function() {
+    var wrap = document.getElementById(comboId);
+    if (wrap) wrap.classList.add('open');
+    var input = document.getElementById(inputId);
+    if (input) input.select();
+    Promise.resolve(typeof getData === 'function' ? getData() : getData).then(function(items) {
+      _renderSearchDropdown(dropdownId, items, selectedIdFn(), '', selectFn);
+    });
+  };
+
+  window[filterFn] = function(q) {
+    Promise.resolve(typeof getData === 'function' ? getData() : getData).then(function(items) {
+      _renderSearchDropdown(dropdownId, items, selectedIdFn(), q, selectFn);
+    });
+  };
+
+  window[selectFn] = function(id) {
+    var wrap = document.getElementById(comboId);
+    if (wrap) wrap.classList.remove('open');
+    Promise.resolve(typeof getData === 'function' ? getData() : getData).then(function(items) {
+      var p = items.find(function(x) { return x.id == id; });
+      if (p) {
+        document.getElementById(inputId).value = p.name;
+        if (onSelect) onSelect(p);
+      }
+    });
+  };
+}
+
+function _renderSearchDropdown(dropdownId, items, selectedId, q, selectFnName) {
+  var dd = document.getElementById(dropdownId);
+  if (!dd) return;
+  var v = (q || '').trim().toLowerCase();
+  var list = v ? items.filter(function(p) {
+    return (p.code || '').toLowerCase().indexOf(v) >= 0 || (p.name || '').toLowerCase().indexOf(v) >= 0;
+  }) : items;
+  if (!list.length) { dd.innerHTML = '<div class="combo-no-match">未找到匹配项目</div>'; return; }
+  dd.innerHTML = list.map(function(p) {
+    var cls = p.id == selectedId ? 'combo-opt selected' : 'combo-opt';
+    return '<div class="' + cls + '" onmousedown="event.preventDefault()" onclick="' + selectFnName + '(' + p.id + ')">' +
+      '<div class="combo-opt-name">' + escHtml(p.name) + '</div>' +
+      '<div class="combo-opt-meta">' + escHtml(p.code || '') + '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function _renderComboDropdown(dropdownId, selectedId, q, selectFnName) {
+  var dd = document.getElementById(dropdownId);
+  if (!dd) return;
+  var v = (q || '').trim().toLowerCase();
+  var list = v ? _allProjects.filter(function(p) {
+    return (p.code || '').toLowerCase().indexOf(v) >= 0 || (p.name || '').toLowerCase().indexOf(v) >= 0;
+  }) : _allProjects;
+  if (!list.length) { dd.innerHTML = '<div class="combo-no-match">未找到匹配项目</div>'; return; }
+  dd.innerHTML = list.map(function(p) {
+    var cls = p.id == selectedId ? 'combo-opt selected' : 'combo-opt';
+    return '<div class="' + cls + '" onmousedown="event.preventDefault()" onclick="' + selectFnName + '(' + p.id + ')">' +
+      '<div class="combo-opt-name">' + escHtml(p.name) + '</div>' +
+      '<div class="combo-opt-meta">' + escHtml(p.code || '') + '</div>' +
+    '</div>';
+  }).join('');
+}
+
+// Global click to close any open combo
+document.addEventListener('click', function(e) {
+  document.querySelectorAll('.proj-combo').forEach(function(c) {
+    if (!c.contains(e.target)) c.classList.remove('open');
+  });
+});
+

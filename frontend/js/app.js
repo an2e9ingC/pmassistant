@@ -7,6 +7,8 @@ var TOAST_PERM_LABELS = {
   doc_template: '文档模板配置',
   product_link: '产品维护',
   customer_link: '客户维护',
+  task_edit: '任务管理',
+  worklog_edit: '工时填报',
 };
 
 // ── View init wrappers (complex init logic extracted from gotoView) ──
@@ -31,8 +33,14 @@ function initDashboard() {
 }
 
 function initDetailView() {
-  loadComboProjects().then(function() {
-    if (_comboCurId) { loadProjectDetail(_comboCurId); }
+  loadAllProjects().then(function() {
+    if (window._pendingProjectId) {
+      document.getElementById('combo-input').value = '';
+      projComboSelect(window._pendingProjectId);
+      window._pendingProjectId = null;
+    } else if (_comboCurId) {
+      loadProjectDetail(_comboCurId);
+    }
   });
 }
 
@@ -63,6 +71,7 @@ var VIEW_REGISTRY = {
   standards:        { title: '流程规范',    label: '流程规范',    perm: 'doc_template',  initName: 'initStandards',        js: '/js/standards.js?v=250625' },
   'db-manage':      { title: '数据库管理',  label: '数据库管理',  perm: 'admin',         initName: 'initDbManage',         js: '/js/db-manage.js?v=250625' },
   'user-center':    { title: '用户中心',    label: '用户中心',    perm: null,            init: initUserCenter },
+  tasks:            { title: '任务管理',    label: '任务管理',    perm: null,            initName: 'initTasks',            js: '/js/tasks.js?v=250625' },
 };
 
 // ── Lazy script loader ──
@@ -1262,6 +1271,16 @@ function initUserCenter() {
       '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">角色与权限</div>' +
       '<div style="padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;line-height:2.2">' + permBadges + '</div>' +
     '</div>' +
+    // My tasks section
+    '<div style="margin-bottom:16px">' +
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">我的任务</div>' +
+      '<div id="uc-my-tasks" style="padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:12px">加载中...</div>' +
+    '</div>' +
+    // Weekly worklog summary
+    '<div style="margin-bottom:16px">' +
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">本周工时</div>' +
+      '<div id="uc-weekly-hours" style="padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:12px">加载中...</div>' +
+    '</div>' +
     // Security section (local users only)
     '<div>' +
       '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">安全设置</div>' +
@@ -1271,6 +1290,50 @@ function initUserCenter() {
           : '<button class="btn btn-sm" onclick="changePassword()">修改密码</button>') +
       '</div>' +
     '</div>';
+
+  // Async: load my tasks
+  API.get('/tasks/my').then(function(tasks) {
+    var el = document.getElementById('uc-my-tasks');
+    if (!el) return;
+    if (!tasks || !tasks.length) {
+      el.innerHTML = '<span style="color:var(--muted)">暂无分配给您的任务</span>';
+      return;
+    }
+    var byStatus = {todo: [], in_progress: [], review: [], done: [], closed: []};
+    tasks.forEach(function(t) {
+      var s = t.status || 'todo';
+      if (!byStatus[s]) s = 'todo';
+      if (byStatus[s]) byStatus[s].push(t);
+    });
+    var labels = {todo: '待办', in_progress: '进行中', review: '评审中', done: '已完成', closed: '已关闭'};
+    var html = '';
+    Object.keys(byStatus).forEach(function(s) {
+      if (!byStatus[s].length) return;
+      html += '<div style="margin-bottom:6px"><span style="font-weight:500">' + labels[s] + ':</span> ' + byStatus[s].length + '个</div>';
+    });
+    html += '<div style="margin-top:8px"><a href="javascript:void(0)" onclick="gotoView(\'tasks\')" style="color:var(--accent);font-size:12px">查看全部任务 →</a></div>';
+    el.innerHTML = html;
+  }).catch(function() {
+    var el = document.getElementById('uc-my-tasks');
+    if (el) el.innerHTML = '<span style="color:var(--muted)">加载失败</span>';
+  });
+
+  // Async: load weekly hours
+  var now = new Date();
+  var weekStart = new Date(now);
+  weekStart.setDate(now.getDate() - now.getDay() + 1);
+  var dateFrom = weekStart.toISOString().slice(0,10);
+  var dateTo = now.toISOString().slice(0,10);
+  API.get('/worklogs/summary?user_id=' + user.id + '&date_from=' + dateFrom + '&date_to=' + dateTo).then(function(data) {
+    var el = document.getElementById('uc-weekly-hours');
+    if (!el) return;
+    var total = data ? (data.total_hours || 0).toFixed(1) : '0.0';
+    el.innerHTML = '<div style="font-size:24px;font-weight:700;color:var(--accent)">' + total + 'h</div>' +
+      '<div style="font-size:11px;color:var(--muted);margin-top:4px">本周累计</div>';
+  }).catch(function() {
+    var el = document.getElementById('uc-weekly-hours');
+    if (el) el.innerHTML = '<span style="color:var(--muted)">加载失败</span>';
+  });
 }
 
 async function showNewUserWelcomeDialog() {

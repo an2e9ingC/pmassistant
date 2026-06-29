@@ -2,83 +2,23 @@
    PROJECT DETAIL VIEW
 ═══════════════════════════════════════════════════ */
 
-/* Combo Box */
+/* Combo Box — uses shared projectCombo component */
 
 var _comboCurId = null;
-var _projDetail = null;  // current project detail
-var _comboOpen  = false;
-var _comboProjects = [];
+var _projDetail = null;
 var _projectProducts = [];
-var _userNames = [];     // PMA users for 交付责任人
-var _customerNames = []; // customers for 收货方
+var _userNames = [];
+var _customerNames = [];
 
-async function loadComboProjects() {
-  try {
-    _comboProjects = await API.get('/projects');
-  } catch(e) {
-    _comboProjects = [];
+initProjectCombo({
+  comboId: 'proj-combo',
+  inputId: 'combo-input',
+  dropdownId: 'combo-dropdown',
+  selectedIdFn: function() { return _comboCurId; },
+  onSelect: function(p) {
+    _comboCurId = p.id;
+    loadProjectDetail(p.id);
   }
-}
-
-function renderComboOptions(q) {
-  var v = (q || '').trim().toLowerCase();
-  var list = v ? _comboProjects.filter(function(p) {
-    return (p.code || '').toLowerCase().indexOf(v) >= 0 ||
-           (p.name || '').toLowerCase().indexOf(v) >= 0 ||
-           (p.customer_name || '').toLowerCase().indexOf(v) >= 0;
-  }) : _comboProjects;
-
-  if (!list.length) {
-    return '<div class="combo-no-match">未找到匹配项目</div>';
-  }
-
-  return list.map(function(p) {
-    var cls = p.id == _comboCurId ? 'combo-opt selected' : 'combo-opt';
-    var typeTxt = getProjectTypeLabel(p.project_type);
-    var projCode = extractProjectCode(p.name);
-    var coreName = extractCoreName(p.name);
-    return '<div class="' + cls + '" onclick="selectComboProject(' + p.id + ')">' +
-      renderProjIcon(p.project_type, projCode) +
-      '<div style="min-width:0">' +
-        '<div class="combo-opt-name">' + escHtml(coreName) + '</div>' +
-        '<div class="combo-opt-meta">' + escHtml(projCode) + ' · ' + typeTxt + '项目' + (p.customer_name ? ' · ' + renderCustomerBadge(p.customer_name) : '') + '</div>' +
-      '</div>' +
-    '</div>';
-  }).join('');
-}
-
-function openCombo() {
-  _comboOpen = true;
-  document.getElementById('proj-combo').classList.add('open');
-  document.getElementById('combo-input').select();
-  document.getElementById('combo-dropdown').innerHTML = renderComboOptions('');
-}
-
-function filterCombo(q) {
-  if (!_comboOpen) openCombo();
-  document.getElementById('combo-dropdown').innerHTML = renderComboOptions(q);
-}
-
-async function selectComboProject(id) {
-  _comboCurId = id;
-  var p = _comboProjects.find(function(p) { return p.id == id; });
-  if (p) {
-    var custName = p.customer_name || p.name;
-    var codeLabel = p.code || '#' + p.id;
-    document.getElementById('combo-input').value = custName + '  (' + codeLabel + ')';
-  }
-  closeCombo();
-  await loadProjectDetail(id);
-}
-
-function closeCombo() {
-  _comboOpen = false;
-  document.getElementById('proj-combo').classList.remove('open');
-}
-
-document.addEventListener('click', function(e) {
-  var combo = document.getElementById('proj-combo');
-  if (combo && !combo.contains(e.target)) closeCombo();
 });
 
 /* Project Detail Loading */
@@ -1552,6 +1492,18 @@ function switchDTab(id, el) {
   // Refresh tab content when switching to it
   if (id === 'maintenance') buildMaintenance();
   if (id === 'activities') loadActivities();
+  if (id === 'pma-tasks' && _comboCurId) {
+    var projName = (document.getElementById('combo-input') || {}).value || '';
+    if (!projName && typeof _allProjects !== 'undefined') {
+      var p = _allProjects.find(function(x) { return x.id == _comboCurId; });
+      if (p) projName = p.name;
+    }
+    if (typeof initProjectTasks === 'function') {
+      initProjectTasks(_comboCurId, projName);
+    } else if (typeof loadViewScript === 'function') {
+      loadViewScript('/js/tasks.js?v=250625', function() { initProjectTasks(_comboCurId, projName); });
+    }
+  }
 }
 
 function gotoStageDetail(idx) {
