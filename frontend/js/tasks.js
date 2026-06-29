@@ -101,7 +101,7 @@ function _renderTaskFilters() {
         inputId: 'task-proj-input',
         dropdownId: 'task-proj-dropdown',
         onSelect: function(p) { _taskProjectId = p.id; _taskProjectName = p.name; loadTaskData(); }
-      }) +
+      }) + '<style>#task-proj-combo{min-width:0!important}</style>' +
     '</div>';
   }
 
@@ -502,6 +502,8 @@ function _showTaskForm(title, task) {
           '<option value="high"' + (t.priority==='high'?' selected':'') + '>高</option>' +
           '<option value="critical"' + (t.priority==='critical'?' selected':'') + '>紧急</option>' +
         '</select></div>' +
+      '<div><label style="font-size:11px;color:var(--muted)">负责人</label>' +
+        '<input class="search-inp" id="tf-assignee" value="' + (t.assignee_id || '') + '" placeholder="用户ID" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
       '<div><label style="font-size:11px;color:var(--muted)">预估工时(h)</label>' +
         '<input class="search-inp" id="tf-estimate" type="number" step="0.5" min="0" value="' + (t.estimate_hours || '') + '" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
       '<div><label style="font-size:11px;color:var(--muted)">截止日期</label>' +
@@ -602,6 +604,7 @@ async function submitTask(taskId) {
     description: document.getElementById('tf-desc').value.trim(),
     status: document.getElementById('tf-status').value,
     priority: document.getElementById('tf-priority').value,
+    assignee_id: parseInt(document.getElementById('tf-assignee').value) || null,
     estimate_hours: parseFloat(document.getElementById('tf-estimate').value) || 0,
     due_date: document.getElementById('tf-due').value || null,
     execution_id: parseInt(document.getElementById('tf-execution').value) || null,
@@ -656,69 +659,128 @@ function openCopyTaskDialog(taskId) {
 /* ── Batch Create ── */
 
 function openBatchCreateDialog() {
-  if (!_taskProjectId) { showToast('请先选择项目', 'error'); return; }
+  // Default 2 rows; project combo loads list on demand
+  _renderBatchForm([{}, {}]);
+  // Pre-load executions
+  if (_taskProjectId) {
+    API.get('/projects/' + _taskProjectId + '/gantt').then(function(data) {
+      _batchExecutions = (data && data.stages) ? data.stages : [];
+    }).catch(function() { _batchExecutions = []; });
+  }
+}
 
-  var rows = [{title: '', execution: '', assignee: '', estimate: ''}];
-  _renderBatchForm(rows);
+var _batchExecutions = [];
+var _batchProjectId = null;
+
+function _batchExecOptions(selId) {
+  return '<select class="search-inp" id="' + selId + '" style="flex:1.5"><option value="">选择阶段</option>' +
+    _batchExecutions.map(function(s) {
+      return '<option value="' + (s.execution_id || s.id || '') + '">' + escHtml(s.name || s.standard_stage || '') + '</option>';
+    }).join('') + '</select>';
+}
+
+function _batchRowHTML(i, r) {
+  r = r || {};
+  return '<div style="display:flex;gap:3px;margin-bottom:4px;align-items:center;font-size:12px">' +
+    _batchExecOptions('bt-exec-' + i) +
+    '<input class="search-inp" id="bt-title-' + i + '" value="' + escHtml(r.title || '') + '" placeholder="标题 *" style="flex:2;min-width:120px">' +
+    '<select class="search-inp" id="bt-status-' + i + '" style="flex:0.8;min-width:70px"><option value="todo">待办</option><option value="in_progress">进行中</option><option value="review">评审中</option><option value="done">已完成</option><option value="closed">已关闭</option></select>' +
+    '<select class="search-inp" id="bt-priority-' + i + '" style="flex:0.7;min-width:55px"><option value="medium">中</option><option value="low">低</option><option value="high">高</option><option value="critical">紧急</option></select>' +
+    '<input class="search-inp" id="bt-assignee-' + i + '" value="' + escHtml(r.assignee || '') + '" placeholder="负责人" style="flex:0.9;min-width:70px">' +
+    '<input class="search-inp" id="bt-estimate-' + i + '" value="' + escHtml(r.estimate || '') + '" placeholder="工时(h)" style="flex:0.6;min-width:55px" type="number" step="0.5">' +
+    '<input class="search-inp" id="bt-due-' + i + '" value="' + escHtml(r.due_date || '') + '" type="date" style="flex:1;min-width:110px">' +
+    '<input class="search-inp" id="bt-desc-' + i + '" value="' + escHtml(r.desc || '') + '" placeholder="描述" style="flex:1.5;min-width:100px">' +
+    '<button class="btn-xs" onclick="_batchCopyRow(' + i + ')" title="同上" style="color:var(--accent)">同上</button>' +
+    '<button class="btn-xs" onclick="this.parentElement.remove()" style="color:var(--red)">×</button>' +
+  '</div>';
+}
+
+function _batchCopyRow(i) {
+  if (i <= 0) return;
+  var prev = document.getElementById('batch-rows').children[i - 1];
+  ['exec','title','status','priority','assignee','estimate','due','desc'].forEach(function(field) {
+    var src = prev.querySelector('[id^="bt-' + field + '-"]');
+    var dst = document.getElementById('bt-' + field + '-' + i);
+    if (src && dst) { if (dst.tagName === 'SELECT') dst.selectedIndex = src.selectedIndex; else dst.value = src.value; }
+  });
 }
 
 function _renderBatchForm(rows) {
-  var html = '<div id="batch-rows" style="max-height:400px;overflow-y:auto">';
-  rows.forEach(function(r, i) {
-    html += '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">' +
-      '<input class="search-inp" id="bt-title-' + i + '" value="' + escHtml(r.title) + '" placeholder="任务标题" style="flex:4">' +
-      '<input class="search-inp" id="bt-exec-' + i + '" value="' + escHtml(r.execution) + '" placeholder="阶段ID" style="flex:1">' +
-      '<input class="search-inp" id="bt-assignee-' + i + '" value="' + escHtml(r.assignee) + '" placeholder="负责人ID" style="flex:1">' +
-      '<input class="search-inp" id="bt-estimate-' + i + '" value="' + escHtml(r.estimate) + '" placeholder="工时" style="flex:1" type="number" step="0.5">' +
-      '<button class="btn-xs" onclick="this.parentElement.remove()" style="color:var(--red)">×</button>' +
-    '</div>';
-  });
-  html += '</div>' +
-    '<button class="btn-xs" onclick="_batchAddRow()" style="margin-top:4px">+ 添加行</button>';
+  _batchProjectId = _taskProjectId;
+  var projHtml = '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--muted)">所属项目 *</label><div style="margin-top:2px">' +
+    createProjectCombo({
+      comboId: 'batch-proj-combo',
+      inputId: 'batch-proj-input',
+      dropdownId: 'batch-proj-dropdown',
+      selectedIdFn: function() { return _batchProjectId; },
+      onSelect: function(p) { _batchProjectId = p.id; _loadBatchExecs(p.id); }
+    }) + '</div></div>';
+
+  var html = projHtml + '<div id="batch-rows" style="max-height:400px;overflow:auto;min-width:900px">';
+  rows.forEach(function(r, i) { html += _batchRowHTML(i, r); });
+  html += '</div><button class="btn-xs" onclick="_batchAddRow()" style="margin-top:4px">+ 添加行</button>';
 
   openDialog('批量创建任务', html, [
     {text: '取消', onclick: '_closeTaskDialog()'},
     {text: '创建', cls: 'btn-primary', onclick: '_submitBatchCreate()'}
-  ], {maxWidth: 700});
+  ], {maxWidth: '95vw'});
+
+  // Pre-fill project and load executions if set
+  _batchProjectId = _taskProjectId;
+  if (_taskProjectId && _taskProjectName) {
+    _loadBatchExecs(_taskProjectId);
+    setTimeout(function() {
+      var inp = document.getElementById('batch-proj-input');
+      if (inp) inp.value = _taskProjectName;
+    }, 200);
+  }
+}
+
+function _loadBatchExecs(projectId) {
+  API.get('/projects/' + projectId + '/gantt').then(function(data) {
+    _batchExecutions = (data && data.stages) ? data.stages : [];
+  }).catch(function() { _batchExecutions = []; });
 }
 
 function _batchAddRow() {
   var container = document.getElementById('batch-rows');
   if (!container) return;
   var i = container.children.length;
-  container.insertAdjacentHTML('beforeend',
-    '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">' +
-      '<input class="search-inp" id="bt-title-' + i + '" placeholder="任务标题" style="flex:4">' +
-      '<input class="search-inp" id="bt-exec-' + i + '" placeholder="阶段ID" style="flex:1">' +
-      '<input class="search-inp" id="bt-assignee-' + i + '" placeholder="负责人ID" style="flex:1">' +
-      '<input class="search-inp" id="bt-estimate-' + i + '" placeholder="工时" style="flex:1" type="number" step="0.5">' +
-      '<button class="btn-xs" onclick="this.parentElement.remove()" style="color:var(--red)">×</button>' +
-    '</div>');
+  container.insertAdjacentHTML('beforeend', _batchRowHTML(i));
 }
 
 async function _submitBatchCreate() {
   var tasks = [];
   var container = document.getElementById('batch-rows');
   if (!container) return;
+  if (!_batchProjectId) { showToast('请选择项目', 'error'); return; }
   var rows = container.children;
   for (var i = 0; i < rows.length; i++) {
     var titleEl = rows[i].querySelector('[id^="bt-title-"]');
     var execEl = rows[i].querySelector('[id^="bt-exec-"]');
+    var statusEl = rows[i].querySelector('[id^="bt-status-"]');
+    var priorityEl = rows[i].querySelector('[id^="bt-priority-"]');
     var assigneeEl = rows[i].querySelector('[id^="bt-assignee-"]');
     var estEl = rows[i].querySelector('[id^="bt-estimate-"]');
+    var dueEl = rows[i].querySelector('[id^="bt-due-"]');
+    var descEl = rows[i].querySelector('[id^="bt-desc-"]');
     var title = titleEl ? titleEl.value.trim() : '';
     if (!title) continue;
     tasks.push({
       title: title,
       execution_id: execEl ? (parseInt(execEl.value) || null) : null,
+      status: statusEl ? statusEl.value : 'todo',
+      priority: priorityEl ? priorityEl.value : 'medium',
       assignee_id: assigneeEl ? (parseInt(assigneeEl.value) || null) : null,
       estimate_hours: estEl ? (parseFloat(estEl.value) || 0) : 0,
+      due_date: dueEl ? (dueEl.value || null) : null,
+      description: descEl ? (descEl.value.trim() || null) : null,
     });
   }
   if (!tasks.length) { showToast('请至少填写一个任务标题', 'error'); return; }
 
   try {
-    await API.post('/tasks/batch', {project_id: _taskProjectId, tasks: tasks});
+    await API.post('/tasks/batch', {project_id: _batchProjectId, tasks: tasks});
     showToast('已创建 ' + tasks.length + ' 个任务', 'success');
     _closeTaskDialog();
     loadTaskData();

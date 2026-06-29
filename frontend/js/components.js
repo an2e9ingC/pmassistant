@@ -302,8 +302,10 @@ function openDialog(title, bodyHtml, buttons, opts) {
 
   var closeHtml = opts.hideClose ? '' :
     '<button class="note-dialog-close" onclick="this.closest(\'.note-dialog-overlay\').remove()">&times;</button>';
+  var widthStyle = typeof maxWidth === 'number' ? maxWidth + 'px' : maxWidth;
+  var autoWidth = typeof maxWidth === 'number' ? '' : 'width:auto;';
   var html = '<div class="note-dialog-overlay ' + overlayClass + '">' +
-    '<div class="note-dialog" style="max-width:' + maxWidth + 'px">' +
+    '<div class="note-dialog" style="' + autoWidth + 'max-width:' + widthStyle + '">' +
       '<div class="note-dialog-head"><span class="note-dialog-title">' + title + '</span>' +
         closeHtml + '</div>' +
       bodyHtml +
@@ -513,7 +515,7 @@ function createProjectCombo(opts) {
   var filterFn = _fnName(opts.comboId, 'Filter');
   return '<div class="proj-combo" id="' + opts.comboId + '">' +
     '<input class="proj-combo-input" id="' + opts.inputId + '" type="text" autocomplete="off" placeholder="' + escHtml(opts.placeholder || '搜索或选择项目…') + '" ' +
-      'onfocus="' + openFn + '()" oninput="' + filterFn + '(this.value)">' +
+      'onclick="' + openFn + '()" oninput="' + filterFn + '(this.value)">' +
     '<svg class="proj-combo-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2,5 7,10 12,5"/></svg>' +
     '<div class="proj-combo-dropdown" id="' + opts.dropdownId + '"></div>' +
   '</div>';
