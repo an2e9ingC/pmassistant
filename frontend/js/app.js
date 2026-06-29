@@ -1225,115 +1225,182 @@ function initUserCenter() {
   if (!user) { container.innerHTML = '<div class="error-state">未登录</div>'; return; }
   var isGitlab = user.auth_source === 'gitlab';
   var perms = (user.permissions || '').split(',').filter(Boolean);
-  var permLabels = {
-    'admin': '系统管理', 'sync': '数据同步', 'project_edit': '项目维护',
-    'product_link': '产品维护', 'customer_link': '客户维护',
-    'doc_template': '文档模板配置', 'stage_mapping': '阶段映射',
-  };
-  var permBadges = perms.length
-    ? perms.map(function(p) { return '<span style="display:inline-block;margin:1px 3px;padding:2px 8px;border-radius:3px;font-size:11px;background:var(--accent-lt);color:var(--accent)">' + escHtml(permLabels[p] || p) + '</span>'; }).join('')
-    : '<span style="font-size:12px;color:var(--muted)">无特殊权限</span>';
+  var permLabels = {'admin':'系统管理','sync':'数据同步','project_edit':'项目维护','product_link':'产品维护','customer_link':'客户维护','doc_template':'文档模板配置','stage_mapping':'阶段映射','task_edit':'任务管理','worklog_edit':'工时填报'};
+  var permBadges = perms.map(function(p) { return '<span class="profile-role-tag">' + escHtml(permLabels[p]||p) + '</span>'; }).join('');
 
   container.innerHTML =
-    // User info section
-    '<div style="margin-bottom:24px">' +
-      '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">个人信息</div>' +
-      '<div style="display:flex;align-items:center;gap:14px;margin-bottom:12px">' +
-        '<div style="width:56px;height:56px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:600">' +
-          escHtml((user.display_name || user.username).charAt(0).toUpperCase()) +
+    // Profile bar
+    '<div class="profile-bar">' +
+      '<div class="profile-avatar">' + escHtml((user.display_name||user.username).charAt(0).toUpperCase()) + '</div>' +
+      '<div class="profile-info">' +
+        '<div class="profile-name">' + escHtml(user.display_name||user.username) + '</div>' +
+        '<div class="profile-row"><div class="profile-user">@' + escHtml(user.username) + '</div>' +
+          '<button class="profile-action-btn" id="btn-gitlab" onclick="_ucTogglePanel(\'gitlab\')"><svg width="16" height="16" viewBox="0 0 380 380" fill="currentColor"><path d="M282.83 170.73l-.27-.69-26.14-68.22a6.81 6.81 0 00-2.69-3.24 7 7 0 00-8 .43 7 7 0 00-2.32 3.52l-17.65 54H154.07l-17.65-54a6.86 6.86 0 00-2.32-3.53 7 7 0 00-8-.43 6.87 6.87 0 00-2.69 3.24L97.44 170l-.26.69a48.54 48.54 0 0016.1 56.1l.09.07.24.17 39.82 30.2 19.7 15.11 12 9.08a7.07 7.07 0 004.33 1.58 7.09 7.09 0 004.33-1.58l12-9.08 19.7-15.11 40.06-30.35.09-.07a48.63 48.63 0 0016.08-56.1z"/></svg> GitLab</button>' +
+          '<button class="profile-action-btn" id="btn-security" onclick="_ucTogglePanel(\'security\')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> 安全</button>' +
         '</div>' +
-        '<div>' +
-          '<div style="font-size:16px;font-weight:600;margin-bottom:2px">' + escHtml(user.display_name || user.username) + '</div>' +
-          '<div style="font-size:12px;color:var(--muted);font-family:var(--mono)">@' + escHtml(user.username) + '</div>' +
-        '</div>' +
+        '<div class="profile-roles">' + permBadges + '</div>' +
       '</div>' +
-      // GitLab account section (consolidated)
-      (isGitlab
-        ? '<div style="padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin-bottom:4px">' +
-            '<div style="font-size:12px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:6px">' +
-              '<svg width="14" height="14" viewBox="0 0 380 380" fill="#e24329"><path d="M282.83 170.73l-.27-.69-26.14-68.22a6.81 6.81 0 00-2.69-3.24 7 7 0 00-8 .43 7 7 0 00-2.32 3.52l-17.65 54H154.07l-17.65-54a6.86 6.86 0 00-2.32-3.53 7 7 0 00-8-.43 6.87 6.87 0 00-2.69 3.24L97.44 170l-.26.69a48.54 48.54 0 0016.1 56.1l.09.07.24.17 39.82 30.2 19.7 15.11 12 9.08a7.07 7.07 0 004.33 1.58 7.09 7.09 0 004.33-1.58l12-9.08 19.7-15.11 40.06-30.35.09-.07a48.63 48.63 0 0016.08-56.1z"/></svg>' +
-              'GitLab 账户' +
-            '</div>' +
-            '<div style="font-size:12px;line-height:2">' +
-              '<div>用户名: <span style="color:var(--fg);font-weight:500">@' + escHtml(user.username) + '</span></div>' +
-              '<div>Token 状态: ' +
-                (user.gitlab_token_valid
-                  ? '<span style="color:var(--success);font-weight:600">有效</span>'
-                  : '<span style="color:var(--danger);font-weight:600">无效/过期（需重新登录）</span>') +
-              '</div>' +
-              '<a href="http://192.168.0.128/' + escHtml(user.username) + '" target="_blank" style="color:var(--accent);text-decoration:none">GitLab 个人主页 ↗</a>' +
-            '</div>' +
-          '</div>'
-        : '<div style="font-size:12px;color:var(--muted)">认证来源: 本地</div>') +
+      '<div class="profile-stats" id="uc-stats">加载中...</div>' +
     '</div>' +
-    // Permissions section
-    '<div style="margin-bottom:16px">' +
-      '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">角色与权限</div>' +
-      '<div style="padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;line-height:2.2">' + permBadges + '</div>' +
-    '</div>' +
-    // My tasks section
-    '<div style="margin-bottom:16px">' +
-      '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">我的任务</div>' +
-      '<div id="uc-my-tasks" style="padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:12px">加载中...</div>' +
-    '</div>' +
-    // Weekly worklog summary
-    '<div style="margin-bottom:16px">' +
-      '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">本周工时</div>' +
-      '<div id="uc-weekly-hours" style="padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:12px">加载中...</div>' +
-    '</div>' +
-    // Security section (local users only)
-    '<div>' +
-      '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">安全设置</div>' +
-      '<div style="padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:13px">' +
-        (isGitlab
-          ? '<span style="color:var(--muted)">GitLab 用户，请前往 <a href="http://192.168.0.128/-/profile/password/edit" target="_blank" style="color:var(--accent)">GitLab 管理密码 ↗</a></span>'
-          : '<button class="btn btn-sm" onclick="changePassword()">修改密码</button>') +
+    // Expand panel
+    '<div class="profile-expand" id="uc-expand"><div class="profile-expand-inner"><div id="uc-expand-content"></div></div></div>' +
+    // Task list + Calendar
+    '<div class="dash-grid-task">' +
+      '<div>' +
+        '<div class="sec-hd"><h2 id="uc-list-heading">我的任务</h2>' +
+          '<div class="view-switch">' +
+            '<button class="view-switch-btn active" onclick="_ucSwitchView(\'tasks\')">任务</button>' +
+            '<button class="view-switch-btn" onclick="_ucSwitchView(\'bugs\')">Bug</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="task-filter-bar" id="uc-filter-bar"></div>' +
+        '<div class="panel"><div class="task-table-wrap"><table class="task-table"><thead id="uc-table-head"></thead><tbody id="uc-table-tbody"></tbody></table></div></div>' +
+      '</div>' +
+      '<div>' +
+        '<div class="sec-hd"><h2>本周工时</h2></div>' +
+        '<div class="panel panel-pad" id="uc-calendar"></div>' +
       '</div>' +
     '</div>';
 
-  // Async: load my tasks
-  API.get('/tasks/my').then(function(tasks) {
-    var el = document.getElementById('uc-my-tasks');
-    if (!el) return;
-    if (!tasks || !tasks.length) {
-      el.innerHTML = '<span style="color:var(--muted)">暂无分配给您的任务</span>';
-      return;
-    }
-    var byStatus = {todo: [], in_progress: [], review: [], done: [], closed: []};
-    tasks.forEach(function(t) {
-      var s = t.status || 'todo';
-      if (!byStatus[s]) s = 'todo';
-      if (byStatus[s]) byStatus[s].push(t);
-    });
-    var labels = {todo: '待办', in_progress: '进行中', review: '评审中', done: '已完成', closed: '已关闭'};
-    var html = '';
-    Object.keys(byStatus).forEach(function(s) {
-      if (!byStatus[s].length) return;
-      html += '<div style="margin-bottom:6px"><span style="font-weight:500">' + labels[s] + ':</span> ' + byStatus[s].length + '个</div>';
-    });
-    html += '<div style="margin-top:8px"><a href="javascript:void(0)" onclick="gotoView(\'tasks\')" style="color:var(--accent);font-size:12px">查看全部任务 →</a></div>';
-    el.innerHTML = html;
-  }).catch(function() {
-    var el = document.getElementById('uc-my-tasks');
-    if (el) el.innerHTML = '<span style="color:var(--muted)">加载失败</span>';
-  });
+  // Load data
+  _ucLoadTasks(user);
+  _ucLoadCalendar(user);
+}
 
-  // Async: load weekly hours
-  var now = new Date();
-  var weekStart = new Date(now);
-  weekStart.setDate(now.getDate() - now.getDay() + 1);
-  var dateFrom = weekStart.toISOString().slice(0,10);
-  var dateTo = now.toISOString().slice(0,10);
-  API.get('/worklogs/summary?user_id=' + user.id + '&date_from=' + dateFrom + '&date_to=' + dateTo).then(function(data) {
-    var el = document.getElementById('uc-weekly-hours');
-    if (!el) return;
-    var total = data ? (data.total_hours || 0).toFixed(1) : '0.0';
-    el.innerHTML = '<div style="font-size:24px;font-weight:700;color:var(--accent)">' + total + 'h</div>' +
-      '<div style="font-size:11px;color:var(--muted);margin-top:4px">本周累计</div>';
+var _ucTasks = [];
+var _ucFilterStatus = 'all';
+var _ucFilterProj = '';
+var _ucView = 'tasks';
+
+function _ucSwitchView(v) {
+  _ucView = v;
+  document.getElementById('uc-list-heading').textContent = v === 'tasks' ? '我的任务' : '我的Bug';
+  document.querySelectorAll('.view-switch-btn').forEach(function(b,i){ b.classList.toggle('active', (i===0&&v==='tasks')||(i===1&&v==='bugs')); });
+  if (v === 'tasks') { _renderUcFilterBar(); _renderUcTableHead(); _renderUcTaskTable(); }
+  else {
+    document.getElementById('uc-filter-bar').innerHTML = '';
+    document.getElementById('uc-table-head').innerHTML = '';
+    document.getElementById('uc-table-tbody').innerHTML = '<tr><td colspan="1"><div class="empty-state" style="padding:40px">TODO：Bug 管理功能即将上线，敬请期待。</div></td></tr>';
+  }
+}
+
+function _ucLoadTasks(user) {
+  API.get('/tasks/my').then(function(tasks) {
+    _ucTasks = tasks || [];
+    _renderUcFilterBar();
+    _renderUcTableHead();
+    _renderUcTaskTable();
+    _renderUcStats();
   }).catch(function() {
-    var el = document.getElementById('uc-weekly-hours');
-    if (el) el.innerHTML = '<span style="color:var(--muted)">加载失败</span>';
+    document.getElementById('uc-table-tbody').innerHTML = '<tr><td colspan="7"><div class="empty-state">加载失败</div></td></tr>';
   });
+}
+
+function _renderUcFilterBar() {
+  var counts = {todo:0, in_progress:0, review:0, done:0};
+  var projSet = {};
+  _ucTasks.forEach(function(t) { counts[t.status||'todo'] = (counts[t.status]||0)+1; if(t.project_name) projSet[t.project_name]=1; });
+  var projs = Object.keys(projSet).sort();
+  var tabs = [{k:'all',l:'全部',c:_ucTasks.length},{k:'todo',l:'待办',c:counts.todo||0},{k:'in_progress',l:'进行中',c:counts.in_progress||0},{k:'review',l:'评审中',c:counts.review||0},{k:'done',l:'已完成',c:counts.done||0}];
+  document.getElementById('uc-filter-bar').innerHTML =
+    '<div class="task-tabs">' + tabs.map(function(t) { return '<button class="task-tab' + (_ucFilterStatus===t.k?' active':'') + '" onclick="_ucSetFilter(\''+t.k+'\')">'+t.l+'<span class="task-tab-count">'+t.c+'</span></button>'; }).join('') + '</div>' +
+    '<select class="proj-select" onchange="_ucFilterProj=this.value;_renderUcTaskTable()"><option value="">全部项目</option>' + projs.map(function(p) { return '<option value="'+escHtml(p)+'"'+(_ucFilterProj===p?' selected':'')+'>'+escHtml(p)+'</option>'; }).join('') + '</select>';
+}
+
+function _ucSetFilter(s) { _ucFilterStatus = s; _renderUcFilterBar(); _renderUcTaskTable(); }
+
+function _renderUcTableHead() {
+  document.getElementById('uc-table-head').innerHTML = '<tr><th>项目</th><th>任务</th><th>阶段</th><th>状态</th><th>优先级</th><th>截止日期</th><th>进度</th></tr>';
+}
+
+function _renderUcTaskTable() {
+  var filtered = _ucTasks.filter(function(t) {
+    if (_ucFilterStatus !== 'all' && t.status !== _ucFilterStatus) return false;
+    if (_ucFilterProj && t.project_name !== _ucFilterProj) return false;
+    return true;
+  });
+  var labels = {todo:'待办',in_progress:'进行中',review:'评审中',done:'已完成',closed:'已关闭'};
+  var tbody = document.getElementById('uc-table-tbody');
+  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state">暂无匹配任务</div></td></tr>'; return; }
+  tbody.innerHTML = filtered.map(function(t) {
+    var pct = t.progress || 0;
+    var overdue = t.due_date && t.status !== 'done' && t.status !== 'closed' && t.due_date < new Date().toISOString().slice(0,10);
+    return '<tr onclick="gotoView(\'tasks\')" style="cursor:pointer">' +
+      '<td style="font-size:12px;color:var(--muted)">' + escHtml(t.project_name||'') + '</td>' +
+      '<td style="font-weight:530">' + escHtml(t.title) + '</td>' +
+      '<td style="font-size:12px;color:var(--muted)">' + escHtml(t.stage_name||'-') + '</td>' +
+      '<td><span class="status-pill '+t.status+'"><span class="status-dot '+t.status+'"></span>'+ (labels[t.status]||t.status) +'</span></td>' +
+      '<td><span class="prio-tag '+(t.priority||'medium')+'">'+ ({low:'低',medium:'中',high:'高',critical:'紧急'}[t.priority]||t.priority) +'</span></td>' +
+      '<td class="'+(overdue?'due-overdue':'')+'" style="font-family:var(--mono);font-size:12px">'+(t.due_date||'-')+'</td>' +
+      '<td><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden"><div style="height:100%;border-radius:2px;background:'+(pct>=80?'var(--success)':pct>=40?'var(--accent)':'var(--warn)')+';width:'+pct+'%"></div></div><span style="font-family:var(--mono);font-size:11px;font-weight:550">'+pct+'%</span></div></td>' +
+    '</tr>';
+  }).join('');
+}
+
+function _renderUcStats() {
+  var counts = {todo:0, in_progress:0, done:0};
+  _ucTasks.forEach(function(t) { if(t.status==='todo')counts.todo++; else if(t.status==='in_progress'||t.status==='review')counts.in_progress++; else if(t.status==='done'||t.status==='closed')counts.done++; });
+  document.getElementById('uc-stats').innerHTML =
+    '<div class="profile-stat todo"><div class="profile-stat-val">'+counts.todo+'</div><div class="profile-stat-lbl">待办</div></div>' +
+    '<div class="profile-stat doing"><div class="profile-stat-val">'+counts.in_progress+'</div><div class="profile-stat-lbl">进行中</div></div>' +
+    '<div class="profile-stat hours"><div class="profile-stat-val" id="uc-week-total">...</div><div class="profile-stat-lbl">本周工时</div></div>';
+}
+
+function _ucLoadCalendar(user) {
+  var now = new Date();
+  var ws = new Date(now); ws.setDate(now.getDate()-now.getDay()+1);
+  var df = ws.toISOString().slice(0,10), dt = now.toISOString().slice(0,10);
+  API.get('/worklogs/calendar?user_id='+user.id+'&date_from='+df+'&date_to='+dt).then(function(data) {
+    var days = ['一','二','三','四','五','六','日'];
+    var todayIdx = now.getDay()===0?6:now.getDay()-1;
+    var daily = {};
+    if(data&&data.daily) data.daily.forEach(function(d){daily[d.date]={h:d.total_hours,tasks:d.tasks};});
+    var maxH = Math.max.apply(null, [1].concat(Object.values(daily).map(function(d){return d.h;})));
+    var total = data?(data.total||0):0;
+    document.getElementById('uc-week-total').textContent = total.toFixed(1)+'h';
+    var cal = document.getElementById('uc-calendar');
+    if(!cal) return;
+    var html = '<div class="cal-header">';
+    for(var i=0;i<7;i++){var d=new Date(ws);d.setDate(ws.getDate()+i);var ds=d.toISOString().slice(0,10);var dd=daily[ds];html+='<div><div class="cal-header-day">'+days[i]+'</div><div class="cal-header-date'+(i===todayIdx?' today':'')+'">'+(d.getMonth()+1)+'/'+d.getDate()+'</div></div>';}
+    html += '</div><div class="cal-body">';
+    for(var i=0;i<7;i++){var d=new Date(ws);d.setDate(ws.getDate()+i);var ds=d.toISOString().slice(0,10);var dd=daily[ds];var h=dd?dd.h:0;html+='<div class="cal-day-cell"><div class="cal-hours'+(h===0?' none':'')+'">'+(h===0?'—':h.toFixed(1)+'h')+'</div><div class="cal-bar-wrap"><div class="cal-bar-fill'+(h>1.5?' over':'')+'" style="width:'+(h/maxH*100)+'%"></div></div></div>';}
+    html += '</div><div class="cal-week-total"><span class="cal-week-total-lbl">本周累计</span><span class="cal-week-total-val">'+total.toFixed(1)+'h</span></div>';
+    cal.innerHTML = html;
+  }).catch(function(){});
+}
+
+var _ucPanelOpen = null;
+function _ucTogglePanel(type) {
+  var expand = document.getElementById('uc-expand');
+  var content = document.getElementById('uc-expand-content');
+  var user = getCurrentUser();
+  if (_ucPanelOpen === type) { _ucPanelOpen = null; expand.classList.remove('open'); return; }
+  _ucPanelOpen = type; expand.classList.add('open');
+  if (type === 'gitlab') {
+    var isGitlab = user.auth_source === 'gitlab';
+    content.innerHTML =
+      '<div class="expand-card">' +
+        '<h3><svg width="16" height="16" viewBox="0 0 380 380" fill="#e24329"><path d="M282.83 170.73l-.27-.69-26.14-68.22a6.81 6.81 0 00-2.69-3.24 7 7 0 00-8 .43 7 7 0 00-2.32 3.52l-17.65 54H154.07l-17.65-54a6.86 6.86 0 00-2.32-3.53 7 7 0 00-8-.43 6.87 6.87 0 00-2.69 3.24L97.44 170l-.26.69a48.54 48.54 0 0016.1 56.1l.09.07.24.17 39.82 30.2 19.7 15.11 12 9.08a7.07 7.07 0 004.33 1.58 7.09 7.09 0 004.33-1.58l12-9.08 19.7-15.11 40.06-30.35.09-.07a48.63 48.63 0 0016.08-56.1z"/></svg> GitLab 账户</h3>' +
+        (isGitlab ? '' +
+          '<div class="integration-row"><span class="integration-row-lbl">用户名</span><span class="integration-row-val">@'+escHtml(user.username)+'</span></div>' +
+          '<div class="integration-row"><span class="integration-row-lbl">Token 状态</span><span class="integration-row-val ok">'+(user.gitlab_token_valid?'有效':'无效')+'</span></div>' +
+          '<a class="integration-link" href="http://192.168.0.128/'+escHtml(user.username)+'" target="_blank">GitLab 个人主页 ↗</a>'
+        : '<div class="integration-row"><span class="integration-row-lbl">状态</span><span class="integration-row-val">未启用，请使用本地密码登录</span></div>') +
+      '</div>' +
+      '<div class="expand-card" style="visibility:hidden"></div>';
+  } else if (type === 'security') {
+    var isGitlab = user.auth_source === 'gitlab';
+    content.innerHTML =
+      '<div class="expand-card" style="visibility:hidden"></div>' +
+      '<div class="expand-card">' +
+        '<h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> 安全设置</h3>' +
+        '<div class="integration-row"><span class="integration-row-lbl">账户来源</span><span class="integration-row-val">'+(isGitlab?'GitLab OAuth':'本地账户')+'</span></div>' +
+        '<div class="integration-row"><span class="integration-row-lbl">登录方式</span><span class="integration-row-val">'+(isGitlab?'GitLab 账户登录':'本地密码登录')+'</span></div>' +
+        (isGitlab
+          ? '<a class="integration-link" href="http://192.168.0.128/-/profile/password/edit" target="_blank">在 GitLab 中管理密码 ↗</a>'
+          : '<button class="btn btn-sm" onclick="changePassword()">修改密码</button>') +
+      '</div>';
+  }
 }
 
 async function showNewUserWelcomeDialog() {
