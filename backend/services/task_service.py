@@ -264,9 +264,10 @@ def _task_dict(t: Task, db=None) -> dict:
             output = json.loads(t.output_items)
         except (json.JSONDecodeError, TypeError):
             pass
-    # Resolve execution name and assignee name
+    # Resolve execution name, assignee name, and project name
     exec_name = None
     assignee_name = None
+    proj_name = None
     if t.execution_id:
         from backend.models.zentao import CachedExecution
         exc = db.query(CachedExecution).filter(CachedExecution.id == t.execution_id).first() if db else None
@@ -277,10 +278,16 @@ def _task_dict(t: Task, db=None) -> dict:
         u = db.query(LocalUser).filter(LocalUser.id == t.assignee_id).first() if db else None
         if u:
             assignee_name = u.display_name or u.username
+    if t.project_id:
+        from backend.models.zentao import CachedProject
+        proj = db.query(CachedProject).filter(CachedProject.id == t.project_id).first() if db else None
+        if proj:
+            proj_name = proj.name
 
     return {
         "id": t.id,
         "project_id": t.project_id,
+        "project_name": proj_name,
         "execution_id": t.execution_id,
         "stage_name": t.stage_name,
         "execution_name": exec_name or t.stage_name,

@@ -217,53 +217,22 @@ function renderTaskTable(tasks, execs) {
     });
   }
 
-  // Group by execution or stage_name
-  var groups = {};
-  var ungrouped = [];
-  tasks.forEach(function(t) {
-    var eid = t.execution_id ? String(t.execution_id) : (t.stage_name || '_none');
-    var gname = stageMap[eid] || t.stage_name;
-    if ((eid !== '_none') && gname) {
-      if (!groups[eid]) groups[eid] = { name: gname, tasks: [] };
-      groups[eid].tasks.push(t);
-    } else {
-      ungrouped.push(t);
-    }
-  });
-
   var html = '<table class="proj-table"><thead><tr>' +
-    '<th style="width:28%;text-align:left">标题</th>' +
-    '<th style="width:10%">阶段</th>' +
-    '<th style="width:7%">状态</th>' +
-    '<th style="width:6%">优先级</th>' +
-    '<th style="width:8%">负责人</th>' +
-    '<th style="width:7%">预估工时</th>' +
-    '<th style="width:10%">实际工时</th>' +
-    '<th style="width:8%">截止日期</th>' +
+    '<th style="width:12%">项目</th>' +
+    '<th style="width:24%;text-align:left">标题</th>' +
+    '<th style="width:9%">阶段</th>' +
+    '<th style="width:6%">状态</th>' +
+    '<th style="width:5%">优先级</th>' +
+    '<th style="width:7%">负责人</th>' +
+    '<th style="width:6%">预估工时</th>' +
+    '<th style="width:7%">实际工时</th>' +
+    '<th style="width:6%">进度</th>' +
+    '<th style="width:7%">截止日期</th>' +
     '<th>操作</th>' +
     '</tr></thead><tbody>';
 
-  // Render grouped tasks
-  var groupKeys = Object.keys(groups);
-  groupKeys.forEach(function(eid) {
-    var g = groups[eid];
-    var doneCount = g.tasks.filter(function(t) { return t.status === 'done' || t.status === 'closed'; }).length;
-    var totalConsumed = g.tasks.reduce(function(s, t) { return s + (t.consumed_hours || 0); }, 0);
-    var totalEstimate = g.tasks.reduce(function(s, t) { return s + (t.estimate_hours || 0); }, 0);
-    html += '<tr class="stage-group-row" style="background:var(--bg-secondary)">' +
-      '<td colspan="9" style="font-weight:600;font-size:12px;padding:6px 12px">' +
-        escHtml(g.name) + ' <span style="color:var(--muted);font-weight:400">(' + g.tasks.length + '个任务, ' + doneCount + '完成, ' +
-        totalConsumed.toFixed(1) + '/' + totalEstimate.toFixed(1) + 'h)</span>' +
-      '</td></tr>';
-    g.tasks.forEach(function(t) { html += _renderTaskRow(t, stageMap); });
-  });
-
-  // Unrouped
-  if (ungrouped.length) {
-    html += '<tr class="stage-group-row" style="background:var(--bg-secondary)">' +
-      '<td colspan="9" style="font-weight:600;font-size:12px;padding:6px 12px">未分类 <span style="color:var(--muted);font-weight:400">(' + ungrouped.length + '个任务)</span></td></tr>';
-    ungrouped.forEach(function(t) { html += _renderTaskRow(t, stageMap); });
-  }
+  // Flat list — stage grouping moved to board pie chart
+  tasks.forEach(function(t) { html += _renderTaskRow(t, stageMap); });
 
   html += '</tbody></table>';
   content.innerHTML = html;
@@ -280,17 +249,17 @@ function _renderTaskRow(t, stageMap) {
   var progressPct = t.estimate_hours > 0 ? Math.round((t.consumed_hours || 0) / t.estimate_hours * 100) : 0;
   var overdue = t.due_date && t.status !== 'done' && t.status !== 'closed' && t.due_date < new Date().toISOString().slice(0,10);
   var assigneeName = t.assignee_name || t.assignee_username || (t.assignee_id || '-');
+  var projName = t.project_name || '';
   return '<tr class="clickable">' +
+    '<td style="font-size:11px;color:var(--muted)">' + escHtml(projName) + '</td>' +
     '<td style="text-align:left"><a href="javascript:void(0)" onclick="openTaskViewDialog(' + t.id + ')" style="color:var(--accent)">' + escHtml(t.title) + '</a></td>' +
     '<td>' + (stageName ? '<span style="font-size:11px;color:var(--muted)">' + escHtml(stageName) + '</span>' : '-') + '</td>' +
     '<td>' + renderPill(t.status || 'todo') + '</td>' +
     '<td>' + _renderPriority(t.priority) + '</td>' +
     '<td style="font-size:12px">' + escHtml(assigneeName) + '</td>' +
     '<td>' + (t.estimate_hours || 0).toFixed(1) + 'h</td>' +
-    '<td style="font-size:12px">' +
-      (t.consumed_hours || 0).toFixed(1) + 'h / ' + (t.estimate_hours || 0).toFixed(1) + 'h ' +
-      renderProgressCircle(progressPct, 26, {label:''}) +
-    '</td>' +
+    '<td style="font-size:12px">' + (t.consumed_hours || 0).toFixed(1) + 'h</td>' +
+    '<td>' + renderProgressCircle(progressPct, 26, {label:''}) + '</td>' +
     '<td style="color:' + (overdue ? 'var(--red)' : '') + '">' + (t.due_date || '-') + '</td>' +
     '<td>' +
       iconEdit('openTaskDialog(' + t.id + ')', '编辑任务') +
@@ -329,7 +298,30 @@ function renderTaskBoard(tasks) {
     });
   }
 
-  var html = '<div style="display:flex;gap:12px;height:100%">';
+  // Status pie chart
+  var total = tasks ? tasks.length : 0;
+  var statsHtml = '';
+  if (total > 0) {
+    var statusCounts = {};
+    columns.forEach(function(c) { statusCounts[c.key] = (byStatus[c.key] || []).length; });
+    var statusPie = _buildPieChart(columns, statusCounts, total, '状态分布');
+    // Stage pie chart
+    var byStage = {};
+    var stageColors = ['var(--accent)','var(--success)','var(--warn)','var(--danger)','#8b5cf6','#ec4899','#06b6d4','#f97316','#84cc16','#64748b'];
+    var stageList = [];
+    if (tasks) {
+      tasks.forEach(function(t) {
+        var sn = t.stage_name || t.execution_name || '未分类';
+        if (!byStage[sn]) { byStage[sn] = 0; stageList.push({key: sn, label: sn}); }
+        byStage[sn]++;
+      });
+    }
+    stageList.forEach(function(s, i) { s.color = stageColors[i % stageColors.length]; });
+    var stagePie = _buildPieChart(stageList, byStage, total, '阶段分布');
+    statsHtml = '<div style="display:flex;gap:12px;margin-bottom:16px">' + statusPie + stagePie + '</div>';
+  }
+
+  var html = statsHtml + '<div style="display:flex;gap:12px;height:100%">';
   columns.forEach(function(col) {
     var items = byStatus[col.key];
     html += '<div style="flex:1;background:var(--bg-secondary);border-radius:6px;padding:12px;display:flex;flex-direction:column">' +
@@ -405,6 +397,31 @@ async function renderTaskCalendar() {
   } catch(e) {
     content.innerHTML = '<div class="error-state">加载日历失败: ' + escHtml(e.message || '') + '</div>';
   }
+}
+
+function _buildPieChart(groups, counts, total, title) {
+  var pieParts = [];
+  var accumulated = 0;
+  groups.forEach(function(g) {
+    var cnt = counts[g.key] || 0;
+    if (cnt > 0) {
+      var pct = cnt / total;
+      pieParts.push(g.color + ' ' + Math.round(accumulated*100) + '% ' + Math.round((accumulated+pct)*100) + '%');
+      accumulated += pct;
+    }
+  });
+  var gradient = pieParts.length ? 'conic-gradient(' + pieParts.join(',') + ')' : '';
+  return '<div style="flex:1;display:flex;gap:10px;align-items:center;padding:10px;background:var(--bg);border-radius:8px">' +
+    '<div style="width:48px;height:48px;border-radius:50%;background:' + gradient + ';flex-shrink:0"></div>' +
+    '<div style="font-size:11px;line-height:1.6;min-width:0">' +
+      '<div style="font-weight:600;margin-bottom:2px;font-size:12px">' + title + ' (' + total + ')</div>' +
+      groups.map(function(g) {
+        var cnt = counts[g.key] || 0;
+        if (!cnt) return '';
+        return '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:' + g.color + ';margin-right:3px"></span>' +
+          escHtml(g.label) + ': ' + cnt + ' (' + Math.round(cnt/total*100) + '%)</div>';
+      }).join('') +
+    '</div></div>';
 }
 
 function _getIntensityStyle(hours) {
@@ -672,44 +689,31 @@ function _showTaskForm(title, task) {
     }
   }, 100);
 
-function _loadTfExecutions(projectId) {
+function _loadTfExecutions(projectId, selectedId) {
   API.get('/projects/' + projectId + '/gantt').then(function(data) {
     var sel = document.getElementById('tf-execution');
     if (!sel) return;
+    var prevVal = selectedId || sel.value;
     sel.innerHTML = '<option value="">选择阶段...</option>';
     if (data && data.stages) {
       data.stages.forEach(function(s) {
         var eid = s.execution_id || '';
         var label = s.name || s.standard_stage || '';
-        var stageName = eid ? '' : (s.standard_stage || s.name || '');
-        if (!eid && stageName) eid = '_' + stageName; // synthetic key for template stages
+        if (!eid && label) eid = '_' + label;
         var opt = document.createElement('option');
         opt.value = eid;
         opt.textContent = label;
-        if (!eid) opt.dataset.stageName = stageName;
+        if (eid === prevVal) opt.selected = true;
         sel.appendChild(opt);
       });
     }
   }).catch(function() {});
 }
 
-  // Async: load executions for project (pre-fill from detail tab)
+  // Async: load executions for project with task's current stage pre-selected
   if (_taskProjectId) {
-    API.get('/projects/' + _taskProjectId + '/gantt').then(function(data) {
-      var sel = document.getElementById('tf-execution');
-      if (!sel) return;
-      sel.innerHTML = '<option value="">选择阶段...</option>';
-      if (data && data.stages) {
-        data.stages.forEach(function(s) {
-          var eid = s.execution_id || s.id || '';
-          var opt = document.createElement('option');
-          opt.value = eid;
-          opt.textContent = s.name || s.standard_stage || '';
-          if (t.execution_id && String(t.execution_id) === String(eid)) opt.selected = true;
-          sel.appendChild(opt);
-        });
-      }
-    }).catch(function() {});
+    var curExecVal = t.execution_id ? String(t.execution_id) : (t.stage_name ? '_' + t.stage_name : '');
+    _loadTfExecutions(_taskProjectId, curExecVal);
   }
 
   // Async: load worklogs and comments (edit mode)
