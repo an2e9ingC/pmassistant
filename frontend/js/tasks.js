@@ -246,7 +246,7 @@ function _renderTaskRow(t, stageMap) {
   if (!stageName && t.execution_name) {
     stageName = t.execution_name;
   }
-  var progressPct = t.estimate_hours > 0 ? Math.round((t.consumed_hours || 0) / t.estimate_hours * 100) : 0;
+  var progressPct = t.progress || 0;
   var overdue = t.due_date && t.status !== 'done' && t.status !== 'closed' && t.due_date < new Date().toISOString().slice(0,10);
   var assigneeName = t.assignee_name || t.assignee_username || (t.assignee_id || '-');
   var projName = t.project_name || '';
@@ -492,6 +492,7 @@ function _showTaskView(t) {
     '<div><span style="font-size:11px;color:var(--muted)">阶段</span><div style="margin-top:2px">' + escHtml(t.stage_name || t.execution_name || '-') + '</div></div>' +
     '<div>' + renderPill(t.status || 'todo') + ' <span style="font-size:10px;color:var(--muted)">' + (labels[t.status] || t.status) + '</span></div>' +
     '<div><span style="font-size:11px;color:var(--muted)">优先级</span><div style="margin-top:2px">' + (priLabels[t.priority] || t.priority) + '</div></div>' +
+    '<div><span style="font-size:11px;color:var(--muted)">进度</span><div style="margin-top:2px">' + renderProgressCircle(t.progress || 0, 32, {label:''}) + '</div></div>' +
     '<div><span style="font-size:11px;color:var(--muted)">预估工时</span><div style="margin-top:2px">' + (t.estimate_hours || 0).toFixed(1) + 'h</div></div>' +
     '<div><span style="font-size:11px;color:var(--muted)">实际工时</span><div style="margin-top:2px">' + (t.consumed_hours || 0).toFixed(1) + 'h</div></div>' +
     '<div><span style="font-size:11px;color:var(--muted)">负责人</span><div style="margin-top:2px">' + escHtml(t.assignee_name || '-') + '</div></div>' +
@@ -522,18 +523,13 @@ function _showTaskView(t) {
     {text: '关闭', onclick: '_closeTaskDialog()'}
   ], {maxWidth: 650});
 
-  // Async load worklogs and comments
-  API.get('/worklogs?task_id=' + t.id).then(function(logs) {
-    var el = document.getElementById('tv-worklogs');
-    if (!el) return;
-    if (!logs || !logs.length) { el.innerHTML = '<div style="color:var(--muted);font-size:12px">暂无工时记录</div>'; return; }
-    el.innerHTML = logs.map(function(w) {
-      return '<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)">' +
-        (w.date || '?') + ' | ' + w.hours.toFixed(1) + 'h' + (w.description ? ' | ' + escHtml(w.description) : '') + '</div>';
-    }).join('');
-  }).catch(function() {});
+  // Async load worklogs and comments (DOM exists after openDialog)
+  _refreshTaskWorklogs(t.id);
+  _loadViewComments(t.id);
+}
 
-  API.get('/task-comments?task_id=' + t.id).then(function(comments) {
+function _loadViewComments(taskId) {
+  API.get('/task-comments?task_id=' + taskId).then(function(comments) {
     var el = document.getElementById('tv-comments');
     if (!el) return;
     if (!comments || !comments.length) { el.innerHTML = '<div style="color:var(--muted);font-size:12px">暂无评论</div>'; return; }
@@ -550,16 +546,7 @@ function _submitViewComment(taskId) {
   if (!input || !input.value.trim()) return;
   API.post('/task-comments', {task_id: taskId, content: input.value.trim()}).then(function() {
     input.value = '';
-    API.get('/task-comments?task_id=' + taskId).then(function(comments) {
-      var el = document.getElementById('tv-comments');
-      if (!el) return;
-      if (!comments || !comments.length) { el.innerHTML = '<div style="color:var(--muted);font-size:12px">暂无评论</div>'; return; }
-      el.innerHTML = comments.map(function(c) {
-        return '<div style="padding:4px 0;border-bottom:1px solid var(--border)">' +
-          '<span style="font-size:10px;color:var(--muted)">' + escHtml(c.display_name || c.username) + ' · ' + (c.created_at || '') + '</span>' +
-          '<div style="font-size:13px">' + escHtml(c.content) + '</div></div>';
-      }).join('');
-    });
+    _loadViewComments(taskId);
   }).catch(function(e) { showToast('评论失败: ' + (e.message || ''), 'error'); });
 }
 
@@ -631,6 +618,8 @@ function _showTaskForm(title, task) {
           selectedIdFn: function() { return _tfAssigneeId; },
           onSelect: function(u) { _tfAssigneeId = u.id; }
         }) + '</div></div>' +
+      '<div><label style="font-size:11px;color:var(--muted)">进度(%)</label>' +
+        '<input class="search-inp" id="tf-progress" type="number" min="0" max="100" step="5" value="' + (t.progress || 0) + '" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
       '<div><label style="font-size:11px;color:var(--muted)">预估工时(h)</label>' +
         '<input class="search-inp" id="tf-estimate" type="number" step="0.5" min="0" value="' + (t.estimate_hours || '') + '" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
       '<div><label style="font-size:11px;color:var(--muted)">截止日期</label>' +
@@ -718,7 +707,10 @@ function _loadTfExecutions(projectId, selectedId) {
 
   // Async: load worklogs and comments (edit mode)
   if (isEdit) {
-    _loadWorklogs(t.id);
+    API.get('/worklogs?task_id=' + t.id).then(function(logs) {
+      var el = document.getElementById('tf-worklogs');
+      if (el) el.innerHTML = _renderWorklogTable(logs || [], t.id);
+    }).catch(function() {});
     _loadComments(t.id);
   }
 }
@@ -748,6 +740,7 @@ async function submitTask(taskId) {
     status: document.getElementById('tf-status').value,
     priority: document.getElementById('tf-priority').value,
     assignee_id: _tfAssigneeId,
+    progress: parseInt(document.getElementById('tf-progress').value) || 0,
     estimate_hours: parseFloat(document.getElementById('tf-estimate').value) || 0,
     due_date: document.getElementById('tf-due').value || null,
     execution_id: parseInt(document.getElementById('tf-execution').value) || null,
@@ -1054,6 +1047,22 @@ async function _submitImportTasks() {
 
 /* ── Worklog Dialog ── */
 
+function _renderWorklogTable(logs, taskId) {
+  if (!logs || !logs.length) return '<div style="color:var(--muted);font-size:12px">暂无工时记录</div>';
+  var html = '<table class="proj-table" style="font-size:12px"><thead><tr>' +
+    '<th>日期</th><th>工时(h)</th><th>描述</th><th style="width:60px">操作</th></tr></thead><tbody>';
+  logs.forEach(function(w) {
+    html += '<tr>' +
+      '<td>' + (w.date || '?') + '</td>' +
+      '<td>' + w.hours.toFixed(1) + '</td>' +
+      '<td style="text-align:left">' + escHtml(w.description || '') + '</td>' +
+      '<td>' + iconEdit('openWorklogEditDialog(' + w.id + ',' + taskId + ')', '编辑') +
+        iconDelete('deleteWorklogById(' + w.id + ',' + taskId + ')', '删除') + '</td>' +
+    '</tr>';
+  });
+  return html + '</tbody></table>';
+}
+
 function openWorklogDialog(taskId) {
   var today = new Date().toISOString().slice(0,10);
   var html = '<div>' +
@@ -1061,22 +1070,65 @@ function openWorklogDialog(taskId) {
       '<input class="search-inp" id="wl-date" type="date" value="' + today + '" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工时(h)</label>' +
       '<input class="search-inp" id="wl-hours" type="number" step="0.5" min="0.5" value="1" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">进度(%)</label>' +
+      '<input class="search-inp" id="wl-progress" type="number" min="0" max="100" step="5" value="0" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工作描述</label>' +
       '<textarea class="search-inp" id="wl-desc" rows="2" style="width:100%;box-sizing:border-box;margin-top:2px;resize:vertical"></textarea></div>' +
-    '<div id="wl-history" style="max-height:200px;overflow-y:auto;margin-top:12px;border-top:1px solid var(--border);padding-top:8px"></div>' +
   '</div>';
 
   openDialog('记录工时', html, [
     {text: '取消', onclick: '_closeTaskDialog()'},
     {text: '提交', cls: 'btn-primary', onclick: 'submitWorklog(' + taskId + ')'}
   ], {maxWidth: 450});
+}
 
-  // Load history
-  _loadWorklogHistory(taskId);
+function openWorklogEditDialog(wlId, taskId) {
+  Promise.all([
+    API.get('/worklogs?task_id=' + taskId),
+    API.get('/tasks/' + taskId)
+  ]).then(function(results) {
+    var logs = results[0] || [];
+    var task = results[1] || {};
+    var w = logs.find(function(l) { return l.id === wlId; });
+    if (!w) { showToast('未找到工时记录', 'error'); return; }
+    var html = '<div>' +
+      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">日期</label>' +
+        '<input class="search-inp" id="wl-date" type="date" value="' + (w.date || '') + '" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
+      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工时(h)</label>' +
+        '<input class="search-inp" id="wl-hours" type="number" step="0.5" min="0.5" value="' + w.hours + '" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
+      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">进度(%)</label>' +
+        '<input class="search-inp" id="wl-progress" type="number" min="0" max="100" step="5" value="' + (task.progress || 0) + '" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
+      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工作描述</label>' +
+        '<textarea class="search-inp" id="wl-desc" rows="2" style="width:100%;box-sizing:border-box;margin-top:2px;resize:vertical">' + escHtml(w.description || '') + '</textarea></div>' +
+    '</div>';
+    openDialog('编辑工时', html, [
+      {text: '取消', onclick: '_closeTaskDialog()'},
+      {text: '保存', cls: 'btn-primary', onclick: '_submitWorklogEdit(' + wlId + ',' + taskId + ')'}
+    ], {maxWidth: 450});
+  }).catch(function(e) { showToast('加载失败: ' + (e.message || ''), 'error'); });
+}
+
+async function _submitWorklogEdit(wlId, taskId) {
+  var hours = parseFloat(document.getElementById('wl-hours').value);
+  var progress = parseInt(document.getElementById('wl-progress').value) || 0;
+  if (!hours || hours <= 0) { showToast('请输入有效的工时数', 'error'); return; }
+  try {
+    await API.put('/worklogs/' + wlId, {
+      hours: hours,
+      date: document.getElementById('wl-date').value,
+      description: document.getElementById('wl-desc').value.trim(),
+    });
+    await API.put('/tasks/' + taskId, { progress: progress });
+    showToast('工时已更新', 'success');
+    _closeTaskDialog();
+    _refreshTaskWorklogs(taskId);
+    loadTaskData();
+  } catch(e) { showToast('更新失败: ' + (e.message || '未知错误'), 'error'); }
 }
 
 async function submitWorklog(taskId) {
   var hours = parseFloat(document.getElementById('wl-hours').value);
+  var progress = parseInt(document.getElementById('wl-progress').value) || 0;
   if (!hours || hours <= 0) { showToast('请输入有效的工时数', 'error'); return; }
   try {
     await API.post('/worklogs', {
@@ -1085,67 +1137,32 @@ async function submitWorklog(taskId) {
       date: document.getElementById('wl-date').value,
       description: document.getElementById('wl-desc').value.trim(),
     });
+    await API.put('/tasks/' + taskId, { progress: progress });
     showToast('工时已记录', 'success');
     _closeTaskDialog();
+    _refreshTaskWorklogs(taskId);
     loadTaskData();
-  } catch(e) {
-    showToast('记录失败: ' + (e.message || '未知错误'), 'error');
-  }
+  } catch(e) { showToast('记录失败: ' + (e.message || '未知错误'), 'error'); }
 }
 
-async function _loadWorklogHistory(taskId) {
-  var el = document.getElementById('wl-history');
-  if (!el) return;
-  try {
-    var logs = await API.get('/worklogs?task_id=' + taskId);
-    if (!logs || !logs.length) {
-      el.innerHTML = '<div style="color:var(--muted);font-size:12px">暂无工时记录</div>';
-      return;
-    }
-    var html = '<div style="font-size:11px;font-weight:600;margin-bottom:4px">历史记录</div>';
-    logs.forEach(function(w) {
-      html += '<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)">' +
-        (w.date || '?') + ' | ' + w.hours.toFixed(1) + 'h' +
-        (w.description ? ' | ' + escHtml(w.description) : '') +
-        ' <a href="javascript:void(0)" onclick="deleteWorklogConfirm(' + w.id + ',' + taskId + ')" style="color:var(--red);font-size:10px">删除</a>' +
-      '</div>';
-    });
-    el.innerHTML = html;
-  } catch(e) { el.innerHTML = ''; }
-}
-
-function deleteWorklogConfirm(wlId, taskId) {
+function deleteWorklogById(wlId, taskId) {
   if (!confirm('确认删除此工时记录？')) return;
   API.del('/worklogs/' + wlId).then(function() {
     showToast('已删除', 'success');
-    _loadWorklogHistory(taskId);
+    _refreshTaskWorklogs(taskId);
     loadTaskData();
-  }).catch(function(e) {
-    showToast('删除失败: ' + (e.message || ''), 'error');
-  });
+  }).catch(function(e) { showToast('删除失败: ' + (e.message || ''), 'error'); });
+}
+
+function _refreshTaskWorklogs(taskId) {
+  API.get('/worklogs?task_id=' + taskId).then(function(logs) {
+    var el = document.getElementById('tv-worklogs');
+    if (!el) el = document.getElementById('tf-worklogs');
+    if (el) el.innerHTML = _renderWorklogTable(logs || [], taskId);
+  }).catch(function() {});
 }
 
 /* ── Worklogs (in task dialog) ── */
-
-async function _loadWorklogs(taskId) {
-  var el = document.getElementById('tf-worklogs');
-  if (!el) return;
-  try {
-    var logs = await API.get('/worklogs?task_id=' + taskId);
-    if (!logs || !logs.length) {
-      el.innerHTML = '<div style="color:var(--muted);font-size:12px">暂无工时记录</div>';
-      return;
-    }
-    var html = '';
-    logs.forEach(function(w) {
-      html += '<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)">' +
-        (w.date || '?') + ' | ' + w.hours.toFixed(1) + 'h' +
-        (w.description ? ' | ' + escHtml(w.description) : '') +
-      '</div>';
-    });
-    el.innerHTML = html;
-  } catch(e) { el.innerHTML = '<div style="color:var(--red)">加载失败</div>'; }
-}
 
 /* ── Comments ── */
 

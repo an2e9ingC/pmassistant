@@ -115,6 +115,7 @@ def create_task(db: Session, data: dict, user) -> dict:
         reporter_id=uid,
         parent_id=data.get("parent_id"),
         blocked_by_id=data.get("blocked_by_id"),
+        progress=int(data.get("progress", 0) or 0),
         estimate_hours=float(data.get("estimate_hours", 0) or 0),
         start_date=_parse_date(data.get("start_date")),
         due_date=_parse_date(data.get("due_date")),
@@ -143,6 +144,7 @@ def create_tasks_batch(db: Session, tasks_data: list, user) -> List[dict]:
             type=data.get("type", "development"),
             assignee_id=data.get("assignee_id"),
             reporter_id=uid,
+            progress=int(data.get("progress", 0) or 0),
             estimate_hours=float(data.get("estimate_hours", 0) or 0),
             start_date=_parse_date(data.get("start_date")),
             due_date=_parse_date(data.get("due_date")),
@@ -198,7 +200,7 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
     changes = []
     for field in ("title", "description", "status", "priority", "type",
                    "execution_id", "stage_name", "assignee_id", "parent_id", "blocked_by_id",
-                   "start_date", "due_date", "sort_order"):
+                   "start_date", "due_date", "sort_order", "progress"):
         if field in data and getattr(t, field) != data[field]:
             old_val = getattr(t, field)
             new_val = data[field]
@@ -303,6 +305,7 @@ def _task_dict(t: Task, db=None) -> dict:
         "reporter_id": t.reporter_id,
         "parent_id": t.parent_id,
         "blocked_by_id": t.blocked_by_id,
+        "progress": t.progress or 0,
         "estimate_hours": t.estimate_hours or 0.0,
         "consumed_hours": t.consumed_hours or 0.0,
         "start_date": str(t.start_date) if t.start_date else None,

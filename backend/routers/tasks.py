@@ -16,6 +16,7 @@ class TaskCreate(BaseModel):
     project_id: int
     execution_id: Optional[int] = None
     stage_name: Optional[str] = None
+    progress: Optional[int] = 0
     title: str
     description: Optional[str] = None
     status: Optional[str] = "todo"
@@ -49,6 +50,7 @@ class TaskUpdate(BaseModel):
     type: Optional[str] = None
     execution_id: Optional[int] = None
     stage_name: Optional[str] = None
+    progress: Optional[int] = None
     assignee_id: Optional[int] = None
     parent_id: Optional[int] = None
     blocked_by_id: Optional[int] = None

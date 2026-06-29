@@ -10,6 +10,26 @@ from backend.models.task import WorkLog, Task
 from backend.database import to_local_str
 
 
+def _auto_update_task_status(db: Session, task_id: int):
+    """Auto-transition task status based on consumed/estimate hours ratio.
+    Only upgrades (todo→in_progress→done), never downgrades or overrides manual states.
+    """
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task or not task.estimate_hours or task.estimate_hours <= 0:
+        return
+    consumed = task.consumed_hours or 0.0
+    estimate = task.estimate_hours
+    status = task.status
+
+    if consumed >= estimate and status not in ('done', 'closed'):
+        task.status = 'done'
+        task.completed_at = __import__('datetime').datetime.utcnow()
+        db.commit()
+    elif consumed > 0 and status == 'todo':
+        task.status = 'in_progress'
+        db.commit()
+
+
 def _fetch_task_map(db: Session, task_ids: set) -> dict:
     """Batch-load Task rows by ID, returning {id: Task} map."""
     if not task_ids:
@@ -57,6 +77,7 @@ def create_worklog(db: Session, data: dict, user_id: int) -> dict:
 
     from backend.services.task_service import recalc_consumed_hours
     recalc_consumed_hours(db, w.task_id)
+    _auto_update_task_status(db, w.task_id)
 
     task = db.query(Task).filter(Task.id == w.task_id).first()
     return _worklog_dict(w, task)
@@ -80,6 +101,7 @@ def update_worklog(db: Session, worklog_id: int, data: dict) -> Optional[dict]:
 
     from backend.services.task_service import recalc_consumed_hours
     recalc_consumed_hours(db, w.task_id)
+    _auto_update_task_status(db, w.task_id)
 
     task = db.query(Task).filter(Task.id == w.task_id).first()
     return _worklog_dict(w, task)
@@ -96,6 +118,7 @@ def delete_worklog(db: Session, worklog_id: int) -> bool:
 
     from backend.services.task_service import recalc_consumed_hours
     recalc_consumed_hours(db, task_id)
+    _auto_update_task_status(db, task_id)
     return True
 
 

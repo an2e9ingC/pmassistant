@@ -23,6 +23,7 @@ class Task(Base):
     reporter_id = Column(Integer, ForeignKey("local_users.id"), nullable=False)
     parent_id = Column(Integer, ForeignKey("pma_tasks.id"), nullable=True)
     blocked_by_id = Column(Integer, ForeignKey("pma_tasks.id"), nullable=True)
+    progress = Column(Integer, default=0)  # 0-100, manually updated by user
     estimate_hours = Column(Float, default=0.0)
     consumed_hours = Column(Float, default=0.0)  # Redundant: SUM(pma_worklogs.hours), maintained by service
     start_date = Column(Date, nullable=True)
