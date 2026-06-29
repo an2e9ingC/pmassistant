@@ -24,8 +24,10 @@ function d2pct(ds) {
   return Math.max(0, Math.min(100, (t / G_SPAN) * 100));
 }
 
+function fmtLocalDate(d) { d=d||new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
 function todayPct() {
-  return d2pct(new Date().toISOString().slice(0, 10));
+  return d2pct(fmtLocalDate());
 }
 
 function clearSearch(inputId, callback) {

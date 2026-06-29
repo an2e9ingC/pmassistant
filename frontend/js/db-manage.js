@@ -199,7 +199,7 @@ function exportDatabase() {
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url;
-      a.download = 'pma-backup-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' +
+      a.download = 'pma-backup-' + fmtLocalDate().replace(/-/g,'') + '-' +
         new Date().toTimeString().slice(0,8).replace(/:/g,'') + '.db';
       document.body.appendChild(a);
       a.click();

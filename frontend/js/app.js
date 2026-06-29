@@ -1257,14 +1257,15 @@ function initUserCenter() {
         '<div class="panel"><div class="task-table-wrap"><table class="task-table"><thead id="uc-table-head"></thead><tbody id="uc-table-tbody"></tbody></table></div></div>' +
       '</div>' +
       '<div>' +
-        '<div class="sec-hd"><h2>本周工时</h2></div>' +
+        '<div class="sec-hd"><h2>看板 & 工时</h2></div>' +
         '<div class="panel panel-pad" id="uc-calendar"></div>' +
       '</div>' +
     '</div>';
 
-  // Load data
+  // Calendar navigation callback
+  _calChangeCallback = function() { _ucLoadCalendar(user); };
+  // Load data (calendar loads inside _ucLoadTasks after task data is ready)
   _ucLoadTasks(user);
-  _ucLoadCalendar(user);
 }
 
 var _ucTasks = [];
@@ -1291,6 +1292,8 @@ function _ucLoadTasks(user) {
     _renderUcTableHead();
     _renderUcTaskTable();
     _renderUcStats();
+    // Re-render calendar with pie charts once task data is available
+    _ucLoadCalendar(user);
   }).catch(function() {
     document.getElementById('uc-table-tbody').innerHTML = '<tr><td colspan="7"><div class="empty-state">加载失败</div></td></tr>';
   });
@@ -1324,7 +1327,7 @@ function _renderUcTaskTable() {
   if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state">暂无匹配任务</div></td></tr>'; return; }
   tbody.innerHTML = filtered.map(function(t) {
     var pct = t.progress || 0;
-    var overdue = t.due_date && t.status !== 'done' && t.status !== 'closed' && t.due_date < new Date().toISOString().slice(0,10);
+    var overdue = t.due_date && t.status !== 'done' && t.status !== 'closed' && t.due_date < fmtLocalDate();
     return '<tr onclick="gotoView(\'tasks\')" style="cursor:pointer">' +
       '<td style="font-size:12px;color:var(--muted)">' + escHtml(t.project_name||'') + '</td>' +
       '<td style="font-weight:530">' + escHtml(t.title) + '</td>' +
@@ -1346,25 +1349,50 @@ function _renderUcStats() {
     '<div class="profile-stat hours"><div class="profile-stat-val" id="uc-week-total">...</div><div class="profile-stat-lbl">本周工时</div></div>';
 }
 
+function _fmtLocalDate(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
 function _ucLoadCalendar(user) {
   var now = new Date();
   var ws = new Date(now); ws.setDate(now.getDate()-now.getDay()+1);
-  var df = ws.toISOString().slice(0,10), dt = now.toISOString().slice(0,10);
+  var df = _fmtLocalDate(ws), dt = _fmtLocalDate(now);
+  var cal = document.getElementById('uc-calendar');
+  if(!cal) return;
+
+  // Load calendar data + render pie charts + intensity calendar
   API.get('/worklogs/calendar?user_id='+user.id+'&date_from='+df+'&date_to='+dt).then(function(data) {
-    var days = ['一','二','三','四','五','六','日'];
-    var todayIdx = now.getDay()===0?6:now.getDay()-1;
-    var daily = {};
-    if(data&&data.daily) data.daily.forEach(function(d){daily[d.date]={h:d.total_hours,tasks:d.tasks};});
-    var maxH = Math.max.apply(null, [1].concat(Object.values(daily).map(function(d){return d.h;})));
+    var dailyMap = {};
+    if(data&&data.daily) data.daily.forEach(function(d){dailyMap[d.date]=d;});
     var total = data?(data.total||0):0;
     document.getElementById('uc-week-total').textContent = total.toFixed(1)+'h';
-    var cal = document.getElementById('uc-calendar');
-    if(!cal) return;
-    var html = '<div class="cal-header">';
-    for(var i=0;i<7;i++){var d=new Date(ws);d.setDate(ws.getDate()+i);var ds=d.toISOString().slice(0,10);var dd=daily[ds];html+='<div><div class="cal-header-day">'+days[i]+'</div><div class="cal-header-date'+(i===todayIdx?' today':'')+'">'+(d.getMonth()+1)+'/'+d.getDate()+'</div></div>';}
-    html += '</div><div class="cal-body">';
-    for(var i=0;i<7;i++){var d=new Date(ws);d.setDate(ws.getDate()+i);var ds=d.toISOString().slice(0,10);var dd=daily[ds];var h=dd?dd.h:0;html+='<div class="cal-day-cell"><div class="cal-hours'+(h===0?' none':'')+'">'+(h===0?'—':h.toFixed(1)+'h')+'</div><div class="cal-bar-wrap"><div class="cal-bar-fill'+(h>1.5?' over':'')+'" style="width:'+(h/maxH*100)+'%"></div></div></div>';}
-    html += '</div><div class="cal-week-total"><span class="cal-week-total-lbl">本周累计</span><span class="cal-week-total-val">'+total.toFixed(1)+'h</span></div>';
+
+    var tasks = _ucTasks || [];
+    var totalTasks = tasks.length;
+    var html = '';
+
+    // Pie charts
+    if (totalTasks > 0 && typeof _buildPieChart === 'function') {
+      var cols = [
+        {key:'todo',label:'待办',color:'var(--muted)'},
+        {key:'in_progress',label:'进行中',color:'var(--accent)'},
+        {key:'review',label:'评审中',color:'var(--warn)'},
+        {key:'done',label:'已完成',color:'var(--success)'},
+      ];
+      var byStatus = {}; cols.forEach(function(c){byStatus[c.key]=0;});
+      tasks.forEach(function(t){var s=t.status||'todo';byStatus[s]=(byStatus[s]||0)+1;});
+      var statusCounts = {}; cols.forEach(function(c){statusCounts[c.key]=byStatus[c.key]||0;});
+      var byProj = {}, projColors = ['var(--accent)','var(--success)','var(--warn)','var(--danger)','#8b5cf6','#ec4899','#06b6d4','#f97316','#84cc16'];
+      var projList = [];
+      tasks.forEach(function(t){var pn=t.project_name||'未知';if(!byProj[pn]){byProj[pn]=0;projList.push({key:pn,label:pn});}byProj[pn]++;});
+      projList.forEach(function(s,i){s.color=projColors[i%projColors.length];});
+      html += '<div style="display:flex;gap:8px;margin-bottom:10px">' +
+        _buildPieChart(cols,statusCounts,totalTasks,'状态分布') +
+        _buildPieChart(projList,byProj,totalTasks,'项目分布') + '</div>';
+    }
+
+    // Monthly calendar with intensity colors
+    if (typeof _renderMonthCalendar === 'function') {
+      html += _renderMonthCalendar(now, dailyMap, data);
+    }
     cal.innerHTML = html;
   }).catch(function(){});
 }

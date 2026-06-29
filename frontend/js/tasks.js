@@ -12,11 +12,11 @@ var _taskFilterAssignee = '';
 /* ── Entry Point ── */
 
 function initTasks() {
-  // Called from VIEW_REGISTRY (lazy-loaded)
   _taskProjectId = null;
   _taskFilterStatus = '';
   _taskFilterExecution = '';
   _taskFilterAssignee = '';
+  _calChangeCallback = loadTaskData;
   renderTasksPage();
 }
 
@@ -59,8 +59,6 @@ function renderTasksPage() {
           '<span style="font-weight:600;font-size:15px">任务管理</span>' +
           '<span style="display:flex;gap:4px">' +
             '<button class="btn-sm" id="task-view-table" onclick="switchTaskView(\'table\')" style="background:var(--accent);color:#fff">列表</button>' +
-            '<button class="btn-sm" id="task-view-board" onclick="switchTaskView(\'board\')">看板</button>' +
-            '<button class="btn-sm" id="task-view-cal" onclick="switchTaskView(\'calendar\')">日历</button>' +
           '</span>' +
         '</div>' +
         '<div style="display:flex;gap:8px">' +
@@ -72,7 +70,6 @@ function renderTasksPage() {
         '<span style="font-weight:600;font-size:13px">任务列表</span>' +
         '<span style="display:flex;gap:4px">' +
           '<button class="btn-xs" id="task-view-table" onclick="switchTaskView(\'table\')" style="background:var(--accent);color:#fff">列表</button>' +
-          '<button class="btn-xs" id="task-view-board" onclick="switchTaskView(\'board\')">看板</button>' +
         '</span>' +
         '<div style="display:flex;gap:4px">' +
           '<button class="btn-xs" onclick="openBatchCreateDialog()">+批量</button>' +
@@ -133,9 +130,9 @@ function _renderTaskFilters() {
 
 function switchTaskView(mode) {
   _taskViewMode = mode;
-  ['table','board','calendar'].forEach(function(m) {
+  ['table','board'].forEach(function(m) {
     var btn = document.getElementById('task-view-' + m);
-    if (btn) { btn.style.background = m === mode ? 'var(--accent)' : ''; btn.style.color = m === mode ? '#fff' : ''; /* white text on accent — universal */ }
+    if (btn) { btn.style.background = m === mode ? 'var(--accent)' : ''; btn.style.color = m === mode ? '#fff' : ''; }
   });
   loadTaskData();
 }
@@ -177,8 +174,7 @@ async function loadTaskData() {
     populateTaskFilters(data || [], execs);
 
     if (_taskViewMode === 'table') renderTaskTable(data || [], execs);
-    else if (_taskViewMode === 'board') renderTaskBoard(data || []);
-    else renderTaskCalendar();
+    else renderTaskCalendar(); // combined board + calendar view
 
   } catch(e) {
     content.innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message || '未知错误') + '</div>';
@@ -247,7 +243,7 @@ function _renderTaskRow(t, stageMap) {
     stageName = t.execution_name;
   }
   var progressPct = t.progress || 0;
-  var overdue = t.due_date && t.status !== 'done' && t.status !== 'closed' && t.due_date < new Date().toISOString().slice(0,10);
+  var overdue = t.due_date && t.status !== 'done' && t.status !== 'closed' && t.due_date < fmtLocalDate();
   var assigneeName = t.assignee_name || t.assignee_username || (t.assignee_id || '-');
   var projName = t.project_name || '';
   return '<tr class="clickable">' +
@@ -277,185 +273,7 @@ function _renderPriority(p) {
 
 /* ── Board View (simplified — drag-and-drop in later iteration) ── */
 
-function renderTaskBoard(tasks) {
-  var content = document.getElementById('task-content');
-  if (!content) return;
-
-  var columns = [
-    {key: 'todo', label: '待办', color: 'var(--muted)'},
-    {key: 'in_progress', label: '进行中', color: 'var(--accent)'},
-    {key: 'review', label: '评审中', color: 'var(--warn)'},
-    {key: 'done', label: '已完成', color: 'var(--success)'},
-  ];
-
-  var byStatus = {};
-  columns.forEach(function(c) { byStatus[c.key] = []; });
-  if (tasks) {
-    tasks.forEach(function(t) {
-      var s = t.status || 'todo';
-      if (!byStatus[s]) s = 'todo';
-      if (byStatus[s]) byStatus[s].push(t);
-    });
-  }
-
-  // Status pie chart
-  var total = tasks ? tasks.length : 0;
-  var statsHtml = '';
-  if (total > 0) {
-    var statusCounts = {};
-    columns.forEach(function(c) { statusCounts[c.key] = (byStatus[c.key] || []).length; });
-    var statusPie = _buildPieChart(columns, statusCounts, total, '状态分布');
-    // Stage pie chart
-    var byStage = {};
-    var stageColors = ['var(--accent)','var(--success)','var(--warn)','var(--danger)','#8b5cf6','#ec4899','#06b6d4','#f97316','#84cc16','#64748b'];
-    var stageList = [];
-    if (tasks) {
-      tasks.forEach(function(t) {
-        var sn = t.stage_name || t.execution_name || '未分类';
-        if (!byStage[sn]) { byStage[sn] = 0; stageList.push({key: sn, label: sn}); }
-        byStage[sn]++;
-      });
-    }
-    stageList.forEach(function(s, i) { s.color = stageColors[i % stageColors.length]; });
-    var stagePie = _buildPieChart(stageList, byStage, total, '阶段分布');
-    statsHtml = '<div style="display:flex;gap:12px;margin-bottom:16px">' + statusPie + stagePie + '</div>';
-  }
-
-  var html = statsHtml + '<div style="display:flex;gap:12px;height:100%">';
-  columns.forEach(function(col) {
-    var items = byStatus[col.key];
-    html += '<div style="flex:1;background:var(--bg-secondary);border-radius:6px;padding:12px;display:flex;flex-direction:column">' +
-      '<div style="font-weight:600;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:6px">' +
-        '<span style="width:8px;height:8px;border-radius:50%;background:' + col.color + ';display:inline-block"></span>' +
-        col.label + ' <span style="color:var(--muted);font-weight:400;font-size:11px">(' + items.length + ')</span>' +
-      '</div>' +
-      '<div style="flex:1;overflow-y:auto">';
-    items.forEach(function(t) {
-      html += '<div class="card-pad" style="margin-bottom:8px;cursor:pointer;font-size:12px" onclick="openTaskViewDialog(' + t.id + ')">' +
-        '<div style="font-weight:500;margin-bottom:4px">' + escHtml(t.title) + '</div>' +
-        '<div style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--muted)">' +
-          _renderPriority(t.priority) +
-          '<span>' + (t.consumed_hours || 0).toFixed(1) + '/' + (t.estimate_hours || 0).toFixed(1) + 'h</span>' +
-          (t.due_date ? '<span>' + t.due_date + '</span>' : '') +
-        '</div>' +
-      '</div>';
-    });
-    html += '</div></div>';
-  });
-  html += '</div>';
-  content.innerHTML = html;
-}
-
-/* ── Calendar View ── */
-
-async function renderTaskCalendar() {
-  var content = document.getElementById('task-content');
-  if (!content) return;
-
-  var now = new Date();
-  var weekStart = new Date(now);
-  weekStart.setDate(now.getDate() - now.getDay() + 1); // Monday
-  var weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 6);
-
-  var dateFrom = weekStart.toISOString().slice(0,10);
-  var dateTo = weekEnd.toISOString().slice(0,10);
-
-  try {
-    var user = getCurrentUser();
-    var calData = await API.get('/worklogs/calendar?user_id=' + (user ? user.id : '') + '&date_from=' + dateFrom + '&date_to=' + dateTo);
-
-    var dailyMap = {};
-    if (calData && calData.daily) {
-      calData.daily.forEach(function(d) { dailyMap[d.date] = d; });
-    }
-
-    var html = '<div style="padding:16px">';
-    var weekTotal = calData ? (calData.total || 0) : 0;
-    html += '<div style="font-weight:600;font-size:15px;margin-bottom:4px">本周工时: ' + weekTotal.toFixed(1) + 'h</div>';
-    html += '<div style="font-size:11px;color:var(--muted);margin-bottom:16px">工作强度: 日标准 8h</div>';
-    html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px">';
-
-    var dayLabels = ['一','二','三','四','五','六','日'];
-    for (var i = 0; i < 7; i++) {
-      var d = new Date(weekStart);
-      d.setDate(weekStart.getDate() + i);
-      var dStr = d.toISOString().slice(0,10);
-      var dayData = dailyMap[dStr];
-      var hours = dayData ? dayData.total_hours : 0;
-      var intensity = _getIntensityStyle(hours);
-
-      html += '<div onclick="openDayDetail(\'' + dStr + '\',' + hours + ')" style="border:1px solid var(--border);border-radius:6px;padding:8px;text-align:center;cursor:pointer;' + intensity.bg + '">' +
-        '<div style="font-size:11px;color:var(--muted)">' + dayLabels[i] + '</div>' +
-        '<div style="font-size:18px;font-weight:700;margin:4px 0;color:' + intensity.text + '">' + d.getDate() + '</div>' +
-        '<div style="font-size:13px;font-weight:600;color:' + intensity.text + '">' + hours.toFixed(1) + 'h</div>' +
-        '<div style="font-size:10px;color:' + intensity.text + ';opacity:0.7">' + intensity.label + '</div>' +
-      '</div>';
-    }
-    html += '</div></div>';
-    content.innerHTML = html;
-  } catch(e) {
-    content.innerHTML = '<div class="error-state">加载日历失败: ' + escHtml(e.message || '') + '</div>';
-  }
-}
-
-function _buildPieChart(groups, counts, total, title) {
-  var pieParts = [];
-  var accumulated = 0;
-  groups.forEach(function(g) {
-    var cnt = counts[g.key] || 0;
-    if (cnt > 0) {
-      var pct = cnt / total;
-      pieParts.push(g.color + ' ' + Math.round(accumulated*100) + '% ' + Math.round((accumulated+pct)*100) + '%');
-      accumulated += pct;
-    }
-  });
-  var gradient = pieParts.length ? 'conic-gradient(' + pieParts.join(',') + ')' : '';
-  return '<div style="flex:1;display:flex;gap:10px;align-items:center;padding:10px;background:var(--bg);border-radius:8px">' +
-    '<div style="width:48px;height:48px;border-radius:50%;background:' + gradient + ';flex-shrink:0"></div>' +
-    '<div style="font-size:11px;line-height:1.6;min-width:0">' +
-      '<div style="font-weight:600;margin-bottom:2px;font-size:12px">' + title + ' (' + total + ')</div>' +
-      groups.map(function(g) {
-        var cnt = counts[g.key] || 0;
-        if (!cnt) return '';
-        return '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:' + g.color + ';margin-right:3px"></span>' +
-          escHtml(g.label) + ': ' + cnt + ' (' + Math.round(cnt/total*100) + '%)</div>';
-      }).join('') +
-    '</div></div>';
-}
-
-function _getIntensityStyle(hours) {
-  if (hours <= 0) return {bg: '', text: 'var(--muted)', label: '休息'};
-  var pct = hours / 8;
-  if (pct <= 0.25) return {bg: 'background:var(--success-lt)', text: 'var(--success)', label: '轻松'};
-  if (pct <= 0.5)  return {bg: 'background:var(--accent-lt)', text: 'var(--accent)', label: '适中'};
-  if (pct <= 0.75) return {bg: 'background:var(--warn-lt)', text: 'var(--warn)', label: '饱和'};
-  if (pct <= 1.0)  return {bg: 'background:var(--danger-lt)', text: 'var(--danger)', label: '满负荷'};
-  return {bg: 'background:var(--danger);color:#fff', text: '#fff', label: '超时'};
-}
-
-function openDayDetail(dateStr, totalHours) {
-  API.get('/worklogs/calendar?date_from=' + dateStr + '&date_to=' + dateStr).then(function(data) {
-    var daily = (data && data.daily) ? data.daily : [];
-    var dayData = daily.length ? daily[0] : null;
-    var tasksHtml = '';
-    if (dayData && dayData.tasks) {
-      dayData.tasks.forEach(function(t) {
-        var pct = totalHours > 0 ? Math.round(t.hours / totalHours * 100) : 0;
-        tasksHtml += '<div style="padding:6px 0;border-bottom:1px solid var(--border)">' +
-          '<div style="font-weight:500">' + escHtml(t.title) + '</div>' +
-          '<div style="font-size:11px;color:var(--muted)">' + t.hours.toFixed(1) + 'h (' + pct + '%)' + (t.description ? ' — ' + escHtml(t.description) : '') + '</div>' +
-        '</div>';
-      });
-    }
-    openDialog(dateStr + ' 工时详情 (' + totalHours.toFixed(1) + 'h)',
-      '<div style="max-height:400px;overflow-y:auto">' + (tasksHtml || '<div style="color:var(--muted)">当日无工时记录</div>') + '</div>',
-      [{text: '关闭', onclick: '_closeTaskDialog()'}]);
-
-  }).catch(function(e) {
-    showToast('加载详情失败: ' + (e.message || '未知错误'), 'error');
-  });
-}
+/* Pie charts & calendar moved to components.js */
 
 /* ── Task Dialog ── */
 
@@ -1064,85 +882,90 @@ function _renderWorklogTable(logs, taskId) {
 }
 
 function openWorklogDialog(taskId) {
-  var today = new Date().toISOString().slice(0,10);
-  var html = '<div>' +
-    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">日期</label>' +
-      '<input class="search-inp" id="wl-date" type="date" value="' + today + '" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
-    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工时(h)</label>' +
-      '<input class="search-inp" id="wl-hours" type="number" step="0.5" min="0.5" value="1" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
-    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">进度(%)</label>' +
-      '<input class="search-inp" id="wl-progress" type="number" min="0" max="100" step="5" value="0" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
-    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工作描述</label>' +
-      '<textarea class="search-inp" id="wl-desc" rows="2" style="width:100%;box-sizing:border-box;margin-top:2px;resize:vertical"></textarea></div>' +
-  '</div>';
-
-  openDialog('记录工时', html, [
-    {text: '取消', onclick: '_closeTaskDialog()'},
-    {text: '提交', cls: 'btn-primary', onclick: 'submitWorklog(' + taskId + ')'}
-  ], {maxWidth: 450});
+  // Load current progress
+  API.get('/tasks/'+taskId).then(function(task) {
+    var today = fmtLocalDate();
+    var html = '<div>' +
+      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">日期 *</label>' +
+        '<input class="search-inp" id="wl-date" type="date" required value="'+today+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
+      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工时(h) *</label>' +
+        '<input class="search-inp" id="wl-hours" type="number" step="0.5" min="0.5" required value="1" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
+      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">进度(%) * 当前: '+(task.progress||0)+'%</label>' +
+        '<input class="search-inp" id="wl-progress" type="number" min="0" max="100" step="5" required value="'+(task.progress||0)+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
+      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工作描述 *</label>' +
+        '<textarea class="search-inp" id="wl-desc" rows="2" required style="width:100%;box-sizing:border-box;margin-top:2px;resize:vertical"></textarea></div>' +
+    '</div>';
+    openDialog('记录工时', html, [
+      {text:'取消',onclick:'_closeTaskDialog()'},
+      {text:'提交',cls:'btn-primary',onclick:'submitWorklog('+taskId+')'}
+    ], {maxWidth:450});
+  }).catch(function() {
+    showToast('加载任务信息失败', 'error');
+  });
 }
 
 function openWorklogEditDialog(wlId, taskId) {
   Promise.all([
-    API.get('/worklogs?task_id=' + taskId),
-    API.get('/tasks/' + taskId)
+    API.get('/worklogs?task_id='+taskId),
+    API.get('/tasks/'+taskId)
   ]).then(function(results) {
-    var logs = results[0] || [];
-    var task = results[1] || {};
-    var w = logs.find(function(l) { return l.id === wlId; });
-    if (!w) { showToast('未找到工时记录', 'error'); return; }
+    var logs = results[0]||[];
+    var task = results[1]||{};
+    var w = logs.find(function(l){return l.id===wlId;});
+    if(!w){showToast('未找到工时记录','error');return;}
     var html = '<div>' +
-      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">日期</label>' +
-        '<input class="search-inp" id="wl-date" type="date" value="' + (w.date || '') + '" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
-      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工时(h)</label>' +
-        '<input class="search-inp" id="wl-hours" type="number" step="0.5" min="0.5" value="' + w.hours + '" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
-      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">进度(%)</label>' +
-        '<input class="search-inp" id="wl-progress" type="number" min="0" max="100" step="5" value="' + (task.progress || 0) + '" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
-      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工作描述</label>' +
-        '<textarea class="search-inp" id="wl-desc" rows="2" style="width:100%;box-sizing:border-box;margin-top:2px;resize:vertical">' + escHtml(w.description || '') + '</textarea></div>' +
+      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">日期 *</label>' +
+        '<input class="search-inp" id="wl-date" type="date" required value="'+(w.date||'')+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
+      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工时(h) *</label>' +
+        '<input class="search-inp" id="wl-hours" type="number" step="0.5" min="0.5" required value="'+w.hours+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
+      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">进度(%) * 当前: '+(task.progress||0)+'%</label>' +
+        '<input class="search-inp" id="wl-progress" type="number" min="0" max="100" step="5" required value="'+(task.progress||0)+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
+      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工作描述 *</label>' +
+        '<textarea class="search-inp" id="wl-desc" rows="2" required style="width:100%;box-sizing:border-box;margin-top:2px;resize:vertical">'+escHtml(w.description||'')+'</textarea></div>' +
     '</div>';
     openDialog('编辑工时', html, [
-      {text: '取消', onclick: '_closeTaskDialog()'},
-      {text: '保存', cls: 'btn-primary', onclick: '_submitWorklogEdit(' + wlId + ',' + taskId + ')'}
-    ], {maxWidth: 450});
-  }).catch(function(e) { showToast('加载失败: ' + (e.message || ''), 'error'); });
-}
-
-async function _submitWorklogEdit(wlId, taskId) {
-  var hours = parseFloat(document.getElementById('wl-hours').value);
-  var progress = parseInt(document.getElementById('wl-progress').value) || 0;
-  if (!hours || hours <= 0) { showToast('请输入有效的工时数', 'error'); return; }
-  try {
-    await API.put('/worklogs/' + wlId, {
-      hours: hours,
-      date: document.getElementById('wl-date').value,
-      description: document.getElementById('wl-desc').value.trim(),
-    });
-    await API.put('/tasks/' + taskId, { progress: progress });
-    showToast('工时已更新', 'success');
-    _closeTaskDialog();
-    _refreshTaskWorklogs(taskId);
-    loadTaskData();
-  } catch(e) { showToast('更新失败: ' + (e.message || '未知错误'), 'error'); }
+      {text:'取消',onclick:'_closeTaskDialog()'},
+      {text:'保存',cls:'btn-primary',onclick:'_submitWorklogEdit('+wlId+','+taskId+')'}
+    ], {maxWidth:450});
+  }).catch(function(e){showToast('加载失败: '+(e.message||''),'error');});
 }
 
 async function submitWorklog(taskId) {
   var hours = parseFloat(document.getElementById('wl-hours').value);
-  var progress = parseInt(document.getElementById('wl-progress').value) || 0;
+  var progress = parseInt(document.getElementById('wl-progress').value);
+  var desc = document.getElementById('wl-desc').value.trim();
+  var date = document.getElementById('wl-date').value;
+  if (!date) { showToast('请选择日期', 'error'); return; }
   if (!hours || hours <= 0) { showToast('请输入有效的工时数', 'error'); return; }
+  if (isNaN(progress) || progress < 0 || progress > 100) { showToast('请输入有效的进度(0-100)', 'error'); return; }
+  if (!desc) { showToast('请填写工作描述', 'error'); return; }
   try {
-    await API.post('/worklogs', {
-      task_id: taskId,
-      hours: hours,
-      date: document.getElementById('wl-date').value,
-      description: document.getElementById('wl-desc').value.trim(),
-    });
-    await API.put('/tasks/' + taskId, { progress: progress });
+    await API.post('/worklogs', {task_id:taskId, hours:hours, date:date, description:desc});
+    await API.put('/tasks/'+taskId, {progress:progress});
     showToast('工时已记录', 'success');
     _closeTaskDialog();
     _refreshTaskWorklogs(taskId);
     loadTaskData();
-  } catch(e) { showToast('记录失败: ' + (e.message || '未知错误'), 'error'); }
+  } catch(e) { showToast('记录失败: '+(e.message||'未知错误'), 'error'); }
+}
+
+async function _submitWorklogEdit(wlId, taskId) {
+  var hours = parseFloat(document.getElementById('wl-hours').value);
+  var progress = parseInt(document.getElementById('wl-progress').value);
+  var desc = document.getElementById('wl-desc').value.trim();
+  var date = document.getElementById('wl-date').value;
+  if (!date) { showToast('请选择日期', 'error'); return; }
+  if (!hours || hours <= 0) { showToast('请输入有效的工时数', 'error'); return; }
+  if (isNaN(progress) || progress < 0 || progress > 100) { showToast('请输入有效的进度(0-100)', 'error'); return; }
+  if (!desc) { showToast('请填写工作描述', 'error'); return; }
+  try {
+    await API.put('/worklogs/'+wlId, {hours:hours, date:date, description:desc});
+    await API.put('/tasks/'+taskId, {progress:progress});
+    showToast('工时已更新', 'success');
+    _closeTaskDialog();
+    _refreshTaskWorklogs(taskId);
+    loadTaskData();
+  } catch(e) { showToast('更新失败: '+(e.message||'未知错误'), 'error'); }
 }
 
 function deleteWorklogById(wlId, taskId) {

@@ -83,5 +83,6 @@ allowed-tools: Read, Write, Edit, Bash
 1. **API 字段名以实际返回为准**：`/api/dashboard/projects` 返回 `data.items` 而非 `data.projects`。需查看后端实际 `return` 语句确认 key 名。
 2. **JS 函数名不能含连字符**：`task-proj-comboOpen()` 被解析为 `task - proj - comboOpen()`。通过 `onclick` 属性调用的函数名必须转驼峰。
 3. **提取组件时同步更新 HTML 中的 onclick**：`onfocus="oldFunc()"` 和 JS 里 `window.newFunc = ...` 要一起改。
-4. **删变量定义时检查所有引用**：简化函数时删了变量定义但漏删使用处 → `ReferenceError`。
+4. **日期时间**：详见 `CLAUDE.md` §"日期时间规范（前后端统一）"。
+5. **删变量定义时检查所有引用**：简化函数时删了变量定义但漏删使用处 → `ReferenceError`。
 5. **交付前 code-review**：修改完成交付用户验证前，主动 `/code-review` 检查旧代码残留（新旧实现并存）、遗漏的引用更新、重复代码块。

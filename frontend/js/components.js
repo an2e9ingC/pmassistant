@@ -685,3 +685,195 @@ document.addEventListener('click', function(e) {
   });
 });
 
+/* ═══════════════════════════════════════════════════
+   SVG DONUT PIE CHART — reusable component
+   ═══════════════════════════════════════════════════ */
+
+function _buildPieChart(groups, counts, total, title) {
+  var cx = 45, cy = 45, radius = 36, strokeWidth = 14;
+  var circumference = 2 * Math.PI * radius;
+  var accumulated = 0;
+  var paths = '';
+
+  groups.forEach(function(g) {
+    var cnt = counts[g.key] || 0;
+    if (cnt <= 0) return;
+    var pct = cnt / total;
+    var dashLen = pct * circumference;
+    var dashOffset = circumference - accumulated / total * circumference;
+    var color = g.color;
+    if (color.indexOf('var(') === 0) color = _resolveCSSVar(color);
+    paths += '<circle cx="'+cx+'" cy="'+cy+'" r="'+radius+'" fill="none" stroke="'+color+'" stroke-width="'+strokeWidth+'" ' +
+      'stroke-dasharray="'+dashLen.toFixed(1)+' '+(circumference-dashLen).toFixed(1)+'" ' +
+      'stroke-dashoffset="'+(-dashOffset).toFixed(1)+'" ' +
+      'style="transform:rotate(-90deg);transform-origin:'+cx+'px '+cy+'px;cursor:pointer;transition:opacity 0.15s" ' +
+      'onmouseover="_showPieTooltip(event,\''+escHtml(g.label)+'\','+cnt+','+Math.round(pct*100)+')" ' +
+      'onmouseout="_hidePieTooltip()">' +
+      '<title>'+escHtml(g.label)+': '+cnt+' ('+Math.round(pct*100)+'%)</title></circle>';
+    accumulated += cnt;
+  });
+
+  var svg = '<svg width="90" height="90" viewBox="0 0 90 90" style="flex-shrink:0">' +
+    '<circle cx="'+cx+'" cy="'+cy+'" r="'+radius+'" fill="none" stroke="var(--border)" stroke-width="'+strokeWidth+'"/>' +
+    paths + '</svg>';
+
+  return '<div style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:14px;display:flex;flex-direction:column;align-items:center;gap:12px">' +
+    '<div style="font-weight:620;font-size:13px">' + title + '</div>' +
+    '<div style="position:relative;width:90px;height:90px">' + svg +
+      '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none">' +
+        '<span style="font-size:18px;font-weight:700;font-family:var(--mono);line-height:1">' + total + '</span>' +
+        '<span style="font-size:10px;color:var(--muted)">个任务</span></div></div>' +
+    '<div style="width:100%;font-size:11px;line-height:1.6">' +
+      groups.map(function(g) {
+        var cnt = counts[g.key] || 0;
+        if (!cnt) return '';
+        var pct = Math.round(cnt/total*100);
+        return '<div style="display:flex;align-items:center;justify-content:space-between;padding:2px 0">' +
+          '<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+g.color+';margin-right:6px;vertical-align:middle"></span>'+escHtml(g.label)+'</span>' +
+          '<span style="font-family:var(--mono);color:var(--muted)">'+cnt+' ('+pct+'%)</span></div>';
+      }).join('') +
+    '</div></div>';
+}
+
+function _resolveCSSVar(cssVar) {
+  var el = document.createElement('div');
+  el.style.color = cssVar;
+  document.body.appendChild(el);
+  var color = getComputedStyle(el).color;
+  el.remove();
+  return color || '#999';
+}
+
+function _showPieTooltip(e, label, cnt, pct) {
+  var tip = document.getElementById('pie-tooltip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = 'pie-tooltip';
+    tip.style.cssText = 'position:fixed;pointer-events:none;z-index:9999;padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;font-size:12px;box-shadow:var(--sh-md);white-space:nowrap;';
+    document.body.appendChild(tip);
+  }
+  tip.innerHTML = '<strong>'+escHtml(label)+'</strong>: '+cnt+' 个 ('+pct+'%)';
+  tip.style.left = (e.clientX+12)+'px';
+  tip.style.top = (e.clientY-28)+'px';
+  tip.style.display = 'block';
+}
+
+function _hidePieTooltip() {
+  var tip = document.getElementById('pie-tooltip');
+  if (tip) tip.style.display = 'none';
+}
+
+var _calYear, _calMonth;
+
+function _renderMonthCalendar(today, dailyMap, calData) {
+  if (!_calYear) { _calYear = today.getFullYear(); _calMonth = today.getMonth()+1; }
+  var total = calData ? (calData.total||0) : 0;
+  var monthNames = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+  var dayNames = ['一','二','三','四','五','六','日'];
+
+  var firstDay = new Date(_calYear, _calMonth-1, 1);
+  var lastDay = new Date(_calYear, _calMonth, 0);
+  var startDow = firstDay.getDay()===0 ? 6 : firstDay.getDay()-1;
+  var totalDays = lastDay.getDate();
+  var prevMonthDays = new Date(_calYear, _calMonth-1, 0).getDate();
+
+  var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
+    '<span style="font-size:11px;color:var(--muted)">'+_calYear+'年'+monthNames[_calMonth-1]+' · 本周 '+total.toFixed(1)+'h</span>' +
+    '<span style="display:flex;gap:4px">' +
+      '<button class="btn-xs" onclick="_calShift(-1)">◀</button>' +
+      '<button class="btn-xs" style="font-weight:600" onclick="_calGoToday()">今天</button>' +
+      '<button class="btn-xs" onclick="_calShift(1)">▶</button>' +
+    '</span></div>';
+
+  html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);text-align:center;margin-bottom:4px">';
+  dayNames.forEach(function(n) { html += '<div style="font-size:10px;color:var(--muted);padding:2px 0">'+n+'</div>'; });
+  html += '</div>';
+
+  var cells = '';
+  var totalCells = Math.ceil((startDow + totalDays)/7)*7;
+  for (var i=0; i<totalCells; i++) {
+    var dayNum = i - startDow + 1;
+    var isCurrentMonth = dayNum >= 1 && dayNum <= totalDays;
+    var displayDay = isCurrentMonth ? dayNum : (dayNum < 1 ? prevMonthDays+dayNum : dayNum-totalDays);
+    // Calculate actual date for this cell
+    var y = _calYear, m = _calMonth-1;
+    if (dayNum < 1) { m--; if(m<0){m=11;y--;} }
+    else if (dayNum > totalDays) { m++; if(m>11){m=0;y++;} }
+    var d = new Date(y, m, displayDay);
+    var dStr = y+'-'+String(m+1).padStart(2,'0')+'-'+String(displayDay).padStart(2,'0');
+    var dd = dailyMap[dStr];
+    var h = dd ? (dd.total_hours || dd.h || 0) : 0;
+    var intensity = _getIntensityStyle(h);
+    var todayStr = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+    var isToday = dStr === todayStr;
+
+    // Cell background fill: solid blue from bottom (0-8h), overtime color from yellow to red (>8h)
+    var cellBg = '', tipText = '';
+    if (isCurrentMonth && h > 0) {
+      tipText = h.toFixed(1)+'h';
+      if (h <= 8) {
+        var pct = h/8*100;
+        cellBg = 'background:linear-gradient(to top,#3B82F6 '+pct+'%,transparent '+pct+'%)';
+      } else {
+        // Overtime: no blue, yellow→red gradient from bottom up, height = overtime/8
+        var overH = h - 8;
+        var overPct = overH/8*100;  // overtime height relative to standard 8h
+        cellBg = 'background:linear-gradient(to top,#fbbf24 0%,#ef4444 '+overPct+'%,transparent '+overPct+'%)';
+      }
+    }
+    cells += '<div onclick="openDayDetail(\''+dStr+'\','+h+')" '+(tipText?'title="'+tipText+'"':'')+' style="border:1px solid '+(isToday?'var(--accent)':'var(--border)')+';border-radius:4px;padding:3px 2px;text-align:center;cursor:pointer;' +
+      cellBg + ';' + (isCurrentMonth ? '' : 'opacity:0.35;') + '">' +
+      '<div style="font-size:11px;font-weight:'+(isToday?'700':'400')+';color:'+(isCurrentMonth?'var(--fg)':'var(--muted)')+'">'+displayDay+'</div>' +
+    '</div>';
+  }
+  html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px">'+cells+'</div>';
+  return html;
+}
+
+var _calChangeCallback = null;
+
+function _calShift(delta) {
+  _calMonth += delta;
+  if (_calMonth > 12) { _calMonth = 1; _calYear++; }
+  if (_calMonth < 1) { _calMonth = 12; _calYear--; }
+  if (_calChangeCallback) _calChangeCallback();
+}
+
+function _calGoToday() {
+  var now = new Date();
+  _calYear = now.getFullYear();
+  _calMonth = now.getMonth()+1;
+  if (_calChangeCallback) _calChangeCallback();
+}
+
+function openDayDetail(dateStr, totalHours) {
+  API.get('/worklogs/calendar?date_from='+dateStr+'&date_to='+dateStr).then(function(data) {
+    var daily = (data&&data.daily) ? data.daily : [];
+    var dayData = daily.length ? daily[0] : null;
+    var tasksHtml = '';
+    if (dayData && dayData.tasks) {
+      dayData.tasks.forEach(function(t) {
+        var pct = totalHours>0 ? Math.round(t.hours/totalHours*100) : 0;
+        tasksHtml += '<div style="padding:6px 0;border-bottom:1px solid var(--border)">' +
+          '<div style="font-weight:500">'+escHtml(t.title)+'</div>' +
+          '<div style="font-size:11px;color:var(--muted)">'+t.hours.toFixed(1)+'h ('+pct+'%)'+(t.description?' — '+escHtml(t.description):'')+'</div></div>';
+      });
+    }
+    openDialog(dateStr+' 工时详情 ('+totalHours.toFixed(1)+'h)',
+      '<div style="max-height:400px;overflow-y:auto">'+(tasksHtml||'<div style="color:var(--muted)">当日无工时记录</div>')+'</div>',
+      [{text:'关闭',onclick:"document.querySelector('.note-dialog-overlay').remove()"}]);
+  }).catch(function(e) {
+    showToast('加载详情失败: '+(e.message||'未知错误'), 'error');
+  });
+}
+
+function _getIntensityStyle(hours) {
+  if (hours <= 0) return {bg: '', text: 'var(--muted)'};
+  var pct = hours / 8;
+  if (pct <= 0.25) return {bg: 'background:var(--success-lt)', text: 'var(--success)'};
+  if (pct <= 0.5)  return {bg: 'background:var(--accent-lt)', text: 'var(--accent)'};
+  if (pct <= 0.75) return {bg: 'background:var(--warn-lt)', text: 'var(--warn)'};
+  if (pct <= 1.0)  return {bg: 'background:var(--danger-lt)', text: 'var(--danger)'};
+  return {bg: 'background:var(--danger);color:#fff', text: '#fff'};
+}
+

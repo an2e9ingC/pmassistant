@@ -621,7 +621,7 @@ function buildGantt(data) {
     return '<div class="' + cls + '" style="width:' + c.w + 'px"></div>';
   }).join('');
 
-  var today = new Date().toISOString().slice(0, 10);
+  var today = fmtLocalDate();
   var todayPx = ganttPx(today, range, totalWidth);
   _ganttTodayPx = todayPx;
 
@@ -1228,7 +1228,7 @@ function showDeliveryForm(record) {
         '<button class="note-dialog-close" onclick="cancelDeliveryForm()">&times;</button></div>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">' +
         '<div><label style="font-size:11px;color:var(--muted)">' + prodLabel + '</label><select class="search-inp" id="df-product" style="margin-top:4px;padding:8px 10px">' + prodOptions + '</select></div>' +
-        '<div><label style="font-size:11px;color:var(--muted)">交付日期</label><input class="search-inp" id="df-date" type="date" value="' + (r.date || new Date().toISOString().slice(0,10)) + '" style="margin-top:4px"></div>' +
+        '<div><label style="font-size:11px;color:var(--muted)">交付日期</label><input class="search-inp" id="df-date" type="date" value="' + (r.date || fmtLocalDate()) + '" style="margin-top:4px"></div>' +
         '<div><label style="font-size:11px;color:var(--muted)">交付责任人（PMA用户）</label>' + _selectHtml('df-responsible', _userNames, r.responsible_person || '') + '</div>' +
         '<div><label style="font-size:11px;color:var(--muted)">收货方（客户）</label>' + _selectHtml('df-receiver', _customerNames, r.receiver || '') + '</div>' +
       '</div>' +

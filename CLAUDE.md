@@ -101,9 +101,16 @@ NAS 文件 ───────────┘
 - 遗漏的引用更新（改了一处未改关联处）
 - 重复代码块
 
-### 北京时间显示
+### 日期时间规范（前后端统一）
 
-**所有展示给用户的时间必须为北京时间（UTC+8）**。SQLite `func.now()` 返回 UTC 时间，后端所有日期时间字段在返回给前端前必须使用 `to_local_str()` 转换（`backend/database.py` 已提供），**禁止直接使用 `.strftime()` 或原始 UTC 时间**。
+**所有展示给用户的时间必须为北京时间（UTC+8）。**
+
+| 端 | 规则 | 工具 |
+|----|------|------|
+| 后端 Python | 时间字段返回前端前必须转换 | `to_local_str()`（`backend/database.py`） |
+| 后端 Python | 禁止直接使用 `.strftime()` 或原始 UTC 时间 | — |
+| 前端 JS | 禁止 `new Date().toISOString().slice(0,10)` 取当天日期 | 使用 `fmtLocalDate(d)`（`utils.js`） |
+| 前端 JS | `toISOString()` 转 UTC，UTC+8 时区下会偏移一天 | — |
 
 ### 服务器与环境
 
