@@ -270,6 +270,7 @@ def _task_dict(t: Task, db=None) -> dict:
     # Resolve execution name, assignee name, and project name
     exec_name = None
     assignee_name = None
+    proj_code = None
     proj_name = None
     if t.execution_id:
         from backend.models.zentao import CachedExecution
@@ -286,11 +287,13 @@ def _task_dict(t: Task, db=None) -> dict:
         proj = db.query(CachedProject).filter(CachedProject.id == t.project_id).first() if db else None
         if proj:
             proj_name = proj.name
+            proj_code = proj.code
 
     return {
         "id": t.id,
         "project_id": t.project_id,
         "project_name": proj_name,
+        "project_code": proj_code,
         "execution_id": t.execution_id,
         "stage_name": t.stage_name,
         "execution_name": exec_name or t.stage_name,

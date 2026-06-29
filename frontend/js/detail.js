@@ -98,12 +98,12 @@ function buildDetailHeader(p) {
     dateHtml = '计划时间待定';
   }
 
-  var projCode = extractProjectCode(p.name);
+  var projCode = extractProjectCode(p.name, p.code);
   var coreName = extractCoreName(p.name);
   document.getElementById('detail-header').innerHTML =
     '<div class="detail-meta">' +
       '<div class="detail-title">' +
-        projCodeTag(projCode) + ' ' +
+        projCodeTag(projCode, p.id) + ' ' +
         escHtml(coreName) +
         ((p.linked_products && p.linked_products.length)
           ? ' ' + p.linked_products.map(function(prod) {

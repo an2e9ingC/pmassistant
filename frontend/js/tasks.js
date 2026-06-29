@@ -245,9 +245,9 @@ function _renderTaskRow(t, stageMap) {
   var progressPct = t.progress || 0;
   var overdue = t.due_date && t.status !== 'done' && t.status !== 'closed' && t.due_date < fmtLocalDate();
   var assigneeName = t.assignee_name || t.assignee_username || (t.assignee_id || '-');
-  var projName = t.project_name || '';
+  var projCode = t.project_code || '';
   return '<tr class="clickable">' +
-    '<td style="font-size:11px;color:var(--muted)">' + escHtml(projName) + '</td>' +
+    '<td>' + (projCode ? projCodeTag(projCode, t.project_id) : '<span style="font-size:11px;color:var(--muted)">' + escHtml(t.project_name||'') + '</span>') + '</td>' +
     '<td style="text-align:left"><a href="javascript:void(0)" onclick="openTaskViewDialog(' + t.id + ')" style="color:var(--accent)">' + escHtml(t.title) + '</a></td>' +
     '<td>' + (stageName ? '<span style="font-size:11px;color:var(--muted)">' + escHtml(stageName) + '</span>' : '-') + '</td>' +
     '<td>' + renderPill(t.status || 'todo') + '</td>' +

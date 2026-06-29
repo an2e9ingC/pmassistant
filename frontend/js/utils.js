@@ -256,7 +256,8 @@ function clearBellUnread() {
 }
 
 // Extract project code from name: "PE0406-CDLY-xxx" -> "PE0406"
-function extractProjectCode(name) {
+function extractProjectCode(name, code) {
+  if (code) return code;
   if (!name) return '';
   return name.split('-')[0] || '';
 }
@@ -295,14 +296,16 @@ function gotoCustomerProjects(custName) {
   openCustomerByName(custName);
 }
 
-// Render unified project identity block: [PE0406] 核心名 · CDLY
-function projCodeTag(code, clickHandler) {
-  // Unified project code tag — same style as detail page top-left
-  var style = 'display:inline-flex;align-items:center;padding:3px 9px;border-radius:5px;font-size:13px;font-weight:600;letter-spacing:0.03em;font-family:\'JetBrains Mono\',var(--mono),monospace;background:var(--accent-lt);color:var(--accent);border:1px solid var(--border)';
-  if (clickHandler) {
-    return '<span style="' + style + ';cursor:pointer" onclick="' + clickHandler + '">' + escHtml(code) + '</span>';
+// Render project code tag — clickable to project detail by default
+function projCodeTag(code, clickHandlerOrProjectId) {
+  var handler = clickHandlerOrProjectId;
+  if (typeof handler === 'number' || (typeof handler === 'string' && /^\d+$/.test(handler))) {
+    handler = 'openProject(' + handler + ')';
   }
-  return '<span style="' + style + '">' + escHtml(code) + '</span>';
+  if (handler) {
+    return '<span class="proj-code-btn" onclick="' + handler + '" title="查看项目详情">' + escHtml(code) + '</span>';
+  }
+  return '<span class="proj-code-btn" style="cursor:default">' + escHtml(code) + '</span>';
 }
 
 function renderProjectIdBlock(name, customerName) {

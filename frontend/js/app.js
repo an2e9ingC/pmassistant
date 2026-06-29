@@ -1327,8 +1327,8 @@ function _renderUcTaskTable() {
   tbody.innerHTML = filtered.map(function(t) {
     var pct = t.progress || 0;
     var overdue = t.due_date && t.status !== 'done' && t.status !== 'closed' && t.due_date < fmtLocalDate();
-    return '<tr onclick="gotoView(\'tasks\')" style="cursor:pointer">' +
-      '<td style="font-size:12px;color:var(--muted)">' + escHtml(t.project_name||'') + '</td>' +
+    return '<tr style="cursor:pointer">' +
+      '<td>' + (t.project_code ? projCodeTag(t.project_code, t.project_id) : '<span style="font-size:12px;color:var(--muted)">'+escHtml(t.project_name||'')+'</span>') + '</td>' +
       '<td style="font-weight:530">' + escHtml(t.title) + '</td>' +
       '<td style="font-size:12px;color:var(--muted)">' + escHtml(t.stage_name||'-') + '</td>' +
       '<td><span class="status-pill '+t.status+'"><span class="status-dot '+t.status+'"></span>'+ (labels[t.status]||t.status) +'</span></td>' +
@@ -1383,11 +1383,11 @@ function _ucLoadCalendar(user) {
       // Project distribution: top 3 by count, show project code only, fill missing with —
       var byProj = {}, projColors = ['var(--accent)','var(--success)','var(--warn)'];
       var projList = [];
-      tasks.forEach(function(t){var pn=t.project_name||'未知';if(!byProj[pn]){byProj[pn]=0;projList.push({key:pn,label:pn});}byProj[pn]++;});
+      tasks.forEach(function(t){var pn=t.project_code||t.project_name||'未知';if(!byProj[pn]){byProj[pn]=0;projList.push({key:pn,label:pn});}byProj[pn]++;});
       projList.sort(function(a,b){return byProj[b.key]-byProj[a.key];});
       projList = projList.slice(0,3);
       while (projList.length < 3) { var dummy = '—'; projList.push({key:dummy+projList.length,label:dummy}); byProj[dummy+projList.length]=0; }
-      projList.forEach(function(s,i){s.color=projColors[i];s.label=(typeof extractProjectCode==='function'?extractProjectCode(s.label):s.label);});
+      projList.forEach(function(s,i){s.color=projColors[i];s.label=s.label;}); // project_code already in API
 
       // Filter to only active groups for status pie
       var activeCols = cols.filter(function(c){return (statusCounts[c.key]||0)>0;});

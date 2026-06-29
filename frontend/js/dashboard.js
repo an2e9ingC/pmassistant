@@ -156,7 +156,7 @@ async function loadProjectTable(filter) {
     }
 
     tbody.innerHTML = list.map(function(p) {
-      var projCode = extractProjectCode(p.name);
+      var projCode = extractProjectCode(p.name, p.code);
       var coreName = extractCoreName(p.name);
       // Tags: show max 3, or "无" if none
       var tagsList = p.tags_list || [];

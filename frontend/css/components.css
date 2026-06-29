@@ -273,6 +273,16 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .proj-icon:hover { border-color: var(--accent); box-shadow: var(--sh); }
 .proj-name { font-size: 13.5px; font-weight: 540; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .proj-code { font-size: 11.5px; color: var(--muted); font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.proj-code-btn {
+  display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 6px;
+  font-size: 12px; font-weight: 600; font-family: var(--mono);
+  background: var(--accent-lt); color: var(--accent); cursor: pointer;
+  transition: background 0.15s, color 0.15s, transform 0.1s;
+  text-decoration: none; border: 2px solid var(--accent);
+}
+.proj-code-btn:hover { background: var(--accent); color: #fff; }
+.proj-code-btn:active { transform: scale(0.96); }
 .alert-list { }
 .alert-row {
   display: flex; align-items: flex-start; gap: 12px;
