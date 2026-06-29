@@ -214,6 +214,21 @@ def _worklog_dict(w: WorkLog, task: Task = None) -> dict:
     }
 
 
+def _comment_dict(c, db=None) -> dict:
+    """Serialize TaskComment, resolving username."""
+    from backend.models.local import LocalUser
+    user = db.query(LocalUser).filter(LocalUser.id == c.user_id).first() if db and c.user_id else None
+    return {
+        "id": c.id,
+        "task_id": c.task_id,
+        "user_id": c.user_id,
+        "username": user.username if user else "?",
+        "display_name": user.display_name if user else "?",
+        "content": c.content,
+        "created_at": to_local_str(c.created_at) if c.created_at else None,
+    }
+
+
 def _parse_date(val):
     if not val:
         return None

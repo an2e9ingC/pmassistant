@@ -40,10 +40,11 @@ def get_task(db: Session, task_id: int) -> Optional[dict]:
     d = _task_dict(t, db)
     # Attach worklogs
     logs = db.query(WorkLog).filter(WorkLog.task_id == task_id).order_by(WorkLog.date.desc(), WorkLog.created_at.desc()).all()
+    from backend.services.worklog_service import _worklog_dict, _comment_dict
     d["worklogs"] = [_worklog_dict(w) for w in logs]
     # Attach comments
     comments = db.query(TaskComment).filter(TaskComment.task_id == task_id).order_by(TaskComment.created_at.asc()).all()
-    d["comments"] = [_comment_dict(c) for c in comments]
+    d["comments"] = [_comment_dict(c, db) for c in comments]
     return d
 
 
