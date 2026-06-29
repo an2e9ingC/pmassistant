@@ -1403,7 +1403,7 @@ function buildNotes(notes) {
         '<td style="font-size:12px;font-family:var(--mono);color:var(--muted);white-space:nowrap">' + escHtml(n.created_at || '') + '</td>' +
         '<td style="font-size:12px">' + escHtml(n.stage_name || '项目整体') + '</td>' +
         '<td style="font-size:12.5px;font-weight:540">' + escHtml(n.recorded_by || '') + '</td>' +
-        '<td style="font-size:13px;line-height:1.5;white-space:pre-wrap">' + escHtml(n.content) + '</td>' +
+        '<td style="font-size:13px;line-height:1.5;white-space:pre-wrap;text-align:left">' + escHtml(n.content) + '</td>' +
       '</tr>';
     });
     tableHtml += '</tbody></table></div>';

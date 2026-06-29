@@ -188,9 +188,9 @@
 }
 .proj-table th { border-right: 1px solid var(--border); }
 .proj-table th:last-child { border-right: none; }
-.proj-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.proj-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
 .proj-table td:last-child { border-right: none; }
-.proj-table td:has(.proj-name) { white-space: normal; overflow: visible; }
+.proj-table td:has(.proj-name) { white-space: normal; overflow: visible; text-align: left; }
 .proj-table tr:last-child td { border-bottom: none; }
 .proj-table tbody tr { transition: background 0.1s; }
 .proj-table.clickable tbody tr { cursor: pointer; }

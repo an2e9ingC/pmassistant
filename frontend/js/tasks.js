@@ -232,7 +232,7 @@ function renderTaskTable(tasks, execs) {
   });
 
   var html = '<table class="proj-table"><thead><tr>' +
-    '<th style="width:28%">标题</th>' +
+    '<th style="width:28%;text-align:left">标题</th>' +
     '<th style="width:10%">阶段</th>' +
     '<th style="width:7%">状态</th>' +
     '<th style="width:6%">优先级</th>' +
@@ -281,7 +281,7 @@ function _renderTaskRow(t, stageMap) {
   var overdue = t.due_date && t.status !== 'done' && t.status !== 'closed' && t.due_date < new Date().toISOString().slice(0,10);
   var assigneeName = t.assignee_name || t.assignee_username || (t.assignee_id || '-');
   return '<tr class="clickable">' +
-    '<td><a href="javascript:void(0)" onclick="openTaskViewDialog(' + t.id + ')" style="color:var(--accent)">' + escHtml(t.title) + '</a></td>' +
+    '<td style="text-align:left"><a href="javascript:void(0)" onclick="openTaskViewDialog(' + t.id + ')" style="color:var(--accent)">' + escHtml(t.title) + '</a></td>' +
     '<td>' + (stageName ? '<span style="font-size:11px;color:var(--muted)">' + escHtml(stageName) + '</span>' : '-') + '</td>' +
     '<td>' + renderPill(t.status || 'todo') + '</td>' +
     '<td>' + _renderPriority(t.priority) + '</td>' +

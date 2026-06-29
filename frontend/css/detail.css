@@ -87,7 +87,7 @@
 }
 .stage-table th { border-right: 1px solid var(--border); }
 .stage-table th:last-child { border-right: none; }
-.stage-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); font-size: 13px; vertical-align: middle; text-align: left; }
+.stage-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); font-size: 13px; vertical-align: middle; text-align: center; }
 .stage-table td:last-child { border-right: none; }
 .stage-table tr:last-child td { border-bottom: none; }
 .stage-table tbody tr:nth-child(odd) td { background: var(--surface); }

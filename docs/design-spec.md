@@ -495,9 +495,9 @@ multiSelectDialog('编辑关联产品', allProducts, linkedIds, {
 **所有表格（`.stage-table` 和 `.proj-table`）必须遵守以下规范：**
 
 - **表头（th）**：居中对齐 + 单行显示（`text-align: center; white-space: nowrap`）
-- **单元格（td）**：左对齐 + 垂直居中（`text-align: left; vertical-align: middle`）
+- **单元格（td）**：居中对齐 + 垂直居中（`text-align: center; vertical-align: middle`）
 - 表头禁止换行，内容过多时通过 `overflow: hidden; text-overflow: ellipsis` 截断
-- 特殊列（如序号列、编号列）可单独覆盖 `text-align: center`，进度/图标列保持居中
+- 需要左对齐的列（如标题、描述等文本列）可单独覆盖 `text-align: left`
 
 ### 进度指示
 
