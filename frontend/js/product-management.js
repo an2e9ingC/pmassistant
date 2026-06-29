@@ -416,7 +416,7 @@ function _pmShowAddChildDialog(parentId, level) {
 async function _pmAddChildNode(parentId) {
   var name = document.getElementById('pm-child-name').value.trim();
   if (!name) { showToast('请输入名称', 'error'); return; }
-  document.querySelector('.shared-dialog-overlay').remove();
+  closeSharedDialog();
   try {
     await API.post('/product-doc-templates/product-nodes', {name: name, parent_id: parentId, sort_order: 0});
     showToast('已添加: ' + name, 'ok');
@@ -444,7 +444,7 @@ async function _pmRenameNode(nodeId) {
   if (!name) { showToast('请输入名称', 'error'); return; }
   var ok = await verifyPassword('重命名产品节点: ' + (editNode.name || ''), 'pw_verify_product_node_edit');
   if (!ok) return;
-  document.querySelector('.shared-dialog-overlay').remove();
+  closeSharedDialog();
   try {
     await API.put('/product-doc-templates/product-nodes/' + nodeId, {name: name});
     showToast('已重命名', 'ok');
@@ -488,7 +488,7 @@ function _pmShowAddProductLineDialog() {
 async function _pmAddProductLine() {
   var name = document.getElementById('pm-line-name').value.trim();
   if (!name) { showToast('请输入产品线名称', 'error'); return; }
-  document.querySelector('.shared-dialog-overlay').remove();
+  closeSharedDialog();
   try {
     await API.post('/product-doc-templates/product-nodes', {name: name, parent_id: null, sort_order: 0});
     showToast('已添加产品线: ' + name, 'ok');
@@ -566,7 +566,7 @@ async function _pmLinkProducts() {
   var ids = [];
   cbs.forEach(function(cb) { ids.push(parseInt(cb.value)); });
 
-  document.querySelector('.shared-dialog-overlay').remove();
+  closeSharedDialog();
   var success = 0, fail = 0;
   for (var i = 0; i < ids.length; i++) {
     try {
@@ -743,7 +743,7 @@ async function _pmCreateProduct() {
     projectIds.push(parseInt(cb.value));
   });
 
-  document.querySelector('.shared-dialog-overlay').remove();
+  closeSharedDialog();
   try {
     await API.post('/product-management/products', {
       name: name, code: code, node_id: _pmSelectedNodeId,
@@ -795,7 +795,7 @@ async function _pmSaveProductProjects(productId) {
   document.querySelectorAll('.pm-prodproj-cb:checked').forEach(function(cb) {
     projectIds.push(parseInt(cb.value));
   });
-  document.querySelector('.shared-dialog-overlay').remove();
+  closeSharedDialog();
   try {
     await API.put('/product-management/products/' + productId + '/projects', { project_ids: projectIds });
     showToast('项目关联已更新', 'ok');

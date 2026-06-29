@@ -450,7 +450,7 @@ function openDayDetail(dateStr, totalHours) {
     }
     openDialog(dateStr + ' 工时详情 (' + totalHours.toFixed(1) + 'h)',
       '<div style="max-height:400px;overflow-y:auto">' + (tasksHtml || '<div style="color:var(--muted)">当日无工时记录</div>') + '</div>',
-      [{text: '关闭', onclick: 'document.querySelector(\".note-dialog-overlay\").remove()'}]);
+      [{text: '关闭', onclick: '_closeTaskDialog()'}]);
 
   }).catch(function(e) {
     showToast('加载详情失败: ' + (e.message || '未知错误'), 'error');

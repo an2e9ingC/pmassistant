@@ -261,7 +261,7 @@ function editProjectBackground() {
 async function saveProjectBackground() {
   var input = document.getElementById('proj-bg-input');
   var bg = (input && input.value) ? input.value : '';
-  document.querySelector('.shared-dialog-overlay').remove();
+  closeSharedDialog();
   try {
     await API.put('/projects/' + _comboCurId + '/background', { background: bg });
     _projDetail.background = bg;

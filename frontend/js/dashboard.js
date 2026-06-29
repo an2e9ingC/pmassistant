@@ -379,7 +379,7 @@ async function dashboardCreateProject() {
 
   if (!productIds.length) { showToast('项目必须关联至少1个产品', 'error'); return; }
 
-  document.querySelector('.shared-dialog-overlay').remove();
+  closeSharedDialog();
   try {
     await API.post('/product-management/projects', {
       name: name, code: code, project_type: pt,

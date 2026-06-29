@@ -455,7 +455,7 @@ function showAddProductNoteDialog() {
 async function addProductNote() {
   var content = document.getElementById('prod-note-content').value.trim();
   if (!content) { showToast('请输入笔记内容', 'error'); return; }
-  document.querySelector('.shared-dialog-overlay').remove();
+  closeSharedDialog();
   try {
     await API.post('/products/' + _prodDetail.id + '/notes', {content: content});
     showToast('已添加', 'ok');
@@ -600,7 +600,7 @@ async function confirmDeleteBlockDiagram(bdId) {
     return;
   }
   // Close dialog
-  document.querySelector('.shared-dialog-overlay') && document.querySelector('.shared-dialog-overlay').remove();
+  document.querySelector('.shared-dialog-overlay') && closeSharedDialog();
   // Proceed with deletion
   try {
     await API.del('/products/' + _prodDetail.id + '/block-diagrams/' + bdId);
