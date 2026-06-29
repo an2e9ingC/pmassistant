@@ -114,12 +114,8 @@ function renderPill(status) {
   return '<span class="pill ' + (status || 'pending') + '">' + (STATUS_TXT[status] || status) + '</span>';
 }
 
-function renderProgressBar(percent, status) {
-  var p = parseFloat(percent) || 0;
-  var fc = status === 'blocked' ? 'red' : p >= 100 ? 'green' : 'blue';
-  return '<div class="progress-bar"><div class="progress-fill ' + fc + '" style="width:' + p + '%"></div></div>' +
-         '<div class="prog-label">' + p + '%</div>';
-}
+// Deprecated: use renderProgressCircle instead
+// renderProgressBar removed — all progress display now uses the ring component
 
 function renderDelIcon(item) {
   if (item.done) {
@@ -600,6 +596,86 @@ function _renderComboDropdown(dropdownId, selectedId, q, selectFnName) {
       '<div class="combo-opt-meta">' + escHtml(p.code || '') + '</div>' +
     '</div>';
   }).join('');
+}
+
+/* ═══════════════════════════════════════════════════
+   USER COMBO — reusable searchable user selector
+   ═══════════════════════════════════════════════════ */
+
+var _allUsers = [];
+var _allUsersLoaded = false;
+
+async function loadAllUsers() {
+  if (_allUsersLoaded) return;
+  try {
+    var data = await API.get('/users/options');
+    if (data) _allUsers = data;
+    _allUsersLoaded = true;
+  } catch(e) {}
+}
+
+function createUserCombo(opts) {
+  var comboId = opts.comboId;
+  var inputId = opts.inputId;
+  var dropdownId = opts.dropdownId;
+  var onSelect = opts.onSelect;
+  var selectedIdFn = opts.selectedIdFn || function() { return null; };
+
+  var openFn = _fnName(comboId, 'Open');
+  var filterFn = _fnName(comboId, 'Filter');
+  var selectFn = _fnName(comboId, 'Select');
+
+  window[openFn] = function() {
+    loadAllUsers().then(function() {
+      var wrap = document.getElementById(comboId);
+      if (wrap) wrap.classList.add('open');
+      var input = document.getElementById(inputId);
+      if (input) input.select();
+      _renderUserDropdown(dropdownId, selectedIdFn(), '', selectFn);
+    }).catch(function(e) { console.error(comboId + ' load error:', e); });
+  };
+
+  window[filterFn] = function(q) {
+    _renderUserDropdown(dropdownId, selectedIdFn(), q, selectFn);
+  };
+
+  window[selectFn] = function(id) {
+    var wrap = document.getElementById(comboId);
+    if (wrap) wrap.classList.remove('open');
+    var u = _allUsers.find(function(x) { return x.id == id; });
+    if (u) {
+      document.getElementById(inputId).value = u.name;
+      if (onSelect) onSelect(u);
+    }
+  };
+
+  return '<div class="proj-combo" id="' + comboId + '">' +
+    '<input class="proj-combo-input" id="' + inputId + '" type="text" autocomplete="off" placeholder="' + escHtml(opts.placeholder || '搜索负责人...') + '" ' +
+      'onclick="' + openFn + '()" oninput="' + filterFn + '(this.value)">' +
+    '<svg class="proj-combo-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2,5 7,10 12,5"/></svg>' +
+    '<div class="proj-combo-dropdown" id="' + dropdownId + '"></div>' +
+  '</div>';
+}
+
+function _renderUserDropdown(dropdownId, selectedId, q, selectFnName) {
+  var dd = document.getElementById(dropdownId);
+  if (!dd) return;
+  var v = (q || '').trim().toLowerCase();
+  var list = v ? _allUsers.filter(function(u) {
+    return (u.code||'').toLowerCase().indexOf(v)>=0 || (u.name||'').toLowerCase().indexOf(v)>=0;
+  }) : _allUsers;
+  if (!list.length) { dd.innerHTML = '<div class="combo-no-match">未找到匹配用户</div>'; return; }
+  dd.innerHTML = list.map(function(u) {
+    var cls = u.id == selectedId ? 'combo-opt selected' : 'combo-opt';
+    return '<div class="'+cls+'" onmousedown="event.preventDefault()" onclick="'+selectFnName+'('+u.id+')">' +
+      '<div class="combo-opt-name">'+escHtml(u.name)+'</div>' +
+      '<div class="combo-opt-meta">@'+escHtml(u.code||'')+'</div></div>';
+  }).join('');
+}
+
+function closeSharedDialog() {
+  var overlay = document.querySelector('.shared-dialog-overlay');
+  if (overlay) overlay.remove();
 }
 
 // Global click to close any open combo

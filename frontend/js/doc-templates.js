@@ -1422,11 +1422,6 @@ function selectImportSource(nodeId, name, el) {
   if (btn) btn.disabled = false;
 }
 
-function closeSharedDialog() {
-  var overlay = document.querySelector('.shared-dialog-overlay');
-  if (overlay) overlay.remove();
-}
-
 function executeImportTemplates() {
   if (!window._importSourceId || !_selectedNodeId) return;
   closeSharedDialog();

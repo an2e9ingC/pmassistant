@@ -13,6 +13,7 @@ class Task(Base):
     id = Column(Integer, primary_key=True)
     project_id = Column(Integer, ForeignKey("zenta_projects.id"), nullable=False, index=True)
     execution_id = Column(Integer, ForeignKey("zenta_executions.id"), nullable=True, index=True)
+    stage_name = Column(String(128), nullable=True)  # template stage name when no Zentao execution exists
     title = Column(String(256), nullable=False)
     description = Column(Text, nullable=True)
     status = Column(String(32), default="todo")  # todo / in_progress / review / done / closed

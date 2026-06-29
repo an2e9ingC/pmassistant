@@ -217,13 +217,14 @@ function renderTaskTable(tasks, execs) {
     });
   }
 
-  // Group by execution
+  // Group by execution or stage_name
   var groups = {};
   var ungrouped = [];
   tasks.forEach(function(t) {
-    var eid = t.execution_id ? String(t.execution_id) : '_none';
-    if (t.execution_id && stageMap[eid]) {
-      if (!groups[eid]) groups[eid] = { name: stageMap[eid], tasks: [] };
+    var eid = t.execution_id ? String(t.execution_id) : (t.stage_name || '_none');
+    var gname = stageMap[eid] || t.stage_name;
+    if ((eid !== '_none') && gname) {
+      if (!groups[eid]) groups[eid] = { name: gname, tasks: [] };
       groups[eid].tasks.push(t);
     } else {
       ungrouped.push(t);
@@ -231,15 +232,15 @@ function renderTaskTable(tasks, execs) {
   });
 
   var html = '<table class="proj-table"><thead><tr>' +
-    '<th style="width:35%">标题</th>' +
+    '<th style="width:28%">标题</th>' +
     '<th style="width:10%">阶段</th>' +
-    '<th style="width:8%">状态</th>' +
+    '<th style="width:7%">状态</th>' +
     '<th style="width:6%">优先级</th>' +
     '<th style="width:8%">负责人</th>' +
-    '<th style="width:8%">预估工时</th>' +
-    '<th style="width:12%">实际工时</th>' +
+    '<th style="width:7%">预估工时</th>' +
+    '<th style="width:10%">实际工时</th>' +
     '<th style="width:8%">截止日期</th>' +
-    '<th style="width:5%"></th>' +
+    '<th>操作</th>' +
     '</tr></thead><tbody>';
 
   // Render grouped tasks
@@ -269,25 +270,30 @@ function renderTaskTable(tasks, execs) {
 }
 
 function _renderTaskRow(t, stageMap) {
-  var stageName = '';
-  if (t.execution_id && stageMap[String(t.execution_id)]) {
+  var stageName = t.stage_name || '';
+  if (!stageName && t.execution_id && stageMap[String(t.execution_id)]) {
     stageName = stageMap[String(t.execution_id)];
+  }
+  if (!stageName && t.execution_name) {
+    stageName = t.execution_name;
   }
   var progressPct = t.estimate_hours > 0 ? Math.round((t.consumed_hours || 0) / t.estimate_hours * 100) : 0;
   var overdue = t.due_date && t.status !== 'done' && t.status !== 'closed' && t.due_date < new Date().toISOString().slice(0,10);
+  var assigneeName = t.assignee_name || t.assignee_username || (t.assignee_id || '-');
   return '<tr class="clickable">' +
-    '<td><a href="javascript:void(0)" onclick="openTaskDialog(' + t.id + ')" style="color:var(--accent)">' + escHtml(t.title) + '</a></td>' +
+    '<td><a href="javascript:void(0)" onclick="openTaskViewDialog(' + t.id + ')" style="color:var(--accent)">' + escHtml(t.title) + '</a></td>' +
     '<td>' + (stageName ? '<span style="font-size:11px;color:var(--muted)">' + escHtml(stageName) + '</span>' : '-') + '</td>' +
     '<td>' + renderPill(t.status || 'todo') + '</td>' +
     '<td>' + _renderPriority(t.priority) + '</td>' +
-    '<td style="font-size:12px">' + (t.assignee_id || '-') + '</td>' +
+    '<td style="font-size:12px">' + escHtml(assigneeName) + '</td>' +
     '<td>' + (t.estimate_hours || 0).toFixed(1) + 'h</td>' +
-    '<td>' +
-      '<span style="font-size:12px">' + (t.consumed_hours || 0).toFixed(1) + 'h</span>' +
-      '<div style="margin-top:2px">' + renderProgressBar(progressPct) + '</div>' +
+    '<td style="font-size:12px">' +
+      (t.consumed_hours || 0).toFixed(1) + 'h / ' + (t.estimate_hours || 0).toFixed(1) + 'h ' +
+      renderProgressCircle(progressPct, 26, {label:''}) +
     '</td>' +
     '<td style="color:' + (overdue ? 'var(--red)' : '') + '">' + (t.due_date || '-') + '</td>' +
     '<td>' +
+      iconEdit('openTaskDialog(' + t.id + ')', '编辑任务') +
       iconCopy('openCopyTaskDialog(' + t.id + ')', '复制任务') +
       iconDelete('deleteTask(' + t.id + ')', '删除任务') +
     '</td>' +
@@ -333,7 +339,7 @@ function renderTaskBoard(tasks) {
       '</div>' +
       '<div style="flex:1;overflow-y:auto">';
     items.forEach(function(t) {
-      html += '<div class="card-pad" style="margin-bottom:8px;cursor:pointer;font-size:12px" onclick="openTaskDialog(' + t.id + ')">' +
+      html += '<div class="card-pad" style="margin-bottom:8px;cursor:pointer;font-size:12px" onclick="openTaskViewDialog(' + t.id + ')">' +
         '<div style="font-weight:500;margin-bottom:4px">' + escHtml(t.title) + '</div>' +
         '<div style="display:flex;gap:4px;align-items:center;font-size:10px;color:var(--muted)">' +
           _renderPriority(t.priority) +
@@ -437,16 +443,114 @@ function openDayDetail(dateStr, totalHours) {
 /* ── Task Dialog ── */
 
 var _tfProjectId = null; // project ID selected in the task form
+var _tfAssigneeId = null; // assignee ID selected in the task form
+
+function _tfStageName() {
+  var sel = document.getElementById('tf-execution');
+  if (!sel) return null;
+  var val = sel.value;
+  if (val && val[0] === '_') return val.substring(1); // synthetic key
+  return null;
+}
 
 function _closeTaskDialog() {
   var overlay = document.querySelector('.note-dialog-overlay');
   if (overlay) overlay.remove();
 }
 
+function openTaskViewDialog(taskId) {
+  API.get('/tasks/' + taskId).then(function(data) {
+    _showTaskView(data);
+  }).catch(function(e) {
+    showToast('加载失败: ' + (e.message || ''), 'error');
+  });
+}
+
+function _showTaskView(t) {
+  var labels = {todo:'待办', in_progress:'进行中', review:'评审中', done:'已完成', closed:'已关闭'};
+  var priLabels = {low:'低', medium:'中', high:'高', critical:'紧急'};
+
+  var html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
+    '<div><span style="font-size:11px;color:var(--muted)">标题</span><div style="font-weight:500;margin-top:2px">' + escHtml(t.title) + '</div></div>' +
+    '<div><span style="font-size:11px;color:var(--muted)">阶段</span><div style="margin-top:2px">' + escHtml(t.stage_name || t.execution_name || '-') + '</div></div>' +
+    '<div>' + renderPill(t.status || 'todo') + ' <span style="font-size:10px;color:var(--muted)">' + (labels[t.status] || t.status) + '</span></div>' +
+    '<div><span style="font-size:11px;color:var(--muted)">优先级</span><div style="margin-top:2px">' + (priLabels[t.priority] || t.priority) + '</div></div>' +
+    '<div><span style="font-size:11px;color:var(--muted)">预估工时</span><div style="margin-top:2px">' + (t.estimate_hours || 0).toFixed(1) + 'h</div></div>' +
+    '<div><span style="font-size:11px;color:var(--muted)">实际工时</span><div style="margin-top:2px">' + (t.consumed_hours || 0).toFixed(1) + 'h</div></div>' +
+    '<div><span style="font-size:11px;color:var(--muted)">负责人</span><div style="margin-top:2px">' + escHtml(t.assignee_name || '-') + '</div></div>' +
+    '<div><span style="font-size:11px;color:var(--muted)">截止日期</span><div style="margin-top:2px">' + (t.due_date || '-') + '</div></div>' +
+  '</div>' +
+  (t.description ? '<div style="margin-top:12px"><span style="font-size:11px;color:var(--muted)">描述</span><div style="margin-top:4px;font-size:13px;line-height:1.6">' + escHtml(t.description) + '</div></div>' : '') +
+  // Output items
+  (t.output_items && t.output_items.length ? '<div style="margin-top:12px"><span style="font-size:11px;color:var(--muted)">产出物</span>' +
+    t.output_items.map(function(o) { return '<div style="margin-top:4px"><a href="' + escHtml(o.url) + '" target="_blank" style="color:var(--accent);font-size:13px">' + escHtml(o.name) + '</a></div>'; }).join('') + '</div>' : '') +
+  // Worklogs
+  '<div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px">' +
+    '<div style="font-weight:600;font-size:13px;margin-bottom:8px">工时日志 (' + (t.consumed_hours || 0).toFixed(1) + 'h)</div>' +
+    '<div id="tv-worklogs">加载中...</div>' +
+    '<button class="btn-sm" onclick="openWorklogDialog(' + t.id + ')" style="margin-top:8px">+ 记录工时</button>' +
+  '</div>' +
+  // Comments
+  '<div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px">' +
+    '<div style="font-weight:600;font-size:13px;margin-bottom:8px">评论</div>' +
+    '<div id="tv-comments">加载中...</div>' +
+    '<div style="display:flex;gap:8px;margin-top:8px">' +
+      '<input class="search-inp" id="tv-comment-input" placeholder="添加评论..." style="flex:1">' +
+      '<button class="btn-sm btn-primary" onclick="_submitViewComment(' + t.id + ')">发送</button>' +
+    '</div>' +
+  '</div>';
+
+  openDialog('任务详情: ' + escHtml(t.title), html, [
+    {text: '编辑', cls: 'btn-primary', onclick: '_closeTaskDialog();openTaskDialog(' + t.id + ')'},
+    {text: '关闭', onclick: '_closeTaskDialog()'}
+  ], {maxWidth: 650});
+
+  // Async load worklogs and comments
+  API.get('/worklogs?task_id=' + t.id).then(function(logs) {
+    var el = document.getElementById('tv-worklogs');
+    if (!el) return;
+    if (!logs || !logs.length) { el.innerHTML = '<div style="color:var(--muted);font-size:12px">暂无工时记录</div>'; return; }
+    el.innerHTML = logs.map(function(w) {
+      return '<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)">' +
+        (w.date || '?') + ' | ' + w.hours.toFixed(1) + 'h' + (w.description ? ' | ' + escHtml(w.description) : '') + '</div>';
+    }).join('');
+  }).catch(function() {});
+
+  API.get('/task-comments?task_id=' + t.id).then(function(comments) {
+    var el = document.getElementById('tv-comments');
+    if (!el) return;
+    if (!comments || !comments.length) { el.innerHTML = '<div style="color:var(--muted);font-size:12px">暂无评论</div>'; return; }
+    el.innerHTML = comments.map(function(c) {
+      return '<div style="padding:4px 0;border-bottom:1px solid var(--border)">' +
+        '<span style="font-size:10px;color:var(--muted)">' + escHtml(c.display_name || c.username) + ' · ' + (c.created_at || '') + '</span>' +
+        '<div style="font-size:13px">' + escHtml(c.content) + '</div></div>';
+    }).join('');
+  }).catch(function() {});
+}
+
+function _submitViewComment(taskId) {
+  var input = document.getElementById('tv-comment-input');
+  if (!input || !input.value.trim()) return;
+  API.post('/task-comments', {task_id: taskId, content: input.value.trim()}).then(function() {
+    input.value = '';
+    API.get('/task-comments?task_id=' + taskId).then(function(comments) {
+      var el = document.getElementById('tv-comments');
+      if (!el) return;
+      if (!comments || !comments.length) { el.innerHTML = '<div style="color:var(--muted);font-size:12px">暂无评论</div>'; return; }
+      el.innerHTML = comments.map(function(c) {
+        return '<div style="padding:4px 0;border-bottom:1px solid var(--border)">' +
+          '<span style="font-size:10px;color:var(--muted)">' + escHtml(c.display_name || c.username) + ' · ' + (c.created_at || '') + '</span>' +
+          '<div style="font-size:13px">' + escHtml(c.content) + '</div></div>';
+      }).join('');
+    });
+  }).catch(function(e) { showToast('评论失败: ' + (e.message || ''), 'error'); });
+}
+
 function openTaskDialog(taskId) {
   var isEdit = !!taskId;
   var title = isEdit ? '编辑任务' : '新建任务';
   _tfProjectId = _taskProjectId; // default to page context
+  _tfAssigneeId = null;
 
   if (isEdit) {
     API.get('/tasks/' + taskId).then(function(data) {
@@ -503,7 +607,13 @@ function _showTaskForm(title, task) {
           '<option value="critical"' + (t.priority==='critical'?' selected':'') + '>紧急</option>' +
         '</select></div>' +
       '<div><label style="font-size:11px;color:var(--muted)">负责人</label>' +
-        '<input class="search-inp" id="tf-assignee" value="' + (t.assignee_id || '') + '" placeholder="用户ID" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
+        '<div style="margin-top:2px">' + createUserCombo({
+          comboId: 'tf-assignee-combo',
+          inputId: 'tf-assignee-input',
+          dropdownId: 'tf-assignee-dropdown',
+          selectedIdFn: function() { return _tfAssigneeId; },
+          onSelect: function(u) { _tfAssigneeId = u.id; }
+        }) + '</div></div>' +
       '<div><label style="font-size:11px;color:var(--muted)">预估工时(h)</label>' +
         '<input class="search-inp" id="tf-estimate" type="number" step="0.5" min="0" value="' + (t.estimate_hours || '') + '" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
       '<div><label style="font-size:11px;color:var(--muted)">截止日期</label>' +
@@ -547,11 +657,19 @@ function _showTaskForm(title, task) {
 
   openDialog(title, bodyHtml, buttons, {maxWidth: 700});
 
-  // Pre-fill project in form
+  // Pre-fill project and assignee
   _tfProjectId = _taskProjectId;
+  _tfAssigneeId = t.assignee_id || null;
   setTimeout(function() {
     var tfInput = document.getElementById('tf-project-input');
     if (tfInput && _taskProjectName) tfInput.value = _taskProjectName;
+    if (_tfAssigneeId) {
+      // Pre-fill assignee name (loaded async by combo)
+      loadAllUsers().then(function() {
+        var u = _allUsers.find(function(x) { return x.id == _tfAssigneeId; });
+        if (u) { var inp = document.getElementById('tf-assignee-input'); if (inp) inp.value = u.name; }
+      });
+    }
   }, 100);
 
 function _loadTfExecutions(projectId) {
@@ -561,10 +679,14 @@ function _loadTfExecutions(projectId) {
     sel.innerHTML = '<option value="">选择阶段...</option>';
     if (data && data.stages) {
       data.stages.forEach(function(s) {
-        var eid = s.execution_id || s.id || '';
+        var eid = s.execution_id || '';
+        var label = s.name || s.standard_stage || '';
+        var stageName = eid ? '' : (s.standard_stage || s.name || '');
+        if (!eid && stageName) eid = '_' + stageName; // synthetic key for template stages
         var opt = document.createElement('option');
         opt.value = eid;
-        opt.textContent = s.name || s.standard_stage || '';
+        opt.textContent = label;
+        if (!eid) opt.dataset.stageName = stageName;
         sel.appendChild(opt);
       });
     }
@@ -621,10 +743,11 @@ async function submitTask(taskId) {
     description: document.getElementById('tf-desc').value.trim(),
     status: document.getElementById('tf-status').value,
     priority: document.getElementById('tf-priority').value,
-    assignee_id: parseInt(document.getElementById('tf-assignee').value) || null,
+    assignee_id: _tfAssigneeId,
     estimate_hours: parseFloat(document.getElementById('tf-estimate').value) || 0,
     due_date: document.getElementById('tf-due').value || null,
     execution_id: parseInt(document.getElementById('tf-execution').value) || null,
+    stage_name: _tfStageName(),
     project_id: _tfProjectId || _taskProjectId,
   };
 
@@ -703,7 +826,7 @@ function _batchRowHTML(i, r) {
     '<input class="search-inp" id="bt-title-' + i + '" value="' + escHtml(r.title || '') + '" placeholder="标题 *" style="flex:2;min-width:120px">' +
     '<select class="search-inp" id="bt-status-' + i + '" style="flex:0.8;min-width:70px"><option value="todo">待办</option><option value="in_progress">进行中</option><option value="review">评审中</option><option value="done">已完成</option><option value="closed">已关闭</option></select>' +
     '<select class="search-inp" id="bt-priority-' + i + '" style="flex:0.7;min-width:55px"><option value="medium">中</option><option value="low">低</option><option value="high">高</option><option value="critical">紧急</option></select>' +
-    '<input class="search-inp" id="bt-assignee-' + i + '" value="' + escHtml(r.assignee || '') + '" placeholder="负责人" style="flex:0.9;min-width:70px">' +
+    '<select class="search-inp" id="bt-assignee-' + i + '" style="flex:0.9;min-width:120px"><option value="">负责人</option></select>' +
     '<input class="search-inp" id="bt-estimate-' + i + '" value="' + escHtml(r.estimate || '') + '" placeholder="工时(h)" style="flex:0.6;min-width:55px" type="number" step="0.5">' +
     '<input class="search-inp" id="bt-due-' + i + '" value="' + escHtml(r.due_date || '') + '" type="date" style="flex:1;min-width:110px">' +
     '<input class="search-inp" id="bt-desc-' + i + '" value="' + escHtml(r.desc || '') + '" placeholder="描述" style="flex:1.5;min-width:100px">' +
@@ -742,6 +865,17 @@ function _renderBatchForm(rows) {
     {text: '创建', cls: 'btn-primary', onclick: '_submitBatchCreate()'}
   ], {maxWidth: '95vw'});
 
+  // Load users for assignee selects (reuse global user cache)
+  loadAllUsers().then(function() {
+    document.querySelectorAll('[id^="bt-assignee-"]').forEach(function(sel) {
+      _allUsers.forEach(function(u) {
+        var opt = document.createElement('option');
+        opt.value = u.id; opt.textContent = u.name;
+        sel.appendChild(opt);
+      });
+    });
+  });
+
   // Pre-fill project and load executions if set
   _batchProjectId = _taskProjectId;
   if (_taskProjectId && _taskProjectName) {
@@ -764,13 +898,19 @@ function _loadBatchExecs(projectId) {
 function _refreshBatchExecSelects() {
   var opts = '<option value="">选择阶段</option>' +
     _batchExecutions.map(function(s) {
-      return '<option value="' + (s.execution_id || s.id || '') + '">' + escHtml(s.name || s.standard_stage || '') + '</option>';
+      var eid = s.execution_id || '';
+      var label = s.name || s.standard_stage || '';
+      if (!eid && label) eid = '_' + label;
+      return '<option value="' + eid + '">' + escHtml(label) + '</option>';
     }).join('');
   document.querySelectorAll('[id^="bt-exec-"]').forEach(function(sel) {
-    var prev = sel.value;
     sel.innerHTML = opts;
-    if (prev) sel.value = prev; // preserve previous selection if still valid
   });
+}
+
+function _batchStageName(val) {
+  if (val && val[0] === '_') return val.substring(1);
+  return null;
 }
 
 function _batchAddRow() {
@@ -778,6 +918,17 @@ function _batchAddRow() {
   if (!container) return;
   var i = container.children.length;
   container.insertAdjacentHTML('beforeend', _batchRowHTML(i));
+  // Populate user select for new row (reuse global cache)
+  var sel = document.getElementById('bt-assignee-' + i);
+  if (sel) {
+    loadAllUsers().then(function() {
+      _allUsers.forEach(function(u) {
+        var opt = document.createElement('option');
+        opt.value = u.id; opt.textContent = u.name;
+        if (!sel.querySelector('option[value="'+u.id+'"]')) sel.appendChild(opt);
+      });
+    });
+  }
 }
 
 async function _submitBatchCreate() {
@@ -797,9 +948,11 @@ async function _submitBatchCreate() {
     var descEl = rows[i].querySelector('[id^="bt-desc-"]');
     var title = titleEl ? titleEl.value.trim() : '';
     if (!title) continue;
+    var execVal = execEl ? execEl.value : '';
     tasks.push({
       title: title,
-      execution_id: execEl ? (parseInt(execEl.value) || null) : null,
+      execution_id: execVal && execVal[0] !== '_' ? (parseInt(execVal) || null) : null,
+      stage_name: _batchStageName(execVal),
       status: statusEl ? statusEl.value : 'todo',
       priority: priorityEl ? priorityEl.value : 'medium',
       assignee_id: assigneeEl ? (parseInt(assigneeEl.value) || null) : null,

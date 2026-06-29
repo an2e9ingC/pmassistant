@@ -29,7 +29,7 @@ def get_tasks(
     if assignee_id:
         q = q.filter(Task.assignee_id == assignee_id)
     q = q.order_by(Task.sort_order, Task.created_at.desc())
-    return [_task_dict(t) for t in q.all()]
+    return [_task_dict(t, db) for t in q.all()]
 
 
 def get_task(db: Session, task_id: int) -> Optional[dict]:
@@ -37,7 +37,7 @@ def get_task(db: Session, task_id: int) -> Optional[dict]:
     t = db.query(Task).filter(Task.id == task_id).first()
     if not t:
         return None
-    d = _task_dict(t)
+    d = _task_dict(t, db)
     # Attach worklogs
     logs = db.query(WorkLog).filter(WorkLog.task_id == task_id).order_by(WorkLog.date.desc(), WorkLog.created_at.desc()).all()
     d["worklogs"] = [_worklog_dict(w) for w in logs]
@@ -54,7 +54,7 @@ def get_my_tasks(db: Session, user_id: int) -> List[dict]:
         Task.due_date.asc().nullslast(),
         Task.created_at.desc(),
     ).all()
-    return [_task_dict(t) for t in tasks]
+    return [_task_dict(t, db) for t in tasks]
 
 
 def get_task_stats(db: Session, project_id: Optional[int] = None) -> dict:
@@ -104,6 +104,7 @@ def create_task(db: Session, data: dict, user) -> dict:
     t = Task(
         project_id=data.get("project_id"),
         execution_id=data.get("execution_id"),
+        stage_name=data.get("stage_name") or None,
         title=data.get("title", ""),
         description=data.get("description"),
         status=data.get("status", "todo"),
@@ -122,7 +123,7 @@ def create_task(db: Session, data: dict, user) -> dict:
     db.commit()
     db.refresh(t)
     _log_audit(db, t.project_id, uname, "task_create", f"创建任务 #{t.id}: {t.title}")
-    return _task_dict(t)
+    return _task_dict(t, db)
 
 
 def create_tasks_batch(db: Session, tasks_data: list, user) -> List[dict]:
@@ -133,6 +134,7 @@ def create_tasks_batch(db: Session, tasks_data: list, user) -> List[dict]:
         t = Task(
             project_id=data.get("project_id"),
             execution_id=data.get("execution_id"),
+            stage_name=data.get("stage_name"),
             title=data.get("title", ""),
             description=data.get("description"),
             status=data.get("status", "todo"),
@@ -150,7 +152,7 @@ def create_tasks_batch(db: Session, tasks_data: list, user) -> List[dict]:
     for t in created:
         db.refresh(t)
     _log_audit(db, t.project_id, uname, "task_create_batch", f"批量创建任务 #{t.id}: {t.title}")
-    return [_task_dict(t) for t in created]
+    return [_task_dict(t, db) for t in created]
 
 
 def import_tasks(db: Session, task_ids: list, target_project_id: int, execution_mapping: dict, user) -> List[dict]:
@@ -181,7 +183,7 @@ def import_tasks(db: Session, task_ids: list, target_project_id: int, execution_
     for t in created:
         db.refresh(t)
     _log_audit(db, target_project_id, uname, "task_import", f"从其他项目导入 {len(created)} 个任务")
-    return [_task_dict(t) for t in created]
+    return [_task_dict(t, db) for t in created]
 
 
 def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[dict]:
@@ -194,7 +196,7 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
     old_status = t.status
     changes = []
     for field in ("title", "description", "status", "priority", "type",
-                   "execution_id", "assignee_id", "parent_id", "blocked_by_id",
+                   "execution_id", "stage_name", "assignee_id", "parent_id", "blocked_by_id",
                    "start_date", "due_date", "sort_order"):
         if field in data and getattr(t, field) != data[field]:
             old_val = getattr(t, field)
@@ -203,10 +205,14 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
                 setattr(t, field, int(new_val) if new_val else None)
             elif field in ("assignee_id", "parent_id", "blocked_by_id"):
                 setattr(t, field, int(new_val) if new_val else None)
+            elif field in ("start_date", "due_date"):
+                setattr(t, field, _parse_date(new_val) if new_val else None)
             else:
                 setattr(t, field, new_val)
             changes.append(f"{field}: {old_val} -> {new_val}")
 
+    if "stage_name" in data:
+        t.stage_name = data["stage_name"] or None
     if "estimate_hours" in data:
         t.estimate_hours = float(data["estimate_hours"] or 0)
     if "output_items" in data:
@@ -221,7 +227,7 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
     if changes:
         _log_audit(db, t.project_id, uname, "task_update", f"更新任务 #{t.id}: " + "; ".join(changes[:3]))
 
-    return _task_dict(t)
+    return _task_dict(t, db)
 
 
 def delete_task(db: Session, task_id: int, user=None) -> bool:
@@ -251,23 +257,41 @@ def recalc_consumed_hours(db: Session, task_id: int):
     db.commit()
 
 
-def _task_dict(t: Task) -> dict:
+def _task_dict(t: Task, db=None) -> dict:
     output = []
     if t.output_items:
         try:
             output = json.loads(t.output_items)
         except (json.JSONDecodeError, TypeError):
             pass
+    # Resolve execution name and assignee name
+    exec_name = None
+    assignee_name = None
+    if t.execution_id:
+        from backend.models.zentao import CachedExecution
+        exc = db.query(CachedExecution).filter(CachedExecution.id == t.execution_id).first() if db else None
+        if exc:
+            exec_name = exc.name
+    if t.assignee_id:
+        from backend.models.local import LocalUser
+        u = db.query(LocalUser).filter(LocalUser.id == t.assignee_id).first() if db else None
+        if u:
+            assignee_name = u.display_name or u.username
+
     return {
         "id": t.id,
         "project_id": t.project_id,
         "execution_id": t.execution_id,
+        "stage_name": t.stage_name,
+        "execution_name": exec_name or t.stage_name,
         "title": t.title,
         "description": t.description,
         "status": t.status,
         "priority": t.priority,
         "type": t.type,
         "assignee_id": t.assignee_id,
+        "assignee_name": assignee_name,
+        "assignee_username": None,
         "reporter_id": t.reporter_id,
         "parent_id": t.parent_id,
         "blocked_by_id": t.blocked_by_id,
@@ -300,11 +324,11 @@ def _parse_date(val) -> Optional[date]:
 
 
 def _log_audit(db: Session, project_id: int, username: Optional[str], action: str, detail: str):
-    """Record task operation to audit log."""
+    """Record task operation to audit log + project activity."""
     if not username:
         return
     try:
-        from backend.models.local import AuditLog
+        from backend.models.local import AuditLog, ProjectActivity
         log = AuditLog(
             username=username,
             action=action,
@@ -313,6 +337,15 @@ def _log_audit(db: Session, project_id: int, username: Optional[str], action: st
             level="low",
         )
         db.add(log)
+        # Also write to ProjectActivity so it appears in project detail timeline
+        if project_id:
+            act = ProjectActivity(
+                project_id=project_id,
+                username=username,
+                action="PMA任务: " + action,
+                detail=detail,
+            )
+            db.add(act)
         db.commit()
     except Exception:
         pass  # audit log should never block task operations

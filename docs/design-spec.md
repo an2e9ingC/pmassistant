@@ -497,9 +497,17 @@ multiSelectDialog('编辑关联产品', allProducts, linkedIds, {
 - **表头（th）**：居中对齐 + 单行显示（`text-align: center; white-space: nowrap`）
 - **单元格（td）**：左对齐 + 垂直居中（`text-align: left; vertical-align: middle`）
 - 表头禁止换行，内容过多时通过 `overflow: hidden; text-overflow: ellipsis` 截断
-- 特殊列（如序号列）可单独覆盖 `text-align: center`，进度条/图标列保持居中
+- 特殊列（如序号列、编号列）可单独覆盖 `text-align: center`，进度/图标列保持居中
+
+### 进度指示
+
+**统一使用环形进度组件 `renderProgressCircle(percent, size, opts)`**。`renderProgressBar` 已废弃删除。
+
+- 项目列表：`renderProgressCircle(p.progress, 32, {label:''})`
+- 任务列表/产品维护关联项目：`renderProgressCircle(pct, 26, {label:''})`
 
 **修改记录：**
+- 2026-06-29：废弃 `renderProgressBar` 线性进度条，统一使用环形进度 `renderProgressCircle`
 - 2026-06-08：统一 `.stage-table td` 从 `vertical-align: top` 改为 `middle`
 - 2026-06-08：统一 `.stage-table th` 和 `.proj-table th` 从 `text-align: left` 改为 `center`
 - 2026-06-08：表头新增 `white-space: nowrap` 单行显示

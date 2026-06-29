@@ -27,6 +27,18 @@ def list_user_names(db: Session = Depends(get_db), _=Depends(get_current_user)):
     return {"code": 0, "data": [u[0] for u in users if u[0]], "message": "ok"}
 
 
+@user_router.get("/options", response_model=dict)
+def list_user_options(db: Session = Depends(get_db), _=Depends(get_current_user)):
+    """Return PMA local users as {id, name} for dropdowns (task assignee etc.)."""
+    from backend.models.local import LocalUser
+    users = db.query(LocalUser.id, LocalUser.username, LocalUser.display_name).filter(
+        LocalUser.is_active == True
+    ).order_by(LocalUser.username).all()
+    return {"code": 0, "data": [
+        {"id": u[0], "name": (u[2] or u[1]), "code": u[1]} for u in users
+    ], "message": "ok"}
+
+
 @user_router.get("/customers/names", response_model=dict)
 def list_customer_names(db: Session = Depends(get_db), _=Depends(get_current_user)):
     """Return cached customer names for delivery form dropdown."""

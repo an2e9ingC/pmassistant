@@ -45,7 +45,7 @@ allowed-tools: Read, Write, Edit, Bash
 | `multiSelectDialog(...)` | 多选搜索对话框 |
 | `renderPill(status)` | 状态圆点 |
 | `renderTypeBadge(type)` | 类型 badge |
-| `renderProgressBar(percent, status)` | 进度条 |
+| `renderProgressCircle(percent, size, opts)` | 环形进度（唯一进度组件，renderProgressBar已废弃） |
 | `renderProgressRing(percent, size, opts)` | 环形进度 |
 | `createProjectCombo(opts)` | 项目搜索下拉（新建HTML+注册函数） |
 | `initProjectCombo(opts)` | 项目搜索下拉（已有HTML，仅注册函数） |

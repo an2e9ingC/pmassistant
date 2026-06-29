@@ -15,6 +15,7 @@ router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 class TaskCreate(BaseModel):
     project_id: int
     execution_id: Optional[int] = None
+    stage_name: Optional[str] = None
     title: str
     description: Optional[str] = None
     status: Optional[str] = "todo"
@@ -47,6 +48,7 @@ class TaskUpdate(BaseModel):
     priority: Optional[str] = None
     type: Optional[str] = None
     execution_id: Optional[int] = None
+    stage_name: Optional[str] = None
     assignee_id: Optional[int] = None
     parent_id: Optional[int] = None
     blocked_by_id: Optional[int] = None

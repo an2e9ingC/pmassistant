@@ -877,7 +877,7 @@ function renderProdMaintenance(p) {
         '<td>' + (proj.customer_name ? '<span onclick="event.stopPropagation();openCustomerByName(\'' + escHtml(proj.customer_name) + '\')" style="cursor:pointer">' + renderCustomerBadge(proj.customer_name) + '</span>' : '—') + '</td>' +
         '<td>' + renderTypeBadge(proj.project_type) + '</td>' +
         '<td>' + renderPill(proj.status) + '</td>' +
-        '<td class="prog-cell">' + renderProgressBar(proj.progress, proj.status) + '</td>' +
+        '<td class="prog-cell">' + renderProgressCircle(parseFloat(proj.progress) || 0, 26, {label:''}) + '</td>' +
         '<td style="font-size:12px;color:' + (proj.end ? 'var(--muted)' : 'var(--warn)') + '">' + (proj.end ? formatDate(proj.end) : '长期') + '</td>' +
       '</tr>';
     });
