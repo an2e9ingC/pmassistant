@@ -60,10 +60,10 @@ def mapping_overview(db: Session = Depends(get_db), _=Depends(get_current_user))
 
 @router.get("/categories", response_model=dict)
 def list_categories(db: Session = Depends(get_db), _=Depends(get_current_user)):
-    from backend.models.zentao import CachedProduct
+    from backend.models.zentao import PmaProduct
     # Collect distinct categories from both PMA-local category and Zentao program_name
     cats = set()
-    for row in db.query(CachedProduct.program_name, CachedProduct.category).all():
+    for row in db.query(PmaProduct.program_name, PmaProduct.category).all():
         for val in row:
             if val:
                 cats.add(val)
@@ -85,7 +85,7 @@ def update_product(
     db: Session = Depends(get_db),
     user=Depends(require_admin),
 ):
-    from backend.models.zentao import CachedProduct as _CP
+    from backend.models.zentao import PmaProduct as _CP
     old_prod = db.query(_CP).filter(_CP.id == product_id).first()
     if not old_prod:
         raise HTTPException(status_code=404, detail="Product not found")

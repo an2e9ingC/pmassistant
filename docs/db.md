@@ -27,11 +27,11 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 | `zenta_projects` | `CachedProject` | 39 | ZenTao 缓存 | 从 ZenTao 同步的项目数据，包含项目元信息、进度、工时、客户关联等 |
 | `zenta_executions` | `CachedExecution` | 282 | ZenTao 缓存 | 项目下的执行/迭代/阶段，每个项目可有多个执行 |
 | `zenta_tasks` | `CachedTask` | 330 | ZenTao 缓存 | 执行下的具体任务，包含指派人、工时、阻塞标记、交付物清单 |
-| `zenta_products` | `CachedProduct` | 82 | ZenTao 缓存 | 从 ZenTao 同步的产品数据，含 NAS 路径、Git 地址、客户标记等扩展字段 |
+| `pma_products` | `PmaProduct` | 82 | ZenTao 缓存 | 从 ZenTao 同步的产品数据，含 NAS 路径、Git 地址、客户标记等扩展字段 |
 | `zenta_releases` | `CachedRelease` | 4 | ZenTao 缓存 | 产品下的发布版本/里程碑，含 GitLab 关联地址及校验状态 |
 | `zenta_bugs` | `CachedBug` | 98 | ZenTao 缓存 | 产品/项目下的 Bug 缺陷数据，按严重程度、优先级、状态追踪 |
 | `zenta_users` | `CachedUser` | 73 | ZenTao 缓存 | ZenTao 系统中的用户列表，用于人员指派信息展示 |
-| `zenta_customers` | `CachedCustomer` | 4 | ZenTao 缓存 | 客户信息，与项目和产品通过链接表多对多关联 |
+| `pma_customers` | `PmaCustomer` | 4 | ZenTao 缓存 | 客户信息，与项目和产品通过链接表多对多关联 |
 | `product_project_links` | `ProductProjectLink` | 2 | 关系表 | 产品与项目的 N:M 关联（组合唯一），维护产品-项目对应关系 |
 | `customer_project_links` | `CustomerProjectLink` | 3 | 关系表 | 客户与项目的 N:M 关联（组合唯一） |
 | `customer_product_links` | `CustomerProductLink` | 0 | 关系表 | 客户与产品的 N:M 关联（组合唯一） |
@@ -64,7 +64,7 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 
 | 文件 | 包含的模型 |
 |------|-----------|
-| `backend/models/zentao.py` | `CachedProject`, `CachedExecution`, `CachedTask`, `CachedUser`, `CachedProduct`, `CachedRelease`, `ProductProjectLink`, `ProductNodeLink`, `CachedCustomer`, `CustomerProjectLink`, `CustomerProductLink` |
+| `backend/models/zentao.py` | `CachedProject`, `CachedExecution`, `CachedTask`, `CachedUser`, `PmaProduct`, `CachedRelease`, `ProductProjectLink`, `ProductNodeLink`, `PmaCustomer`, `CustomerProjectLink`, `CustomerProductLink` |
 | `backend/models/local.py` | `LocalUser`, `Role`, `UserRole`, `ProductNote`, `ProjectNote`, `PmaSetting`, `ProjectActivity`, `SyncLog`, `AuditLog` |
 | `backend/models/document.py` | `DocumentTemplate`, `ProjectDocument`, `ProductDocTemplate`, `ProductLine`, `PmaTag` |
 | `backend/models/delivery.py` | `DeliveryRecord` |
@@ -79,7 +79,7 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 
 ```
 ┌──────────────────────┐
-│    zenta_customers   │
+│    pma_customers   │
 └────────┬─────────────┘
          │ 1
          │
@@ -93,7 +93,7 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
     │ N                            │ N
     │                              │
 ┌───┴───────────┐          ┌───────┴──────────────┐
-│ zenta_projects│          │   zenta_products     │
+│ zenta_projects│          │   pma_products     │
 │ (id PK)       │          │   (id PK)            │
 └───┬───────────┘          └──┬───────────────────┘
     │                         │
@@ -279,7 +279,7 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 
 ---
 
-#### 5.1.4 `zenta_products` — 产品
+#### 5.1.4 `pma_products` — 产品
 
 | # | 列名 | 类型 | 约束 | 说明 |
 |---|------|------|------|------|
@@ -317,7 +317,7 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 | # | 列名 | 类型 | 约束 | 说明 |
 |---|------|------|------|------|
 | 1 | `id` | INTEGER | **PK** | ZenTao 发布 ID |
-| 2 | `product_id` | INTEGER | NOT NULL, INDEX, **FK→zenta_products.id** | 所属产品 |
+| 2 | `product_id` | INTEGER | NOT NULL, INDEX, **FK→pma_products.id** | 所属产品 |
 | 3 | `name` | VARCHAR(256) | NOT NULL | 发布名称 |
 | 4 | `marker` | INTEGER | default=0 | 标记：0=普通发布，1=里程碑 |
 | 5 | `status` | VARCHAR(32) | default="normal" | 状态 |
@@ -329,7 +329,7 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 | 11 | `raw_json` | TEXT | — | ZenTao 原始 JSON |
 | 12 | `synced_at` | DATETIME | default=now | 同步时间 |
 
-**关系**：`product` → `zenta_products.id`
+**关系**：`product` → `pma_products.id`
 
 ---
 
@@ -371,7 +371,7 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 
 ---
 
-#### 5.1.8 `zenta_customers` — 客户
+#### 5.1.8 `pma_customers` — 客户
 
 | # | 列名 | 类型 | 约束 | 说明 |
 |---|------|------|------|------|
@@ -390,7 +390,7 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 | # | 列名 | 类型 | 约束 | 说明 |
 |---|------|------|------|------|
 | 1 | `id` | INTEGER | **PK** | — |
-| 2 | `product_id` | INTEGER | NOT NULL, INDEX, **FK→zenta_products.id** | 产品 ID |
+| 2 | `product_id` | INTEGER | NOT NULL, INDEX, **FK→pma_products.id** | 产品 ID |
 | 3 | `project_id` | INTEGER | NOT NULL, INDEX, **FK→zenta_projects.id** | 项目 ID |
 | 4 | `created_at` | DATETIME | default=now | — |
 
@@ -401,7 +401,7 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 | # | 列名 | 类型 | 约束 | 说明 |
 |---|------|------|------|------|
 | 1 | `id` | INTEGER | **PK** | — |
-| 2 | `customer_id` | INTEGER | NOT NULL, INDEX, **FK→zenta_customers.id** | 客户 ID |
+| 2 | `customer_id` | INTEGER | NOT NULL, INDEX, **FK→pma_customers.id** | 客户 ID |
 | 3 | `project_id` | INTEGER | NOT NULL, INDEX, **FK→zenta_projects.id** | 项目 ID |
 | 4 | `created_at` | DATETIME | default=now | — |
 
@@ -412,8 +412,8 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 | # | 列名 | 类型 | 约束 | 说明 |
 |---|------|------|------|------|
 | 1 | `id` | INTEGER | **PK** | — |
-| 2 | `customer_id` | INTEGER | NOT NULL, INDEX, **FK→zenta_customers.id** | 客户 ID |
-| 3 | `product_id` | INTEGER | NOT NULL, INDEX, **FK→zenta_products.id** | 产品 ID |
+| 2 | `customer_id` | INTEGER | NOT NULL, INDEX, **FK→pma_customers.id** | 客户 ID |
+| 3 | `product_id` | INTEGER | NOT NULL, INDEX, **FK→pma_products.id** | 产品 ID |
 | 4 | `created_at` | DATETIME | default=now | — |
 
 **UNIQUE(customer_id, product_id)**
@@ -423,7 +423,7 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 | # | 列名 | 类型 | 约束 | 说明 |
 |---|------|------|------|------|
 | 1 | `id` | INTEGER | **PK** | — |
-| 2 | `product_id` | INTEGER | NOT NULL, INDEX, **FK→zenta_products.id** | 产品 ID |
+| 2 | `product_id` | INTEGER | NOT NULL, INDEX, **FK→pma_products.id** | 产品 ID |
 | 3 | `product_node_id` | INTEGER | NOT NULL, INDEX, **FK→pma_product_lines.id** | 产品节点 ID |
 | 4 | `created_at` | DATETIME | default=now | — |
 
@@ -589,7 +589,7 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 | 4 | `recorded_by` | VARCHAR(64) | NOT NULL, default="" | 记录人 |
 | 5 | `created_at` | DATETIME | default=now | — |
 
-> 注意：`product_id` 无 FK 约束，引用 `zenta_products.id` 或 `pma_product_lines.id` 视业务场景而定。
+> 注意：`product_id` 无 FK 约束，引用 `pma_products.id` 或 `pma_product_lines.id` 视业务场景而定。
 
 #### 5.3.12 `project_notes` — 项目笔记
 
@@ -698,15 +698,15 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 |------|--------|--------|--------|:---:|
 | `zenta_executions` | `project_id` | `zenta_projects` | `id` | N:1 |
 | `zenta_tasks` | `execution_id` | `zenta_executions` | `id` | N:1 |
-| `zenta_releases` | `product_id` | `zenta_products` | `id` | N:1 |
-| `product_project_links` | `product_id` | `zenta_products` | `id` | N:M |
+| `zenta_releases` | `product_id` | `pma_products` | `id` | N:1 |
+| `product_project_links` | `product_id` | `pma_products` | `id` | N:M |
 | `product_project_links` | `project_id` | `zenta_projects` | `id` | N:M |
-| `product_node_links` | `product_id` | `zenta_products` | `id` | N:M |
+| `product_node_links` | `product_id` | `pma_products` | `id` | N:M |
 | `product_node_links` | `product_node_id` | `pma_product_lines` | `id` | N:M |
-| `customer_project_links` | `customer_id` | `zenta_customers` | `id` | N:M |
+| `customer_project_links` | `customer_id` | `pma_customers` | `id` | N:M |
 | `customer_project_links` | `project_id` | `zenta_projects` | `id` | N:M |
-| `customer_product_links` | `customer_id` | `zenta_customers` | `id` | N:M |
-| `customer_product_links` | `product_id` | `zenta_products` | `id` | N:M |
+| `customer_product_links` | `customer_id` | `pma_customers` | `id` | N:M |
+| `customer_product_links` | `product_id` | `pma_products` | `id` | N:M |
 | `user_roles` | `user_id` | `local_users` | `id` | N:M |
 | `user_roles` | `role_id` | `local_roles` | `id` | N:M |
 | `pma_product_lines` | `parent_id` | `pma_product_lines` | `id` | 自引用 N:1 |
@@ -725,7 +725,7 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 | `local_users` | `username` | 用户名唯一 |
 | `local_roles` | `key` | 角色 key 唯一 |
 | `zenta_users` | `account` | ZenTao 账号唯一 |
-| `zenta_customers` | `name` | 客户名唯一 |
+| `pma_customers` | `name` | 客户名唯一 |
 | `pma_settings` | `key` | 设置 key 唯一 |
 | `pma_tags` | `name` | 标签名唯一 |
 | `product_project_links` | (`product_id`, `project_id`) | 组合唯一 |
@@ -740,14 +740,14 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 ```
 ZenTao API ──全量同步──► sync_service.py
                             │
-                            ├──► zenta_products ──► product_node_links ◄── pma_product_lines
+                            ├──► pma_products ──► product_node_links ◄── pma_product_lines
                             ├──► zenta_projects ◄── product_project_links
                             ├──► zenta_executions
                             ├──► zenta_tasks
                             ├──► zenta_bugs
                             ├──► zenta_users
                             ├──► zenta_releases
-                            └──► zenta_customers
+                            └──► pma_customers
                                       │
                     客户关联 ◄─────────┤
                     customer_project_links

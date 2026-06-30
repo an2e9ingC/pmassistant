@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from backend.config import zentao_product_url, zentao_product_bugs_url, zentao_product_releases_url
 from backend.database import to_local_str
 from backend.models.zentao import (
-    CachedProduct, CachedProject, ProductProjectLink,
+    PmaProduct, CachedProject, ProductProjectLink,
 )
 from backend.models.local import ProductActivity
 
@@ -28,35 +28,35 @@ def get_products(
     page: int = 1,
     limit: int = 50,
 ) -> tuple[list[dict], int]:
-    q = db.query(CachedProduct)
+    q = db.query(PmaProduct)
     if search:
         pattern = f"%{search}%"
         q = q.filter(
-            (CachedProduct.name.ilike(pattern)) |
-            (CachedProduct.code.ilike(pattern)) |
-            (CachedProduct.tags.ilike(pattern))
+            (PmaProduct.name.ilike(pattern)) |
+            (PmaProduct.code.ilike(pattern)) |
+            (PmaProduct.tags.ilike(pattern))
         )
     if category:
-        q = q.filter(CachedProduct.category == category)
+        q = q.filter(PmaProduct.category == category)
     if tags:
         for tag in tags.split(","):
             tag = tag.strip()
             if tag:
-                q = q.filter(CachedProduct.tags.ilike(f"%{tag}%"))
+                q = q.filter(PmaProduct.tags.ilike(f"%{tag}%"))
     total = q.count()
-    items = q.order_by(CachedProduct.id).offset((page - 1) * limit).limit(limit).all()
+    items = q.order_by(PmaProduct.id).offset((page - 1) * limit).limit(limit).all()
     return [_product_item(p, db) for p in items], total
 
 
 def get_product(db: Session, product_id: int) -> Optional[dict]:
-    p = db.query(CachedProduct).filter(CachedProduct.id == product_id).first()
+    p = db.query(PmaProduct).filter(PmaProduct.id == product_id).first()
     if not p:
         return None
     return _product_detail(p, db)
 
 
 def update_product(db: Session, product_id: int, data: dict) -> Optional[dict]:
-    p = db.query(CachedProduct).filter(CachedProduct.id == product_id).first()
+    p = db.query(PmaProduct).filter(PmaProduct.id == product_id).first()
     if not p:
         return None
     for field in ("category", "nas_path", "git_url", "pma_customer", "alias_name", "name", "code", "status", "description", "tags"):
@@ -68,7 +68,7 @@ def update_product(db: Session, product_id: int, data: dict) -> Optional[dict]:
 
 
 def get_product_projects(db: Session, product_id: int) -> list[dict]:
-    from backend.models.zentao import CustomerProjectLink, CachedCustomer
+    from backend.models.zentao import CustomerProjectLink, PmaCustomer
     links = db.query(ProductProjectLink).filter(
         ProductProjectLink.product_id == product_id
     ).all()
@@ -83,7 +83,7 @@ def get_product_projects(db: Session, product_id: int) -> list[dict]:
         CustomerProjectLink.project_id.in_(project_ids)
     ).all()
     cust_ids = set(l.customer_id for l in cust_links)
-    custs = {c.id: c.name for c in db.query(CachedCustomer).filter(CachedCustomer.id.in_(cust_ids)).all()} if cust_ids else {}
+    custs = {c.id: c.name for c in db.query(PmaCustomer).filter(PmaCustomer.id.in_(cust_ids)).all()} if cust_ids else {}
     cust_map = {}
     for cl in cust_links:
         name = custs.get(cl.customer_id)
@@ -147,15 +147,15 @@ def get_project_products_full(db: Session, project_id: int) -> list[dict]:
     product_ids = [l.product_id for l in links]
     if not product_ids:
         return []
-    products = db.query(CachedProduct).filter(
-        CachedProduct.id.in_(product_ids)
+    products = db.query(PmaProduct).filter(
+        PmaProduct.id.in_(product_ids)
     ).all()
     return [_product_detail(p, db) for p in products]
 
 
 def get_mapping_overview(db: Session) -> dict:
     """Overview stats for the mapping view."""
-    total_products = db.query(CachedProduct).count()
+    total_products = db.query(PmaProduct).count()
     total_projects = db.query(CachedProject).count()
     total_links = db.query(ProductProjectLink).count()
     unlinked_products = total_products - db.query(ProductProjectLink.product_id).distinct().count()
@@ -169,7 +169,7 @@ def get_mapping_overview(db: Session) -> dict:
     }
 
 
-def _product_item(p: CachedProduct, db: Session) -> dict:
+def _product_item(p: PmaProduct, db: Session) -> dict:
     link_count = db.query(ProductProjectLink).filter(
         ProductProjectLink.product_id == p.id
     ).count()
@@ -216,11 +216,11 @@ def _doc_completion(product_id: int, db: Session) -> int:
     return round(submitted / len(docs) * 100)
 
 
-def _product_detail(p: CachedProduct, db: Session) -> dict:
+def _product_detail(p: PmaProduct, db: Session) -> dict:
     projects = get_product_projects(db, p.id)
     cat = p.program_name or p.category
     # Derive customers from CustomerProjectLink (SQL) + product desc (supplementary)
-    from backend.models.zentao import ProductProjectLink as PPL, CustomerProjectLink as CPL, CachedCustomer
+    from backend.models.zentao import ProductProjectLink as PPL, CustomerProjectLink as CPL, PmaCustomer
     prod_project_ids = [l.project_id for l in db.query(PPL).filter(PPL.product_id == p.id).all()]
     customer_ids = set()
     if prod_project_ids:
@@ -228,7 +228,7 @@ def _product_detail(p: CachedProduct, db: Session) -> dict:
             customer_ids.add(row[0])
     customer_names = []
     if customer_ids:
-        customer_names = [r[0] for r in db.query(CachedCustomer.name).filter(CachedCustomer.id.in_(customer_ids)).all()]
+        customer_names = [r[0] for r in db.query(PmaCustomer.name).filter(PmaCustomer.id.in_(customer_ids)).all()]
     customers = list(set(customer_names))
     tags_str = p.tags or ""
     return {

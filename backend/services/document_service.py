@@ -934,14 +934,14 @@ def get_or_init_product_documents(db: Session, product_id: int) -> list[dict]:
     Each template generates one ProductDocument row for this product.
     Existing rows preserve their status/location/upload info on re-sync."""
     from backend.models.document import ProductDocTemplate, ProductDocument
-    from backend.models.zentao import CachedProduct, ProductNodeLink
+    from backend.models.zentao import PmaProduct, ProductNodeLink
 
     # Find which L2 nodes this product is linked to
     links = db.query(ProductNodeLink).filter(ProductNodeLink.product_id == product_id).all()
     if not links:
         return []
 
-    product = db.query(CachedProduct).filter(CachedProduct.id == product_id).first()
+    product = db.query(PmaProduct).filter(PmaProduct.id == product_id).first()
     product_code = (product.code or "") if product else ""
 
     results = []

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.middleware.auth import get_current_user, require_perm
-from backend.models.zentao import ProductProjectLink, CustomerProjectLink, CustomerProductLink, CachedProduct, CachedProject, CachedCustomer
+from backend.models.zentao import ProductProjectLink, CustomerProjectLink, CustomerProductLink, PmaProduct, CachedProject, PmaCustomer
 from backend.services.project_service import log_project_activity
 
 router = APIRouter(prefix="/api/maintenance", tags=["maintenance"])
@@ -23,7 +23,7 @@ class LinkIds(BaseModel):
 @router.get("/customers", response_model=dict)
 def list_customers(db: Session = Depends(get_db), _=Depends(get_current_user)):
     """List all cached customers for dropdown selection."""
-    customers = db.query(CachedCustomer).order_by(CachedCustomer.name).all()
+    customers = db.query(PmaCustomer).order_by(PmaCustomer.name).all()
     return {"code": 0, "data": [{"id": c.id, "name": c.name} for c in customers], "message": "ok"}
 
 
@@ -33,7 +33,7 @@ def list_customers(db: Session = Depends(get_db), _=Depends(get_current_user)):
 def get_project_products(project_id: int, db: Session = Depends(get_db), _=Depends(require_perm("project_edit"))):
     links = db.query(ProductProjectLink).filter(ProductProjectLink.project_id == project_id).all()
     product_ids = [l.product_id for l in links]
-    products = db.query(CachedProduct).filter(CachedProduct.id.in_(product_ids)).all() if product_ids else []
+    products = db.query(PmaProduct).filter(PmaProduct.id.in_(product_ids)).all() if product_ids else []
     return {"code": 0, "data": [{"id": p.id, "name": p.name, "code": p.code} for p in products], "message": "ok"}
 
 
@@ -42,12 +42,12 @@ def set_project_products(project_id: int, payload: LinkIds, db: Session = Depend
     # Get old names before deleting links
     old_links = db.query(ProductProjectLink).filter(ProductProjectLink.project_id == project_id).all()
     old_pids = [l.product_id for l in old_links]
-    old_names = [p.name for p in db.query(CachedProduct).filter(CachedProduct.id.in_(old_pids)).all()] if old_pids else []
+    old_names = [p.name for p in db.query(PmaProduct).filter(PmaProduct.id.in_(old_pids)).all()] if old_pids else []
     db.query(ProductProjectLink).filter(ProductProjectLink.project_id == project_id).delete()
     for pid in payload.ids:
         db.add(ProductProjectLink(product_id=pid, project_id=project_id))
     db.commit()
-    names = [p.name for p in db.query(CachedProduct).filter(CachedProduct.id.in_(payload.ids)).all()]
+    names = [p.name for p in db.query(PmaProduct).filter(PmaProduct.id.in_(payload.ids)).all()]
     old_str = ", ".join(old_names) if old_names else "无"
     new_str = ", ".join(names) if names else "无"
     log_project_activity(db, project_id, user.username, "关联产品", f"product:'{old_str}'->'{new_str}'")
@@ -60,7 +60,7 @@ def set_project_products(project_id: int, payload: LinkIds, db: Session = Depend
 def get_project_customers(project_id: int, db: Session = Depends(get_db), _=Depends(require_perm("project_edit"))):
     links = db.query(CustomerProjectLink).filter(CustomerProjectLink.project_id == project_id).all()
     customer_ids = [l.customer_id for l in links]
-    customers = db.query(CachedCustomer).filter(CachedCustomer.id.in_(customer_ids)).all() if customer_ids else []
+    customers = db.query(PmaCustomer).filter(PmaCustomer.id.in_(customer_ids)).all() if customer_ids else []
     return {"code": 0, "data": [{"id": c.id, "name": c.name} for c in customers], "message": "ok"}
 
 
@@ -68,12 +68,12 @@ def get_project_customers(project_id: int, db: Session = Depends(get_db), _=Depe
 def set_project_customers(project_id: int, payload: LinkIds, db: Session = Depends(get_db), user=Depends(require_perm("project_edit"))):
     old_links = db.query(CustomerProjectLink).filter(CustomerProjectLink.project_id == project_id).all()
     old_cids = [l.customer_id for l in old_links]
-    old_names = [c.name for c in db.query(CachedCustomer).filter(CachedCustomer.id.in_(old_cids)).all()] if old_cids else []
+    old_names = [c.name for c in db.query(PmaCustomer).filter(PmaCustomer.id.in_(old_cids)).all()] if old_cids else []
     db.query(CustomerProjectLink).filter(CustomerProjectLink.project_id == project_id).delete()
     for cid in payload.ids:
         db.add(CustomerProjectLink(customer_id=cid, project_id=project_id))
     db.commit()
-    names = [c.name for c in db.query(CachedCustomer).filter(CachedCustomer.id.in_(payload.ids)).all()]
+    names = [c.name for c in db.query(PmaCustomer).filter(PmaCustomer.id.in_(payload.ids)).all()]
     old_str = ", ".join(old_names) if old_names else "无"
     new_str = ", ".join(names) if names else "无"
     log_project_activity(db, project_id, user.username, "关联客户", f"customer:'{old_str}'->'{new_str}'")
@@ -138,7 +138,7 @@ def set_project_tags(project_id: int, payload: TagList, db: Session = Depends(ge
 def get_product_customers(product_id: int, db: Session = Depends(get_db), _=Depends(require_perm("product_link"))):
     links = db.query(CustomerProductLink).filter(CustomerProductLink.product_id == product_id).all()
     customer_ids = [l.customer_id for l in links]
-    customers = db.query(CachedCustomer).filter(CachedCustomer.id.in_(customer_ids)).all() if customer_ids else []
+    customers = db.query(PmaCustomer).filter(PmaCustomer.id.in_(customer_ids)).all() if customer_ids else []
     return {"code": 0, "data": [{"id": c.id, "name": c.name} for c in customers], "message": "ok"}
 
 

@@ -309,14 +309,14 @@ def _detect_alerts_internal(db: Session) -> list[dict]:
                 })
 
     # GitLab release URL validation alerts (FR-004)
-    from backend.models.zentao import CachedRelease, CachedProduct
+    from backend.models.zentao import CachedRelease, PmaProduct
     invalid_releases = db.query(CachedRelease).filter(
         CachedRelease.gitlab_url.isnot(None),
         CachedRelease.gitlab_url != "",
         CachedRelease.gitlab_url_valid == False,
     ).all()
     for r in invalid_releases:
-        product = db.query(CachedProduct).filter(CachedProduct.id == r.product_id).first()
+        product = db.query(PmaProduct).filter(PmaProduct.id == r.product_id).first()
         product_name = product.name if product else f"产品#{r.product_id}"
         alert_id += 1
         alerts.append({
@@ -334,7 +334,7 @@ def _detect_alerts_internal(db: Session) -> list[dict]:
         CachedRelease.desc != "",
     ).all()
     for r in missing_url_releases:
-        product = db.query(CachedProduct).filter(CachedProduct.id == r.product_id).first()
+        product = db.query(PmaProduct).filter(PmaProduct.id == r.product_id).first()
         product_name = product.name if product else f"产品#{r.product_id}"
         alert_id += 1
         alerts.append({

@@ -108,8 +108,8 @@ def link_product_to_node(
     try:
         result = pm_service.link_product_to_node(db, body.product_id, body.node_id)
         from backend.models.document import ProductLine
-        from backend.models.zentao import CachedProduct
-        prod = db.query(CachedProduct).filter(CachedProduct.id == body.product_id).first()
+        from backend.models.zentao import PmaProduct
+        prod = db.query(PmaProduct).filter(PmaProduct.id == body.product_id).first()
         node = db.query(ProductLine).filter(ProductLine.id == body.node_id).first()
         log_audit(db, user, "product_node_link",
                   f"关联产品「{prod.name if prod else body.product_id}」到节点「{node.name if node else body.node_id}」",
@@ -131,8 +131,8 @@ def unlink_product_from_node(
     try:
         result = pm_service.unlink_product_from_node(db, product_id, node_id)
         from backend.models.document import ProductLine
-        from backend.models.zentao import CachedProduct
-        prod = db.query(CachedProduct).filter(CachedProduct.id == product_id).first()
+        from backend.models.zentao import PmaProduct
+        prod = db.query(PmaProduct).filter(PmaProduct.id == product_id).first()
         node = db.query(ProductLine).filter(ProductLine.id == node_id).first()
         log_audit(db, user, "product_node_unlink",
                   f"取消关联「{prod.name if prod else product_id}」从节点「{node.name if node else node_id}」",
@@ -316,8 +316,8 @@ def update_product_projects(
 ):
     """Replace all project associations for a product."""
     try:
-        from backend.models.zentao import CachedProduct, CachedProject
-        prod = db.query(CachedProduct).filter(CachedProduct.id == product_id).first()
+        from backend.models.zentao import PmaProduct, CachedProject
+        prod = db.query(PmaProduct).filter(PmaProduct.id == product_id).first()
         # Get old linked project IDs for change tracking
         from backend.models.local import ProductProjectLink as _PPL
         old_links = db.query(_PPL).filter(_PPL.product_id == product_id).all()

@@ -7,8 +7,8 @@ import re
 
 from backend.config import settings, zentao_project_url, zentao_product_url
 from backend.models.zentao import (
-    CachedProject, CachedExecution, CachedTask, CachedProduct, ProductProjectLink,
-    CustomerProjectLink, CachedCustomer,
+    CachedProject, CachedExecution, CachedTask, PmaProduct, ProductProjectLink,
+    CustomerProjectLink, PmaCustomer,
 )
 from backend.models.document import ProjectDocument
 from backend.models.local import ProjectActivity
@@ -461,7 +461,7 @@ def get_project_resources(db: Session, project_id: int) -> list[dict]:
         .all()
     )
     for lr in link_records:
-        prod = db.query(CachedProduct).filter(CachedProduct.id == lr.product_id).first()
+        prod = db.query(PmaProduct).filter(PmaProduct.id == lr.product_id).first()
         if prod:
             if prod.nas_path:
                 links.append({"label": f"NAS - {prod.name}", "url": prod.nas_path, "description": f"{prod.name} 硬件资料"})
@@ -478,7 +478,7 @@ def get_project_resources(db: Session, project_id: int) -> list[dict]:
             CachedRelease.gitlab_url != "",
         ).order_by(CachedRelease.date.desc()).all()
         for r in releases:
-            prod = db.query(CachedProduct).filter(CachedProduct.id == r.product_id).first()
+            prod = db.query(PmaProduct).filter(PmaProduct.id == r.product_id).first()
             prod_name = prod.name if prod else f"产品#{r.product_id}"
             valid_suffix = " ✓" if r.gitlab_url_valid else (" ✗" if r.gitlab_url_valid is False else "")
             links.append({
@@ -498,7 +498,7 @@ def get_project_products(db: Session, project_id: int) -> list[dict]:
     )
     products = []
     for lr in link_records:
-        prod = db.query(CachedProduct).filter(CachedProduct.id == lr.product_id).first()
+        prod = db.query(PmaProduct).filter(PmaProduct.id == lr.product_id).first()
         if prod:
             products.append({
                 "id": prod.id,
@@ -574,7 +574,7 @@ def _batch_cust_map(db: Session, project_ids: list[int]) -> dict:
     links = db.query(CustomerProjectLink).filter(CustomerProjectLink.project_id.in_(project_ids)).all()
     if links:
         cids = set(l.customer_id for l in links)
-        cnames = {c.id: c.name for c in db.query(CachedCustomer).filter(CachedCustomer.id.in_(cids)).all()}
+        cnames = {c.id: c.name for c in db.query(PmaCustomer).filter(PmaCustomer.id.in_(cids)).all()}
         for l in links:
             name = cnames.get(l.customer_id)
             if name:

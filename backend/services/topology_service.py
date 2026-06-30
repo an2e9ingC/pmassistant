@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
-from backend.models.zentao import CachedProject, CachedProduct, CachedCustomer, ProductProjectLink, CustomerProjectLink
+from backend.models.zentao import CachedProject, PmaProduct, PmaCustomer, ProductProjectLink, CustomerProjectLink
 
 
 def search_topology(
@@ -32,10 +32,10 @@ def search_topology(
         pattern = f"%{product}%"
         sub_ids = (
             db.query(ProductProjectLink.project_id)
-            .join(CachedProduct, CachedProduct.id == ProductProjectLink.product_id)
+            .join(PmaProduct, PmaProduct.id == ProductProjectLink.product_id)
             .filter(
-                (CachedProduct.name.ilike(pattern)) |
-                (CachedProduct.code.ilike(pattern))
+                (PmaProduct.name.ilike(pattern)) |
+                (PmaProduct.code.ilike(pattern))
             )
             .subquery()
         )
@@ -47,8 +47,8 @@ def search_topology(
         # Projects linked via CustomerProjectLink
         linked_ids = (
             db.query(CustomerProjectLink.project_id)
-            .join(CachedCustomer, CachedCustomer.id == CustomerProjectLink.customer_id)
-            .filter(CachedCustomer.name.ilike(pattern))
+            .join(PmaCustomer, PmaCustomer.id == CustomerProjectLink.customer_id)
+            .filter(PmaCustomer.name.ilike(pattern))
         )
         q = q.filter(
             CachedProject.customer_name.ilike(pattern) |
@@ -71,7 +71,7 @@ def search_topology(
     product_ids = set(link.product_id for link in links)
     prods = {
         p.id: p.name
-        for p in db.query(CachedProduct).filter(CachedProduct.id.in_(product_ids)).all()
+        for p in db.query(PmaProduct).filter(PmaProduct.id.in_(product_ids)).all()
     }
     for link in links:
         name = prods.get(link.product_id)
@@ -87,7 +87,7 @@ def search_topology(
     cust_ids = set(l.customer_id for l in cust_links)
     custs = {
         c.id: c.name
-        for c in db.query(CachedCustomer).filter(CachedCustomer.id.in_(cust_ids)).all()
+        for c in db.query(PmaCustomer).filter(PmaCustomer.id.in_(cust_ids)).all()
     }
     cust_map: Dict[int, List[str]] = {}
     for link in cust_links:

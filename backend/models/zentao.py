@@ -109,8 +109,8 @@ class CachedUser(Base):
     synced_at = Column(DateTime, default=func.now())
 
 
-class CachedProduct(Base):
-    __tablename__ = "zenta_products"
+class PmaProduct(Base):
+    __tablename__ = "pma_products"
 
     id = Column(Integer, primary_key=True)
     code = Column(String(128), index=True)
@@ -141,15 +141,15 @@ class ProductProjectLink(Base):
     __tablename__ = "product_project_links"
 
     id = Column(Integer, primary_key=True)
-    product_id = Column(Integer, ForeignKey("zenta_products.id"), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("pma_products.id"), nullable=False, index=True)
     project_id = Column(Integer, ForeignKey("zenta_projects.id"), nullable=False, index=True)
     created_at = Column(DateTime, default=func.now())
 
     __table_args__ = (UniqueConstraint("product_id", "project_id"),)
 
 
-class CachedCustomer(Base):
-    __tablename__ = "zenta_customers"
+class PmaCustomer(Base):
+    __tablename__ = "pma_customers"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(128), unique=True, nullable=False, index=True)
@@ -162,7 +162,7 @@ class CustomerProjectLink(Base):
     __tablename__ = "customer_project_links"
 
     id = Column(Integer, primary_key=True)
-    customer_id = Column(Integer, ForeignKey("zenta_customers.id"), nullable=False, index=True)
+    customer_id = Column(Integer, ForeignKey("pma_customers.id"), nullable=False, index=True)
     project_id = Column(Integer, ForeignKey("zenta_projects.id"), nullable=False, index=True)
     created_at = Column(DateTime, default=func.now())
 
@@ -173,8 +173,8 @@ class CustomerProductLink(Base):
     __tablename__ = "customer_product_links"
 
     id = Column(Integer, primary_key=True)
-    customer_id = Column(Integer, ForeignKey("zenta_customers.id"), nullable=False, index=True)
-    product_id = Column(Integer, ForeignKey("zenta_products.id"), nullable=False, index=True)
+    customer_id = Column(Integer, ForeignKey("pma_customers.id"), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("pma_products.id"), nullable=False, index=True)
     created_at = Column(DateTime, default=func.now())
 
     __table_args__ = (UniqueConstraint("customer_id", "product_id"),)
@@ -185,7 +185,7 @@ class CachedRelease(Base):
     __tablename__ = "zenta_releases"
 
     id = Column(Integer, primary_key=True)
-    product_id = Column(Integer, ForeignKey("zenta_products.id"), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("pma_products.id"), nullable=False, index=True)
     name = Column(String(256), nullable=False)            # version name, e.g. "v1.0.0"
     marker = Column(Integer, default=0)                    # 0=normal, 1=milestone
     status = Column(String(32), default="normal")          # normal / terminated
@@ -198,7 +198,7 @@ class CachedRelease(Base):
     raw_json = Column(Text)
     synced_at = Column(DateTime, default=func.now())
 
-    product = relationship("CachedProduct", backref="releases_list")
+    product = relationship("PmaProduct", backref="releases_list")
 
 
 class ProductNodeLink(Base):
@@ -206,7 +206,7 @@ class ProductNodeLink(Base):
     __tablename__ = "product_node_links"
 
     id = Column(Integer, primary_key=True)
-    product_id = Column(Integer, ForeignKey("zenta_products.id"), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("pma_products.id"), nullable=False, index=True)
     product_node_id = Column(Integer, ForeignKey("pma_product_lines.id"), nullable=False, index=True)
     created_at = Column(DateTime, default=func.now())
 

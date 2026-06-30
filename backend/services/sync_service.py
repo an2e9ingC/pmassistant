@@ -14,8 +14,8 @@ from backend.database import SessionLocal
 from backend.models.bug import CachedBug
 from backend.models.zentao import (
     CachedProject, CachedExecution, CachedTask,
-    CachedUser, CachedProduct, ProductProjectLink,
-    CachedCustomer, CustomerProjectLink,
+    CachedUser, PmaProduct, ProductProjectLink,
+    PmaCustomer, CustomerProjectLink,
 )
 from backend.models.local import SyncLog
 from backend.services.zentao_client import ZentaoClient
@@ -352,9 +352,9 @@ class SyncService:
             created, updated, deleted = 0, 0, 0
 
             # Cleanup stale products first (Zentao-synced = is_local IS NOT TRUE)
-            stale = db.query(CachedProduct).filter(
-                ~CachedProduct.id.in_(api_ids),
-                CachedProduct.is_local != True,
+            stale = db.query(PmaProduct).filter(
+                ~PmaProduct.id.in_(api_ids),
+                PmaProduct.is_local != True,
             ).all()
             for sp in stale:
                 db.query(ProductProjectLink).filter(ProductProjectLink.product_id == sp.id).delete()
@@ -366,7 +366,7 @@ class SyncService:
             for p in products:
                 pid = p.get("program", 0)
                 prog_name = prog_names.get(pid, "")
-                existing = db.query(CachedProduct).filter(CachedProduct.id == p["id"]).first()
+                existing = db.query(PmaProduct).filter(PmaProduct.id == p["id"]).first()
                 if existing:
                     # Update core fields but preserve PMA enrichments
                     desc = p.get("desc", "") or ""
@@ -395,10 +395,10 @@ class SyncService:
             try:
                 from backend.models.zentao import ProductNodeLink
                 from backend.models.document import ProductLine
-                synced_products = db.query(CachedProduct).filter(
-                    CachedProduct.is_local == False,
-                    CachedProduct.program_name.isnot(None),
-                    CachedProduct.program_name != "",
+                synced_products = db.query(PmaProduct).filter(
+                    PmaProduct.is_local == False,
+                    PmaProduct.program_name.isnot(None),
+                    PmaProduct.program_name != "",
                 ).all()
                 tree_nodes = db.query(ProductLine).all()
                 linked_count = 0
@@ -677,7 +677,7 @@ class SyncService:
             # Only sync bugs for products linked to filtered projects
             from backend.config import settings
             pf = getattr(settings, "ZENTAO_PROJECT_FILTER", "") or os.environ.get("ZENTAO_PROJECT_FILTER", "")
-            products = db.query(CachedProduct).all()
+            products = db.query(PmaProduct).all()
             if pf:
                 prefixes = [x.strip() for x in pf.split(",") if x.strip()]
                 filtered_project_ids = {
@@ -756,12 +756,12 @@ class SyncService:
     async def _sync_releases(self, db: Session) -> dict:
         """Sync Zentao product releases/versions (for GitLab URL validation).
         Releases are product-level data — sync ALL products, not just filtered ones."""
-        from backend.models.zentao import CachedRelease, CachedProduct
+        from backend.models.zentao import CachedRelease, PmaProduct
         log = _log_sync(db, "releases")
         created, updated, deleted, failed_products = 0, 0, 0, 0
         total = 0
         try:
-            products = db.query(CachedProduct).filter(CachedProduct.is_local != True).all()
+            products = db.query(PmaProduct).filter(PmaProduct.is_local != True).all()
 
             import asyncio
             sem = asyncio.Semaphore(10)
@@ -846,9 +846,9 @@ class SyncService:
         existing.synced_at = datetime.now(timezone.utc)
         return 1
 
-    def _build_product(self, p: dict) -> CachedProduct:
+    def _build_product(self, p: dict) -> PmaProduct:
         desc = p.get("desc", "") or ""
-        return CachedProduct(
+        return PmaProduct(
             id=p["id"], code=p.get("code", ""),
             name=p.get("name", ""), type=p.get("type", ""),
             status=p.get("status", ""), program_id=p.get("program", 0),

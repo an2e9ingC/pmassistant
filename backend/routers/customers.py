@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.middleware.auth import get_current_user, require_perm
 from backend.routers.logs import log_audit
-from backend.models.zentao import CachedCustomer, CachedProject, CachedProduct, CustomerProjectLink, CustomerProductLink, ProductProjectLink
+from backend.models.zentao import PmaCustomer, CachedProject, PmaProduct, CustomerProjectLink, CustomerProductLink, ProductProjectLink
 from backend.routers.logs import log_audit
 
 router = APIRouter(prefix="/api/customers", tags=["customers"])
@@ -31,10 +31,10 @@ def list_customers(
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
-    q = db.query(CachedCustomer)
+    q = db.query(PmaCustomer)
     if search:
-        q = q.filter(CachedCustomer.name.ilike(f"%{search}%"))
-    customers = q.order_by(CachedCustomer.name).all()
+        q = q.filter(PmaCustomer.name.ilike(f"%{search}%"))
+    customers = q.order_by(PmaCustomer.name).all()
     return {
         "code": 0,
         "data": [
@@ -55,10 +55,10 @@ def list_customers(
 
 @router.post("", response_model=dict)
 def create_customer(payload: CustomerCreate, db: Session = Depends(get_db), user=Depends(require_perm("customer_link"))):
-    existing = db.query(CachedCustomer).filter(CachedCustomer.name == payload.name).first()
+    existing = db.query(PmaCustomer).filter(PmaCustomer.name == payload.name).first()
     if existing:
         raise HTTPException(status_code=400, detail="客户名称已存在")
-    c = CachedCustomer(name=payload.name, full_name=payload.full_name or "")
+    c = PmaCustomer(name=payload.name, full_name=payload.full_name or "")
     db.add(c)
     db.commit()
     db.refresh(c)
@@ -67,7 +67,7 @@ def create_customer(payload: CustomerCreate, db: Session = Depends(get_db), user
 
 @router.put("/{customer_id}", response_model=dict)
 def update_customer(customer_id: int, payload: CustomerUpdate, db: Session = Depends(get_db), user=Depends(require_perm("customer_link"))):
-    c = db.query(CachedCustomer).filter(CachedCustomer.id == customer_id).first()
+    c = db.query(PmaCustomer).filter(PmaCustomer.id == customer_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="客户不存在")
     if payload.name is not None:
@@ -80,7 +80,7 @@ def update_customer(customer_id: int, payload: CustomerUpdate, db: Session = Dep
 
 @router.delete("/{customer_id}", response_model=dict)
 def delete_customer(customer_id: int, db: Session = Depends(get_db), _=Depends(require_perm("customer_link")), cu = Depends(get_current_user)):
-    c = db.query(CachedCustomer).filter(CachedCustomer.id == customer_id).first()
+    c = db.query(PmaCustomer).filter(PmaCustomer.id == customer_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="客户不存在")
     cname = c.name
@@ -94,7 +94,7 @@ def delete_customer(customer_id: int, db: Session = Depends(get_db), _=Depends(r
 
 @router.get("/{customer_id}", response_model=dict)
 def get_customer_detail(customer_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
-    c = db.query(CachedCustomer).filter(CachedCustomer.id == customer_id).first()
+    c = db.query(PmaCustomer).filter(PmaCustomer.id == customer_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="客户不存在")
     # Associated projects
@@ -104,7 +104,7 @@ def get_customer_detail(customer_id: int, db: Session = Depends(get_db), _=Depen
     # Associated products
     prod_links = db.query(CustomerProductLink).filter(CustomerProductLink.customer_id == customer_id).all()
     product_ids = [l.product_id for l in prod_links]
-    products = db.query(CachedProduct).filter(CachedProduct.id.in_(product_ids)).all() if product_ids else []
+    products = db.query(PmaProduct).filter(PmaProduct.id.in_(product_ids)).all() if product_ids else []
     return {
         "code": 0,
         "data": {

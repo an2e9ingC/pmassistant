@@ -42,8 +42,8 @@ def list_user_options(db: Session = Depends(get_db), _=Depends(get_current_user)
 @user_router.get("/customers/names", response_model=dict)
 def list_customer_names(db: Session = Depends(get_db), _=Depends(get_current_user)):
     """Return cached customer names for delivery form dropdown."""
-    from backend.models.zentao import CachedCustomer
-    customers = db.query(CachedCustomer.name).order_by(CachedCustomer.name).all()
+    from backend.models.zentao import PmaCustomer
+    customers = db.query(PmaCustomer.name).order_by(PmaCustomer.name).all()
     return {"code": 0, "data": [c[0] for c in customers if c[0]], "message": "ok"}
 
 

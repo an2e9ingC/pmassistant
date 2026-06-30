@@ -39,13 +39,13 @@ def get_projects(
         db, search, type, status, category, program_id, sort_by, sort_order, page, limit,
     )
     # Batch-load linked customers for all items
-    from backend.models.zentao import CustomerProjectLink, CachedCustomer
+    from backend.models.zentao import CustomerProjectLink, PmaCustomer
     proj_ids = [p.id for p in items]
     cust_links = db.query(CustomerProjectLink).filter(CustomerProjectLink.project_id.in_(proj_ids)).all()
     cust_map = {}
     if cust_links:
         cids = set(l.customer_id for l in cust_links)
-        cnames = {c.id: c.name for c in db.query(CachedCustomer).filter(CachedCustomer.id.in_(cids)).all()}
+        cnames = {c.id: c.name for c in db.query(PmaCustomer).filter(PmaCustomer.id.in_(cids)).all()}
         for cl in cust_links:
             name = cnames.get(cl.customer_id)
             if name:

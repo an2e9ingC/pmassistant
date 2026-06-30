@@ -137,7 +137,7 @@ class ProductActivity(Base):
     __tablename__ = "product_activities"
 
     id = Column(Integer, primary_key=True)
-    product_id = Column(Integer, ForeignKey("zenta_products.id"), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("pma_products.id"), nullable=False, index=True)
     username = Column(String(64), nullable=False)
     action = Column(String(128), nullable=False)   # e.g. 编辑产品, 关联项目, 文档更新, 框图
     detail = Column(String(512), nullable=True)

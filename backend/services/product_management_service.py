@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from backend.database import to_local_str
 from backend.models.document import ProductLine
 from backend.models.zentao import (
-    CachedProduct,
+    PmaProduct,
     CachedProject,
     ProductNodeLink,
     ProductProjectLink,
@@ -93,9 +93,9 @@ def get_node_products(db: Session, node_id: int) -> list[dict]:
     if not product_ids:
         return []
 
-    products = db.query(CachedProduct).filter(
-        CachedProduct.id.in_(product_ids)
-    ).order_by(CachedProduct.name).all()
+    products = db.query(PmaProduct).filter(
+        PmaProduct.id.in_(product_ids)
+    ).order_by(PmaProduct.name).all()
 
     return [_product_item(p, db) for p in products]
 
@@ -130,9 +130,9 @@ def get_node_projects(db: Session, node_id: int) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def link_product_to_node(db: Session, product_id: int, node_id: int) -> dict:
-    """Link a CachedProduct to a tree node."""
+    """Link a PmaProduct to a tree node."""
     # Verify product exists
-    product = db.query(CachedProduct).filter(CachedProduct.id == product_id).first()
+    product = db.query(PmaProduct).filter(PmaProduct.id == product_id).first()
     if not product:
         raise ValueError(f"产品不存在: {product_id}")
 
@@ -189,13 +189,13 @@ def create_local_product(
         raise ValueError(f"节点不存在: {node_id}")
 
     # Check name uniqueness
-    existing = db.query(CachedProduct).filter(
-        CachedProduct.name == name, CachedProduct.is_local == True
+    existing = db.query(PmaProduct).filter(
+        PmaProduct.name == name, PmaProduct.is_local == True
     ).first()
     if existing:
         raise ValueError(f"已存在同名本地产品: {name}")
 
-    product = CachedProduct(
+    product = PmaProduct(
         name=name,
         code=code,
         status=status,
@@ -233,7 +233,7 @@ def create_local_product(
 
 def get_local_product(db: Session, product_id: int) -> Optional[dict]:
     """Get a product (any source) as dict for comparison."""
-    product = db.query(CachedProduct).filter(CachedProduct.id == product_id).first()
+    product = db.query(PmaProduct).filter(PmaProduct.id == product_id).first()
     if not product:
         return None
     return {"id": product.id, "name": product.name, "code": product.code, "status": product.status, "description": product.description or ""}
@@ -241,8 +241,8 @@ def get_local_product(db: Session, product_id: int) -> Optional[dict]:
 
 def update_local_product(db: Session, product_id: int, data: dict) -> dict:
     """Update a PMA-local product."""
-    product = db.query(CachedProduct).filter(
-        CachedProduct.id == product_id, CachedProduct.is_local == True
+    product = db.query(PmaProduct).filter(
+        PmaProduct.id == product_id, PmaProduct.is_local == True
     ).first()
     if not product:
         raise ValueError(f"本地产品不存在: {product_id}")
@@ -261,8 +261,8 @@ def delete_local_product(db: Session, product_id: int) -> dict:
     """Delete a PMA-local product and its related data."""
     from backend.models.document import ProductDocument
     from backend.models.zentao import CustomerProductLink
-    product = db.query(CachedProduct).filter(
-        CachedProduct.id == product_id, CachedProduct.is_local == True
+    product = db.query(PmaProduct).filter(
+        PmaProduct.id == product_id, PmaProduct.is_local == True
     ).first()
     if not product:
         raise ValueError(f"本地产品不存在: {product_id}")
@@ -317,7 +317,7 @@ def create_local_project(
 
     # Link to products
     for pid in product_ids:
-        prod = db.query(CachedProduct).filter(CachedProduct.id == pid).first()
+        prod = db.query(PmaProduct).filter(PmaProduct.id == pid).first()
         if prod:
             existing_link = db.query(ProductProjectLink).filter(
                 ProductProjectLink.product_id == pid,
@@ -367,7 +367,7 @@ def update_product_projects(
     db: Session, product_id: int, project_ids: list[int]
 ) -> dict:
     """Replace all project associations for a product with the given list."""
-    product = db.query(CachedProduct).filter(CachedProduct.id == product_id).first()
+    product = db.query(PmaProduct).filter(PmaProduct.id == product_id).first()
     if not product:
         raise ValueError(f"产品不存在: {product_id}")
 
@@ -390,7 +390,7 @@ def update_product_projects(
 # Dict helpers
 # ---------------------------------------------------------------------------
 
-def _product_item(p: CachedProduct, db: Session) -> dict:
+def _product_item(p: PmaProduct, db: Session) -> dict:
     """Format a product for list display."""
     # Count linked projects
     project_count = db.query(sqlfunc.count(ProductProjectLink.id)).filter(
@@ -438,8 +438,8 @@ def _project_item(p: CachedProject, db: Session) -> dict:
     product_ids = [l.product_id for l in product_links]
     product_names = []
     if product_ids:
-        products = db.query(CachedProduct).filter(
-            CachedProduct.id.in_(product_ids)
+        products = db.query(PmaProduct).filter(
+            PmaProduct.id.in_(product_ids)
         ).all()
         product_names = [p.name for p in products]
 

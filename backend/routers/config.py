@@ -214,7 +214,7 @@ def clear_database(_=Depends(require_admin), cu = Depends(get_current_user)):
     from backend.database import SessionLocal
     from backend.models.zentao import (
         CachedProject, CachedExecution, CachedTask, CachedUser,
-        CachedProduct, ProductProjectLink, CachedCustomer, CustomerProjectLink,
+        PmaProduct, ProductProjectLink, PmaCustomer, CustomerProjectLink,
     )
     from backend.models.bug import CachedBug
     from backend.models.delivery import DeliveryRecord
@@ -223,8 +223,8 @@ def clear_database(_=Depends(require_admin), cu = Depends(get_current_user)):
     try:
         tables = [
             CachedTask, CachedExecution, CachedProject, CachedUser,
-            ProductProjectLink, CachedCustomer, CustomerProjectLink,
-            CachedBug, DeliveryRecord, CachedProduct,
+            ProductProjectLink, PmaCustomer, CustomerProjectLink,
+            CachedBug, DeliveryRecord, PmaProduct,
         ]
         count = 0
         for t in tables:

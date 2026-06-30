@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.middleware.auth import get_current_user, require_admin
 from backend.models.local import LocalUser
-from backend.models.zentao import CachedRelease, CachedProduct
+from backend.models.zentao import CachedRelease, PmaProduct
 from backend.config import settings
 
 router = APIRouter(prefix="/api/gitlab", tags=["gitlab"])
@@ -73,7 +73,7 @@ def list_releases(
 
     items = []
     for r in releases:
-        product = db.query(CachedProduct).filter(CachedProduct.id == r.product_id).first()
+        product = db.query(PmaProduct).filter(PmaProduct.id == r.product_id).first()
         items.append({
             "id": r.id,
             "product_id": r.product_id,
@@ -128,7 +128,7 @@ def releases_stats(db: Session = Depends(get_db), _=Depends(get_current_user)):
     # Build detailed list
     items = []
     for r in releases:
-        product = db.query(CachedProduct).filter(CachedProduct.id == r.product_id).first()
+        product = db.query(PmaProduct).filter(PmaProduct.id == r.product_id).first()
         items.append({
             "id": r.id,
             "product_id": r.product_id,
