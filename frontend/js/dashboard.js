@@ -26,6 +26,7 @@ async function renderDashboard() {
     loadProjectTable(curTypeFilter),
   ]);
   document.getElementById('tab-fav').textContent = '★ 收藏 ' + _favProjects.length;
+  document.getElementById('kpi-fav-count').textContent = _favProjects.length;
   _dashboardLoading = false;
 }
 
@@ -95,19 +96,17 @@ function filterByProgram(pid, el) {
 /* Category card click — filters project list */
 
 function filterByCategory(category, el) {
-  // Toggle: click active card again to deselect, or click "全部"
-  if (_curCategory === category && category !== '') {
-    category = '';
-  }
+  if (_curCategory === category && category !== '') { category = ''; }
   _curCategory = category;
-  document.querySelectorAll('#kpi-grid .kpi-card').forEach(function(c) { c.classList.remove('active'); });
+  // Reset type filter tabs
+  curTypeFilter = 'all';
+  document.querySelectorAll('#type-filter .tab').forEach(function(t) { t.classList.remove('active'); });
+  var allTab = document.getElementById('tab-all');
+  if (allTab) allTab.classList.add('active');
+  // Update KPI card highlights
+  document.querySelectorAll('.kpi-card').forEach(function(c) { c.classList.remove('active'); });
   if (el) el.classList.add('active');
-  var table = document.querySelector('#view-dashboard .proj-table');
-  if (table) {
-    if (category) table.setAttribute('data-category', category);
-    else table.removeAttribute('data-category');
-  }
-  loadProjectTable(curTypeFilter);
+  loadProjectTable('all');
 }
 
 /* Project Table */
@@ -126,6 +125,9 @@ function filterTable(f, el) {
     document.querySelectorAll('#type-filter .tab').forEach(function(t) { t.classList.remove('active'); });
     el.classList.add('active');
   }
+  // Reset category filter when switching type filter
+  _curCategory = '';
+  document.querySelectorAll('#kpi-grid .kpi-card').forEach(function(c){c.classList.remove('active');});
   loadProjectTable(f);
 }
 
@@ -186,7 +188,7 @@ async function loadProjectTable(filter) {
       var riskBg = { normal: 'var(--success-lt)', low: 'var(--bg)', medium: 'var(--warn-lt)', high: 'var(--danger-lt)', overdue: 'var(--danger-lt)', incomplete: 'var(--warn-lt)' }[riskLevel] || 'var(--bg)';
 
       return '<tr id="proj-row-' + p.id + '" ' + rowClick + '>' +
-        '<td style="width:28px;text-align:center;padding-right:0">' + favStar('project', p.id, {stopPropagation: true}) + '</td>' +
+        '<td style="width:28px;text-align:center;padding-center:0">' + favStar('project', p.id, {stopPropagation: true}) + '</td>' +
         '<td>' + projIconHtml + '</td>' +
         '<td><div class="proj-name">' + escHtml(coreName) + '</div></td>' +
         '<td><span onclick="event.stopPropagation();openCustomerByName(\'' + escHtml(p.customer_name || '') + '\')" style="cursor:pointer">' + renderCustomerBadge(p.customer_name) + '</span></td>' +
