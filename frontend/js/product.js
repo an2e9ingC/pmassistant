@@ -25,6 +25,7 @@ async function initProductList() {
     _prodTree = (await API.get('/product-doc-templates/product-tree')) || [];
   } catch(e) { _prodTree = []; }
 
+  await loadFavProducts();
   _prodActiveL1 = null;
   _prodActiveL2 = null;
   renderProdOverview();

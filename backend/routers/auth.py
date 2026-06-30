@@ -53,6 +53,29 @@ def me(user: LocalUser = Depends(get_current_user)):
     }
 
 
+class FavoritesUpdate(BaseModel):
+    favorites: list  # list of product IDs
+
+@router.get("/favorites", response_model=dict)
+def get_favorites(user: LocalUser = Depends(get_current_user)):
+    import json
+    try:
+        favs = json.loads(user.favorites or "[]")
+    except (json.JSONDecodeError, TypeError):
+        favs = []
+    return {"code": 0, "data": favs, "message": "ok"}
+
+@router.put("/favorites", response_model=dict)
+def update_favorites(
+    payload: FavoritesUpdate,
+    db: Session = Depends(get_db),
+    user: LocalUser = Depends(get_current_user),
+):
+    import json
+    user.favorites = json.dumps(payload.favorites)
+    db.commit()
+    return {"code": 0, "data": payload.favorites, "message": "ok"}
+
 class PasswordUpdate(BaseModel):
     old_password: str
     new_password: str

@@ -46,20 +46,35 @@ function iconRestore(onclick, title) {
 
 /* ── Favorite helpers ── */
 
+var _favProducts = [];
+var _favLoaded = false;
+
 function getFavProducts() {
-  try { return JSON.parse(localStorage.getItem('pma_fav_products') || '[]'); }
-  catch(e) { return []; }
+  return _favProducts;
 }
+
+async function loadFavProducts() {
+  if (_favLoaded) return _favProducts;
+  try {
+    var data = await API.get('/auth/favorites');
+    _favProducts = data || [];
+  } catch(e) { _favProducts = []; }
+  _favLoaded = true;
+  return _favProducts;
+}
+
 function isFavProduct(id) {
-  return getFavProducts().indexOf(id) >= 0;
+  return _favProducts.indexOf(id) >= 0;
 }
-function toggleFavProduct(id) {
-  var favs = getFavProducts();
-  var idx = favs.indexOf(id);
-  if (idx >= 0) { favs.splice(idx, 1); }
-  else { favs.push(id); }
-  localStorage.setItem('pma_fav_products', JSON.stringify(favs));
-  return idx < 0; // true = added, false = removed
+
+async function toggleFavProduct(id) {
+  var idx = _favProducts.indexOf(id);
+  if (idx >= 0) { _favProducts.splice(idx, 1); }
+  else { _favProducts.push(id); }
+  try {
+    await API.put('/auth/favorites', {favorites: _favProducts});
+  } catch(e) { /* revert on failure */ }
+  return idx < 0;
 }
 
 function renderProgressCircle(percent, size, opts) {
