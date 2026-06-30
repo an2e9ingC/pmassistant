@@ -319,8 +319,8 @@ function renderProdDetailHeader(p) {
   document.getElementById('prod-detail-header').innerHTML =
     '<div class="detail-meta">' +
       '<div class="detail-title">' +
+        '<span style="vertical-align:middle;margin-right:4px">' + favStar('product', p.id, {size:'22px'}) + '</span>' +
         escHtml(p.name) +
-        '<span style="vertical-align:middle;margin-left:4px">' + favStar('product', p.id, {size:'22px'}) + '</span>' +
         (p.is_local
           ? ' <span class="pm-src-badge local" style="vertical-align:middle;margin-left:6px">PMA本地</span>'
           : (p.synced_at ? ' <span class="pm-src-badge synced" style="vertical-align:middle;margin-left:6px" title="同步于 ' + escHtml(p.synced_at) + '">禅道同步</span>' : '')) +

@@ -100,21 +100,21 @@ var _STAR_PATH = 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L
 function _favSparkle(el) {
   var svg = el.querySelector('svg');
   if (!svg) return;
-  // Add scale burst animation
   svg.style.animation = 'none';
-  svg.offsetHeight; // reflow
+  svg.offsetHeight;
   svg.style.animation = 'fav-sparkle 0.5s ease-out';
-  // Create 6 burst dots
   var rect = svg.getBoundingClientRect();
   var cx = rect.left + rect.width/2, cy = rect.top + rect.height/2;
-  var colors = ['var(--warn)','#fbbf24','#f59e0b','var(--warn)','#fbbf24','#f59e0b'];
-  for (var i=0; i<6; i++) {
-    var dot = document.createElement('div');
-    var angle = (i/6)*Math.PI*2;
-    var dist = 8 + Math.random()*8;
-    dot.style.cssText = 'position:fixed;left:'+(cx-1.5)+'px;top:'+(cy-1.5)+'px;width:4px;height:4px;border-radius:50%;background:'+colors[i]+';z-index:9999;pointer-events:none;--dx:'+(Math.cos(angle)*dist)+'px;--dy:'+(Math.sin(angle)*dist)+'px;animation:fav-burst-dot 0.6s ease-out forwards';
-    document.body.appendChild(dot);
-    setTimeout(function(){ dot.remove(); }, 650);
+  var colors = ['#eab308','#fbbf24','#f59e0b','#eab308','#fbbf24','#f59e0b','#eab308','#f59e0b'];
+  for (var i=0; i<8; i++) {
+    (function(idx){
+      var dot = document.createElement('div');
+      var angle = (idx/8)*Math.PI*2;
+      var dist = 14 + Math.random()*16;
+      dot.style.cssText = 'position:fixed;left:'+(cx-3)+'px;top:'+(cy-3)+'px;width:6px;height:6px;border-radius:50%;background:'+colors[idx]+';z-index:9999;pointer-events:none;--dx:'+(Math.cos(angle)*dist)+'px;--dy:'+(Math.sin(angle)*dist)+'px;animation:fav-burst-dot 0.7s ease-out forwards';
+      document.body.appendChild(dot);
+      setTimeout(function(){ dot.remove(); }, 750);
+    })(i);
   }
 }
 
@@ -122,12 +122,12 @@ function favStar(type, id, opts) {
   opts = opts || {};
   var fav = isFav(type, id);
   var s = parseInt(opts.size) || 16;
-  var color = fav ? 'var(--warn)' : 'var(--muted)';
-  var fill = fav ? 'var(--warn)' : 'none';
+  var color = fav ? '#eab308' : 'var(--muted)';
+  var fill = fav ? '#eab308' : 'none';
   var sw = 1.5;
   var title = fav ? (opts.unfavTitle || '取消收藏') : (opts.favTitle || '收藏');
   var stop = opts.stopPropagation ? 'event.stopPropagation();' : '';
-  return '<span onclick="' + stop + 'toggleFav(\''+type+'\','+id+');_favSparkle(this);var s=this.querySelector(\'svg\');var c=s.getAttribute(\'data-fav\')===\'1\';s.setAttribute(\'data-fav\',c?\'0\':\'1\');var p=s.querySelector(\'path\');p.setAttribute(\'fill\',c?\'none\':\'var(--warn)\');p.setAttribute(\'stroke\',c?\'var(--muted)\':\'var(--warn)\')" style="cursor:pointer;display:inline-flex;vertical-align:middle;position:relative" title="' + title + '">' +
+  return '<span onclick="' + stop + 'toggleFav(\''+type+'\','+id+');_favSparkle(this);var s=this.querySelector(\'svg\');var c=s.getAttribute(\'data-fav\')===\'1\';s.setAttribute(\'data-fav\',c?\'0\':\'1\');var p=s.querySelector(\'path\');p.setAttribute(\'fill\',c?\'none\':\'#eab308\');p.setAttribute(\'stroke\',c?\'var(--muted)\':\'#eab308\')" style="cursor:pointer;display:inline-flex;vertical-align:middle;position:relative" title="' + title + '">' +
     '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" data-fav="' + (fav ? '1' : '0') + '" style="display:block">' +
       '<path d="' + _STAR_PATH + '" fill="' + fill + '" stroke="' + color + '" stroke-width="' + sw + '" stroke-linejoin="round"/>' +
     '</svg></span>';

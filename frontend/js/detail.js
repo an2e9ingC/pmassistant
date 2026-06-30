@@ -104,14 +104,9 @@ function buildDetailHeader(p) {
   document.getElementById('detail-header').innerHTML =
     '<div class="detail-meta">' +
       '<div class="detail-title">' +
+        '<span style="vertical-align:middle;margin-right:4px">' + favStar('project', p.id, {size:'22px'}) + '</span>' +
         projCodeTag(projCode, p.id) + ' ' +
         escHtml(coreName) +
-        ' <span style="vertical-align:middle;margin-left:4px">' + favStar('project', p.id, {size:'22px'}) + '</span>' +
-        ((p.linked_products && p.linked_products.length)
-          ? ' ' + p.linked_products.map(function(prod) {
-              return '<span class="prod-link-chip" style="cursor:pointer;font-size:11px;padding:2px 8px;margin-right:3px;background:var(--accent-lt);color:var(--accent);border-radius:4px;vertical-align:middle" onclick="event.stopPropagation();openProductDetail(\'' + prod.id + '\')" title="' + escHtml(prod.code || '') + '">' + escHtml(prod.name) + '</span>';
-            }).join('')
-          : '') +
       '</div>' +
       '<div class="detail-sub">' +
         '<span class="meta-item">' +
@@ -1775,9 +1770,11 @@ function _renderMaintSection(containerId, hdId, linked, idKey, labelKey, type, l
   var container = document.getElementById(containerId);
   var hd = document.getElementById(hdId);
 
+  var clickFn = type === 'prod' ? 'openProductDetail' : '';
   var badgesHtml = linked.length ? linked.map(function(x) {
-    return '<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:12px;background:var(--accent-lt);color:var(--accent)">' +
-      escHtml(x[labelKey]) + ' <span onclick="maintRemove_' + type + '(' + x[idKey] + ')" style="cursor:pointer;opacity:0.5;font-size:14px" title="移除">&times;</span></span>';
+    var onClick = clickFn ? ' onclick="event.stopPropagation();' + clickFn + '(\''+x[idKey]+'\')"' : '';
+    return '<span class="prod-link-chip" style="padding:3px 8px;margin-right:3px;font-size:12px"' + onClick + ' title="查看详情">' +
+      escHtml(x[labelKey]) + '</span> <span onclick="maintRemove_' + type + '(' + x[idKey] + ')" style="cursor:pointer;opacity:0.5;font-size:14px" title="移除">&times;</span>';
   }).join('') : '<span style="font-size:12px;color:var(--muted)">暂无' + labelName + '</span>';
 
   // Section header: replace entire element to avoid nested section-hd
