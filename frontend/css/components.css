@@ -544,12 +544,18 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .prod-link-chip {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 4px 10px; border-radius: 6px;
-  font-size: 11.5px; font-weight: 520;
-  background: var(--bg); border: 1px solid var(--border);
-  color: var(--muted); text-decoration: none;
-  transition: all 0.12s;
+  font-size: 12px; font-weight: 600;
+  font-family: var(--mono);
+  background: var(--fav-lt); color: var(--fav); cursor: pointer;
+  border: 2px solid var(--fav);
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s, transform 0.1s;
 }
-.prod-link-chip:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-lt); }
+.prod-link-chip:hover { background: var(--fav); color: #fff; }
+.prod-link-chip:active { transform: scale(0.96); }
+
+.cust-badge:hover { background: var(--warn); color: #fff; }
+.cust-badge:active { transform: scale(0.96); }
 
 @media (max-width: 768px) {
   .prod-stats { grid-template-columns: repeat(2, 1fr); }
@@ -561,14 +567,14 @@ input[type="checkbox"] { accent-color: var(--accent); }
 
 .cust-badge {
   display: inline-flex; align-items: center;
-  padding: 3px 9px; border-radius: 5px;
-  font-size: 11.5px; font-weight: 550; letter-spacing: 0.03em;
+  padding: 4px 10px; border-radius: 6px;
+  font-size: 12px; font-weight: 600; letter-spacing: 0.03em;
   font-family: var(--mono);
   background: var(--warn-lt); color: var(--warn);
-  border: 1px solid var(--border);
+  border: 2px solid var(--warn);
   white-space: nowrap;
   cursor: pointer;
-  transition: border-color 0.12s, background 0.12s;
+  transition: background 0.15s, color 0.15s, transform 0.1s;
 }
 .cust-badge:hover {
   border-color: var(--warn);

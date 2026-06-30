@@ -267,11 +267,7 @@ function chipTag(name, colorClass, onclick, removable, removeOnclick) {
  *   - color: CSS var string, defaults to accent
  */
 function linkChip(name, onclick, title, bgColor, fgColor) {
-  var bg = bgColor || 'var(--accent-lt)';
-  var fg = fgColor || 'var(--accent)';
-  return '<span style="cursor:pointer;background:' + bg + ';color:' + fg +
-    ';padding:2px 8px;border-radius:3px;font-size:11px;font-weight:500;white-space:nowrap"' +
-    ' onclick="' + onclick + '" title="' + (title || '') + '">' + escHtml(name) + '</span>';
+  return '<span class="prod-link-chip" onclick="' + onclick + '" title="' + (title || '') + '">' + escHtml(name) + '</span>';
 }
 
 /* ═══════════════════════════════════════════════════

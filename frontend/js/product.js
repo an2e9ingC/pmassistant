@@ -364,13 +364,6 @@ function renderProdInfo(p) {
   });
   html += '</div>';
 
-  // Links
-  if (p.nas_path || p.git_url) {
-    html += '<div style="display:flex;gap:8px;margin-top:12px">' +
-      (p.nas_path ? '<a href="' + escHtml(p.nas_path) + '" target="_blank" class="prod-link-chip">📁 NAS</a>' : '') +
-      (p.git_url ? '<a href="' + escHtml(p.git_url) + '" target="_blank" class="prod-link-chip">🗃 Git</a>' : '') +
-    '</div>';
-  }
 
   html += '</div>';
 
@@ -874,7 +867,7 @@ function renderProdMaintenance(p) {
       html += '<tr onclick="openProject(\'' + proj.id + '\')" style="cursor:pointer">' +
         '<td>' + renderProjIcon(proj.project_type, projCode) + '</td>' +
         '<td><div class="proj-name">' + escHtml(coreName) + '</div></td>' +
-        '<td>' + (proj.customer_name ? '<span onclick="event.stopPropagation();openCustomerByName(\'' + escHtml(proj.customer_name) + '\')" style="cursor:pointer">' + renderCustomerBadge(proj.customer_name) + '</span>' : '—') + '</td>' +
+        '<td>' + (proj.customer_name ? renderCustomerBadge(proj.customer_name) : '—') + '</td>' +
         '<td>' + renderTypeBadge(proj.project_type) + '</td>' +
         '<td>' + renderPill(proj.status) + '</td>' +
         '<td class="prog-cell">' + renderProgressCircle(parseFloat(proj.progress) || 0, 26, {label:''}) + '</td>' +

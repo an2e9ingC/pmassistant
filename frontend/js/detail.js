@@ -193,7 +193,7 @@ function buildInfo(p, notes, delivery) {
       '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">关联项目（' + linkedProjects.length + '）</div>';
   if (linkedProjects.length) {
     html += '<div style="display:flex;flex-wrap:wrap;gap:4px">' +
-      linkedProjects.map(function(lp) { return linkChip(lp.name, 'loadProjectDetail(' + lp.id + ')', lp.code || '', 'var(--success-lt)', 'var(--success)'); }).join('') +
+      linkedProjects.map(function(lp) { return '<span class="proj-code-btn" onclick="loadProjectDetail('+lp.id+')" title="'+escHtml(lp.code||'')+'">'+escHtml(lp.name)+'</span>'; }).join('') +
     '</div>';
   } else {
     html += '<div style="font-size:12px;color:var(--muted);font-style:italic">暂无</div>';
@@ -1770,11 +1770,13 @@ function _renderMaintSection(containerId, hdId, linked, idKey, labelKey, type, l
   var container = document.getElementById(containerId);
   var hd = document.getElementById(hdId);
 
-  var clickFn = type === 'prod' ? 'openProductDetail' : '';
+  var chipClass = type === 'prod' ? 'prod-link-chip' : (type === 'cust' ? 'cust-badge' : 'proj-code-btn');
+  var clickFn = type === 'prod' ? 'openProductDetail' : (type === 'cust' ? 'openCustomerByName' : '');
+  var clickArg = type === 'cust' ? labelKey : idKey;
   var badgesHtml = linked.length ? linked.map(function(x) {
-    var onClick = clickFn ? ' onclick="event.stopPropagation();' + clickFn + '(\''+x[idKey]+'\')"' : '';
-    return '<span class="prod-link-chip" style="padding:3px 8px;margin-right:3px;font-size:12px"' + onClick + ' title="查看详情">' +
-      escHtml(x[labelKey]) + '</span> <span onclick="maintRemove_' + type + '(' + x[idKey] + ')" style="cursor:pointer;opacity:0.5;font-size:14px" title="移除">&times;</span>';
+    var onClick = clickFn ? ' onclick="event.stopPropagation();' + clickFn + '(\''+escHtml(x[clickArg]).replace(/'/g,"\\'")+'\')"' : '';
+    return '<span class="'+chipClass+'"' + onClick + ' title="查看详情">' + escHtml(x[labelKey]) + '</span>' +
+      ' <span onclick="maintRemove_' + type + '(' + x[idKey] + ')" style="cursor:pointer;opacity:0.5;font-size:14px" title="移除">&times;</span>';
   }).join('') : '<span style="font-size:12px;color:var(--muted)">暂无' + labelName + '</span>';
 
   // Section header: replace entire element to avoid nested section-hd

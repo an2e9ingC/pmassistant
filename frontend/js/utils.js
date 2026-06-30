@@ -286,7 +286,7 @@ function stripHtml(html) {
 // Render customer badge: small icon-style abbreviation
 function renderCustomerBadge(customerName) {
   if (!customerName) return '<span style="font-size:12px;color:var(--muted)">—</span>';
-  return '<span class="cust-badge">' + escHtml(customerName) + '</span>';
+  return '<span class="cust-badge" onclick="event.stopPropagation();openCustomerByName(\''+escHtml(customerName).replace(/'/g,"\\'")+'\')" title="查看客户详情">' + escHtml(customerName) + '</span>';
 }
 
 // Navigate to customer detail (replaces old topology redirect)
