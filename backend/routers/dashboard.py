@@ -115,15 +115,8 @@ def _project_list_item(p, linked_customers=None, has_pending_docs: bool = False,
         active = [e for e in exc if e.status in ("doing",)]
         current_stage = (active[0].name if active else exc[-1].name) if exc else None
 
-    # Customer: merge stored value + linked customers (PMA manual association only)
-    cust_names = []
-    if p.customer_name:
-        cust_names.append(p.customer_name)
-    if linked_customers:
-        for n in linked_customers:
-            if n not in cust_names:
-                cust_names.append(n)
-    customer = "、".join(cust_names)
+    # Customer: from linked customers only (p.customer_name is deprecated stale text)
+    customer = "、".join(linked_customers or [])
 
     # Tags: prefer stored value, fallback to on-the-fly extraction from raw_json desc
     tags_str = p.tags or ""

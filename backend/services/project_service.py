@@ -561,15 +561,8 @@ def _calc_risk_level(p: CachedProject, has_pending_docs: bool = False, has_incom
 
 
 def _resolve_customer(p: CachedProject, linked_customers: list = None) -> str:
-    """Return customer from stored field + linked customers (PMA manual association only)."""
-    names = []
-    if p.customer_name:
-        names.append(p.customer_name)
-    if linked_customers:
-        for n in linked_customers:
-            if n not in names:
-                names.append(n)
-    return "、".join(names) if names else ""
+    """Return customer from linked customers only (p.customer_name is deprecated)."""
+    return "、".join(linked_customers or []) if linked_customers else ""
 
 
 def _batch_cust_map(db: Session, project_ids: list[int]) -> dict:

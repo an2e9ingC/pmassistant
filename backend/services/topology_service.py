@@ -97,10 +97,8 @@ def search_topology(
 
     results = []
     for p in projects:
-        # Merge project.customer_name with linked customer names
-        cust_names = list(dict.fromkeys(
-            ([p.customer_name] if p.customer_name else []) + cust_map.get(p.id, [])
-        ))
+        # Customer: from linked customers only (p.customer_name is deprecated)
+        cust_names = cust_map.get(p.id, [])
         results.append({
             "project_id": p.id,
             "project_code": p.code or (p.name.split("-")[0] if p.name and "-" in p.name else ""),

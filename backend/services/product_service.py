@@ -94,7 +94,7 @@ def get_product_projects(db: Session, product_id: int) -> list[dict]:
         "id": p.id, "code": p.code, "name": p.name,
         "project_type": p.project_type,
         "status": _status_map.get(p.status, p.status or "pending"),
-        "customer_name": _merge_customers(p.customer_name, cust_map.get(p.id, [])),
+        "customer_name": "、".join(cust_map.get(p.id, [])) if cust_map.get(p.id) else "",
         "progress": p.progress or "0",
         "begin": str(p.begin) if p.begin else None,
         "end": str(p.end) if p.end else None,
