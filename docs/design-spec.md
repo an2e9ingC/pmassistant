@@ -499,6 +499,15 @@ multiSelectDialog('编辑关联产品', allProducts, linkedIds, {
 - 表头禁止换行，内容过多时通过 `overflow: hidden; text-overflow: ellipsis` 截断
 - 需要左对齐的列（如标题、描述等文本列）可单独覆盖 `text-align: left`
 
+### 按钮设计规范
+
+**新增/创建类按钮统一使用**：`<button class="btn btn-primary" style="font-size:12px;padding:5px 14px">+ 新建XX</button>`
+
+- 主要操作（新建/保存）：`btn btn-primary` — 蓝底白字
+- 次要操作（批量/导入/取消）：`btn` — 透明底边框风格
+- 表格内操作：`btn-xs` / 图标按钮（`iconEdit` / `iconDelete` / `iconCopy`）
+- 禁止在操作栏使用 `btn-xs` 作为主要新建按钮
+
 ### 进度指示
 
 **统一使用环形进度组件 `renderProgressCircle(percent, size, opts)`**。`renderProgressBar` 已废弃删除。

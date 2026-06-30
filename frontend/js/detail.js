@@ -1501,7 +1501,7 @@ function switchDTab(id, el) {
     if (typeof initProjectTasks === 'function') {
       initProjectTasks(_comboCurId, projName);
     } else if (typeof loadViewScript === 'function') {
-      loadViewScript('/js/tasks.js?v=250625', function() { initProjectTasks(_comboCurId, projName); });
+      loadViewScript('/js/tasks.js?v=250630', function() { initProjectTasks(_comboCurId, projName); });
     }
   }
 }

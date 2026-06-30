@@ -68,12 +68,9 @@ function renderTasksPage() {
         '</div>' +
       '</div>' : '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid var(--border)">' +
         '<span style="font-weight:600;font-size:13px">任务列表</span>' +
-        '<span style="display:flex;gap:4px">' +
-          '<button class="btn-xs" id="task-view-table" onclick="switchTaskView(\'table\')" style="background:var(--accent);color:#fff">列表</button>' +
-        '</span>' +
-        '<div style="display:flex;gap:4px">' +
-          '<button class="btn-xs" onclick="openBatchCreateDialog()">+批量</button>' +
-          '<button class="btn-xs btn-primary" onclick="openTaskDialog()">+新建</button>' +
+        '<div style="display:flex;gap:8px">' +
+          '<button class="btn" onclick="openBatchCreateDialog()" style="font-size:12px;padding:5px 14px">+ 批量</button>' +
+          '<button class="btn btn-primary" onclick="openTaskDialog()" style="font-size:12px;padding:5px 14px">+ 新建</button>' +
         '</div>' +
       '</div>') +
       '<div id="task-content" style="flex:1;overflow:auto;padding:16px">加载中...</div>' +

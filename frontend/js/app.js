@@ -71,7 +71,7 @@ var VIEW_REGISTRY = {
   standards:        { title: '流程规范',    label: '流程规范',    perm: 'doc_template',  initName: 'initStandards',        js: '/js/standards.js?v=250625' },
   'db-manage':      { title: '数据库管理',  label: '数据库管理',  perm: 'admin',         initName: 'initDbManage',         js: '/js/db-manage.js?v=250625' },
   'user-center':    { title: '用户中心',    label: '用户中心',    perm: null,            init: initUserCenter },
-  tasks:            { title: '任务管理',    label: '任务管理',    perm: null,            initName: 'initTasks',            js: '/js/tasks.js?v=250625' },
+  tasks:            { title: '任务管理',    label: '任务管理',    perm: null,            initName: 'initTasks',            js: '/js/tasks.js?v=250630' },
 };
 
 // ── Lazy script loader ──
