@@ -33,11 +33,22 @@ allowed-tools: Read, Write, Edit, Bash
 commit 时：   dev-plan.md   同步为 v2026.06.29-beta2（不再 +1）
 ```
 
+## JS 缓存版本
+
+`frontend/index.html` 和 `frontend/js/app.js` 中所有 JS/CSS 引用均带 `?v=YYMMDD` 版本号。**每次修改 JS/CSS 代码前**，将版本号更新为当天日期：
+
+- `index.html`：`<script src="/js/xxx.js?v=250630">`（所有 `<script>` 和 `<link>` 标签）
+- `app.js`：`js: '/js/xxx.js?v=250630'`（VIEW_REGISTRY 中所有懒加载条目）
+
+可一键替换：`sed -i 's/v=YYMMDD旧/v=YYMMDD新/g' frontend/index.html frontend/js/app.js`
+
 ## 同步更新检查清单
 
 | 文件 | 更新时机 |
 |------|---------|
 | `frontend/index.html#app-version` | **每次修改代码前** |
+| `frontend/index.html` JS/CSS `?v=` | **每次修改 JS/CSS 代码前** |
+| `frontend/js/app.js` VIEW_REGISTRY `?v=` | **每次修改懒加载 JS 代码前** |
 | `docs/dev-plan.md` | commit 时同步（取 #app-version 值，不额外 +1） |
 | `docs/design-spec.md` | 新增 UI 组件/设计模式 |
 | `docs/deploy-guide.md` | 新增路由/配置/运维操作 |

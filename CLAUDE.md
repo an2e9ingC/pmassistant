@@ -152,7 +152,7 @@ JS 工厂函数（`components.js`）：`sectionHeader()` / `iconBtn()` / `linkCh
 
 ### 版本号
 
-**每次修改代码前**更新 `frontend/index.html#app-version`。文档版本号仅在 commit 时同步，不额外 +1，允许非连续。详见 `Skill("pma-version")`。
+**每次修改代码前**更新 `frontend/index.html#app-version`，同时更新所有 JS/CSS `?v=YYMMDD` 缓存版本号。文档版本号仅在 commit 时同步，不额外 +1，允许非连续。详见 `Skill("pma-version")`。
 
 ### 前端组件
 

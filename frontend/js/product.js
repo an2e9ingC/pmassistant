@@ -193,9 +193,8 @@ function _povRenderProducts() {
     if (tagTexts.length) {
       tagsHtml = '<div class="prod-tags">' + tagTexts.slice(0,4).map(function(t,j){ return '<span class="prod-tag t' + (j%5) + '">' + escHtml(t) + '</span>'; }).join('') + '</div>';
     }
-    var fav = isFavProduct(p.id);
     return '<div class="pov-prod-card" style="position:relative" onclick="openProductDetail(\'' + p.id + '\')">' +
-      '<button class="btn-icon" style="position:absolute;top:10px;right:10px;font-size:20px;z-index:1;' + (fav ? 'color:var(--warn)' : '') + '" onclick="event.stopPropagation();_toggleProdFav(' + p.id + ',this)" title="' + (fav ? '取消收藏' : '收藏') + '">' + (fav ? '★' : '☆') + '</button>' +
+      '<span style="position:absolute;top:10px;right:10px;z-index:1">' + favStar('product', p.id, {stopPropagation:true, size:'20px'}) + '</span>' +
       '<div class="pov-prod-header"><div>' +
         '<div class="prod-code">' + escHtml(p.code || '#' + p.id) + '</div>' +
         '<div class="prod-name">' + escHtml(p.name) + '</div>' +
@@ -321,7 +320,7 @@ function renderProdDetailHeader(p) {
     '<div class="detail-meta">' +
       '<div class="detail-title">' +
         escHtml(p.name) +
-        '<button class="btn-icon" style="font-size:22px;vertical-align:middle;margin-left:4px;' + (isFavProduct(p.id) ? 'color:var(--warn)' : '') + '" onclick="_toggleProdFav(' + p.id + ',this)" title="' + (isFavProduct(p.id) ? '取消收藏' : '收藏') + '">' + (isFavProduct(p.id) ? '★' : '☆') + '</button>' +
+        '<span style="vertical-align:middle;margin-left:4px">' + favStar('product', p.id, {size:'22px'}) + '</span>' +
         (p.is_local
           ? ' <span class="pm-src-badge local" style="vertical-align:middle;margin-left:6px">PMA本地</span>'
           : (p.synced_at ? ' <span class="pm-src-badge synced" style="vertical-align:middle;margin-left:6px" title="同步于 ' + escHtml(p.synced_at) + '">禅道同步</span>' : '')) +

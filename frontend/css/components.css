@@ -283,6 +283,21 @@ input[type="checkbox"] { accent-color: var(--accent); }
 }
 .proj-code-btn:hover { background: var(--accent); color: #fff; }
 .proj-code-btn:active { transform: scale(0.96); }
+
+/* Fav star sparkle animation */
+@keyframes fav-sparkle {
+  0%   { transform: scale(1); }
+  30%  { transform: scale(1.6); }
+  50%  { transform: scale(1.6); }
+  100% { transform: scale(1); }
+}
+@keyframes fav-burst-dot {
+  0%   { opacity: 1; transform: translate(0,0) scale(1); }
+  100% { opacity: 0; transform: translate(var(--dx),var(--dy)) scale(0); }
+}
+.fav-anim { animation: fav-sparkle 0.5s ease-out; }
+.fav-burst { position: absolute; pointer-events: none; }
+.fav-burst-dot { position: absolute; width: 3px; height: 3px; border-radius: 50%; background: var(--warn); animation: fav-burst-dot 0.6s ease-out forwards; }
 .alert-list { }
 .alert-row {
   display: flex; align-items: flex-start; gap: 12px;

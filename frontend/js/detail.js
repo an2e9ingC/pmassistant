@@ -25,6 +25,7 @@ initProjectCombo({
 
 async function loadProjectDetail(id) {
   if (!id) return;
+  await loadFavorites();
 
   // Show loading state
   document.getElementById('detail-header').innerHTML = '<div class="loading-spinner">加载项目详情...</div>';
@@ -105,6 +106,7 @@ function buildDetailHeader(p) {
       '<div class="detail-title">' +
         projCodeTag(projCode, p.id) + ' ' +
         escHtml(coreName) +
+        ' <span style="vertical-align:middle;margin-left:4px">' + favStar('project', p.id, {size:'22px'}) + '</span>' +
         ((p.linked_products && p.linked_products.length)
           ? ' ' + p.linked_products.map(function(prod) {
               return '<span class="prod-link-chip" style="cursor:pointer;font-size:11px;padding:2px 8px;margin-right:3px;background:var(--accent-lt);color:var(--accent);border-radius:4px;vertical-align:middle" onclick="event.stopPropagation();openProductDetail(\'' + prod.id + '\')" title="' + escHtml(prod.code || '') + '">' + escHtml(prod.name) + '</span>';

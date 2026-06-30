@@ -2,6 +2,8 @@
    DASHBOARD VIEW
 ═══════════════════════════════════════════════════ */
 var curTypeFilter = 'all';
+
+// Project favorites use shared favStar component (persisted to DB)
 var curSearchVal  = '';
 var _curCategory = 'active';
 var _curProgramId = '';  // '' = all
@@ -18,10 +20,12 @@ async function renderDashboard() {
     var el = document.getElementById(id);
     if (el) el.textContent = '...';
   });
+  try { await loadFavorites(); } catch(e) { console.error('loadFavorites failed:', e); }
   await Promise.all([
     loadKpiCards(),
     loadProjectTable(curTypeFilter),
   ]);
+  document.getElementById('tab-fav').textContent = '★ 收藏 ' + _favProjects.length;
   _dashboardLoading = false;
 }
 
@@ -137,11 +141,11 @@ async function loadProjectTable(filter) {
     params.sort_by = 'id'; params.sort_order = 'asc';
   }
   if (curSearchVal) params.search = curSearchVal;
-  if (filter && filter !== 'all') params.type = filter;
+  if (filter && filter !== 'all' && filter !== 'fav') params.type = filter;
   if (_curProgramId) params.program_id = _curProgramId;
 
   var tbody = document.getElementById('proj-tbody');
-  tbody.innerHTML = '<tr><td colspan="10"><div class="loading-spinner">加载中...</div></td></tr>';
+  tbody.innerHTML = '<tr><td colspan="11"><div class="loading-spinner">加载中...</div></td></tr>';
 
   try {
     var query = Object.keys(params).map(function(k) {
@@ -150,8 +154,14 @@ async function loadProjectTable(filter) {
     var data = await API.get('/dashboard/projects?' + query);
     var list = data.items || [];
 
+    // Filter by favorites
+    if (curTypeFilter === 'fav') {
+      list = list.filter(function(p) { return isFav('project', p.id); });
+      document.getElementById('tab-fav').textContent = '★ 收藏 ' + list.length;
+    }
+
     if (!list.length) {
-      tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state">未找到匹配项目</div></td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state">未找到匹配项目</div></td></tr>';
       return;
     }
 
@@ -176,6 +186,7 @@ async function loadProjectTable(filter) {
       var riskBg = { normal: 'var(--success-lt)', low: 'var(--bg)', medium: 'var(--warn-lt)', high: 'var(--danger-lt)', overdue: 'var(--danger-lt)', incomplete: 'var(--warn-lt)' }[riskLevel] || 'var(--bg)';
 
       return '<tr id="proj-row-' + p.id + '" ' + rowClick + '>' +
+        '<td style="width:28px;text-align:center;padding-right:0">' + favStar('project', p.id, {stopPropagation: true}) + '</td>' +
         '<td>' + projIconHtml + '</td>' +
         '<td><div class="proj-name">' + escHtml(coreName) + '</div></td>' +
         '<td><span onclick="event.stopPropagation();openCustomerByName(\'' + escHtml(p.customer_name || '') + '\')" style="cursor:pointer">' + renderCustomerBadge(p.customer_name) + '</span></td>' +
@@ -189,7 +200,7 @@ async function loadProjectTable(filter) {
       '</tr>';
     }).join('');
   } catch(e) {
-    tbody.innerHTML = '<tr><td colspan="10"><div class="error-state">加载失败: ' + escHtml(e.message) + '<br><button onclick="loadProjectTable(\'' + filter + '\')">重试</button></div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11"><div class="error-state">加载失败: ' + escHtml(e.message) + '<br><button onclick="loadProjectTable(\'' + filter + '\')">重试</button></div></td></tr>';
   }
 }
 

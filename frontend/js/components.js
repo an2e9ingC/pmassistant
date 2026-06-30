@@ -46,35 +46,91 @@ function iconRestore(onclick, title) {
 
 /* ── Favorite helpers ── */
 
+/* ═══════════════════════════════════════════════════
+   FAVORITES — unified product + project fav, persisted to DB
+   Usage: favStar(type, id) returns HTML; isFav(type, id) checks
+   ═══════════════════════════════════════════════════ */
+
 var _favProducts = [];
+var _favProjects = [];
 var _favLoaded = false;
 
-function getFavProducts() {
-  return _favProducts;
-}
-
-async function loadFavProducts() {
-  if (_favLoaded) return _favProducts;
+async function loadFavorites() {
+  if (_favLoaded) return;
   try {
     var data = await API.get('/auth/favorites');
-    _favProducts = data || [];
-  } catch(e) { _favProducts = []; }
+    // Handle old format migration: flat array → {products:[], projects:[]}
+    if (Array.isArray(data)) { _favProducts = data; _favProjects = []; }
+    else { _favProducts = (data && data.products) ? data.products : []; _favProjects = (data && data.projects) ? data.projects : []; }
+  } catch(e) { _favProducts = []; _favProjects = []; }
   _favLoaded = true;
-  return _favProducts;
 }
 
-function isFavProduct(id) {
-  return _favProducts.indexOf(id) >= 0;
+// Backward compat: product.js callers use this
+async function loadFavProducts() { await loadFavorites(); }
+
+function getFavProducts() { return _favProducts; }
+
+function isFav(type, id) {
+  if (typeof type !== 'string') return false;
+  var list = type === 'product' ? _favProducts : _favProjects;
+  return list.indexOf(id) >= 0;
 }
 
-async function toggleFavProduct(id) {
-  var idx = _favProducts.indexOf(id);
-  if (idx >= 0) { _favProducts.splice(idx, 1); }
-  else { _favProducts.push(id); }
+// Backward compat
+function isFavProduct(id) { return isFav('product', id); }
+
+async function toggleFav(type, id) {
+  var list = type === 'product' ? _favProducts : _favProjects;
+  var idx = list.indexOf(id);
+  if (idx >= 0) { list.splice(idx, 1); }
+  else { list.push(id); }
   try {
-    await API.put('/auth/favorites', {favorites: _favProducts});
+    await API.put('/auth/favorites/toggle', {type: type, id: id});
   } catch(e) { /* revert on failure */ }
   return idx < 0;
+}
+
+// Backward compat
+async function toggleFavProduct(id) { return await toggleFav('product', id); }
+
+var _STAR_PATH = 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z';
+
+// Sparkle burst on fav click
+function _favSparkle(el) {
+  var svg = el.querySelector('svg');
+  if (!svg) return;
+  // Add scale burst animation
+  svg.style.animation = 'none';
+  svg.offsetHeight; // reflow
+  svg.style.animation = 'fav-sparkle 0.5s ease-out';
+  // Create 6 burst dots
+  var rect = svg.getBoundingClientRect();
+  var cx = rect.left + rect.width/2, cy = rect.top + rect.height/2;
+  var colors = ['var(--warn)','#fbbf24','#f59e0b','var(--warn)','#fbbf24','#f59e0b'];
+  for (var i=0; i<6; i++) {
+    var dot = document.createElement('div');
+    var angle = (i/6)*Math.PI*2;
+    var dist = 8 + Math.random()*8;
+    dot.style.cssText = 'position:fixed;left:'+(cx-1.5)+'px;top:'+(cy-1.5)+'px;width:4px;height:4px;border-radius:50%;background:'+colors[i]+';z-index:9999;pointer-events:none;--dx:'+(Math.cos(angle)*dist)+'px;--dy:'+(Math.sin(angle)*dist)+'px;animation:fav-burst-dot 0.6s ease-out forwards';
+    document.body.appendChild(dot);
+    setTimeout(function(){ dot.remove(); }, 650);
+  }
+}
+
+function favStar(type, id, opts) {
+  opts = opts || {};
+  var fav = isFav(type, id);
+  var s = parseInt(opts.size) || 16;
+  var color = fav ? 'var(--warn)' : 'var(--muted)';
+  var fill = fav ? 'var(--warn)' : 'none';
+  var sw = 1.5;
+  var title = fav ? (opts.unfavTitle || '取消收藏') : (opts.favTitle || '收藏');
+  var stop = opts.stopPropagation ? 'event.stopPropagation();' : '';
+  return '<span onclick="' + stop + 'toggleFav(\''+type+'\','+id+');_favSparkle(this);var s=this.querySelector(\'svg\');var c=s.getAttribute(\'data-fav\')===\'1\';s.setAttribute(\'data-fav\',c?\'0\':\'1\');var p=s.querySelector(\'path\');p.setAttribute(\'fill\',c?\'none\':\'var(--warn)\');p.setAttribute(\'stroke\',c?\'var(--muted)\':\'var(--warn)\')" style="cursor:pointer;display:inline-flex;vertical-align:middle;position:relative" title="' + title + '">' +
+    '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" data-fav="' + (fav ? '1' : '0') + '" style="display:block">' +
+      '<path d="' + _STAR_PATH + '" fill="' + fill + '" stroke="' + color + '" stroke-width="' + sw + '" stroke-linejoin="round"/>' +
+    '</svg></span>';
 }
 
 function renderProgressCircle(percent, size, opts) {
