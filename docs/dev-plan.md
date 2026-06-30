@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-> 当前版本：v2026.06.30-beta12 | 最后更新：2026-06-30
+> 当前版本：v2026.06.30-beta13 | 最后更新：2026-06-30
 
 ---
 
@@ -226,7 +226,8 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
-| 2026-06-30 | v2026.06.30-beta12 | refactor: zenta_表重命名—pma_customers+pma_products(CachedCustomer→PmaCustomer/CachedProduct→PmaProduct) |
+| 2026-06-30 | v2026.06.30-beta13 | feat: 用户中心任务列表对齐PMA任务页—10列+renderPill/ProgressCircle+点击打开浏览视图 |
+| 2026-06-30 | v2026.06.30-beta12 | refactor: zenta_表重命名—pma_customers+pma_products |
 | 2026-06-30 | v2026.06.30-beta11 | fix: 客户名显示去冗余—4处拼接移除customer_name旧文本，仅用FK关联 |
 | 2026-06-30 | v2026.06.30-beta10 | feat: 三类标签统一风格+淡紫产品/琥珀客户+全部支持点击跳转 |
 | 2026-06-30 | v2026.06.30-beta9 | feat: 收藏星移至名字前+金黄色+星光增强+关联产品标签统一prod-link-chip |

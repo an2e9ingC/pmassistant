@@ -1311,8 +1311,13 @@ function _renderUcFilterBar() {
 
 function _ucSetFilter(s) { _ucFilterStatus = s; _renderUcFilterBar(); _renderUcTaskTable(); }
 
+function _ucOpenTask(taskId) {
+  if (typeof openTaskViewDialog === 'function') { openTaskViewDialog(taskId); }
+  else if (typeof loadViewScript === 'function') { loadViewScript('/js/tasks.js?v=250701', function() { openTaskViewDialog(taskId); }); }
+}
+
 function _renderUcTableHead() {
-  document.getElementById('uc-table-head').innerHTML = '<tr><th>项目</th><th>任务</th><th>阶段</th><th>状态</th><th>优先级</th><th>截止日期</th><th>进度</th></tr>';
+  document.getElementById('uc-table-head').innerHTML = '<tr><th>项目</th><th>任务</th><th>阶段</th><th>状态</th><th>优先级</th><th>负责人</th><th>预估</th><th>实际</th><th>进度</th><th>截止</th></tr>';
 }
 
 function _renderUcTaskTable() {
@@ -1321,20 +1326,24 @@ function _renderUcTaskTable() {
     if (_ucFilterProj && t.project_name !== _ucFilterProj) return false;
     return true;
   });
-  var labels = {todo:'待办',in_progress:'进行中',review:'评审中',done:'已完成',closed:'已关闭'};
   var tbody = document.getElementById('uc-table-tbody');
-  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state">暂无匹配任务</div></td></tr>'; return; }
+  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state">暂无匹配任务</div></td></tr>'; return; }
   tbody.innerHTML = filtered.map(function(t) {
+    var stageName = t.stage_name || t.execution_name || '-';
     var pct = t.progress || 0;
     var overdue = t.due_date && t.status !== 'done' && t.status !== 'closed' && t.due_date < fmtLocalDate();
-    return '<tr style="cursor:pointer">' +
-      '<td>' + (t.project_code ? projCodeTag(t.project_code, t.project_id) : '<span style="font-size:12px;color:var(--muted)">'+escHtml(t.project_name||'')+'</span>') + '</td>' +
-      '<td style="font-weight:530">' + escHtml(t.title) + '</td>' +
-      '<td style="font-size:12px;color:var(--muted)">' + escHtml(t.stage_name||'-') + '</td>' +
-      '<td><span class="status-pill '+t.status+'"><span class="status-dot '+t.status+'"></span>'+ (labels[t.status]||t.status) +'</span></td>' +
-      '<td><span class="prio-tag '+(t.priority||'medium')+'">'+ ({low:'低',medium:'中',high:'高',critical:'紧急'}[t.priority]||t.priority) +'</span></td>' +
-      '<td class="'+(overdue?'due-overdue':'')+'" style="font-family:var(--mono);font-size:12px">'+(t.due_date||'-')+'</td>' +
-      '<td><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden"><div style="height:100%;border-radius:2px;background:'+(pct>=80?'var(--success)':pct>=40?'var(--accent)':'var(--warn)')+';width:'+pct+'%"></div></div><span style="font-family:var(--mono);font-size:11px;font-weight:550">'+pct+'%</span></div></td>' +
+    var assignee = t.assignee_name || t.assignee_username || (t.assignee_id||'-');
+    return '<tr style="cursor:pointer" onclick="_ucOpenTask('+t.id+')">' +
+      '<td>' + (t.project_code ? projCodeTag(t.project_code, t.project_id) : escHtml(t.project_name||'')) + '</td>' +
+      '<td style="text-align:left;font-weight:530">' + escHtml(t.title) + '</td>' +
+      '<td style="font-size:11px;color:var(--muted)">' + escHtml(stageName) + '</td>' +
+      '<td>' + renderPill(t.status||'todo') + '</td>' +
+      '<td><span class="prio-tag '+(t.priority||'medium')+'">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[t.priority]||t.priority)+'</span></td>' +
+      '<td style="font-size:12px">'+escHtml(assignee)+'</td>' +
+      '<td style="font-size:12px">'+(t.estimate_hours||0).toFixed(1)+'h</td>' +
+      '<td style="font-size:12px">'+(t.consumed_hours||0).toFixed(1)+'h</td>' +
+      '<td>'+renderProgressCircle(pct,22,{label:''})+'</td>' +
+      '<td style="font-size:12px;color:'+(overdue?'var(--red)':'')+'">'+(t.due_date||'-')+'</td>' +
     '</tr>';
   }).join('');
 }

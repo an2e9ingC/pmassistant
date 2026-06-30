@@ -303,7 +303,7 @@ function projCodeTag(code, clickHandlerOrProjectId) {
     handler = 'openProject(' + handler + ')';
   }
   if (handler) {
-    return '<span class="proj-code-btn" onclick="' + handler + '" title="查看项目详情">' + escHtml(code) + '</span>';
+    return '<span class="proj-code-btn" onclick="event.stopPropagation();' + handler + '" title="查看项目详情">' + escHtml(code) + '</span>';
   }
   return '<span class="proj-code-btn" style="cursor:default">' + escHtml(code) + '</span>';
 }
