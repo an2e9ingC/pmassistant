@@ -265,7 +265,7 @@ async function loadAlertList(projectId) {
       var dot = a.severity === 'red' ? 'r' : 'y';
       return '<div class="alert-row">' +
         '<div class="alert-dot ' + dot + '"></div>' +
-        (a.project_code ? projCodeTag(a.project_code, 'event.stopPropagation();openProject(\'' + a.project_id + '\')') : '') +
+        (a.project_code ? projCodeTag(a.project_code, 'event.stopPropagation();openProject(\'' + a.project_id + '\')') + ' ' + escHtml(a.project_name || '') : '') +
         '<div class="alert-body">' +
           '<div class="alert-msg">' + escHtml(a.message) + '</div>' +
           (a.sub_message ? '<div class="alert-sub">' + escHtml(a.sub_message) + '</div>' : '') +

@@ -211,16 +211,17 @@ function renderTaskTable(tasks, execs) {
   }
 
   var html = '<table class="proj-table"><thead><tr>' +
-    '<th style="width:12%">项目</th>' +
-    '<th style="width:24%;text-align:left">标题</th>' +
+    '<th style="width:7%">编号</th>' +
+    '<th style="width:10%;text-align:left">项目名称</th>' +
+    '<th style="width:18%;text-align:left">标题</th>' +
     '<th style="width:9%">阶段</th>' +
     '<th style="width:6%">状态</th>' +
     '<th style="width:5%">优先级</th>' +
-    '<th style="width:7%">负责人</th>' +
+    '<th style="width:6%">负责人</th>' +
     '<th style="width:6%">预估工时</th>' +
-    '<th style="width:7%">实际工时</th>' +
+    '<th style="width:6%">实际工时</th>' +
     '<th style="width:6%">进度</th>' +
-    '<th style="width:7%">截止日期</th>' +
+    '<th style="width:6%">截止日期</th>' +
     '<th>操作</th>' +
     '</tr></thead><tbody>';
 
@@ -244,7 +245,8 @@ function _renderTaskRow(t, stageMap) {
   var assigneeName = t.assignee_name || t.assignee_username || (t.assignee_id || '-');
   var projCode = t.project_code || '';
   return '<tr class="clickable">' +
-    '<td>' + (projCode ? projCodeTag(projCode, t.project_id) : '<span style="font-size:11px;color:var(--muted)">' + escHtml(t.project_name||'') + '</span>') + '</td>' +
+    '<td>' + (projCode ? projCodeTag(projCode, t.project_id) : '-') + '</td>' +
+    '<td style="text-align:left;font-size:12px">' + escHtml(t.project_name || '-') + '</td>' +
     '<td style="text-align:left"><a href="javascript:void(0)" onclick="openTaskViewDialog(' + t.id + ')" style="color:var(--accent)">' + escHtml(t.title) + '</a></td>' +
     '<td>' + (stageName ? '<span style="font-size:11px;color:var(--muted)">' + escHtml(stageName) + '</span>' : '-') + '</td>' +
     '<td>' + renderPill(t.status || 'todo') + '</td>' +

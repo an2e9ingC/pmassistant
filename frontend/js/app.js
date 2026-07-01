@@ -642,7 +642,7 @@ async function toggleNotifDropdown(e) {
         html += '<div class="notif-item" onclick="openProject(\'' + a.project_id + '\');closeNotifDropdown()">' +
           '<div style="width:6px;height:6px;border-radius:50%;background:' + dotColor + ';flex-shrink:0;margin-top:5px"></div>' +
           '<div style="min-width:0"><div style="font-size:12px;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(a.message) + '</div>' +
-          '<div style="font-size:10.5px;color:var(--muted)">' + escHtml(a.project_code || '') + '</div></div>' +
+          '<div style="font-size:10.5px;color:var(--muted)">' + escHtml(a.project_code || '') + (a.project_code && a.project_name ? ' ' + escHtml(a.project_name) : '') + '</div></div>' +
         '</div>';
       });
     }
@@ -865,6 +865,77 @@ function startNotifPoll() {
   _notifPollTimer = setInterval(loadNotifBar, 30000);  // poll every 30s
 }
 
+/* ── Alert Ticker (bottom scrolling bar) ── */
+
+var _tickerEnabled = localStorage.getItem('pma_ticker_enabled') !== '0';  // default ON
+var _tickerSpeed = localStorage.getItem('pma_ticker_speed') || 'normal';  // slow|normal|fast
+var _tickerSpeeds = {slow: 150, normal: 100, fast: 60};
+var _tickerTimer = null;
+
+function initAlertTicker() {
+  if (_tickerEnabled) {
+    loadAlertTicker();
+    if (_tickerTimer) clearInterval(_tickerTimer);
+    _tickerTimer = setInterval(loadAlertTicker, 60000);
+  }
+}
+
+function applyTickerSpeed() {
+  var inner = document.getElementById('alert-ticker-inner');
+  if (inner) inner.style.animationDuration = _tickerSpeeds[_tickerSpeed] + 's';
+}
+
+function toggleAlertTicker() {
+  _tickerEnabled = !_tickerEnabled;
+  localStorage.setItem('pma_ticker_enabled', _tickerEnabled ? '1' : '0');
+  var ticker = document.getElementById('alert-ticker');
+  if (_tickerEnabled) {
+    if (ticker) ticker.style.display = '';
+    initAlertTicker();
+  } else {
+    if (ticker) ticker.style.display = 'none';
+    if (_tickerTimer) { clearInterval(_tickerTimer); _tickerTimer = null; }
+  }
+}
+
+function setTickerSpeed(speed) {
+  _tickerSpeed = speed;
+  localStorage.setItem('pma_ticker_speed', speed);
+  applyTickerSpeed();
+}
+
+async function loadAlertTicker() {
+  var ticker = document.getElementById('alert-ticker');
+  if (!ticker || !_tickerEnabled) return;
+  try {
+    var data = await API.get('/dashboard/alerts?limit=30');
+    var alerts = data.items || [];
+    if (!alerts.length) { ticker.style.display = 'none'; return; }
+    ticker.style.display = '';
+    applyTickerSpeed();
+    // Duplicate items for seamless scrolling
+    var items = alerts.concat(alerts);
+    var html = '';
+    items.forEach(function(a) {
+      var dot = a.severity === 'red' ? '#f87171' : '#fbbf24';
+      html += '<span style="display:inline-block;margin:0 12px;padding:2px 8px;border-radius:3px;background:var(--bg)">' +
+        '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:' + dot + ';margin-right:4px;vertical-align:middle"></span>' +
+        '<span style="color:var(--accent);cursor:pointer" onclick="openProject(\'' + a.project_id + '\')">' + escHtml(a.project_code || '') + '</span>' +
+        (a.project_name ? ' <span style="color:var(--muted);font-size:11px">' + escHtml(a.project_name) + '</span>' : '') +
+        ' <span style="color:var(--fg)">' + escHtml(a.message) + '</span>' +
+      '</span>';
+    });
+    document.getElementById('alert-ticker-inner').innerHTML = html;
+  } catch(e) { /* non-critical */ }
+}
+
+function setThemeMode(mode) {
+  localStorage.setItem('pm_theme_mode', mode);
+  _applyTheme(_getEffectiveTheme());
+  var themeTgl = document.getElementById('theme-toggle');
+  if (themeTgl) themeTgl.classList.toggle('on', document.documentElement.getAttribute('data-theme') === 'dark');
+}
+
 /* ── Notification Management View ── */
 
 function initNotifManage() {
@@ -1030,6 +1101,9 @@ async function init() {
 
   // Start notification bar polling
   startNotifPoll();
+
+  // Start alert ticker (if enabled by user preference)
+  initAlertTicker();
 
   // Data source status — render defaults immediately, then update
   renderSourceTags();
@@ -1211,6 +1285,7 @@ function initUserCenter() {
         '<div class="profile-row"><div class="profile-user">@' + escHtml(user.username) + '</div>' +
           '<button class="profile-action-btn" id="btn-gitlab" onclick="_ucTogglePanel(\'gitlab\')"><svg width="16" height="16" viewBox="0 0 380 380" fill="currentColor"><path d="M282.83 170.73l-.27-.69-26.14-68.22a6.81 6.81 0 00-2.69-3.24 7 7 0 00-8 .43 7 7 0 00-2.32 3.52l-17.65 54H154.07l-17.65-54a6.86 6.86 0 00-2.32-3.53 7 7 0 00-8-.43 6.87 6.87 0 00-2.69 3.24L97.44 170l-.26.69a48.54 48.54 0 0016.1 56.1l.09.07.24.17 39.82 30.2 19.7 15.11 12 9.08a7.07 7.07 0 004.33 1.58 7.09 7.09 0 004.33-1.58l12-9.08 19.7-15.11 40.06-30.35.09-.07a48.63 48.63 0 0016.08-56.1z"/></svg> GitLab</button>' +
           '<button class="profile-action-btn" id="btn-security" onclick="_ucTogglePanel(\'security\')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> 安全</button>' +
+          '<button class="profile-action-btn" id="btn-preferences" onclick="_ucTogglePanel(\'preferences\')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg> 偏好</button>' +
           '<button class="profile-action-btn" id="btn-switch-account" onclick="switchAccount()" style="color:var(--warn)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 3h5v5M21 3l-7 7M8 21H3v-5M3 21l7-7"/></svg> 切换账号</button>' +
         '</div>' +
         '<div class="profile-roles">' + permBadges + '</div>' +
@@ -1269,7 +1344,7 @@ function _ucLoadTasks(user) {
     // Re-render calendar with pie charts once task data is available
     _ucLoadCalendar(user);
   }).catch(function() {
-    document.getElementById('uc-table-tbody').innerHTML = '<tr><td colspan="7"><div class="empty-state">加载失败</div></td></tr>';
+    document.getElementById('uc-table-tbody').innerHTML = '<tr><td colspan="11"><div class="empty-state">加载失败</div></td></tr>';
   });
 }
 
@@ -1292,7 +1367,7 @@ function _ucOpenTask(taskId) {
 }
 
 function _renderUcTableHead() {
-  document.getElementById('uc-table-head').innerHTML = '<tr><th>项目</th><th>任务</th><th>阶段</th><th>状态</th><th>优先级</th><th>负责人</th><th>预估</th><th>实际</th><th>进度</th><th>截止</th></tr>';
+  document.getElementById('uc-table-head').innerHTML = '<tr><th>编号</th><th>项目名称</th><th>任务</th><th>阶段</th><th>状态</th><th>优先级</th><th>负责人</th><th>预估</th><th>实际</th><th>进度</th><th>截止</th></tr>';
 }
 
 function _renderUcTaskTable() {
@@ -1302,14 +1377,15 @@ function _renderUcTaskTable() {
     return true;
   });
   var tbody = document.getElementById('uc-table-tbody');
-  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state">暂无匹配任务</div></td></tr>'; return; }
+  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state">暂无匹配任务</div></td></tr>'; return; }
   tbody.innerHTML = filtered.map(function(t) {
     var stageName = t.stage_name || t.execution_name || '-';
     var pct = t.progress || 0;
     var overdue = t.due_date && t.status !== 'done' && t.status !== 'closed' && t.due_date < fmtLocalDate();
     var assignee = t.assignee_name || t.assignee_username || (t.assignee_id||'-');
     return '<tr style="cursor:pointer" onclick="_ucOpenTask('+t.id+')">' +
-      '<td>' + (t.project_code ? projCodeTag(t.project_code, t.project_id) : escHtml(t.project_name||'')) + '</td>' +
+      '<td>' + (t.project_code ? projCodeTag(t.project_code, t.project_id) : '-') + '</td>' +
+      '<td style="text-align:left;font-size:12px">' + escHtml(t.project_name || '-') + '</td>' +
       '<td style="text-align:left;font-weight:530">' + escHtml(t.title) + '</td>' +
       '<td style="font-size:11px;color:var(--muted)">' + escHtml(stageName) + '</td>' +
       '<td>' + renderPill(t.status||'todo') + '</td>' +
@@ -1425,7 +1501,53 @@ function _ucTogglePanel(type) {
           ? '<a class="integration-link" href="http://192.168.0.128/-/profile/password/edit" target="_blank">在 GitLab 中管理密码 ↗</a>'
           : '<button class="btn btn-sm" onclick="changePassword()">修改密码</button>') +
       '</div>';
+  } else if (type === 'preferences') {
+    _renderPreferencesPanel(content);
   }
+}
+
+function _renderPreferencesPanel(content) {
+  if (!content) content = document.getElementById('uc-expand-content');
+  if (!content) return;
+  var tickerOn = localStorage.getItem('pma_ticker_enabled') !== '0';
+  var tickerSpeed = localStorage.getItem('pma_ticker_speed') || 'normal';
+  var themeMode = localStorage.getItem('pm_theme_mode') || 'auto';
+  var themeLabels = {auto: '自动', light: '浅色', dark: '深色'};
+  var speedLabels = {slow: '慢速', normal: '正常', fast: '快速'};
+  var speedBtns = '';
+  ['slow', 'normal', 'fast'].forEach(function(s) {
+    speedBtns += '<button class="btn btn-xs" style="margin-right:4px;' +
+      (tickerSpeed === s ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : '') +
+      '" onclick="setTickerSpeed(\'' + s + '\');_renderPreferencesPanel()">' + speedLabels[s] + '</button>';
+  });
+  var themeBtns = '';
+  ['auto', 'light', 'dark'].forEach(function(m) {
+    themeBtns += '<button class="btn btn-xs" style="margin-right:4px;' +
+      (themeMode === m ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : '') +
+      '" onclick="setThemeMode(\'' + m + '\');_renderPreferencesPanel()">' + themeLabels[m] + '</button>';
+  });
+
+  content.innerHTML =
+    '<div class="expand-card" style="visibility:hidden"></div>' +
+    '<div class="expand-card">' +
+      '<h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg> 偏好设置</h3>' +
+
+      // Ticker toggle
+      '<div class="integration-row" style="cursor:pointer" onclick="toggleAlertTicker();_renderPreferencesPanel()">' +
+        '<span class="integration-row-lbl">底部滚动告警条</span>' +
+        '<span class="integration-row-val" style="color:' + (tickerOn ? 'var(--success)' : 'var(--muted)') + '">' + (tickerOn ? '已开启' : '已关闭') + '</span>' +
+      '</div>' +
+
+      // Ticker speed
+      (tickerOn ? '<div style="margin-top:6px"><span style="font-size:11px;color:var(--muted)">滚动速率</span><div style="margin-top:3px">' + speedBtns + '</div></div>' : '') +
+
+      // Theme
+      '<div style="margin-top:12px;padding-top:8px;border-top:1px solid var(--border)">' +
+        '<span style="font-size:11px;color:var(--muted)">主题模式</span><div style="margin-top:3px">' + themeBtns + '</div>' +
+      '</div>' +
+
+      '<div style="font-size:10px;color:var(--muted);margin-top:12px;padding-top:8px;border-top:1px solid var(--border)">更多偏好设置即将上线</div>' +
+    '</div>';
 }
 
 async function showNewUserWelcomeDialog() {

@@ -928,6 +928,7 @@ function openDayDetail(dateStr, totalHours) {
         var pct = totalHours>0 ? Math.round(t.hours/totalHours*100) : 0;
         tasksHtml += '<div style="padding:6px 0;border-bottom:1px solid var(--border)">' +
           '<div style="font-weight:500">'+escHtml(t.title)+'</div>' +
+          (t.project_code ? '<div style="font-size:11px;color:var(--accent)">' + escHtml(t.project_code) + (t.project_name ? ' ' + escHtml(t.project_name) : '') + '</div>' : '') +
           '<div style="font-size:11px;color:var(--muted)">'+t.hours.toFixed(1)+'h ('+pct+'%)'+(t.description?' — '+escHtml(t.description):'')+'</div></div>';
       });
     }
