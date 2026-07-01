@@ -53,25 +53,25 @@ function initLogsView() {
 
 var VIEW_REGISTRY = {
   dashboard:        { title: '项目总览',    label: '项目总览',    perm: null,            init: initDashboard },
-  detail:           { title: '项目详情',    label: '项目详情',    perm: null,            init: initDetailView,         js: '/js/detail.js?v=v2026.07.01-beta2' },
+  detail:           { title: '项目详情',    label: '项目详情',    perm: null,            init: initDetailView,         js: '/js/detail.js?v=' + APP_VERSION },
   'product-list':   { title: '产品总览',    label: '产品总览',    perm: null,            init: initProductList },
   'product-detail': { title: '产品详情',    label: '产品详情',    perm: null,            init: initProductDetail },
-  'product-management': { title: '产品管理', label: '产品管理',  perm: 'product_link',  initName: 'initProductManagement', js: '/js/product-management.js?v=v2026.07.01-beta2' },
-  customers:        { title: '客户管理',    label: '客户管理',    perm: 'customer_link', initName: 'initCustomerManagement', js: '/js/customers.js?v=v2026.07.01-beta2' },
-  'customer-detail':{ title: '客户详情',    label: '客户详情',    perm: null,            initName: 'initCustomerDetail',   js: '/js/customers.js?v=v2026.07.01-beta2' },
-  topology:         { title: '快速检索',    label: '快速检索',    perm: null,            initName: 'initTopology',         js: '/js/topology.js?v=v2026.07.01-beta2' },
-  'gitlab-releases':{ title: 'GitLab 发布', label: 'GitLab 发布', perm: null,            initName: 'initGitLabReleases',   js: '/js/gitlab-releases.js?v=v2026.07.01-beta2' },
-  reports:          { title: '统计报告',    label: '统计报告',    perm: null,            initName: 'renderReports',        js: '/js/reports.js?v=v2026.07.01-beta2' },
+  'product-management': { title: '产品管理', label: '产品管理',  perm: 'product_link',  initName: 'initProductManagement', js: '/js/product-management.js?v=' + APP_VERSION },
+  customers:        { title: '客户管理',    label: '客户管理',    perm: 'customer_link', initName: 'initCustomerManagement', js: '/js/customers.js?v=' + APP_VERSION },
+  'customer-detail':{ title: '客户详情',    label: '客户详情',    perm: null,            initName: 'initCustomerDetail',   js: '/js/customers.js?v=' + APP_VERSION },
+  topology:         { title: '快速检索',    label: '快速检索',    perm: null,            initName: 'initTopology',         js: '/js/topology.js?v=' + APP_VERSION },
+  'gitlab-releases':{ title: 'GitLab 发布', label: 'GitLab 发布', perm: null,            initName: 'initGitLabReleases',   js: '/js/gitlab-releases.js?v=' + APP_VERSION },
+  reports:          { title: '统计报告',    label: '统计报告',    perm: null,            initName: 'renderReports',        js: '/js/reports.js?v=' + APP_VERSION },
   'notif-manage':   { title: '通知管理',    label: '通知管理',    perm: null,            init: initNotifManage },
-  logs:             { title: '系统日志',    label: '系统日志',    perm: 'admin',         init: initLogsView,           js: '/js/logs.js?v=v2026.07.01-beta2' },
-  users:            { title: '用户管理',    label: '用户管理',    perm: 'admin',         initName: 'initUserManagement',   js: '/js/admin.js?v=v2026.07.01-beta2' },
-  permissions:      { title: '权限管理',    label: '权限管理',    perm: 'admin',         initName: 'initPermissions',      js: '/js/admin.js?v=v2026.07.01-beta2' },
-  config:           { title: '数据源配置',  label: '数据源配置',  perm: 'admin',         initName: 'initAdmin',            js: '/js/admin.js?v=v2026.07.01-beta2' },
-  'doc-templates':  { title: '项目&模板管理', label: '项目&模板管理', perm: 'doc_template', initName: 'initDocTemplates',  js: '/js/doc-templates.js?v=v2026.07.01-beta2' },
-  standards:        { title: '流程规范',    label: '流程规范',    perm: 'doc_template',  initName: 'initStandards',        js: '/js/standards.js?v=v2026.07.01-beta2' },
-  'db-manage':      { title: '数据库管理',  label: '数据库管理',  perm: 'admin',         initName: 'initDbManage',         js: '/js/db-manage.js?v=v2026.07.01-beta2' },
+  logs:             { title: '系统日志',    label: '系统日志',    perm: 'admin',         init: initLogsView,           js: '/js/logs.js?v=' + APP_VERSION },
+  users:            { title: '用户管理',    label: '用户管理',    perm: 'admin',         initName: 'initUserManagement',   js: '/js/admin.js?v=' + APP_VERSION },
+  permissions:      { title: '权限管理',    label: '权限管理',    perm: 'admin',         initName: 'initPermissions',      js: '/js/admin.js?v=' + APP_VERSION },
+  config:           { title: '数据源配置',  label: '数据源配置',  perm: 'admin',         initName: 'initAdmin',            js: '/js/admin.js?v=' + APP_VERSION },
+  'doc-templates':  { title: '项目&模板管理', label: '项目&模板管理', perm: 'doc_template', initName: 'initDocTemplates',  js: '/js/doc-templates.js?v=' + APP_VERSION },
+  standards:        { title: '流程规范',    label: '流程规范',    perm: 'doc_template',  initName: 'initStandards',        js: '/js/standards.js?v=' + APP_VERSION },
+  'db-manage':      { title: '数据库管理',  label: '数据库管理',  perm: 'admin',         initName: 'initDbManage',         js: '/js/db-manage.js?v=' + APP_VERSION },
   'user-center':    { title: '用户中心',    label: '用户中心',    perm: null,            init: initUserCenter },
-  tasks:            { title: '任务管理',    label: '任务管理',    perm: null,            initName: 'initTasks',            js: '/js/tasks.js?v=v2026.07.01-beta2' },
+  tasks:            { title: '任务管理',    label: '任务管理',    perm: null,            initName: 'initTasks',            js: '/js/tasks.js?v=' + APP_VERSION },
 };
 
 // ── Lazy script loader ──
@@ -1007,11 +1007,6 @@ async function init() {
     var initials = (user.username || '').substring(0, 2).toUpperCase();
     document.getElementById('user-avatar').textContent = initials;
     document.getElementById('user-name').textContent = user.display_name || user.username;
-    // Hide "修改密码" menu item for GitLab users
-    var pwMenuItem = document.getElementById('menu-change-password');
-    if (pwMenuItem) {
-      pwMenuItem.style.display = (user.auth_source === 'gitlab') ? 'none' : '';
-    }
     // Show/hide nav items based on user permissions (driven by VIEW_REGISTRY)
     updateNavVisibility();
 
@@ -1147,7 +1142,7 @@ async function init() {
 
   // Navigate to saved view or dashboard (respect URL hash first)
   var hashView = window.location.hash.replace('#/', '');
-  var lastView = hashView || localStorage.getItem('pm_view') || 'dashboard';
+  var lastView = hashView || localStorage.getItem('pm_view') || 'user-center';
   gotoView(lastView, false);  // don't push state on initial load
   if (!hashView && window.location.hash !== '#/' + lastView) {
     history.replaceState({ view: lastView }, '', '#/' + lastView);
@@ -1174,25 +1169,6 @@ async function init() {
     });
   });
 }
-
-/* User menu */
-
-function toggleUserMenu(e) {
-  e.stopPropagation();
-  var menu = document.getElementById('user-menu');
-  menu.classList.toggle('open');
-}
-
-function closeUserMenu() {
-  var menu = document.getElementById('user-menu');
-  if (menu) menu.classList.remove('open');
-}
-
-document.addEventListener('click', function(e) {
-  if (!e.target.closest('.user-pill') && !e.target.closest('.user-menu')) {
-    closeUserMenu();
-  }
-});
 
 function changePassword() {
   var user = getCurrentUser();
@@ -1235,6 +1211,7 @@ function initUserCenter() {
         '<div class="profile-row"><div class="profile-user">@' + escHtml(user.username) + '</div>' +
           '<button class="profile-action-btn" id="btn-gitlab" onclick="_ucTogglePanel(\'gitlab\')"><svg width="16" height="16" viewBox="0 0 380 380" fill="currentColor"><path d="M282.83 170.73l-.27-.69-26.14-68.22a6.81 6.81 0 00-2.69-3.24 7 7 0 00-8 .43 7 7 0 00-2.32 3.52l-17.65 54H154.07l-17.65-54a6.86 6.86 0 00-2.32-3.53 7 7 0 00-8-.43 6.87 6.87 0 00-2.69 3.24L97.44 170l-.26.69a48.54 48.54 0 0016.1 56.1l.09.07.24.17 39.82 30.2 19.7 15.11 12 9.08a7.07 7.07 0 004.33 1.58 7.09 7.09 0 004.33-1.58l12-9.08 19.7-15.11 40.06-30.35.09-.07a48.63 48.63 0 0016.08-56.1z"/></svg> GitLab</button>' +
           '<button class="profile-action-btn" id="btn-security" onclick="_ucTogglePanel(\'security\')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> 安全</button>' +
+          '<button class="profile-action-btn" id="btn-switch-account" onclick="switchAccount()" style="color:var(--warn)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 3h5v5M21 3l-7 7M8 21H3v-5M3 21l7-7"/></svg> 切换账号</button>' +
         '</div>' +
         '<div class="profile-roles">' + permBadges + '</div>' +
       '</div>' +
@@ -1311,7 +1288,7 @@ function _ucSetFilter(s) { _ucFilterStatus = s; _renderUcFilterBar(); _renderUcT
 
 function _ucOpenTask(taskId) {
   if (typeof openTaskViewDialog === 'function') { openTaskViewDialog(taskId); }
-  else if (typeof loadViewScript === 'function') { loadViewScript('/js/tasks.js?v=v2026.07.01-beta2', function() { openTaskViewDialog(taskId); }); }
+  else if (typeof loadViewScript === 'function') { loadViewScript('/js/tasks.js?v=' + APP_VERSION, function() { openTaskViewDialog(taskId); }); }
 }
 
 function _renderUcTableHead() {

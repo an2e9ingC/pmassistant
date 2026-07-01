@@ -3,17 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="app-version" content="v2026.07.01-beta5">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>PM Assistant · 集成禅道 & GitLab</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/css/tokens.css?v=v2026.07.01-beta2">
-<link rel="stylesheet" href="/css/reset.css?v=v2026.07.01-beta2">
-<link rel="stylesheet" href="/css/layout.css?v=v2026.07.01-beta2">
-<link rel="stylesheet" href="/css/components.css?v=v2026.07.01-beta2">
-<link rel="stylesheet" href="/css/gantt.css?v=v2026.07.01-beta2">
-<link rel="stylesheet" href="/css/detail.css?v=v2026.07.01-beta2">
-<link rel="stylesheet" href="/css/doc-templates.css?v=v2026.07.01-beta2">
+<script>
+window.APP_VERSION = document.querySelector('meta[name="app-version"]').content;
+(function(){
+var v = window.APP_VERSION;
+document.write('<link rel="stylesheet" href="/css/tokens.css?v=' + v + '">');
+document.write('<link rel="stylesheet" href="/css/reset.css?v=' + v + '">');
+document.write('<link rel="stylesheet" href="/css/layout.css?v=' + v + '">');
+document.write('<link rel="stylesheet" href="/css/components.css?v=' + v + '">');
+document.write('<link rel="stylesheet" href="/css/gantt.css?v=' + v + '">');
+document.write('<link rel="stylesheet" href="/css/detail.css?v=' + v + '">');
+document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '">');
+})();
+</script>
 </head>
 <body>
 
@@ -198,7 +205,7 @@
         <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle;margin-right:3px"><circle cx="8" cy="8" r="6"/><line x1="8" y1="5" x2="8" y2="9"/><circle cx="8" cy="12" r="0.8" fill="currentColor" stroke="none"/></svg>
         问题反馈
       </a>
-      <span id="app-version">v2026.07.01-beta2</span>
+      <span id="app-version"></span><script>document.getElementById('app-version').textContent = APP_VERSION;</script>
     </div>
   </div>
 </aside>
@@ -276,16 +283,9 @@
         </svg>
       </button>
       <div style="position:relative">
-        <div class="user-pill" onclick="toggleUserMenu(event)" title="用户菜单">
+        <div class="user-pill" onclick="gotoView('user-center')" title="个人中心">
           <div class="avatar" id="user-avatar">--</div>
           <span class="user-label" id="user-name">用户</span>
-        </div>
-        <div class="user-menu" id="user-menu">
-          <div class="user-menu-item" onclick="gotoView('user-center');closeUserMenu()">用户中心</div>
-          <div class="user-menu-divider"></div>
-          <div class="user-menu-item" onclick="changePassword();closeUserMenu()" id="menu-change-password">修改密码</div>
-          <div class="user-menu-divider"></div>
-          <div class="user-menu-item" onclick="switchAccount()" style="color:var(--warn)">切换账号</div>
         </div>
       </div>
     </div>
@@ -955,16 +955,26 @@
   </div>
 </main>
 
-<script src="/js/utils.js?v=v2026.07.01-beta2"></script>
-<script src="/js/api.js?v=v2026.07.01-beta2"></script>
+<script>
+(function(){
+var v = window.APP_VERSION;
+document.write('<script src="/js/utils.js?v=' + v + '"><\/script>');
+document.write('<script src="/js/api.js?v=' + v + '"><\/script>');
+})();
+</script>
 <!-- Document preview: marked.js (Markdown) + mammoth.js (Word) -->
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mammoth/mammoth.browser.min.js"></script>
-<script src="/js/auth.js?v=v2026.07.01-beta2"></script>
-<script src="/js/components.js?v=v2026.07.01-beta2"></script>
-<script src="/js/dashboard.js?v=v2026.07.01-beta2"></script>
-<script src="/js/product.js?v=v2026.07.01-beta2"></script>
-<script src="/js/app.js?v=v2026.07.01-beta2"></script>
+<script>
+(function(){
+var v = window.APP_VERSION;
+document.write('<script src="/js/auth.js?v=' + v + '"><\/script>');
+document.write('<script src="/js/components.js?v=' + v + '"><\/script>');
+document.write('<script src="/js/dashboard.js?v=' + v + '"><\/script>');
+document.write('<script src="/js/product.js?v=' + v + '"><\/script>');
+document.write('<script src="/js/app.js?v=' + v + '"><\/script>');
+})();
+</script>
 <script>
 // ── Sync menu dropdown ──
 function toggleSyncMenu(e) {

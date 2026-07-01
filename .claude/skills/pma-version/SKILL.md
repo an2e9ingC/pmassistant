@@ -33,23 +33,26 @@ allowed-tools: Read, Write, Edit, Bash
 commit 时：   dev-plan.md   同步为 v2026.06.29-beta2（不再 +1）
 ```
 
-## JS 缓存版本
+## JS/CSS 缓存版本
 
-`frontend/index.html` 和 `frontend/js/app.js` 中所有 JS/CSS 引用均带 `?v=` 版本号，**值与 `#app-version` 保持一致**（如 `?v=v2026.07.01-beta2`）：
+版本号由 `<meta name="app-version" content="v2026.07.01-beta2">` 统一定义，`window.APP_VERSION` 读取后动态拼接，**无需手动更新每一处 `?v=`**：
 
-- `index.html`：`<script src="/js/xxx.js?v=v2026.07.01-beta2">`（所有 `<script>` 和 `<link>` 标签）
-- `app.js`：`js: '/js/xxx.js?v=v2026.07.01-beta2'`（VIEW_REGISTRY 中所有懒加载条目）
+- `index.html` / `login.html`：CSS/JS 通过 `document.write` 自动带 `?v=APP_VERSION`
+- `app.js` VIEW_REGISTRY：`js: '/js/tasks.js?v=' + APP_VERSION`（自动跟随）
 
-可一键替换：`sed -i 's/?v=[^"]*/?v=<新版本号>/g' frontend/index.html frontend/js/app.js`
+更新版本号只需改两个 meta 标签：
+
+```bash
+sed -i 's/<meta name="app-version" content="[^"]*"/<meta name="app-version" content="新版本号"/' frontend/index.html frontend/login.html
+```
 
 ## 同步更新检查清单
 
 | 文件 | 更新时机 |
 |------|---------|
-| `frontend/index.html#app-version` | **每次修改代码前** |
-| `frontend/index.html` JS/CSS `?v=` | **每次修改 JS/CSS 代码前** |
-| `frontend/js/app.js` VIEW_REGISTRY `?v=` | **每次修改懒加载 JS 代码前** |
-| `docs/dev-plan.md` | commit 时同步（取 #app-version 值，不额外 +1） |
+| `frontend/index.html` `<meta name="app-version">` | **每次修改代码前** |
+| `frontend/login.html` `<meta name="app-version">` | **每次修改代码前** |
+| `docs/dev-plan.md` | commit 时同步（取 meta 值，不额外 +1） |
 | `docs/design-spec.md` | 新增 UI 组件/设计模式 |
 | `docs/deploy-guide.md` | 新增路由/配置/运维操作 |
 | `docs/db.md` | 数据层变更 |

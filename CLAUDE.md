@@ -152,13 +152,15 @@ JS 工厂函数（`components.js`）：`sectionHeader()` / `iconBtn()` / `linkCh
 
 ### 版本号
 
-**每次修改代码前**更新 `frontend/index.html#app-version`，同时更新所有 JS/CSS `?v=` 缓存版本号为**与 `#app-version` 相同的值**（如 `?v=v2026.07.01-beta2`）。文档版本号仅在 commit 时同步，不额外 +1，允许非连续。详见 `Skill("pma-version")`。
+版本号统一由 `<meta name="app-version" content="v2026.07.01-beta2">` 定义，`window.APP_VERSION` 读取后所有 JS/CSS 引用动态拼接，**只需改 meta 一处**：
 
-**缓存版本格式**：与 `#app-version` 一致（`vYYYY.MM.DD-betaN`），适用位置：
-- `frontend/index.html`：`<script src="/js/app.js?v=v2026.07.01-beta2">`（所有 `<script>` 和 `<link>` 标签）
-- `frontend/js/app.js` VIEW_REGISTRY：`js: '/js/tasks.js?v=v2026.07.01-beta2'`（所有懒加载条目）
+- `frontend/index.html`：`<meta name="app-version" content="...">` → CSS/JS 通过 `document.write` 自动带 `?v=`
+- `frontend/login.html`：同上
+- `frontend/js/app.js`：VIEW_REGISTRY 中 `js: '/js/tasks.js?v=' + APP_VERSION`（自动跟随）
 
-可一键替换：`sed -i 's/?v=[^"]*/?v=<新版本号>/g' frontend/index.html frontend/js/app.js`
+可一键替换：`sed -i 's/<meta name="app-version" content="[^"]*"/<meta name="app-version" content="新版本号"/' frontend/index.html frontend/login.html`
+
+**每次修改代码前**更新两个 meta 标签。文档版本号仅在 commit 时同步，不额外 +1，允许非连续。详见 `Skill("pma-version")`。
 
 ### 前端组件
 
