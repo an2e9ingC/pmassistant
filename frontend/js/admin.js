@@ -479,7 +479,7 @@ function openUserCreateDialog() {
       '<div style="margin-bottom:10px;font-size:12px;color:var(--muted)">每行填写一个用户，密码留空默认为 123456</div>' +
       '<div id="ud-rows" style="flex:1;overflow-y:auto;min-height:240px"></div>' +
       '<div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-shrink:0">' +
-        '<button class="btn btn-sm" onclick="addUdRow()" style="padding-left:12px;padding-right:12px">+ 添加行</button>' +
+        '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px;padding-left:12px;padding-right:12px" onclick="addUdRow()">+ 添加行</button>' +
       '</div>' +
       '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:14px;flex-shrink:0">' +
         '<span id="ud-msg" style="font-size:11px"></span>' +

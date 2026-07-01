@@ -1374,7 +1374,7 @@ function buildResources(resources, detail) {
           '<div style="font-weight:560;font-size:13px;margin-bottom:2px">' + escHtml(prod.name) + '</div>' +
           '<div style="font-size:11px;color:var(--muted);font-family:var(--mono)">' + escHtml(prod.code || '#' + prod.id) + '</div>' +
         '</div>' +
-        '<button class="btn btn-primary btn-sm" style="flex-shrink:0;margin-left:12px" onclick="_prodDetailTargetTab=\'docs\';openProductDetail(' + prod.id + ')" title="查看产品文档">' + prodDocsLabel + '</button>' +
+        '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px; style="flex-shrink:0;margin-left:12px""flex-shrink:0;margin-left:12px' + prodDocsLabel + '</button>' +
       '</div>';
     });
   } else {

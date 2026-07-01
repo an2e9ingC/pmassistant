@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-> 当前版本：v2026.07.01-beta9 | 最后更新：2026-07-01
+> 当前版本：v2026.07.01-beta10 | 最后更新：2026-07-01
 
 ---
 
@@ -226,6 +226,7 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-07-01 | v2026.07.01-beta10 | style: 区块操作按钮统一对齐design-spec §22—btn btn-primary+内联样式替换btn-sm |
 | 2026-07-01 | v2026.07.01-beta9 | feat: #70任务对话框分区卡片布局+--red→--danger+按钮规范对齐+pma-frontend-rules SKILL重写 |
 | 2026-07-01 | v2026.07.01-beta5 | feat: #68头像→个人中心+#69登录默认个人中心+refactor:版本号meta统一管理 |
 | 2026-07-01 | v2026.07.01-beta2 | refactor: JS/CSS缓存版本格式改为与app-version一致的vYYYY.MM.DD-betaN，更新CLAUDE.md+pma-version SKILL.md |

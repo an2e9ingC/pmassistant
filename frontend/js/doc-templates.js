@@ -237,7 +237,7 @@ function renderTemplatesPage() {
       '<div class="empty-state" style="padding:40px">暂无阶段类型<br><span style="font-size:11px;color:var(--muted)">请先添加阶段类型，再配置文档模板</span></div>';
     if (canEdit) {
       emptyHtml += '<div style="text-align:center;margin-top:12px">' +
-        '<button class="btn btn-primary btn-sm" onclick="showAddStageDialog()">+ 新增阶段类型</button>' +
+        '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="showAddStageDialog()">+ 新增阶段类型</button>' +
         '</div>';
     }
     document.getElementById('dtsec-project').innerHTML = emptyHtml;
@@ -275,7 +275,7 @@ function renderTemplatesPage() {
   var pendingCount = _pendingOps.length;
   var saveBtnHtml = '';
   if (canEdit && pendingCount > 0) {
-    saveBtnHtml = '<button class="btn btn-primary btn-sm" style="padding-left:14px;padding-right:14px;margin-left:8px" onclick="saveAllChanges()">保存配置 (' + pendingCount + ')</button>' +
+    saveBtnHtml = '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px;padding-left:14px;padding-right:14px;margin-left:8px" onclick="saveAllChanges()">保存配置 (' + pendingCount + ')</button>' +
       '<button class="btn btn-sm" style="margin-left:4px;color:var(--warn);border-color:var(--warn)" onclick="discardChanges()">放弃</button>';
   } else if (canEdit && pendingCount === 0) {
     saveBtnHtml = '<span style="font-size:11px;color:var(--muted);margin-left:8px"><span style="color:var(--muted)">✓ 已保存</span></span>';
@@ -290,7 +290,7 @@ function renderTemplatesPage() {
         saveBtnHtml +
         syncAllHtml +
       '</div>' +
-      (canEdit ? '<button class="btn btn-sm" onclick="showAddTemplateForm()">+ 添加文档</button>' : '') +
+      (canEdit ? '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="showAddTemplateForm()">+ 添加文档</button>' : '') +
     '</div>';
 
   if (docs.length) {
@@ -933,7 +933,7 @@ function renderProductTreePage() {
   var pendingCount = _productPendingOps.length;
   var saveBtnHtml = '';
   if (canEdit && pendingCount > 0) {
-    saveBtnHtml = '<button class="btn btn-primary btn-sm" style="padding-left:14px;padding-right:14px;margin-left:8px" onclick="saveProductChanges()">保存配置 (' + pendingCount + ')</button>' +
+    saveBtnHtml = '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px;padding-left:14px;padding-right:14px;margin-left:8px" onclick="saveProductChanges()">保存配置 (' + pendingCount + ')</button>' +
       '<button class="btn btn-sm" style="margin-left:4px;color:var(--warn);border-color:var(--warn)" onclick="discardProductChanges()">放弃</button>';
   } else if (canEdit && pendingCount === 0 && _productTemplates.length >= 0 && _selectedNodeId) {
     // Only show "已保存" when we have loaded a node
@@ -947,7 +947,7 @@ function renderProductTreePage() {
   rightHtml += '</div>';
   if (canEdit && isL2) {
     rightHtml += '<span style="display:flex;gap:4px">' +
-      '<button class="btn btn-primary btn-sm" onclick="showAddProductTemplateForm()">+ 添加文档</button>' +
+      '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="showAddProductTemplateForm()">+ 添加文档</button>' +
       '<button class="btn btn-sm" style="color:var(--accent);border-color:var(--accent)" onclick="showImportTemplatesDialog()">导入模板</button>' +
     '</span>';
   }
@@ -1471,7 +1471,7 @@ function renderTagsPage() {
 
   var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
     '<div class="section-title">标签管理 <span style="font-size:11px;color:var(--muted);font-weight:400">（' + _tags.length + '）</span></div>' +
-    (canEdit ? '<button class="btn btn-primary btn-sm" onclick="showAddTagDialog()">+ 添加标签</button>' : '') +
+    (canEdit ? '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="showAddTagDialog()">+ 添加标签</button>' : '') +
   '</div>';
 
   sections.forEach(function(sec) {

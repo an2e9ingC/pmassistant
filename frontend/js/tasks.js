@@ -62,9 +62,9 @@ function renderTasksPage() {
           '</span>' +
         '</div>' +
         '<div style="display:flex;gap:8px">' +
-          '<button class="btn-sm" onclick="openBatchCreateDialog()" title="批量创建">+批量</button>' +
+          '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openBatchCreateDialog()" title="批量创建">+批量</button>' +
           '<button class="btn-sm" onclick="openImportTasksDialog()" title="从其他项目导入">导入</button>' +
-          '<button class="btn-sm btn-primary" onclick="openTaskDialog()">+ 新建任务</button>' +
+          '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openTaskDialog()">+ 新建任务</button>' +
         '</div>' +
       '</div>' : '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid var(--border)">' +
         '<span style="font-weight:600;font-size:13px">任务列表</span>' +
