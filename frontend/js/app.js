@@ -1318,7 +1318,7 @@ function _renderUcTaskTable() {
       '<td style="font-size:12px">'+(t.estimate_hours||0).toFixed(1)+'h</td>' +
       '<td style="font-size:12px">'+(t.consumed_hours||0).toFixed(1)+'h</td>' +
       '<td>'+renderProgressCircle(pct,22,{label:''})+'</td>' +
-      '<td style="font-size:12px;color:'+(overdue?'var(--red)':'')+'">'+(t.due_date||'-')+'</td>' +
+      '<td style="font-size:12px;color:'+(overdue?'var(--danger)':'')+'">'+(t.due_date||'-')+'</td>' +
     '</tr>';
   }).join('');
 }

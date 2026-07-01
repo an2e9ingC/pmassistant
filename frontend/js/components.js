@@ -367,7 +367,7 @@ function openDialog(title, bodyHtml, buttons, opts) {
   var closeHtml = opts.hideClose ? '' :
     '<button class="note-dialog-close" onclick="this.closest(\'.note-dialog-overlay\').remove()">&times;</button>';
   var widthStyle = typeof maxWidth === 'number' ? maxWidth + 'px' : maxWidth;
-  var autoWidth = typeof maxWidth === 'number' ? '' : 'width:auto;';
+  var autoWidth = typeof maxWidth === 'number' ? '' : 'width:' + widthStyle + ';';
   var html = '<div class="note-dialog-overlay ' + overlayClass + '">' +
     '<div class="note-dialog" style="' + autoWidth + 'max-width:' + widthStyle + '">' +
       '<div class="note-dialog-head"><span class="note-dialog-title">' + title + '</span>' +
