@@ -218,7 +218,7 @@
 }
 .toggle-switch-knob {
   width: 20px; height: 20px;
-  background: #fff;
+  background: var(--surface);
   border-radius: 50%;
   position: absolute; top: 2px; left: 2px;
   transition: transform 0.2s;
@@ -310,7 +310,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .topbar .src-tag { position: relative; cursor: pointer; }
 .src-tag-tip {
   display: none; position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
-  background: #333; color: #f5f5f5; font-size: 12px; padding: 10px 14px; border-radius: 6px;
+  background: var(--fg); color: var(--bg); font-size: 12px; padding: 10px 14px; border-radius: 6px;
   white-space: pre; line-height: 1.7; box-shadow: 0 4px 16px rgba(0,0,0,0.35); z-index: 999;
   min-width: 220px;
 }

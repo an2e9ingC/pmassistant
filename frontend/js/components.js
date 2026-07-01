@@ -146,13 +146,14 @@ function renderProgressCircle(percent, size, opts) {
   var dash = (pct / 100) * circumference;
   var gap = circumference - dash;
   var color = opts.color || (pct >= 100 ? 'var(--success)' : pct >= 75 ? 'var(--success)' : pct >= 50 ? 'var(--warn)' : pct > 0 ? 'var(--accent)' : 'var(--border)');
+  var bgStroke = (pct === 0 && opts.color) ? opts.color : 'var(--border)';
   var textSize = Math.round(s * 0.32);
   var labelSize = Math.round(s * 0.16);
   var label = opts.label !== undefined ? opts.label : '';
   var html = '<div class="ring-wrap" style="display:inline-flex;flex-direction:column;align-items:center;gap:4px">' +
     '<div style="position:relative;width:' + s + 'px;height:' + s + 'px">' +
     '<svg width="' + s + '" height="' + s + '" viewBox="0 0 ' + s + ' ' + s + '">' +
-      '<circle cx="' + cx + '" cy="' + cx + '" r="' + r + '" fill="none" stroke="var(--border)" stroke-width="' + sw + '"/>' +
+      '<circle cx="' + cx + '" cy="' + cx + '" r="' + r + '" fill="none" stroke="' + bgStroke + '" stroke-width="' + sw + '"/>' +
       '<circle cx="' + cx + '" cy="' + cx + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + sw + '"' +
         ' stroke-dasharray="' + dash.toFixed(1) + ' ' + gap.toFixed(1) + '" stroke-linecap="round" transform="rotate(-90 ' + cx + ' ' + cx + ')"/>' +
     '</svg>' +

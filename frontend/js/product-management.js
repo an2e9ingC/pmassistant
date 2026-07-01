@@ -442,7 +442,7 @@ function _pmShowRenameNodeDialog(nodeId) {
 async function _pmRenameNode(nodeId) {
   var name = document.getElementById('pm-rename').value.trim();
   if (!name) { showToast('请输入名称', 'error'); return; }
-  var ok = await verifyPassword('重命名产品节点: ' + (editNode.name || ''), 'pw_verify_product_node_edit');
+  var ok = await verifyPassword('重命名产品节点: ' + (node.name || ''), 'pw_verify_product_node_edit');
   if (!ok) return;
   closeSharedDialog();
   try {

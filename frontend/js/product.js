@@ -202,7 +202,7 @@ function _povRenderProducts() {
       (tagsHtml || '') +
       '<div class="prod-footer">' +
         '<span class="prod-src ' + (p.is_local ? 'local' : 'synced') + '">' + (p.is_local ? 'PMA 本地' : '禅道同步') + '</span>' +
-        renderProgressCircle(p.doc_completion || 0, 36, { label: '资料' }) +
+        renderProgressCircle(p.doc_completion || 0, 36, { label: '资料', color: (p.doc_completion >= 100 ? 'var(--success)' : 'var(--danger)') }) +
       '</div>' +
     '</div>';
   }).join('');
@@ -328,7 +328,7 @@ function renderProdDetailHeader(p) {
       '</div>' +
       (p.code ? '<div class="detail-subtitle" style="font-family:var(--mono);font-size:12px;color:var(--muted)">' + escHtml(p.code) + '</div>' : '') +
     '</div>' +
-    '<div style="flex-shrink:0;margin-left:auto">' + renderProgressCircle(p.doc_completion || 0, 56, { label: '资料完整度' }) + '</div>';
+    '<div style="flex-shrink:0;margin-left:auto">' + renderProgressCircle(p.doc_completion || 0, 56, { label: '资料完整度', color: (p.doc_completion >= 100 ? 'var(--success)' : 'var(--danger)') }) + '</div>';
 }
 
 // ── Tab: 基本信息 ──

@@ -497,10 +497,10 @@ async function submitFeedback() {
 }
 
 function toggleTheme() {
-  var dark = document.documentElement.getAttribute('data-theme') === 'dark';
-  var next = dark ? 'light' : 'dark';
+  var mode = localStorage.getItem('pm_theme_mode') || 'auto';
+  var next = mode === 'auto' ? 'light' : (mode === 'light' ? 'dark' : 'auto');
   localStorage.setItem('pm_theme_mode', next);
-  _applyTheme(next);
+  _applyTheme(_getEffectiveTheme());
 }
 
 /* Data Source Status — topbar tags */
@@ -999,8 +999,6 @@ async function init() {
   }
   _applyTheme(_getEffectiveTheme());
   var themeTgl = document.getElementById('theme-toggle');
-  var themeLbl = document.getElementById('theme-lbl');
-  if (themeLbl) themeLbl.textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? '深色' : '浅色';
   if (themeTgl) themeTgl.classList.toggle('on', document.documentElement.getAttribute('data-theme') === 'dark');
 
   // User display
@@ -1513,32 +1511,39 @@ async function showNewUserWelcomeDialog() {
 function _getEffectiveTheme() {
   var mode = localStorage.getItem('pm_theme_mode') || 'auto';
   if (mode === 'auto') {
-    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    return prefersDark ? 'dark' : 'light';
+    var h = new Date().getHours();
+    return (h >= 6 && h < 19) ? 'light' : 'dark';
   }
   return mode;
 }
 
 function _applyTheme(theme) {
-  // theme is the effective value: 'light' or 'dark'
   localStorage.setItem('pm_theme', theme);
   document.documentElement.setAttribute('data-theme', theme);
 
+  var mode = localStorage.getItem('pm_theme_mode') || 'auto';
   var themeBtn = document.getElementById('theme-toggle-btn');
   if (themeBtn) {
-    themeBtn.innerHTML = theme === 'dark'
-      ? '<svg width="15" height="15" viewBox="0 0 16 16" fill="#f5c542" stroke="none"><path d="M6 .278a.768.768 0 0 1 .08.858 7.208 7.208 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 0 1 .81.316.733.733 0 0 1-.031.893A8.349 8.349 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 0 1 6 .278z"/></svg>'
-      : '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.2 3.2l1 1M11.8 11.8l1 1M11.8 3.2l-1 1M4.2 11.8l-1 1M5 8a3 3 0 1 0 6 0 3 3 0 0 0-6 0z"/></svg>';
-    themeBtn.title = theme === 'dark' ? '切换浅色主题' : '切换深色主题';
+    if (mode === 'auto') {
+      // Moon + "A" — auto mode
+      themeBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#f5c542" stroke-width="1.2"><path d="M6 .278a.768.768 0 0 1 .08.858 7.208 7.208 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 0 1 .81.316.733.733 0 0 1-.031.893A8.349 8.349 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 0 1 6 .278z"/><text x="6.5" y="10" font-size="12" font-weight="700" fill="#f5c542" stroke="none" font-family="sans-serif">A</text></svg>';
+      themeBtn.title = '自动（跟随系统）';
+    } else if (theme === 'dark') {
+      themeBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 16 16" fill="#f5c542" stroke="none"><path d="M6 .278a.768.768 0 0 1 .08.858 7.208 7.208 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 0 1 .81.316.733.733 0 0 1-.031.893A8.349 8.349 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 0 1 6 .278z"/></svg>';
+      themeBtn.title = '深色 · 点击切换浅色';
+    } else {
+      themeBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.2 3.2l1 1M11.8 11.8l1 1M11.8 3.2l-1 1M4.2 11.8l-1 1M5 8a3 3 0 1 0 6 0 3 3 0 0 0-6 0z"/></svg>';
+      themeBtn.title = '浅色 · 点击切换自动';
+    }
   }
 }
 
-// Re-evaluate auto theme when system preference changes
-window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function() {
-  if (localStorage.getItem('pm_theme_mode') === 'auto') {
+// Re-evaluate time-based auto theme every 5 minutes
+setInterval(function() {
+  if ((localStorage.getItem('pm_theme_mode') || 'auto') === 'auto') {
     _applyTheme(_getEffectiveTheme());
   }
-});
+}, 300000);
 
 function closePwDialog() {
   var overlay = document.querySelector('.note-dialog-overlay');
