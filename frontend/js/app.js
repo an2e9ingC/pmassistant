@@ -830,10 +830,12 @@ async function loadNotifBar() {
     if (!data || data.length === 0) {
       bar.style.display = 'none';
       bar.innerHTML = '';
+      _adjustTickerPosition(0);
       return;
     }
     bar.style.display = '';
     bar.innerHTML = data.map(function(n) {
+      // Ticker position adjusted after rendering
       var closable = n.level !== 'severe';
       var cls = 'notif-bar-item notif-bar-' + n.level;
       var closeBtn = closable
@@ -846,6 +848,7 @@ async function loadNotifBar() {
         closeBtn +
       '</div>';
     }).join('');
+    setTimeout(function() { _adjustTickerPosition(bar.offsetHeight); }, 50);
   } catch(e) {
     console.error('Failed to load notifications:', e);
   }
@@ -870,7 +873,7 @@ function startNotifPoll() {
 
 var _tickerEnabled = localStorage.getItem('pma_ticker_enabled') !== '0';  // default ON
 var _tickerSpeed = localStorage.getItem('pma_ticker_speed') || 'normal';  // slow|normal|fast
-var _tickerSpeeds = {slow: 150, normal: 100, fast: 60};
+var _tickerSpeeds = {slow: 300, normal: 210, fast: 140};
 var _tickerTimer = null;
 
 function initAlertTicker() {
@@ -928,6 +931,11 @@ async function loadAlertTicker() {
     });
     document.getElementById('alert-ticker-inner').innerHTML = html;
   } catch(e) { /* non-critical */ }
+}
+
+function _adjustTickerPosition(notifBarHeight) {
+  var ticker = document.getElementById('alert-ticker');
+  if (ticker) ticker.style.bottom = (notifBarHeight || 0) + 'px';
 }
 
 function setThemeMode(mode) {
@@ -1284,7 +1292,7 @@ function initUserCenter() {
         '<div class="profile-row"><div class="profile-user">@' + escHtml(user.username) + '</div>' +
           '<button class="profile-action-btn" id="btn-gitlab" onclick="_ucTogglePanel(\'gitlab\')"><svg width="16" height="16" viewBox="0 0 380 380" fill="currentColor"><path d="M282.83 170.73l-.27-.69-26.14-68.22a6.81 6.81 0 00-2.69-3.24 7 7 0 00-8 .43 7 7 0 00-2.32 3.52l-17.65 54H154.07l-17.65-54a6.86 6.86 0 00-2.32-3.53 7 7 0 00-8-.43 6.87 6.87 0 00-2.69 3.24L97.44 170l-.26.69a48.54 48.54 0 0016.1 56.1l.09.07.24.17 39.82 30.2 19.7 15.11 12 9.08a7.07 7.07 0 004.33 1.58 7.09 7.09 0 004.33-1.58l12-9.08 19.7-15.11 40.06-30.35.09-.07a48.63 48.63 0 0016.08-56.1z"/></svg> GitLab</button>' +
           '<button class="profile-action-btn" id="btn-security" onclick="_ucTogglePanel(\'security\')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> 安全</button>' +
-          '<button class="profile-action-btn" id="btn-preferences" onclick="_ucTogglePanel(\'preferences\')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg> 偏好</button>' +
+          '<button class="profile-action-btn" id="btn-preferences" onclick="_ucTogglePanel(\'preferences\')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> 偏好</button>' +
           '<button class="profile-action-btn" id="btn-switch-account" onclick="switchAccount()" style="color:var(--warn)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 3h5v5M21 3l-7 7M8 21H3v-5M3 21l7-7"/></svg> 切换账号</button>' +
         '</div>' +
         '<div class="profile-roles">' + permBadges + '</div>' +
@@ -1511,7 +1519,6 @@ function _renderPreferencesPanel(content) {
   var tickerOn = localStorage.getItem('pma_ticker_enabled') !== '0';
   var tickerSpeed = localStorage.getItem('pma_ticker_speed') || 'normal';
   var themeMode = localStorage.getItem('pm_theme_mode') || 'auto';
-  var themeLabels = {auto: '自动', light: '浅色', dark: '深色'};
   var speedLabels = {slow: '慢速', normal: '正常', fast: '快速'};
   var speedBtns = '';
   ['slow', 'normal', 'fast'].forEach(function(s) {
@@ -1519,17 +1526,23 @@ function _renderPreferencesPanel(content) {
       (tickerSpeed === s ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : '') +
       '" onclick="setTickerSpeed(\'' + s + '\');_renderPreferencesPanel()">' + speedLabels[s] + '</button>';
   });
+  var themeIcons = {
+    auto: '<svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="#f5c542" stroke-width="1.2" style="vertical-align:middle"><path d="M6 .278a.768.768 0 0 1 .08.858 7.208 7.208 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 0 1 .81.316.733.733 0 0 1-.031.893A8.349 8.349 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 0 1 6 .278z"/><text x="6.5" y="11" font-size="12" font-weight="700" fill="#f5c542" stroke="none" font-family="sans-serif">A</text></svg>',
+    light: '<svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.2 3.2l1 1M11.8 11.8l1 1M11.8 3.2l-1 1M4.2 11.8l-1 1M5 8a3 3 0 1 0 6 0 3 3 0 0 0-6 0z"/></svg>',
+    dark: '<svg width="20" height="20" viewBox="0 0 16 16" fill="#f5c542" stroke="none" style="vertical-align:middle"><path d="M6 .278a.768.768 0 0 1 .08.858 7.208 7.208 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 0 1 .81.316.733.733 0 0 1-.031.893A8.349 8.349 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 0 1 6 .278z"/></svg>'
+  };
+  var themeTips = {auto: '自动（白天浅色，晚上深色）', light: '浅色', dark: '深色'};
   var themeBtns = '';
   ['auto', 'light', 'dark'].forEach(function(m) {
-    themeBtns += '<button class="btn btn-xs" style="margin-right:4px;' +
-      (themeMode === m ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : '') +
-      '" onclick="setThemeMode(\'' + m + '\');_renderPreferencesPanel()">' + themeLabels[m] + '</button>';
+    themeBtns += '<button class="btn-icon" title="' + themeTips[m] + '" style="margin-right:8px;padding:3px 7px;border-radius:6px;' +
+      (themeMode === m ? 'background:var(--accent-lt);border:1px solid var(--accent)' : 'border:1px solid transparent') +
+      '" onclick="setThemeMode(\'' + m + '\');_renderPreferencesPanel()">' + themeIcons[m] + '</button>';
   });
 
   content.innerHTML =
     '<div class="expand-card" style="visibility:hidden"></div>' +
     '<div class="expand-card">' +
-      '<h3 style="margin-bottom:12px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg> 偏好设置</h3>' +
+      '<h3 style="margin-bottom:12px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> 偏好设置</h3>' +
 
       // Responsive card grid
       '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px">' +
@@ -1632,7 +1645,7 @@ function _applyTheme(theme) {
     if (mode === 'auto') {
       // Moon + "A" — auto mode
       themeBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#f5c542" stroke-width="1.2"><path d="M6 .278a.768.768 0 0 1 .08.858 7.208 7.208 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 0 1 .81.316.733.733 0 0 1-.031.893A8.349 8.349 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 0 1 6 .278z"/><text x="6.5" y="10" font-size="12" font-weight="700" fill="#f5c542" stroke="none" font-family="sans-serif">A</text></svg>';
-      themeBtn.title = '自动（跟随系统）';
+      themeBtn.title = '自动切换（白天浅色，晚上深色）';
     } else if (theme === 'dark') {
       themeBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 16 16" fill="#f5c542" stroke="none"><path d="M6 .278a.768.768 0 0 1 .08.858 7.208 7.208 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 0 1 .81.316.733.733 0 0 1-.031.893A8.349 8.349 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 0 1 6 .278z"/></svg>';
       themeBtn.title = '深色 · 点击切换浅色';
