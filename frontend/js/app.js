@@ -969,9 +969,7 @@ function loadNotifManage() {
         '<td><span style="display:inline-block;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:600;color:#fff;background:' + color + '">' + escHtml(levelLabels[n.level] || n.level) + '</span></td>' +
         '<td style="font-size:13px">' + escHtml(n.content) + '</td>' +
         '<td style="font-size:12px;font-family:var(--mono)">@' + escHtml(n.created_by) + '</td>' +
-        '<td><label class="toggle-switch" style="vertical-align:middle">' +
-          '<input type="checkbox" ' + (n.is_active ? 'checked' : '') + ' onchange="toggleNotifStatus(' + n.id + ',this)">' +
-          '<span class="toggle-slider"></span></label></td>' +
+        '<td>' + toggleSwitch(n.is_active, 'toggleNotifStatus(' + n.id + ')', {id: 'notif-tgl-' + n.id}) + '</td>' +
         '<td style="font-size:12px;color:var(--muted)">' + escHtml(n.created_at || '') + '</td>' +
         '<td style="white-space:nowrap">' +
           iconEdit('editNotifDialog(' + n.id + ',\'' + escJs(n.content) + '\')') +
@@ -984,14 +982,14 @@ function loadNotifManage() {
   });
 }
 
-async function toggleNotifStatus(id, cb) {
+async function toggleNotifStatus(id) {
   try {
     var result = await API.put('/notifications/' + id + '/toggle');
-    cb.checked = result.is_active;
+    var tgl = document.getElementById('notif-tgl-' + id);
+    if (tgl) tgl.outerHTML = toggleSwitch(result.is_active, 'toggleNotifStatus(' + id + ')', {id: 'notif-tgl-' + id});
     showToast('通知已' + (result.is_active ? '开启' : '关闭'), 'success');
     loadNotifBar();
   } catch(e) {
-    cb.checked = !cb.checked;  // revert
     showToast('操作失败: ' + e.message, 'error');
   }
 }

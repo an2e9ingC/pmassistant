@@ -659,9 +659,7 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
       <div class="section-hd"><div class="section-title">权限管理</div>
         <div style="display:flex;align-items:center;gap:8px">
           <span style="font-size:11px;color:var(--muted)">权限调试信息</span>
-          <div class="toggle-switch" id="toggle-debug-perm" onclick="toggleDebugPerm()">
-            <div class="toggle-switch-knob"></div>
-          </div>
+          <span id="toggle-debug-perm" style="display:inline-flex;align-items:center;width:44px;height:24px;border-radius:12px;background:var(--border);cursor:pointer;transition:background 0.2s" onclick="toggleDebugPerm()"><span style="display:inline-block;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.2);transition:transform 0.2s;transform:translateX(2px)"></span></span>
         </div>
       </div>
       <div class="tabs" style="margin-bottom:12px">

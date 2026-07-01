@@ -761,11 +761,13 @@ function arraysEqual(a, b) { if (!a || !b) return a === b; if (a.length !== b.le
 
 async function toggleDebugPerm() {
   var toggle = document.getElementById('toggle-debug-perm');
+  var knob = toggle ? toggle.querySelector('span') : null;
   var next = !window._debugPermEnabled;
   try {
     await API.put('/admin/settings', { debug_perm: next });
     window._debugPermEnabled = next;
-    if (toggle) toggle.classList.toggle('on', next);
+    if (toggle) { toggle.style.background = next ? 'var(--success)' : 'var(--border)'; }
+    if (knob) { knob.style.transform = next ? 'translateX(22px)' : 'translateX(2px)'; }
     // Refresh current page title
     var view = localStorage.getItem('pm_view') || 'dashboard';
     var entry = VIEW_REGISTRY[view];
@@ -830,7 +832,11 @@ function togglePermForRole(roleId, permKey, checked) {
 
 async function initPermissions() {
   var debugToggle = document.getElementById("toggle-debug-perm");
-  if (debugToggle) debugToggle.classList.toggle("on", window._debugPermEnabled);
+  if (debugToggle) {
+    debugToggle.style.background = window._debugPermEnabled ? 'var(--success)' : 'var(--border)';
+    var knob = debugToggle.querySelector('span');
+    if (knob) knob.style.transform = window._debugPermEnabled ? 'translateX(22px)' : 'translateX(2px)';
+  }
   try {
     var meta = await API.get('/admin/users/permissions');
     _allPerms = meta.permissions || [];
