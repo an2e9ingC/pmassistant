@@ -1530,23 +1530,30 @@ function _renderPreferencesPanel(content) {
   content.innerHTML =
     '<div class="expand-card" style="visibility:hidden"></div>' +
     '<div class="expand-card">' +
-      '<h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg> 偏好设置</h3>' +
+      '<h3 style="margin-bottom:12px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg> 偏好设置</h3>' +
 
-      // Ticker toggle
-      '<div class="integration-row">' +
-        '<span class="integration-row-lbl">底部滚动告警条</span>' +
-        toggleSwitch(tickerOn, 'toggleAlertTicker();_renderPreferencesPanel()') +
+      // Responsive card grid
+      '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px">' +
+
+        // Card 1: 通知
+        '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px">' +
+          '<div style="font-size:12px;font-weight:600;color:var(--fg);margin-bottom:10px">通知</div>' +
+          '<div class="integration-row" style="margin-bottom:8px">' +
+            '<span class="integration-row-lbl">底部滚动告警条</span>' +
+            toggleSwitch(tickerOn, 'toggleAlertTicker();_renderPreferencesPanel()') +
+          '</div>' +
+          (tickerOn ? '<div><span style="font-size:11px;color:var(--muted)">滚动速率</span><div style="margin-top:3px">' + speedBtns + '</div></div>' : '') +
+        '</div>' +
+
+        // Card 2: 外观
+        '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px">' +
+          '<div style="font-size:12px;font-weight:600;color:var(--fg);margin-bottom:10px">外观</div>' +
+          '<span style="font-size:11px;color:var(--muted)">主题模式</span><div style="margin-top:3px">' + themeBtns + '</div>' +
+        '</div>' +
+
       '</div>' +
 
-      // Ticker speed
-      (tickerOn ? '<div style="margin-top:6px"><span style="font-size:11px;color:var(--muted)">滚动速率</span><div style="margin-top:3px">' + speedBtns + '</div></div>' : '') +
-
-      // Theme
-      '<div style="margin-top:12px;padding-top:8px;border-top:1px solid var(--border)">' +
-        '<span style="font-size:11px;color:var(--muted)">主题模式</span><div style="margin-top:3px">' + themeBtns + '</div>' +
-      '</div>' +
-
-      '<div style="font-size:10px;color:var(--muted);margin-top:12px;padding-top:8px;border-top:1px solid var(--border)">更多偏好设置即将上线</div>' +
+      '<div style="font-size:10px;color:var(--muted);margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">更多偏好设置即将上线</div>' +
     '</div>';
 }
 
