@@ -15,7 +15,7 @@ function initTasks() {
   _taskProjectId = null;
   _taskFilterStatus = '';
   _taskFilterExecution = '';
-  _taskFilterAssignee = '';
+  _taskFilterAssignee = 'me';  // default: show current user's tasks
   _calChangeCallback = loadTaskData;
   renderTasksPage();
 }
@@ -119,7 +119,7 @@ function _renderTaskFilters() {
       '<label style="font-size:11px;color:var(--muted)">负责人</label>' +
       '<select class="search-inp" id="task-assignee-filter" onchange="_taskFilterAssignee=this.value;loadTaskData()" style="width:100%;margin-top:4px">' +
         '<option value="">全部</option>' +
-        '<option value="me">我负责的</option></select>' +
+        '<option value="me"' + (_taskFilterAssignee==='me'?' selected':'') + '>我负责的</option></select>' +
     '</div>';
 }
 

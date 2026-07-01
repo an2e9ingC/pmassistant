@@ -53,25 +53,25 @@ function initLogsView() {
 
 var VIEW_REGISTRY = {
   dashboard:        { title: '项目总览',    label: '项目总览',    perm: null,            init: initDashboard },
-  detail:           { title: '项目详情',    label: '项目详情',    perm: null,            init: initDetailView,         js: '/js/detail.js?v=250701' },
+  detail:           { title: '项目详情',    label: '项目详情',    perm: null,            init: initDetailView,         js: '/js/detail.js?v=v2026.07.01-beta2' },
   'product-list':   { title: '产品总览',    label: '产品总览',    perm: null,            init: initProductList },
   'product-detail': { title: '产品详情',    label: '产品详情',    perm: null,            init: initProductDetail },
-  'product-management': { title: '产品管理', label: '产品管理',  perm: 'product_link',  initName: 'initProductManagement', js: '/js/product-management.js?v=250630' },
-  customers:        { title: '客户管理',    label: '客户管理',    perm: 'customer_link', initName: 'initCustomerManagement', js: '/js/customers.js?v=250630' },
-  'customer-detail':{ title: '客户详情',    label: '客户详情',    perm: null,            initName: 'initCustomerDetail',   js: '/js/customers.js?v=250630' },
-  topology:         { title: '快速检索',    label: '快速检索',    perm: null,            initName: 'initTopology',         js: '/js/topology.js?v=250630' },
-  'gitlab-releases':{ title: 'GitLab 发布', label: 'GitLab 发布', perm: null,            initName: 'initGitLabReleases',   js: '/js/gitlab-releases.js?v=250630' },
-  reports:          { title: '统计报告',    label: '统计报告',    perm: null,            initName: 'renderReports',        js: '/js/reports.js?v=250630' },
+  'product-management': { title: '产品管理', label: '产品管理',  perm: 'product_link',  initName: 'initProductManagement', js: '/js/product-management.js?v=v2026.07.01-beta2' },
+  customers:        { title: '客户管理',    label: '客户管理',    perm: 'customer_link', initName: 'initCustomerManagement', js: '/js/customers.js?v=v2026.07.01-beta2' },
+  'customer-detail':{ title: '客户详情',    label: '客户详情',    perm: null,            initName: 'initCustomerDetail',   js: '/js/customers.js?v=v2026.07.01-beta2' },
+  topology:         { title: '快速检索',    label: '快速检索',    perm: null,            initName: 'initTopology',         js: '/js/topology.js?v=v2026.07.01-beta2' },
+  'gitlab-releases':{ title: 'GitLab 发布', label: 'GitLab 发布', perm: null,            initName: 'initGitLabReleases',   js: '/js/gitlab-releases.js?v=v2026.07.01-beta2' },
+  reports:          { title: '统计报告',    label: '统计报告',    perm: null,            initName: 'renderReports',        js: '/js/reports.js?v=v2026.07.01-beta2' },
   'notif-manage':   { title: '通知管理',    label: '通知管理',    perm: null,            init: initNotifManage },
-  logs:             { title: '系统日志',    label: '系统日志',    perm: 'admin',         init: initLogsView,           js: '/js/logs.js?v=250630' },
-  users:            { title: '用户管理',    label: '用户管理',    perm: 'admin',         initName: 'initUserManagement',   js: '/js/admin.js?v=250630' },
-  permissions:      { title: '权限管理',    label: '权限管理',    perm: 'admin',         initName: 'initPermissions',      js: '/js/admin.js?v=250630' },
-  config:           { title: '数据源配置',  label: '数据源配置',  perm: 'admin',         initName: 'initAdmin',            js: '/js/admin.js?v=250630' },
-  'doc-templates':  { title: '项目&模板管理', label: '项目&模板管理', perm: 'doc_template', initName: 'initDocTemplates',  js: '/js/doc-templates.js?v=250630' },
-  standards:        { title: '流程规范',    label: '流程规范',    perm: 'doc_template',  initName: 'initStandards',        js: '/js/standards.js?v=250630' },
-  'db-manage':      { title: '数据库管理',  label: '数据库管理',  perm: 'admin',         initName: 'initDbManage',         js: '/js/db-manage.js?v=250630' },
+  logs:             { title: '系统日志',    label: '系统日志',    perm: 'admin',         init: initLogsView,           js: '/js/logs.js?v=v2026.07.01-beta2' },
+  users:            { title: '用户管理',    label: '用户管理',    perm: 'admin',         initName: 'initUserManagement',   js: '/js/admin.js?v=v2026.07.01-beta2' },
+  permissions:      { title: '权限管理',    label: '权限管理',    perm: 'admin',         initName: 'initPermissions',      js: '/js/admin.js?v=v2026.07.01-beta2' },
+  config:           { title: '数据源配置',  label: '数据源配置',  perm: 'admin',         initName: 'initAdmin',            js: '/js/admin.js?v=v2026.07.01-beta2' },
+  'doc-templates':  { title: '项目&模板管理', label: '项目&模板管理', perm: 'doc_template', initName: 'initDocTemplates',  js: '/js/doc-templates.js?v=v2026.07.01-beta2' },
+  standards:        { title: '流程规范',    label: '流程规范',    perm: 'doc_template',  initName: 'initStandards',        js: '/js/standards.js?v=v2026.07.01-beta2' },
+  'db-manage':      { title: '数据库管理',  label: '数据库管理',  perm: 'admin',         initName: 'initDbManage',         js: '/js/db-manage.js?v=v2026.07.01-beta2' },
   'user-center':    { title: '用户中心',    label: '用户中心',    perm: null,            init: initUserCenter },
-  tasks:            { title: '任务管理',    label: '任务管理',    perm: null,            initName: 'initTasks',            js: '/js/tasks.js?v=250630' },
+  tasks:            { title: '任务管理',    label: '任务管理',    perm: null,            initName: 'initTasks',            js: '/js/tasks.js?v=v2026.07.01-beta2' },
 };
 
 // ── Lazy script loader ──
@@ -1311,7 +1311,7 @@ function _ucSetFilter(s) { _ucFilterStatus = s; _renderUcFilterBar(); _renderUcT
 
 function _ucOpenTask(taskId) {
   if (typeof openTaskViewDialog === 'function') { openTaskViewDialog(taskId); }
-  else if (typeof loadViewScript === 'function') { loadViewScript('/js/tasks.js?v=250701', function() { openTaskViewDialog(taskId); }); }
+  else if (typeof loadViewScript === 'function') { loadViewScript('/js/tasks.js?v=v2026.07.01-beta2', function() { openTaskViewDialog(taskId); }); }
 }
 
 function _renderUcTableHead() {

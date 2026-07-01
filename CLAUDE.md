@@ -152,7 +152,13 @@ JS 工厂函数（`components.js`）：`sectionHeader()` / `iconBtn()` / `linkCh
 
 ### 版本号
 
-**每次修改代码前**更新 `frontend/index.html#app-version`，同时更新所有 JS/CSS `?v=YYMMDD` 缓存版本号。文档版本号仅在 commit 时同步，不额外 +1，允许非连续。详见 `Skill("pma-version")`。
+**每次修改代码前**更新 `frontend/index.html#app-version`，同时更新所有 JS/CSS `?v=` 缓存版本号为**与 `#app-version` 相同的值**（如 `?v=v2026.07.01-beta2`）。文档版本号仅在 commit 时同步，不额外 +1，允许非连续。详见 `Skill("pma-version")`。
+
+**缓存版本格式**：与 `#app-version` 一致（`vYYYY.MM.DD-betaN`），适用位置：
+- `frontend/index.html`：`<script src="/js/app.js?v=v2026.07.01-beta2">`（所有 `<script>` 和 `<link>` 标签）
+- `frontend/js/app.js` VIEW_REGISTRY：`js: '/js/tasks.js?v=v2026.07.01-beta2'`（所有懒加载条目）
+
+可一键替换：`sed -i 's/?v=[^"]*/?v=<新版本号>/g' frontend/index.html frontend/js/app.js`
 
 ### 前端组件
 

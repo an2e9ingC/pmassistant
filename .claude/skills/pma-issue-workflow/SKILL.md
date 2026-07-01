@@ -17,11 +17,56 @@ allowed-tools: Read, Write, Edit, Bash, LSP, Agent, WebFetch
 
 ### 0. 获取 Issue 详情（仅 `issue#N` 或 `#N` 无描述时）
 
+**单个 Issue：**
+
 ```bash
-curl -s "http://localhost:8000/api/gitlab/issues/{N}" \
-  -H "Authorization: Bearer $(curl -s -X POST http://localhost:8000/api/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"username":"徐川","password":"123456"}' | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['access_token'])")"
+python3 << 'PYEOF'
+import urllib.request, json
+
+# 1. 登录获取 token
+login_data = json.dumps({"username": "admin", "password": "123456"}).encode()
+req = urllib.request.Request("http://localhost:8000/api/auth/login", data=login_data,
+    headers={"Content-Type": "application/json"})
+resp = urllib.request.urlopen(req)
+token = json.loads(resp.read())["data"]["access_token"]
+
+# 2. 获取单个 Issue
+IID = {N}  # 替换为实际 issue 编号
+req = urllib.request.Request(f"http://localhost:8000/api/gitlab/issues/{IID}",
+    headers={"Authorization": f"Bearer {token}"})
+resp = urllib.request.urlopen(req)
+issue = json.loads(resp.read())
+data = issue.get("data", issue)
+print(f"=== #{IID}: {data.get('title','?')} [{data.get('state','?')}] ===")
+desc = data.get("description", "")
+if desc: print(desc[:400])
+print()
+PYEOF
+```
+
+**批量获取多个 Issue：**
+
+```bash
+python3 << 'PYEOF'
+import urllib.request, json
+
+login_data = json.dumps({"username": "admin", "password": "123456"}).encode()
+req = urllib.request.Request("http://localhost:8000/api/auth/login", data=login_data,
+    headers={"Content-Type": "application/json"})
+resp = urllib.request.urlopen(req)
+token = json.loads(resp.read())["data"]["access_token"]
+
+for iid in [62, 63, 65, 67]:  # 替换为实际 issue 编号列表
+    req = urllib.request.Request(f"http://localhost:8000/api/gitlab/issues/{iid}",
+        headers={"Authorization": f"Bearer {token}"})
+    resp = urllib.request.urlopen(req)
+    issue = json.loads(resp.read())
+    data = issue.get("data", issue)
+    print(f"=== #{iid}: {data.get('title','?')} [{data.get('state','?')}] ===")
+    desc = data.get("description", "")
+    if desc: print(desc[:400])
+    print()
+PYEOF
 ```
 
 ### 1. 理解问题

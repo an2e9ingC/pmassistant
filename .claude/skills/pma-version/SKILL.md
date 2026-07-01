@@ -35,12 +35,12 @@ commit 时：   dev-plan.md   同步为 v2026.06.29-beta2（不再 +1）
 
 ## JS 缓存版本
 
-`frontend/index.html` 和 `frontend/js/app.js` 中所有 JS/CSS 引用均带 `?v=YYMMDD` 版本号。**每次修改 JS/CSS 代码前**，将版本号更新为当天日期：
+`frontend/index.html` 和 `frontend/js/app.js` 中所有 JS/CSS 引用均带 `?v=` 版本号，**值与 `#app-version` 保持一致**（如 `?v=v2026.07.01-beta2`）：
 
-- `index.html`：`<script src="/js/xxx.js?v=250630">`（所有 `<script>` 和 `<link>` 标签）
-- `app.js`：`js: '/js/xxx.js?v=250630'`（VIEW_REGISTRY 中所有懒加载条目）
+- `index.html`：`<script src="/js/xxx.js?v=v2026.07.01-beta2">`（所有 `<script>` 和 `<link>` 标签）
+- `app.js`：`js: '/js/xxx.js?v=v2026.07.01-beta2'`（VIEW_REGISTRY 中所有懒加载条目）
 
-可一键替换：`sed -i 's/v=YYMMDD旧/v=YYMMDD新/g' frontend/index.html frontend/js/app.js`
+可一键替换：`sed -i 's/?v=[^"]*/?v=<新版本号>/g' frontend/index.html frontend/js/app.js`
 
 ## 同步更新检查清单
 
