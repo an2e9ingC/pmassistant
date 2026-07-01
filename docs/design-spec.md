@@ -577,3 +577,54 @@ multiSelectDialog('编辑关联产品', allProducts, linkedIds, {
 
 **修改记录：**
 - 2026-06-18：新增区块操作按钮规范，统一 btn-primary 蓝色按钮 + section-hd 右上角布局
+
+---
+
+## 23. 功能开关规范（iOS 风格）
+
+**所有功能性开关（开/关两种状态）统一采用 iOS 风格滑动开关，作为全站标准控件。**
+
+### 视觉规格
+
+| 状态 | 背景色 | 圆点位置 |
+|------|--------|---------|
+| 开启 | `var(--success)` (#16A34A) | 右侧 |
+| 关闭 | `#D1D5DB`（浅色）/ `#4B5563`（深色） | 左侧 |
+
+- 尺寸：`width: 44px; height: 24px; border-radius: 12px`
+- 圆点：`width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.2)`
+- 过渡：`transition: background 0.2s, transform 0.2s`
+- 圆点位移：`transform: translateX(22px)`（开）/ `translateX(2px)`（关）
+- 禁用态：`opacity: 0.5; cursor: not-allowed`
+- 光标：`cursor: pointer`
+
+### 使用方式
+
+```js
+// components.js 工厂函数
+toggleSwitch(isOn, onclick, opts)
+// isOn: boolean — 当前开关状态
+// onclick: string — 点击时执行的 JS 表达式
+// opts.disabled: boolean — 是否禁用（可选）
+// opts.id: string — 容器元素 id（可选）
+```
+
+示例：
+```html
+<!-- 偏好设置中的告警条开关 -->
+<script>toggleSwitch(true, "toggleAlertTicker();_renderPreferencesPanel()")</script>
+```
+
+### 适用场景
+- 个人偏好设置中的所有开关项
+- 通知设置中的启用/禁用开关
+- 任何需要 on/off 切换的配置项
+
+### 禁止
+- **禁止使用普通按钮（btn/btn-sm/btn-xs）模拟开关**
+- **禁止使用 checkbox 原生控件**
+- **禁止使用非标准颜色**
+
+**修改记录：**
+- 2026-07-02：新增 iOS 风格功能开关规范，作为全站标准控件
+- 2026-06-18：新增区块操作按钮规范，统一 btn-primary 蓝色按钮 + section-hd 右上角布局

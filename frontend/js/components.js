@@ -170,6 +170,19 @@ function iconFav(onclick, active, title) {
     (active ? '★' : '☆') + '</button>';
 }
 
+/** Toggle Switch — iOS-style on/off control for preferences/settings */
+function toggleSwitch(isOn, onclick, opts) {
+  opts = opts || {};
+  var idAttr = opts.id ? ' id="' + opts.id + '"' : '';
+  var disabled = opts.disabled ? ' opacity:0.5;cursor:not-allowed' : ' cursor:pointer';
+  var bg = isOn ? 'var(--success)' : 'var(--border)';
+  var circleX = isOn ? '22px' : '2px';
+  var onclickAttr = !opts.disabled ? ' onclick="' + onclick + '"' : '';
+  return '<span' + idAttr + ' style="display:inline-flex;align-items:center;width:44px;height:24px;border-radius:12px;background:' + bg + ';transition:background 0.2s;' + disabled + '"' + onclickAttr + '>' +
+    '<span style="display:inline-block;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.2);transition:transform 0.2s;transform:translateX(' + circleX + ')"></span>' +
+  '</span>';
+}
+
 function renderProjIcon(type, code) {
   if (code) return projCodeTag(code);
   var t = (type || 'RD').toLowerCase();

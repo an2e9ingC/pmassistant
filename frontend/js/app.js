@@ -1533,9 +1533,9 @@ function _renderPreferencesPanel(content) {
       '<h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg> 偏好设置</h3>' +
 
       // Ticker toggle
-      '<div class="integration-row" style="cursor:pointer" onclick="toggleAlertTicker();_renderPreferencesPanel()">' +
+      '<div class="integration-row">' +
         '<span class="integration-row-lbl">底部滚动告警条</span>' +
-        '<span class="integration-row-val" style="color:' + (tickerOn ? 'var(--success)' : 'var(--muted)') + '">' + (tickerOn ? '已开启' : '已关闭') + '</span>' +
+        toggleSwitch(tickerOn, 'toggleAlertTicker();_renderPreferencesPanel()') +
       '</div>' +
 
       // Ticker speed
