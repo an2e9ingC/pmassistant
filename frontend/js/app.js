@@ -309,11 +309,11 @@ function openFeedbackDialog() {
         '</span>' +
       '</div>' +
       '<div style="margin-bottom:12px">' +
-        '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">组件（可多选）</label>' +
+        '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">组件 <span style="color:var(--danger)">*必选</span></label>' +
         '<div style="display:flex;flex-wrap:wrap;gap:6px">' + chipsHtml + '</div>' +
       '</div>' +
       '<div style="margin-bottom:12px">' +
-        '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">标题</label>' +
+        '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">标题 <span style="color:var(--danger)">*必填</span></label>' +
         '<input class="search-inp" id="fb-title" placeholder="简要描述问题或建议..." style="width:100%;box-sizing:border-box">' +
       '</div>' +
       '<div style="margin-bottom:12px">' +
@@ -450,6 +450,7 @@ async function submitFeedback() {
   var versionEl = document.getElementById('fb-version');
   var versionInfo = versionEl ? versionEl.textContent : '';
   if (!title) { showToast('请输入标题', 'error'); return; }
+  if (!_fbComponents.length) { showToast('请至少选择一个组件', 'error'); return; }
 
   // Prepend selected component labels to title as [标签] prefix
   if (_fbComponents.length) {
