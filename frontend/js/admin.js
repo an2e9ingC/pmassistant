@@ -17,108 +17,209 @@ async function initAdmin() {
   }
 }
 
-function renderConfigForm(cfg) {
-  var sections = [
-    { key: 'zentao', title: '禅道 (Zentao)', fields: [
-      { key: 'base_url', label: 'API 地址', type: 'url', ph: 'http://192.168.3.22/zentao/api.php/v1' },
-      { key: 'account', label: '账号', type: 'text', ph: 'PM_Assistant' },
-      { key: 'password', label: '密码', type: 'password', ph: '' },
-      { key: 'project_filter', label: '项目筛选', type: 'text', ph: '如 PE04,PE05（逗号分隔前缀，留空=全部）' },
-      { key: 'sync_interval', label: '自动同步(分)', type: 'number', ph: '30（0=关闭）' },
-    ]},
-    { key: 'gitlab', title: 'GitLab', fields: [
-      { key: 'base_url', label: 'API 地址', type: 'url', ph: 'http://192.168.0.128/api/v4' },
-      { key: 'token', label: 'Access Token (数据同步)', type: 'password', ph: '' },
-      { key: 'app_id', label: 'OAuth Application ID', type: 'text', ph: '' },
-      { key: 'app_secret', label: 'OAuth Application Secret', type: 'password', ph: '' },
-      { key: 'oauth_enabled', label: '启用 GitLab OAuth 登录', type: 'toggle', ph: '' },
-      { key: 'oauth_redirect_uri', label: 'OAuth 回调地址', type: 'url', ph: 'http://192.168.1.x:8000/api/auth/gitlab/callback' },
-    ]},
-    { key: 'nas', title: 'NAS 存储', fields: [
-      { key: 'host', label: '主机地址', type: 'text', ph: '192.168.x.x' },
-      { key: 'username', label: '用户名', type: 'text', ph: '' },
-      { key: 'password', label: '密码', type: 'password', ph: '' },
-    ]},
-    { key: 'svn', title: 'SVN 版本管理', fields: [
-      { key: 'base_url', label: 'SVN 地址', type: 'url', ph: 'http://192.168.0.124:8443/svn' },
-      { key: 'username', label: '用户名', type: 'text', ph: '' },
-      { key: 'password', label: '密码', type: 'password', ph: '' },
-    ]},
-  ];
+// ── Config section definitions (module scope, shared by card + dialog) ──
 
+var _configSections = [
+  { key: 'zentao', title: '禅道 (Zentao)', summaryKey: 'base_url', summaryPrefix: 'API: ', fields: [
+    { key: 'base_url', label: 'API 地址', type: 'url', ph: 'http://192.168.3.22/zentao/api.php/v1' },
+    { key: 'account', label: '账号', type: 'text', ph: 'PM_Assistant' },
+    { key: 'password', label: '密码', type: 'password', ph: '' },
+    { key: 'project_filter', label: '项目筛选', type: 'text', ph: '如 PE04,PE05（逗号分隔前缀，留空=全部）' },
+    { key: 'sync_interval', label: '自动同步(分)', type: 'number', ph: '30（0=关闭）' },
+  ]},
+  { key: 'gitlab', title: 'GitLab', summaryKey: 'base_url', summaryPrefix: 'API: ', fields: [
+    { key: 'base_url', label: 'API 地址', type: 'url', ph: 'http://192.168.0.128/api/v4' },
+    { key: 'token', label: 'Access Token (数据同步)', type: 'password', ph: '' },
+    { key: 'app_id', label: 'OAuth Application ID', type: 'text', ph: '' },
+    { key: 'app_secret', label: 'OAuth Application Secret', type: 'password', ph: '' },
+    { key: 'oauth_enabled', label: '启用 GitLab OAuth 登录', type: 'toggle', ph: '' },
+    { key: 'oauth_redirect_uri', label: 'OAuth 回调地址', type: 'url', ph: 'http://192.168.1.x:8000/api/auth/gitlab/callback' },
+  ]},
+  { key: 'nas', title: 'NAS 存储', summaryKey: 'host', summaryPrefix: '主机: ', fields: [
+    { key: 'host', label: '主机地址', type: 'text', ph: '192.168.x.x' },
+    { key: 'username', label: '用户名', type: 'text', ph: '' },
+    { key: 'password', label: '密码', type: 'password', ph: '' },
+  ]},
+  { key: 'svn', title: 'SVN 版本管理', summaryKey: 'base_url', summaryPrefix: '地址: ', fields: [
+    { key: 'base_url', label: 'SVN 地址', type: 'url', ph: 'http://192.168.0.124:8443/svn' },
+    { key: 'username', label: '用户名', type: 'text', ph: '' },
+    { key: 'password', label: '密码', type: 'password', ph: '' },
+  ]},
+];
+
+function _renderFieldHtml(f, sectionKey, cfgData) {
+  var rawVal = cfgData && cfgData[f.key];
+  var val = (f.type === 'checkbox' || f.type === 'toggle') ? '' : (rawVal || '');
+  var isPw = f.type === 'password';
+  var isCb = f.type === 'checkbox';
+  var isTg = f.type === 'toggle';
+  var uid = 'cfg-' + sectionKey + '-' + f.key;
+  var html = '';
+
+  if (isCb) {
+    var checked = (rawVal === true || rawVal === 'true' || rawVal === '1' || rawVal === 1);
+    html += '<label class="config-field config-field-checkbox">' +
+      '<span class="config-input-wrap">' +
+        '<input id="' + uid + '" class="config-input config-checkbox" type="checkbox"' +
+          ' data-section="' + sectionKey + '" data-field="' + f.key + '"' +
+          (checked ? ' checked' : '') + ' value="1">' +
+      '</span>' +
+      '<span class="config-field-label config-checkbox-label">' + f.label + '</span>' +
+    '</label>';
+  } else if (isTg) {
+    var tgOn = (rawVal === true || rawVal === 'true' || rawVal === '1' || rawVal === 1);
+    html += '<label class="config-field config-field-checkbox">' +
+      '<input id="' + uid + '" class="config-input" type="checkbox"' +
+        ' data-section="' + sectionKey + '" data-field="' + f.key + '"' +
+        (tgOn ? ' checked' : '') + ' value="1" style="position:absolute;opacity:0;pointer-events:none">' +
+      toggleSwitch(tgOn, "toggleConfigSwitch('" + uid + "')", {id: uid + '-toggle'}) +
+      '<span class="config-field-label" style="width:auto;margin-left:10px">' + f.label + '</span>' +
+    '</label>';
+  } else {
+    html += '<label class="config-field">' +
+      '<span class="config-field-label">' + f.label + '</span>' +
+      '<span class="config-input-wrap">' +
+        '<input id="' + uid + '" class="config-input" type="' + (isPw ? 'password' : f.type) +
+          '" data-section="' + sectionKey + '" data-field="' + f.key + '"' +
+          ' value="' + escHtml(val) + '" placeholder="' + escHtml(f.ph) + '"' +
+          (isPw ? ' autocomplete="new-password" onkeyup="checkCapsLock(event,\'' + uid + '-caps\')"' : '') + '>' +
+        (isPw ? '<button type="button" class="config-pw-toggle" onclick="togglePwVis(\'' + uid + '\',this)" title="显示密码">' +
+          '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+            '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>' +
+            '<circle cx="12" cy="12" r="3"/>' +
+          '</svg></button>' : '') +
+        (isPw ? '<span id="' + uid + '-caps" class="config-caps-warn" style="display:none">&#x21E7; 大写锁定已开</span>' : '') +
+      '</span>' +
+    '</label>';
+  }
+  return html;
+}
+
+function renderConfigForm(cfg) {
   var html = '<div class="config-grid">';
-  sections.forEach(function(sec) {
-    var enabledOn = !(cfg[sec.key] && cfg[sec.key].enabled === false);
+  _configSections.forEach(function(sec) {
+    var data = cfg[sec.key] || {};
+    var enabledOn = !(data.enabled === false);
     var euid = 'cfg-' + sec.key + '-enabled';
+    var summaryVal = data[sec.summaryKey] || '';
+    var summaryText = summaryVal ? sec.summaryPrefix + summaryVal : '未配置';
+
     html += '<div class="config-section ' + sec.key + '">' +
-      '<div class="config-section-title" style="display:flex;align-items:center;gap:12px">' +
+      '<div class="config-section-title" style="display:flex;align-items:center;gap:10px">' +
         '<span>' + sec.title + '</span>' +
         '<span style="margin-left:auto;display:flex;align-items:center;gap:8px">' +
           '<span style="font-size:10px;color:var(--muted);white-space:nowrap">启用</span>' +
           '<input id="' + euid + '" class="config-input" type="checkbox"' +
             ' data-section="' + sec.key + '" data-field="enabled"' +
             (enabledOn ? ' checked' : '') + ' value="1" style="position:absolute;opacity:0;pointer-events:none">' +
-          toggleSwitch(enabledOn, "toggleConfigSwitch('" + euid + "')", {id: euid + '-toggle'}) +
+          toggleSwitch(enabledOn, "toggleSourceEnabled('" + sec.key + "')", {id: euid + '-toggle'}) +
           '<button class="btn btn-xs" onclick="testSourceConnection(\'' + sec.key + '\')" style="font-size:10px;padding:2px 8px;white-space:nowrap;flex-shrink:0">测试连接</button>' +
+          '<button class="btn btn-xs" onclick="openSourceConfigDialog(\'' + sec.key + '\')" title="编辑配置" style="font-size:10px;padding:2px 6px;white-space:nowrap;flex-shrink:0">' +
+            '<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+              '<path d="M11 2l3 3-9 9H2v-3l9-9z"/></svg>' +
+          '</button>' +
         '</span>' +
       '</div>' +
-      '<div class="config-fields">';
-    sec.fields.forEach(function(f) {
-      var rawVal = cfg[sec.key] && cfg[sec.key][f.key];
-      var val = (f.type === 'checkbox' || f.type === 'toggle') ? '' : (rawVal || '');
-      var isPw = f.type === 'password';
-      var isCb = f.type === 'checkbox';
-      var isTg = f.type === 'toggle';
-      var uid = 'cfg-' + sec.key + '-' + f.key;
-
-      if (isCb) {
-        var checked = (rawVal === true || rawVal === 'true' || rawVal === '1' || rawVal === 1);
-        html += '<label class="config-field config-field-checkbox">' +
-          '<span class="config-input-wrap">' +
-            '<input id="' + uid + '" class="config-input config-checkbox" type="checkbox"' +
-              ' data-section="' + sec.key + '" data-field="' + f.key + '"' +
-              (checked ? ' checked' : '') + ' value="1">' +
-          '</span>' +
-          '<span class="config-field-label config-checkbox-label">' + f.label + '</span>' +
-        '</label>';
-      } else if (isTg) {
-        var tgOn = (rawVal === true || rawVal === 'true' || rawVal === '1' || rawVal === 1);
-        html += '<label class="config-field config-field-checkbox">' +
-          '<input id="' + uid + '" class="config-input" type="checkbox"' +
-            ' data-section="' + sec.key + '" data-field="' + f.key + '"' +
-            (tgOn ? ' checked' : '') + ' value="1" style="position:absolute;opacity:0;pointer-events:none">' +
-          toggleSwitch(tgOn, "toggleConfigSwitch('" + uid + "')", {id: uid + '-toggle'}) +
-          '<span class="config-field-label" style="width:auto;margin-left:10px">' + f.label + '</span>' +
-        '</label>';
-      } else {
-        html += '<label class="config-field">' +
-          '<span class="config-field-label">' + f.label + '</span>' +
-          '<span class="config-input-wrap">' +
-            '<input id="' + uid + '" class="config-input" type="' + (isPw ? 'password' : f.type) +
-              '" data-section="' + sec.key + '" data-field="' + f.key + '"' +
-              ' value="' + escHtml(val) + '" placeholder="' + escHtml(f.ph) + '"' +
-              (isPw ? ' autocomplete="new-password" onkeyup="checkCapsLock(event,\'' + uid + '-caps\')"' : '') + '>' +
-            (isPw ? '<button type="button" class="config-pw-toggle" onclick="togglePwVis(\'' + uid + '\',this)" title="显示密码">' +
-              '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-                '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>' +
-                '<circle cx="12" cy="12" r="3"/>' +
-              '</svg></button>' : '') +
-            (isPw ? '<span id="' + uid + '-caps" class="config-caps-warn" style="display:none">&#x21E7; 大写锁定已开</span>' : '') +
-          '</span>' +
-        '</label>';
-      }
-    });
-    html += '</div></div>';
+      '<div style="padding:8px 20px;font-size:11.5px;color:' + (summaryVal ? 'var(--fg)' : 'var(--muted)') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+        escHtml(summaryText) +
+      '</div>' +
+    '</div>';
   });
 
   html += '</div>'; // .config-grid
-  html += '<div class="config-actions">' +
-    '<button class="btn btn-primary" onclick="saveConfig()">保存配置</button>' +
-    '<span id="config-save-msg" style="font-size:12px;margin-left:12px"></span>' +
+  html += '<div class="config-actions" style="margin-top:12px">' +
+    '<span id="config-save-msg" style="font-size:12px"></span>' +
     '<button class="btn" onclick="clearDatabase()" style="margin-left:auto;font-size:12px;color:var(--danger);padding:5px 16px">清除数据库缓存</button>' +
   '</div>';
 
   document.getElementById('admin-config-form').innerHTML = html;
+}
+
+// ── Dialog-based config editing ──
+
+function openSourceConfigDialog(secKey) {
+  var sec = _configSections.find(function(s) { return s.key === secKey; });
+  if (!sec) return;
+  var data = (_adminFormData && _adminFormData[secKey]) ? _adminFormData[secKey] : {};
+
+  var fieldsHtml = '';
+  sec.fields.forEach(function(f) {
+    fieldsHtml += _renderFieldHtml(f, secKey, data);
+  });
+
+  var bodyHtml = '<div style="display:flex;flex-direction:column;max-height:55vh;overflow-y:auto;padding:4px 0">' +
+    fieldsHtml +
+  '</div>';
+
+  openDialog(sec.title + ' 配置', bodyHtml, [
+    { text: '取消', cls: '', onclick: "this.closest('.note-dialog-overlay').remove()" },
+    { text: '保存', cls: 'btn-primary', onclick: "saveSourceConfig('" + secKey + "');this.closest('.note-dialog-overlay').remove()" },
+  ], { maxWidth: 560 });
+}
+
+async function saveSourceConfig(secKey) {
+  var msg = document.getElementById('config-save-msg');
+  if (msg) { msg.textContent = ''; }
+
+  // Collect field values from dialog
+  var sectionData = {};
+  document.querySelectorAll('.config-input[data-section="' + secKey + '"]').forEach(function(inp) {
+    var field = inp.dataset.field;
+    if (inp.type === 'checkbox') {
+      sectionData[field] = inp.checked;
+    } else {
+      // Skip masked passwords
+      if ((field === 'password' || field === 'token') && inp.value && inp.value.indexOf('•') >= 0) {
+        return;
+      }
+      sectionData[field] = inp.value;
+    }
+  });
+
+  // Build full payload from _adminFormData, replacing the edited section
+  var payload = JSON.parse(JSON.stringify(_adminFormData));
+  payload[secKey] = sectionData;
+
+  // Preserve enabled state from the card
+  var ecb = document.getElementById('cfg-' + secKey + '-enabled');
+  if (ecb) { payload[secKey].enabled = ecb.checked; }
+
+  try {
+    var result = await API.put('/admin/config', payload);
+    _adminFormData = result;
+    // Re-render cards with updated data
+    renderConfigForm(_adminFormData);
+    if (msg) msg.innerHTML = '<span style="color:var(--success)">&#10003; ' +
+      (secKey === 'zentao' ? '禅道' : secKey === 'gitlab' ? 'GitLab' : secKey === 'nas' ? 'NAS' : 'SVN') +
+      ' 配置已保存</span>';
+    setTimeout(function() { if (msg) msg.textContent = ''; }, 3000);
+  } catch(e) {
+    if (msg) msg.innerHTML = '<span style="color:var(--danger)">保存失败: ' + escHtml(e.message) + '</span>';
+  }
+}
+
+async function toggleSourceEnabled(secKey) {
+  var cb = document.getElementById('cfg-' + secKey + '-enabled');
+  var toggle = document.getElementById('cfg-' + secKey + '-enabled-toggle');
+  if (!cb || !toggle) return;
+  cb.checked = !cb.checked;
+  toggle.style.background = cb.checked ? 'var(--success)' : 'var(--border)';
+  var dot = toggle.querySelector('span');
+  if (dot) dot.style.transform = 'translateX(' + (cb.checked ? '22px' : '2px') + ')';
+
+  // Auto-save
+  if (!_adminFormData || !_adminFormData[secKey]) return;
+  _adminFormData[secKey].enabled = cb.checked;
+  try {
+    await API.put('/admin/config', _adminFormData);
+  } catch(e) {
+    // revert
+    cb.checked = !cb.checked;
+    _adminFormData[secKey].enabled = cb.checked;
+    toggle.style.background = cb.checked ? 'var(--success)' : 'var(--border)';
+    if (dot) dot.style.transform = 'translateX(' + (cb.checked ? '22px' : '2px') + ')';
+    showToast('保存失败: ' + e.message, 'error');
+  }
 }
 
 function togglePwVis(id, btn) {
@@ -170,44 +271,6 @@ async function testSourceConnection(source) {
     showToast('测试失败: ' + escHtml(e.message || '未知错误'), 'error');
   }
   if (btn) { btn.disabled = false; btn.textContent = '测试连接'; }
-}
-
-async function saveConfig() {
-  var btn = document.querySelector('.config-actions .btn');
-  var msg = document.getElementById('config-save-msg');
-  btn.disabled = true;
-  btn.textContent = '保存中...';
-  msg.textContent = '';
-
-  var payload = { zentao: {}, gitlab: {}, nas: {}, svn: {} };
-  document.querySelectorAll('.config-input').forEach(function(inp) {
-    var sec = inp.dataset.section;
-    var field = inp.dataset.field;
-    if (inp.type === 'checkbox') {
-      payload[sec][field] = inp.checked;
-    } else {
-      payload[sec][field] = inp.value;
-    }
-  });
-
-  try {
-    var result = await API.put('/admin/config', payload);
-    _adminFormData = result;
-    msg.innerHTML = '<span style="color:var(--success)">&#10003; 已保存（部分配置需下次同步生效）</span>';
-    // Update password/token fields with masked values from response
-    document.querySelectorAll('.config-input').forEach(function(inp) {
-      var sec = inp.dataset.section;
-      var field = inp.dataset.field;
-      if (result[sec] && result[sec][field] && (field === 'password' || field === 'token')) {
-        inp.value = result[sec][field];
-        if (inp.type === 'text') inp.type = 'password';
-      }
-    });
-  } catch(e) {
-    msg.innerHTML = '<span style="color:var(--danger)">保存失败: ' + escHtml(e.message) + '</span>';
-  }
-  btn.disabled = false;
-  btn.textContent = '保存配置';
 }
 
 async function clearDatabase() {
@@ -784,25 +847,49 @@ async function deleteUser(id, username) {
 async function loadPmaSettingsUI() {
   try {
     var settings = await API.get('/admin/settings');
-    var html = '<div class="section-hd" style="margin-top:22px"><div class="section-title">操作安全设置</div></div>' +
-      '<div class="card" style="padding:16px;margin-bottom:20px">' +
-        '<div style="font-size:12px;color:var(--muted);margin-bottom:10px">以下操作是否需要密码验证确认：</div>';
+    var items = [];
     Object.keys(settings).forEach(function(key) {
       var s = settings[key];
-      html += '<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;cursor:pointer">' +
-        '<input type="checkbox" ' + (s.value ? 'checked' : '') + ' onchange="togglePmaSetting(\'' + key + '\',this.checked)">' +
-        escHtml(s.label) + '</label>';
+      var uid = 'pma-setting-' + key;
+      items.push(
+        '<label style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:var(--bg);border-radius:8px;gap:10px;cursor:default">' +
+          '<span style="font-size:12.5px">' + escHtml(s.label) + '</span>' +
+          '<span style="flex-shrink:0">' +
+            toggleSwitch(s.value, "togglePmaSetting('" + key + "'," + !s.value + ",this)", {id: uid}) +
+          '</span>' +
+        '</label>'
+      );
     });
-    html += '</div>';
+    var html = '<div class="section-hd" style="margin-top:22px"><div class="section-title">操作安全设置</div></div>' +
+      '<div class="card" style="padding:16px;margin-bottom:20px">' +
+        '<div style="font-size:12px;color:var(--muted);margin-bottom:12px">以下操作是否需要密码验证确认：</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
+          items.join('') +
+        '</div>' +
+      '</div>';
     var container = document.getElementById('admin-settings-area');
     if (container) container.innerHTML = html;
   } catch(e) {}
 }
 
-async function togglePmaSetting(key, checked) {
-  var payload = {}; payload[key] = checked;
-  try { await API.put('/admin/settings', payload); _pmaSettings = null; loadPmaSettings(); showToast('已更新', 'success'); }
-  catch(e) { showToast('保存失败: ' + e.message, 'error'); }
+async function togglePmaSetting(key, newValue, toggleEl) {
+  if (toggleEl) {
+    toggleEl.style.background = newValue ? 'var(--success)' : 'var(--border)';
+    var dot = toggleEl.querySelector('span');
+    if (dot) dot.style.transform = 'translateX(' + (newValue ? '22px' : '2px') + ')';
+  }
+  var payload = {}; payload[key] = newValue;
+  try {
+    await API.put('/admin/settings', payload);
+    _pmaSettings = null;
+    if (typeof loadPmaSettings === 'function') loadPmaSettings();
+  } catch(e) {
+    if (toggleEl) {
+      toggleEl.style.background = !newValue ? 'var(--success)' : 'var(--border)';
+      if (dot) dot.style.transform = 'translateX(' + (!newValue ? '22px' : '2px') + ')';
+    }
+    showToast('保存失败: ' + e.message, 'error');
+  }
 }
 
 /* ═══════════════════════════════════════════════════
