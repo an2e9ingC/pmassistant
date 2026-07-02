@@ -33,7 +33,19 @@ async function renderLogs() {
   startLogAutoRefresh();
 }
 
-async function fetchLogs() {
+function _logLineHtml(line) {
+  var cls = '';
+  if (line.indexOf(' ERROR ') >= 0 || line.indexOf('CRITICAL') >= 0) cls = 'log-error';
+  else if (line.indexOf('WARNING') >= 0) cls = 'log-warn';
+  else if (line.indexOf('DEBUG') >= 0) cls = 'log-debug';
+  return '<span class="' + cls + '">' + escHtml(line) + '</span>';
+}
+
+function _logRenderFull(container, lines) {
+  container.innerHTML = '<pre class="log-pre">' + lines.map(_logLineHtml).join('\n') + '</pre>';
+}
+
+async function fetchLogs(forceFull) {
   var container = document.getElementById('log-content');
   var params = 'tail=' + _logTail + '&level=' + _logLevel;
   if (_logSearch) params += '&search=' + encodeURIComponent(_logSearch);
@@ -46,31 +58,46 @@ async function fetchLogs() {
       return;
     }
     var lines = text.split('\n');
-    var html = lines.map(function(line) {
-      var cls = '';
-      if (line.indexOf(' ERROR ') >= 0 || line.indexOf('CRITICAL') >= 0) cls = 'log-error';
-      else if (line.indexOf('WARNING') >= 0) cls = 'log-warn';
-      else if (line.indexOf('DEBUG') >= 0) cls = 'log-debug';
-      return '<span class="' + cls + '">' + escHtml(line) + '</span>';
-    }).join('\n');
+    var pre = container.querySelector('.log-pre');
 
-    // Preserve scroll position if user is reading older logs
-    var wasAtBottom = isLogAtBottom();
-    container.innerHTML = '<pre class="log-pre">' + html + '</pre>';
-
-    // Re-bind scroll listener on the scrollable container
-    if (container) {
-      container.addEventListener('scroll', function() {
-        _logUserScrolled = !isLogAtBottom();
-      });
-      // Auto-scroll to bottom only if: initial load, or user was already at bottom
-      if (!_logUserScrolled || wasAtBottom) {
-        scrollLogToBottom();
+    if (forceFull || !pre || _logSearch) {
+      _logRenderFull(container, lines);
+      var wasAtBottom = true;
+    } else {
+      // Check if content actually changed
+      var oldText = pre.textContent || '';
+      if (oldText === text) {
+        // No change — skip DOM update entirely, preserve selection
+        _logUserScrolled = _logUserScrolled; // keep current state
+      } else {
+        // Content changed — find last common line and append new ones
+        var spans = pre.querySelectorAll('span');
+        var lastDomLine = spans.length ? spans[spans.length - 1].textContent : '';
+        var lastIdx = -1;
+        for (var i = lines.length - 1; i >= 0; i--) {
+          if (lines[i] === lastDomLine) { lastIdx = i; break; }
+        }
+        if (lastIdx >= 0 && lastIdx < lines.length - 1) {
+          // Append only new lines, keep existing DOM intact
+          var newLines = lines.slice(lastIdx + 1);
+          pre.insertAdjacentHTML('beforeend', '\n' + newLines.map(_logLineHtml).join('\n'));
+          // Trim oldest if exceeding tail
+          spans = pre.querySelectorAll('span');
+          while (spans.length > _logTail) { spans[0].remove(); spans = pre.querySelectorAll('span'); }
+        } else {
+          // Last line not found — full refresh
+          _logRenderFull(container, lines);
+        }
       }
+      var wasAtBottom = isLogAtBottom();
     }
 
     document.getElementById('log-status').textContent =
       '已加载 ' + lines.length + ' 条 · ' + new Date().toLocaleTimeString();
+
+    if (!_logUserScrolled || wasAtBottom) {
+      scrollLogToBottom();
+    }
   } catch(e) {
     container.innerHTML = '<div class="error-state">加载日志失败: ' + escHtml(e.message || 'Request failed') +
       '<br><button onclick="fetchLogs()">重试</button></div>';
@@ -83,19 +110,19 @@ function setLogLevel() {
   _logRefreshInterval = _logIntervals[_logLevel] || 15000;
   _logUserScrolled = false;
   restartLogAutoRefresh();
-  fetchLogs();
+  fetchLogs(true);
 }
 
 function setLogTail() {
   var sel = document.getElementById('log-tail-select');
   _logTail = parseInt(sel ? sel.value : 200) || 200;
-  fetchLogs();
+  fetchLogs(true);
 }
 
 function onLogSearch(v) {
   _logSearch = v;
   clearTimeout(window._logSearchTimer);
-  window._logSearchTimer = setTimeout(fetchLogs, 300);
+  window._logSearchTimer = setTimeout(function() { fetchLogs(true); }, 300);
 }
 
 /* ── Single pause/resume button ── */
@@ -130,7 +157,7 @@ function toggleLogAutoRefresh() {
     // Currently paused → resume, and reset scroll state
     _logUserScrolled = false;
     startLogAutoRefresh();
-    fetchLogs();
+    fetchLogs(true);
   }
 }
 
