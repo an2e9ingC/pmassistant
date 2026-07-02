@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.database import get_db, to_local_str, _db_path
-from backend.middleware.auth import get_current_user, require_admin, require_perm
+from backend.middleware.auth import get_current_user, has_perm, require_admin, require_perm
 from backend.models.local import ProductNote, ProductBlockDiagram
 from backend.services import product_service
 from backend.services.product_service import log_product_activity
@@ -232,9 +232,13 @@ def update_product_document(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    """Update a product document's status/location."""
+    """Update a product document's status/location. Requires product_link permission for status changes."""
     from backend.models.document import ProductDocument
     from datetime import datetime as _dt
+
+    # Require product_link permission when marking as submitted
+    if body.status == "submitted" and not has_perm(user, "product_link") and not has_perm(user, "admin"):
+        raise HTTPException(status_code=403, detail="您无权限才能在此操作，请按要求直接提交到指定路径即可")
 
     doc = db.query(ProductDocument).filter(
         ProductDocument.id == doc_id,
@@ -258,13 +262,23 @@ def update_product_document(
         if old_loc != body.location:
             doc_changes.append(f"location:'{old_loc}'->'{body.location}'")
         doc.location = body.location
+        # Track modifier: record who changed/cleared the location
+        doc.updated_by = user.username
+        doc.updated_at = _dt.now()
+        if body.location:
+            # Set uploader if location is being filled (new upload)
+            if not doc.uploaded_by:
+                doc.uploaded_by = user.username
+                doc.uploaded_at = _dt.now()
     if body.doc_type is not None:
         doc.doc_type = body.doc_type
     if body.uploaded_by is not None:
-        old_ub = doc.uploaded_by or ""
-        if old_ub != body.uploaded_by:
-            doc_changes.append(f"uploaded_by:'{old_ub}'->'{body.uploaded_by}'")
         doc.uploaded_by = body.uploaded_by
+    if body.uploaded_at is not None:
+        try:
+            doc.uploaded_at = _dt.fromisoformat(body.uploaded_at)
+        except ValueError:
+            pass
     if body.uploaded_at is not None:
         try:
             doc.uploaded_at = _dt.fromisoformat(body.uploaded_at)
@@ -275,6 +289,14 @@ def update_product_document(
     detail = "; ".join(doc_changes) if doc_changes else "无变更"
     log_product_activity(db, product_id, user.username, "更新文档", f"doc_name:'{doc.doc_name}'; {detail}")
     return {"code": 0, "data": {"id": doc.id, "status": doc.status}, "message": "ok"}
+
+
+@router.post("/{product_id}/docs/check", response_model=dict)
+def check_product_documents(product_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    """Auto-scan product document paths and mark as submitted if files exist."""
+    from backend.services.doc_scanner import check_product_docs
+    result = check_product_docs(db, product_id)
+    return {"code": 0, "data": result, "message": "ok"}
 
 
 # ── Product Block Diagrams ──

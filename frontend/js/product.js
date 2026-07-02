@@ -410,6 +410,17 @@ function renderProdDocs(p) {
 
   API.get('/products/' + p.id + '/documents').then(function(docs) {
     _renderProdDocsInline(docs || []);
+    // Auto-scan: check if pending docs have files at target paths
+    var pending = (docs || []).filter(function(d) { return d.status === 'pending' && d.doc_path; });
+    if (pending.length) {
+      API.post('/products/' + p.id + '/docs/check', {}).then(function(result) {
+        if (result && result.auto_submitted > 0) {
+          API.get('/products/' + p.id + '/documents').then(function(fresh) {
+            _renderProdDocsInline(fresh || []);
+          });
+        }
+      }).catch(function() { /* scan may fail on non-SVN paths */ });
+    }
   }).catch(function() {
     _renderProdDocsInline([]);
   });
@@ -666,10 +677,10 @@ function _renderProdDocsInline(docs) {
   });
 
   var colorMap = { '硬件开发': 'var(--accent-lt)', '结构设计': '#e8f5e9', 'BSP开发': '#fff3e0', '软件开发': '#e3f2fd', '测试': '#fce4ec', '通用': 'var(--surface)' };
-  var typeLabels = { gitlab: 'GitLab', svn: 'SVN', nas: 'NAS', solidworks: 'SOLIDWORKS', pma: 'PMA' };
+  var typeLabels = { gitlab: 'GitLab', svn: 'SVN', nas: 'NAS', solidworks: '结构设计', pma: 'PMA' };
   var html = '<div class="card" style="padding:0;overflow:hidden">';
   html += '<div class="table-scroll" style="max-height:600px"><table class="stage-table"><thead><tr>' +
-    '<th style="width:80px">分类</th><th style="width:50px">序号</th><th>文档名称</th><th>责任人</th><th style="width:90px">状态</th><th>类型</th><th>路径</th><th>上传人</th><th>上传时间</th><th>操作</th>' +
+    '<th style="width:80px">分类</th><th style="width:50px">序号</th><th>文档名称</th><th>责任人</th><th style="width:90px">状态</th><th>类型</th><th>路径</th><th>最后修改时间</th><th>修改人</th><th>操作</th>' +
     '</tr></thead><tbody>';
   stageOrder.forEach(function(st) {
     var items = grouped[st];
@@ -684,9 +695,9 @@ function _renderProdDocsInline(docs) {
       if (i === 0) {
         html += '<td rowspan="' + items.length + '" style="vertical-align:middle;text-align:center;font-weight:600;' + cellStyle + 'color:var(--accent);font-size:12px">' + escHtml(st) + '<br><span style="font-size:10px;color:var(--muted)">' + items.length + ' 项</span></td>';
       }
-      // Status pill — only submitted is clickable (toggle to pending)
+      // Status pill — system auto-detects, not manually toggleable
       var statusHtml = d.done
-        ? '<span class="pill completed" style="cursor:' + (canEdit ? 'pointer' : 'default') + '" onclick="' + (canEdit ? 'toggleProdDocStatus(' + d.id + ',\'pending\')' : '') + '" title="点击标记为未提交">已提交</span>'
+        ? '<span class="pill completed">已提交</span>'
         : '<span class="pill blocked">未提交</span>';
 
       html += '<td style="font-family:var(--mono);color:var(--muted);text-align:center;' + cellStyle + '">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
@@ -694,16 +705,19 @@ function _renderProdDocsInline(docs) {
         '<td style="font-size:12px;white-space:nowrap;' + cellStyle + '">' + escHtml(d.responsible_role || '—') + '</td>' +
         '<td style="white-space:nowrap;' + cellStyle + '">' + statusHtml + '</td>' +
         '<td style="font-size:11px;' + cellStyle + '">' + escHtml(typeLabels[d.doc_type] || '—') + '</td>' +
-        '<td style="font-size:12px;' + cellStyle + '">' + (d.location
+        '<td style="font-size:12px;text-align:left;' + cellStyle + '">' + (d.location
           ? '<a href="' + escHtml(d.location) + '" target="_blank" style="color:var(--accent);text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">' + escHtml(d.location) + '</a>'
           : (d.doc_path ? '<span style="color:var(--muted);font-style:italic">请提交到：' + escHtml(d.doc_path) + '</span>' : '—')) + '</td>' +
-        '<td style="font-size:12px;color:var(--muted);' + cellStyle + '">' + escHtml(d.uploaded_by || '—') + '</td>' +
-        '<td style="font-size:11px;color:var(--muted);white-space:nowrap;' + cellStyle + '">' + escHtml(d.uploaded_at || '—') + '</td>' +
+        '<td style="font-size:11px;color:var(--muted);white-space:nowrap;' + cellStyle + '">' + escHtml(d.updated_at || '—') + '</td>' +
+        '<td style="font-size:12px;color:var(--muted);' + cellStyle + '">' + escHtml(d.updated_by || '—') + '</td>' +
         '<td style="white-space:nowrap;text-align:center;' + cellStyle + '">' +
           (d.location && isPreviewableUrl(d.location)
             ? iconEye("previewDocument('" + encodeURIComponent(d.location) + "','" + escJs(d.doc_name || '') + "')")
             : '') +
           iconUpload('showUploadDocDialog(' + d.id + ')', '上传文档') +
+          (d.location && canEdit
+            ? iconDelete('clearDocLocation(' + d.id + ')', '清除路径')
+            : '') +
         '</td>' +
       '</tr>';
     });
@@ -727,9 +741,10 @@ function switchToProdMaintenance() {
   if (tab) switchProdTab('maintenance', tab);
 }
 
-async function toggleProdDocStatus(docId, newStatus) {
+async function clearDocLocation(docId) {
+  if (!confirm('确认清除该文档的已上传路径？')) return;
   try {
-    await API.put('/products/' + _prodDetailCurId + '/documents/' + docId, { status: newStatus });
+    await API.put('/products/' + _prodDetailCurId + '/documents/' + docId, { location: '', status: 'pending' });
     var docs = await API.get('/products/' + _prodDetailCurId + '/documents');
     _renderProdDocsInline(docs || []);
   } catch(e) {
@@ -759,10 +774,10 @@ function _openUploadDialog(d) {
     svn: 'SVN 地址，如 http://192.168.0.124:8443/svn/...',
     gitlab: 'GitLab 发布链接，如 http://192.168.0.128/.../-/releases/...',
     nas: 'NAS 路径，如 \\\\192.168.0.x\\share\\...',
-    solidworks: 'SOLIDWORKS 文件路径',
+    solidworks: '结构设计文件路径',
     pma: 'PMA 系统内部链接'
   };
-  var typeLabels = { gitlab: 'GitLab', svn: 'SVN', nas: 'NAS', solidworks: 'SOLIDWORKS', pma: 'PMA 链接' };
+  var typeLabels = { gitlab: 'GitLab', svn: 'SVN', nas: 'NAS', solidworks: '结构设计', pma: 'PMA 链接' };
   var makeTypeBtn = function(type, label) {
     var active = type === defaultType;
     return '<button class="btn upload-type-btn" style="font-size:11px;padding:4px 10px' +
@@ -771,13 +786,14 @@ function _openUploadDialog(d) {
   };
   var currentUploadType = d.doc_type || 'gitlab';
   var html = '<div style="margin-bottom:10px">' +
-    '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">期望路径：' + escHtml(d.doc_path || '未配置') + '</div>' +
+    '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">期望路径：</div>' +
+    '<div style="font-size:12px;color:var(--accent);margin-bottom:10px;word-break:break-all;line-height:1.5">' + escHtml(d.doc_path || '未配置') + '</div>' +
     '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:6px">文档类型</label>' +
     '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap" id="upload-type-btns">' +
       makeTypeBtn('gitlab', 'GitLab') +
       makeTypeBtn('svn', 'SVN') +
       makeTypeBtn('nas', 'NAS') +
-      makeTypeBtn('solidworks', 'SOLIDWORKS') +
+      makeTypeBtn('solidworks', '结构设计') +
       makeTypeBtn('pma', 'PMA') +
     '</div>' +
     '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:6px">文档位置</label>' +
@@ -788,7 +804,7 @@ function _openUploadDialog(d) {
   openDialog('上传文档 — <span style="color:var(--accent)">' + escHtml(d.doc_name) + '</span>', html,
     [{text: '取消', onclick: 'closeSharedDialog()'},
      {text: '提交', cls: 'btn-primary', onclick: 'submitUploadDoc(' + d.id + ')'}],
-    {hideClose: true});
+    {maxWidth: '50%', hideClose: true});
 }
 
 function setUploadType(type) {
@@ -797,7 +813,7 @@ function setUploadType(type) {
   if (type === 'svn') { input.value = ''; input.placeholder = 'SVN 地址，如 http://192.168.0.124:8443/svn/...'; }
   else if (type === 'gitlab') { input.value = ''; input.placeholder = 'GitLab 发布链接，如 http://192.168.0.128/.../-/releases/...'; }
   else if (type === 'nas') { input.value = ''; input.placeholder = 'NAS 路径，如 \\\\192.168.0.x\\share\\...'; }
-  else if (type === 'solidworks') { input.value = ''; input.placeholder = 'SOLIDWORKS 文件路径'; }
+  else if (type === 'solidworks') { input.value = ''; input.placeholder = '结构设计文件路径'; }
   else if (type === 'pma') { input.value = ''; input.placeholder = 'PMA 系统内部链接'; }
   // Highlight selected
   document.querySelectorAll('#upload-type-btns .upload-type-btn').forEach(function(btn) {
