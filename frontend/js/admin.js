@@ -31,7 +31,7 @@ function renderConfigForm(cfg) {
       { key: 'token', label: 'Access Token (数据同步)', type: 'password', ph: '' },
       { key: 'app_id', label: 'OAuth Application ID', type: 'text', ph: '' },
       { key: 'app_secret', label: 'OAuth Application Secret', type: 'password', ph: '' },
-      { key: 'oauth_enabled', label: '启用 GitLab OAuth 登录', type: 'checkbox', ph: '' },
+      { key: 'oauth_enabled', label: '启用 GitLab OAuth 登录', type: 'toggle', ph: '' },
       { key: 'oauth_redirect_uri', label: 'OAuth 回调地址', type: 'url', ph: 'http://192.168.1.x:8000/api/auth/gitlab/callback' },
     ]},
     { key: 'nas', title: 'NAS 存储', fields: [
@@ -39,18 +39,36 @@ function renderConfigForm(cfg) {
       { key: 'username', label: '用户名', type: 'text', ph: '' },
       { key: 'password', label: '密码', type: 'password', ph: '' },
     ]},
+    { key: 'svn', title: 'SVN 版本管理', fields: [
+      { key: 'base_url', label: 'SVN 地址', type: 'url', ph: 'http://192.168.0.124:8443/svn' },
+      { key: 'username', label: '用户名', type: 'text', ph: '' },
+      { key: 'password', label: '密码', type: 'password', ph: '' },
+    ]},
   ];
 
   var html = '<div class="config-grid">';
   sections.forEach(function(sec) {
+    var enabledOn = !(cfg[sec.key] && cfg[sec.key].enabled === false);
+    var euid = 'cfg-' + sec.key + '-enabled';
     html += '<div class="config-section ' + sec.key + '">' +
-      '<div class="config-section-title">' + sec.title + '</div>' +
+      '<div class="config-section-title" style="display:flex;align-items:center;gap:12px">' +
+        '<span>' + sec.title + '</span>' +
+        '<span style="margin-left:auto;display:flex;align-items:center;gap:8px">' +
+          '<span style="font-size:10px;color:var(--muted);white-space:nowrap">启用</span>' +
+          '<input id="' + euid + '" class="config-input" type="checkbox"' +
+            ' data-section="' + sec.key + '" data-field="enabled"' +
+            (enabledOn ? ' checked' : '') + ' value="1" style="position:absolute;opacity:0;pointer-events:none">' +
+          toggleSwitch(enabledOn, "toggleConfigSwitch('" + euid + "')", {id: euid + '-toggle'}) +
+          '<button class="btn btn-xs" onclick="testSourceConnection(\'' + sec.key + '\')" style="font-size:10px;padding:2px 8px;white-space:nowrap;flex-shrink:0">测试连接</button>' +
+        '</span>' +
+      '</div>' +
       '<div class="config-fields">';
     sec.fields.forEach(function(f) {
       var rawVal = cfg[sec.key] && cfg[sec.key][f.key];
-      var val = (f.type === 'checkbox') ? '' : (rawVal || '');
+      var val = (f.type === 'checkbox' || f.type === 'toggle') ? '' : (rawVal || '');
       var isPw = f.type === 'password';
       var isCb = f.type === 'checkbox';
+      var isTg = f.type === 'toggle';
       var uid = 'cfg-' + sec.key + '-' + f.key;
 
       if (isCb) {
@@ -62,6 +80,15 @@ function renderConfigForm(cfg) {
               (checked ? ' checked' : '') + ' value="1">' +
           '</span>' +
           '<span class="config-field-label config-checkbox-label">' + f.label + '</span>' +
+        '</label>';
+      } else if (isTg) {
+        var tgOn = (rawVal === true || rawVal === 'true' || rawVal === '1' || rawVal === 1);
+        html += '<label class="config-field config-field-checkbox">' +
+          '<input id="' + uid + '" class="config-input" type="checkbox"' +
+            ' data-section="' + sec.key + '" data-field="' + f.key + '"' +
+            (tgOn ? ' checked' : '') + ' value="1" style="position:absolute;opacity:0;pointer-events:none">' +
+          toggleSwitch(tgOn, "toggleConfigSwitch('" + uid + "')", {id: uid + '-toggle'}) +
+          '<span class="config-field-label" style="width:auto;margin-left:10px">' + f.label + '</span>' +
         '</label>';
       } else {
         html += '<label class="config-field">' +
@@ -115,6 +142,36 @@ function checkCapsLock(e, warnId) {
   el.style.display = caps ? '' : 'none';
 }
 
+function toggleConfigSwitch(checkboxId) {
+  var cb = document.getElementById(checkboxId);
+  var toggle = document.getElementById(checkboxId + '-toggle');
+  if (!cb || !toggle) return;
+  cb.checked = !cb.checked;
+  toggle.style.background = cb.checked ? 'var(--success)' : 'var(--border)';
+  var dot = toggle.querySelector('span');
+  if (dot) dot.style.transform = 'translateX(' + (cb.checked ? '22px' : '2px') + ')';
+}
+
+var _testResults = {};
+
+async function testSourceConnection(source) {
+  var btn = event && event.target;
+  if (btn) { btn.disabled = true; btn.textContent = '测试中...'; }
+  try {
+    var result = await API.post('/admin/test-connection/' + source);
+    _testResults[source] = result;
+    var ok = result && result.ok;
+    showToast(
+      (ok ? '✓ ' : '✗ ') + (source === 'zentao' ? '禅道' : source === 'gitlab' ? 'GitLab' : source === 'nas' ? 'NAS' : 'SVN') +
+      ': ' + (result ? result.detail : '未知'),
+      ok ? 'success' : 'error'
+    );
+  } catch(e) {
+    showToast('测试失败: ' + escHtml(e.message || '未知错误'), 'error');
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '测试连接'; }
+}
+
 async function saveConfig() {
   var btn = document.querySelector('.config-actions .btn');
   var msg = document.getElementById('config-save-msg');
@@ -122,7 +179,7 @@ async function saveConfig() {
   btn.textContent = '保存中...';
   msg.textContent = '';
 
-  var payload = { zentao: {}, gitlab: {}, nas: {} };
+  var payload = { zentao: {}, gitlab: {}, nas: {}, svn: {} };
   document.querySelectorAll('.config-input').forEach(function(inp) {
     var sec = inp.dataset.section;
     var field = inp.dataset.field;

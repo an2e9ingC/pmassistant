@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="app-version" content="v2026.07.02-beta9>
+<meta name="app-version" content="v2026.07.02-beta10">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>PM Assistant · 集成禅道 & GitLab</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -154,13 +154,6 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
         </svg>
         权限管理
       </div>
-      <div class="nav-item" id="nav-config" onclick="gotoView('config')">
-        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-          <circle cx="8" cy="8" r="2.5"/>
-          <path d="M8 1.5v2M8 12.5v2M2.5 8h2M11.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/>
-        </svg>
-        数据源配置
-      </div>
       <div class="nav-item" id="nav-standards" onclick="gotoView('standards')">
         <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M2 3h5l2 2h5v8H2z"/>
@@ -220,6 +213,7 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
         <span class="src-tag pending" id="src-zentao" onclick="toggleSrcTip('zentao',event)"><span class="src-tag-label">禅道 待同步</span><span class="src-tag-tip" id="src-zentao-tip"></span></span>
         <span class="src-tag pending" id="src-gitlab" onclick="toggleSrcTip('gitlab',event)"><span class="src-tag-label">GitLab 未配置</span><span class="src-tag-tip" id="src-gitlab-tip"></span></span>
         <span class="src-tag pending" id="src-nas" onclick="toggleSrcTip('nas',event)"><span class="src-tag-label">NAS 未配置</span><span class="src-tag-tip" id="src-nas-tip"></span></span>
+        <span class="src-tag pending" id="src-svn" onclick="toggleSrcTip('svn',event)"><span class="src-tag-label">SVN 未配置</span><span class="src-tag-tip" id="src-svn-tip"></span></span>
         <div class="src-sync-wrap" id="src-sync-btn" style="display:none">
           <button class="src-sync-btn" onclick="toggleSyncMenu(event)" title="数据源配置">
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -248,6 +242,15 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
                 <line x1="6" y1="6" x2="6" y2="2"/>
               </svg>
               项目筛选
+            </button>
+            <button class="src-sync-menu-item" onclick="event.stopPropagation();toggleSyncMenu();gotoView('config')">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+                <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+                <line x1="6" y1="6" x2="6.01" y2="6"/>
+                <line x1="6" y1="18" x2="6.01" y2="18"/>
+              </svg>
+              数据源配置
             </button>
           </div>
         </div>

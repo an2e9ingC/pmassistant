@@ -30,6 +30,7 @@ class ZentaoConfig(BaseModel):
     password: str = ""
     project_filter: str = ""  # comma-separated project code prefixes
     sync_interval: str = "30"  # auto-sync interval in minutes, 0=disabled
+    enabled: bool = True
 
 
 class GitLabConfig(BaseModel):
@@ -39,18 +40,28 @@ class GitLabConfig(BaseModel):
     app_secret: str = ""          # GitLab OAuth Application Secret
     oauth_enabled: bool = False   # Enable GitLab OAuth login
     oauth_redirect_uri: str = ""  # OAuth callback URL
+    enabled: bool = True
 
 
 class NasConfig(BaseModel):
     host: str = ""
     username: str = ""
     password: str = ""
+    enabled: bool = True
+
+
+class SvnConfig(BaseModel):
+    base_url: str = ""
+    username: str = ""
+    password: str = ""
+    enabled: bool = True
 
 
 class DataSourceConfig(BaseModel):
     zentao: ZentaoConfig = ZentaoConfig()
     gitlab: GitLabConfig = GitLabConfig()
     nas: NasConfig = NasConfig()
+    svn: SvnConfig = SvnConfig()
 
 
 # ── Persistence ──
@@ -64,6 +75,7 @@ def _load_config() -> dict:
             "password": os.environ.get("ZENTAO_AUTH_PASSWORD", ""),
             "project_filter": os.environ.get("ZENTAO_PROJECT_FILTER", ""),
             "sync_interval": os.environ.get("SYNC_INTERVAL_MINUTES", "30"),
+            "enabled": os.environ.get("ZENTAO_ENABLED", "true").lower() in ("1", "true", "yes"),
         },
         "gitlab": {
             "base_url": os.environ.get("GITLAB_BASE_URL", ""),
@@ -72,11 +84,19 @@ def _load_config() -> dict:
             "app_secret": os.environ.get("GITLAB_APP_SECRET", ""),
             "oauth_enabled": os.environ.get("GITLAB_OAUTH_ENABLED", "").lower() in ("1", "true", "yes"),
             "oauth_redirect_uri": os.environ.get("GITLAB_OAUTH_REDIRECT_URI", ""),
+            "enabled": os.environ.get("GITLAB_ENABLED", "true").lower() in ("1", "true", "yes"),
         },
         "nas": {
             "host": os.environ.get("NAS_HOST", ""),
             "username": os.environ.get("NAS_USERNAME", ""),
             "password": os.environ.get("NAS_PASSWORD", ""),
+            "enabled": os.environ.get("NAS_ENABLED", "true").lower() in ("1", "true", "yes"),
+        },
+        "svn": {
+            "base_url": os.environ.get("SVN_BASE_URL", ""),
+            "username": os.environ.get("SVN_USERNAME", ""),
+            "password": os.environ.get("SVN_PASSWORD", ""),
+            "enabled": os.environ.get("SVN_ENABLED", "true").lower() in ("1", "true", "yes"),
         },
     }
     if CONFIG_FILE.exists():
@@ -104,15 +124,22 @@ def _save_config(cfg: dict) -> None:
         "zentao.password": "ZENTAO_AUTH_PASSWORD",
         "zentao.project_filter": "ZENTAO_PROJECT_FILTER",
         "zentao.sync_interval": "SYNC_INTERVAL_MINUTES",
+        "zentao.enabled": "ZENTAO_ENABLED",
         "gitlab.base_url": "GITLAB_BASE_URL",
         "gitlab.token": "GITLAB_TOKEN",
         "gitlab.app_id": "GITLAB_APP_ID",
         "gitlab.app_secret": "GITLAB_APP_SECRET",
         "gitlab.oauth_enabled": "GITLAB_OAUTH_ENABLED",
         "gitlab.oauth_redirect_uri": "GITLAB_OAUTH_REDIRECT_URI",
+        "gitlab.enabled": "GITLAB_ENABLED",
         "nas.host": "NAS_HOST",
         "nas.username": "NAS_USERNAME",
         "nas.password": "NAS_PASSWORD",
+        "nas.enabled": "NAS_ENABLED",
+        "svn.base_url": "SVN_BASE_URL",
+        "svn.username": "SVN_USERNAME",
+        "svn.password": "SVN_PASSWORD",
+        "svn.enabled": "SVN_ENABLED",
     }
 
     if ENV_FILE.exists():
@@ -348,3 +375,84 @@ def get_system_info():
         },
         "message": "ok",
     }
+
+
+# ── Connection Test ──
+
+def _encode_url(url: str) -> str:
+    """Percent-encode non-ASCII characters in a URL path/query."""
+    import urllib.parse
+    scheme, netloc, path, query, fragment = urllib.parse.urlsplit(url)
+    path = urllib.parse.quote(path, safe="/:@%")
+    query = urllib.parse.quote(query, safe="=&%")
+    return urllib.parse.urlunsplit((scheme, netloc, path, query, fragment))
+
+
+@router.post("/test-connection/{source}", response_model=dict)
+def test_connection(source: str, _=Depends(require_admin)):
+    """Test connectivity for a given data source using saved config."""
+    import urllib.request
+    import urllib.error
+
+    cfg = _load_config()
+    section = cfg.get(source)
+    if not section:
+        return {"code": 1, "message": f"未知数据源: {source}"}
+
+    if not section.get("enabled", True):
+        return {"code": 0, "data": {"ok": False, "detail": "数据源已禁用"}, "message": "ok"}
+
+    try:
+        if source == "zentao":
+            url = section.get("base_url", "")
+            if not url:
+                return {"code": 0, "data": {"ok": False, "detail": "未配置 API 地址"}, "message": "ok"}
+            req = urllib.request.Request(url, method="GET")
+            resp = urllib.request.urlopen(req, timeout=10)
+            return {"code": 0, "data": {"ok": True, "detail": f"HTTP {resp.status} — 连接成功"}, "message": "ok"}
+
+        elif source == "gitlab":
+            token = section.get("token", "")
+            base_url = section.get("base_url", "")
+            if not token or not base_url:
+                return {"code": 0, "data": {"ok": False, "detail": "未配置 Token 或 API 地址"}, "message": "ok"}
+            url = base_url.rstrip("/") + "/version"
+            req = urllib.request.Request(url, headers={"PRIVATE-TOKEN": token})
+            resp = urllib.request.urlopen(req, timeout=10)
+            body = json.loads(resp.read().decode())
+            ver = body.get("version", "unknown")
+            return {"code": 0, "data": {"ok": True, "detail": f"GitLab {ver} — 连接成功"}, "message": "ok"}
+
+        elif source == "nas":
+            host = section.get("host", "")
+            if not host:
+                return {"code": 0, "data": {"ok": False, "detail": "未配置主机地址"}, "message": "ok"}
+            return {"code": 0, "data": {"ok": True, "detail": f"主机 {host} 已配置"}, "message": "ok"}
+
+        elif source == "svn":
+            url = section.get("base_url", "")
+            username = section.get("username", "")
+            password = section.get("password", "")
+            if not url:
+                return {"code": 0, "data": {"ok": False, "detail": "未配置 SVN 地址"}, "message": "ok"}
+            # Percent-encode non-ASCII characters in URL
+            url = _encode_url(url)
+            data = '<?xml version="1.0" encoding="utf-8"?><propfind xmlns="DAV:"><prop><resourcetype/></prop></propfind>'
+            req = urllib.request.Request(url, data=data.encode(), method="PROPFIND",
+                                          headers={"Depth": "0", "Content-Type": "application/xml"})
+            if username and password:
+                import base64
+                cred = base64.b64encode(f"{username}:{password}".encode()).decode()
+                req.add_header("Authorization", f"Basic {cred}")
+            resp = urllib.request.urlopen(req, timeout=10)
+            return {"code": 0, "data": {"ok": True, "detail": f"HTTP {resp.status} — SVN 连接成功"}, "message": "ok"}
+
+        else:
+            return {"code": 1, "message": f"不支持的数据源: {source}"}
+
+    except urllib.error.HTTPError as e:
+        return {"code": 0, "data": {"ok": False, "detail": f"HTTP {e.code} — {e.reason}"}, "message": "ok"}
+    except urllib.error.URLError as e:
+        return {"code": 0, "data": {"ok": False, "detail": f"连接失败: {e.reason}"}, "message": "ok"}
+    except Exception as e:
+        return {"code": 0, "data": {"ok": False, "detail": f"测试异常: {str(e)[:120]}"}, "message": "ok"}

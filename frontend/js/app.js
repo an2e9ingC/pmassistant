@@ -506,8 +506,8 @@ function toggleTheme() {
 
 /* Data Source Status — topbar tags */
 
-var _srcStates = { zentao: 'pending', gitlab: 'pending', nas: 'pending' };
-var _srcDetails = { zentao: '', gitlab: '', nas: '' };
+var _srcStates = { zentao: 'pending', gitlab: 'pending', nas: 'pending', svn: 'pending' };
+var _srcDetails = { zentao: '', gitlab: '', nas: '', svn: '' };
 
 function updateLinkStatus() {
   API.get('/sync/sources').then(function(sources) {
@@ -580,14 +580,15 @@ document.addEventListener('click', function(e) {
 });
 
 function renderSourceTags() {
-  var names = { zentao: '禅道', gitlab: 'GitLab', nas: 'NAS' };
+  var names = { zentao: '禅道', gitlab: 'GitLab', nas: 'NAS', svn: 'SVN' };
   var reasons = {
     zentao: { ok: '', warn: '未同步', err: '同步失败', pending: '待同步' },
     gitlab: { ok: '', warn: '未同步', err: '同步失败', pending: '未配置' },
     nas:    { ok: '', warn: '未同步', err: '同步失败', pending: '未配置' },
+    svn:    { ok: '', warn: '未扫描', err: '连接失败', pending: '未配置' },
   };
 
-  ['zentao', 'gitlab', 'nas'].forEach(function(key) {
+  ['zentao', 'gitlab', 'nas', 'svn'].forEach(function(key) {
     var el = document.getElementById('src-' + key);
     if (!el) return;
     var state = _srcStates[key] || 'pending';

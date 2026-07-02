@@ -15,6 +15,15 @@ logger = logging.getLogger(__name__)
 HTTP_TIMEOUT = 10
 
 
+def _encode_url(url: str) -> str:
+    """Percent-encode non-ASCII characters in a URL path/query."""
+    import urllib.parse
+    scheme, netloc, path, query, fragment = urllib.parse.urlsplit(url)
+    path = urllib.parse.quote(path, safe="/:@%")
+    query = urllib.parse.quote(query, safe="=&%")
+    return urllib.parse.urlunsplit((scheme, netloc, path, query, fragment))
+
+
 def _glob_to_regex(pattern: str) -> str:
     """Convert a shell-style glob pattern to a regex pattern.
     *  → .*  (any sequence)
@@ -80,6 +89,8 @@ def _list_directory_svn(base_url: str) -> list:
     """
     if not _is_http_url(base_url):
         return []
+    # Percent-encode non-ASCII characters in URL (e.g. Chinese path segments)
+    base_url = _encode_url(base_url)
     data = """<?xml version="1.0" encoding="utf-8"?>
 <propfind xmlns="DAV:">
   <prop>
@@ -105,6 +116,7 @@ def _list_directory_html(base_url: str) -> list:
     """
     if not _is_http_url(base_url):
         return []
+    base_url = _encode_url(base_url)
     try:
         req = urllib.request.Request(base_url)
         resp = urllib.request.urlopen(req, timeout=HTTP_TIMEOUT)
@@ -122,6 +134,7 @@ def check_file_exists(url: str) -> bool:
     """
     if not _is_http_url(url):
         return False  # not a valid HTTP URL, cannot check
+    url = _encode_url(url)
     try:
         req = urllib.request.Request(url, method="HEAD")
         resp = urllib.request.urlopen(req, timeout=HTTP_TIMEOUT)

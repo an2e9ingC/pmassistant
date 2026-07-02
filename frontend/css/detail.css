@@ -389,7 +389,7 @@
 
 /* Admin — Data Source Config */
 .config-grid {
-  display: flex; flex-direction: column; gap: 16px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
 }
 .config-section {
   border: 1px solid var(--border);
@@ -399,6 +399,7 @@
 .config-section.zentao  { border-left: 4px solid var(--accent); }
 .config-section.gitlab  { border-left: 4px solid var(--warn); }
 .config-section.nas     { border-left: 4px solid var(--success); }
+.config-section.svn     { border-left: 4px solid #7c3aed; }
 .config-section:last-of-type { margin-bottom: 0; }
 .config-section-title {
   font-size: 13px; font-weight: 600;
@@ -409,6 +410,7 @@
 .config-section.zentao  .config-section-title { background: var(--accent-lt); }
 .config-section.gitlab  .config-section-title { background: var(--warn-lt); }
 .config-section.nas     .config-section-title { background: var(--success-lt); }
+.config-section.svn     .config-section-title { background: #ede9fe; }
 .config-fields {
   display: flex; flex-direction: column;
 }
@@ -691,6 +693,7 @@
 .block-diagram-lightbox-overlay {
   animation: bd-fade-in 0.2s ease;
 }
+[data-theme="dark"] .config-section.svn .config-section-title { background: #2e1065; }
 @keyframes bd-fade-in {
   from { opacity: 0; }
   to { opacity: 1; }

@@ -200,4 +200,17 @@ def sync_sources(db: Session = Depends(get_db), _=Depends(get_current_user)):
         "detail": f"主机: {nas_host or '未配置'}\n路径: {nas_path or '未配置'}",
     })
 
+    # SVN — document scanning
+    svn_url = os.environ.get("SVN_BASE_URL", "")
+    svn_configured = bool(svn_url)
+    sources.append({
+        "key": "svn",
+        "name": "SVN",
+        "configured": svn_configured,
+        "sync_status": "pending",
+        "last_sync": None,
+        "description": "版本管理（产品文档自动扫描）",
+        "detail": f"地址: {svn_url or '未配置'}\n用户: {os.environ.get('SVN_USERNAME', '未配置')}",
+    })
+
     return {"code": 0, "data": sources, "message": "ok"}
