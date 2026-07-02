@@ -251,6 +251,7 @@ function openProductDetail(id) {
 /* ---- Product Detail ---- */
 
 var _prodDetailCurId = null;
+var _prodDocScanning = false;
 var _prodDetailTargetTab = null;  // set before navigation to jump to a specific tab
 var _prodComboAll = [];
 
@@ -411,15 +412,18 @@ function renderProdDocs(p) {
   API.get('/products/' + p.id + '/documents').then(function(docs) {
     _renderProdDocsInline(docs || []);
     // Auto-scan: check if pending docs have files at target paths
-    var pending = (docs || []).filter(function(d) { return d.status === 'pending' && d.doc_path; });
+    var pending = (docs || []).filter(function(d) { return d.status === 'pending' && (d.doc_path || d.location); });
     if (pending.length) {
+      _prodDocScanning = true;
+      _renderProdDocsInline(docs || []);  // re-render to show "验证中"
       API.post('/products/' + p.id + '/docs/check', {}).then(function(result) {
-        if (result && result.auto_submitted > 0) {
+        _prodDocScanning = false;
+        if (result && result.auto_submitted > 0 || result && result.scanned > 0) {
           API.get('/products/' + p.id + '/documents').then(function(fresh) {
             _renderProdDocsInline(fresh || []);
           });
         }
-      }).catch(function() { /* scan may fail on non-SVN paths */ });
+      }).catch(function() { _prodDocScanning = false; });
     }
   }).catch(function() {
     _renderProdDocsInline([]);
@@ -695,10 +699,17 @@ function _renderProdDocsInline(docs) {
       if (i === 0) {
         html += '<td rowspan="' + items.length + '" style="vertical-align:middle;text-align:center;font-weight:600;' + cellStyle + 'color:var(--accent);font-size:12px">' + escHtml(st) + '<br><span style="font-size:10px;color:var(--muted)">' + items.length + ' 项</span></td>';
       }
-      // Status pill — system auto-detects, not manually toggleable
-      var statusHtml = d.done
-        ? '<span class="pill completed">已提交</span>'
-        : '<span class="pill blocked">未提交</span>';
+      // Status pill — system auto-detects
+      var statusHtml;
+      if (d.done) {
+        statusHtml = '<span class="pill completed">已提交</span>';
+      } else if (_prodDocScanning) {
+        statusHtml = '<span class="pill" style="background:var(--warn-lt);color:var(--warn);animation:pulse 1s infinite">验证中</span>';
+      } else if (d.location) {
+        statusHtml = '<span class="pill" style="background:var(--danger-lt);color:var(--danger)">错误</span>';
+      } else {
+        statusHtml = '<span class="pill blocked">未提交</span>';
+      }
 
       html += '<td style="font-family:var(--mono);color:var(--muted);text-align:center;' + cellStyle + '">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
         '<td style="font-weight:500;' + cellStyle + '">' + escHtml(d.doc_name) + '</td>' +
@@ -837,16 +848,25 @@ async function submitUploadDoc(docId) {
   var now = new Date().toISOString().slice(0, 19);
   try {
     await API.put('/products/' + _prodDetailCurId + '/documents/' + docId, {
-      status: 'submitted',
       location: location,
       doc_type: docType,
       uploaded_by: uploadBy,
       uploaded_at: now,
     });
     closeSharedDialog();
-    var docs = await API.get('/products/' + _prodDetailCurId + '/documents');
-    _renderProdDocsInline(docs || []);
-    showToast('文档已提交', 'success');
+    showToast('正在验证文件...', 'info');
+    _prodDocScanning = true;
+    // Refresh to show "验证中", then scan, then refresh to show result
+    API.get('/products/' + _prodDetailCurId + '/documents').then(function(docs) {
+      _renderProdDocsInline(docs || []);
+    });
+    function _finishScan() {
+      _prodDocScanning = false;
+      API.get('/products/' + _prodDetailCurId + '/documents').then(function(docs) {
+        _renderProdDocsInline(docs || []);
+      });
+    }
+    API.post('/products/' + _prodDetailCurId + '/docs/check', {}).then(_finishScan).catch(_finishScan);
   } catch(e) {
     showToast('提交失败: ' + (e.message || '未知错误'), 'error');
   }

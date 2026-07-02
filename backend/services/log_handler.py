@@ -2,7 +2,7 @@ import logging
 import traceback
 from datetime import datetime
 
-from backend.config import BEIJING_TZ, beijing_now
+from backend.config import beijing_now
 from backend.database import SessionLocal
 from backend.models.log_entry import LogEntry
 
@@ -15,7 +15,7 @@ class DatabaseLogHandler(logging.Handler):
             db = SessionLocal()
             try:
                 entry = LogEntry(
-                    timestamp=datetime.fromtimestamp(record.created, tz=BEIJING_TZ),
+                    timestamp=datetime.utcfromtimestamp(record.created),
                     level=record.levelname,
                     logger=record.name,
                     message=self.format(record),

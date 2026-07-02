@@ -70,10 +70,16 @@ def _parse_doc_path(doc_path: str) -> tuple:
     return base_url, file_regex
 
 
+def _is_http_url(url: str) -> bool:
+    return url.startswith("http://") or url.startswith("https://")
+
+
 def _list_directory_svn(base_url: str) -> list:
     """Try to list a directory via SVN PROPFIND.
     Returns list of href paths found.
     """
+    if not _is_http_url(base_url):
+        return []
     data = """<?xml version="1.0" encoding="utf-8"?>
 <propfind xmlns="DAV:">
   <prop>
@@ -97,6 +103,8 @@ def _list_directory_html(base_url: str) -> list:
     """Try to list a directory via HTTP GET (Apache/nginx directory listing).
     Returns list of href paths found.
     """
+    if not _is_http_url(base_url):
+        return []
     try:
         req = urllib.request.Request(base_url)
         resp = urllib.request.urlopen(req, timeout=HTTP_TIMEOUT)
@@ -110,8 +118,10 @@ def _list_directory_html(base_url: str) -> list:
 
 def check_file_exists(url: str) -> bool:
     """Check if a file exists at the given URL and has non-zero size.
-    Uses HTTP HEAD request.
+    Uses HTTP HEAD request. Requires http:// or https:// scheme.
     """
+    if not _is_http_url(url):
+        return False  # not a valid HTTP URL, cannot check
     try:
         req = urllib.request.Request(url, method="HEAD")
         resp = urllib.request.urlopen(req, timeout=HTTP_TIMEOUT)
@@ -188,23 +198,28 @@ def check_product_docs(db, product_id: int) -> dict:
             # Already submitted — skip scanning
             continue
 
-        doc_path = doc.doc_path or ""
-        if not doc_path:
+        # Priority: check user-uploaded location first, then template path
+        check_path = doc.location or doc.doc_path or ""
+        if not check_path:
             continue
 
         scanned += 1
-        exists = scan_doc_path(doc_path)
+        try:
+            exists = scan_doc_path(check_path)
+        except Exception as e:
+            logger.warning(f"Scan failed for doc {doc.id} ({doc.doc_name}): {e}")
+            exists = False
 
         results.append({
             "doc_id": doc.id,
             "doc_name": doc.doc_name,
-            "path": doc_path,
+            "path": check_path,
             "found": exists,
         })
 
         if exists:
             from datetime import datetime as _dt
-            now = _dt.now()
+            now = _dt.utcnow()
             doc.status = "submitted"
             doc.completed_at = now
             doc.uploaded_by = doc.uploaded_by or "auto-scanner"

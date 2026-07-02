@@ -254,7 +254,7 @@ def update_product_document(
             doc_changes.append(f"status:'{old_status}'->'{body.status}'")
         doc.status = body.status
         if body.status == "submitted" and not doc.completed_at:
-            doc.completed_at = _dt.now()
+            doc.completed_at = _dt.utcnow()
         elif body.status == "pending":
             doc.completed_at = None
     if body.location is not None:
@@ -264,12 +264,12 @@ def update_product_document(
         doc.location = body.location
         # Track modifier: record who changed/cleared the location
         doc.updated_by = user.username
-        doc.updated_at = _dt.now()
+        doc.updated_at = _dt.utcnow()
         if body.location:
             # Set uploader if location is being filled (new upload)
             if not doc.uploaded_by:
                 doc.uploaded_by = user.username
-                doc.uploaded_at = _dt.now()
+                doc.uploaded_at = _dt.utcnow()
     if body.doc_type is not None:
         doc.doc_type = body.doc_type
     if body.uploaded_by is not None:
@@ -295,8 +295,14 @@ def update_product_document(
 def check_product_documents(product_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
     """Auto-scan product document paths and mark as submitted if files exist."""
     from backend.services.doc_scanner import check_product_docs
-    result = check_product_docs(db, product_id)
-    return {"code": 0, "data": result, "message": "ok"}
+    import traceback, logging
+    logger = logging.getLogger(__name__)
+    try:
+        result = check_product_docs(db, product_id)
+        return {"code": 0, "data": result, "message": "ok"}
+    except Exception as e:
+        logger.error(f"Doc scan failed for product {product_id}: {e}\n{traceback.format_exc()}")
+        return {"code": 0, "data": {"scanned": 0, "auto_submitted": 0, "results": [], "error": str(e)}, "message": "ok"}
 
 
 # ── Product Block Diagrams ──
