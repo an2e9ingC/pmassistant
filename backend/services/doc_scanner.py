@@ -24,6 +24,38 @@ def _encode_url(url: str) -> str:
     return urllib.parse.urlunsplit((scheme, netloc, path, query, fragment))
 
 
+def _add_svn_auth(req: urllib.request.Request) -> urllib.request.Request:
+    """Add Basic auth header if SVN credentials are configured."""
+    import os
+    import base64
+    svn_user = os.environ.get("SVN_USERNAME", "")
+    svn_pass = os.environ.get("SVN_PASSWORD", "")
+    if svn_user and svn_pass:
+        cred = base64.b64encode(f"{svn_user}:{svn_pass}".encode()).decode()
+        req.add_header("Authorization", f"Basic {cred}")
+    return req
+
+
+def _relative_path(base_url: str, full_url: str) -> str:
+    """Extract the relative path of full_url from base_url.
+    Returns e.g. 'LNS677A-V010/05_file.rar' or '' if URLs don't share the same base.
+    """
+    import urllib.parse
+    base_parsed = urllib.parse.urlparse(base_url)
+    full_parsed = urllib.parse.urlparse(full_url)
+    if base_parsed.netloc != full_parsed.netloc:
+        return ""
+    base_path = base_parsed.path.rstrip("/") + "/"
+    full_path = full_parsed.path
+    if full_path.startswith(base_path):
+        return full_path[len(base_path):]
+    # Try with decoded paths (SVN PROPFIND returns percent-encoded, base may be unencoded)
+    from urllib.parse import unquote
+    if full_path.startswith(unquote(base_path)):
+        return full_path[len(unquote(base_path)):]
+    return ""
+
+
 def _glob_to_regex(pattern: str) -> str:
     """Convert a shell-style glob pattern to a regex pattern.
     *  → .*  (any sequence)
@@ -98,8 +130,11 @@ def _list_directory_svn(base_url: str) -> list:
     <getcontentlength/>
   </prop>
 </propfind>"""
+    # Depth: 2 to list files one level below wildcard directory
+    # (templates like */*-pattern.rar match files inside product subdirectories)
     req = urllib.request.Request(base_url, data=data.encode(), method="PROPFIND",
-                                  headers={"Depth": "1", "Content-Type": "application/xml"})
+                                  headers={"Depth": "2", "Content-Type": "application/xml"})
+    _add_svn_auth(req)
     try:
         resp = urllib.request.urlopen(req, timeout=HTTP_TIMEOUT)
         body = resp.read().decode("utf-8", errors="replace")
@@ -119,6 +154,7 @@ def _list_directory_html(base_url: str) -> list:
     base_url = _encode_url(base_url)
     try:
         req = urllib.request.Request(base_url)
+        _add_svn_auth(req)
         resp = urllib.request.urlopen(req, timeout=HTTP_TIMEOUT)
         body = resp.read().decode("utf-8", errors="replace")
         # Parse href from HTML directory listing
@@ -129,17 +165,19 @@ def _list_directory_html(base_url: str) -> list:
 
 
 def check_file_exists(url: str) -> bool:
-    """Check if a file exists at the given URL and has non-zero size.
+    """Check if a file exists at the given URL.
     Uses HTTP HEAD request. Requires http:// or https:// scheme.
+    Note: SVN WebDAV servers often return Content-Length: 0 on HEAD,
+    so we only check HTTP 2xx status.
     """
     if not _is_http_url(url):
         return False  # not a valid HTTP URL, cannot check
     url = _encode_url(url)
     try:
         req = urllib.request.Request(url, method="HEAD")
+        _add_svn_auth(req)
         resp = urllib.request.urlopen(req, timeout=HTTP_TIMEOUT)
-        content_length = resp.headers.get("Content-Length", "0")
-        return int(content_length) > 0
+        return resp.status >= 200 and resp.status < 300
     except Exception:
         return False
 
@@ -174,14 +212,11 @@ def scan_doc_path(doc_path: str) -> bool:
         # Can't list — try the base URL directly (some servers auto-index)
         return False
 
-    # Match entries against pattern
+    # Match entries against pattern (match against full entry path; .* is greedy)
     compiled = re.compile(file_regex, re.IGNORECASE)
     for entry in entries:
-        # Clean entry (remove base URL prefix, query params)
-        filename = entry.rstrip("/")
-        if "/" in filename:
-            filename = filename.rsplit("/", 1)[-1]
-        if compiled.match(filename):
+        rel_path = entry.rstrip("/").lstrip("/")
+        if compiled.match(rel_path):
             # Found a match — check if file is non-empty
             file_url = urljoin(base_url, entry) if not entry.startswith("http") else entry
             if check_file_exists(file_url):
@@ -204,35 +239,65 @@ def check_product_docs(db, product_id: int) -> dict:
 
     scanned = 0
     auto_submitted = 0
+    reverted = 0
     results = []
 
-    for doc in docs:
-        if doc.status == "submitted":
-            # Already submitted — skip scanning
-            continue
+    from datetime import datetime as _dt
 
-        # Priority: check user-uploaded location first, then template path
-        check_path = doc.location or doc.doc_path or ""
+    for doc in docs:
+        template_path = doc.doc_path or ""
+        check_path = doc.location or template_path
         if not check_path:
             continue
 
         scanned += 1
-        try:
-            exists = scan_doc_path(check_path)
-        except Exception as e:
-            logger.warning(f"Scan failed for doc {doc.id} ({doc.doc_name}): {e}")
-            exists = False
+        exists = False
+        mismatch = ""
+
+        # If user provided a location AND template has wildcards, validate location matches template
+        if doc.location and template_path:
+            template_base, template_regex = _parse_doc_path(template_path)
+            if template_regex:
+                # Parse location to get its relative path from template base
+                loc_base, loc_regex = _parse_doc_path(doc.location)
+                # Compute relative path: strip template base URL prefix from location
+                rel_path = _relative_path(template_base, doc.location)
+                if rel_path:
+                    compiled = re.compile(template_regex, re.IGNORECASE)
+                    if compiled.match(rel_path):
+                        # Location matches template pattern — now check file exists
+                        exists = check_file_exists(doc.location)
+                    else:
+                        exists = False
+                        mismatch = f"路径与模板不匹配：期望匹配 {template_path}，实际填写路径不符合通配符规则"
+                else:
+                    exists = False
+                    mismatch = f"路径不在模板基础目录下：模板基础路径为 {template_base}"
+            else:
+                # Template has no wildcards — just verify the location file exists
+                exists = scan_doc_path(doc.location)
+        else:
+            # No user location — use template wildcard to find files
+            try:
+                exists = scan_doc_path(check_path)
+            except Exception as e:
+                logger.warning(f"Scan failed for doc {doc.id} ({doc.doc_name}): {e}")
+
+        if mismatch:
+            logger.warning(f"[doc-scanner] doc#{doc.id} '{doc.doc_name}': {mismatch}")
 
         results.append({
             "doc_id": doc.id,
             "doc_name": doc.doc_name,
             "path": check_path,
+            "template_path": template_path,
             "found": exists,
+            "mismatch": mismatch,
+            "prev_status": doc.status,
         })
 
-        if exists:
-            from datetime import datetime as _dt
-            now = _dt.utcnow()
+        now = _dt.utcnow()
+        if exists and doc.status != "submitted":
             doc.status = "submitted"
             doc.completed_at = now
             doc.uploaded_by = doc.uploaded_by or "auto-scanner"
@@ -240,12 +305,23 @@ def check_product_docs(db, product_id: int) -> dict:
             doc.updated_by = "auto-scanner"
             doc.updated_at = now
             auto_submitted += 1
+        elif not exists and doc.status == "submitted":
+            # File no longer accessible or mismatched — revert to pending
+            doc.status = "pending"
+            doc.completed_at = None
+            doc.updated_by = "auto-scanner"
+            doc.updated_at = now
+            reverted += 1
+            reason = mismatch or "文件不存在或无法访问"
+            logger.warning(f"[doc-scanner] doc#{doc.id} '{doc.doc_name}' "
+                           f"reverted to pending: {reason}")
 
-    if auto_submitted > 0:
+    if auto_submitted > 0 or reverted > 0:
         db.commit()
 
     return {
         "scanned": scanned,
         "auto_submitted": auto_submitted,
+        "reverted": reverted,
         "results": results,
     }

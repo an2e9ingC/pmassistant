@@ -700,9 +700,9 @@ function _renderProdDocsInline(docs) {
         html += '<td rowspan="' + items.length + '" style="vertical-align:middle;text-align:center;font-weight:600;' + cellStyle + 'color:var(--accent);font-size:12px">' + escHtml(st) + '<br><span style="font-size:10px;color:var(--muted)">' + items.length + ' 项</span></td>';
       }
       // Status pill — system auto-detects
-      var hasError = !d.done && d.location;
+      var hasError = (!d.done && d.location) || d.mismatch;
       var statusHtml;
-      if (d.done) {
+      if (d.done && !d.mismatch) {
         statusHtml = '<span class="pill completed">已提交</span>';
       } else if (_prodDocScanning) {
         statusHtml = '<span class="pill" style="background:var(--warn-lt);color:var(--warn);animation:pulse 1s infinite">验证中</span>';
@@ -717,12 +717,16 @@ function _renderProdDocsInline(docs) {
         '<td style="font-size:12px;white-space:nowrap;' + cellStyle + '">' + escHtml(d.responsible_role || '—') + '</td>' +
         '<td style="white-space:nowrap;' + cellStyle + '">' + statusHtml + '</td>' +
         '<td style="font-size:11px;' + cellStyle + '">' + escHtml(typeLabels[d.doc_type] || '—') + '</td>' +
-        '<td style="font-size:12px;text-align:left;' + cellStyle + '">' + (d.location
-          ? (hasError
-            ? '<span style="color:var(--danger)">' + escHtml((d.location||'').replace(/^请提交到：/,'')) + '</span><br><span style="font-size:10px;color:var(--danger)">文件不存在或无法访问</span>'
-              + (d.doc_path ? '<br><span style="font-size:10px;color:var(--muted)">请提交到：' + escHtml(d.doc_path) + '</span>' : '')
-            : '<a href="' + escHtml(d.location) + '" target="_blank" style="color:var(--accent);text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">' + escHtml(d.location) + '</a>')
-          : (d.doc_path ? '<span style="color:var(--muted);font-style:italic">请提交到：' + escHtml(d.doc_path) + '</span>' : '—')) + '</td>' +
+        '<td style="font-size:12px;text-align:left;' + cellStyle + '">' + (d.mismatch
+          ? '<span style="color:var(--danger)">' + escHtml((d.location||'').replace(/^请提交到：/,'')) + '</span><br><span style="font-size:10px;color:var(--danger)">' + escHtml(d.mismatch) + '</span>'
+          : (d.location
+            ? (hasError
+              ? '<span style="color:var(--danger)">' + escHtml((d.location||'').replace(/^请提交到：/,'')) + '</span><br><span style="font-size:10px;color:var(--danger)">文件不存在或无法访问</span>'
+              : '<a href="' + escHtml(d.location) + '" target="_blank" style="color:var(--accent);text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">' + escHtml(d.location) + '</a>')
+            : (d.doc_path ? '<span style="color:var(--muted);font-style:italic">请提交到：' + escHtml(d.doc_path) + '</span>' : '—'))) +
+          // Debug: always show template path below
+          (d.doc_path && d.location ? '<br><span style="font-size:10px;color:var(--muted)">模板: ' + escHtml(d.doc_path) + '</span>' : '') +
+        '</td>' +
         '<td style="font-size:11px;color:var(--muted);white-space:nowrap;' + cellStyle + '">' + escHtml(d.updated_at || '—') + '</td>' +
         '<td style="font-size:12px;color:var(--muted);' + cellStyle + '">' + escHtml(d.updated_by || '—') + '</td>' +
         '<td style="white-space:nowrap;text-align:center;' + cellStyle + '">' +

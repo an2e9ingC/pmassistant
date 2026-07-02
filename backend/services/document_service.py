@@ -986,6 +986,18 @@ def get_or_init_product_documents(db: Session, product_id: int) -> list[dict]:
 
             done = existing.status == "submitted"
             warn = existing.status == "pending"
+            # Check if location matches template wildcard pattern
+            mismatch = ""
+            if existing.location and existing.doc_path and ('*' in existing.doc_path or '?' in existing.doc_path):
+                import re as _re
+                from backend.services.doc_scanner import _parse_doc_path, _relative_path
+                t_base, t_regex = _parse_doc_path(existing.doc_path)
+                if t_regex:
+                    rel = _relative_path(t_base, existing.location)
+                    if not rel:
+                        mismatch = f"路径不在模板目录下（模板: {existing.doc_path}）"
+                    elif not _re.compile(t_regex, _re.IGNORECASE).match(rel):
+                        mismatch = f"路径与模板不匹配，期望通配符: {existing.doc_path}"
             results.append({
                 "id": existing.id,
                 "template_id": tpl.id,
@@ -1000,6 +1012,7 @@ def get_or_init_product_documents(db: Session, product_id: int) -> list[dict]:
                 "done": done,
                 "warn": warn,
                 "location": existing.location or "",
+                "mismatch": mismatch,
                 "uploaded_by": existing.uploaded_by or "",
                 "uploaded_at": to_local_str(existing.uploaded_at) if existing.uploaded_at else "",
                 "completed_at": to_local_str(existing.completed_at) if existing.completed_at else "",

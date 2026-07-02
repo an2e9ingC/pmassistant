@@ -309,20 +309,26 @@ class SyncService:
                     products = db.query(PmaProduct).all()
                     total_scanned = 0
                     total_submitted = 0
+                    total_reverted = 0
                     failed = 0
                     for prod in products:
                         try:
                             r = check_product_docs(db, prod.id)
                             total_scanned += r.get("scanned", 0)
                             total_submitted += r.get("auto_submitted", 0)
+                            total_reverted += r.get("reverted", 0)
                         except Exception:
                             failed += 1
                     timings["svn"] = round(time.time() - t0, 1)
+                    parts = [f"扫描{total_scanned}个", f"自动提交{total_submitted}个"]
+                    if total_reverted > 0:
+                        parts.append(f"回退{total_reverted}个")
                     svn_summary = {
                         "status": "success",
-                        "summary": f"扫描{total_scanned}个 / 自动提交{total_submitted}个",
+                        "summary": " / ".join(parts),
                         "scanned": total_scanned,
                         "auto_submitted": total_submitted,
+                        "reverted": total_reverted,
                         "products": len(products),
                         "failed_products": failed,
                     }
