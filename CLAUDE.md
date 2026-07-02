@@ -5,6 +5,65 @@
 
 ---
 
+## 0. Code Discovery Protocol（代码发现协议 — 最高优先级）
+
+> **规则：进行任何代码探索时，必须优先使用 codebase-memory MCP 工具，再使用 grep/glob/Read。**
+
+### 工具选择决策树
+
+| 你想做什么 | 使用工具 | 说明 |
+|-----------|---------|------|
+| "这个功能在哪实现的" | `search_graph(query="...")` | BM25 全文搜索，camelCase 分词，结构重要性排序 |
+| "这个函数被谁调用 / 调用了谁" | `trace_path(mode="calls")` | 上下游调用链，支持 `direction="both"` |
+| "数据从 API 入口到数据库怎么流转" | `trace_path(mode="data_flow")` | 沿 CALLS + DATA_FLOWS 追踪参数/返回值传递 |
+| "看这个函数的完整源码" | `get_code_snippet(qualified_name)` | 精确源码，支持 `include_neighbors=true` 获取上下文 |
+| "项目怎么分层的 / 有哪些模块" | `get_architecture()` | 包结构、服务依赖、Leiden 社区检测（揭示实际架构边界） |
+| "有哪些 API 路由" | `search_graph(label="Route")` | 列出所有路由节点，含 HTTP 方法 + 路径 |
+| "搜索某个字符串出现在哪里" | `search_code(pattern="...")` | 图谱增强 grep：按函数去重、按重要性排序 |
+| "复杂关联查询" | `query_graph(query="MATCH ...")` | Cypher 图查询，适合聚合分析、热点路径检测 |
+| "跨服务调用链" | `trace_path(mode="cross_service")` | 通过 Route 节点追踪 HTTP/异步跨服务调用 |
+
+### 典型工作流
+
+```
+1. search_graph(query="关键词")  → 定位相关函数/类/路由
+2. trace_path(function_name, mode="calls")  → 理解调用链，评估修改影响范围
+3. get_code_snippet(qualified_name)  → 获取精确源码
+4. （仅当需要查看非代码文件时）→ Read
+```
+
+### 性能热点检测
+
+排查性能问题时，用 Cypher 查询找出高复杂度热点：
+
+```
+query_graph("
+  MATCH (f:Function)
+  WHERE f.transitive_loop_depth >= 3 OR f.linear_scan_in_loop >= 1
+  RETURN f.qualified_name, f.transitive_loop_depth, f.linear_scan_in_loop, f.cyclomatic
+  ORDER BY f.transitive_loop_depth DESC
+")
+```
+
+- `transitive_loop_depth`：传递嵌套循环深度（O(n^k) 代理指标）
+- `linear_scan_in_loop`：循环内线性扫描次数（隐藏的 O(n²)）
+- `alloc_in_loop`：循环内内存分配
+- `cyclomatic`：圈复杂度
+
+### 索引维护
+
+项目已在 codebase-memory 中索引。重大重构或新增大量代码后，重新索引：
+
+```
+index_repository(repo_path="/home/xuchuan/workspace/pma", mode="moderate")
+```
+
+- `full`：全部文件 + 语义边（最全，最慢）
+- `moderate`：过滤后文件 + 语义边（推荐日常使用）
+- `fast`：过滤后文件，无语义边（最快）
+
+---
+
 ## 1. 项目概述
 
 ### 架构
@@ -128,7 +187,10 @@ NAS 文件 ───────────┘
 ## 5. Bug 分析流程（快速参考）
 
 1. 先查系统日志：`tail -50 data/pma-$PORT.log`
-2. 有堆栈 → 分析修复
+2. 有堆栈 → 定位出错函数 → 用 MCP 追踪上下游：
+   - `trace_path(function_name, mode="data_flow")` — 追踪数据流转，定位数据在哪一层出错
+   - `trace_path(function_name, mode="calls", direction="inbound")` — 查看调用者，评估修复影响范围
+   - `search_code(pattern="同类模式")` — 扫描同类问题
 3. 日志不足 → 先加日志（`logger.exception` / `logger.error`）→ 复现 → 修复
 4. 外部 API 调用记录：URL + 状态码 + 响应预览（出错时）
 5. 不在日志中记录密码/Token
