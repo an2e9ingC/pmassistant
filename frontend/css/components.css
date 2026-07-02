@@ -292,6 +292,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
   min-width: 220px;
 }
 .src-tag-tip.show { display: block; }
+.src-tag:hover .src-tag-tip { display: block; }
 
 .alert-dot.r { background: var(--danger); }
 .alert-dot.y { background: var(--warn); }

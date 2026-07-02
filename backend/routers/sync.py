@@ -131,6 +131,18 @@ def sync_sources(db: Session = Depends(get_db), _=Depends(get_current_user)):
     zentao_status = "pending"
     if zentao_log:
         zentao_status = zentao_log.status if zentao_log.status != "running" else "ok"
+    # Build sync result detail from latest SyncLog entries
+    zentao_detail = "暂无同步数据"
+    if zentao_log:
+        entity_types = ["users", "projects", "executions", "tasks", "bugs"]
+        parts = []
+        for et in entity_types:
+            log = db.query(SyncLog).filter(SyncLog.entity_type == et).order_by(SyncLog.started_at.desc()).first()
+            if log and log.items_fetched is not None:
+                label = {"users": "用户", "projects": "项目", "executions": "执行", "tasks": "任务", "bugs": "Bug"}.get(et, et)
+                parts.append(f"{label}{log.items_fetched}")
+        if parts:
+            zentao_detail = " / ".join(parts)
     sources.append({
         "key": "zentao",
         "name": "禅道",
@@ -138,7 +150,7 @@ def sync_sources(db: Session = Depends(get_db), _=Depends(get_current_user)):
         "sync_status": zentao_status,
         "last_sync": zentao_log.finished_at.isoformat() if (zentao_log and zentao_log.finished_at) else None,
         "description": "项目管理（项目/迭代/任务/Bug/发布版本）",
-        "detail": f"API: {settings.ZENTAO_BASE_URL}\n账号: {settings.ZENTAO_AUTH_ACCOUNT}",
+        "detail": zentao_detail,
     })
 
     # GitLab — configured if token is set; check latest release sync + validation
@@ -169,13 +181,16 @@ def sync_sources(db: Session = Depends(get_db), _=Depends(get_current_user)):
         CachedRelease.gitlab_url_valid.is_(None),
     ).count()
 
-    detail_parts = [f"API: {settings.GITLAB_BASE_URL}", f"Token: {'已配置' if gitlab_configured else '未配置'}"]
-    if total_releases > 0:
-        detail_parts.append(f"发布版本: {total_releases}个")
+    gitlab_detail = "未配置Token"
+    if gitlab_configured:
+        parts = [f"发布版本{total_releases}个"]
         if invalid_count > 0:
-            detail_parts.append(f"链接无效: {invalid_count}个")
+            parts.append(f"链接无效{invalid_count}个")
         if unchecked_count > 0:
-            detail_parts.append(f"待校验: {unchecked_count}个")
+            parts.append(f"待校验{unchecked_count}个")
+        valid_count = total_releases - invalid_count - unchecked_count
+        parts.append(f"有效{max(0, valid_count)}个")
+        gitlab_detail = " / ".join(parts)
 
     sources.append({
         "key": "gitlab",
@@ -184,12 +199,11 @@ def sync_sources(db: Session = Depends(get_db), _=Depends(get_current_user)):
         "sync_status": gitlab_sync_status,
         "last_sync": gitlab_last_sync,
         "description": "代码仓库（发布版本校验）" if gitlab_configured else "代码仓库（未配置Token）",
-        "detail": "\n".join(detail_parts),
+        "detail": gitlab_detail,
     })
 
     # NAS — not yet integrated
     nas_host = os.environ.get("NAS_HOST", "")
-    nas_path = os.environ.get("NAS_PATH", "")
     sources.append({
         "key": "nas",
         "name": "NAS",
@@ -197,20 +211,33 @@ def sync_sources(db: Session = Depends(get_db), _=Depends(get_current_user)):
         "sync_status": "pending",
         "last_sync": None,
         "description": "文件存储（售前项目检测、交付文档）",
-        "detail": f"主机: {nas_host or '未配置'}\n路径: {nas_path or '未配置'}",
+        "detail": "未配置NAS路径" if not nas_host else "已配置，待首次同步",
     })
 
     # SVN — document scanning
     svn_url = os.environ.get("SVN_BASE_URL", "")
     svn_configured = bool(svn_url)
+    # Get last SVN scan result from sync log
+    svn_sync_log = (
+        db.query(SyncLog)
+        .filter(SyncLog.entity_type == "svn")
+        .order_by(SyncLog.started_at.desc())
+        .first()
+    )
+    svn_detail = "未配置SVN地址"
+    if svn_configured:
+        if svn_sync_log and svn_sync_log.items_fetched is not None:
+            svn_detail = f"扫描{svn_sync_log.items_fetched}个 / 自动提交{svn_sync_log.items_created or 0}个"
+        else:
+            svn_detail = "已配置，待首次同步"
     sources.append({
         "key": "svn",
         "name": "SVN",
         "configured": svn_configured,
-        "sync_status": "pending",
-        "last_sync": None,
+        "sync_status": svn_sync_log.status if svn_sync_log else "pending",
+        "last_sync": svn_sync_log.finished_at.isoformat() if (svn_sync_log and svn_sync_log.finished_at) else None,
         "description": "版本管理（产品文档自动扫描）",
-        "detail": f"地址: {svn_url or '未配置'}\n用户: {os.environ.get('SVN_USERNAME', '未配置')}",
+        "detail": svn_detail,
     })
 
     return {"code": 0, "data": sources, "message": "ok"}

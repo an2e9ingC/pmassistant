@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="app-version" content="v2026.07.02-beta11">
+<meta name="app-version" content="v2026.07.02-beta12">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>PM Assistant · 集成禅道 & GitLab</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -210,10 +210,10 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
     <span id="branch-badge" title="当前开发分支">trunk</span>
     <div class="topbar-right">
       <div class="src-tags" id="topbar-sources">
-        <span class="src-tag pending" id="src-zentao" onclick="toggleSrcTip('zentao',event)"><span class="src-tag-label">禅道 待同步</span><span class="src-tag-tip" id="src-zentao-tip"></span></span>
-        <span class="src-tag pending" id="src-gitlab" onclick="toggleSrcTip('gitlab',event)"><span class="src-tag-label">GitLab 未配置</span><span class="src-tag-tip" id="src-gitlab-tip"></span></span>
-        <span class="src-tag pending" id="src-nas" onclick="toggleSrcTip('nas',event)"><span class="src-tag-label">NAS 未配置</span><span class="src-tag-tip" id="src-nas-tip"></span></span>
-        <span class="src-tag pending" id="src-svn" onclick="toggleSrcTip('svn',event)"><span class="src-tag-label">SVN 未配置</span><span class="src-tag-tip" id="src-svn-tip"></span></span>
+        <span class="src-tag pending" id="src-zentao"><span class="src-tag-label">禅道</span><span class="src-tag-tip" id="src-zentao-tip"></span></span>
+        <span class="src-tag pending" id="src-gitlab"><span class="src-tag-label">GitLab</span><span class="src-tag-tip" id="src-gitlab-tip"></span></span>
+        <span class="src-tag pending" id="src-nas"><span class="src-tag-label">NAS</span><span class="src-tag-tip" id="src-nas-tip"></span></span>
+        <span class="src-tag pending" id="src-svn"><span class="src-tag-label">SVN</span><span class="src-tag-tip" id="src-svn-tip"></span></span>
         <div class="src-sync-wrap" id="src-sync-btn" style="display:none">
           <button class="src-sync-btn" onclick="toggleSyncMenu(event)" title="数据源配置">
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1139,12 +1139,24 @@ async function triggerSync() {
     var nIcon = ns.status === 'skipped' ? '⊘' : '—';
     msgLines.push('NAS ' + nIcon + ' ' + (ns.summary || ns.status || '未执行'));
 
+    // SVN
+    var ss = d.svn_summary || {};
+    var sIcon = ss.status === 'success' ? '✓' : (ss.status === 'failed' ? '✗' : (ss.status === 'skipped' ? '⊘' : '—'));
+    msgLines.push('SVN ' + sIcon + ' ' + (ss.summary || ss.status || '未执行'));
+
     var toastType = (d.zentao_summary && d.zentao_summary.status === 'failed') ? 'error' : 'success';
     showToast('数据同步完成\n' + msgLines.join('\n'), toastType);
     if (_srcStates) {
-      var zs = d.zentao_summary || {};
-      _srcStates.zentao = zs.status === 'success' ? 'ok' : (zs.status === 'failed' ? 'err' : 'warn');
+      var zs2 = d.zentao_summary || {};
+      _srcStates.zentao = zs2.status === 'success' ? 'ok' : (zs2.status === 'failed' ? 'err' : 'warn');
       _srcStates.gitlab = gs.status === 'success' ? 'ok' : (gs.status === 'failed' ? 'err' : 'warn');
+      _srcStates.nas = ns.status === 'success' ? 'ok' : (ns.status === 'failed' ? 'err' : 'warn');
+      _srcStates.svn = ss.status === 'success' ? 'ok' : (ss.status === 'failed' ? 'err' : 'warn');
+      // Save sync overview for hover tooltip
+      _srcSyncMsg.zentao = zs2.status === 'success' ? parts.join('\n') : (zs2.summary || '同步失败');
+      _srcSyncMsg.gitlab = (gs.summary || gs.status || '');
+      _srcSyncMsg.nas = (ns.summary || ns.status || '');
+      _srcSyncMsg.svn = (ss.summary || ss.status || '');
       renderSourceTags();
     }
     updateLinkStatus();

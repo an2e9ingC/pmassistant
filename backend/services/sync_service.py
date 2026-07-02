@@ -296,13 +296,61 @@ class SyncService:
             nas_summary = {"status": "skipped", "summary": "未配置NAS路径"}
             _auto_sync_notify["nas"] = nas_summary
 
+            # ── Source 4: SVN (product document scanning) ──
+            svn_summary = {}
+            svn_url = os.environ.get("SVN_BASE_URL", "")
+            svn_enabled = os.environ.get("SVN_ENABLED", "true").lower() in ("1", "true", "yes")
+            if svn_url and svn_enabled:
+                try:
+                    _sync_progress["phase"] = "SVN文档扫描"
+                    t0 = time.time()
+                    from backend.services.doc_scanner import check_product_docs
+                    from backend.models.zentao import PmaProduct
+                    products = db.query(PmaProduct).all()
+                    total_scanned = 0
+                    total_submitted = 0
+                    failed = 0
+                    for prod in products:
+                        try:
+                            r = check_product_docs(db, prod.id)
+                            total_scanned += r.get("scanned", 0)
+                            total_submitted += r.get("auto_submitted", 0)
+                        except Exception:
+                            failed += 1
+                    timings["svn"] = round(time.time() - t0, 1)
+                    svn_summary = {
+                        "status": "success",
+                        "summary": f"扫描{total_scanned}个 / 自动提交{total_submitted}个",
+                        "scanned": total_scanned,
+                        "auto_submitted": total_submitted,
+                        "products": len(products),
+                        "failed_products": failed,
+                    }
+                    logger.info(f"[SVN] 文档扫描完成: {svn_summary['summary']}（{len(products)}个产品）")
+                    svn_log = SyncLog(started_at=datetime.now(timezone.utc), finished_at=datetime.now(timezone.utc),
+                                      entity_type="svn", status="success",
+                                      items_fetched=total_scanned, items_created=total_submitted)
+                    db.add(svn_log); db.commit()
+                    _auto_sync_notify["svn"] = svn_summary
+                except Exception as e:
+                    logger.error(f"[SVN] 文档扫描失败: {e}")
+                    svn_summary = {"status": "failed", "summary": str(e)[:100]}
+                    svn_log = SyncLog(started_at=datetime.now(timezone.utc), finished_at=datetime.now(timezone.utc),
+                                      entity_type="svn", status="failed", error_message=str(e)[:200])
+                    db.add(svn_log); db.commit()
+                    _auto_sync_notify["svn"] = svn_summary
+            else:
+                svn_summary = {"status": "skipped", "summary": "未配置SVN地址"}
+                _auto_sync_notify["svn"] = svn_summary
+
             timings["total"] = round(time.time() - t_start, 1)
 
-            logger.info(f"Sync completed in {timings['total']}s | 禅道:{zentao_summary.get('status','?')} GitLab:{gitlab_summary.get('status','?')} NAS:{nas_summary.get('status','?')}")
+            logger.info(f"Sync completed in {timings['total']}s | 禅道:{zentao_summary.get('status','?')} GitLab:{gitlab_summary.get('status','?')} NAS:{nas_summary.get('status','?')} SVN:{svn_summary.get('status','?')}")
             results["timings"] = timings
             results["zentao_summary"] = zentao_summary
             results["gitlab_summary"] = gitlab_summary
             results["nas_summary"] = nas_summary
+            results["svn_summary"] = svn_summary
 
             # Post-sync: check stage name mismatches
             mismatch = _check_stage_mismatches(db)

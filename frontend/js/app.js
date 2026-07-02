@@ -508,6 +508,7 @@ function toggleTheme() {
 
 var _srcStates = { zentao: 'pending', gitlab: 'pending', nas: 'pending', svn: 'pending' };
 var _srcDetails = { zentao: '', gitlab: '', nas: '', svn: '' };
+var _srcSyncMsg = {};
 
 function updateLinkStatus() {
   API.get('/sync/sources').then(function(sources) {
@@ -526,76 +527,39 @@ function updateLinkStatus() {
         _srcStates[key] = 'warn';
       }
     });
-    renderSourceTags();
-    // Pre-fill tips with permission-aware detail
+    // Apply permission filter to tooltip detail
     var user = getCurrentUser();
     var perms = (user && user.permissions) ? user.permissions.split(',') : [];
     var isAdmin = user && (user.role === 'admin' || perms.indexOf('admin') >= 0);
     var canSeeDetail = isAdmin || perms.indexOf('project_edit') >= 0 || perms.indexOf('doc_template') >= 0;
     sources.forEach(function(s) {
-      var tip = document.getElementById('src-' + s.key + '-tip');
-      if (tip) {
-        tip.textContent = canSeeDetail ? (s.detail || getSimpleStatus(s)) : getSimpleStatus(s);
-      }
+      // Store config detail for tooltip fallback (permission-aware)
+      _srcDetails[s.key] = canSeeDetail ? (s.detail || '') : '';
     });
+    renderSourceTags();
   }).catch(function(e) {
     console.error('updateLinkStatus failed:', e);
   });
 }
 
-function toggleSrcTip(key, e) {
-  e.stopPropagation();
-  var tip = document.getElementById('src-' + key + '-tip');
-  if (!tip) return;
-  if (!tip.textContent) {
-    tip.textContent = '加载中...';
-    var user = getCurrentUser();
-    var perms = (user && user.permissions) ? user.permissions.split(',') : [];
-    var isAdmin = user && (user.role === 'admin' || perms.indexOf('admin') >= 0);
-    var canSeeDetail = isAdmin || perms.indexOf('project_edit') >= 0 || perms.indexOf('doc_template') >= 0;
-    API.get('/sync/sources').then(function(sources) {
-      var s = sources.find(function(x) { return x.key === key; });
-      if (!s) { tip.textContent = '暂无信息'; return; }
-      if (canSeeDetail) {
-        tip.textContent = s.detail || getSimpleStatus(s);
-      } else {
-        tip.textContent = getSimpleStatus(s);
-      }
-    }).catch(function() { tip.textContent = '获取失败'; });
-  }
-  document.querySelectorAll('.src-tag-tip.show').forEach(function(t) { if (t !== tip) t.classList.remove('show'); });
-  tip.classList.toggle('show');
-}
-
-function getSimpleStatus(s) {
-  var names = { zentao: '禅道', gitlab: 'GitLab', nas: 'NAS' };
-  var name = names[s.key] || s.key;
-  if (!s.configured) return name + ' 未配置';
-  if (s.sync_status === 'success') return name + ' 连接正常';
-  if (s.sync_status === 'failed') return name + ' 连接异常';
-  return name + ' 待同步';
-}
 document.addEventListener('click', function(e) {
   if (!e.target.closest('.src-tag')) document.querySelectorAll('.src-tag-tip.show').forEach(function(t) { t.classList.remove('show'); });
 });
 
 function renderSourceTags() {
   var names = { zentao: '禅道', gitlab: 'GitLab', nas: 'NAS', svn: 'SVN' };
-  var reasons = {
-    zentao: { ok: '', warn: '未同步', err: '同步失败', pending: '待同步' },
-    gitlab: { ok: '', warn: '未同步', err: '同步失败', pending: '未配置' },
-    nas:    { ok: '', warn: '未同步', err: '同步失败', pending: '未配置' },
-    svn:    { ok: '', warn: '未扫描', err: '连接失败', pending: '未配置' },
-  };
 
   ['zentao', 'gitlab', 'nas', 'svn'].forEach(function(key) {
     var el = document.getElementById('src-' + key);
     if (!el) return;
     var state = _srcStates[key] || 'pending';
     el.className = 'src-tag ' + state;
-    var reason = reasons[key][state] || '';
+    // Label: source name only; status/details in hover tooltip
     var label = el.querySelector('.src-tag-label');
-    if (label) label.textContent = names[key] + (reason ? ' ' + reason : '');
+    if (label) label.textContent = names[key];
+    // Tooltip: sync overview > config detail > fallback
+    var tip = el.querySelector('.src-tag-tip');
+    if (tip) tip.textContent = _srcSyncMsg[key] || _srcDetails[key] || names[key] + ' 连接状态未知';
   });
 }
 
