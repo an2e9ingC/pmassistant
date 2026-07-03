@@ -253,7 +253,9 @@ function _renderTaskRow(t, stageMap) {
     '<td>' + _renderPriority(t.priority) + '</td>' +
     '<td style="font-size:12px">' + escHtml(assigneeName) + '</td>' +
     '<td>' + (t.estimate_hours || 0).toFixed(1) + 'h</td>' +
-    '<td style="font-size:12px">' + (t.consumed_hours || 0).toFixed(1) + 'h</td>' +
+    '<td style="font-size:12px">' + (t.consumed_hours || 0).toFixed(1) + 'h' +
+      (function() { var orig = t.original_estimate_hours || t.estimate_hours || 0; var ot = (t.consumed_hours || 0) - orig; return ot > 0 ? ' <span style="color:var(--warn);font-size:9px">+'+ot.toFixed(1)+'</span>' : ''; })() +
+    '</td>' +
     '<td>' + renderProgressCircle(progressPct, 26, {label:''}) + '</td>' +
     '<td style="color:' + (overdue ? 'var(--danger)' : '') + '">' + (t.due_date || '-') + '</td>' +
     '<td>' +
@@ -346,15 +348,14 @@ function _showTaskView(t) {
         '<div><span style="' + _lbl + '">优先级</span><div style="margin-top:3px">' + _renderPriority(t.priority || 'medium') + '</div></div>' +
         '<div><span style="' + _lbl + '">进度</span><div style="margin-top:2px">' + renderProgressCircle(t.progress || 0, 30, {label:''}) + '</div></div>' +
         (function() {
-        var orig = t.original_estimate_hours || 0;
+        var orig = t.original_estimate_hours || t.estimate_hours || 0;
         var est = t.estimate_hours || 0;
         var cons = t.consumed_hours || 0;
-        var over = cons - est;
+        var overtime = cons - orig;
         var h = '<div><span style="' + _lbl + '">工时</span><div style="' + _val + '">';
-        if (orig > 0) h += '<span style="font-size:10px;color:var(--muted)">原计划 ' + orig.toFixed(1) + 'h</span><br>';
         h += '预估 ' + est.toFixed(1) + 'h / 实际 ' + cons.toFixed(1) + 'h';
-        if (over > 0 && t.status !== 'done' && t.status !== 'closed') {
-          h += ' <span style="color:var(--warn);font-size:11px">(超' + over.toFixed(1) + 'h)</span>';
+        if (overtime > 0 && t.status !== 'done' && t.status !== 'closed') {
+          h += '<br><span style="color:var(--warn);font-size:11px">超时 ' + overtime.toFixed(1) + 'h (原计划 ' + orig.toFixed(1) + 'h)</span>';
         }
         h += '</div></div>';
         return h;
@@ -550,20 +551,22 @@ function _showTaskForm(title, task) {
   bodyHtml = '<div style="max-height:75vh;overflow-y:auto;padding-right:4px">' + bodyHtml + '</div>';
   openDialog(title, bodyHtml, buttons, {maxWidth: '60%'});
 
-  // Pre-fill project and assignee
-  _tfProjectId = _taskProjectId;
+  // Pre-fill project, assignee, and stage from task data (edit mode)
+  _tfProjectId = t.project_id || _taskProjectId;
   _tfAssigneeId = t.assignee_id || null;
-  setTimeout(function() {
-    var tfInput = document.getElementById('tf-project-input');
-    if (tfInput && _taskProjectName) tfInput.value = _taskProjectName;
-    if (_tfAssigneeId) {
-      // Pre-fill assignee name (loaded async by combo)
-      loadAllUsers().then(function() {
-        var u = _allUsers.find(function(x) { return x.id == _tfAssigneeId; });
-        if (u) { var inp = document.getElementById('tf-assignee-input'); if (inp) inp.value = u.name; }
-      });
-    }
-  }, 100);
+  if (isEdit && t.project_id) {
+    // Set project name from task data
+    var projName = (t.project_code ? '[' + t.project_code + '] ' : '') + (t.project_name || '');
+    setTimeout(function() {
+      var pi = document.getElementById('tf-project-input');
+      if (pi) pi.value = projName;
+      // Pre-fill assignee name
+      if (_tfAssigneeId && t.assignee_name) {
+        var ai = document.getElementById('tf-assignee-input');
+        if (ai) ai.value = t.assignee_name;
+      }
+    }, 50);
+  }
 
 function _loadTfExecutions(projectId, selectedId) {
   API.get('/projects/' + projectId + '/gantt').then(function(data) {
@@ -587,9 +590,10 @@ function _loadTfExecutions(projectId, selectedId) {
 }
 
   // Async: load executions for project with task's current stage pre-selected
-  if (_taskProjectId) {
+  var projId = t.project_id || _taskProjectId;
+  if (projId) {
     var curExecVal = t.execution_id ? String(t.execution_id) : (t.stage_name ? '_' + t.stage_name : '');
-    _loadTfExecutions(_taskProjectId, curExecVal);
+    _loadTfExecutions(projId, curExecVal);
   }
 
   // Async: load worklogs and comments (edit mode)
@@ -952,14 +956,22 @@ function _renderWorklogTable(logs, taskId) {
 }
 
 function openWorklogDialog(taskId) {
-  // Load current progress
   API.get('/tasks/'+taskId).then(function(task) {
     var today = fmtLocalDate();
+    var est = task.estimate_hours || 0;
+    var cons = task.consumed_hours || 0;
+    var showOver = est > 0 && cons >= est;
+    var overBudgetHint = '<div id="wl-over-budget" style="margin-bottom:8px;padding:8px;background:var(--warn-lt);border-radius:6px;border:1px solid var(--warn);' + (showOver ? '' : 'display:none') + '">' +
+      '<div style="font-size:11px;color:var(--warn);margin-bottom:4px">已超预估工时 (已耗时 ' + cons.toFixed(1) + 'h / 预估 ' + est.toFixed(1) + 'h)</div>' +
+      '<label style="font-size:11px;color:var(--muted)">预计还需要 (h) <span style="color:var(--danger)">*必填</span></label>' +
+      '<input class="search-inp" id="wl-remaining" type="number" step="0.5" min="0" style="width:100%;box-sizing:border-box;margin-top:2px" placeholder="还需多少小时完成？">' +
+    '</div>';
     var html = '<div>' +
+      overBudgetHint +
       '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">日期 *</label>' +
         '<input class="search-inp" id="wl-date" type="date" required value="'+today+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
       '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工时(h) *</label>' +
-        '<input class="search-inp" id="wl-hours" type="number" step="0.5" min="0.5" required value="1" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
+        '<input class="search-inp" id="wl-hours" type="number" step="0.5" min="0.5" required value="1" style="width:100%;box-sizing:border-box;margin-top:2px" oninput="_wlCheckOverBudget(' + taskId + ')"></div>' +
       '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">进度(%) * 当前: '+(task.progress||0)+'%</label>' +
         '<input class="search-inp" id="wl-progress" type="number" min="0" max="100" step="5" required value="'+(task.progress||0)+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
       '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工作描述 *</label>' +
@@ -1000,11 +1012,27 @@ function openWorklogEditDialog(wlId, taskId) {
   }).catch(function(e){showToast('加载失败: '+(e.message||''),'error');});
 }
 
+function _wlCheckOverBudget(taskId) {
+  var hoursEl = document.getElementById('wl-hours');
+  var obEl = document.getElementById('wl-over-budget');
+  if (!hoursEl || !obEl) return;
+  var h = parseFloat(hoursEl.value) || 0;
+  // Fetch current consumed to check if new hours exceed estimate
+  API.get('/tasks/'+taskId).then(function(task) {
+    var cons = (task.consumed_hours || 0);
+    var est = task.estimate_hours || 0;
+    if (est > 0 && cons + h > est) {
+      obEl.style.display = '';
+    }
+  }).catch(function(){});
+}
+
 async function submitWorklog(taskId) {
   var hours = parseFloat(document.getElementById('wl-hours').value);
   var progress = parseInt(document.getElementById('wl-progress').value);
   var desc = document.getElementById('wl-desc').value.trim();
   var date = document.getElementById('wl-date').value;
+  var remainingEl = document.getElementById('wl-remaining');
   if (!date) { showToast('请选择日期', 'error'); return; }
   if (!hours || hours <= 0) { showToast('请输入有效的工时数', 'error'); return; }
   if (isNaN(progress) || progress < 0 || progress > 100) { showToast('请输入有效的进度(0-100)', 'error'); return; }
@@ -1012,6 +1040,16 @@ async function submitWorklog(taskId) {
   try {
     await API.post('/worklogs', {task_id:taskId, hours:hours, date:date, description:desc});
     await API.put('/tasks/'+taskId, {progress:progress});
+    // If over budget and remaining hours specified, extend estimate
+    if (remainingEl && remainingEl.value) {
+      var remaining = parseFloat(remainingEl.value);
+      if (remaining > 0) {
+        var task = await API.get('/tasks/'+taskId);
+        var newConsumed = (task.consumed_hours || 0) + hours;
+        var total = newConsumed + remaining;
+        await API.post('/tasks/'+taskId+'/extend-estimate', {additional_hours: total - (task.estimate_hours || 0)});
+      }
+    }
     showToast('工时已记录', 'success');
     _closeTaskDialog();
     _refreshTaskWorklogs(taskId);
