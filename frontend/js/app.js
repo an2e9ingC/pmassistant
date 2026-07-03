@@ -1346,9 +1346,12 @@ function initUserCenter() {
     '<div class="dash-grid-task">' +
       '<div>' +
         '<div class="sec-hd"><h2 id="uc-list-heading">我的任务</h2>' +
-          '<div class="view-switch">' +
-            '<button class="view-switch-btn active" onclick="_ucSwitchView(\'tasks\')">任务</button>' +
-            '<button class="view-switch-btn" onclick="_ucSwitchView(\'bugs\')">Bug</button>' +
+          '<div style="display:flex;align-items:center;gap:10px">' +
+            '<div class="view-switch">' +
+              '<button class="view-switch-btn active" onclick="_ucSwitchView(\'tasks\')">任务</button>' +
+              '<button class="view-switch-btn" onclick="_ucSwitchView(\'bugs\')">Bug</button>' +
+            '</div>' +
+            '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="_ucNewTask()">+ 新建任务</button>' +
           '</div>' +
         '</div>' +
         '<div class="task-filter-bar" id="uc-filter-bar"></div>' +
@@ -1392,7 +1395,7 @@ function _ucLoadTasks(user) {
     // Re-render calendar with pie charts once task data is available
     _ucLoadCalendar(user);
   }).catch(function() {
-    document.getElementById('uc-table-tbody').innerHTML = '<tr><td colspan="11"><div class="empty-state">加载失败</div></td></tr>';
+    document.getElementById('uc-table-tbody').innerHTML = '<tr><td colspan="12"><div class="empty-state">加载失败</div></td></tr>';
   });
 }
 
@@ -1415,7 +1418,7 @@ function _ucOpenTask(taskId) {
 }
 
 function _renderUcTableHead() {
-  document.getElementById('uc-table-head').innerHTML = '<tr><th>编号</th><th>项目名称</th><th>任务</th><th>阶段</th><th>状态</th><th>优先级</th><th>负责人</th><th>预估</th><th>实际</th><th>进度</th><th>截止</th></tr>';
+  document.getElementById('uc-table-head').innerHTML = '<tr><th>编号</th><th>项目名称</th><th>任务</th><th>阶段</th><th>状态</th><th>优先级</th><th>负责人</th><th>预估</th><th>实际</th><th>进度</th><th>截止</th><th>操作</th></tr>';
 }
 
 function _renderUcTaskTable() {
@@ -1425,7 +1428,7 @@ function _renderUcTaskTable() {
     return true;
   });
   var tbody = document.getElementById('uc-table-tbody');
-  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state">暂无匹配任务</div></td></tr>'; return; }
+  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="12"><div class="empty-state">暂无匹配任务</div></td></tr>'; return; }
   tbody.innerHTML = filtered.map(function(t) {
     var stageName = t.stage_name || t.execution_name || '-';
     var pct = t.progress || 0;
@@ -1443,6 +1446,10 @@ function _renderUcTaskTable() {
       '<td style="font-size:12px">'+(t.consumed_hours||0).toFixed(1)+'h</td>' +
       '<td>'+renderProgressCircle(pct,22,{label:''})+'</td>' +
       '<td style="font-size:12px;color:'+(overdue?'var(--danger)':'')+'">'+(t.due_date||'-')+'</td>' +
+      '<td onclick="event.stopPropagation()">' +
+        iconEdit('_ucOpenTask('+t.id+')', '查看/编辑') +
+        iconDelete('_ucDeleteTask('+t.id+')', '删除') +
+      '</td>' +
     '</tr>';
   }).join('');
 }
@@ -1456,6 +1463,19 @@ function _renderUcStats() {
     '<div class="profile-stat hours"><div class="profile-stat-val" id="uc-week-total">...</div><div class="profile-stat-lbl">本周工时</div></div>';
 }
 
+function _ucNewTask() {
+  if (typeof openTaskDialog === 'function') { openTaskDialog(); }
+  else if (typeof loadViewScript === 'function') { loadViewScript('/js/tasks.js?v=' + APP_VERSION, function() { openTaskDialog(); }); }
+}
+async function _ucDeleteTask(taskId) {
+  if (!confirm('确定删除此任务？')) return;
+  try {
+    await API.del('/tasks/' + taskId);
+    showToast('已删除', 'success');
+    var user = getCurrentUser();
+    if (user) _ucLoadTasks(user);
+  } catch(e) { showToast('删除失败: ' + (e.message || ''), 'error'); }
+}
 function _fmtLocalDate(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 
 function _ucLoadCalendar(user) {
