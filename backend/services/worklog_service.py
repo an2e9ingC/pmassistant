@@ -11,8 +11,8 @@ from backend.database import to_local_str
 
 
 def _auto_update_task_status(db: Session, task_id: int):
-    """Auto-transition task status based on consumed/estimate hours ratio.
-    Only upgrades (todo→in_progress→done), never downgrades or overrides manual states.
+    """Auto-transition task status: todo→in_progress, over-budget→review.
+    Over-budget tasks go to 'review' for user decision instead of auto-completing.
     """
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task or not task.estimate_hours or task.estimate_hours <= 0:
@@ -21,9 +21,11 @@ def _auto_update_task_status(db: Session, task_id: int):
     estimate = task.estimate_hours
     status = task.status
 
-    if consumed >= estimate and status not in ('done', 'closed'):
-        task.status = 'done'
-        task.completed_at = __import__('datetime').datetime.utcnow()
+    if consumed >= estimate and status not in ('done', 'closed', 'review'):
+        # Over budget: flag for user decision instead of auto-completing
+        task.status = 'review'
+        if not task.original_estimate_hours:
+            task.original_estimate_hours = estimate
         db.commit()
     elif consumed > 0 and status == 'todo':
         task.status = 'in_progress'
@@ -59,7 +61,7 @@ def get_worklogs(
     logs = q.all()
     task_ids = {w.task_id for w in logs}
     task_map = _fetch_task_map(db, task_ids)
-    return [_worklog_dict(w, task_map.get(w.task_id)) for w in logs]
+    return [_worklog_dict(w, task_map.get(w.task_id), db) for w in logs]
 
 
 def create_worklog(db: Session, data: dict, user_id: int) -> dict:
@@ -80,7 +82,7 @@ def create_worklog(db: Session, data: dict, user_id: int) -> dict:
     _auto_update_task_status(db, w.task_id)
 
     task = db.query(Task).filter(Task.id == w.task_id).first()
-    return _worklog_dict(w, task)
+    return _worklog_dict(w, task, db)
 
 
 def update_worklog(db: Session, worklog_id: int, data: dict) -> Optional[dict]:
@@ -104,7 +106,7 @@ def update_worklog(db: Session, worklog_id: int, data: dict) -> Optional[dict]:
     _auto_update_task_status(db, w.task_id)
 
     task = db.query(Task).filter(Task.id == w.task_id).first()
-    return _worklog_dict(w, task)
+    return _worklog_dict(w, task, db)
 
 
 def delete_worklog(db: Session, worklog_id: int) -> bool:
@@ -224,11 +226,15 @@ def get_summary(
     }
 
 
-def _worklog_dict(w: WorkLog, task: Task = None) -> dict:
+def _worklog_dict(w: WorkLog, task: Task = None, db: Session = None) -> dict:
+    from backend.models.local import LocalUser
+    user = db.query(LocalUser).filter(LocalUser.id == w.user_id).first() if db and w.user_id else None
     return {
         "id": w.id,
         "task_id": w.task_id,
         "user_id": w.user_id,
+        "username": user.username if user else "?",
+        "display_name": user.display_name if user else "?",
         "hours": w.hours,
         "date": str(w.date) if w.date else None,
         "description": w.description,

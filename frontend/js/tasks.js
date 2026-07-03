@@ -303,6 +303,7 @@ function openTaskViewDialog(taskId) {
 var _card = 'background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px';
 var _cardHd = 'font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.03em';
 var _grid2 = 'display:grid;grid-template-columns:1fr 1fr;gap:6px 20px';
+var _grid4 = 'display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px 14px';
 var _lbl = 'font-size:11px;color:var(--muted)';
 var _val = 'font-size:13px;margin-top:1px';
 
@@ -341,10 +342,23 @@ function _showTaskView(t) {
     '<div style="' + _card + '">' +
       '<div style="' + _cardHd + '">状态与进度</div>' +
       '<div style="' + _grid2 + '">' +
-        '<div><span style="' + _lbl + '">状态</span><div style="margin-top:3px">' + renderPill(t.status || 'todo') + ' <span style="font-size:11px;color:var(--muted)">' + (labels[t.status] || t.status) + '</span></div></div>' +
+        '<div><span style="' + _lbl + '">状态</span><div style="margin-top:3px">' + renderPill(t.status || 'todo') + '</div></div>' +
         '<div><span style="' + _lbl + '">优先级</span><div style="margin-top:3px">' + _renderPriority(t.priority || 'medium') + '</div></div>' +
         '<div><span style="' + _lbl + '">进度</span><div style="margin-top:2px">' + renderProgressCircle(t.progress || 0, 30, {label:''}) + '</div></div>' +
-        '<div><span style="' + _lbl + '">工时</span><div style="' + _val + '">预估 ' + (t.estimate_hours || 0).toFixed(1) + 'h / 实际 ' + (t.consumed_hours || 0).toFixed(1) + 'h</div></div>' +
+        (function() {
+        var orig = t.original_estimate_hours || 0;
+        var est = t.estimate_hours || 0;
+        var cons = t.consumed_hours || 0;
+        var over = cons - est;
+        var h = '<div><span style="' + _lbl + '">工时</span><div style="' + _val + '">';
+        if (orig > 0) h += '<span style="font-size:10px;color:var(--muted)">原计划 ' + orig.toFixed(1) + 'h</span><br>';
+        h += '预估 ' + est.toFixed(1) + 'h / 实际 ' + cons.toFixed(1) + 'h';
+        if (over > 0 && t.status !== 'done' && t.status !== 'closed') {
+          h += ' <span style="color:var(--warn);font-size:11px">(超' + over.toFixed(1) + 'h)</span>';
+        }
+        h += '</div></div>';
+        return h;
+      })() +
       '</div>' +
     '</div>' +
   '</div>';
@@ -445,48 +459,51 @@ function _showTaskForm(title, task) {
   }
 
   var inp = 'width:100%;box-sizing:border-box;margin-top:1px';
+  var row2 = 'display:grid;grid-template-columns:1fr 1fr;gap:10px';
   var bodyHtml = '';
 
-  // ── Section 1: 基本信息 ──
-  bodyHtml += '<div style="' + _card + '">' +
-    '<div style="' + _cardHd + '">基本信息</div>' +
-    '<div style="margin-bottom:6px"><label style="' + _lbl + '">所属项目 *</label>' +
-      '<div style="margin-top:2px">' + createProjectCombo({
-        comboId: 'tf-proj-combo', inputId: 'tf-project-input', dropdownId: 'tf-proj-dropdown',
-        selectedIdFn: function() { return _tfProjectId; },
-        onSelect: function(p) { _tfProjectId = p.id; _loadTfExecutions(p.id); }
-      }) + '</div></div>' +
-    '<div style="' + _grid2 + '">' +
-      '<div><label style="' + _lbl + '">标题 *</label><input class="search-inp" id="tf-title" value="' + escHtml(t.title || '') + '" style="' + inp + '"></div>' +
-      '<div><label style="' + _lbl + '">阶段</label><select class="search-inp" id="tf-execution" style="' + inp + '"><option value="">选择阶段...</option>' + execOpts + '</select></div>' +
-      '<div><label style="' + _lbl + '">负责人</label><div style="margin-top:2px">' + createUserCombo({
-        comboId: 'tf-assignee-combo', inputId: 'tf-assignee-input', dropdownId: 'tf-assignee-dropdown',
-        selectedIdFn: function() { return _tfAssigneeId; },
-        onSelect: function(u) { _tfAssigneeId = u.id; }
-      }) + '</div></div>' +
-      '<div><label style="' + _lbl + '">截止日期</label><input class="search-inp" id="tf-due" type="date" value="' + (t.due_date || '') + '" style="' + inp + '"></div>' +
+  // ── Row 1: 基本信息 + 状态与进度 side by side ──
+  bodyHtml += '<div style="' + row2 + '">' +
+    // ── 基本信息 ──
+    '<div style="' + _card + '">' +
+      '<div style="' + _cardHd + '">基本信息</div>' +
+      '<div style="margin-bottom:6px"><label style="' + _lbl + '">所属项目 *</label>' +
+        '<div style="margin-top:2px">' + createProjectCombo({
+          comboId: 'tf-proj-combo', inputId: 'tf-project-input', dropdownId: 'tf-proj-dropdown',
+          selectedIdFn: function() { return _tfProjectId; },
+          onSelect: function(p) { _tfProjectId = p.id; _loadTfExecutions(p.id); }
+        }) + '</div></div>' +
+      '<div style="margin-bottom:6px"><label style="' + _lbl + '">标题 *</label><input class="search-inp" id="tf-title" value="' + escHtml(t.title || '') + '" style="' + inp + '"></div>' +
+      '<div style="' + _grid2 + '">' +
+        '<div><label style="' + _lbl + '">阶段</label><select class="search-inp" id="tf-execution" style="' + inp + '"><option value="">选择阶段...</option>' + execOpts + '</select></div>' +
+        '<div><label style="' + _lbl + '">负责人</label><div style="margin-top:2px">' + createUserCombo({
+          comboId: 'tf-assignee-combo', inputId: 'tf-assignee-input', dropdownId: 'tf-assignee-dropdown',
+          selectedIdFn: function() { return _tfAssigneeId; },
+          onSelect: function(u) { _tfAssigneeId = u.id; }
+        }) + '</div></div>' +
+      '</div>' +
     '</div>' +
-  '</div>';
-
-  // ── Section 2: 状态与进度 ──
-  bodyHtml += '<div style="' + _card + '">' +
-    '<div style="' + _cardHd + '">状态与进度</div>' +
-    '<div style="' + _grid2 + '">' +
-      '<div><label style="' + _lbl + '">状态</label><select class="search-inp" id="tf-status" style="' + inp + '">' +
-        '<option value="todo"' + (t.status==='todo'?' selected':'') + '>待办</option>' +
-        '<option value="in_progress"' + (t.status==='in_progress'?' selected':'') + '>进行中</option>' +
-        '<option value="review"' + (t.status==='review'?' selected':'') + '>评审中</option>' +
-        '<option value="done"' + (t.status==='done'?' selected':'') + '>已完成</option>' +
-        '<option value="closed"' + (t.status==='closed'?' selected':'') + '>已关闭</option>' +
-      '</select></div>' +
-      '<div><label style="' + _lbl + '">优先级</label><select class="search-inp" id="tf-priority" style="' + inp + '">' +
-        '<option value="low"' + (t.priority==='low'?' selected':'') + '>低</option>' +
-        '<option value="medium"' + (t.priority==='medium'?' selected':'') + '>中</option>' +
-        '<option value="high"' + (t.priority==='high'?' selected':'') + '>高</option>' +
-        '<option value="critical"' + (t.priority==='critical'?' selected':'') + '>紧急</option>' +
-      '</select></div>' +
-      '<div><label style="' + _lbl + '">进度(%)</label><input class="search-inp" id="tf-progress" type="number" min="0" max="100" step="5" value="' + (t.progress || 0) + '" style="' + inp + '"></div>' +
-      '<div><label style="' + _lbl + '">预估工时(h)</label><input class="search-inp" id="tf-estimate" type="number" step="0.5" min="0" value="' + (t.estimate_hours || '') + '" style="' + inp + '"></div>' +
+    // ── 状态与进度 ──
+    '<div style="' + _card + '">' +
+      '<div style="' + _cardHd + '">状态与进度</div>' +
+      '<div style="' + _grid2 + '">' +
+        '<div><label style="' + _lbl + '">截止日期</label><input class="search-inp" id="tf-due" type="date" value="' + (t.due_date || '') + '" style="' + inp + '"></div>' +
+        '<div><label style="' + _lbl + '">状态</label><select class="search-inp" id="tf-status" style="' + inp + '">' +
+          '<option value="todo"' + (t.status==='todo'?' selected':'') + '>待办</option>' +
+          '<option value="in_progress"' + (t.status==='in_progress'?' selected':'') + '>进行中</option>' +
+          '<option value="review"' + (t.status==='review'?' selected':'') + '>评审中</option>' +
+          '<option value="done"' + (t.status==='done'?' selected':'') + '>已完成</option>' +
+          '<option value="closed"' + (t.status==='closed'?' selected':'') + '>已关闭</option>' +
+        '</select></div>' +
+        '<div><label style="' + _lbl + '">优先级</label><select class="search-inp" id="tf-priority" style="' + inp + '">' +
+          '<option value="low"' + (t.priority==='low'?' selected':'') + '>低</option>' +
+          '<option value="medium"' + (t.priority==='medium'?' selected':'') + '>中</option>' +
+          '<option value="high"' + (t.priority==='high'?' selected':'') + '>高</option>' +
+          '<option value="critical"' + (t.priority==='critical'?' selected':'') + '>紧急</option>' +
+        '</select></div>' +
+        '<div><label style="' + _lbl + '">进度(%)</label><input class="search-inp" id="tf-progress" type="number" min="0" max="100" step="5" value="' + (t.progress || 0) + '" style="' + inp + '"></div>' +
+        '<div><label style="' + _lbl + '">预估工时(h)</label><input class="search-inp" id="tf-estimate" type="number" step="0.5" min="0" value="' + (t.estimate_hours || '') + '" style="' + inp + '"></div>' +
+      '</div>' +
     '</div>' +
   '</div>';
 
@@ -530,6 +547,7 @@ function _showTaskForm(title, task) {
     {text: (isEdit ? '保存' : '创建'), cls: 'btn-primary', onclick: 'submitTask(' + (t.id || 'null') + ')'}
   ];
 
+  bodyHtml = '<div style="max-height:75vh;overflow-y:auto;padding-right:4px">' + bodyHtml + '</div>';
   openDialog(title, bodyHtml, buttons, {maxWidth: '60%'});
 
   // Pre-fill project and assignee
@@ -919,10 +937,11 @@ async function _submitImportTasks() {
 function _renderWorklogTable(logs, taskId) {
   if (!logs || !logs.length) return '<div style="color:var(--muted);font-size:12px">暂无工时记录</div>';
   var html = '<div style="overflow-x:auto;max-width:100%"><table class="proj-table" style="font-size:12px;width:100%"><thead><tr>' +
-    '<th>日期</th><th>工时(h)</th><th>描述</th><th>操作</th></tr></thead><tbody>';
+    '<th>日期</th><th>用户</th><th>工时(h)</th><th>描述</th><th>操作</th></tr></thead><tbody>';
   logs.forEach(function(w) {
     html += '<tr>' +
       '<td>' + (w.date || '?') + '</td>' +
+      '<td style="font-size:11px">' + escHtml(w.display_name || w.username || '?') + '</td>' +
       '<td>' + w.hours.toFixed(1) + '</td>' +
       '<td style="text-align:left;white-space:normal;word-break:break-word">' + escHtml(w.description || '') + '</td>' +
       '<td>' + iconEdit('openWorklogEditDialog(' + w.id + ',' + taskId + ')', '编辑') +

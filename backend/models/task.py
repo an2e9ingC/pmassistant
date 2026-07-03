@@ -25,6 +25,7 @@ class Task(Base):
     blocked_by_id = Column(Integer, ForeignKey("pma_tasks.id"), nullable=True)
     progress = Column(Integer, default=0)  # 0-100, manually updated by user
     estimate_hours = Column(Float, default=0.0)
+    original_estimate_hours = Column(Float, default=0.0)  # 原计划耗时，超预算延长后保留初始值
     consumed_hours = Column(Float, default=0.0)  # Redundant: SUM(pma_worklogs.hours), maintained by service
     start_date = Column(Date, nullable=True)
     due_date = Column(Date, nullable=True)

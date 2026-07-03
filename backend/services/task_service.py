@@ -233,6 +233,20 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
     return _task_dict(t, db)
 
 
+def extend_task_estimate(db: Session, task_id: int, additional_hours: float) -> Optional[dict]:
+    """Extend task estimate by additional hours. Saves original estimate on first extend."""
+    t = db.query(Task).filter(Task.id == task_id).first()
+    if not t:
+        return None
+    old_estimate = t.estimate_hours or 0.0
+    if not t.original_estimate_hours:
+        t.original_estimate_hours = old_estimate
+    t.estimate_hours = old_estimate + additional_hours
+    t.status = 'in_progress'  # Move back from review to in_progress
+    db.commit()
+    return _task_dict(t, db)
+
+
 def delete_task(db: Session, task_id: int, user=None) -> bool:
     """Delete a task and its worklogs + comments."""
     uid, uname = _get_user_info(user)
@@ -310,6 +324,7 @@ def _task_dict(t: Task, db=None) -> dict:
         "blocked_by_id": t.blocked_by_id,
         "progress": t.progress or 0,
         "estimate_hours": t.estimate_hours or 0.0,
+        "original_estimate_hours": t.original_estimate_hours or 0.0,
         "consumed_hours": t.consumed_hours or 0.0,
         "start_date": str(t.start_date) if t.start_date else None,
         "due_date": str(t.due_date) if t.due_date else None,

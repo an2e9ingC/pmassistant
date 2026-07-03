@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.middleware.auth import get_current_user, require_perm
 from backend.services import task_service
+from backend.routers.logs import log_audit
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
@@ -151,6 +152,24 @@ def update_task(
     if not t:
         raise HTTPException(status_code=404, detail="Task not found")
     return {"code": 0, "data": t, "message": "ok"}
+
+
+class ExtendEstimateBody(BaseModel):
+    additional_hours: float
+
+
+@router.post("/{task_id}/extend-estimate", response_model=dict)
+def extend_estimate(
+    task_id: int,
+    body: ExtendEstimateBody,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("task_edit")),
+):
+    t = task_service.extend_task_estimate(db, task_id, body.additional_hours)
+    if not t:
+        raise HTTPException(status_code=404, detail="Task not found")
+    log_audit(db, user, "task_extend", f"任务 #{task_id} 延长预估 {body.additional_hours}h", "任务", "medium")
+    return {"code": 0, "data": t, "message": "已延长预估"}
 
 
 @router.delete("/{task_id}", response_model=dict)
