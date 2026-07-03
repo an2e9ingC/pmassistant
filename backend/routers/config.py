@@ -377,6 +377,27 @@ def get_system_info():
     }
 
 
+# ── Changelog ──
+
+@router.get("/changelog", response_model=dict)
+def get_changelog():
+    """Return recent version changelog entries from dev-plan.md."""
+    import re as _re
+    devplan_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+                                 "docs", "dev-plan.md")
+    entries = []
+    try:
+        with open(devplan_path) as f:
+            content = f.read()
+        # Parse version history table: | date | version | description |
+        pattern = _re.compile(r'\|\s*(\d{4}-\d{2}-\d{2})\s*\|\s*(v[\d.]+-beta\d+)\s*\|\s*(.+?)\s*\|')
+        for m in pattern.finditer(content):
+            entries.append({"date": m.group(1), "version": m.group(2), "description": m.group(3)})
+    except Exception:
+        pass
+    return {"code": 0, "data": entries, "message": "ok"}
+
+
 # ── Connection Test ──
 
 def _encode_url(url: str) -> str:

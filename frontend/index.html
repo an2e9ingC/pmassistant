@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="app-version" content="v2026.07.03-beta3">
+<meta name="app-version" content="v2026.07.03-beta4">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>PM Assistant · 集成禅道 & GitLab</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -194,7 +194,7 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
   <div class="sidebar-footer">
 
     <div style="text-align:center;font-size:10px;color:var(--muted)">
-      <a href="#" onclick="openFeedbackDialog();return false" style="color:var(--muted);text-decoration:none;display:block;margin-bottom:4px" title="提交 Bug 或功能建议">
+      <a href="#" id="feedback-link" onclick="openFeedbackDialog();return false" style="color:var(--muted);text-decoration:none;display:block;margin-bottom:4px" title="提交 Bug 或功能建议">
         <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle;margin-right:3px"><circle cx="8" cy="8" r="6"/><line x1="8" y1="5" x2="8" y2="9"/><circle cx="8" cy="12" r="0.8" fill="currentColor" stroke="none"/></svg>
         问题反馈
       </a>
@@ -256,7 +256,7 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
         </div>
       </div>
       <div style="position:relative">
-        <button class="icon-btn" title="通知中心" onclick="toggleNotifDropdown(event)">
+        <button class="icon-btn" id="notif-bell-btn" title="通知中心" onclick="toggleNotifDropdown(event)">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
             <path d="M8 1.5A5 5 0 0 0 3 6.5v2.5L2 11h12l-1-2V6.5A5 5 0 0 0 8 1.5z"/>
             <path d="M6.5 13a1.5 1.5 0 0 0 3 0" stroke-linecap="round"/>

@@ -1133,9 +1133,15 @@ async function init() {
   }
 
   // Show welcome dialog for first-time GitLab users
-  if (localStorage.getItem('pma_new_user') === '1') {
+  var isNewUser = localStorage.getItem('pma_new_user') === '1';
+  if (isNewUser) {
     localStorage.removeItem('pma_new_user');
-    showNewUserWelcomeDialog();
+    showNewUserGuide();
+  }
+
+  // Show changelog on version update (skip during new user guide)
+  if (!isNewUser && localStorage.getItem('pma_skip_changelog') !== '1') {
+    checkNewVersion();
   }
 
   // Show publish notification button if user has permission
@@ -1732,6 +1738,197 @@ function fetchBranch() {
       }
     }
   }).catch(function() {});
+}
+
+// ── New User Guide ──
+
+var _guideAllSteps = [
+  { el: '.sidebar-brand', tip: '点击 PMA Logo 随时返回项目总览首页', pos: 'bottom' },
+  { el: '.sidebar-nav', tip: '通过左侧导航栏切换各个功能页面', pos: 'right' },
+  { el: '#topbar-sources', tip: '顶部标签显示数据源连接状态，鼠标悬停查看详情', pos: 'bottom' },
+  { el: '#notif-bell-btn', tip: '铃铛图标是通知中心，查看系统告警和历史消息', pos: 'bottom' },
+  { el: '#theme-toggle-btn', tip: '浅色/深色主题切换，支持自动模式', pos: 'bottom' },
+  { el: '#user-avatar', tip: '个人中心：任务总览、偏好设置、切换账号、工时统计等', pos: 'bottom' },
+  { el: '#feedback-link', tip: '左下角问题反馈入口，提交 Bug 或功能建议', pos: 'top' },
+  { el: '#src-sync-btn', tip: '点击这里手动触发数据同步', pos: 'bottom', adminOnly: true },
+];
+
+function showNewUserGuide() {
+  // Filter steps by user permissions
+  var user = getCurrentUser();
+  var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+  var isAdmin = user && (user.role === 'admin' || perms.indexOf('admin') >= 0);
+  var steps = _guideAllSteps.filter(function(s) { return !s.adminOnly || isAdmin; });
+
+  var step = 0;
+  var overlay = document.createElement('div');
+  overlay.id = 'guide-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.2);z-index:9999;transition:opacity 0.3s';
+  var highlight = document.createElement('div');
+  highlight.id = 'guide-highlight';
+  highlight.style.cssText = 'position:fixed;z-index:10001;border:2px solid var(--accent);border-radius:8px;box-shadow:0 0 0 6px var(--accent-lt);pointer-events:none;transition:all 0.3s';
+  var tipBox = document.createElement('div');
+  tipBox.id = 'guide-tip';
+  tipBox.style.cssText = 'position:fixed;z-index:10000;background:var(--surface);border:2px solid var(--accent);border-radius:10px;padding:16px 20px;box-shadow:0 8px 32px rgba(0,0,0,0.3);width:300px;font-size:13px;line-height:1.6;transition:all 0.3s';
+  var tipText = document.createElement('div');
+  tipText.style.cssText = 'margin-bottom:12px;color:var(--fg)';
+  var prevBtn = document.createElement('button');
+  prevBtn.className = 'btn btn-sm'; prevBtn.textContent = '上一步'; prevBtn.style.display = 'none';
+  var nextBtn = document.createElement('button');
+  nextBtn.className = 'btn btn-primary'; nextBtn.style.cssText = 'font-size:12px;padding:4px 14px;margin-left:auto';
+  var btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display:flex;align-items:center;gap:8px';
+  btnRow.append(prevBtn, nextBtn);
+  tipBox.append(tipText, btnRow);
+  document.body.append(overlay, highlight, tipBox);
+
+  function showStep(n) {
+    step = n;
+    if (step >= steps.length) {
+      overlay.remove(); highlight.remove(); tipBox.remove();
+      showGuideWelcome();
+      return;
+    }
+    var s = steps[n];
+    var target = document.querySelector(s.el);
+    if (!target) { showStep(n + 1); return; }
+    var r = target.getBoundingClientRect();
+    // Update highlight (clamp within viewport)
+    var hl = Math.max(0, r.left - 6), ht = Math.max(0, r.top - 6);
+    var hw = Math.max(48, Math.min(r.width + 12, window.innerWidth - hl)), hh = Math.max(36, Math.min(r.height + 12, window.innerHeight - ht));
+    highlight.style.left = hl + 'px';
+    highlight.style.top = ht + 'px';
+    highlight.style.width = hw + 'px';
+    highlight.style.height = hh + 'px';
+    highlight.style.display = '';
+    // Position tip
+    var tipW = 300, tipH = 110;
+    var tx, ty;
+    if (s.pos === 'right') {
+      tx = Math.min(r.right + 16, window.innerWidth - tipW - 16);
+      ty = Math.max(16, Math.min(r.top + r.height / 2 - tipH / 2, window.innerHeight - tipH - 16));
+      tipBox.style.transform = 'none';
+    } else if (s.pos === 'top') {
+      tx = Math.max(tipW / 2 + 8, Math.min(r.left + r.width / 2, window.innerWidth - tipW / 2 - 8));
+      ty = Math.max(16, r.top - tipH - 12);
+      tipBox.style.transform = 'translate(-50%, 0)';
+    } else {
+      tx = Math.max(tipW / 2 + 8, Math.min(r.left + r.width / 2, window.innerWidth - tipW / 2 - 8));
+      ty = Math.min(r.bottom + 12, window.innerHeight - tipH - 16);
+      tipBox.style.transform = 'translate(-50%, 0)';
+    }
+    tipText.textContent = s.tip;
+    tipBox.style.left = tx + 'px';
+    tipBox.style.top = ty + 'px';
+    prevBtn.style.display = n > 0 ? '' : 'none';
+    nextBtn.textContent = n < steps.length - 1 ? '下一步' : '完成';
+  }
+
+  nextBtn.onclick = function() { showStep(step + 1); };
+  prevBtn.onclick = function() { showStep(step - 1); };
+  overlay.addEventListener('click', function(e) { e.stopPropagation(); });
+  showStep(0);
+}
+
+async function showGuideWelcome() {
+  var user = getCurrentUser();
+  // Fetch admin contacts
+  var contactsHtml = '加载中...';
+  try {
+    var resp = await fetch('/api/auth/gitlab/admin-contacts');
+    var json = await resp.json();
+    if (json.code === 0 && json.data && json.data.contacts && json.data.contacts.length > 0) {
+      contactsHtml = json.data.contacts.map(function(c) {
+        return '<span style="display:inline-block;margin:2px 4px;padding:2px 8px;border-radius:3px;font-size:11px;background:var(--accent-lt);color:var(--accent)">' +
+          escHtml(c.display_name || c.username) + ' (@' + escHtml(c.username) + ')</span>';
+      }).join('');
+    } else {
+      contactsHtml = '暂无管理员信息';
+    }
+  } catch(e) { contactsHtml = '获取失败'; }
+
+  var perms = (user ? user.permissions || '' : '').split(',').filter(Boolean);
+  var permLabels = {'admin': '系统管理', 'sync': '数据同步', 'project_edit': '项目维护', 'product_link': '产品维护', 'customer_link': '客户维护', 'doc_template': '文档模板配置', 'stage_mapping': '阶段映射'};
+  var permBadges = perms.length ? perms.map(function(p) { return '<span style="display:inline-block;margin:1px 3px;padding:2px 8px;border-radius:3px;font-size:11px;background:var(--accent-lt);color:var(--accent)">' + escHtml(permLabels[p] || p) + '</span>'; }).join('') : '无特殊权限（基础 public 角色）';
+
+  var html =
+    '<div style="text-align:center;padding:8px 0">' +
+      '<img src="/logo/logo-mark-light.svg" style="width:140px;margin-bottom:12px" onerror="this.style.display=\'none\'">' +
+      '<div style="font-size:14px;line-height:1.8;margin-bottom:16px">欢迎使用项目管理助手！</div>' +
+    '</div>' +
+    '<div style="margin-bottom:12px;font-size:12px;line-height:1.6">' +
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">当前权限</div>' +
+      '<div style="line-height:2">' + permBadges + '</div>' +
+    '</div>' +
+    '<div style="padding:12px;background:var(--bg);border-radius:8px;border:1px solid var(--border);font-size:12px;line-height:1.6">' +
+      '<strong>需要更多权限？</strong>请联系以下管理员为你分配相应角色：' +
+      '<div style="margin-top:6px;line-height:2">' + contactsHtml + '</div>' +
+    '</div>';
+  openDialog('&#x1F44B; 欢迎使用 PMA', html,
+    [{ text: '开始使用', cls: 'btn-primary', onclick: "var d=document.querySelector('.shared-dialog-overlay,.note-dialog-overlay');if(d)d.remove()" }],
+    { maxWidth: 460 }
+  );
+}
+
+// ── Version Changelog Dialog ──
+
+async function checkNewVersion() {
+  var lastVer = localStorage.getItem('pma_seen_version') || '';
+  var curVer = window.APP_VERSION || '';
+  if (!curVer) return;
+  if (lastVer === curVer) return;
+
+  try {
+    var data = await API.get('/admin/changelog');
+    var entries = data || [];
+    // Find entries between lastVer and curVer
+    var seenIdx = -1, curIdx = -1;
+    for (var i = 0; i < entries.length; i++) {
+      if (entries[i].version === lastVer) seenIdx = i;
+      if (entries[i].version === curVer) curIdx = i;
+    }
+    if (curIdx < 0) return;
+    var newEntries = [];
+    for (var i = (seenIdx >= 0 ? seenIdx - 1 : 0); i >= 0; i--) {
+      newEntries.push(entries[i]);
+      if (entries[i].version === curVer) break;
+    }
+    if (!newEntries.length) return;
+
+    var page = 0;
+    function renderPage() {
+      var e = newEntries[page];
+      var html = '<div style="font-size:13px;line-height:1.8">' +
+        '<div style="font-weight:600;color:var(--accent);margin-bottom:8px">' +
+          escHtml(e.version) + ' <span style="font-size:11px;color:var(--muted)">' + escHtml(e.date) + '</span></div>' +
+        '<div style="color:var(--fg);white-space:pre-wrap">' + escHtml(e.description) + '</div>' +
+      '</div>';
+      var nav = '';
+      if (newEntries.length > 1) {
+        nav = '<div style="text-align:center;margin-top:10px;font-size:11px;color:var(--muted)">' +
+          (page + 1) + ' / ' + newEntries.length + ' &nbsp;' +
+          (page > 0 ? '<button class="btn btn-xs" onclick="event.stopPropagation();_clPrevPage()" style="margin:0 4px">← 上一页</button>' : '') +
+          (page < newEntries.length - 1 ? '<button class="btn btn-xs" onclick="event.stopPropagation();_clNextPage()" style="margin:0 4px">下一页 →</button>' : '') +
+        '</div>';
+      }
+      // Update dialog body
+      var body = document.querySelector('#clog-body');
+      if (body) body.innerHTML = html + nav;
+    }
+    window._clPrevPage = function() { if (page > 0) { page--; renderPage(); } };
+    window._clNextPage = function() { if (page < newEntries.length - 1) { page++; renderPage(); } };
+
+    var bodyHtml = '<div id="clog-body"></div>';
+    openDialog('系统更新日志',
+      bodyHtml,
+      [{ text: '知道了', cls: 'btn-primary', onclick: "var d=document.querySelector('.shared-dialog-overlay,.note-dialog-overlay');if(d)d.remove()" }],
+      { maxWidth: 520 }
+    );
+    renderPage();
+  } catch(e) {}
+
+  // Mark current version as seen
+  localStorage.setItem('pma_seen_version', curVer);
 }
 
 document.addEventListener('DOMContentLoaded', function() {
