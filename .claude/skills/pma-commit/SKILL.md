@@ -48,3 +48,6 @@ Co-Authored-By: <model-name> / <tool-name>
   3. `./server.sh -p <PORT> restart`
 - **数据层变更必须同步更新 `docs/db.md`**
 - **AI 生成 commit 必须加 `Co-Authored-By:`**
+- **commit 重启后必须更新 codebase-memory 索引**：
+  1. `./server.sh -p <PORT> restart`（见上）
+  2. `index_repository(repo_path="/home/xuchuan/workspace/pma", mode="moderate")`

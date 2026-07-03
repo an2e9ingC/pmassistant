@@ -52,7 +52,7 @@ query_graph("
 
 ### 索引维护
 
-项目已在 codebase-memory 中索引。重大重构或新增大量代码后，重新索引：
+项目已在 codebase-memory 中索引。**每次 commit 后必须重新索引**（已在 pma-commit SKILL 中自动执行）：
 
 ```
 index_repository(repo_path="/home/xuchuan/workspace/pma", mode="moderate")
