@@ -240,6 +240,7 @@ def check_product_docs(db, product_id: int) -> dict:
     scanned = 0
     auto_submitted = 0
     reverted = 0
+    location_filled = 0
     results = []
 
     from datetime import datetime as _dt
@@ -254,30 +255,14 @@ def check_product_docs(db, product_id: int) -> dict:
         exists = False
         mismatch = ""
 
-        # If user provided a location AND template has wildcards, validate location matches template
+        # If user set a location, validate it matches the template
         if doc.location and template_path:
-            template_base, template_regex = _parse_doc_path(template_path)
-            if template_regex:
-                # Parse location to get its relative path from template base
-                loc_base, loc_regex = _parse_doc_path(doc.location)
-                # Compute relative path: strip template base URL prefix from location
-                rel_path = _relative_path(template_base, doc.location)
-                if rel_path:
-                    compiled = re.compile(template_regex, re.IGNORECASE)
-                    if compiled.match(rel_path):
-                        # Location matches template pattern — now check file exists
-                        exists = check_file_exists(doc.location)
-                    else:
-                        exists = False
-                        mismatch = f"路径与模板不匹配：期望匹配 {template_path}，实际填写路径不符合通配符规则"
-                else:
-                    exists = False
-                    mismatch = f"路径不在模板基础目录下：模板基础路径为 {template_base}"
+            if template_path != doc.location:
+                mismatch = f"路径与模板不匹配（期望: {template_path}）"
             else:
-                # Template has no wildcards — just verify the location file exists
-                exists = scan_doc_path(doc.location)
+                exists = check_file_exists(doc.location)
         else:
-            # No user location — use template wildcard to find files
+            # No user location — use template path directly
             try:
                 exists = scan_doc_path(check_path)
             except Exception as e:
@@ -297,14 +282,22 @@ def check_product_docs(db, product_id: int) -> dict:
         })
 
         now = _dt.utcnow()
-        if exists and doc.status != "submitted":
-            doc.status = "submitted"
-            doc.completed_at = now
-            doc.uploaded_by = doc.uploaded_by or "auto-scanner"
-            doc.uploaded_at = doc.uploaded_at or now
-            doc.updated_by = "auto-scanner"
-            doc.updated_at = now
-            auto_submitted += 1
+        if exists:
+            # Auto-fill location with the verified path (only if no wildcards — direct URL)
+            if check_path and '*' not in check_path and '?' not in check_path:
+                if not doc.location:
+                    doc.location = check_path
+                    doc.updated_by = "auto-scanner"
+                    doc.updated_at = now
+                    location_filled += 1
+            if doc.status != "submitted":
+                doc.status = "submitted"
+                doc.completed_at = now
+                doc.uploaded_by = doc.uploaded_by or "auto-scanner"
+                doc.uploaded_at = doc.uploaded_at or now
+                doc.updated_by = "auto-scanner"
+                doc.updated_at = now
+                auto_submitted += 1
         elif not exists and doc.status == "submitted":
             # File no longer accessible or mismatched — revert to pending
             doc.status = "pending"
@@ -316,12 +309,13 @@ def check_product_docs(db, product_id: int) -> dict:
             logger.warning(f"[doc-scanner] doc#{doc.id} '{doc.doc_name}' "
                            f"reverted to pending: {reason}")
 
-    if auto_submitted > 0 or reverted > 0:
+    if auto_submitted > 0 or reverted > 0 or location_filled > 0:
         db.commit()
 
     return {
         "scanned": scanned,
         "auto_submitted": auto_submitted,
         "reverted": reverted,
+        "location_filled": location_filled,
         "results": results,
     }

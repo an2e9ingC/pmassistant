@@ -31,11 +31,13 @@ class TemplateCreate(BaseModel):
     product_id: int
     doc_name: str
     sort_order: int = 0
-    doc_path: str
+    doc_path: str = ""  # legacy, auto-computed from base_path + file_pattern
     stage_type: str = "通用"
     doc_type: Optional[str] = None
     responsible_role: Optional[str] = None
     description: Optional[str] = None
+    base_path: Optional[str] = None  # 路径模板, * = 产品代号
+    file_pattern: Optional[str] = None  # 文件名模板, * = 产品代号
 
 
 class TemplateUpdate(BaseModel):
@@ -45,8 +47,10 @@ class TemplateUpdate(BaseModel):
     stage_type: Optional[str] = None
     description: Optional[str] = None
     responsible_role: Optional[str] = None
-    doc_path: Optional[str] = None
+    doc_path: Optional[str] = None  # legacy
     doc_type: Optional[str] = None
+    base_path: Optional[str] = None
+    file_pattern: Optional[str] = None
 
 
 # ── Product Tree (read) ──
@@ -177,16 +181,24 @@ def update_template(
     user=Depends(require_perm("doc_template")),
 ):
     old_tpl = db.query(ProductDocTemplate).filter(ProductDocTemplate.id == template_id).first()
-    old_doc_name = old_tpl.doc_name if old_tpl else "?"
+    if not old_tpl:
+        raise HTTPException(status_code=404, detail="Template not found")
     tpl = document_service.update_product_template(
         db, template_id, body.model_dump(exclude_none=True)
     )
-    if not tpl:
-        raise HTTPException(status_code=404, detail="Template not found")
-    new_name = tpl.get("doc_name", old_doc_name)
-    detail = f"编辑模板: {new_name}"
-    if old_doc_name != new_name:
-        detail = f"编辑模板: {old_doc_name} → {new_name}"
+    # Build detailed audit log with all changed fields
+    changes = []
+    field_labels = {
+        "doc_name": "名称", "base_path": "路径", "file_pattern": "文档名",
+        "stage_type": "阶段", "doc_type": "类型", "responsible_role": "责任人",
+        "sort_order": "序号", "description": "说明",
+    }
+    for fk, fl in field_labels.items():
+        ov = getattr(old_tpl, fk, None) or ""
+        nv = tpl.get(fk, ov) or ""
+        if str(ov) != str(nv):
+            changes.append(f"{fl}: {ov} → {nv}")
+    detail = f"编辑模板: {old_tpl.doc_name}" + ("\n" + "\n".join(changes) if changes else "（无变更）")
     log_audit(db, user, "product_doc_template_edit", detail, "产品", "medium")
     return {"code": 0, "data": tpl, "message": "ok"}
 

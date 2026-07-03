@@ -55,7 +55,9 @@ class ProductDocTemplate(Base):
     sort_order = Column(Integer, default=0)
     description = Column(String(512), nullable=True)
     responsible_role = Column(String(128), nullable=True)  # 责任人/岗位
-    doc_path = Column(String(512), nullable=True)  # 文档路径/NAS路径
+    doc_path = Column(String(512), nullable=True)  # 文档路径/NAS路径 (legacy, computed from base_path+file_pattern)
+    base_path = Column(String(512), nullable=True)  # 路径模板, * = 产品代号占位符
+    file_pattern = Column(String(256), nullable=True)  # 文件名模板, * = 产品代号占位符
     doc_type = Column(String(32), nullable=True)  # 文档类型: gitlab/svn/nas
 
 

@@ -921,6 +921,8 @@ def _product_template_dict(t: ProductDocTemplate) -> dict:
         "description": t.description,
         "responsible_role": t.responsible_role,
         "doc_path": t.doc_path or "",
+        "base_path": t.base_path or "",
+        "file_pattern": t.file_pattern or "",
         "doc_type": t.doc_type or "",
     }
 
@@ -951,9 +953,18 @@ def get_or_init_product_documents(db: Session, product_id: int) -> list[dict]:
         ).order_by(ProductDocTemplate.sort_order).all()
 
         for tpl in templates:
-            # Derive actual product path: replace {code} placeholder if present
-            template_path = tpl.doc_path or ""
-            actual_path = template_path.replace("{code}", product_code) if product_code else template_path
+            # Derive actual product path from base_path + file_pattern with * = product_code
+            if tpl.base_path and tpl.file_pattern:
+                base = tpl.base_path.replace("{code}", product_code) if product_code else tpl.base_path
+                pattern = tpl.file_pattern.replace("{code}", product_code) if product_code else tpl.file_pattern
+                actual_path = base.rstrip("/") + "/" + pattern.lstrip("/")
+            else:
+                # Legacy fallback: support both {code} and * placeholders
+                template_path = tpl.doc_path or ""
+                if product_code:
+                    actual_path = template_path.replace("{code}", product_code).replace("*", product_code)
+                else:
+                    actual_path = template_path
 
             # Find existing doc instance
             existing = db.query(ProductDocument).filter(
@@ -982,13 +993,19 @@ def get_or_init_product_documents(db: Session, product_id: int) -> list[dict]:
                 existing.sort_order = tpl.sort_order
                 existing.responsible_role = tpl.responsible_role
                 existing.description = tpl.description
+                # Always sync doc_path from template (location is user-uploaded path, independent)
                 existing.doc_path = actual_path
 
             done = existing.status == "submitted"
             warn = existing.status == "pending"
-            # Check if location matches template wildcard pattern
+            # Check if location matches template pattern
             mismatch = ""
-            if existing.location and existing.doc_path and ('*' in existing.doc_path or '?' in existing.doc_path):
+            if existing.location and (tpl.base_path or tpl.file_pattern):
+                # New format: compare location against expanded doc_path
+                if existing.location != existing.doc_path:
+                    mismatch = f"路径与模板不匹配（期望: {existing.doc_path}）"
+            elif existing.location and existing.doc_path and ('*' in existing.doc_path or '?' in existing.doc_path):
+                # Legacy format with wildcards
                 import re as _re
                 from backend.services.doc_scanner import _parse_doc_path, _relative_path
                 t_base, t_regex = _parse_doc_path(existing.doc_path)

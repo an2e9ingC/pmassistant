@@ -730,12 +730,10 @@ function _renderProdDocsInline(docs) {
         '<td style="font-size:11px;color:var(--muted);white-space:nowrap;' + cellStyle + '">' + escHtml(d.updated_at || '—') + '</td>' +
         '<td style="font-size:12px;color:var(--muted);' + cellStyle + '">' + escHtml(d.updated_by || '—') + '</td>' +
         '<td style="white-space:nowrap;text-align:center;' + cellStyle + '">' +
-          (d.location && isPreviewableUrl(d.location)
-            ? iconEye("previewDocument('" + encodeURIComponent(d.location) + "','" + escJs(d.doc_name || '') + "')")
-            : '') +
-          iconUpload('showUploadDocDialog(' + d.id + ')', '上传文档') +
-          (d.location && canEdit
-            ? iconDelete('clearDocLocation(' + d.id + ')', '清除路径')
+          (d.location
+            ? (isPreviewableUrl(d.location)
+              ? iconEye("previewDocument('" + encodeURIComponent(d.location) + "','" + escJs(d.doc_name || '') + "')")
+              : '<a href="' + escHtml(d.location) + '" target="_blank" title="打开链接" style="text-decoration:none;font-size:15px">&#x1F517;</a>')
             : '') +
         '</td>' +
       '</tr>';
@@ -758,126 +756,6 @@ function _filterSearchableItems(input) {
 function switchToProdMaintenance() {
   var tab = document.querySelector('#view-product-detail .dtab[onclick*="maintenance"]');
   if (tab) switchProdTab('maintenance', tab);
-}
-
-async function clearDocLocation(docId) {
-  if (!confirm('确认清除该文档的已上传路径？')) return;
-  try {
-    await API.put('/products/' + _prodDetailCurId + '/documents/' + docId, { location: '', status: 'pending' });
-    var docs = await API.get('/products/' + _prodDetailCurId + '/documents');
-    _renderProdDocsInline(docs || []);
-  } catch(e) {
-    showToast('操作失败: ' + (e.message || '未知错误'), 'error');
-  }
-}
-
-function showUploadDocDialog(docId) {
-  var doc = null;
-  // Find doc data from the last rendered list
-  var el = document.getElementById('prod-docs-inline');
-  if (el) {
-    // Re-fetch to get doc info
-    API.get('/products/' + _prodDetailCurId + '/documents').then(function(docs) {
-      var d = (docs || []).find(function(x) { return x.id === docId; });
-      if (!d) { showToast('未找到文档信息', 'error'); return; }
-      _openUploadDialog(d);
-    });
-  }
-}
-
-function _openUploadDialog(d) {
-  var currentUser = getCurrentUser();
-  var uploadBy = currentUser ? (currentUser.display_name || currentUser.username) : '';
-  var defaultType = d.doc_type || 'gitlab';
-  var placeholderMap = {
-    svn: 'SVN 地址，如 http://192.168.0.124:8443/svn/...',
-    gitlab: 'GitLab 发布链接，如 http://192.168.0.128/.../-/releases/...',
-    nas: 'NAS 路径，如 \\\\192.168.0.x\\share\\...',
-    solidworks: '结构设计文件路径',
-    pma: 'PMA 系统内部链接'
-  };
-  var typeLabels = { gitlab: 'GitLab', svn: 'SVN', nas: 'NAS', solidworks: '结构设计', pma: 'PMA 链接' };
-  var makeTypeBtn = function(type, label) {
-    var active = type === defaultType;
-    return '<button class="btn upload-type-btn" style="font-size:11px;padding:4px 10px' +
-      (active ? ';background:var(--accent);color:#fff' : '') +
-      '" onclick="setUploadType(\'' + type + '\')">' + label + '</button>';
-  };
-  var currentUploadType = d.doc_type || 'gitlab';
-  var html = '<div style="margin-bottom:10px">' +
-    '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">期望路径：</div>' +
-    '<div style="font-size:12px;color:var(--accent);margin-bottom:10px;word-break:break-all;line-height:1.5">' + escHtml(d.doc_path || '未配置') + '</div>' +
-    '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:6px">文档类型</label>' +
-    '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap" id="upload-type-btns">' +
-      makeTypeBtn('gitlab', 'GitLab') +
-      makeTypeBtn('svn', 'SVN') +
-      makeTypeBtn('nas', 'NAS') +
-      makeTypeBtn('solidworks', '结构设计') +
-      makeTypeBtn('pma', 'PMA') +
-    '</div>' +
-    '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:6px">文档位置</label>' +
-    '<input class="search-inp" id="upload-doc-location" value="' + escHtml(d.location || '') + '" placeholder="' + (placeholderMap[defaultType] || '') + '" style="width:100%;box-sizing:border-box;margin-bottom:10px">' +
-    '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">上传人：<span style="color:var(--fg);font-weight:500">' + escHtml(uploadBy) + '</span></div>' +
-  '</div>';
-
-  openDialog('上传文档 — <span style="color:var(--accent)">' + escHtml(d.doc_name) + '</span>', html,
-    [{text: '取消', onclick: 'closeSharedDialog()'},
-     {text: '提交', cls: 'btn-primary', onclick: 'submitUploadDoc(' + d.id + ')'}],
-    {maxWidth: '50%', hideClose: true});
-}
-
-function setUploadType(type) {
-  var input = document.getElementById('upload-doc-location');
-  if (!input) return;
-  if (type === 'svn') { input.value = ''; input.placeholder = 'SVN 地址，如 http://192.168.0.124:8443/svn/...'; }
-  else if (type === 'gitlab') { input.value = ''; input.placeholder = 'GitLab 发布链接，如 http://192.168.0.128/.../-/releases/...'; }
-  else if (type === 'nas') { input.value = ''; input.placeholder = 'NAS 路径，如 \\\\192.168.0.x\\share\\...'; }
-  else if (type === 'solidworks') { input.value = ''; input.placeholder = '结构设计文件路径'; }
-  else if (type === 'pma') { input.value = ''; input.placeholder = 'PMA 系统内部链接'; }
-  // Highlight selected
-  document.querySelectorAll('#upload-type-btns .upload-type-btn').forEach(function(btn) {
-    btn.style.background = ''; btn.style.color = '';
-  });
-  var selected = document.querySelector('#upload-type-btns .upload-type-btn[onclick*=\"' + type + '\"]');
-  if (selected) { selected.style.background = 'var(--accent)'; selected.style.color = '#fff'; }
-  input.focus();
-}
-
-async function submitUploadDoc(docId) {
-  var location = document.getElementById('upload-doc-location').value.trim();
-  if (!location) { showToast('请输入文档位置', 'error'); return; }
-  // Get selected doc_type from the active button
-  var activeBtn = document.querySelector('#upload-type-btns .upload-type-btn[style*=\"background\"]');
-  var docType = (activeBtn && activeBtn.getAttribute('onclick') || '').match(/setUploadType\('(\w+)'\)/);
-  docType = (docType && docType[1]) || currentUploadType || 'gitlab';
-
-  var currentUser = getCurrentUser();
-  var uploadBy = currentUser ? (currentUser.display_name || currentUser.username) : '';
-  var now = new Date().toISOString().slice(0, 19);
-  try {
-    await API.put('/products/' + _prodDetailCurId + '/documents/' + docId, {
-      location: location,
-      doc_type: docType,
-      uploaded_by: uploadBy,
-      uploaded_at: now,
-    });
-    closeSharedDialog();
-    showToast('正在验证文件...', 'info');
-    _prodDocScanning = true;
-    // Refresh to show "验证中", then scan, then refresh to show result
-    API.get('/products/' + _prodDetailCurId + '/documents').then(function(docs) {
-      _renderProdDocsInline(docs || []);
-    });
-    function _finishScan() {
-      _prodDocScanning = false;
-      API.get('/products/' + _prodDetailCurId + '/documents').then(function(docs) {
-        _renderProdDocsInline(docs || []);
-      });
-    }
-    API.post('/products/' + _prodDetailCurId + '/docs/check', {}).then(_finishScan).catch(_finishScan);
-  } catch(e) {
-    showToast('提交失败: ' + (e.message || '未知错误'), 'error');
-  }
 }
 
 // ── Tab: 产品维护（编辑、删除、项目关联、客户、标签） ──

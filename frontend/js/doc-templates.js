@@ -315,9 +315,10 @@ function renderTemplatesPage() {
         '<td style="font-weight:500">' + escHtml(d.doc_name) + '</td>' +
         '<td style="font-size:12px;white-space:nowrap;width:80px">' + escHtml(d.responsible_role || '—') + '</td>' +
         '<td style="font-size:11px">' + escHtml(typeLabels[d.doc_type] || '—') + '</td>' +
-        '<td style="font-size:12px">' + (d.doc_path
-          ? '<a href="' + escHtml(d.doc_path) + '" target="_blank" style="color:var(--accent);text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'" title="点击打开路径">' + escHtml(d.doc_path) + ' ↗</a>'
-          : '—') + '</td>' +
+        '<td style="font-size:11px">' + (d.base_path || d.file_pattern
+          ? (d.base_path ? '<div style="color:var(--muted)">' + escHtml(d.base_path) + '</div>' : '') +
+            (d.file_pattern ? '<div style="font-family:var(--mono);color:var(--accent)">' + escHtml(d.file_pattern) + '</div>' : '')
+          : (d.doc_path ? '<a href="' + escHtml(d.doc_path) + '" target="_blank" style="color:var(--accent);text-decoration:none">' + escHtml(d.doc_path) + ' ↗</a>' : '—')) + '</td>' +
         '<td style="font-size:12px;color:var(--muted)">' + escHtml(d.description || '') + '</td>' +
         (canEdit
           ? '<td style="white-space:nowrap;text-align:center" ondragover="event.stopPropagation()" ondrop="event.stopPropagation()">' +
@@ -1078,6 +1079,17 @@ function _selectProductStage(stage) {
 
 /* ── Product Template CRUD (direct API, no pending queue) ── */
 
+function _updatePathPreview() {
+  var baseEl = document.getElementById('ptf-base-path');
+  var patEl = document.getElementById('ptf-file-pattern');
+  var previewEl = document.getElementById('ptf-path-preview');
+  if (!previewEl) return;
+  var base = baseEl ? baseEl.value.trim() : '';
+  var pat = patEl ? patEl.value.trim() : '';
+  if (!base && !pat) { previewEl.value = ''; return; }
+  previewEl.value = (base + '/' + pat).replace(/\/{2,}/g, '/');
+}
+
 function showAddProductTemplateForm() {
   var selNode = _findNodeById(_selectedNodeId);
   var name = selNode ? selNode.name : '';
@@ -1106,15 +1118,24 @@ function showAddProductTemplateForm() {
       '</div>' +
     '</div>' +
     '<div style="margin-bottom:10px">' +
-      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">路径 <span style="color:var(--danger)">*必填</span></label>' +
-      '<input class="search-inp" id="ptf-path" placeholder="选择类型后自动提示" style="width:100%;box-sizing:border-box">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">路径 <span style="color:var(--danger)">*必填</span> &nbsp;<span style="font-weight:400;font-size:10px">{code} = 产品代号占位符</span></label>' +
+      '<input class="search-inp" id="ptf-base-path" placeholder="http://.../信号板/{code}/" style="width:100%;box-sizing:border-box;margin-bottom:8px" oninput="_updatePathPreview()">' +
+    '</div>' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名 <span style="color:var(--danger)">*必填</span> &nbsp;<span style="font-weight:400;font-size:10px">{code} = 产品代号占位符</span></label>' +
+      '<input class="search-inp" id="ptf-file-pattern" placeholder="01_{code}_SCH-FINAL.rar" style="width:100%;box-sizing:border-box" oninput="_updatePathPreview()">' +
+    '</div>' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">最终路径预览 &nbsp;<span style="font-weight:400;font-size:10px">* 替换为产品代号</span></label>' +
+      '<input class="search-inp" id="ptf-path-preview" value="" style="width:100%;box-sizing:border-box;color:var(--accent);font-size:11px;font-family:var(--mono)" disabled>' +
     '</div>' +
     '<div style="margin-bottom:4px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">说明（可选）</label>' +
       '<input class="search-inp" id="ptf-desc" style="width:100%;box-sizing:border-box">' +
     '</div>',
     [{text: '取消', cls: '', onclick: 'closeSharedDialog()'},
-     {text: '确定', cls: 'btn-primary', onclick: 'saveProductTemplate()'}], {hideClose: true}, 'gitlab');
+     {text: '确定', cls: 'btn-primary', onclick: 'saveProductTemplate()'}], {hideClose: true, maxWidth: 780}, 'gitlab');
+  setTimeout(_updatePathPreview, 80);
 }
 
 function showEditProductTemplateForm(id) {
@@ -1148,15 +1169,24 @@ function showEditProductTemplateForm(id) {
       '</div>' +
     '</div>' +
     '<div style="margin-bottom:10px">' +
-      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">路径 <span style="color:var(--danger)">*必填</span></label>' +
-      '<input class="search-inp" id="ptf-path" value="' + escHtml(tpl.doc_path || '') + '" placeholder="文档索引路径" style="width:100%;box-sizing:border-box">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">路径 <span style="color:var(--danger)">*必填</span> &nbsp;<span style="font-weight:400;font-size:10px">{code} = 产品代号占位符，如 LNS677A-V010</span></label>' +
+      '<input class="search-inp" id="ptf-base-path" value="' + escHtml(tpl.base_path || '') + '" placeholder="http://.../信号板/{code}/" style="width:100%;box-sizing:border-box;margin-bottom:8px" oninput="_updatePathPreview()">' +
+    '</div>' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名 <span style="color:var(--danger)">*必填</span> &nbsp;<span style="font-weight:400;font-size:10px">{code} = 产品代号占位符</span></label>' +
+      '<input class="search-inp" id="ptf-file-pattern" value="' + escHtml(tpl.file_pattern || '') + '" placeholder="01_{code}_SCH-FINAL.rar" style="width:100%;box-sizing:border-box" oninput="_updatePathPreview()">' +
+    '</div>' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">最终路径预览 &nbsp;<span style="font-weight:400;font-size:10px">* 替换为产品代号</span></label>' +
+      '<input class="search-inp" id="ptf-path-preview" value="" style="width:100%;box-sizing:border-box;color:var(--accent);font-size:11px;font-family:var(--mono)" disabled>' +
     '</div>' +
     '<div style="margin-bottom:4px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">说明（可选）</label>' +
       '<input class="search-inp" id="ptf-desc" value="' + escHtml(tpl.description || '') + '" style="width:100%;box-sizing:border-box">' +
     '</div>',
     [{text: '取消', cls: '', onclick: 'closeSharedDialog()'},
-     {text: '确定', cls: 'btn-primary', onclick: 'saveProductTemplate(' + id + ')'}], {hideClose: true}, tpl.doc_type || 'gitlab');
+     {text: '确定', cls: 'btn-primary', onclick: 'saveProductTemplate(' + id + ')'}], {hideClose: true, maxWidth: 780}, tpl.doc_type || 'gitlab');
+  setTimeout(_updatePathPreview, 80);
 }
 
 function renderProductAfterReorder() {
@@ -1180,20 +1210,24 @@ function saveProductTemplate(id) {
   var orderEl = document.getElementById('ptf-order');
   var descEl = document.getElementById('ptf-desc');
   var roleEl = document.getElementById('dt-role');
-  var pathEl = document.getElementById('ptf-path');
+  var basePathEl = document.getElementById('ptf-base-path');
+  var filePatEl = document.getElementById('ptf-file-pattern');
   var stageEl = document.getElementById('ptf-stage');
 
-  if (!nameEl || !orderEl || !descEl || !pathEl) { showToast('表单数据异常，请重新打开对话框', 'error'); return; }
+  if (!nameEl || !orderEl || !descEl || !basePathEl || !filePatEl) { showToast('表单数据异常，请重新打开对话框', 'error'); return; }
 
   var order = parseInt(orderEl.value) || 0;
   var desc = descEl.value.trim();
   var role = roleEl ? roleEl.value : '';
-  var path = pathEl.value.trim();
+  var basePath = basePathEl.value.trim();
+  var filePattern = filePatEl.value.trim();
+  // Compute full doc_path for legacy compatibility
+  var fullPath = basePath && filePattern ? basePath.replace(/\/*$/, '') + '/' + filePattern.replace(/^\/*/, '') : '';
   var stage = stageEl ? stageEl.value : (_productStage || '通用');
   var typeEl = document.getElementById('ptf-doctype');
   var docType = typeEl ? typeEl.value : '';
   if (!nameEl.value.trim()) { showToast('请输入文档名称', 'error'); return; }
-  if (!path) { showToast('请输入路径', 'error'); return; }
+  if (!basePath && !filePattern) { showToast('请填写路径或文档名', 'error'); return; }
   if (!docType) { showToast('请选择文档类型', 'error'); return; }
   if (!role) { showToast('请选择责任人', 'error'); return; }
   var name = nameEl.value.trim();
@@ -1205,20 +1239,21 @@ function saveProductTemplate(id) {
     // Edit existing template
     var tpl = _productTemplates.find(function(x) { return x.id === id; });
     if (!tpl) { showToast('未找到该模板', 'error'); return; }
-    tpl.doc_name = name; tpl.doc_path = path; tpl.doc_type = docType;
+    tpl.doc_name = name; tpl.doc_path = fullPath; tpl.base_path = basePath; tpl.file_pattern = filePattern; tpl.doc_type = docType;
     tpl.sort_order = order; tpl.stage_type = stage; tpl.description = desc; tpl.responsible_role = role;
     _productPendingOps.push({ type: 'edit', id: id,
       doc_name: name, sort_order: order, stage_type: stage, responsible_role: role,
-      description: desc, doc_path: path, doc_type: docType });
+      description: desc, doc_path: fullPath, base_path: basePath, file_pattern: filePattern, doc_type: docType });
   } else if (id && id < 0) {
     var tpl2 = _productTemplates.find(function(x) { return x.id === id; });
     if (tpl2) {
-      tpl2.doc_name = name; tpl2.doc_path = path; tpl2.doc_type = docType;
+      tpl2.doc_name = name; tpl2.doc_path = fullPath; tpl2.base_path = basePath; tpl2.file_pattern = filePattern; tpl2.doc_type = docType;
       tpl2.sort_order = order; tpl2.stage_type = stage; tpl2.description = desc; tpl2.responsible_role = role;
     }
     for (var pi = 0; pi < _productPendingOps.length; pi++) {
       if (_productPendingOps[pi].tempId === id) {
-        _productPendingOps[pi].doc_name = name; _productPendingOps[pi].doc_path = path;
+        _productPendingOps[pi].doc_name = name; _productPendingOps[pi].doc_path = fullPath;
+        _productPendingOps[pi].base_path = basePath; _productPendingOps[pi].file_pattern = filePattern;
         _productPendingOps[pi].doc_type = docType; _productPendingOps[pi].sort_order = order;
         _productPendingOps[pi].stage_type = stage; _productPendingOps[pi].responsible_role = role;
         _productPendingOps[pi].description = desc;
@@ -1228,11 +1263,12 @@ function saveProductTemplate(id) {
   } else {
     var tempId = _productNextTempId--;
     var newDoc = { id: tempId, doc_name: name, sort_order: order,
-      stage_type: stage, responsible_role: role, description: desc, doc_path: path, doc_type: docType };
+      stage_type: stage, responsible_role: role, description: desc,
+      doc_path: fullPath, base_path: basePath, file_pattern: filePattern, doc_type: docType };
     _productTemplates.push(newDoc);
     _productPendingOps.push({ type: 'add', tempId: tempId,
       doc_name: name, sort_order: order, stage_type: stage, responsible_role: role,
-      description: desc, doc_path: path, doc_type: docType });
+      description: desc, doc_path: fullPath, base_path: basePath, file_pattern: filePattern, doc_type: docType });
   }
   renderProductTreePage();
 }
@@ -1302,7 +1338,9 @@ async function saveProductChanges() {
               doc_name: docs[di].doc_name, sort_order: newSort,
               stage_type: docs[di].stage_type || '通用', doc_type: docs[di].doc_type || '',
               responsible_role: docs[di].responsible_role || '',
-              description: docs[di].description || '', doc_path: docs[di].doc_path || '' });
+              description: docs[di].description || '',
+              doc_path: docs[di].doc_path || '', base_path: docs[di].base_path || '',
+              file_pattern: docs[di].file_pattern || '' });
           }
         }
       }
@@ -1316,10 +1354,10 @@ async function saveProductChanges() {
     var op = ops[i];
     try {
       if (op.type === 'add') {
-        await API.post('/product-doc-templates', { product_id: _selectedNodeId, doc_name: op.doc_name, sort_order: op.sort_order, stage_type: op.stage_type || '通用', doc_type: op.doc_type || '', responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '' });
+        await API.post('/product-doc-templates', { product_id: _selectedNodeId, doc_name: op.doc_name, sort_order: op.sort_order, stage_type: op.stage_type || '通用', doc_type: op.doc_type || '', responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '', base_path: op.base_path || '', file_pattern: op.file_pattern || '' });
         success++;
       } else if (op.type === 'edit') {
-        await API.put('/product-doc-templates/' + op.id, { doc_name: op.doc_name, sort_order: op.sort_order, stage_type: op.stage_type || '通用', doc_type: op.doc_type || '', responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '' });
+        await API.put('/product-doc-templates/' + op.id, { doc_name: op.doc_name, sort_order: op.sort_order, stage_type: op.stage_type || '通用', doc_type: op.doc_type || '', responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '', base_path: op.base_path || '', file_pattern: op.file_pattern || '' });
         success++;
       } else if (op.type === 'delete') {
         await API.del('/product-doc-templates/' + op.id);
