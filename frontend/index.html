@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="app-version" content="v2026.07.03-beta2">
+<meta name="app-version" content="v2026.07.03-beta3">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>PM Assistant · 集成禅道 & GitLab</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -210,10 +210,10 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
     <span id="branch-badge" title="当前开发分支">trunk</span>
     <div class="topbar-right">
       <div class="src-tags" id="topbar-sources">
-        <span class="src-tag pending" id="src-zentao"><span class="src-tag-label">禅道</span><span class="src-tag-tip" id="src-zentao-tip"></span></span>
-        <span class="src-tag pending" id="src-gitlab"><span class="src-tag-label">GitLab</span><span class="src-tag-tip" id="src-gitlab-tip"></span></span>
-        <span class="src-tag pending" id="src-nas"><span class="src-tag-label">NAS</span><span class="src-tag-tip" id="src-nas-tip"></span></span>
-        <span class="src-tag pending" id="src-svn"><span class="src-tag-label">SVN</span><span class="src-tag-tip" id="src-svn-tip"></span></span>
+        <span class="src-tag pending" id="src-zentao" onclick="showSrcMenu('zentao',event)"><span class="src-tag-label">禅道</span><span class="src-tag-tip" id="src-zentao-tip"></span></span>
+        <span class="src-tag pending" id="src-gitlab" onclick="showSrcMenu('gitlab',event)"><span class="src-tag-label">GitLab</span><span class="src-tag-tip" id="src-gitlab-tip"></span></span>
+        <span class="src-tag pending" id="src-nas" onclick="showSrcMenu('nas',event)"><span class="src-tag-label">NAS</span><span class="src-tag-tip" id="src-nas-tip"></span></span>
+        <span class="src-tag pending" id="src-svn" onclick="showSrcMenu('svn',event)"><span class="src-tag-label">SVN</span><span class="src-tag-tip" id="src-svn-tip"></span></span>
         <div class="src-sync-wrap" id="src-sync-btn" style="display:none">
           <button class="src-sync-btn" onclick="toggleSyncMenu(event)" title="数据源配置">
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

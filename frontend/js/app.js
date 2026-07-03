@@ -546,6 +546,76 @@ document.addEventListener('click', function(e) {
   if (!e.target.closest('.src-tag')) document.querySelectorAll('.src-tag-tip.show').forEach(function(t) { t.classList.remove('show'); });
 });
 
+// ── Source tag click menu ──
+
+function showSrcMenu(key, e) {
+  e.stopPropagation();
+  var existing = document.getElementById('src-popup-menu');
+  if (existing) existing.remove();
+  var tag = document.getElementById('src-' + key);
+  if (!tag) return;
+  var rect = tag.getBoundingClientRect();
+  var names = { zentao: '禅道', gitlab: 'GitLab', nas: 'NAS', svn: 'SVN' };
+  var name = names[key] || key;
+  var menu = document.createElement('div');
+  menu.id = 'src-popup-menu';
+  menu.style.cssText = 'position:fixed;z-index:1000;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.15);min-width:150px;overflow:hidden';
+  menu.style.left = rect.left + 'px';
+  menu.style.top = (rect.bottom + 4) + 'px';
+  menu.innerHTML =
+    '<div style="padding:8px 14px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border)">' + escHtml(name) + '</div>' +
+    '<button onclick="triggerSingleSync(\'' + key + '\');var m=document.getElementById(\'src-popup-menu\');if(m)m.remove()" style="display:block;width:100%;padding:8px 14px;border:none;background:var(--surface);color:var(--fg);font-size:13px;text-align:left;cursor:pointer;transition:background 0.1s" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'var(--surface)\'">' +
+      '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:8px;vertical-align:middle"><polyline points="1.5,5.5 3.5,2.5 1.5,2.5"/><polyline points="14.5,10.5 12.5,13.5 14.5,13.5"/><path d="M2.5 8a5.5 5.5 0 0 1 10-2.5"/><path d="M13.5 8a5.5 5.5 0 0 1-10 2.5"/></svg>同步此数据源' +
+    '</button>' +
+    '<button onclick="gotoSrcConfig(\'' + key + '\');var m=document.getElementById(\'src-popup-menu\');if(m)m.remove()" style="display:block;width:100%;padding:8px 14px;border:none;background:var(--surface);color:var(--fg);font-size:13px;text-align:left;cursor:pointer;transition:background 0.1s" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'var(--surface)\'">' +
+      '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-right:8px;vertical-align:middle"><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v2M8 12.5v2M2.5 8h2M11.5 8h2"/></svg>配置此数据源' +
+    '</button>';
+  document.body.appendChild(menu);
+  // Close on outside click
+  setTimeout(function() {
+    document.addEventListener('click', function _close(e) {
+      if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('click', _close); }
+    });
+  }, 10);
+}
+
+async function triggerSingleSync(key) {
+  var names = { zentao: '禅道', gitlab: 'GitLab', nas: 'NAS', svn: 'SVN' };
+  var name = names[key] || key;
+  showToast(name + ' 同步中...', 'info');
+  try {
+    var result = await API.post('/sync/trigger/' + key);
+    var d = result || {};
+    var summary = '';
+    if (key === 'svn') {
+      var ss = d.svn_summary || {};
+      summary = ss.summary || '完成';
+    } else if (key === 'gitlab') {
+      var gs = d.gitlab_summary || {};
+      summary = gs.summary || '完成';
+    } else {
+      summary = '已触发（请使用完整同步）';
+    }
+    showToast(name + ' 同步完成: ' + summary, 'success');
+    updateLinkStatus();
+  } catch(e) {
+    showToast(name + ' 同步失败: ' + (e.message || '未知错误'), 'error');
+  }
+}
+
+function gotoSrcConfig(key) {
+  gotoView('config');
+  // Set highlight target for config page to flash
+  window._srcConfigHighlight = key;
+}
+
+// Called by renderConfigForm to add highlight
+function _getSrcConfigHighlight() {
+  var k = window._srcConfigHighlight;
+  window._srcConfigHighlight = null;
+  return k;
+}
+
 function renderSourceTags() {
   var names = { zentao: '禅道', gitlab: 'GitLab', nas: 'NAS', svn: 'SVN' };
 

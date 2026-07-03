@@ -20,6 +20,60 @@ async def trigger_sync(_=Depends(require_perm("sync"))):
     return result
 
 
+@router.post("/trigger/{source}", response_model=dict)
+async def trigger_single_sync(source: str, db: Session = Depends(get_db), _=Depends(require_perm("sync"))):
+    """Trigger sync for a single data source (zentao/gitlab/nas/svn)."""
+    import time as _time, os as _os
+    from datetime import datetime as _dt, timezone as _tz
+
+    if source == "svn":
+        from backend.services.doc_scanner import check_product_docs
+        from backend.models.zentao import PmaProduct
+        products = db.query(PmaProduct).all()
+        t0 = _time.time()
+        total_scanned, total_submitted, total_reverted, total_location, total_matched = 0, 0, 0, 0, 0
+        for prod in products:
+            r = check_product_docs(db, prod.id)
+            total_scanned += r.get("scanned", 0)
+            total_submitted += r.get("auto_submitted", 0)
+            total_reverted += r.get("reverted", 0)
+            total_location += r.get("location_filled", 0)
+            total_matched += r.get("total_matched", 0)
+        elapsed = round(_time.time() - t0, 1)
+        summary_parts = [f"总匹配{total_matched}个", f"新匹配{total_submitted}个"]
+        if total_reverted: summary_parts.append(f"回退{total_reverted}个")
+        if total_location: summary_parts.append(f"补填路径{total_location}个")
+        return {"code": 0, "data": {
+            "svn_summary": {"status": "success", "summary": " / ".join(summary_parts),
+                             "scanned": total_scanned, "total_matched": total_matched, "auto_submitted": total_submitted,
+                             "reverted": total_reverted, "location_filled": total_location, "products": len(products)},
+            "timings": {"total": elapsed},
+        }, "message": "ok"}
+
+    if source == "gitlab":
+        from backend.config import settings
+        if not settings.GITLAB_TOKEN:
+            return {"code": 0, "data": {"gitlab_summary": {"status": "skipped", "summary": "未配置Token"}}, "message": "ok"}
+        from backend.services.gitlab_service import validate_all_releases
+        t0 = _time.time()
+        vresult = await validate_all_releases(db, concurrency=5)
+        elapsed = round(_time.time() - t0, 1)
+        return {"code": 0, "data": {
+            "gitlab_summary": {"status": "success",
+                                "summary": f"发布版本校验完成 / 有效{vresult.get('valid',0)} / 无效{vresult.get('invalid',0)}"},
+            "gitlab_validation": vresult,
+            "timings": {"total": elapsed},
+        }, "message": "ok"}
+
+    if source in ("zentao", "nas"):
+        return {"code": 0, "data": {
+            f"{source}_summary": {"status": "skipped" if source == "nas" else "triggered",
+                                   "summary": "单源同步请使用完整同步" if source == "zentao" else "NAS同步尚未实现"},
+        }, "message": "ok"}
+
+    return {"code": 1, "message": f"不支持的数据源: {source}"}
+
+
 @router.get("/status", response_model=dict)
 def sync_status(db: Session = Depends(get_db), _=Depends(get_current_user)):
     # Get latest sync log for each entity type

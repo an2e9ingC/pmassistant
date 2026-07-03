@@ -234,7 +234,6 @@ class SyncService:
 
         try:
             # ── Source 1: Zentao ──
-            zentao_summary = {}
             try:
                 t0 = time.time(); await self.client.authenticate(); timings["auth"] = round(time.time() - t0, 1)
                 logger.info("[禅道] 认证成功，开始同步...")
@@ -310,6 +309,8 @@ class SyncService:
                     total_scanned = 0
                     total_submitted = 0
                     total_reverted = 0
+                    total_location = 0
+                    total_matched = 0
                     failed = 0
                     for prod in products:
                         try:
@@ -317,12 +318,16 @@ class SyncService:
                             total_scanned += r.get("scanned", 0)
                             total_submitted += r.get("auto_submitted", 0)
                             total_reverted += r.get("reverted", 0)
+                            total_location += r.get("location_filled", 0)
+                            total_matched += r.get("total_matched", 0)
                         except Exception:
                             failed += 1
                     timings["svn"] = round(time.time() - t0, 1)
-                    parts = [f"扫描{total_scanned}个", f"自动提交{total_submitted}个"]
+                    parts = [f"总匹配{total_matched}个", f"新匹配{total_submitted}个"]
                     if total_reverted > 0:
                         parts.append(f"回退{total_reverted}个")
+                    if total_location > 0:
+                        parts.append(f"补填路径{total_location}个")
                     svn_summary = {
                         "status": "success",
                         "summary": " / ".join(parts),

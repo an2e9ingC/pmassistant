@@ -133,6 +133,27 @@ function renderConfigForm(cfg) {
   '</div>';
 
   document.getElementById('admin-config-form').innerHTML = html;
+  // Highlight target card if navigated from source tag
+  if (typeof _getSrcConfigHighlight === 'function') {
+    var hlKey = _getSrcConfigHighlight();
+    if (hlKey) {
+      setTimeout(function() {
+        var card = document.querySelector('.config-section.' + hlKey);
+        if (card) {
+          card.style.transition = 'box-shadow 0.3s, border-color 0.3s';
+          card.style.boxShadow = '0 0 0 3px var(--accent)';
+          card.style.borderColor = 'var(--accent)';
+          card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          var count = 0;
+          var flash = setInterval(function() {
+            card.style.boxShadow = (count % 2 === 0) ? '0 0 0 3px var(--accent)' : '0 0 0 3px transparent';
+            count++;
+            if (count >= 6) { clearInterval(flash); card.style.boxShadow = ''; card.style.borderColor = ''; }
+          }, 500);
+        }
+      }, 200);
+    }
+  }
 }
 
 // ── Dialog-based config editing ──

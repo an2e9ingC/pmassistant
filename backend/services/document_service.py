@@ -959,12 +959,8 @@ def get_or_init_product_documents(db: Session, product_id: int) -> list[dict]:
                 pattern = tpl.file_pattern.replace("{code}", product_code) if product_code else tpl.file_pattern
                 actual_path = base.rstrip("/") + "/" + pattern.lstrip("/")
             else:
-                # Legacy fallback: support both {code} and * placeholders
                 template_path = tpl.doc_path or ""
-                if product_code:
-                    actual_path = template_path.replace("{code}", product_code).replace("*", product_code)
-                else:
-                    actual_path = template_path
+                actual_path = template_path
 
             # Find existing doc instance
             existing = db.query(ProductDocument).filter(
@@ -1001,20 +997,10 @@ def get_or_init_product_documents(db: Session, product_id: int) -> list[dict]:
             # Check if location matches template pattern
             mismatch = ""
             if existing.location and (tpl.base_path or tpl.file_pattern):
-                # New format: compare location against expanded doc_path
                 if existing.location != existing.doc_path:
                     mismatch = f"路径与模板不匹配（期望: {existing.doc_path}）"
             elif existing.location and existing.doc_path and ('*' in existing.doc_path or '?' in existing.doc_path):
-                # Legacy format with wildcards
-                import re as _re
-                from backend.services.doc_scanner import _parse_doc_path, _relative_path
-                t_base, t_regex = _parse_doc_path(existing.doc_path)
-                if t_regex:
-                    rel = _relative_path(t_base, existing.location)
-                    if not rel:
-                        mismatch = f"路径不在模板目录下（模板: {existing.doc_path}）"
-                    elif not _re.compile(t_regex, _re.IGNORECASE).match(rel):
-                        mismatch = f"路径与模板不匹配，期望通配符: {existing.doc_path}"
+                mismatch = f"路径包含通配符，无法校验（模板: {existing.doc_path}）"
             results.append({
                 "id": existing.id,
                 "template_id": tpl.id,

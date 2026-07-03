@@ -241,6 +241,7 @@ def check_product_docs(db, product_id: int) -> dict:
     auto_submitted = 0
     reverted = 0
     location_filled = 0
+    total_matched = 0
     results = []
 
     from datetime import datetime as _dt
@@ -283,6 +284,7 @@ def check_product_docs(db, product_id: int) -> dict:
 
         now = _dt.utcnow()
         if exists:
+            total_matched += 1
             # Auto-fill location with the verified path (only if no wildcards — direct URL)
             if check_path and '*' not in check_path and '?' not in check_path:
                 if not doc.location:
@@ -314,6 +316,7 @@ def check_product_docs(db, product_id: int) -> dict:
 
     return {
         "scanned": scanned,
+        "total_matched": total_matched,
         "auto_submitted": auto_submitted,
         "reverted": reverted,
         "location_filled": location_filled,
