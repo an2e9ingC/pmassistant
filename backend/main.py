@@ -4,14 +4,15 @@ import time
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session
 
 from backend.config import settings, SERVER_START_TIME
 from backend.database import init_db
-from backend.routers import auth, config, dashboard, projects, sync, products, delivery, reports, logs, topology, admin_users, maintenance, customers, document_template, product_doc_template, pma_tag, standards, gitlab, db_manage, product_management, notifications, documents, tasks, worklogs
+from backend.routers import auth, config, dashboard, projects, sync, products, delivery, reports, logs, topology, admin_users, maintenance, customers, document_template, product_doc_template, pma_tag, standards, gitlab, db_manage, product_management, notifications, documents, tasks, worklogs, bugs
 
 # File log handler — use same directory as database
 import backend.database as _db_module
@@ -132,6 +133,21 @@ app.include_router(documents.router)
 app.include_router(tasks.router)
 app.include_router(worklogs.router)
 app.include_router(worklogs.comment_router)
+app.include_router(bugs.router)
+
+# ── Attachment serving (standalone, not prefixed) ──
+from fastapi.responses import StreamingResponse
+from backend.services import bug_service as _bs
+from backend.database import get_db as _gdb
+from backend.middleware.auth import get_current_user as _gcu
+
+@app.get("/api/attachments/{attachment_id}")
+def serve_attachment(attachment_id: int, db: Session = Depends(_gdb), _=Depends(_gcu)):
+    result = _bs.get_attachment_path(attachment_id, db)
+    if not result: raise HTTPException(status_code=404, detail="Attachment not found")
+    path, mime, fname = result
+    return StreamingResponse(open(path, "rb"), media_type=mime,
+                             headers={"Content-Disposition": f"inline; filename={fname}"})
 
 # Static files (frontend)
 app.mount("/css", StaticFiles(directory="frontend/css"), name="css")

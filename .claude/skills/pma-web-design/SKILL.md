@@ -192,9 +192,47 @@ gap: 6px 14px;
 | `iconCopy(onclick, title)` | 复制图标 📋 | — |
 | `iconUpload(onclick, title)` | 上传图标 📤 | — |
 | `iconToggle(onclick, title)` | 禁用图标 ⊙\ | SVG矢量+红色 |
-| `createProjectCombo(opts)` | 项目搜索下拉 | comboId, onSelect |
-| `createUserCombo(opts)` | 用户搜索下拉 | comboId, onSelect |
+| `createProjectCombo(opts)` | 项目搜索下拉 | comboId, inputId, dropdownId, onSelect, placeholder |
+| `createProductCombo(opts)` | 产品搜索下拉 | 同上，数据源为 `/api/products?limit=200` |
+| `createUserCombo(opts)` | 用户搜索下拉 | comboId, inputId, dropdownId, onSelect |
 | `multiSelectDialog(title, items, ids, opts, cb)` | 多选弹窗 | placeholder, maxWidth |
+
+### 6.1 搜索下拉组件标准（Searchable Combo）
+
+所有需要从大量选项中搜索/选择的下拉框，统一使用搜索下拉组件。已有三种：
+
+```
+createProjectCombo({ comboId, inputId, dropdownId, onSelect, selectedIdFn, placeholder })
+createProductCombo({ comboId, inputId, dropdownId, onSelect, selectedIdFn, placeholder })
+createUserCombo({ comboId, inputId, dropdownId, onSelect, selectedIdFn })
+```
+
+**通用参数：**
+
+| 参数 | 说明 |
+|------|------|
+| `comboId` | 外层容器 ID |
+| `inputId` | 搜索输入框 ID |
+| `dropdownId` | 下拉列表 ID |
+| `onSelect(item)` | 选中回调，`item` 含 `{id, name, code}` |
+| `selectedIdFn()` | 返回当前已选 ID（编辑模式预填） |
+| `placeholder` | 输入框占位文本 |
+
+**HTML 结构（自动生成）：**
+```html
+<div class="proj-combo" id="{comboId}">
+  <input class="proj-combo-input" id="{inputId}" placeholder="..."
+    onclick="{comboId}Open()" oninput="{comboId}Filter(this.value)">
+  <svg class="proj-combo-arrow">...</svg>
+  <div class="proj-combo-dropdown" id="{dropdownId}"></div>
+</div>
+```
+
+**新增同类组件时**，参照 `createProductCombo` 模式：
+1. 在 `components.js` 中添加 `createXxxCombo(opts)` 函数
+2. 调用 `_fnName` 生成 open/filter/select 函数名
+3. 在 open 函数中异步加载数据，调用 `_renderSearchDropdown(dropdownId, items, selectedId, q, selectFn)`
+4. 返回 HTML 字符串
 
 ---
 

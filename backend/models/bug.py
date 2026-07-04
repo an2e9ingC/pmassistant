@@ -1,5 +1,6 @@
+"""PMA-native Bug tracking models."""
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Text, Date
+from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Date, ForeignKey, JSON
 from sqlalchemy.sql import func
 
 from backend.database import Base
@@ -25,3 +26,106 @@ class CachedBug(Base):
     closed_date = Column(DateTime, nullable=True)
     raw_json = Column(Text)
     synced_at = Column(DateTime, default=func.now())
+
+
+class PmaBug(Base):
+    """PMA-native bug tracking — product-scoped, with project optionally linked."""
+    __tablename__ = "pma_bugs"
+
+    id = Column(Integer, primary_key=True)
+    title = Column(String(512), nullable=False)
+    description = Column(Text, nullable=True)  # Markdown
+
+    # Core relationships
+    product_id = Column(Integer, ForeignKey("pma_products.id"), nullable=False, index=True)
+    project_id = Column(Integer, ForeignKey("zenta_projects.id"), nullable=True, index=True)
+    component_id = Column(Integer, ForeignKey("product_doc_templates.id"), nullable=True)
+
+    # Status & resolution
+    status = Column(String(32), default="open", index=True)
+    # open / confirmed / in_progress / gitlab_submitted / resolved / closed
+    resolution = Column(String(32), nullable=True)
+    # resolved / unresolved / duplicate / wontfix / invalid / postponed
+
+    # Severity & priority
+    severity = Column(Integer, default=3)  # 1-4
+    priority = Column(String(16), default="medium")  # low / medium / high / critical
+    type = Column(String(32), default="codeerror")
+    # codeerror / design / compatibility / standard / security / performance / other
+
+    # People
+    reporter_id = Column(Integer, ForeignKey("local_users.id"), nullable=False)
+    assignee_id = Column(Integer, ForeignKey("local_users.id"), nullable=True)
+    resolved_by_id = Column(Integer, ForeignKey("local_users.id"), nullable=True)
+
+    # Genealogy
+    original_bug_id = Column(Integer, ForeignKey("pma_bugs.id"), nullable=True)  # copy/clone source
+    source_bug_id = Column(Integer, nullable=True)  # Zentao original bug ID
+
+    # GitLab integration
+    gitlab_url = Column(String(512), nullable=True)
+    gitlab_iid = Column(Integer, nullable=True)
+
+    # Work tracking
+    estimate_hours = Column(Float, default=0.0)
+    consumed_hours = Column(Float, default=0.0)
+
+    # Dates
+    due_date = Column(Date, nullable=True)
+    resolved_at = Column(DateTime, nullable=True)
+    closed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class BugWorkLog(Base):
+    """Time tracking for bugs."""
+    __tablename__ = "pma_bug_worklogs"
+
+    id = Column(Integer, primary_key=True)
+    bug_id = Column(Integer, ForeignKey("pma_bugs.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("local_users.id"), nullable=False)
+    hours = Column(Float, nullable=False)
+    date = Column(Date, nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+
+
+class BugAnalysis(Base):
+    """Analysis/comment records on bugs — enhanced with markdown + attachments."""
+    __tablename__ = "pma_bug_analysis"
+
+    id = Column(Integer, primary_key=True)
+    bug_id = Column(Integer, ForeignKey("pma_bugs.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("local_users.id"), nullable=False)
+    content = Column(Text, nullable=False)  # Markdown
+    attachments = Column(JSON, nullable=True)  # [{"filename": "...", "url": "..."}]
+    created_at = Column(DateTime, default=func.now())
+
+
+class BugAttachment(Base):
+    """File attachments for bugs — stored on filesystem, DB holds metadata."""
+    __tablename__ = "pma_bug_attachments"
+
+    id = Column(Integer, primary_key=True)
+    bug_id = Column(Integer, ForeignKey("pma_bugs.id"), nullable=False, index=True)
+    analysis_id = Column(Integer, ForeignKey("pma_bug_analysis.id"), nullable=True, index=True)
+    filename = Column(String(256), nullable=False)
+    mime_type = Column(String(128), nullable=False)
+    file_path = Column(String(512), nullable=False)  # relative to data/uploads/
+    file_size = Column(Integer, default=0)
+    uploaded_by = Column(Integer, ForeignKey("local_users.id"), nullable=False)
+    created_at = Column(DateTime, default=func.now())
+
+
+class BugTransfer(Base):
+    """Records of bug transfers between projects."""
+    __tablename__ = "pma_bug_transfers"
+
+    id = Column(Integer, primary_key=True)
+    bug_id = Column(Integer, ForeignKey("pma_bugs.id"), nullable=False, index=True)
+    from_project_id = Column(Integer, ForeignKey("zenta_projects.id"), nullable=True)
+    to_project_id = Column(Integer, ForeignKey("zenta_projects.id"), nullable=False)
+    transfer_type = Column(String(16), nullable=False)  # move / copy
+    transferred_by = Column(Integer, ForeignKey("local_users.id"), nullable=False)
+    created_at = Column(DateTime, default=func.now())

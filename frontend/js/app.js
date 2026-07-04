@@ -64,6 +64,7 @@ var VIEW_REGISTRY = {
   reports:          { title: '统计报告',    label: '统计报告',    perm: null,            initName: 'renderReports',        js: '/js/reports.js?v=' + APP_VERSION },
   'notif-manage':   { title: '通知管理',    label: '通知管理',    perm: null,            init: initNotifManage },
   logs:             { title: '系统日志',    label: '系统日志',    perm: 'admin',         init: initLogsView,           js: '/js/logs.js?v=' + APP_VERSION },
+  bugs:             { title: 'Bug 管理',     label: 'Bug 管理',    perm: null,            initName: 'initBugs',         js: '/js/bugs.js?v=' + APP_VERSION },
   users:            { title: '用户管理',    label: '用户管理',    perm: 'admin',         initName: 'initUserManagement',   js: '/js/admin.js?v=' + APP_VERSION },
   permissions:      { title: '权限管理',    label: '权限管理',    perm: 'admin',         initName: 'initPermissions',      js: '/js/admin.js?v=' + APP_VERSION },
   config:           { title: '数据源配置',  label: '数据源配置',  perm: 'admin',         initName: 'initAdmin',            js: '/js/admin.js?v=' + APP_VERSION },
@@ -1351,7 +1352,7 @@ function initUserCenter() {
               '<button class="view-switch-btn active" onclick="_ucSwitchView(\'tasks\')">任务</button>' +
               '<button class="view-switch-btn" onclick="_ucSwitchView(\'bugs\')">Bug</button>' +
             '</div>' +
-            '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="_ucNewTask()">+ 新建任务</button>' +
+            '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" id="uc-new-btn" onclick="_ucNewItem()">+ 新建任务</button>' +
           '</div>' +
         '</div>' +
         '<div class="task-filter-bar" id="uc-filter-bar"></div>' +
@@ -1377,11 +1378,18 @@ function _ucSwitchView(v) {
   _ucView = v;
   document.getElementById('uc-list-heading').textContent = v === 'tasks' ? '我的任务' : '我的Bug';
   document.querySelectorAll('.view-switch-btn').forEach(function(b,i){ b.classList.toggle('active', (i===0&&v==='tasks')||(i===1&&v==='bugs')); });
+  var btn = document.getElementById('uc-new-btn');
+  if (btn) { btn.textContent = v === 'tasks' ? '+ 新建任务' : '+ 新建Bug'; }
   if (v === 'tasks') { _renderUcFilterBar(); _renderUcTableHead(); _renderUcTaskTable(); }
-  else {
-    document.getElementById('uc-filter-bar').innerHTML = '';
-    document.getElementById('uc-table-head').innerHTML = '';
-    document.getElementById('uc-table-tbody').innerHTML = '<tr><td colspan="1"><div class="empty-state" style="padding:40px">TODO：Bug 管理功能即将上线，敬请期待。</div></td></tr>';
+  else { _ucLoadBugs(); }
+}
+
+function _ucNewItem() {
+  if (_ucView === 'bugs') {
+    if (typeof openBugDialog === 'function') openBugDialog();
+    else if (typeof loadViewScript === 'function') loadViewScript('/js/bugs.js?v=' + APP_VERSION, function() { openBugDialog(); });
+  } else {
+    _ucNewTask();
   }
 }
 
@@ -1461,6 +1469,26 @@ function _renderUcStats() {
     '<div class="profile-stat todo"><div class="profile-stat-val">'+counts.todo+'</div><div class="profile-stat-lbl">待办</div></div>' +
     '<div class="profile-stat doing"><div class="profile-stat-val">'+counts.in_progress+'</div><div class="profile-stat-lbl">进行中</div></div>' +
     '<div class="profile-stat hours"><div class="profile-stat-val" id="uc-week-total">...</div><div class="profile-stat-lbl">本周工时</div></div>';
+}
+
+async function _ucLoadBugs() {
+  document.getElementById('uc-filter-bar').innerHTML = '';
+  document.getElementById('uc-table-head').innerHTML = '<tr><th>编号</th><th>标题</th><th>产品</th><th>状态</th><th>严重</th><th>操作</th></tr>';
+  try {
+    var bugs = await API.get('/bugs/my');
+    var tbody = document.getElementById('uc-table-tbody');
+    if (!bugs || !bugs.length) { tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">暂无Bug</div></td></tr>'; return; }
+    tbody.innerHTML = bugs.map(function(b) {
+      return '<tr style="cursor:pointer" onclick="openBugDetail('+b.id+')">' +
+        '<td style="font-family:var(--mono);font-size:11px">#' + b.id + '</td>' +
+        '<td style="text-align:left;font-weight:530">' + escHtml(b.title) + '</td>' +
+        '<td style="font-size:12px">' + escHtml(b.product_name||'-') + '</td>' +
+        '<td>' + renderPill(b.status||'open') + '</td>' +
+        '<td>' + (b.severity||'-') + '</td>' +
+        '<td onclick="event.stopPropagation()">' + iconEdit('openBugDialog('+b.id+')','编辑') + iconDelete('deleteBugById('+b.id+')','删除') + '</td>' +
+      '</tr>';
+    }).join('');
+  } catch(e) { document.getElementById('uc-table-tbody').innerHTML = '<tr><td colspan="6"><div class="error-state">加载失败</div></td></tr>'; }
 }
 
 function _ucNewTask() {

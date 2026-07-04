@@ -587,6 +587,42 @@ function _setupComboFunctions(opts) {
   };
 }
 
+function createProductCombo(opts) {
+  var comboId = opts.comboId, inputId = opts.inputId, dropdownId = opts.dropdownId;
+  var openFn = _fnName(comboId, 'Open');
+  var filterFn = _fnName(comboId, 'Filter');
+  var selectFn = _fnName(comboId, 'Select');
+  window[openFn] = function() {
+    API.get('/products?limit=200').then(function(data) {
+      var items = (data && data.items) ? data.items : (data || []);
+      window['_combo_'+comboId] = items;
+      var wrap = document.getElementById(comboId); if (!wrap) return;
+      wrap.classList.add('open');
+      var inp = document.getElementById(inputId); if (inp) inp.select();
+      _renderSearchDropdown(dropdownId, items, opts.selectedIdFn ? opts.selectedIdFn() : null, '', selectFn);
+    });
+  };
+  window[filterFn] = function(q) {
+    var items = window['_combo_'+comboId] || [];
+    _renderSearchDropdown(dropdownId, items, opts.selectedIdFn ? opts.selectedIdFn() : null, q, selectFn);
+  };
+  window[selectFn] = function(id) {
+    var wrap = document.getElementById(comboId); if (wrap) wrap.classList.remove('open');
+    var items = window['_combo_'+comboId] || [];
+    var p = items.find(function(x) { return x.id == id; });
+    if (p) {
+      document.getElementById(inputId).value = p.name;
+      if (opts.onSelect) opts.onSelect(p);
+    }
+  };
+  return '<div class="proj-combo" id="' + comboId + '" style="min-width:0!important">' +
+    '<input class="proj-combo-input" id="' + inputId + '" type="text" autocomplete="off" placeholder="' + escHtml(opts.placeholder || '搜索产品...') + '" ' +
+      'onclick="' + openFn + '()" oninput="' + filterFn + '(this.value)">' +
+    '<svg class="proj-combo-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2,5 7,10 12,5"/></svg>' +
+    '<div class="proj-combo-dropdown" id="' + dropdownId + '"></div>' +
+  '</div>';
+}
+
 function createProjectCombo(opts) {
   _setupComboFunctions(opts);
   var openFn = _fnName(opts.comboId, 'Open');

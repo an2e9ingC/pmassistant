@@ -42,7 +42,7 @@ allowed-tools: Read, Write, Edit, Bash
 
 ## 组件复用原则
 
-1. **搜索下拉** → `createProjectCombo()` / `initProjectCombo()` / `initSearchCombo()`
+1. **搜索下拉** → `createProjectCombo()` / `createProductCombo()` / `createUserCombo()` / `initSearchCombo()`（详见 `pma-web-design` §6.1）
 2. **对话框** → `openDialog()`，禁止手写 overlay HTML
 3. **状态标签** → `renderPill()`，新增状态需同步 `STATUS_TXT` + CSS
 4. **进度** → `renderProgressCircle()`（唯一进度组件，`renderProgressBar` 已废弃）
