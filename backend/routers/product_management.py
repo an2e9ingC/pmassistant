@@ -74,6 +74,14 @@ def get_tree(
 
 # ── Node Content ──
 
+@router.get("/products/{product_id}/node", response_model=dict)
+def get_product_node(product_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    """Return the tree node ID that this product is linked to."""
+    from backend.models.zentao import ProductNodeLink
+    link = db.query(ProductNodeLink).filter(ProductNodeLink.product_id == product_id).first()
+    return {"code": 0, "data": {"node_id": link.product_node_id if link else None}, "message": "ok"}
+
+
 @router.get("/nodes/{node_id}/products", response_model=dict)
 def get_node_products(
     node_id: int,

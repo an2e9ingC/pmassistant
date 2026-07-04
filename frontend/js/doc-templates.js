@@ -52,10 +52,12 @@ function switchDocTemplateTab(tab, el) {
   document.getElementById('dtsec-product').style.display = tab === 'product' ? '' : 'none';
   document.getElementById('dtsec-tags').style.display = tab === 'tags' ? '' : 'none';
   document.getElementById('dtsec-naming').style.display = tab === 'naming' ? '' : 'none';
+  document.getElementById('dtsec-bugtpl').style.display = tab === 'bugtpl' ? '' : 'none';
   if (tab === 'project') initDocTemplates();
   else if (tab === 'product') initProductDocTemplates();
   else if (tab === 'tags') initTags();
   else if (tab === 'naming') initNamingOptions();
+  else if (tab === 'bugtpl') initBugTemplates();
 }
 function _openDocDialog(title, bodyHtml, buttons, opts, defaultDocType) {
   openDialog(title, bodyHtml, buttons, opts);
@@ -1726,4 +1728,71 @@ async function _namingDelete(id, fk) {
   } catch(e) {
     showToast('删除失败: ' + (e.message || ''), 'error');
   }
+}
+
+/* ── Bug Templates Tab ── */
+
+async function initBugTemplates() {
+  var c = document.getElementById('dtsec-bugtpl');
+  c.innerHTML = '<div class="loading-spinner">加载中...</div>';
+  try {
+    var data = await API.get('/product-doc-templates/bug-templates');
+    var tpls = data || [];
+    var html = '<div style="max-width:800px">' +
+      '<div style="display:flex;justify-content:flex-end;margin-bottom:10px">' +
+        '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="_bugTplShowEdit(0)">+ 添加模板</button>' +
+      '</div>';
+    if (!tpls.length) { html += '<div class="empty-state">暂无模板</div>'; }
+    else {
+      html += '<table class="proj-table"><thead><tr><th>名称</th><th>内容预览</th><th>操作</th></tr></thead><tbody>';
+      tpls.forEach(function(t) {
+        html += '<tr><td style="font-weight:500">'+escHtml(t.name)+(t.is_default?' <span style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:3px">默认</span>':'')+'</td>' +
+          '<td style="font-size:11px;color:var(--muted);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHtml((t.content||'').substring(0,80))+'</td>' +
+          '<td>'+(t.is_default?'':iconBtn('⭐','设为默认','_bugTplSetDefault('+t.id+')'))+iconEdit('_bugTplShowEdit('+t.id+')','编辑')+iconDelete('_bugTplDelete('+t.id+')','删除')+'</td></tr>';
+      });
+      html += '</tbody></table>';
+    }
+    html += '</div>';
+    c.innerHTML = html;
+  } catch(e) { c.innerHTML = '<div class="error-state">加载失败: '+escHtml(e.message)+'</div>'; }
+}
+
+function _bugTplShowEdit(id) {
+  var defaultContent = '## 问题描述\n\n请简要描述遇到的问题。\n\n## 复现步骤\n\n1. \n2. \n3. \n\n## 期望行为\n\n应该发生什么。\n\n## 实际行为\n\n实际发生了什么。\n\n## 环境信息\n\n- 版本: \n- 硬件: \n- 浏览器: \n\n## 附件/截图\n\n';
+  var t = id ? _bugTplFind(id) : null;
+  var body = '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">模板名称 *</label>' +
+    '<input class="search-inp" id="bt-name" value="'+escHtml(t?t.name:'')+'" style="width:100%;box-sizing:border-box;margin-top:3px"></div>' +
+    '<div><label style="font-size:11px;color:var(--muted)">内容（Markdown）</label>' +
+    '<textarea class="search-inp" id="bt-content" rows="12" style="width:100%;box-sizing:border-box;margin-top:3px;resize:vertical;font-family:var(--mono);font-size:12px">'+escHtml(t?t.content:defaultContent)+'</textarea></div>';
+  openDialog((id?'编辑':'添加')+' Bug提交模板', body, [
+    {text:'取消',onclick:'closeSharedDialog()'},
+    {text:'保存',cls:'btn-primary',onclick:'_bugTplSave('+(id||0)+')'}
+  ], {maxWidth:560});
+}
+
+function _bugTplFind(id) {
+  var el = document.querySelector('#dtsec-bugtpl');
+  return null; // We'll re-fetch
+}
+
+async function _bugTplSave(id) {
+  var name = document.getElementById('bt-name').value.trim();
+  var content = document.getElementById('bt-content').value;
+  if (!name) { showToast('请输入模板名称','error'); return; }
+  try {
+    if (id) await API.put('/product-doc-templates/bug-templates/'+id, {name:name, content:content});
+    else await API.post('/product-doc-templates/bug-templates', {name:name, content:content});
+    closeSharedDialog(); initBugTemplates();
+  } catch(e) { showToast('保存失败: '+(e.message||''),'error'); }
+}
+
+async function _bugTplSetDefault(id) {
+  try { await API.put('/product-doc-templates/bug-templates/'+id, {is_default: 1}); initBugTemplates(); }
+  catch(e) { showToast('设置失败: '+(e.message||''),'error'); }
+}
+
+async function _bugTplDelete(id) {
+  if (!confirm('确定删除此模板？')) return;
+  try { await API.del('/product-doc-templates/bug-templates/'+id); initBugTemplates(); }
+  catch(e) { showToast('删除失败: '+(e.message||''),'error'); }
 }

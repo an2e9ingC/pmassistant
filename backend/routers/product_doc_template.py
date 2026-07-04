@@ -367,3 +367,57 @@ def delete_naming_option(option_id: int, db: Session = Depends(get_db), user=Dep
     db.delete(opt); db.commit()
     log_audit(db, user, "naming_option_delete", f"删除命名选项: {info}", "产品", "medium")
     return {"code": 0, "message": "ok"}
+
+
+# ── Bug Templates ──
+
+class BugTemplateCreate(BaseModel):
+    name: str
+    content: str = ""
+    sort_order: int = 0
+
+
+class BugTemplateUpdate(BaseModel):
+    name: Optional[str] = None
+    content: Optional[str] = None
+    sort_order: Optional[int] = None
+    is_default: Optional[int] = None
+
+
+@router.get("/bug-templates", response_model=dict)
+def get_bug_templates(db: Session = Depends(get_db), _=Depends(get_current_user)):
+    from backend.models.document import BugTemplate
+    tpls = db.query(BugTemplate).order_by(BugTemplate.sort_order).all()
+    return {"code": 0, "data": [{"id": t.id, "name": t.name, "content": t.content, "sort_order": t.sort_order, "is_default": t.is_default or 0} for t in tpls], "message": "ok"}
+
+
+@router.post("/bug-templates", response_model=dict)
+def create_bug_template(body: BugTemplateCreate, db: Session = Depends(get_db), user=Depends(require_perm("doc_template"))):
+    from backend.models.document import BugTemplate
+    t = BugTemplate(name=body.name, content=body.content, sort_order=body.sort_order)
+    db.add(t); db.commit()
+    return {"code": 0, "data": {"id": t.id}, "message": "ok"}
+
+
+@router.put("/bug-templates/{tid}", response_model=dict)
+def update_bug_template(tid: int, body: BugTemplateUpdate, db: Session = Depends(get_db), user=Depends(require_perm("doc_template"))):
+    from backend.models.document import BugTemplate
+    t = db.query(BugTemplate).filter(BugTemplate.id == tid).first()
+    if not t: raise HTTPException(status_code=404, detail="Not found")
+    if body.is_default == 1:
+        db.query(BugTemplate).update({BugTemplate.is_default: 0})
+    if body.name is not None: t.name = body.name
+    if body.content is not None: t.content = body.content
+    if body.sort_order is not None: t.sort_order = body.sort_order
+    if body.is_default is not None: t.is_default = body.is_default
+    db.commit()
+    return {"code": 0, "data": {"id": t.id}, "message": "ok"}
+
+
+@router.delete("/bug-templates/{tid}", response_model=dict)
+def delete_bug_template(tid: int, db: Session = Depends(get_db), user=Depends(require_perm("doc_template"))):
+    from backend.models.document import BugTemplate
+    t = db.query(BugTemplate).filter(BugTemplate.id == tid).first()
+    if not t: raise HTTPException(status_code=404, detail="Not found")
+    db.delete(t); db.commit()
+    return {"code": 0, "message": "ok"}

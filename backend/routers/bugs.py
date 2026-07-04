@@ -213,3 +213,79 @@ def transfer_bug(bug_id: int, body: TransferCreate, db: Session = Depends(get_db
     if not b: raise HTTPException(status_code=404, detail="Bug not found")
     log_audit(db, user, "bug_transfer", f"Bug #{bug_id} {body.transfer_type}→项目{body.to_project_id}", "Bug", "medium")
     return {"code": 0, "data": b, "message": "ok"}
+
+
+# ── GitLab Integration ──
+
+@router.post("/{bug_id}/gitlab-submit", response_model=dict)
+async def submit_to_gitlab(bug_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    """Submit bug as GitLab issue using the component's doc_path."""
+    b = bug_service.get_bug(db, bug_id)
+    if not b: raise HTTPException(status_code=404, detail="Bug not found")
+    if not b.get("component_id"):
+        raise HTTPException(status_code=400, detail="Bug 未选择组件，无法确定 GitLab 仓库")
+
+    # Get component's doc_path to determine gitlab project
+    from backend.models.document import ProductDocTemplate
+    tpl = db.query(ProductDocTemplate).filter(ProductDocTemplate.id == b["component_id"]).first()
+    if not tpl or not tpl.doc_path:
+        raise HTTPException(status_code=400, detail="组件未配置文档路径")
+    if tpl.doc_type != "gitlab":
+        raise HTTPException(status_code=400, detail="组件文档类型非 GitLab（当前: " + (tpl.doc_type or "未设置") + "）")
+
+    # Parse gitlab project path from doc_path
+    import re as _re
+    m = _re.search(r'https?://[^/]+/(.+?)(?:/-)?(?:/releases|/tags)?$|https?://[^/]+/(.+)', tpl.doc_path)
+    if not m:
+        raise HTTPException(status_code=400, detail="无法从组件路径解析 GitLab 项目: " + tpl.doc_path)
+    proj_path = (m.group(1) or m.group(2)).rstrip("/")
+
+    try:
+        from backend.services.gitlab_client import GitLabClient
+        client = GitLabClient()
+        title = f"[PMA Bug #{bug_id}] {b['title']}"
+        desc = b.get("description", "") + f"\n\n---\nPMA Bug: {b.get('product_name','')} / {b.get('component_name','')}"
+        result = await client.create_issue(proj_path, title, desc)
+        await client.close()
+
+        gitlab_url = result.get("web_url", "")
+        gitlab_iid = result.get("iid")
+        bug_service.update_bug(db, bug_id, {"gitlab_url": gitlab_url, "gitlab_iid": gitlab_iid, "status": "in_progress"})
+        bug_service.create_analysis(db, {"bug_id": bug_id, "content": f"已提交到 GitLab: {gitlab_url}"}, user.id)
+
+        log_audit(db, user, "bug_gitlab_submit", f"Bug #{bug_id} → GitLab Issue {proj_path}#{gitlab_iid}", "Bug", "medium")
+        return {"code": 0, "data": {"gitlab_url": gitlab_url, "gitlab_iid": gitlab_iid}, "message": "已提交到 GitLab"}
+    except Exception as e:
+        msg = str(e)[:200]
+        if "403" in msg or "Forbidden" in msg:
+            raise HTTPException(status_code=400, detail="GitLab 权限不足，需要仓库的 Reporter 权限。请联系管理员为你添加权限后重试。")
+        raise HTTPException(status_code=500, detail=f"GitLab 提交失败: {msg}")
+
+
+@router.post("/gitlab-sync", response_model=dict)
+async def sync_gitlab_issues(db: Session = Depends(get_db), _=Depends(require_perm("sync"))):
+    """Auto-sync: check all gitlab-submitted bugs, update if issues are closed."""
+    from backend.models.bug import PmaBug
+    bugs = db.query(PmaBug).filter(PmaBug.gitlab_url.isnot(None), PmaBug.gitlab_url != "",
+                                    PmaBug.status == "in_progress").all()
+    synced = 0
+    for b in bugs:
+        try:
+            from backend.services.gitlab_client import GitLabClient
+            client = GitLabClient()
+            # Extract project path + iid from gitlab_url
+            import re as _re
+            m = _re.search(r'https?://[^/]+/(.+?)/-/issues/(\d+)', b.gitlab_url or "")
+            if not m: continue
+            proj_path, issue_iid = m.group(1), m.group(2)
+            issue = await client.get_issue(proj_path, int(issue_iid))
+            await client.close()
+            if issue and issue.get("state") == "closed":
+                b.status = "gitlab_submitted"
+                bug_service.create_analysis(db, {"bug_id": b.id,
+                    "content": f"GitLab Issue 已关闭 (state=closed)"}, None)
+                synced += 1
+        except Exception:
+            continue
+    db.commit()
+    return {"code": 0, "data": {"synced": synced}, "message": "ok"}

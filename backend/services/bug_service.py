@@ -58,6 +58,7 @@ def create_bug(db, data):
 def update_bug(db, bug_id, data):
     b = db.query(PmaBug).filter(PmaBug.id == bug_id).first()
     if not b: return None
+    old_status = b.status
     for k in ["title","description","project_id","component_id","status","resolution",
               "severity","priority","type","assignee_id","estimate_hours",
               "gitlab_url","gitlab_iid","resolved_by_id"]:
@@ -68,6 +69,15 @@ def update_bug(db, bug_id, data):
         b.closed_at = datetime.now(timezone.utc)
     b.updated_at = datetime.now(timezone.utc)
     db.commit()
+    # Auto-sync linked bugs when resolved/closed
+    if data.get("status") in ("resolved","closed") and old_status not in ("resolved","closed"):
+        linked = db.query(PmaBug).filter(PmaBug.original_bug_id == bug_id).all()
+        for lb in linked:
+            if lb.status not in ("resolved","closed"):
+                lb.status = "resolved"; lb.resolved_at = datetime.now(timezone.utc)
+                db.add(BugAnalysis(bug_id=lb.id, user_id=lb.assignee_id or lb.reporter_id,
+                        content=f"关联 Bug #{bug_id} 已解决，自动同步状态"))
+        if linked: db.commit()
     return _bug_dict(b, db)
 
 def delete_bug(db, bug_id):

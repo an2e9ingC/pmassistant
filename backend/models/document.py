@@ -72,6 +72,18 @@ class ProductNamingOption(Base):
     sort_order = Column(Integer, default=0)
 
 
+class BugTemplate(Base):
+    """Bug submission templates — name + markdown content, managed in doc-templates page."""
+    __tablename__ = "pma_bug_templates"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(128), nullable=False)
+    content = Column(Text, nullable=True)  # Markdown
+    is_default = Column(Integer, default=0)
+    sort_order = Column(Integer, default=0)
+    created_at = Column(DateTime, default=func.now())
+
+
 class ProductLine(Base):
     """Hierarchical product tree nodes (3 levels).
     Level 1 = 产品线, Level 2 = 产品系列, Level 3 = 产品型号.

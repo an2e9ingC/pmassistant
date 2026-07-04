@@ -181,6 +181,7 @@ async function openBugDetail(bugId) {
     '<div id="bv-analyses"><div class="loading-spinner">加载中...</div></div></div>';
 
   var btns = [
+    {text:'提交到GitLab',cls:'btn',onclick:'_bugSubmitGitlab('+bugId+')',enabled:!!(b.component_id && !b.gitlab_url)},
     {text:'编辑',cls:'btn-primary',onclick:'openBugDialog('+bugId+');closeSharedDialog()'},
     {text:'关闭',onclick:'closeSharedDialog()'}];
   openDialog('Bug #' + bugId, html, btns, {maxWidth:'65%'});
@@ -210,6 +211,7 @@ function _showBugForm(b) {
   var html = '<div style="max-height:60vh;overflow-y:auto;padding-right:4px">' +
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">标题 *</label>' +
     '<input class="search-inp" id="bf-title" value="'+escHtml(t.title||'')+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
+    // Row: 产品 | 项目 (full width each, 2-col)
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
       '<div><label style="font-size:11px;color:var(--muted)">产品 *</label>' +
         '<div style="margin-top:2px">' + createProductCombo({
@@ -226,21 +228,35 @@ function _showBugForm(b) {
           selectedIdFn: function() { return t.project_id || null; },
           onSelect: function(p) { _bfProjId = p.id; }
         }) + '</div></div>' +
+    '</div>' +
+    // Row: 组件 | 负责人 | 严重程度 | 优先级 (4-col)
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px 10px">' +
       '<div><label style="font-size:11px;color:var(--muted)">组件</label><select class="search-inp" id="bf-component" style="width:100%;margin-top:2px"><option value="">选择组件...</option></select></div>' +
       '<div><label style="font-size:11px;color:var(--muted)">负责人</label><div id="bf-assignee-wrap" style="margin-top:2px"></div></div>' +
       '<div><label style="font-size:11px;color:var(--muted)">严重程度</label><select class="search-inp" id="bf-severity" style="width:100%;margin-top:2px">' +
         '<option value="1">1-致命</option><option value="2">2-严重</option><option value="3" selected>3-一般</option><option value="4">4-建议</option></select></div>' +
       '<div><label style="font-size:11px;color:var(--muted)">优先级</label><select class="search-inp" id="bf-priority" style="width:100%;margin-top:2px">' +
         '<option value="low">低</option><option value="medium" selected>中</option><option value="high">高</option><option value="critical">紧急</option></select></div>' +
+    '</div>' +
+    // Row: 类型 | 状态 | 预估工时 | (empty) (4-col)
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px 10px">' +
       '<div><label style="font-size:11px;color:var(--muted)">类型</label><select class="search-inp" id="bf-type" style="width:100%;margin-top:2px">' +
         '<option value="codeerror">代码错误</option><option value="design">设计缺陷</option><option value="security">安全问题</option><option value="performance">性能问题</option><option value="other">其他</option></select></div>' +
       '<div><label style="font-size:11px;color:var(--muted)">状态</label><select class="search-inp" id="bf-status" style="width:100%;margin-top:2px">' +
         '<option value="open">待确认</option><option value="confirmed">已确认</option><option value="in_progress">处理中</option><option value="resolved">已解决</option><option value="closed">已关闭</option></select></div>' +
       '<div><label style="font-size:11px;color:var(--muted)">预估工时(h)</label>' +
         '<input class="search-inp" id="bf-estimate" type="number" step="0.5" value="'+(t.estimate_hours||'')+'" style="width:100%;margin-top:2px"></div>' +
+      '<div></div>' +
     '</div>' +
-    '<div style="margin-top:8px"><label style="font-size:11px;color:var(--muted)">描述（Markdown）</label>' +
+    '<div style="margin-top:8px"><label style="font-size:11px;color:var(--muted)">描述模板 <span style="font-weight:400">（可选）</span></label>' +
+    '<select class="search-inp" id="bf-desc-tpl" onchange="_bugApplyDescTemplate()" style="width:100%;box-sizing:border-box;margin-top:2px">' +
+      '<option value="">不使用模板</option></select></div>' +
+    '<div style="margin-top:8px"><div style="display:flex;align-items:center;justify-content:space-between">' +
+      '<label style="font-size:11px;color:var(--muted)">描述（Markdown）</label>' +
+      '<button class="btn btn-xs" onclick="_bugToggleMdPreview()" style="font-size:10px;padding:1px 6px">预览</button>' +
+    '</div>' +
     '<textarea class="search-inp" id="bf-desc" rows="6" style="width:100%;box-sizing:border-box;margin-top:2px;resize:vertical">'+escHtml(t.description||'')+'</textarea>' +
+    '<div id="bf-desc-preview" class="markdown-body" style="display:none;max-height:200px;overflow-y:auto;padding:8px;border:1px solid var(--border);border-radius:6px;margin-top:2px;font-size:13px"></div>' +
     '<div style="display:flex;gap:8px;margin-top:4px;align-items:center">' +
       '<label class="btn btn-sm" style="cursor:pointer;font-size:10px;padding:2px 8px">📎 附件<input type="file" id="bf-file-input" style="display:none" onchange="_bugUploadAttach()" multiple></label>' +
       '<span style="font-size:10px;color:var(--muted)">支持粘贴图片 (Ctrl+V)</span>' +
@@ -249,7 +265,19 @@ function _showBugForm(b) {
   var title = isEdit ? '编辑Bug #'+t.id : '新建Bug';
   openDialog(title, html, [
     {text:'取消',onclick:'closeSharedDialog()'},
-    {text:isEdit?'保存':'创建',cls:'btn-primary',onclick:'_submitBug('+(t.id||'null')+')'}], {maxWidth:600});
+    {text:isEdit?'保存':'创建',cls:'btn-primary',onclick:'_submitBug('+(t.id||'null')+')'}], {maxWidth:'60%'});
+  // Load bug description templates (independent of product selection)
+  API.get('/product-doc-templates/bug-templates').then(function(btpls) {
+  window._bfDescTemplates = btpls || [];
+    var tplSel = document.getElementById('bf-desc-tpl');
+    var defaultTpl = (btpls||[]).find(function(t) { return t.is_default; });
+    if (tplSel) {
+      tplSel.innerHTML = '<option value="">不使用模板</option>';
+      (btpls||[]).forEach(function(t) { tplSel.innerHTML += '<option value="'+t.id+'">'+escHtml(t.name)+'</option>'; });
+      if (defaultTpl && !isEdit) { tplSel.value = defaultTpl.id; _bugApplyDescTemplate(); }
+    }
+  });
+
   // Pre-fill existing product name + load projects/components for edit mode
   if (t.product_id) {
     setTimeout(function() {
@@ -276,29 +304,51 @@ function _showBugForm(b) {
 }
 
 function _bugLoadComponents() {
-  if (window._bfAllTemplates) { _bugFillComponents(window._bfAllTemplates); return; }
-  API.get('/product-doc-templates/product-tree').then(function(tree) {
-    var found = false;
-    (tree||[]).forEach(function(l1) {
-      (l1.children||[]).forEach(function(l2) {
-        if (!found && l2.template_count > 0) {
-          found = true;
-          API.get('/product-doc-templates/templates/' + l2.id).then(function(tpls) {
-            window._bfAllTemplates = (tpls||[]).filter(function(t, i, arr) {
-              return arr.findIndex(function(x) { return x.doc_name === t.doc_name; }) === i;
-            });
-            _bugFillComponents(window._bfAllTemplates);
-          }).catch(function() { _bugFillComponents([]); });
-        }
-      });
-    });
-    if (!found) _bugFillComponents([]);
+  if (!_bfProdId) { _bugFillComponents([]); return; }
+  API.get("/product-management/products/" + _bfProdId + "/node").then(function(r) {
+    var nodeId = (r && r.node_id) ? r.node_id : null;
+    if (nodeId) {
+      API.get("/product-doc-templates/templates/" + nodeId).then(function(tpls) {
+        window._bfAllTemplates = (tpls||[]).filter(function(t, i, arr) {
+          return arr.findIndex(function(x) { return x.doc_name === t.doc_name; }) === i;
+        });
+        _bugFillComponents(window._bfAllTemplates);
+      }).catch(function() { _bugFillComponents([]); });
+    } else { _bugFillComponents([]); }
   }).catch(function() { _bugFillComponents([]); });
 }
 function _bugFillComponents(tpls) {
   var sel = document.getElementById('bf-component'); if (!sel) return;
   sel.innerHTML = '<option value="">选择组件...</option>';
   (tpls||[]).forEach(function(t) { sel.innerHTML += '<option value="'+t.id+'">'+escHtml(t.doc_name)+'</option>'; });
+}
+
+function _bugToggleMdPreview() {
+  var ta = document.getElementById('bf-desc');
+  var pv = document.getElementById('bf-desc-preview');
+  var btn = event && event.target;
+  if (!ta || !pv) return;
+  if (pv.style.display === 'none') {
+    pv.innerHTML = renderMarkdown(ta.value);
+    pv.style.display = '';
+    ta.style.display = 'none';
+    if (btn) btn.textContent = '编辑';
+  } else {
+    pv.style.display = 'none';
+    ta.style.display = '';
+    if (btn) btn.textContent = '预览';
+  }
+}
+
+function _bugApplyDescTemplate() {
+  var tplSel = document.getElementById('bf-desc-tpl');
+  var descEl = document.getElementById('bf-desc');
+  if (!tplSel || !descEl) return;
+  var tplId = tplSel.value;
+  if (!tplId) return;
+  var tpls = window._bfDescTemplates || [];
+  var t = tpls.find(function(x) { return x.id == tplId; });
+  if (t) descEl.value = t.content || '';
 }
 
 async function _submitBug(bugId) {
@@ -438,6 +488,16 @@ function _initBugFormFeatures() {
     if (!window._bfUploadedUrls) window._bfUploadedUrls = [];
     window._bfUploadedUrls.push(url);
   });
+}
+
+async function _bugSubmitGitlab(bugId) {
+  if (!confirm('将此Bug提交到GitLab创建Issue？\n\n需要仓库Reporter权限。')) return;
+  try {
+    var r = await API.post('/bugs/'+bugId+'/gitlab-submit');
+    showToast('已提交到GitLab: ' + (r.gitlab_url||''), 'success');
+    closeSharedDialog();
+    loadBugs();
+  } catch(e) { showToast('提交失败: '+(e.message||''),'error'); }
 }
 
 function _bugDragStart(e, bugId) { e.dataTransfer.setData('text/plain', String(bugId)); }
