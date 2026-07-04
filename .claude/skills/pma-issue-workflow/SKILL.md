@@ -72,9 +72,18 @@ PYEOF
 ### 1. 理解问题
 - 从 title/description 提取关键词，确定功能模块
 
-### 2. 定位代码
-- `grep` 搜索关键词 → 找到相关文件和行号
-- Read 上下文代码，理解当前实现逻辑
+### 2. 定位代码（必须优先使用 MCP）
+
+> **规则：必须遵循 CLAUDE.md §0 Code Discovery Protocol。先用 MCP，再用 grep/Read。**
+
+```
+1. search_graph(query="关键词") → 定位相关函数/类/路由
+2. trace_path(function_name, mode="calls") → 理解调用链和权限依赖
+3. get_code_snippet(qualified_name) → 获取精确源码
+4. （仅当 MCP 无法满足时）→ grep/Read
+```
+
+- 特别注意：调用相似功能的端点，查看其权限装饰器模式（`require_perm` vs `get_current_user`）
 
 ### 3. 诊断根因
 - 对比当前实现 vs 预期行为
@@ -82,7 +91,7 @@ PYEOF
 
 ### 4. 设计方案
 - **动态优于静态**：从 DOM/API/DB 提取而非硬编码
-- **权限感知**：尊重现有权限控制
+- **权限感知**：尊重现有权限控制，参考已有端点的权限模式
 - **最少改动**
 
 ### 5. 实现

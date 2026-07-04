@@ -17,7 +17,7 @@ allowed-tools: Read, Write, Edit, Bash, LSP
 
 ## 扫描同类问题
 
-修复 bug 时，grep 搜索代码库中相同模式的问题。列出同类问题并询问是否一并修复。
+修复 bug 时，用 `search_code(pattern="...")` 或 `trace_path` 扫描同类问题。列出同类问题并询问是否一并修复。
 
 ## 日志完善原则
 
