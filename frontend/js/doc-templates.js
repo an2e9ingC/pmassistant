@@ -51,9 +51,11 @@ function switchDocTemplateTab(tab, el) {
   document.getElementById('dtsec-project').style.display = tab === 'project' ? '' : 'none';
   document.getElementById('dtsec-product').style.display = tab === 'product' ? '' : 'none';
   document.getElementById('dtsec-tags').style.display = tab === 'tags' ? '' : 'none';
+  document.getElementById('dtsec-naming').style.display = tab === 'naming' ? '' : 'none';
   if (tab === 'project') initDocTemplates();
   else if (tab === 'product') initProductDocTemplates();
   else if (tab === 'tags') initTags();
+  else if (tab === 'naming') initNamingOptions();
 }
 function _openDocDialog(title, bodyHtml, buttons, opts, defaultDocType) {
   openDialog(title, bodyHtml, buttons, opts);
@@ -1612,5 +1614,93 @@ async function deleteTag(id) {
     showToast('标签已删除', 'ok');
   } catch(e) {
     showToast('删除失败: ' + e.message, 'error');
+  }
+}
+
+/* ── Product Naming Convention ── */
+
+var _namingFieldLabels = {series:'系列', fpga:'FPGA', cpu:'CPU', adc:'ADC', form:'形态'};
+
+async function initNamingOptions() {
+  var container = document.getElementById('dtsec-naming');
+  container.innerHTML = '<div class="loading-spinner">加载中...</div>';
+  try {
+    var data = await API.get('/product-doc-templates/naming-options');
+    var fields = ['series', 'fpga', 'cpu', 'adc', 'form'];
+    var html = '<div style="max-width:900px">';
+    fields.forEach(function(fk) {
+      var opts = data[fk] || [];
+      html += '<div class="card" style="padding:14px 18px;margin-bottom:12px">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
+          '<span style="font-weight:600;font-size:13px">' + escHtml(_namingFieldLabels[fk] || fk) + '</span>' +
+          '<button class="btn btn-sm btn-primary" onclick="_namingShowAdd(\'' + fk + '\')">+ 添加</button>' +
+        '</div>' +
+        '<table class="proj-table" style="font-size:12px"><thead><tr><th>编号</th><th>描述</th><th>操作</th></tr></thead><tbody>';
+      opts.forEach(function(o) {
+        html += '<tr>' +
+          '<td style="font-family:var(--mono);font-weight:600">' + escHtml(o.code) + '</td>' +
+          '<td>' + escHtml(o.description) + '</td>' +
+          '<td>' + iconEdit('_namingShowEdit(' + o.id + ',\'' + fk + '\',\'' + escHtml(o.code).replace(/'/g,"\\'") + '\',\'' + escHtml(o.description).replace(/'/g,"\\'") + '\')', '编辑') +
+            iconDelete('_namingDelete(' + o.id + ',\'' + fk + '\')', '删除') +
+          '</td>' +
+        '</tr>';
+      });
+      html += '</tbody></table></div>';
+    });
+    html += '</div>';
+    container.innerHTML = html;
+  } catch(e) {
+    container.innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '</div>';
+  }
+}
+
+function _namingShowAdd(fk) {
+  var label = _namingFieldLabels[fk] || fk;
+  var body = '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">编号 *</label>' +
+    '<input class="search-inp" id="nm-code" maxlength="4" style="width:100%;box-sizing:border-box;margin-top:3px;font-family:var(--mono)"></div>' +
+    '<div><label style="font-size:11px;color:var(--muted)">描述 *</label>' +
+    '<input class="search-inp" id="nm-desc" style="width:100%;box-sizing:border-box;margin-top:3px"></div>';
+  openDialog('添加' + label + '选项', body, [
+    {text: '取消', onclick: 'closeSharedDialog()'},
+    {text: '添加', cls: 'btn-primary', onclick: '_namingSave(0,\"' + fk + '\")'}
+  ]);
+}
+
+function _namingShowEdit(id, fk, code, desc) {
+  var label = _namingFieldLabels[fk] || fk;
+  var body = '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">编号 *</label>' +
+    '<input class="search-inp" id="nm-code" maxlength="4" value="' + escHtml(code) + '" style="width:100%;box-sizing:border-box;margin-top:3px;font-family:var(--mono)"></div>' +
+    '<div><label style="font-size:11px;color:var(--muted)">描述 *</label>' +
+    '<input class="search-inp" id="nm-desc" value="' + escHtml(desc) + '" style="width:100%;box-sizing:border-box;margin-top:3px"></div>';
+  openDialog('编辑' + label + '选项', body, [
+    {text: '取消', onclick: 'closeSharedDialog()'},
+    {text: '保存', cls: 'btn-primary', onclick: '_namingSave(' + id + ',\"' + fk + '\")'}
+  ]);
+}
+
+async function _namingSave(id, fk) {
+  var code = document.getElementById('nm-code').value.trim();
+  var desc = document.getElementById('nm-desc').value.trim();
+  if (!code || !desc) { showToast('编号和描述不能为空', 'error'); return; }
+  try {
+    if (id) {
+      await API.put('/product-doc-templates/naming-options/' + id, {code: code, description: desc});
+    } else {
+      await API.post('/product-doc-templates/naming-options', {field_key: fk, code: code, description: desc});
+    }
+    closeSharedDialog();
+    initNamingOptions();
+  } catch(e) {
+    showToast('保存失败: ' + (e.message || ''), 'error');
+  }
+}
+
+async function _namingDelete(id, fk) {
+  if (!confirm('确定删除此选项？')) return;
+  try {
+    await API.del('/product-doc-templates/naming-options/' + id);
+    initNamingOptions();
+  } catch(e) {
+    showToast('删除失败: ' + (e.message || ''), 'error');
   }
 }

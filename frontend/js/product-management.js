@@ -678,39 +678,27 @@ function _filterSearchableItems(input) {
 
 /* ── Create Product by Naming Convention ── */
 
-var _prodNamingOpts = {
-  series: [
-    {code:'S', desc:'高速存储'},
-    {code:'P', desc:'电源管理'},
-    {code:'X', desc:'信号处理'},
-    {code:'H', desc:'混合信号'},
-  ],
-  fpga: [
-    {code:'0', desc:'无FPGA'},
-    {code:'1', desc:'Xilinx Spartan'},
-    {code:'2', desc:'Xilinx Kintex'},
-    {code:'3', desc:'Xilinx Zynq'},
-  ],
-  cpu: [
-    {code:'0', desc:'无CPU'},
-    {code:'1', desc:'ARM Cortex-A'},
-    {code:'2', desc:'ARM Cortex-M'},
-    {code:'3', desc:'RISC-V'},
-  ],
-  adc: [
-    {code:'0', desc:'无ADC'},
-    {code:'1', desc:'12-bit'},
-    {code:'2', desc:'14-bit'},
-    {code:'3', desc:'16-bit'},
-  ],
-  form: [
-    {code:'3', desc:'3U VPX'},
-    {code:'6', desc:'6U VPX'},
-    {code:'8', desc:'8U VPX'},
-    {code:'4', desc:'4U CPCI'},
-    {code:'N', desc:'非标定制'},
-  ],
-};
+var _prodNamingOpts = null;
+
+async function _pmLoadNamingOpts() {
+  try {
+    var data = await API.get('/product-doc-templates/naming-options');
+    var opts = {};
+    for (var key in (data || {})) {
+      opts[key] = (data[key] || []).map(function(o) { return {code: o.code, desc: o.description}; });
+    }
+    _prodNamingOpts = opts;
+  } catch(e) {
+    // Fallback defaults
+    _prodNamingOpts = {
+      series: [{code:'S',desc:'高速存储'},{code:'P',desc:'电源管理'},{code:'X',desc:'信号处理'},{code:'H',desc:'混合信号'}],
+      fpga: [{code:'0',desc:'无FPGA'},{code:'1',desc:'Xilinx Spartan'},{code:'2',desc:'Xilinx Kintex'},{code:'3',desc:'Xilinx Zynq'}],
+      cpu: [{code:'0',desc:'无CPU'},{code:'1',desc:'ARM Cortex-A'},{code:'2',desc:'ARM Cortex-M'},{code:'3',desc:'RISC-V'}],
+      adc: [{code:'0',desc:'无ADC'},{code:'1',desc:'12-bit'},{code:'2',desc:'14-bit'},{code:'3',desc:'16-bit'}],
+      form: [{code:'3',desc:'3U VPX'},{code:'6',desc:'6U VPX'},{code:'8',desc:'8U VPX'},{code:'4',desc:'4U CPCI'},{code:'N',desc:'非标定制'}],
+    };
+  }
+}
 
 function _pmBuildProdCode() {
   var s = document.getElementById('pmnc-series'); if (!s) return 'L####';
@@ -733,6 +721,12 @@ function _pmShowNamingProductDialog() {
   var crumbTitle = crumbs.length > 1
     ? escHtml(crumbs[0]) + ' / ' + escHtml(crumbs[1])
     : escHtml(crumbs[0] || '');
+
+  // Ensure naming options are loaded
+  if (!_prodNamingOpts) {
+    _pmLoadNamingOpts().then(function() { _pmShowNamingProductDialog(); });
+    return;
+  }
 
   var makeSelect = function(id, opts) {
     var h = '<select class="search-inp" id="' + id + '" onchange="_pmBuildProdCode()" style="width:100%;box-sizing:border-box;margin-top:4px">';

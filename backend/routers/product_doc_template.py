@@ -284,3 +284,64 @@ def import_templates(
         "data": {"imported": imported, "removed": removed},
         "message": f"从「{src.name}」导入 {imported} 个模板" + (f"，清除了原有 {removed} 个模板" if removed > 0 else ""),
     }
+
+
+# ── Product Naming Convention Options ──
+
+class NamingOptionCreate(BaseModel):
+    field_key: str
+    code: str
+    description: str
+    sort_order: int = 0
+
+
+class NamingOptionUpdate(BaseModel):
+    code: Optional[str] = None
+    description: Optional[str] = None
+    sort_order: Optional[int] = None
+
+
+@router.get("/naming-options", response_model=dict)
+def get_naming_options(db: Session = Depends(get_db), _=Depends(require_perm("doc_template"))):
+    """Return all naming convention options grouped by field_key."""
+    from backend.models.document import ProductNamingOption
+    opts = db.query(ProductNamingOption).order_by(ProductNamingOption.field_key, ProductNamingOption.sort_order).all()
+    grouped = {}
+    for o in opts:
+        if o.field_key not in grouped:
+            grouped[o.field_key] = []
+        grouped[o.field_key].append({"id": o.id, "code": o.code, "description": o.description, "sort_order": o.sort_order})
+    return {"code": 0, "data": grouped, "message": "ok"}
+
+
+@router.post("/naming-options", response_model=dict)
+def create_naming_option(body: NamingOptionCreate, db: Session = Depends(get_db), user=Depends(require_perm("doc_template"))):
+    from backend.models.document import ProductNamingOption
+    opt = ProductNamingOption(field_key=body.field_key, code=body.code, description=body.description, sort_order=body.sort_order)
+    db.add(opt); db.commit()
+    log_audit(db, user, "naming_option_add", f"新增命名选项: {body.field_key}.{body.code}={body.description}", "产品", "medium")
+    return {"code": 0, "data": {"id": opt.id}, "message": "ok"}
+
+
+@router.put("/naming-options/{option_id}", response_model=dict)
+def update_naming_option(option_id: int, body: NamingOptionUpdate, db: Session = Depends(get_db), user=Depends(require_perm("doc_template"))):
+    from backend.models.document import ProductNamingOption
+    opt = db.query(ProductNamingOption).filter(ProductNamingOption.id == option_id).first()
+    if not opt: raise HTTPException(status_code=404, detail="Option not found")
+    if body.code is not None: opt.code = body.code
+    if body.description is not None: opt.description = body.description
+    if body.sort_order is not None: opt.sort_order = body.sort_order
+    db.commit()
+    log_audit(db, user, "naming_option_edit", f"编辑命名选项: {opt.field_key}.{opt.code}={opt.description}", "产品", "medium")
+    return {"code": 0, "data": {"id": opt.id}, "message": "ok"}
+
+
+@router.delete("/naming-options/{option_id}", response_model=dict)
+def delete_naming_option(option_id: int, db: Session = Depends(get_db), user=Depends(require_perm("doc_template"))):
+    from backend.models.document import ProductNamingOption
+    opt = db.query(ProductNamingOption).filter(ProductNamingOption.id == option_id).first()
+    if not opt: raise HTTPException(status_code=404, detail="Option not found")
+    info = f"{opt.field_key}.{opt.code}={opt.description}"
+    db.delete(opt); db.commit()
+    log_audit(db, user, "naming_option_delete", f"删除命名选项: {info}", "产品", "medium")
+    return {"code": 0, "message": "ok"}

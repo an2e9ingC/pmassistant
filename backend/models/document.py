@@ -61,6 +61,17 @@ class ProductDocTemplate(Base):
     doc_type = Column(String(32), nullable=True)  # 文档类型: gitlab/svn/nas
 
 
+class ProductNamingOption(Base):
+    """Configurable product naming convention options (e.g., series codes, FPGA options)."""
+    __tablename__ = "product_naming_options"
+
+    id = Column(Integer, primary_key=True)
+    field_key = Column(String(32), nullable=False, index=True)  # series / fpga / cpu / adc / form
+    code = Column(String(8), nullable=False)
+    description = Column(String(64), nullable=False)
+    sort_order = Column(Integer, default=0)
+
+
 class ProductLine(Base):
     """Hierarchical product tree nodes (3 levels).
     Level 1 = 产品线, Level 2 = 产品系列, Level 3 = 产品型号.
