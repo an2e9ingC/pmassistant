@@ -217,7 +217,8 @@ function renderProductManagementPage() {
 
     rightHtml += '<div style="display:flex;gap:6px;margin-bottom:12px">';
     if (_pmIsAdmin) {
-      rightHtml += '<button class="btn btn-primary" style="font-size:11px;padding:5px 12px" onclick="_pmShowCreateProductDialog()">+ 添加三级产品</button>';
+      rightHtml += '<button class="btn btn-primary" style="font-size:11px;padding:5px 12px" onclick="_pmShowNamingProductDialog()">+ 添加三级产品</button>';
+      rightHtml += '<button class="btn" style="font-size:11px;padding:5px 12px" onclick="_pmShowCreateProductDialog()">+ 添加三级产品(Old)</button>';
       rightHtml += '<button class="btn btn-primary" style="font-size:11px;padding:5px 12px" onclick="_pmShowLinkProductDialog()">+ 关联已有三级产品</button>';
     }
     rightHtml += '</div>';
@@ -673,6 +674,158 @@ function _filterSearchableItems(input) {
   list.querySelectorAll('.searchable-item').forEach(function(item) {
     item.style.display = q ? (item.getAttribute('data-search-text').indexOf(q) >= 0 ? '' : 'none') : '';
   });
+}
+
+/* ── Create Product by Naming Convention ── */
+
+var _prodNamingOpts = {
+  series: [
+    {code:'S', desc:'高速存储'},
+    {code:'P', desc:'电源管理'},
+    {code:'X', desc:'信号处理'},
+    {code:'H', desc:'混合信号'},
+  ],
+  fpga: [
+    {code:'0', desc:'无FPGA'},
+    {code:'1', desc:'Xilinx Spartan'},
+    {code:'2', desc:'Xilinx Kintex'},
+    {code:'3', desc:'Xilinx Zynq'},
+  ],
+  cpu: [
+    {code:'0', desc:'无CPU'},
+    {code:'1', desc:'ARM Cortex-A'},
+    {code:'2', desc:'ARM Cortex-M'},
+    {code:'3', desc:'RISC-V'},
+  ],
+  adc: [
+    {code:'0', desc:'无ADC'},
+    {code:'1', desc:'12-bit'},
+    {code:'2', desc:'14-bit'},
+    {code:'3', desc:'16-bit'},
+  ],
+  form: [
+    {code:'3', desc:'3U VPX'},
+    {code:'6', desc:'6U VPX'},
+    {code:'8', desc:'8U VPX'},
+    {code:'4', desc:'4U CPCI'},
+    {code:'N', desc:'非标定制'},
+  ],
+};
+
+function _pmBuildProdCode() {
+  var s = document.getElementById('pmnc-series'); if (!s) return 'L####';
+  var code = 'L' +
+    (s.value || '#') +
+    (document.getElementById('pmnc-fpga').value || '#') +
+    (document.getElementById('pmnc-cpu').value || '#') +
+    (document.getElementById('pmnc-adc').value || '#') +
+    (document.getElementById('pmnc-form').value || '#');
+  var preview = document.getElementById('pmnc-preview');
+  if (preview) preview.textContent = code;
+  var nameEl = document.getElementById('pm-newprod-name');
+  if (nameEl) nameEl.value = code;
+  return code;
+}
+
+function _pmShowNamingProductDialog() {
+  var node = _pmFindNodeById(_pmSelectedNodeId);
+  var crumbs = _pmGetBreadcrumb(_pmSelectedNodeId);
+  var crumbTitle = crumbs.length > 1
+    ? escHtml(crumbs[0]) + ' / ' + escHtml(crumbs[1])
+    : escHtml(crumbs[0] || '');
+
+  var makeSelect = function(id, opts) {
+    var h = '<select class="search-inp" id="' + id + '" onchange="_pmBuildProdCode()" style="width:100%;box-sizing:border-box;margin-top:4px">';
+    opts.forEach(function(o) {
+      h += '<option value="' + o.code + '">' + o.code + ' – ' + o.desc + '</option>';
+    });
+    return h + '</select>';
+  };
+
+  var projectCheckboxes = _pmAllProjects.length
+    ? _pmAllProjects.slice(0, 50).map(function(proj) {
+        return '<label class="searchable-item" data-search-text="' + escHtml((proj.name + ' ' + (proj.code || '')).toLowerCase()) + '" style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;cursor:pointer">' +
+          '<input type="checkbox" value="' + proj.id + '" class="pm-newprod-proj">' +
+          escHtml(proj.code || '') + ' ' + escHtml(proj.name) +
+        '</label>';
+      }).join('')
+    : '<span style="font-size:12px;color:var(--muted)">暂无可选项目</span>';
+
+  API.get('/tags').then(function(allTags) {
+    var tagCheckboxes = allTags && allTags.length
+      ? allTags.filter(function(t) { return !t.category || t.category === 'product'; }).map(function(t) {
+          return '<label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;cursor:pointer">' +
+            '<input type="checkbox" value="' + escHtml(t.name) + '" class="pm-newprod-tag">' + escHtml(t.name) +
+          '</label>';
+        }).join('')
+      : '<span style="font-size:12px;color:var(--muted)">暂无标签，请先在文档模板中配置</span>';
+
+    var formHtml =
+      '<div style="text-align:center;margin-bottom:12px">' +
+        '<div style="font-size:10px;color:var(--muted);margin-bottom:2px">公司固定缩写</div>' +
+        '<div style="display:inline-block;font-size:24px;font-weight:700;font-family:var(--mono);color:var(--muted);background:var(--bg);padding:4px 14px;border-radius:6px;border:1px solid var(--border);letter-spacing:0.05em">L</div>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">' +
+        '<div><label style="font-size:10px;color:var(--muted)">系列</label>' + makeSelect('pmnc-series', _prodNamingOpts.series) + '</div>' +
+        '<div><label style="font-size:10px;color:var(--muted)">FPGA</label>' + makeSelect('pmnc-fpga', _prodNamingOpts.fpga) + '</div>' +
+        '<div><label style="font-size:10px;color:var(--muted)">CPU</label>' + makeSelect('pmnc-cpu', _prodNamingOpts.cpu) + '</div>' +
+        '<div><label style="font-size:10px;color:var(--muted)">ADC</label>' + makeSelect('pmnc-adc', _prodNamingOpts.adc) + '</div>' +
+        '<div><label style="font-size:10px;color:var(--muted)">形态</label>' + makeSelect('pmnc-form', _prodNamingOpts.form) + '</div>' +
+        '<div style="display:flex;flex-direction:column;justify-content:flex-end">' +
+          '<div style="text-align:center;padding:4px;background:var(--accent-lt);border-radius:6px;border:1px solid var(--accent)">' +
+            '<div style="font-size:9px;color:var(--muted)">自动生成编号</div>' +
+            '<div id="pmnc-preview" style="font-size:20px;font-weight:700;font-family:var(--mono);color:var(--accent)">L####</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">产品名称 <span style="font-weight:400">（自动与编号一致）</span></label>' +
+      '<input class="search-inp" id="pm-newprod-name" style="width:100%;box-sizing:border-box;margin-top:4px;color:var(--muted);background:var(--bg)" disabled></div>' +
+      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">状态</label>' +
+      '<select id="pm-newprod-status" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);margin-top:4px">' +
+        '<option value="normal">正常</option><option value="closed">已关闭</option>' +
+      '</select></div>' +
+      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">产品标签 <span style="font-weight:400">（可选，多选）</span></label>' +
+      '<input class="search-inp" placeholder="搜索标签..." oninput="_filterSearchableItems(this)" style="margin-top:4px;margin-bottom:4px">' +
+      '<div style="max-height:120px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;background:var(--surface)" class="searchable-list">' + tagCheckboxes + '</div></div>' +
+      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">关联项目 <span style="font-weight:400">（可选，可多选）</span></label>' +
+      '<input class="search-inp" placeholder="搜索项目..." oninput="_filterSearchableItems(this)" style="margin-top:4px;margin-bottom:4px">' +
+      '<div style="max-height:120px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;background:var(--surface)" class="searchable-list">' + projectCheckboxes + '</div></div>';
+
+    openDialog('创建新产品 — ' + crumbTitle, formHtml, [
+      {text: '取消', onclick: "var d=document.querySelector('.shared-dialog-overlay');if(d)d.remove()"},
+      {text: '创建', cls: 'btn-primary', onclick: '_pmSubmitNamingProduct()'}
+    ], {maxWidth: 560});
+
+    setTimeout(function() {
+      var code = _pmBuildProdCode();
+      var nameEl = document.getElementById('pm-newprod-name');
+      if (nameEl) nameEl.value = code;
+    }, 60);
+  });
+}
+
+async function _pmSubmitNamingProduct() {
+  var code = _pmBuildProdCode();
+  if (code.indexOf('#') >= 0) { showToast('请选择所有属性', 'error'); return; }
+  var name = code;
+  var status = document.getElementById('pm-newprod-status').value;
+  var tags = [];
+  document.querySelectorAll('.pm-newprod-tag:checked').forEach(function(cb) { tags.push(cb.value); });
+  var projectIds = [];
+  document.querySelectorAll('.pm-newprod-proj:checked').forEach(function(cb) { projectIds.push(parseInt(cb.value)); });
+
+  try {
+    await API.post('/product-management/products', {
+      name: name, code: code, node_id: _pmSelectedNodeId,
+      status: status, project_ids: projectIds, tags: tags
+    });
+    showToast('产品已创建: ' + code, 'success');
+    var d = document.querySelector('.shared-dialog-overlay');
+    if (d) d.remove();
+    await refreshPMData();
+  } catch(e) {
+    showToast('创建失败: ' + (e.message || e.detail || '未知错误'), 'error');
+  }
 }
 
 /* ── Create Local Product (PMA-local, for L2 → 三级产品) ── */
