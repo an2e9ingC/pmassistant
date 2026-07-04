@@ -1620,12 +1620,14 @@ async function deleteTag(id) {
 /* ── Product Naming Convention ── */
 
 var _namingFieldLabels = {series:'系列', fpga:'FPGA', cpu:'CPU', adc:'ADC', form:'形态'};
+var _namingCurrentData = null;
 
 async function initNamingOptions() {
   var container = document.getElementById('dtsec-naming');
   container.innerHTML = '<div class="loading-spinner">加载中...</div>';
   try {
     var data = await API.get('/product-doc-templates/naming-options');
+    _namingCurrentData = data;
     var fields = ['series', 'fpga', 'cpu', 'adc', 'form'];
     var html = '<div style="max-width:900px">';
     fields.forEach(function(fk) {
@@ -1656,8 +1658,10 @@ async function initNamingOptions() {
 
 function _namingShowAdd(fk) {
   var label = _namingFieldLabels[fk] || fk;
-  var body = '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">编号 *</label>' +
-    '<input class="search-inp" id="nm-code" maxlength="4" style="width:100%;box-sizing:border-box;margin-top:3px;font-family:var(--mono)"></div>' +
+  var codeOpts = _namingGetAvailableCodes(fk, '');
+  var body = '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">编号 * <span style="font-weight:400">(0-9, A-Z，不可重复)</span></label>' +
+    '<select class="search-inp" id="nm-code" style="width:100%;box-sizing:border-box;margin-top:3px;font-family:var(--mono)">' +
+    '<option value="">选择编号...</option>' + codeOpts + '</select></div>' +
     '<div><label style="font-size:11px;color:var(--muted)">描述 *</label>' +
     '<input class="search-inp" id="nm-desc" style="width:100%;box-sizing:border-box;margin-top:3px"></div>';
   openDialog('添加' + label + '选项', body, [
@@ -1668,14 +1672,33 @@ function _namingShowAdd(fk) {
 
 function _namingShowEdit(id, fk, code, desc) {
   var label = _namingFieldLabels[fk] || fk;
-  var body = '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">编号 *</label>' +
-    '<input class="search-inp" id="nm-code" maxlength="4" value="' + escHtml(code) + '" style="width:100%;box-sizing:border-box;margin-top:3px;font-family:var(--mono)"></div>' +
+  var codeOpts = _namingGetAvailableCodes(fk, code);
+  var body = '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">编号 * <span style="font-weight:400">(0-9, A-Z)</span></label>' +
+    '<select class="search-inp" id="nm-code" style="width:100%;box-sizing:border-box;margin-top:3px;font-family:var(--mono)">' +
+    codeOpts.replace('value="' + code + '"', 'value="' + code + '" selected') + '</select></div>' +
     '<div><label style="font-size:11px;color:var(--muted)">描述 *</label>' +
     '<input class="search-inp" id="nm-desc" value="' + escHtml(desc) + '" style="width:100%;box-sizing:border-box;margin-top:3px"></div>';
   openDialog('编辑' + label + '选项', body, [
     {text: '取消', onclick: 'closeSharedDialog()'},
     {text: '保存', cls: 'btn-primary', onclick: '_namingSave(' + id + ',\"' + fk + '\")'}
   ]);
+}
+
+function _namingGetAvailableCodes(fk, currentCode) {
+  // Build list of 0-9, A-Z minus already-used codes (except currentCode for edit)
+  var allCodes = [];
+  for (var i = 0; i <= 9; i++) allCodes.push(String(i));
+  for (var c = 65; c <= 90; c++) allCodes.push(String.fromCharCode(c));
+  var used = {};
+  var data = _namingCurrentData;
+  if (data && data[fk]) {
+    data[fk].forEach(function(o) {
+      if (o.code !== currentCode) used[o.code] = true;
+    });
+  }
+  return allCodes.filter(function(c) { return !used[c]; }).map(function(c) {
+    return '<option value="' + c + '">' + c + '</option>';
+  }).join('');
 }
 
 async function _namingSave(id, fk) {

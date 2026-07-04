@@ -317,9 +317,20 @@ def get_naming_options(db: Session = Depends(get_db), _=Depends(require_perm("do
 @router.post("/naming-options", response_model=dict)
 def create_naming_option(body: NamingOptionCreate, db: Session = Depends(get_db), user=Depends(require_perm("doc_template"))):
     from backend.models.document import ProductNamingOption
-    opt = ProductNamingOption(field_key=body.field_key, code=body.code, description=body.description, sort_order=body.sort_order)
+    # Validate code: single char 0-9 or A-Z
+    code = body.code.strip().upper()
+    if len(code) != 1 or not (code.isdigit() or ('A' <= code <= 'Z')):
+        raise HTTPException(status_code=400, detail="编号必须是单个字符（0-9 或 A-Z）")
+    # Check duplicate
+    existing = db.query(ProductNamingOption).filter(
+        ProductNamingOption.field_key == body.field_key,
+        ProductNamingOption.code == code
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail=f"编号 {code} 已被使用")
+    opt = ProductNamingOption(field_key=body.field_key, code=code, description=body.description, sort_order=body.sort_order)
     db.add(opt); db.commit()
-    log_audit(db, user, "naming_option_add", f"新增命名选项: {body.field_key}.{body.code}={body.description}", "产品", "medium")
+    log_audit(db, user, "naming_option_add", f"新增命名选项: {body.field_key}.{code}={body.description}", "产品", "medium")
     return {"code": 0, "data": {"id": opt.id}, "message": "ok"}
 
 
@@ -328,7 +339,18 @@ def update_naming_option(option_id: int, body: NamingOptionUpdate, db: Session =
     from backend.models.document import ProductNamingOption
     opt = db.query(ProductNamingOption).filter(ProductNamingOption.id == option_id).first()
     if not opt: raise HTTPException(status_code=404, detail="Option not found")
-    if body.code is not None: opt.code = body.code
+    if body.code is not None:
+        code = body.code.strip().upper()
+        if len(code) != 1 or not (code.isdigit() or ('A' <= code <= 'Z')):
+            raise HTTPException(status_code=400, detail="编号必须是单个字符（0-9 或 A-Z）")
+        # Check duplicate (exclude self)
+        dup = db.query(ProductNamingOption).filter(
+            ProductNamingOption.field_key == opt.field_key,
+            ProductNamingOption.code == code,
+            ProductNamingOption.id != option_id
+        ).first()
+        if dup: raise HTTPException(status_code=400, detail=f"编号 {code} 已被使用")
+        opt.code = code
     if body.description is not None: opt.description = body.description
     if body.sort_order is not None: opt.sort_order = body.sort_order
     db.commit()
