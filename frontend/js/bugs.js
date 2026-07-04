@@ -276,13 +276,24 @@ function _showBugForm(b) {
 }
 
 function _bugLoadComponents() {
-  var pid = _bfProdId;
-  if (!pid) return;
   if (window._bfAllTemplates) { _bugFillComponents(window._bfAllTemplates); return; }
-  API.get('/product-doc-templates/templates/' + pid).then(function(tpls) {
-      window._bfAllTemplates = tpls || [];
-      _bugFillComponents(window._bfAllTemplates);
-    }).catch(function() { _bugFillComponents([]); });
+  API.get('/product-doc-templates/product-tree').then(function(tree) {
+    var found = false;
+    (tree||[]).forEach(function(l1) {
+      (l1.children||[]).forEach(function(l2) {
+        if (!found && l2.template_count > 0) {
+          found = true;
+          API.get('/product-doc-templates/templates/' + l2.id).then(function(tpls) {
+            window._bfAllTemplates = (tpls||[]).filter(function(t, i, arr) {
+              return arr.findIndex(function(x) { return x.doc_name === t.doc_name; }) === i;
+            });
+            _bugFillComponents(window._bfAllTemplates);
+          }).catch(function() { _bugFillComponents([]); });
+        }
+      });
+    });
+    if (!found) _bugFillComponents([]);
+  }).catch(function() { _bugFillComponents([]); });
 }
 function _bugFillComponents(tpls) {
   var sel = document.getElementById('bf-component'); if (!sel) return;
