@@ -585,16 +585,26 @@ function _setupComboFunctions(opts) {
       if (onSelect) onSelect(p);
     }
   };
+
+  // Enter key to select first option
+  setTimeout(function() {
+    var inp = document.getElementById(inputId);
+    if (inp) inp.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { var dd = document.getElementById(dropdownId); if (dd) { var f = dd.querySelector('.combo-opt'); if (f) f.click(); } }
+    });
+  }, 200);
 }
 
-function createProductCombo(opts) {
+// Generic searchable combo — accepts any dataSource (async function or array)
+function createSearchCombo(opts) {
   var comboId = opts.comboId, inputId = opts.inputId, dropdownId = opts.dropdownId;
   var openFn = _fnName(comboId, 'Open');
   var filterFn = _fnName(comboId, 'Filter');
   var selectFn = _fnName(comboId, 'Select');
   window[openFn] = function() {
-    API.get('/products?limit=200').then(function(data) {
-      var items = (data && data.items) ? data.items : (data || []);
+    var getData = opts.dataSource;
+    Promise.resolve(typeof getData === 'function' ? getData() : getData).then(function(items) {
+      items = (items && items.items) ? items.items : (items || []);
       window['_combo_'+comboId] = items;
       var wrap = document.getElementById(comboId); if (!wrap) return;
       wrap.classList.add('open');
@@ -611,25 +621,42 @@ function createProductCombo(opts) {
     var items = window['_combo_'+comboId] || [];
     var p = items.find(function(x) { return x.id == id; });
     if (p) {
-      document.getElementById(inputId).value = p.name;
+      document.getElementById(inputId).value = p.name || p.username || '';
       if (opts.onSelect) opts.onSelect(p);
     }
   };
+  var enterFn = _fnName(comboId, 'Enter');
+  window[enterFn] = function(e) {
+    if (e.key !== 'Enter') return;
+    var dd = document.getElementById(dropdownId);
+    if (!dd) return;
+    var first = dd.querySelector('.combo-opt');
+    if (first) first.click();
+  };
   return '<div class="proj-combo" id="' + comboId + '" style="min-width:0!important">' +
-    '<input class="proj-combo-input" id="' + inputId + '" type="text" autocomplete="off" placeholder="' + escHtml(opts.placeholder || '搜索产品...') + '" ' +
-      'onclick="' + openFn + '()" oninput="' + filterFn + '(this.value)">' +
+    '<input class="proj-combo-input" id="' + inputId + '" type="text" autocomplete="off" placeholder="' + escHtml(opts.placeholder || '搜索...') + '" ' +
+      'onclick="' + openFn + '()" oninput="' + filterFn + '(this.value)" onkeydown="' + enterFn + '(event)">' +
     '<svg class="proj-combo-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2,5 7,10 12,5"/></svg>' +
     '<div class="proj-combo-dropdown" id="' + dropdownId + '"></div>' +
   '</div>';
+}
+
+// Thin wrappers — delegate to createSearchCombo with pre-configured dataSource
+function createProductCombo(opts) {
+  opts.dataSource = function() { return API.get('/products?limit=200'); };
+  opts.placeholder = opts.placeholder || '搜索产品...';
+  return createSearchCombo(opts);
 }
 
 function createProjectCombo(opts) {
   _setupComboFunctions(opts);
   var openFn = _fnName(opts.comboId, 'Open');
   var filterFn = _fnName(opts.comboId, 'Filter');
+  var enterFn = _fnName(opts.comboId, 'Enter');
+  window[enterFn] = function(e) { if (e.key === 'Enter') { var dd = document.getElementById(opts.dropdownId); if (dd) { var f = dd.querySelector('.combo-opt'); if (f) f.click(); } } };
   return '<div class="proj-combo" id="' + opts.comboId + '">' +
     '<input class="proj-combo-input" id="' + opts.inputId + '" type="text" autocomplete="off" placeholder="' + escHtml(opts.placeholder || '搜索或选择项目…') + '" ' +
-      'onclick="' + openFn + '()" oninput="' + filterFn + '(this.value)">' +
+      'onclick="' + openFn + '()" oninput="' + filterFn + '(this.value)" onkeydown="' + enterFn + '(event)">' +
     '<svg class="proj-combo-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2,5 7,10 12,5"/></svg>' +
     '<div class="proj-combo-dropdown" id="' + opts.dropdownId + '"></div>' +
   '</div>';
@@ -767,9 +794,11 @@ function createUserCombo(opts) {
     }
   };
 
+  var enterFn = _fnName(comboId, 'Enter');
+  window[enterFn] = function(e) { if (e.key === 'Enter') { var dd = document.getElementById(dropdownId); if (dd) { var f = dd.querySelector('.combo-opt'); if (f) f.click(); } } };
   return '<div class="proj-combo" id="' + comboId + '">' +
     '<input class="proj-combo-input" id="' + inputId + '" type="text" autocomplete="off" placeholder="' + escHtml(opts.placeholder || '搜索负责人...') + '" ' +
-      'onclick="' + openFn + '()" oninput="' + filterFn + '(this.value)">' +
+      'onclick="' + openFn + '()" oninput="' + filterFn + '(this.value)" onkeydown="' + enterFn + '(event)">' +
     '<svg class="proj-combo-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2,5 7,10 12,5"/></svg>' +
     '<div class="proj-combo-dropdown" id="' + dropdownId + '"></div>' +
   '</div>';

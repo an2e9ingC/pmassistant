@@ -215,9 +215,16 @@ function _showBugForm(b) {
           comboId: 'bf-prod', inputId: 'bf-prod-input', dropdownId: 'bf-prod-drop',
           placeholder: '搜索产品...',
           selectedIdFn: function() { return t.product_id || null; },
-          onSelect: function(p) { _bfProdId = p.id; _bugLoadProjects(); _bugLoadComponents(); }
+          onSelect: function(p) { _bfProdId = p.id; _bugLoadComponents(); }
         }) + '</div></div>' +
-      '<div><label style="font-size:11px;color:var(--muted)">项目</label><select class="search-inp" id="bf-project" style="width:100%;margin-top:2px"><option value="">选择项目...</option></select></div>' +
+      '<div><label style="font-size:11px;color:var(--muted)">项目</label>' +
+        '<div style="margin-top:2px">' + createSearchCombo({
+          comboId: 'bf-proj', inputId: 'bf-proj-input', dropdownId: 'bf-proj-drop',
+          placeholder: '搜索项目...',
+          dataSource: function() { return API.get('/products/'+(_bfProdId||0)+'/projects').then(function(d){ return d||[]; }).catch(function(){ return []; }); },
+          selectedIdFn: function() { return t.project_id || null; },
+          onSelect: function(p) { _bfProjId = p.id; }
+        }) + '</div></div>' +
       '<div><label style="font-size:11px;color:var(--muted)">组件</label><select class="search-inp" id="bf-component" style="width:100%;margin-top:2px"><option value="">选择组件...</option></select></div>' +
       '<div><label style="font-size:11px;color:var(--muted)">负责人</label><div id="bf-assignee-wrap" style="margin-top:2px"></div></div>' +
       '<div><label style="font-size:11px;color:var(--muted)">严重程度</label><select class="search-inp" id="bf-severity" style="width:100%;margin-top:2px">' +
@@ -247,7 +254,6 @@ function _showBugForm(b) {
         var inp = document.getElementById('bf-prod-input');
         if (inp && p) inp.value = p.name;
       });
-      _bugLoadProjects();
       _bugLoadComponents();
     }, 100);
   }
@@ -261,17 +267,6 @@ function _showBugForm(b) {
       selectedIdFn:function(){return t.assignee_id||null;},
       onSelect:function(u){window._bfAsgnId=u.id;}});
   }, 50);
-}
-
-function _bugLoadProjects() {
-  var pid = _bfProdId;
-  if (!pid) return;
-  API.get('/products/'+pid+'/projects').then(function(projs) {
-    var sel = document.getElementById('bf-project'); if (!sel) return;
-    sel.innerHTML = '<option value="">选择项目...</option>';
-    (projs||[]).forEach(function(p) { sel.innerHTML += '<option value="'+p.id+'">'+escHtml(p.name)+'</option>'; });
-  }).catch(function(){ sel.innerHTML = '<option value="">无关联项目</option>'; });
-  _bugLoadComponents();
 }
 
 function _bugLoadComponents() {
@@ -297,7 +292,7 @@ async function _submitBug(bugId) {
   var payload = {
     title:title, product_id:pid,
     description:document.getElementById('bf-desc').value.trim(),
-    project_id:parseInt(document.getElementById('bf-project').value)||null,
+    project_id:_bfProjId||null,
     component_id:parseInt(document.getElementById('bf-component').value)||null,
     severity:parseInt(document.getElementById('bf-severity').value)||3,
     priority:document.getElementById('bf-priority').value,
