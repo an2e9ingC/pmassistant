@@ -125,13 +125,14 @@ function _renderKanban(container, bugs) {
     html += '<div style="flex:1;min-width:200px;background:var(--bg);border-radius:8px;padding:10px">' +
       '<div style="font-weight:600;font-size:12px;margin-bottom:8px;color:var(--muted)">' + c.label + ' <span style="font-size:10px">' + grouped[c.key].length + '</span></div>';
     grouped[c.key].forEach(function(b) {
-      html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px;margin-bottom:6px;cursor:pointer;font-size:12px" onclick="openBugDetail('+b.id+')">' +
+      html += '<div draggable="true" ondragstart="_bugDragStart(event,'+b.id+')" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px;margin-bottom:6px;cursor:pointer;font-size:12px" onclick="openBugDetail('+b.id+')">' +
         '<div style="font-weight:530;margin-bottom:2px">' + escHtml(b.title) + '</div>' +
         '<div style="font-size:10px;color:var(--muted)">' + escHtml(b.product_name||'') + ' · ' + escHtml(b.assignee_name||'未分配') + '</div>' +
         '<div style="margin-top:4px">' + _renderSev('S'+b.severity, b.severity) + ' ' + _renderPriority(b.priority) + '</div>' +
       '</div>';
     });
-    html += '</div>';
+    html += '</div>' +
+      '<div ondragover="event.preventDefault()" ondrop="_bugDragDrop(event,\''+c.key+'\')" style="min-height:40px"></div>';
   });
   html += '</div>';
   container.innerHTML = html;
@@ -167,7 +168,7 @@ async function openBugDetail(bugId) {
       '</div></div></div>';
 
   if (b.description) html += '<div class="card" style="padding:14px;margin-bottom:12px"><div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px">描述</div>' +
-    '<div style="font-size:13px;line-height:1.6;white-space:pre-wrap">' + escHtml(b.description) + '</div></div>';
+    '<div class="markdown-body" style="font-size:13px;line-height:1.6">' + renderMarkdown(b.description) + '</div></div>';
 
   html += '<div class="card" style="padding:14px;margin-bottom:12px"><div style="display:flex;justify-content:space-between;margin-bottom:8px">' +
     '<span style="font-size:11px;font-weight:600;color:var(--muted)">工时日志 ('+(b.consumed_hours||0).toFixed(1)+'h)</span>' +
@@ -239,7 +240,11 @@ function _showBugForm(b) {
         '<input class="search-inp" id="bf-estimate" type="number" step="0.5" value="'+(t.estimate_hours||'')+'" style="width:100%;margin-top:2px"></div>' +
     '</div>' +
     '<div style="margin-top:8px"><label style="font-size:11px;color:var(--muted)">描述（Markdown）</label>' +
-    '<textarea class="search-inp" id="bf-desc" rows="5" style="width:100%;box-sizing:border-box;margin-top:2px;resize:vertical">'+escHtml(t.description||'')+'</textarea></div>' +
+    '<textarea class="search-inp" id="bf-desc" rows="6" style="width:100%;box-sizing:border-box;margin-top:2px;resize:vertical">'+escHtml(t.description||'')+'</textarea>' +
+    '<div style="display:flex;gap:8px;margin-top:4px;align-items:center">' +
+      '<label class="btn btn-sm" style="cursor:pointer;font-size:10px;padding:2px 8px">📎 附件<input type="file" id="bf-file-input" style="display:none" onchange="_bugUploadAttach()" multiple></label>' +
+      '<span style="font-size:10px;color:var(--muted)">支持粘贴图片 (Ctrl+V)</span>' +
+    '</div></div>' +
   '</div>';
   var title = isEdit ? '编辑Bug #'+t.id : '新建Bug';
   openDialog(title, html, [
@@ -260,13 +265,14 @@ function _showBugForm(b) {
   if (isEdit && t.severity) { setTimeout(function() { var s=document.getElementById('bf-severity'); if(s)s.value=t.severity; },100); }
   if (isEdit && t.priority) { setTimeout(function() { var s=document.getElementById('bf-priority'); if(s)s.value=t.priority; },100); }
   if (isEdit && t.status) { setTimeout(function() { var s=document.getElementById('bf-status'); if(s)s.value=t.status; },100); }
-  // Create user combo for assignee
+  // Create user combo + init features
   setTimeout(function() {
     var wrap = document.getElementById('bf-assignee-wrap');
     if (wrap) wrap.innerHTML = createUserCombo({comboId:'bf-assignee',inputId:'bf-assignee-input',dropdownId:'bf-assignee-drop',
       selectedIdFn:function(){return t.assignee_id||null;},
       onSelect:function(u){window._bfAsgnId=u.id;}});
-  }, 50);
+    _initBugFormFeatures();
+  }, 80);
 }
 
 function _bugLoadComponents() {
@@ -302,8 +308,16 @@ async function _submitBug(bugId) {
     assignee_id:window._bfAsgnId||null,
   };
   try {
-    if (bugId) await API.put('/bugs/'+bugId, payload);
-    else await API.post('/bugs', payload);
+    var result;
+    if (bugId) result = await API.put('/bugs/'+bugId, payload);
+    else result = await API.post('/bugs', payload);
+    var newId = bugId || (result && result.id);
+    // Upload pending files
+    var pending = window._bfPendingFiles || [];
+    window._bfPendingFiles = [];
+    for (var i = 0; i < pending.length; i++) {
+      try { await uploadAttachment(newId, pending[i]); } catch(e) {}
+    }
     showToast(bugId?'已更新':'已创建','success');
     closeSharedDialog();
     loadBugs();
@@ -373,7 +387,7 @@ function _loadBugAnalyses(bugId) {
     analyses.forEach(function(a) {
       h += '<div style="border-left:2px solid var(--accent);padding:4px 0 8px 12px;margin-bottom:4px">' +
         '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">'+(a.created_at||'?')+'</div>' +
-        '<div style="font-size:13px;line-height:1.6;white-space:pre-wrap">'+escHtml(a.content)+'</div></div>';
+        '<div class="markdown-body" style="font-size:13px;line-height:1.6">'+renderMarkdown(a.content)+'</div></div>';
     });
     el.innerHTML = h;
   });
@@ -390,6 +404,41 @@ async function deleteBugById(id) {
 /* ── Helpers ── */
 
 
+
+function _bugUploadAttach() {
+  var inp = document.getElementById('bf-file-input');
+  if (!inp || !inp.files.length) return;
+  var bugId = null; // Not created yet — upload after create
+  // For new bugs, store files and upload after creation
+  window._bfPendingFiles = window._bfPendingFiles || [];
+  for (var i = 0; i < inp.files.length; i++) {
+    window._bfPendingFiles.push(inp.files[i]);
+    var ta = document.getElementById('bf-desc');
+    if (ta) ta.value += '\n📎 ' + inp.files[i].name + ' (待上传)\n';
+  }
+  inp.value = '';
+}
+
+function _initBugFormFeatures() {
+  var ta = document.getElementById('bf-desc');
+  var bugId = null; // Will be filled after create
+  if (ta) initImagePaste(ta, bugId || 0, function(url) {
+    // Store URL for later use
+    if (!window._bfUploadedUrls) window._bfUploadedUrls = [];
+    window._bfUploadedUrls.push(url);
+  });
+}
+
+function _bugDragStart(e, bugId) { e.dataTransfer.setData('text/plain', String(bugId)); }
+async function _bugDragDrop(e, newStatus) {
+  e.preventDefault();
+  var bugId = parseInt(e.dataTransfer.getData('text/plain'));
+  if (!bugId) return;
+  try {
+    await API.put('/bugs/'+bugId, {status: newStatus});
+    loadBugs();
+  } catch(ex) { showToast('更新失败: '+(ex.message||''),'error'); }
+}
 
 function _renderSev(label, sev) {
   var c = {1:'var(--danger)',2:'var(--warn)',3:'var(--muted)',4:'var(--success)'};

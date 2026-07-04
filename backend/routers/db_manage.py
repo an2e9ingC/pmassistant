@@ -368,6 +368,14 @@ def _do_backup(retention: int, keep_hours: int = 0, max_perm: int = 10):
     t = beijing_now().strftime("%Y%m%d-%H%M%S")
     dest = BACKUP_DIR / f"pma-backup-{t}.db"
     shutil.copy2(_db_path, dest)
+    # Also backup uploads directory (attachments)
+    UPLOAD_DIR = Path(os.path.join(os.path.dirname(_db_path), "uploads"))
+    if UPLOAD_DIR.exists():
+        upload_dest = BACKUP_DIR / f"pma-backup-{t}-uploads.tar.gz"
+        import subprocess
+        subprocess.run(["tar", "-czf", str(upload_dest), "-C", str(UPLOAD_DIR.parent), "uploads"],
+                       check=False, capture_output=True)
+        logger.info(f"Auto-backup uploads: {upload_dest.name}")
     logger.info(f"Auto-backup created: {dest.name}")
 
     # ── Permanent backup logic ──
@@ -383,6 +391,9 @@ def _do_backup(retention: int, keep_hours: int = 0, max_perm: int = 10):
     for old in rolling_files[retention:]:
         old.unlink()
         logger.info(f"Auto-backup removed (retention={retention}): {old.name}")
+    # Also clean up old upload backups
+    for old in sorted(BACKUP_DIR.glob("pma-backup-*-uploads.tar.gz"), key=lambda p: p.stat().st_mtime, reverse=True)[retention:]:
+        old.unlink()
 
 
 def _maybe_save_permanent_backup(src: Path, keep_hours: int, max_count: int = 10):

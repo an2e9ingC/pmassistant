@@ -1029,3 +1029,58 @@ function _getIntensityStyle(hours) {
   return {bg: 'background:var(--danger);color:#fff', text: '#fff'};
 }
 
+/* ── Markdown Rendering ── */
+function renderMarkdown(md) {
+  if (!md) return '';
+  try {
+    if (typeof marked !== 'undefined' && marked.parse) {
+      return marked.parse(md);
+    }
+  } catch(e) {}
+  return '<pre style="white-space:pre-wrap;font-size:13px">' + escHtml(md) + '</pre>';
+}
+
+/* ── Attachment Upload ── */
+async function uploadAttachment(bugId, file, analysisId) {
+  var fd = new FormData();
+  fd.append('file', file);
+  if (analysisId) fd.append('analysis_id', String(analysisId));
+  var xhr = new XMLHttpRequest();
+  return new Promise(function(resolve, reject) {
+    xhr.open('POST', '/api/bugs/' + bugId + '/attachments');
+    xhr.setRequestHeader('Authorization', 'Bearer ' + (localStorage.getItem('pm_token') || ''));
+    xhr.onload = function() {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        var d = JSON.parse(xhr.responseText);
+        resolve(d.data || d);
+      } else { reject(new Error('Upload failed: ' + xhr.status)); }
+    };
+    xhr.onerror = function() { reject(new Error('Network error')); };
+    xhr.send(fd);
+  });
+}
+
+/* ── Image Paste Handler ── */
+function initImagePaste(textarea, bugId, onUrlInserted) {
+  if (!textarea) return;
+  textarea.addEventListener('paste', function(e) {
+    var items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') === 0) {
+        e.preventDefault();
+        var file = items[i].getAsFile();
+        uploadAttachment(bugId, file).then(function(a) {
+          var url = a.url || '/api/attachments/' + a.id;
+          var mdImg = '![' + (a.filename || 'image') + '](' + url + ')';
+          var start = textarea.selectionStart;
+          textarea.value = textarea.value.substring(0, start) + mdImg + textarea.value.substring(textarea.selectionEnd);
+          textarea.selectionStart = textarea.selectionEnd = start + mdImg.length;
+          if (onUrlInserted) onUrlInserted(url);
+        }).catch(function(err) { showToast('图片上传失败: ' + (err.message || ''), 'error'); });
+        break;
+      }
+    }
+  });
+}
+

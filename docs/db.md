@@ -1,6 +1,6 @@
 # PMA 数据库文档
 
-> 最后更新：2026-06-16  
+> 最后更新：2026-07-05  
 > 数据库：SQLite（文件 `data/pma-$PORT.db`）  
 > ORM：SQLAlchemy + DeclarativeBase（`backend/database.py`）  
 > 迁移策略：`Base.metadata.create_all()` + 启动时内联 SQL 补丁（`_migrate_sqlite()` / `_migrate_product_hierarchy()`）
@@ -30,6 +30,15 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 | `pma_products` | `PmaProduct` | 82 | ZenTao 缓存 | 从 ZenTao 同步的产品数据，含 NAS 路径、Git 地址、客户标记等扩展字段 |
 | `zenta_releases` | `CachedRelease` | 4 | ZenTao 缓存 | 产品下的发布版本/里程碑，含 GitLab 关联地址及校验状态 |
 | `zenta_bugs` | `CachedBug` | 98 | ZenTao 缓存 | 产品/项目下的 Bug 缺陷数据，按严重程度、优先级、状态追踪 |
+| `pma_bugs` | `PmaBug` | 0 | 本地-Bug | PMA 本地 Bug 系统：产品级追踪，支持组件、严重度、优先级、GitLab 联动、项目转移 |
+| `pma_bug_worklogs` | `BugWorkLog` | 0 | 本地-Bug | Bug 工时记录：user_id、hours、date、description |
+| `pma_bug_analysis` | `BugAnalysis` | 0 | 本地-Bug | Bug 分析解决记录：Markdown 内容 + JSON 附件列表 |
+| `pma_bug_attachments` | `BugAttachment` | 0 | 本地-Bug | Bug 附件元数据：文件名、MIME、文件系统路径、大小 |
+| `pma_bug_transfers` | `BugTransfer` | 0 | 本地-Bug | Bug 项目转移记录：move/copy、来源/目标项目、操作人 |
+| `pma_tasks` | `Task` | 0 | 本地-任务 | PMA 本地任务：项目级，含阶段、状态、工时、进度、产出物 |
+| `pma_worklogs` | `WorkLog` | 0 | 本地-任务 | 任务工时记录：user_id、hours、date、description |
+| `pma_task_comments` | `TaskComment` | 0 | 本地-任务 | 任务评论：纯文本内容，user_id |
+| `product_naming_options` | `ProductNamingOption` | 21 | 本地-产品 | 产品命名规范配置：系列/FPGA/CPU/ADC/形态各字段的可选值 |
 | `zenta_users` | `CachedUser` | 73 | ZenTao 缓存 | ZenTao 系统中的用户列表，用于人员指派信息展示 |
 | `pma_customers` | `PmaCustomer` | 4 | ZenTao 缓存 | 客户信息，与项目和产品通过链接表多对多关联 |
 | `product_project_links` | `ProductProjectLink` | 2 | 关系表 | 产品与项目的 N:M 关联（组合唯一），维护产品-项目对应关系 |
@@ -44,6 +53,7 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 | `pma_tags` | `PmaTag` | 7 | 本地-标签 | 全局标签库，支持分类，用于标记项目或产品 |
 | `document_templates` | `DocumentTemplate` | 32 | 本地-文档 | 按阶段类型定义的文档模板清单，定义每个阶段默认需要哪些文档 |
 | `product_doc_templates` | `ProductDocTemplate` | 2 | 本地-文档 | 按产品节点定义的文档模板，用于产品视角的文档齐套管理 |
+| `product_documents` | `ProductDocument` | — | 本地-文档 | 产品文档实例：状态、location、模板关联、自动扫描 |
 | `project_documents` | `ProjectDocument` | 1542 | 本地-文档 | 每个项目每个执行的实际文档实例：状态、位置、完成时间、更新人 |
 | `delivery_records` | `DeliveryRecord` | 0 | 本地-交付 | 项目交付记录：产品名称、序列号、数量、交付日期、接收人 |
 | `product_notes` | `ProductNote` | 0 | 本地-笔记 | 产品维护笔记，记录人对产品的手动备注 |
@@ -66,9 +76,10 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 |------|-----------|
 | `backend/models/zentao.py` | `CachedProject`, `CachedExecution`, `CachedTask`, `CachedUser`, `PmaProduct`, `CachedRelease`, `ProductProjectLink`, `ProductNodeLink`, `PmaCustomer`, `CustomerProjectLink`, `CustomerProductLink` |
 | `backend/models/local.py` | `LocalUser`, `Role`, `UserRole`, `ProductNote`, `ProjectNote`, `PmaSetting`, `ProjectActivity`, `SyncLog`, `AuditLog` |
-| `backend/models/document.py` | `DocumentTemplate`, `ProjectDocument`, `ProductDocTemplate`, `ProductLine`, `PmaTag` |
+| `backend/models/document.py` | `DocumentTemplate`, `ProjectDocument`, `ProductDocTemplate`, `ProductLine`, `PmaTag`, `ProductNamingOption` |
 | `backend/models/delivery.py` | `DeliveryRecord` |
-| `backend/models/bug.py` | `CachedBug` |
+| `backend/models/bug.py` | `CachedBug`, `PmaBug`, `BugWorkLog`, `BugAnalysis`, `BugAttachment`, `BugTransfer` |
+| `backend/models/task.py` | `Task`, `WorkLog`, `TaskComment` |
 | `backend/models/log_entry.py` | `LogEntry` |
 | `backend/models/standard.py` | `ProcessStandard` |
 | `backend/models/__init__.py` | 聚合导出所有模型 |
