@@ -712,6 +712,19 @@ function _pmBuildProdCode() {
   if (preview) preview.textContent = code;
   var nameEl = document.getElementById('pm-newprod-name');
   if (nameEl) nameEl.value = code;
+  // Auto-select matching tags from naming options
+  var autoTags = {};
+  ['pmnc-series','pmnc-fpga','pmnc-cpu','pmnc-adc','pmnc-form'].forEach(function(sid) {
+    var sel = document.getElementById(sid);
+    if (sel && sel.selectedIndex >= 0) {
+      var txt = sel.options[sel.selectedIndex].text;
+      var idx = txt.indexOf(' – ');
+      if (idx > 0) autoTags[txt.substring(idx + 3)] = true;
+    }
+  });
+  document.querySelectorAll('.pm-newprod-tag').forEach(function(cb) {
+    cb.checked = !!autoTags[cb.value];
+  });
   return code;
 }
 
@@ -804,6 +817,17 @@ async function _pmSubmitNamingProduct() {
   var name = code;
   var status = document.getElementById('pm-newprod-status').value;
   var tags = [];
+  // Auto-tags from naming convention selections
+  ['pmnc-series','pmnc-fpga','pmnc-cpu','pmnc-adc','pmnc-form'].forEach(function(sid) {
+    var sel = document.getElementById(sid);
+    if (sel && sel.selectedIndex >= 0) {
+      var txt = sel.options[sel.selectedIndex].text;
+      // Extract description part (after " – ")
+      var idx = txt.indexOf(' – ');
+      if (idx > 0) tags.push(txt.substring(idx + 3));
+    }
+  });
+  // Merge user-selected tags
   document.querySelectorAll('.pm-newprod-tag:checked').forEach(function(cb) { tags.push(cb.value); });
   var projectIds = [];
   document.querySelectorAll('.pm-newprod-proj:checked').forEach(function(cb) { projectIds.push(parseInt(cb.value)); });
@@ -811,7 +835,8 @@ async function _pmSubmitNamingProduct() {
   try {
     await API.post('/product-management/products', {
       name: name, code: code, node_id: _pmSelectedNodeId,
-      status: status, project_ids: projectIds, tags: tags
+      status: status, project_ids: projectIds,
+      description: tags.join(', ')
     });
     showToast('产品已创建: ' + code, 'success');
     var d = document.querySelector('.shared-dialog-overlay');
