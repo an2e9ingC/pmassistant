@@ -7,7 +7,7 @@
 
 ## 0. Code Discovery Protocol（代码发现协议 — 最高优先级）
 
-> **规则：进行任何代码探索时，必须优先使用 codebase-memory MCP 工具，再使用 grep/glob/Read。**
+> **硬性规则：进行任何代码探索时，必须先输出 MCP 查询结果（search_graph / trace_path），再进入下一步。MCP 返回空或索引未覆盖时才允许 grep/Read。**
 
 ### 工具选择决策树
 

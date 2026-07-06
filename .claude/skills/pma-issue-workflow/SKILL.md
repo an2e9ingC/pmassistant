@@ -72,16 +72,19 @@ PYEOF
 ### 1. 理解问题
 - 从 title/description 提取关键词，确定功能模块
 
-### 2. 定位代码（必须优先使用 MCP）
+### 2. 定位代码（硬性 MCP 检查点 — 禁止跳过）
 
-> **规则：必须遵循 CLAUDE.md §0 Code Discovery Protocol。先用 MCP，再用 grep/Read。**
+> **此步骤为硬性门槛：必须先输出 MCP 查询结果，才能进入 step 3。不得直接 grep/Read。**
 
-```
-1. search_graph(query="关键词") → 定位相关函数/类/路由
-2. trace_path(function_name, mode="calls") → 理解调用链和权限依赖
-3. get_code_snippet(qualified_name) → 获取精确源码
-4. （仅当 MCP 无法满足时）→ grep/Read
-```
+**必须执行（至少有 1 和 2）：**
+
+1. `search_graph(query="关键词")` → 定位相关函数/类/路由
+2. `trace_path(function_name, mode="calls")` → 理解上下游调用链和权限依赖
+3. `get_code_snippet(qualified_name)` → 获取精确源码（需要时）
+
+**仅当 MCP 返回空结果或索引未覆盖时**，才允许 fallback 到 grep/Read。
+
+**输出要求**：向用户展示 MCP 追踪到的调用链路和数据流，然后基于这些信息进入 step 3 诊断。
 
 - 特别注意：调用相似功能的端点，查看其权限装饰器模式（`require_perm` vs `get_current_user`）
 
