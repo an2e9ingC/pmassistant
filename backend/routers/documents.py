@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/documents", tags=["documents"])
 # Allowed file extensions for preview
 ALLOWED_EXTENSIONS = {
     "pdf", "png", "jpg", "jpeg", "gif", "svg", "webp",
-    "md", "txt", "docx",
+    "md", "txt", "docx", "vsdx",
 }
 
 # Content-Type mapping based on file extension
@@ -33,6 +33,7 @@ CONTENT_TYPES = {
     "md": "text/plain; charset=utf-8",
     "txt": "text/plain; charset=utf-8",
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "vsdx": "application/vnd.ms-visio.drawing",
 }
 
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
@@ -230,11 +231,11 @@ async def fetch_document(
                 if len(content) > MAX_FILE_SIZE:
                     raise HTTPException(status_code=413, detail="文件超过50MB限制")
 
-                # Convert docx → PDF via LibreOffice for proper preview (images, formatting)
-                if ext == "docx":
+                # Convert docx/vsdx → PDF via LibreOffice for proper preview
+                if ext in ("docx", "vsdx"):
                     import tempfile, subprocess, os as _os
                     tmpdir = tempfile.mkdtemp(prefix="pma-docx-")
-                    docx_path = _os.path.join(tmpdir, "input.docx")
+                    docx_path = _os.path.join(tmpdir, "input." + ext)
                     try:
                         with open(docx_path, "wb") as f:
                             f.write(content)

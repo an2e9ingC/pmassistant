@@ -467,7 +467,7 @@ function showStageMismatchDialog(execId, stageName, suggestedName, event) {
 
 /* ── Document Preview ── */
 
-var _PREVIEWABLE_EXTS = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'md', 'txt', 'docx'];
+var _PREVIEWABLE_EXTS = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'md', 'txt', 'docx', 'vsdx'];
 
 function isPreviewableUrl(url) {
   if (!url) return false;
@@ -498,13 +498,13 @@ function previewDocument(url, filename) {
       '<div class="note-dialog-head" style="flex-shrink:0">' +
         '<span class="note-dialog-title">' + escHtml(title) + '</span>' +
         '<span style="display:flex;align-items:center;gap:8px">' +
-          (isHttp && ext !== 'pdf' && ext !== 'docx' ? '<a href="' + escHtml(url) + '" target="_blank" style="font-size:11px;color:var(--accent);text-decoration:none;margin-right:4px">在新窗口打开</a>' : '') +
-          (ext === 'pdf' || ext === 'docx' ? '<button class="btn btn-sm" title="在新窗口中全屏查看" style="font-size:12px;padding:2px 6px;margin-right:4px" onclick="window.open(\'' + fetchUrl + '\', \'_blank\')">⛶</button>' : '') +
+          (isHttp && ext !== 'pdf' && ext !== 'docx' && ext !== 'vsdx' ? '<a href="' + escHtml(url) + '" target="_blank" style="font-size:11px;color:var(--accent);text-decoration:none;margin-right:4px">在新窗口打开</a>' : '') +
+          (ext === 'pdf' || ext === 'docx' || ext === 'vsdx' ? '<button class="btn btn-sm" title="在新窗口中全屏查看" style="font-size:12px;padding:2px 6px;margin-right:4px" onclick="window.open(\'' + fetchUrl + '\', \'_blank\')">⛶</button>' : '') +
           '<button class="note-dialog-close" onclick="document.getElementById(\'' + dlgId + '\').remove()">&times;</button>' +
         '</span>' +
       '</div>' +
       '<div id="' + dlgId + '-body" style="flex:1;overflow:auto;min-height:400px;display:flex;align-items:center;justify-content:center">' +
-        (ext === 'docx' ? '<div style="text-align:center;color:var(--muted)"><div style="display:inline-block;width:48px;height:48px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite"></div><div style="margin-top:16px;font-size:13px">正在将 <b>"' + escHtml(title) + '"</b> 转换为 PDF...</div></div>' : '<div class="loading-spinner">加载中...</div>') +
+        ((ext === 'docx' || ext === 'vsdx') ? '<div style="text-align:center;color:var(--muted)"><div style="display:inline-block;width:48px;height:48px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite"></div><div style="margin-top:16px;font-size:13px">正在将 <b>"' + escHtml(title) + '"</b> 转换为 PDF...</div></div>' : '<div class="loading-spinner">加载中...</div>') +
       '</div>' +
     '</div></div>';
   document.body.insertAdjacentHTML('beforeend', html);
@@ -521,8 +521,8 @@ function previewDocument(url, filename) {
     return;
   }
 
-  // DOCX: pre-fetch to trigger server-side conversion, then show PDF
-  if (ext === 'docx') {
+  // DOCX/VSDX: pre-fetch to trigger server-side conversion, then show PDF
+  if (ext === 'docx' || ext === 'vsdx') {
     fetch(fetchUrl).then(function(res) {
       if (!res.ok) throw new Error('HTTP ' + res.status);
       return res.blob();
