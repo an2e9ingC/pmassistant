@@ -427,20 +427,17 @@ function renderProdDocs(p) {
 
   API.get('/products/' + p.id + '/documents').then(function(docs) {
     _renderProdDocsInline(docs || []);
-    // Auto-scan: check if pending docs have files at target paths
-    var pending = (docs || []).filter(function(d) { return d.status === 'pending' && (d.doc_path || d.location); });
-    if (pending.length) {
-      _prodDocScanning = true;
-      _renderProdDocsInline(docs || []);  // re-render to show "验证中"
-      API.post('/products/' + p.id + '/docs/check', {}).then(function(result) {
-        _prodDocScanning = false;
-        if (result && result.auto_submitted > 0 || result && result.scanned > 0) {
-          API.get('/products/' + p.id + '/documents').then(function(fresh) {
-            _renderProdDocsInline(fresh || []);
-          });
-        }
-      }).catch(function() { _prodDocScanning = false; });
-    }
+    // Always re-scan on tab open: check file existence + refresh SVN metadata (rev changes etc.)
+    _prodDocScanning = true;
+    _renderProdDocsInline(docs || []);  // re-render to show "验证中"
+    API.post('/products/' + p.id + '/docs/check', {}).then(function(result) {
+      _prodDocScanning = false;
+      if (result && (result.auto_submitted > 0 || result.scanned > 0)) {
+        API.get('/products/' + p.id + '/documents').then(function(fresh) {
+          _renderProdDocsInline(fresh || []);
+        });
+      }
+    }).catch(function() { _prodDocScanning = false; });
   }).catch(function() {
     _renderProdDocsInline([]);
   });

@@ -318,10 +318,10 @@ class SyncService:
                     from backend.services.doc_scanner import check_product_docs
                     from backend.models.zentao import PmaProduct
                     products = db.query(PmaProduct).all()
-                    # Clear all document locations before scanning — rely on latest SVN data
+                    # Full-overwrite: reset location+status before re-scan (keep svn metadata for rev comparison)
                     from backend.models.document import ProductDocument
                     db.query(ProductDocument).filter(
-                        ProductDocument.location.isnot(None), ProductDocument.location != ""
+                        ProductDocument.doc_type == "svn"
                     ).update({ProductDocument.location: None, ProductDocument.status: "pending"})
                     db.commit()
                     total_scanned = 0
