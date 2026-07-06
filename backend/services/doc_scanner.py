@@ -272,6 +272,14 @@ def check_product_docs(db, product_id: int) -> dict:
         if mismatch:
             logger.warning(f"[doc-scanner] doc#{doc.id} '{doc.doc_name}': {mismatch}")
 
+        # Determine doc_type from template (prefer doc.doc_type, fallback to template)
+        doc_type = doc.doc_type or ""
+        if not doc_type and template_path:
+            if "svn" in template_path.lower():
+                doc_type = "svn"
+            elif "gitlab" in template_path.lower() or "git" in template_path:
+                doc_type = "gitlab"
+
         results.append({
             "doc_id": doc.id,
             "doc_name": doc.doc_name,
@@ -280,6 +288,7 @@ def check_product_docs(db, product_id: int) -> dict:
             "found": exists,
             "mismatch": mismatch,
             "prev_status": doc.status,
+            "doc_type": doc_type,
         })
 
         now = _dt.utcnow()
@@ -301,15 +310,14 @@ def check_product_docs(db, product_id: int) -> dict:
                 doc.updated_at = now
                 auto_submitted += 1
         elif not exists and doc.status == "submitted":
-            # File no longer accessible or mismatched — revert to pending
+            # File no longer accessible — revert to pending
             doc.status = "pending"
             doc.completed_at = None
             doc.updated_by = "auto-scanner"
             doc.updated_at = now
             reverted += 1
-            reason = mismatch or "文件不存在或无法访问"
             logger.warning(f"[doc-scanner] doc#{doc.id} '{doc.doc_name}' "
-                           f"reverted to pending: {reason}")
+                           f"reverted to pending: file not found")
 
     if auto_submitted > 0 or reverted > 0 or location_filled > 0:
         db.commit()

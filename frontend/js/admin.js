@@ -115,6 +115,7 @@ function renderConfigForm(cfg) {
             (enabledOn ? ' checked' : '') + ' value="1" style="position:absolute;opacity:0;pointer-events:none">' +
           toggleSwitch(enabledOn, "toggleSourceEnabled('" + sec.key + "')", {id: euid + '-toggle'}) +
           '<button class="btn btn-xs" onclick="testSourceConnection(\'' + sec.key + '\')" style="font-size:10px;padding:2px 8px;white-space:nowrap;flex-shrink:0">测试连接</button>' +
+          (sec.key === 'svn' ? '<button class="btn btn-xs" onclick="clearSVNData()" style="font-size:10px;padding:2px 8px;white-space:nowrap;flex-shrink:0;color:var(--danger)">清除</button>' : '') +
           '<button class="btn btn-xs" onclick="openSourceConfigDialog(\'' + sec.key + '\')" title="编辑配置" style="font-size:10px;padding:2px 6px;white-space:nowrap;flex-shrink:0">' +
             '<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
               '<path d="M11 2l3 3-9 9H2v-3l9-9z"/></svg>' +
@@ -273,6 +274,14 @@ function toggleConfigSwitch(checkboxId) {
   toggle.style.background = cb.checked ? 'var(--success)' : 'var(--border)';
   var dot = toggle.querySelector('span');
   if (dot) dot.style.transform = 'translateX(' + (cb.checked ? '22px' : '2px') + ')';
+}
+
+async function clearSVNData() {
+  if (!confirm('确定清除所有SVN同步数据？\n\n将清除所有自动扫描的文档路径和状态，下次同步重新扫描。')) return;
+  try {
+    var r = await API.post('/admin/clear-svn');
+    showToast(r.message || '已清除', 'success');
+  } catch(e) { showToast('清除失败: ' + (e.message || ''), 'error'); }
 }
 
 var _testResults = {};

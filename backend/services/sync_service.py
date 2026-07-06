@@ -312,12 +312,21 @@ class SyncService:
                     from backend.services.doc_scanner import check_product_docs
                     from backend.models.zentao import PmaProduct
                     products = db.query(PmaProduct).all()
+                    # Clear all auto-scanner location before scanning — rely on latest SVN data
+                    from backend.models.document import ProductDocument
+                    db.query(ProductDocument).filter(
+                        ProductDocument.location.isnot(None),
+                        ProductDocument.location != "",
+                        ProductDocument.uploaded_by == "auto-scanner"
+                    ).update({ProductDocument.location: None, ProductDocument.status: "pending"})
+                    db.commit()
                     total_scanned = 0
                     total_submitted = 0
                     total_reverted = 0
                     total_location = 0
                     total_matched = 0
                     failed = 0
+                    prod_results = {}
                     for prod in products:
                         try:
                             r = check_product_docs(db, prod.id)
@@ -326,6 +335,7 @@ class SyncService:
                             total_reverted += r.get("reverted", 0)
                             total_location += r.get("location_filled", 0)
                             total_matched += r.get("total_matched", 0)
+                            prod_results[prod.id] = r
                         except Exception:
                             failed += 1
                     timings["svn"] = round(time.time() - t0, 1)
@@ -344,6 +354,18 @@ class SyncService:
                         "failed_products": failed,
                     }
                     logger.info(f"[SVN] 文档扫描完成: {svn_summary['summary']}（{len(products)}个产品）")
+                    # Per-product detail: separate SVN vs non-SVN, matched vs unmatched
+                    for prod in products:
+                        r = prod_results.get(prod.id, {})
+                        if not r.get("scanned"): continue
+                        results_list = r.get("results", [])
+                        svn_docs = [d for d in results_list if d.get("doc_type") == "svn"]
+                        svn_found = [d for d in svn_docs if d.get("found")]
+                        svn_miss = [d for d in svn_docs if not d.get("found")]
+                        svn_total = len(svn_docs)
+                        if svn_total:
+                            logger.info(f"  [SVN] 产品 {prod.name}(#{prod.id}): "
+                                f"模板{svn_total}个 | 匹配{len(svn_found)}个 | 未匹配{len(svn_miss)}个")
                     svn_log = SyncLog(started_at=datetime.now(timezone.utc), finished_at=datetime.now(timezone.utc),
                                       entity_type="svn", status="success",
                                       items_fetched=total_scanned, items_created=total_submitted)
