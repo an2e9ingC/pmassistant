@@ -62,6 +62,9 @@ def get_favorites(user: LocalUser = Depends(get_current_user)):
     import json
     try:
         favs = json.loads(user.favorites or '{"products":[],"projects":[]}')
+        # Migrate old flat-array format
+        if isinstance(favs, list):
+            favs = {"products": favs, "projects": []}
     except (json.JSONDecodeError, TypeError):
         favs = {"products": [], "projects": []}
     return {"code": 0, "data": favs, "message": "ok"}
@@ -75,6 +78,9 @@ def toggle_favorite(
     import json
     try:
         favs = json.loads(user.favorites or '{"products":[],"projects":[]}')
+        # Migrate old flat-array format to new dict format
+        if isinstance(favs, list):
+            favs = {"products": favs, "projects": []}
     except (json.JSONDecodeError, TypeError):
         favs = {"products": [], "projects": []}
     key = payload.type + 's'  # 'products' or 'projects'

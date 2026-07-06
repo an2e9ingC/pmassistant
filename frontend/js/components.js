@@ -63,7 +63,7 @@ async function loadFavorites() {
     // Handle old format migration: flat array → {products:[], projects:[]}
     if (Array.isArray(data)) { _favProducts = data; _favProjects = []; }
     else { _favProducts = (data && data.products) ? data.products : []; _favProjects = (data && data.projects) ? data.projects : []; }
-  } catch(e) { _favProducts = []; _favProjects = []; }
+  } catch(e) { _favProducts = []; _favProjects = []; console.error('loadFavorites failed:', e); }
   _favLoaded = true;
 }
 
@@ -84,12 +84,30 @@ function isFavProduct(id) { return isFav('product', id); }
 async function toggleFav(type, id) {
   var list = type === 'product' ? _favProducts : _favProjects;
   var idx = list.indexOf(id);
-  if (idx >= 0) { list.splice(idx, 1); }
+  var wasFav = idx >= 0;
+  // Optimistic update
+  if (wasFav) { list.splice(idx, 1); }
   else { list.push(id); }
   try {
     await API.put('/auth/favorites/toggle', {type: type, id: id});
-  } catch(e) { /* revert on failure */ }
-  return idx < 0;
+  } catch(e) {
+    // Revert on failure — DB is the source of truth
+    if (wasFav) { list.push(id); }
+    else { var ri = list.indexOf(id); if (ri >= 0) list.splice(ri, 1); }
+    console.error('toggleFav failed:', e);
+    showToast('收藏操作失败: ' + (e.message || '网络错误'), 'error');
+    // Revert DOM star
+    var stars = document.querySelectorAll('[onclick*="toggleFav(\\\'' + type + '\\\',' + id + ')"]');
+    stars.forEach(function(el) {
+      var s = el.querySelector('svg');
+      if (s) {
+        s.setAttribute('data-fav', wasFav ? '1' : '0');
+        var p = s.querySelector('path');
+        if (p) { p.setAttribute('fill', wasFav ? '#eab308' : 'none'); p.setAttribute('stroke', wasFav ? '#eab308' : 'var(--muted)'); }
+      }
+    });
+  }
+  return !wasFav;
 }
 
 // Backward compat
