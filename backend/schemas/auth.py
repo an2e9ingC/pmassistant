@@ -16,6 +16,7 @@ class UserInfo(BaseModel):
     auth_source: Optional[str] = "local"  # 'local' or 'gitlab'
     gitlab_user_id: Optional[int] = None
     gitlab_token_valid: bool = False  # OAuth token present and usable
+    seen_version: Optional[str] = None  # last seen changelog version
 
     model_config = {"from_attributes": True}
 

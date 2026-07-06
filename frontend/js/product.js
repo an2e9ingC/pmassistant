@@ -368,12 +368,6 @@ function renderProdInfo(p) {
 
   html += '</div>';
 
-  // Product Notes
-  html += '<div style="margin-top:20px">' + sectionHeader('产品笔记', null, '+ 添加笔记', 'showAddProductNoteDialog()') + '</div>';
-  html += '<div class="card" style="padding:0;overflow:hidden" id="prod-notes-card">';
-  html += '<div style="max-height:400px;overflow-y:auto"><div id="prod-notes-list"><div class="loading-spinner" style="padding:20px">加载中...</div></div></div>';
-  html += '</div>';
-
   // Product Block Diagrams
   var bdCanEdit = _hasProductLinkPerm();
   if (bdCanEdit) {
@@ -386,7 +380,16 @@ function renderProdInfo(p) {
   html += '<div id="prod-block-diagrams-list"><div class="loading-spinner" style="padding:20px">加载中...</div></div>';
   html += '</div>';
 
+  // Product Notes
+  html += '<div style="margin-top:20px">' + sectionHeader('产品笔记', null, '+ 添加笔记', 'showAddProductNoteDialog()') + '</div>';
+  html += '<div class="card" style="padding:0;overflow:hidden" id="prod-notes-card">';
+  html += '<div style="max-height:400px;overflow-y:auto"><div id="prod-notes-list"><div class="loading-spinner" style="padding:20px">加载中...</div></div></div>';
+  html += '</div>';
+
   document.getElementById('prodsec-info').innerHTML = html;
+
+  // Load block diagrams
+  loadBlockDiagrams();
 
   // Load notes
   API.get('/products/' + p.id + '/notes').then(function(notes) {
@@ -394,9 +397,6 @@ function renderProdInfo(p) {
   }).catch(function() {
     renderProductNotes([]);
   });
-
-  // Load block diagrams
-  loadBlockDiagrams();
 }
 
 function renderProdDocs(p) {

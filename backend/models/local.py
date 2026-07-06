@@ -20,6 +20,7 @@ class LocalUser(Base):
     gitlab_access_token = Column(String(256), nullable=True)  # OAuth access token (for API calls as user)
     is_active = Column(Boolean, default=True)
     favorites = Column(Text, default="[]")  # JSON array of product IDs
+    seen_version = Column(String(32), nullable=True)  # last seen changelog version
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 

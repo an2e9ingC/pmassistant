@@ -1152,7 +1152,7 @@ async function init() {
   }
 
   // Show changelog on version update (skip during new user guide)
-  if (!isNewUser && localStorage.getItem('pma_skip_changelog') !== '1') {
+  if (!isNewUser) {
     checkNewVersion();
   }
 
@@ -1932,50 +1932,71 @@ async function showGuideWelcome() {
 // ── Version Changelog Dialog ──
 
 async function checkNewVersion() {
-  var lastVer = localStorage.getItem('pma_seen_version') || '';
+  var user = getCurrentUser();
+  var lastVer = (user && user.seen_version) || '';
   var curVer = window.APP_VERSION || '';
   if (!curVer) return;
   if (lastVer === curVer) return;
 
+  // Mark current version as seen immediately (persist to server + update local cache)
+  API.put('/auth/seen-version?version=' + encodeURIComponent(curVer)).then(function() {
+    if (user) { user.seen_version = curVer; localStorage.setItem('pma_user', JSON.stringify(user)); }
+  }).catch(function(){});
+
   try {
     var data = await API.get('/admin/changelog');
-    var entries = data || [];
-    // Find entries between lastVer and curVer
-    var seenIdx = -1, curIdx = -1;
-    for (var i = 0; i < entries.length; i++) {
-      if (entries[i].version === lastVer) seenIdx = i;
-      if (entries[i].version === curVer) curIdx = i;
+    var allEntries = data || [];
+
+    // Find entries strictly between lastVer and curVer (exclusive of lastVer, inclusive of curVer)
+    var lastIdx = -1, curIdx = -1;
+    for (var i = 0; i < allEntries.length; i++) {
+      if (allEntries[i].version === lastVer) lastIdx = i;
+      if (allEntries[i].version === curVer) curIdx = i;
     }
-    if (curIdx < 0) return;
+    // If lastVer not found, start from the beginning; otherwise from one after lastVer
+    var startIdx = lastIdx >= 0 ? lastIdx + 1 : 0;
+    var endIdx = curIdx >= 0 ? curIdx : allEntries.length - 1;
+    // Collect entries in range, then reverse to show oldest first
     var newEntries = [];
-    for (var i = (seenIdx >= 0 ? seenIdx - 1 : 0); i >= 0; i--) {
-      newEntries.push(entries[i]);
-      if (entries[i].version === curVer) break;
+    for (var i = startIdx; i <= endIdx && i < allEntries.length; i++) {
+      newEntries.push(allEntries[i]);
     }
-    if (!newEntries.length) return;
+    newEntries.reverse();
+
+    // If no entries found in range, show missing notice
+    if (!newEntries.length) {
+      newEntries = [{ version: curVer, date: '', description: '版本日志缺失，请联系管理员检查版本日志' }];
+    }
 
     var page = 0;
+    var lastPage = newEntries.length - 1;
     function renderPage() {
       var e = newEntries[page];
+      var descStyle = e.description.indexOf('版本日志缺失') >= 0 ? 'color:var(--warn);font-style:italic' : 'color:var(--fg)';
       var html = '<div style="font-size:13px;line-height:1.8">' +
         '<div style="font-weight:600;color:var(--accent);margin-bottom:8px">' +
-          escHtml(e.version) + ' <span style="font-size:11px;color:var(--muted)">' + escHtml(e.date) + '</span></div>' +
-        '<div style="color:var(--fg);white-space:pre-wrap">' + escHtml(e.description) + '</div>' +
+          escHtml(e.version) + (e.date ? ' <span style="font-size:11px;color:var(--muted)">' + escHtml(e.date) + '</span>' : '') + '</div>' +
+        '<div style="white-space:pre-wrap;' + descStyle + '">' + escHtml(e.description) + '</div>' +
       '</div>';
       var nav = '';
       if (newEntries.length > 1) {
-        nav = '<div style="text-align:center;margin-top:10px;font-size:11px;color:var(--muted)">' +
-          (page + 1) + ' / ' + newEntries.length + ' &nbsp;' +
-          (page > 0 ? '<button class="btn btn-xs" onclick="event.stopPropagation();_clPrevPage()" style="margin:0 4px">← 上一页</button>' : '') +
-          (page < newEntries.length - 1 ? '<button class="btn btn-xs" onclick="event.stopPropagation();_clNextPage()" style="margin:0 4px">下一页 →</button>' : '') +
+        var prevBtn = page > 0
+          ? '<button class="btn btn-xs" onclick="event.stopPropagation();_clPrevPage()">← 上一条</button>'
+          : '<span style="display:inline-block;width:56px"></span>';
+        var nextLabel = page < lastPage ? '下一条 →' : '我知道了';
+        var nextBtn = '<button class="btn btn-xs btn-primary" onclick="event.stopPropagation();' + (page < lastPage ? '_clNextPage()' : '_clClose()') + '">' + nextLabel + '</button>';
+        nav = '<div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-top:12px;font-size:11px;color:var(--muted)">' +
+          prevBtn +
+          '<span>' + (page + 1) + ' / ' + newEntries.length + '</span>' +
+          nextBtn +
         '</div>';
       }
-      // Update dialog body
       var body = document.querySelector('#clog-body');
       if (body) body.innerHTML = html + nav;
     }
     window._clPrevPage = function() { if (page > 0) { page--; renderPage(); } };
-    window._clNextPage = function() { if (page < newEntries.length - 1) { page++; renderPage(); } };
+    window._clNextPage = function() { if (page < lastPage) { page++; renderPage(); } };
+    window._clClose = function() { var d=document.querySelector('.shared-dialog-overlay,.note-dialog-overlay'); if(d) d.remove(); };
 
     var bodyHtml = '<div id="clog-body"></div>';
     openDialog('系统更新日志',
@@ -1984,10 +2005,7 @@ async function checkNewVersion() {
       { maxWidth: 520 }
     );
     renderPage();
-  } catch(e) {}
-
-  // Mark current version as seen
-  localStorage.setItem('pma_seen_version', curVer);
+  } catch(e) { console.error('checkNewVersion error:', e); }
 }
 
 document.addEventListener('DOMContentLoaded', function() {

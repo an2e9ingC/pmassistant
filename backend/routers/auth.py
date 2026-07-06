@@ -1,7 +1,7 @@
 import secrets
 import time
 from typing import Dict
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -106,6 +106,20 @@ def update_password(
     user.password_hash = hash_password(payload.new_password)
     db.commit()
     return {"code": 0, "message": "密码已更新"}
+
+
+@router.put("/seen-version", response_model=dict)
+def update_seen_version(
+    version: str = Query(..., description="Version string to mark as seen"),
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Mark a changelog version as seen by the current user."""
+    db.query(LocalUser).filter(LocalUser.id == user.id).update(
+        {LocalUser.seen_version: version}, synchronize_session=False
+    )
+    db.commit()
+    return {"code": 0, "message": "ok"}
 
 
 # ── GitLab OAuth endpoints ──
