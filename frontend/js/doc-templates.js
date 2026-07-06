@@ -839,10 +839,16 @@ async function initProductDocTemplates() {
   try {
     var tree = await API.get('/product-doc-templates/product-tree');
     _productTree = tree || [];
-    // Select first L2 or L1 by default
+    // Select first L2 or L1 by default; if pre-selected, resolve to L2 ancestor
     if (!_selectedNodeId || !_findNodeById(_selectedNodeId)) {
       var firstL2 = _findFirstL2(_productTree);
       _selectedNodeId = firstL2 || (_productTree.length ? _productTree[0].id : null);
+    } else {
+      // If pre-selected node is L3 (product model), navigate to its L2 parent
+      var sel = _findNodeById(_selectedNodeId);
+      if (sel && sel.level === 3 && sel.parent_id) {
+        _selectedNodeId = sel.parent_id;
+      }
     }
     if (_selectedNodeId) {
       await _loadTemplatesForNode(_selectedNodeId);

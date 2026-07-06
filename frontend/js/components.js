@@ -472,19 +472,21 @@ function previewDocument(url, filename) {
   var title = filename || u.split('/').pop() || u.split('\\').pop() || '文档预览';
   var isHttp = /^https?:\/\//.test(url);
 
-  // Build dialog
+  // Build dialog — 95vw/95vh default, fullscreen support
   var dlgId = 'preview-dlg-' + Date.now();
+  var dlgStyle = 'max-width:95vw;width:95vw;max-height:95vh;display:flex;flex-direction:column';
   var html = '<div class="note-dialog-overlay" id="' + dlgId + '" style="z-index:9999">' +
-    '<div class="note-dialog" style="max-width:90vw;width:90vw;max-height:90vh;display:flex;flex-direction:column">' +
+    '<div class="note-dialog" id="' + dlgId + '-dlg" style="' + dlgStyle + '">' +
       '<div class="note-dialog-head" style="flex-shrink:0">' +
         '<span class="note-dialog-title">' + escHtml(title) + '</span>' +
         '<span style="display:flex;align-items:center;gap:8px">' +
-          (isHttp ? '<a href="' + escHtml(url) + '" target="_blank" style="font-size:11px;color:var(--accent);text-decoration:none;margin-right:12px">在新窗口打开</a>' : '') +
+          (isHttp && ext !== 'pdf' && ext !== 'docx' ? '<a href="' + escHtml(url) + '" target="_blank" style="font-size:11px;color:var(--accent);text-decoration:none;margin-right:4px">在新窗口打开</a>' : '') +
+          (ext === 'pdf' || ext === 'docx' ? '<button class="btn btn-sm" title="在新窗口中全屏查看" style="font-size:12px;padding:2px 6px;margin-right:4px" onclick="window.open(\'' + fetchUrl + '\', \'_blank\')">⛶</button>' : '') +
           '<button class="note-dialog-close" onclick="document.getElementById(\'' + dlgId + '\').remove()">&times;</button>' +
         '</span>' +
       '</div>' +
-      '<div id="' + dlgId + '-body" style="flex:1;overflow:auto;min-height:300px;display:flex;align-items:center;justify-content:center">' +
-        '<div class="loading-spinner">加载中...</div>' +
+      '<div id="' + dlgId + '-body" style="flex:1;overflow:auto;min-height:400px;display:flex;align-items:center;justify-content:center">' +
+        (ext === 'docx' ? '<div style="text-align:center;color:var(--muted)"><div style="display:inline-block;width:48px;height:48px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite"></div><div style="margin-top:16px;font-size:13px">正在将 <b>"' + escHtml(title) + '"</b> 转换为 PDF...</div></div>' : '<div class="loading-spinner">加载中...</div>') +
       '</div>' +
     '</div></div>';
   document.body.insertAdjacentHTML('beforeend', html);
@@ -495,9 +497,22 @@ function previewDocument(url, filename) {
 
   var body = document.getElementById(dlgId + '-body');
 
-  // PDF / Images: direct iframe/img
-  if (['pdf'].indexOf(ext) >= 0) {
+  // PDF: direct iframe
+  if (ext === 'pdf') {
     body.innerHTML = '<iframe src="' + fetchUrl + '" style="width:100%;height:100%;min-height:70vh;border:none"></iframe>';
+    return;
+  }
+
+  // DOCX: pre-fetch to trigger server-side conversion, then show PDF
+  if (ext === 'docx') {
+    fetch(fetchUrl).then(function(res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.blob();
+    }).then(function() {
+      body.innerHTML = '<iframe src="' + fetchUrl + '" style="width:100%;height:100%;min-height:70vh;border:none"></iframe>';
+    }).catch(function(e) {
+      body.innerHTML = '<div class="error-state">转换失败: ' + escHtml(e.message) + '</div>';
+    });
     return;
   }
   if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].indexOf(ext) >= 0) {
@@ -505,20 +520,13 @@ function previewDocument(url, filename) {
     return;
   }
 
-  // MD / TXT / DOCX: fetch content
+  // MD / TXT: fetch and render text content
   fetch(fetchUrl).then(function(res) {
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    if (ext === 'docx') return res.arrayBuffer();
     return res.text();
   }).then(function(data) {
     if (ext === 'md') {
       body.innerHTML = '<div style="padding:20px;max-width:900px;margin:0 auto;line-height:1.7">' + marked.parse(data) + '</div>';
-    } else if (ext === 'docx') {
-      mammoth.convertToHtml({ arrayBuffer: data }).then(function(result) {
-        body.innerHTML = '<div style="padding:20px;max-width:900px;margin:0 auto;line-height:1.7">' + result.value + '</div>';
-      }).catch(function() {
-        body.innerHTML = '<div class="error-state">文档解析失败</div>';
-      });
     } else {
       body.innerHTML = '<pre style="padding:20px;white-space:pre-wrap;font-size:13px;line-height:1.6">' + escHtml(data || '') + '</pre>';
     }

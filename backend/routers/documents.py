@@ -212,14 +212,47 @@ async def fetch_document(
 
     # Direct HTTP fetch for other URLs
     try:
-        import httpx
+        import httpx, os, base64
+
+        # Add SVN Basic Auth for SVN server URLs
+        headers = {}
+        svn_base = os.environ.get("SVN_BASE_URL", "")
+        svn_user = os.environ.get("SVN_USERNAME", "")
+        svn_pass = os.environ.get("SVN_PASSWORD", "")
+        if svn_user and svn_pass and svn_base and decoded_url.startswith(svn_base.rstrip("/")):
+            cred = base64.b64encode(f"{svn_user}:{svn_pass}".encode()).decode()
+            headers["Authorization"] = f"Basic {cred}"
 
         async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as http_client:
-            resp = await http_client.get(decoded_url)
+            resp = await http_client.get(decoded_url, headers=headers)
             if resp.status_code == 200:
                 content = resp.content
                 if len(content) > MAX_FILE_SIZE:
                     raise HTTPException(status_code=413, detail="文件超过50MB限制")
+
+                # Convert docx → PDF via LibreOffice for proper preview (images, formatting)
+                if ext == "docx":
+                    import tempfile, subprocess, os as _os
+                    tmpdir = tempfile.mkdtemp(prefix="pma-docx-")
+                    docx_path = _os.path.join(tmpdir, "input.docx")
+                    try:
+                        with open(docx_path, "wb") as f:
+                            f.write(content)
+                        proc = subprocess.run(
+                            ["libreoffice", "--headless", "--convert-to", "pdf", "--outdir", tmpdir, docx_path],
+                            timeout=60, capture_output=True, text=True,
+                        )
+                        pdf_path = _os.path.join(tmpdir, "input.pdf")
+                        if proc.returncode == 0 and _os.path.exists(pdf_path):
+                            with open(pdf_path, "rb") as f:
+                                content = f.read()
+                            content_type = "application/pdf"
+                        else:
+                            logger.warning(f"docx→pdf conversion failed: {proc.stderr}")
+                    finally:
+                        import shutil
+                        shutil.rmtree(tmpdir, ignore_errors=True)
+
                 return Response(content=content, media_type=content_type)
             else:
                 raise HTTPException(status_code=502, detail=f"无法获取文件 (HTTP {resp.status_code})")
