@@ -264,9 +264,15 @@ class SyncService:
             # ── Source 2: GitLab (releases sync + URL validation) ──
             gitlab_summary = {}
             if settings.GITLAB_TOKEN:
-                # Releases sync disabled — all products managed via PMA local
-                results["releases"] = {"fetched": 0, "created": 0, "updated": 0, "deleted": 0, "failed_products": 0}
-                logger.info("[GitLab] 禅道发布版本同步已禁用（产品由PMA本地维护）")
+                # Release sync from Zentao (data source for GitLab URL validation)
+                if os.environ.get("ZENTAO_SYNC_RELEASES", "true").lower() in ("1", "true", "yes"):
+                    t_rel = time.time()
+                    results["releases"] = await self._sync_releases(db)
+                    timings["releases"] = round(time.time() - t_rel, 1)
+                    logger.info(f"[禅道→发布版本] 同步完成: {results.get('releases', {})}")
+                else:
+                    results["releases"] = {"fetched": 0, "created": 0, "updated": 0, "deleted": 0}
+                    logger.info("[禅道→发布版本] 同步已关闭（数据源配置中禁用）")
                 try:
                     _sync_progress["phase"] = "GitLab校验"
                     from backend.services.gitlab_service import validate_all_releases
@@ -274,7 +280,7 @@ class SyncService:
                     vresult = await validate_all_releases(db, concurrency=5)
                     results["gitlab_validation"] = vresult
                     timings["gitlab_validation"] = round(time.time() - t0, 1)
-                    logger.info(f"[GitLab] URL校验完成: {vresult}")
+                    logger.info(f"[GitLab→URL校验] 完成: {vresult}")
 
                     r = results["releases"]
                     gitlab_summary = {

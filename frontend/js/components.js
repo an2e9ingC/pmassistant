@@ -1048,7 +1048,7 @@ async function uploadAttachment(bugId, file, analysisId) {
   var xhr = new XMLHttpRequest();
   return new Promise(function(resolve, reject) {
     xhr.open('POST', '/api/bugs/' + bugId + '/attachments');
-    xhr.setRequestHeader('Authorization', 'Bearer ' + (localStorage.getItem('pm_token') || ''));
+    xhr.setRequestHeader('Authorization', 'Bearer ' + (localStorage.getItem('pma_token') || ''));
     xhr.onload = function() {
       if (xhr.status >= 200 && xhr.status < 300) {
         var d = JSON.parse(xhr.responseText);
@@ -1070,12 +1070,21 @@ function initImagePaste(textarea, bugId, onUrlInserted) {
       if (items[i].type.indexOf('image') === 0) {
         e.preventDefault();
         var file = items[i].getAsFile();
+        if (!bugId) {
+          window._bfPendingFiles = window._bfPendingFiles || [];
+          window._bfPendingFiles.push(file);
+          var mdImg = '<img src="待上传" alt="' + (file.name || 'image') + '" style="max-width:100%">';
+          var start = textarea.selectionStart;
+          textarea.value = textarea.value.substring(0, start) + '\n' + mdImg + '\n' + textarea.value.substring(textarea.selectionEnd);
+          textarea.selectionStart = textarea.selectionEnd = start + mdImg.length + 2;
+          return;
+        }
         uploadAttachment(bugId, file).then(function(a) {
           var url = a.url || '/api/attachments/' + a.id;
-          var mdImg = '![' + (a.filename || 'image') + '](' + url + ')';
+          var mdImg = '<img src="' + url + '" alt="' + (a.filename || 'image') + '" style="max-width:100%">';
           var start = textarea.selectionStart;
-          textarea.value = textarea.value.substring(0, start) + mdImg + textarea.value.substring(textarea.selectionEnd);
-          textarea.selectionStart = textarea.selectionEnd = start + mdImg.length;
+          textarea.value = textarea.value.substring(0, start) + '\n' + mdImg + '\n' + textarea.value.substring(textarea.selectionEnd);
+          textarea.selectionStart = textarea.selectionEnd = start + mdImg.length + 2;
           if (onUrlInserted) onUrlInserted(url);
         }).catch(function(err) { showToast('图片上传失败: ' + (err.message || ''), 'error'); });
         break;

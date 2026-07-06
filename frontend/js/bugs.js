@@ -2,6 +2,7 @@
 var _bugFilterProduct = null;
 var _bugFilterStatus = '';
 var _bugKanbanMode = false;
+var _bfProjId = null;
 
 /* ── Init & Render ── */
 
@@ -168,7 +169,7 @@ async function openBugDetail(bugId) {
       '</div></div></div>';
 
   if (b.description) html += '<div class="card" style="padding:14px;margin-bottom:12px"><div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px">描述</div>' +
-    '<div class="markdown-body" style="font-size:13px;line-height:1.6">' + renderMarkdown(b.description) + '</div></div>';
+    '<div class="markdown-body" style="font-size:13px;line-height:1.6;max-height:300px;overflow-y:auto">' + renderMarkdown(b.description) + '</div></div>';
 
   html += '<div class="card" style="padding:14px;margin-bottom:12px"><div style="display:flex;justify-content:space-between;margin-bottom:8px">' +
     '<span style="font-size:11px;font-weight:600;color:var(--muted)">工时日志 ('+(b.consumed_hours||0).toFixed(1)+'h)</span>' +
@@ -178,7 +179,7 @@ async function openBugDetail(bugId) {
   html += '<div class="card" style="padding:14px;margin-bottom:12px"><div style="display:flex;justify-content:space-between;margin-bottom:8px">' +
     '<span style="font-size:11px;font-weight:600;color:var(--muted)">分析记录</span>' +
     '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openBugAnalysisDialog('+bugId+')">+ 添加</button></div>' +
-    '<div id="bv-analyses"><div class="loading-spinner">加载中...</div></div></div>';
+    '<div id="bv-analyses" style="max-height:250px;overflow-y:auto"><div class="loading-spinner">加载中...</div></div></div>';
 
   var btns = [
     {text:'提交到GitLab',cls:'btn',onclick:'_bugSubmitGitlab('+bugId+')',enabled:!!(b.component_id && !b.gitlab_url)},
@@ -373,11 +374,20 @@ async function _submitBug(bugId) {
     if (bugId) result = await API.put('/bugs/'+bugId, payload);
     else result = await API.post('/bugs', payload);
     var newId = bugId || (result && result.id);
-    // Upload pending files
+    // Upload pending files and replace (待上传) placeholders with real URLs
     var pending = window._bfPendingFiles || [];
     window._bfPendingFiles = [];
+    var desc = payload.description || '';
     for (var i = 0; i < pending.length; i++) {
-      try { await uploadAttachment(newId, pending[i]); } catch(e) {}
+      try {
+        var att = await uploadAttachment(newId, pending[i]);
+        var url = att.url || '/api/attachments/' + att.id;
+        desc = desc.replace('src="待上传" alt="' + pending[i].name + '"', 'src="' + url + '" alt="' + pending[i].name + '"');
+      } catch(e) {}
+    }
+    // Update description with real URLs
+    if (desc !== payload.description && newId) {
+      await API.put('/bugs/' + newId, {description: desc});
     }
     showToast(bugId?'已更新':'已创建','success');
     closeSharedDialog();

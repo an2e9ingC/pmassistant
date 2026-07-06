@@ -142,7 +142,7 @@ from backend.database import get_db as _gdb
 from backend.middleware.auth import get_current_user as _gcu
 
 @app.get("/api/attachments/{attachment_id}")
-def serve_attachment(attachment_id: int, db: Session = Depends(_gdb), _=Depends(_gcu)):
+def serve_attachment(attachment_id: int, db: Session = Depends(_gdb)):
     result = _bs.get_attachment_path(attachment_id, db)
     if not result: raise HTTPException(status_code=404, detail="Attachment not found")
     path, mime, fname = result

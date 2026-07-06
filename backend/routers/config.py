@@ -30,6 +30,7 @@ class ZentaoConfig(BaseModel):
     password: str = ""
     project_filter: str = ""  # comma-separated project code prefixes
     sync_interval: str = "30"  # auto-sync interval in minutes, 0=disabled
+    sync_releases: bool = True  # 同步禅道发布版本（GitLab URL校验数据源）
     enabled: bool = True
 
 
@@ -75,6 +76,7 @@ def _load_config() -> dict:
             "password": os.environ.get("ZENTAO_AUTH_PASSWORD", ""),
             "project_filter": os.environ.get("ZENTAO_PROJECT_FILTER", ""),
             "sync_interval": os.environ.get("SYNC_INTERVAL_MINUTES", "30"),
+            "sync_releases": os.environ.get("ZENTAO_SYNC_RELEASES", "true").lower() in ("1", "true", "yes"),
             "enabled": os.environ.get("ZENTAO_ENABLED", "true").lower() in ("1", "true", "yes"),
         },
         "gitlab": {
@@ -124,6 +126,7 @@ def _save_config(cfg: dict) -> None:
         "zentao.password": "ZENTAO_AUTH_PASSWORD",
         "zentao.project_filter": "ZENTAO_PROJECT_FILTER",
         "zentao.sync_interval": "SYNC_INTERVAL_MINUTES",
+        "zentao.sync_releases": "ZENTAO_SYNC_RELEASES",
         "zentao.enabled": "ZENTAO_ENABLED",
         "gitlab.base_url": "GITLAB_BASE_URL",
         "gitlab.token": "GITLAB_TOKEN",
