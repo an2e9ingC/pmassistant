@@ -570,9 +570,10 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 | 15 | `uploaded_at` | DATETIME | NULLABLE | 上传时间 |
 | 16 | `updated_by` | VARCHAR(64) | NULLABLE | 更新人（PMA 内部记录） |
 | 17 | `svn_author` | VARCHAR(128) | NULLABLE | SVN 最后提交人（PROPFIND creator-displayname） |
-| 18 | `svn_last_modified` | VARCHAR(128) | NULLABLE | SVN 最后修改时间（PROPFIND getlastmodified） |
-| 19 | `created_at` | DATETIME | default=now | — |
-| 20 | `updated_at` | DATETIME | default=now, onupdate=now | — |
+| 18 | `svn_last_modified` | VARCHAR(128) | NULLABLE | SVN 最后修改时间（PROPFIND getlastmodified，已转北京时间） |
+| 19 | `svn_rev` | VARCHAR(32) | NULLABLE | SVN 版本号（PROPFIND version-name） |
+| 20 | `created_at` | DATETIME | default=now | — |
+| 21 | `updated_at` | DATETIME | default=now, onupdate=now | — |
 
 > 从 `product_doc_templates` 初始化，为每个产品的每个文档模板创建实例。`svn_author` 和 `svn_last_modified` 通过 SVN PROPFIND 请求自动填充（仅 SVN 类型文档）。
 

@@ -119,7 +119,8 @@ class ProductDocument(Base):
     uploaded_at = Column(DateTime, nullable=True)
     updated_by = Column(String(64), nullable=True)
     svn_author = Column(String(128), nullable=True)  # SVN 最后提交人
-    svn_last_modified = Column(String(128), nullable=True)  # SVN 最后修改时间
+    svn_last_modified = Column(String(128), nullable=True)  # SVN 最后修改时间（北京时间 YYYY-MM-DD HH:MM:SS）
+    svn_rev = Column(String(32), nullable=True)  # SVN 最后提交版本号（version-name）
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 

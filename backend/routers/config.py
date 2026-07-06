@@ -387,9 +387,11 @@ def clear_svn_data(db: Session = Depends(get_db), user=Depends(require_perm("syn
     """Clear all SVN-synced data for debugging."""
     from backend.models.document import ProductDocument
     cleared = db.query(ProductDocument).filter(
-        ProductDocument.location.isnot(None), ProductDocument.location != ""
+        ProductDocument.doc_type == "svn"
     ).update({ProductDocument.location: None, ProductDocument.status: "pending",
-              ProductDocument.uploaded_at: None, ProductDocument.completed_at: None}, synchronize_session=False)
+              ProductDocument.uploaded_at: None, ProductDocument.completed_at: None,
+              ProductDocument.svn_author: None, ProductDocument.svn_last_modified: None,
+              ProductDocument.svn_rev: None}, synchronize_session=False)
     db.commit()
     log_audit(db, user, "clear_svn", f"清除SVN同步数据: {cleared}条", "SVN", "high")
     return {"code": 0, "data": {"cleared": cleared}, "message": f"已清除{cleared}条SVN数据"}

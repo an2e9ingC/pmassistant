@@ -1023,6 +1023,7 @@ def get_or_init_product_documents(db: Session, product_id: int) -> list[dict]:
                 "updated_at": to_local_str(existing.updated_at) if existing.updated_at else "",
                 "svn_author": existing.svn_author or "",
                 "svn_last_modified": existing.svn_last_modified or "",
+                "svn_rev": existing.svn_rev or "",
                 "node_name": "",  # filled below if needed
             })
 

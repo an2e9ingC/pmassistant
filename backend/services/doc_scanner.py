@@ -5,6 +5,7 @@ and auto-marks documents as submitted when matching files are found (size > 0).
 """
 import re
 import logging
+from datetime import datetime as _dt, timezone as _tz, timedelta as _td
 from urllib.parse import urljoin, urlparse
 import urllib.request
 import urllib.error
@@ -182,18 +183,33 @@ def check_file_exists(url: str) -> bool:
         return False
 
 
+def _format_svn_date(rfc1123_str: str) -> str:
+    """Parse an RFC 1123 date string (e.g. 'Mon, 06 Jul 2026 03:29:20 GMT')
+    and return a Beijing-time string (YYYY-MM-DD HH:MM:SS)."""
+    if not rfc1123_str:
+        return ""
+    try:
+        from email.utils import parsedate_to_datetime
+        utc_dt = parsedate_to_datetime(rfc1123_str)
+        beijing_dt = utc_dt + _td(hours=8)
+        return beijing_dt.strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return rfc1123_str[:19] if len(rfc1123_str) >= 19 else rfc1123_str
+
+
 def get_svn_metadata(url: str) -> tuple:
-    """Get SVN file author and last-modified via PROPFIND (Depth:0).
-    Returns (author, last_modified) or (None, None).
+    """Get SVN file author, last-modified (Beijing time), and revision via PROPFIND.
+    Returns (author, last_modified_beijing, rev) or (None, None, None).
     """
     if not _is_http_url(url):
-        return None, None
+        return None, None, None
     url = _encode_url(url)
     data = """<?xml version="1.0" encoding="utf-8"?>
 <propfind xmlns="DAV:">
   <prop>
     <creator-displayname/>
     <getlastmodified/>
+    <version-name/>
   </prop>
 </propfind>"""
     try:
@@ -206,16 +222,19 @@ def get_svn_metadata(url: str) -> tuple:
         # Match any namespace prefix (D:, lp1:, g0:, etc.) or no prefix
         author_m = _re.search(r"<[\w]*:?creator-displayname>([^<]+)</[\w]*:?creator-displayname>", body)
         date_m = _re.search(r"<[\w]*:?getlastmodified>([^<]+)</[\w]*:?getlastmodified>", body)
+        rev_m = _re.search(r"<[\w]*:?version-name>([^<]+)</[\w]*:?version-name>", body)
         author = author_m.group(1).strip() if author_m else None
-        lastmod = date_m.group(1).strip() if date_m else None
-        if author or lastmod:
-            logger.debug(f"[svn-metadata] {url}: author={author}, lastmod={lastmod}")
+        lastmod_raw = date_m.group(1).strip() if date_m else None
+        lastmod = _format_svn_date(lastmod_raw) if lastmod_raw else None
+        rev = rev_m.group(1).strip() if rev_m else None
+        if author or lastmod or rev:
+            logger.debug(f"[svn-metadata] {url}: author={author}, lastmod={lastmod}, rev={rev}")
         else:
             logger.warning(f"[svn-metadata] PROPFIND response missing expected fields for {url}: {body[:200]}")
-        return author, lastmod
+        return author, lastmod, rev
     except Exception as e:
         logger.warning(f"[svn-metadata] PROPFIND failed for {url}: {type(e).__name__}: {e}")
-        return None, None
+        return None, None, None
 
 
 def scan_doc_path(doc_path: str) -> bool:
@@ -347,17 +366,38 @@ def check_product_docs(db, product_id: int) -> dict:
                 doc.updated_at = now
                 auto_submitted += 1
 
-        # Fetch SVN metadata (author + last-modified) for SVN-type docs
+        # Fetch SVN metadata (author + last-modified + rev) for SVN-type docs
         # Do this regardless of HEAD/scan result — PROPFIND itself confirms accessibility
-        if doc_type == "svn" and check_path and not doc.svn_author:
+        if doc_type == "svn" and check_path:
+            prev_rev = doc.svn_rev
             logger.debug(f"[doc-scanner] Fetching SVN metadata for doc#{doc.id} '{doc.doc_name}': {check_path}")
-            svn_author, svn_lastmod = get_svn_metadata(check_path)
+            svn_author, svn_lastmod, svn_rev = get_svn_metadata(check_path)
             if svn_author:
                 doc.svn_author = svn_author
                 svn_meta_updated += 1
             if svn_lastmod:
                 doc.svn_last_modified = svn_lastmod
                 svn_meta_updated += 1
+            if svn_rev:
+                doc.svn_rev = svn_rev
+                svn_meta_updated += 1
+                # Log product activity if revision changed (new or updated)
+                if prev_rev and prev_rev != svn_rev:
+                    try:
+                        from backend.services.product_service import log_product_activity
+                        detail = (f"SVN文档更新: {doc.doc_name} "
+                                  f"(r{prev_rev} → r{svn_rev}, 提交人: {svn_author or '未知'})")
+                        log_product_activity(db, product_id, svn_author or "SVN", "文档更新", detail)
+                    except Exception:
+                        pass
+                elif not prev_rev and svn_rev:
+                    try:
+                        from backend.services.product_service import log_product_activity
+                        detail = (f"SVN文档首次记录: {doc.doc_name} "
+                                  f"(r{svn_rev}, 提交人: {svn_author or '未知'})")
+                        log_product_activity(db, product_id, svn_author or "SVN", "文档记录", detail)
+                    except Exception:
+                        pass
 
         if not exists and doc.status == "submitted":
             # File no longer accessible — revert to pending
