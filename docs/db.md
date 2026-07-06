@@ -549,7 +549,34 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 | 6 | `description` | VARCHAR(512) | NULLABLE | 描述 |
 | 7 | `responsible_role` | VARCHAR(128) | NULLABLE | 负责角色 |
 
-#### 5.3.9 `project_documents` — 项目文档实例
+#### 5.3.9 `product_documents` — 产品文档实例
+
+| # | 列名 | 类型 | 约束 | 说明 |
+|---|------|------|------|------|
+| 1 | `id` | INTEGER | **PK** | — |
+| 2 | `product_id` | INTEGER | NOT NULL, INDEX | 关联产品 ID |
+| 3 | `template_id` | INTEGER | NULLABLE, INDEX, **FK→product_doc_templates.id** | 关联模板 |
+| 4 | `stage_type` | VARCHAR(64) | NOT NULL, default="通用" | 开发阶段 |
+| 5 | `doc_name` | VARCHAR(256) | NOT NULL | 文档名称 |
+| 6 | `sort_order` | INTEGER | default=0 | 排序 |
+| 7 | `status` | VARCHAR(32) | default="pending" | 状态（pending/submitted） |
+| 8 | `responsible_role` | VARCHAR(128) | NULLABLE | 负责角色 |
+| 9 | `description` | VARCHAR(512) | NULLABLE | 描述 |
+| 10 | `doc_path` | VARCHAR(512) | NULLABLE | 模板文档路径（自动从 base_path+file_pattern 计算） |
+| 11 | `location` | TEXT | NULLABLE | 用户提交的文档位置/链接 |
+| 12 | `doc_type` | VARCHAR(32) | NULLABLE | 文档类型（gitlab/svn/nas/solidworks/pma） |
+| 13 | `completed_at` | DATETIME | NULLABLE | 文档提交/完成时间 |
+| 14 | `uploaded_by` | VARCHAR(64) | NULLABLE | 上传人 |
+| 15 | `uploaded_at` | DATETIME | NULLABLE | 上传时间 |
+| 16 | `updated_by` | VARCHAR(64) | NULLABLE | 更新人（PMA 内部记录） |
+| 17 | `svn_author` | VARCHAR(128) | NULLABLE | SVN 最后提交人（PROPFIND creator-displayname） |
+| 18 | `svn_last_modified` | VARCHAR(128) | NULLABLE | SVN 最后修改时间（PROPFIND getlastmodified） |
+| 19 | `created_at` | DATETIME | default=now | — |
+| 20 | `updated_at` | DATETIME | default=now, onupdate=now | — |
+
+> 从 `product_doc_templates` 初始化，为每个产品的每个文档模板创建实例。`svn_author` 和 `svn_last_modified` 通过 SVN PROPFIND 请求自动填充（仅 SVN 类型文档）。
+
+#### 5.3.10 `project_documents` — 项目文档实例
 
 | # | 列名 | 类型 | 约束 | 说明 |
 |---|------|------|------|------|

@@ -182,6 +182,42 @@ def check_file_exists(url: str) -> bool:
         return False
 
 
+def get_svn_metadata(url: str) -> tuple:
+    """Get SVN file author and last-modified via PROPFIND (Depth:0).
+    Returns (author, last_modified) or (None, None).
+    """
+    if not _is_http_url(url):
+        return None, None
+    url = _encode_url(url)
+    data = """<?xml version="1.0" encoding="utf-8"?>
+<propfind xmlns="DAV:">
+  <prop>
+    <creator-displayname/>
+    <getlastmodified/>
+  </prop>
+</propfind>"""
+    try:
+        req = urllib.request.Request(url, data=data.encode(), method="PROPFIND",
+                                      headers={"Depth": "0", "Content-Type": "application/xml"})
+        _add_svn_auth(req)
+        resp = urllib.request.urlopen(req, timeout=HTTP_TIMEOUT)
+        body = resp.read().decode("utf-8", errors="replace")
+        import re as _re
+        # Match any namespace prefix (D:, lp1:, g0:, etc.) or no prefix
+        author_m = _re.search(r"<[\w]*:?creator-displayname>([^<]+)</[\w]*:?creator-displayname>", body)
+        date_m = _re.search(r"<[\w]*:?getlastmodified>([^<]+)</[\w]*:?getlastmodified>", body)
+        author = author_m.group(1).strip() if author_m else None
+        lastmod = date_m.group(1).strip() if date_m else None
+        if author or lastmod:
+            logger.debug(f"[svn-metadata] {url}: author={author}, lastmod={lastmod}")
+        else:
+            logger.warning(f"[svn-metadata] PROPFIND response missing expected fields for {url}: {body[:200]}")
+        return author, lastmod
+    except Exception as e:
+        logger.warning(f"[svn-metadata] PROPFIND failed for {url}: {type(e).__name__}: {e}")
+        return None, None
+
+
 def scan_doc_path(doc_path: str) -> bool:
     """Scan a single doc_path and return True if a matching file exists.
 
@@ -242,6 +278,7 @@ def check_product_docs(db, product_id: int) -> dict:
     reverted = 0
     location_filled = 0
     total_matched = 0
+    svn_meta_updated = 0
     results = []
 
     from datetime import datetime as _dt
@@ -309,7 +346,20 @@ def check_product_docs(db, product_id: int) -> dict:
                 doc.updated_by = "auto-scanner"
                 doc.updated_at = now
                 auto_submitted += 1
-        elif not exists and doc.status == "submitted":
+
+        # Fetch SVN metadata (author + last-modified) for SVN-type docs
+        # Do this regardless of HEAD/scan result — PROPFIND itself confirms accessibility
+        if doc_type == "svn" and check_path and not doc.svn_author:
+            logger.debug(f"[doc-scanner] Fetching SVN metadata for doc#{doc.id} '{doc.doc_name}': {check_path}")
+            svn_author, svn_lastmod = get_svn_metadata(check_path)
+            if svn_author:
+                doc.svn_author = svn_author
+                svn_meta_updated += 1
+            if svn_lastmod:
+                doc.svn_last_modified = svn_lastmod
+                svn_meta_updated += 1
+
+        if not exists and doc.status == "submitted":
             # File no longer accessible — revert to pending
             doc.status = "pending"
             doc.completed_at = None
@@ -319,7 +369,7 @@ def check_product_docs(db, product_id: int) -> dict:
             logger.warning(f"[doc-scanner] doc#{doc.id} '{doc.doc_name}' "
                            f"reverted to pending: file not found")
 
-    if auto_submitted > 0 or reverted > 0 or location_filled > 0:
+    if auto_submitted > 0 or reverted > 0 or location_filled > 0 or svn_meta_updated > 0:
         db.commit()
 
     return {

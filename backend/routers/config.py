@@ -383,7 +383,7 @@ def get_system_info():
 # ── Debug: Clear SVN data ──
 
 @router.post("/clear-svn", response_model=dict)
-def clear_svn_data(db: Session = Depends(get_db), user=Depends(require_admin)):
+def clear_svn_data(db: Session = Depends(get_db), user=Depends(require_perm("sync"))):
     """Clear all SVN-synced data for debugging."""
     from backend.models.document import ProductDocument
     cleared = db.query(ProductDocument).filter(
@@ -391,7 +391,7 @@ def clear_svn_data(db: Session = Depends(get_db), user=Depends(require_admin)):
     ).update({ProductDocument.location: None, ProductDocument.status: "pending",
               ProductDocument.uploaded_at: None, ProductDocument.completed_at: None}, synchronize_session=False)
     db.commit()
-    log_audit(db, user, "clear_svn", f"清除SVN同步数据: {cleared}条", "SVN", "medium")
+    log_audit(db, user, "clear_svn", f"清除SVN同步数据: {cleared}条", "SVN", "high")
     return {"code": 0, "data": {"cleared": cleared}, "message": f"已清除{cleared}条SVN数据"}
 
 

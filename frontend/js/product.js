@@ -727,8 +727,8 @@ function _renderProdDocsInline(docs) {
           // Debug: always show template path below
           (d.doc_path && d.location ? '<br><span style="font-size:10px;color:var(--muted)">模板: ' + escHtml(d.doc_path) + '</span>' : '') +
         '</td>' +
-        '<td style="font-size:11px;color:var(--muted);white-space:nowrap;' + cellStyle + '">' + escHtml(d.updated_at || '—') + '</td>' +
-        '<td style="font-size:12px;color:var(--muted);' + cellStyle + '">' + escHtml(d.updated_by || '—') + '</td>' +
+        '<td style="font-size:11px;color:var(--muted);white-space:nowrap;' + cellStyle + '">' + escHtml(d.svn_last_modified || '—') + '</td>' +
+        '<td style="font-size:12px;color:var(--muted);' + cellStyle + '">' + escHtml(d.svn_author || '—') + '</td>' +
         '<td style="white-space:nowrap;text-align:center;' + cellStyle + '">' +
           (d.location
             ? (isPreviewableUrl(d.location)

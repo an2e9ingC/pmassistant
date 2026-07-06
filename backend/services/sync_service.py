@@ -234,7 +234,9 @@ class SyncService:
 
         try:
             # ── Source 1: Zentao ──
+            zentao_skip = not os.environ.get("ZENTAO_ENABLED", "true").lower() in ("1", "true", "yes")
             try:
+                if zentao_skip: raise RuntimeError("skip")
                 t0 = time.time(); await self.client.authenticate(); timings["auth"] = round(time.time() - t0, 1)
                 logger.info("[禅道] 认证成功，开始同步...")
                 _sync_progress["phase"] = "用户"; t0 = time.time(); results["users"] = await self._sync_users(db); timings["users"] = round(time.time() - t0, 1)
@@ -257,8 +259,12 @@ class SyncService:
                 }
                 _auto_sync_notify["zentao"] = zentao_summary
             except Exception as e:
-                logger.error(f"[禅道] 同步失败: {e}")
-                zentao_summary = {"status": "failed", "summary": str(e)[:100]}
+                if str(e) == "skip":
+                    zentao_summary = {"status": "skipped", "summary": "已禁用（数据源配置）"}
+                    logger.info("[禅道] 同步已跳过（数据源配置禁用）")
+                else:
+                    logger.error(f"[禅道] 同步失败: {e}")
+                    zentao_summary = {"status": "failed", "summary": str(e)[:100]}
                 _auto_sync_notify["zentao"] = zentao_summary
 
             # ── Source 2: GitLab (releases sync + URL validation) ──

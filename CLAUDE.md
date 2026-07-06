@@ -52,12 +52,25 @@ query_graph("
 
 ### 索引维护
 
-项目已在 codebase-memory 中索引。**每次 commit 后必须重新索引**（已在 pma-commit SKILL 中自动执行）：
+项目已在 codebase-memory 中索引。**每次修改代码后必须重新索引**，确保 MCP 图谱反映最新代码结构：
+
+| 时机 | 索引模式 | 原因 |
+|------|---------|------|
+| **修改代码后（commit 前）** | `moderate` | 让 `trace_path` / `search_graph` 看到最新调用链和字段，辅助后续修改和自检 |
+| **commit 后** | `moderate` | 已在 pma-commit SKILL 中自动执行 |
 
 ```
 index_repository(repo_path="/home/xuchuan/workspace/pma", mode="moderate")
 ```
 
+> **为什么修改代码后就要索引？** MCP 工具（`trace_path`、`search_graph`、`query_graph` 等）基于已索引的图谱。刚修改的代码如果未索引，MCP 看不到新的函数调用、新字段、新数据流路径，导致：
+> - `trace_path` 追踪不到新的调用链
+> - `query_graph` 查不到新增的列和关系
+> - 无法通过图谱发现"新函数被调用但返回值未被使用"等逻辑断点
+>
+> 修改代码 → 索引 → 用 MCP 追踪新代码的上下游 → 发现遗漏 → 修复，这个循环能显著减少调试往返。
+
+模式说明：
 - `full`：全部文件 + 语义边（最全，最慢）
 - `moderate`：过滤后文件 + 语义边（推荐日常使用）
 - `fast`：过滤后文件，无语义边（最快）

@@ -1021,6 +1021,8 @@ def get_or_init_product_documents(db: Session, product_id: int) -> list[dict]:
                 "completed_at": to_local_str(existing.completed_at) if existing.completed_at else "",
                 "updated_by": existing.updated_by or "",
                 "updated_at": to_local_str(existing.updated_at) if existing.updated_at else "",
+                "svn_author": existing.svn_author or "",
+                "svn_last_modified": existing.svn_last_modified or "",
                 "node_name": "",  # filled below if needed
             })
 
