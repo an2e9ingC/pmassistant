@@ -1947,18 +1947,11 @@ async function checkNewVersion() {
     var data = await API.get('/admin/changelog');
     var allEntries = data || [];
 
-    // Find entries strictly between lastVer and curVer (exclusive of lastVer, inclusive of curVer)
-    var lastIdx = -1, curIdx = -1;
-    for (var i = 0; i < allEntries.length; i++) {
-      if (allEntries[i].version === lastVer) lastIdx = i;
-      if (allEntries[i].version === curVer) curIdx = i;
-    }
-    // If lastVer not found, start from the beginning; otherwise from one after lastVer
-    var startIdx = lastIdx >= 0 ? lastIdx + 1 : 0;
-    var endIdx = curIdx >= 0 ? curIdx : allEntries.length - 1;
-    // Collect entries in range, then reverse to show oldest first
+    // Collect entries newer than lastVer (exclusive) up to curVer (inclusive)
+    // allEntries is newest-first from dev-plan.md; reverse to show oldest first
     var newEntries = [];
-    for (var i = startIdx; i <= endIdx && i < allEntries.length; i++) {
+    for (var i = 0; i < allEntries.length; i++) {
+      if (allEntries[i].version === lastVer) break;  // stop at last seen
       newEntries.push(allEntries[i]);
     }
     newEntries.reverse();
@@ -1978,19 +1971,17 @@ async function checkNewVersion() {
           escHtml(e.version) + (e.date ? ' <span style="font-size:11px;color:var(--muted)">' + escHtml(e.date) + '</span>' : '') + '</div>' +
         '<div style="white-space:pre-wrap;' + descStyle + '">' + escHtml(e.description) + '</div>' +
       '</div>';
-      var nav = '';
-      if (newEntries.length > 1) {
-        var prevBtn = page > 0
-          ? '<button class="btn btn-xs" onclick="event.stopPropagation();_clPrevPage()">← 上一条</button>'
-          : '<span style="display:inline-block;width:56px"></span>';
-        var nextLabel = page < lastPage ? '下一条 →' : '我知道了';
-        var nextBtn = '<button class="btn btn-xs btn-primary" onclick="event.stopPropagation();' + (page < lastPage ? '_clNextPage()' : '_clClose()') + '">' + nextLabel + '</button>';
-        nav = '<div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-top:12px;font-size:11px;color:var(--muted)">' +
-          prevBtn +
-          '<span>' + (page + 1) + ' / ' + newEntries.length + '</span>' +
-          nextBtn +
-        '</div>';
-      }
+      var isLast = page >= lastPage;
+      var prevBtn = page > 0
+        ? '<button class="btn btn-xs" onclick="event.stopPropagation();_clPrevPage()">← 上一条</button>'
+        : '<span style="display:inline-block;width:56px"></span>';
+      var nextLabel = isLast ? '我知道了' : '下一条 →';
+      var nextBtn = '<button class="btn btn-xs btn-primary" onclick="event.stopPropagation();' + (isLast ? '_clClose()' : '_clNextPage()') + '">' + nextLabel + '</button>';
+      var nav = '<div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-top:12px;font-size:11px;color:var(--muted)">' +
+        prevBtn +
+        '<span style="min-width:40px;text-align:center;' + (newEntries.length > 1 ? '' : 'visibility:hidden') + '">' + (page + 1) + ' / ' + newEntries.length + '</span>' +
+        nextBtn +
+      '</div>';
       var body = document.querySelector('#clog-body');
       if (body) body.innerHTML = html + nav;
     }
@@ -1999,11 +1990,7 @@ async function checkNewVersion() {
     window._clClose = function() { var d=document.querySelector('.shared-dialog-overlay,.note-dialog-overlay'); if(d) d.remove(); };
 
     var bodyHtml = '<div id="clog-body"></div>';
-    openDialog('系统更新日志',
-      bodyHtml,
-      [{ text: '知道了', cls: 'btn-primary', onclick: "var d=document.querySelector('.shared-dialog-overlay,.note-dialog-overlay');if(d)d.remove()" }],
-      { maxWidth: 520 }
-    );
+    openDialog('系统更新日志', bodyHtml, null, { maxWidth: 520 });
     renderPage();
   } catch(e) { console.error('checkNewVersion error:', e); }
 }
