@@ -570,7 +570,10 @@ function showSrcMenu(key, e) {
     '</button>' +
     '<button onclick="gotoSrcConfig(\'' + key + '\');var m=document.getElementById(\'src-popup-menu\');if(m)m.remove()" style="display:block;width:100%;padding:8px 14px;border:none;background:var(--surface);color:var(--fg);font-size:13px;text-align:left;cursor:pointer;transition:background 0.1s" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'var(--surface)\'">' +
       '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-right:8px;vertical-align:middle"><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v2M8 12.5v2M2.5 8h2M11.5 8h2"/></svg>配置此数据源' +
-    '</button>';
+    '</button>' +
+    (key === 'svn' ? '<button onclick="clearSVNSync();var m=document.getElementById(\'src-popup-menu\');if(m)m.remove()" style="display:block;width:100%;padding:8px 14px;border:none;background:var(--surface);color:var(--danger);font-size:13px;text-align:left;cursor:pointer;transition:background 0.1s" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'var(--surface)\'">' +
+      '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-right:8px;vertical-align:middle"><polyline points="3,6 5,6 13,6"/><path d="M5 6l1 8h4l1-8"/></svg>清除SVN同步数据' +
+    '</button>' : '');
   document.body.appendChild(menu);
   // Close on outside click
   setTimeout(function() {
@@ -578,6 +581,14 @@ function showSrcMenu(key, e) {
       if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('click', _close); }
     });
   }, 10);
+}
+
+async function clearSVNSync() {
+  if (!confirm('确定清除所有SVN同步数据？\n\n文档路径和状态将重置，下次同步重新扫描。')) return;
+  try {
+    var r = await API.post('/admin/clear-svn');
+    showToast(r.message || '已清除', 'success');
+  } catch(e) { showToast('清除失败: ' + (e.message || ''), 'error'); }
 }
 
 async function triggerSingleSync(key) {

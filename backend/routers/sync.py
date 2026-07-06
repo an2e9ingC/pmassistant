@@ -29,6 +29,12 @@ async def trigger_single_sync(source: str, db: Session = Depends(get_db), _=Depe
     if source == "svn":
         from backend.services.doc_scanner import check_product_docs
         from backend.models.zentao import PmaProduct
+        from backend.models.document import ProductDocument
+        # Clear all document locations before scanning — rely on latest SVN data
+        db.query(ProductDocument).filter(
+            ProductDocument.location.isnot(None), ProductDocument.location != ""
+        ).update({ProductDocument.location: None, ProductDocument.status: "pending"})
+        db.commit()
         products = db.query(PmaProduct).all()
         t0 = _time.time()
         total_scanned, total_submitted, total_reverted, total_location, total_matched = 0, 0, 0, 0, 0

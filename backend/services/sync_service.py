@@ -312,12 +312,10 @@ class SyncService:
                     from backend.services.doc_scanner import check_product_docs
                     from backend.models.zentao import PmaProduct
                     products = db.query(PmaProduct).all()
-                    # Clear all auto-scanner location before scanning — rely on latest SVN data
+                    # Clear all document locations before scanning — rely on latest SVN data
                     from backend.models.document import ProductDocument
                     db.query(ProductDocument).filter(
-                        ProductDocument.location.isnot(None),
-                        ProductDocument.location != "",
-                        ProductDocument.uploaded_by == "auto-scanner"
+                        ProductDocument.location.isnot(None), ProductDocument.location != ""
                     ).update({ProductDocument.location: None, ProductDocument.status: "pending"})
                     db.commit()
                     total_scanned = 0
