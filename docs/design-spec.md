@@ -144,6 +144,11 @@
 ### 7.1 后端
 
 - 双写：`data/pma.log`（RotatingFileHandler，5MB/3 备份）+ `log_entries` 数据库表
+- 操作审计：调用 `log_audit(db, user, action, detail, category, level)` 双写系统日志+`audit_logs` 表
+  - **所有增删改操作必须调用**
+  - `level="high"`：删除、权限变更、数据清除
+  - `level="medium"`：编辑、新增
+  - `level="low"`：配置、查看
 - DatabaseLogHandler 在 `lifespan` 中延迟加载（确保表已创建）
 - 日志 API 仅管理员可访问
 

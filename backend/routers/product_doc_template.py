@@ -396,6 +396,7 @@ def create_bug_template(body: BugTemplateCreate, db: Session = Depends(get_db), 
     from backend.models.document import BugTemplate
     t = BugTemplate(name=body.name, content=body.content, sort_order=body.sort_order)
     db.add(t); db.commit()
+    log_audit(db, user, "bug_template_add", f"新增Bug模板: {body.name}", "产品", "medium")
     return {"code": 0, "data": {"id": t.id}, "message": "ok"}
 
 
@@ -411,6 +412,7 @@ def update_bug_template(tid: int, body: BugTemplateUpdate, db: Session = Depends
     if body.sort_order is not None: t.sort_order = body.sort_order
     if body.is_default is not None: t.is_default = body.is_default
     db.commit()
+    log_audit(db, user, "bug_template_edit", f"编辑Bug模板: {t.name}", "产品", "medium")
     return {"code": 0, "data": {"id": t.id}, "message": "ok"}
 
 
@@ -419,5 +421,7 @@ def delete_bug_template(tid: int, db: Session = Depends(get_db), user=Depends(re
     from backend.models.document import BugTemplate
     t = db.query(BugTemplate).filter(BugTemplate.id == tid).first()
     if not t: raise HTTPException(status_code=404, detail="Not found")
+    name = t.name
     db.delete(t); db.commit()
+    log_audit(db, user, "bug_template_delete", f"删除Bug模板: {name}", "产品", "high")
     return {"code": 0, "message": "ok"}

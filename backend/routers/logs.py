@@ -16,15 +16,25 @@ router = APIRouter(prefix="/api/logs", tags=["logs"])
 
 
 def log_audit(db: Session, user: LocalUser, action: str, detail: str = "", category: str = "", level: str = "medium"):
-    """Write an audit log entry.
+    """Write an audit log entry (dual-write: file + database per design-spec §7).
 
     category: dynamic—query /api/logs/audit/categories for available values
     level: high(删除/权限)/medium(编辑/新增)/low(配置/查看)
     """
     import logging
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger("backend.routers.logs")
+    uname = user.username if user else "system"
+    # File log
+    log_msg = f"[操作日志] {uname} | {action} | {detail}"
+    if level == "high":
+        logger.warning(log_msg)
+    elif level == "low":
+        logger.info(log_msg)
+    else:
+        logger.info(log_msg)
+    # Database audit table
     try:
-        db.add(AuditLog(username=user.username, action=action, detail=detail or "",
+        db.add(AuditLog(username=uname, action=action, detail=detail or "",
                          category=category or "", level=level))
         db.commit()
     except Exception as e:

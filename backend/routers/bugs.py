@@ -138,6 +138,7 @@ def list_worklogs(bug_id: int, db: Session = Depends(get_db), _=Depends(get_curr
 def create_worklog(bug_id: int, body: WorklogCreate, db: Session = Depends(get_db), user=Depends(require_perm("worklog_edit"))):
     body.bug_id = bug_id
     w = bug_service.create_worklog(db, body.model_dump(), user.id)
+    log_audit(db, user, "bug_worklog_add", f"Bug #{bug_id} 记录工时 {body.hours}h", "Bug", "low")
     return {"code": 0, "data": w, "message": "ok"}
 
 
@@ -145,6 +146,7 @@ def create_worklog(bug_id: int, body: WorklogCreate, db: Session = Depends(get_d
 def update_worklog(bug_id: int, wl_id: int, body: WorklogUpdate, db: Session = Depends(get_db), user=Depends(require_perm("worklog_edit"))):
     w = bug_service.update_worklog(db, wl_id, body.model_dump(exclude_none=True))
     if not w: raise HTTPException(status_code=404, detail="Worklog not found")
+    log_audit(db, user, "bug_worklog_edit", f"Bug #{bug_id} 编辑工时", "Bug", "low")
     return {"code": 0, "data": w, "message": "ok"}
 
 
@@ -152,6 +154,7 @@ def update_worklog(bug_id: int, wl_id: int, body: WorklogUpdate, db: Session = D
 def delete_worklog(bug_id: int, wl_id: int, db: Session = Depends(get_db), user=Depends(require_perm("worklog_edit"))):
     ok = bug_service.delete_worklog(db, wl_id)
     if not ok: raise HTTPException(status_code=404, detail="Worklog not found")
+    log_audit(db, user, "bug_worklog_delete", f"Bug #{bug_id} 删除工时", "Bug", "high")
     return {"code": 0, "message": "ok"}
 
 
@@ -161,6 +164,7 @@ def delete_worklog(bug_id: int, wl_id: int, db: Session = Depends(get_db), user=
 def create_analysis(bug_id: int, body: AnalysisCreate, db: Session = Depends(get_db), user=Depends(get_current_user)):
     body.bug_id = bug_id
     a = bug_service.create_analysis(db, body.model_dump(), user.id)
+    log_audit(db, user, "bug_analysis_add", f"Bug #{bug_id} 添加分析", "Bug", "medium")
     return {"code": 0, "data": a, "message": "ok"}
 
 
@@ -168,6 +172,7 @@ def create_analysis(bug_id: int, body: AnalysisCreate, db: Session = Depends(get
 def update_analysis(bug_id: int, aid: int, body: AnalysisUpdate, db: Session = Depends(get_db), user=Depends(get_current_user)):
     a = bug_service.update_analysis(db, aid, body.model_dump(exclude_none=True))
     if not a: raise HTTPException(status_code=404, detail="Analysis not found")
+    log_audit(db, user, "bug_analysis_edit", f"Bug #{bug_id} 编辑分析", "Bug", "medium")
     return {"code": 0, "data": a, "message": "ok"}
 
 
@@ -175,6 +180,7 @@ def update_analysis(bug_id: int, aid: int, body: AnalysisUpdate, db: Session = D
 def delete_analysis(bug_id: int, aid: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
     ok = bug_service.delete_analysis(db, aid)
     if not ok: raise HTTPException(status_code=404, detail="Analysis not found")
+    log_audit(db, user, "bug_analysis_delete", f"Bug #{bug_id} 删除分析", "Bug", "high")
     return {"code": 0, "message": "ok"}
 
 
@@ -185,6 +191,7 @@ async def upload_attachment(bug_id: int, file: UploadFile = File(...), analysis_
                             db: Session = Depends(get_db), user=Depends(get_current_user)):
     data = await file.read()
     a = bug_service.save_attachment(db, bug_id, analysis_id, file.filename, file.content_type or "application/octet-stream", data, user.id)
+    log_audit(db, user, "bug_attachment_add", f"Bug #{bug_id} 上传附件: {file.filename}", "Bug", "low")
     return {"code": 0, "data": a, "message": "ok"}
 
 
