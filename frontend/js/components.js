@@ -966,19 +966,21 @@ function _renderMonthCalendar(today, dailyMap, calData) {
     var todayStr = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
     var isToday = dStr === todayStr;
 
-    // Cell background fill: solid blue from bottom (0-8h), overtime color from yellow to red (>8h)
+    // Cell color fill: gradient bar proportional to hours (0-8h blue, >8h yellow→red)
     var cellBg = '', tipText = '';
     if (isCurrentMonth && h > 0) {
       tipText = h.toFixed(1)+'h';
       if (h <= 8) {
         var pct = h/8*100;
-        cellBg = 'background:linear-gradient(to top,#3B82F6 '+pct+'%,transparent '+pct+'%)';
+        cellBg = 'background:linear-gradient(to top,#3B82F6 '+pct+'%,transparent '+pct+'%);';
       } else {
-        // Overtime: no blue, yellow→red gradient from bottom up, height = overtime/8
         var overH = h - 8;
-        var overPct = overH/8*100;  // overtime height relative to standard 8h
-        cellBg = 'background:linear-gradient(to top,#fbbf24 0%,#ef4444 '+overPct+'%,transparent '+overPct+'%)';
+        var overPct = overH/8*100;
+        cellBg = 'background:linear-gradient(to top,#fbbf24 0%,#ef4444 '+overPct+'%,transparent '+overPct+'%);';
       }
+    } else if (intensity.bg) {
+      // Fallback to intensity-based solid color for current month with 0h
+      cellBg = intensity.bg + ';';
     }
     cells += '<div onclick="openDayDetail(\''+dStr+'\','+h+')" '+(tipText?'title="'+tipText+'"':'')+' style="border:1px solid '+(isToday?'var(--accent)':'var(--border)')+';border-radius:4px;padding:3px 2px;text-align:center;cursor:pointer;' +
       cellBg + ';' + (isCurrentMonth ? '' : 'opacity:0.35;') + '">' +

@@ -1518,9 +1518,13 @@ async function _ucDeleteTask(taskId) {
 function _fmtLocalDate(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 
 function _ucLoadCalendar(user) {
+  // Use the month currently displayed in the calendar (supports navigation)
   var now = new Date();
-  var ws = new Date(now); ws.setDate(now.getDate()-now.getDay()+1);
-  var df = _fmtLocalDate(ws), dt = _fmtLocalDate(now);
+  var y = (typeof _calYear !== 'undefined') ? _calYear : now.getFullYear();
+  var m = (typeof _calMonth !== 'undefined') ? _calMonth : (now.getMonth()+1);
+  var ms = new Date(y, m-1, 1);
+  var me = new Date(y, m, 0);
+  var df = _fmtLocalDate(ms), dt = _fmtLocalDate(me);
   var cal = document.getElementById('uc-calendar');
   if(!cal) return;
 
