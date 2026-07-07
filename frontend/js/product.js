@@ -212,7 +212,7 @@ function _toggleProdFav(id, btn) {
   var added = toggleFavProduct(id);
   btn.innerHTML = added ? '★' : '☆';
   btn.title = added ? '取消收藏' : '收藏';
-  btn.style.color = added ? 'var(--warn)' : '';
+  btn.style.color = added ? 'var(--yellow)' : '';
   renderProdOverview();
 }
 
@@ -387,19 +387,44 @@ function renderProdInfo(p) {
     '<div class="dkpi"><div class="dkpi-lbl">描述</div><div class="dkpi-val" style="font-size:12px;line-height:1.6">' + (p.tags_list && p.tags_list[0] ? p.tags_list.filter(function(t){return t;}).map(function(t){return '<span class="tag-badge tag-' + (t.length % 5) + '">#' + escHtml(t) + '</span>';}).join(' ') : '<span style="color:var(--muted)">—</span>') + '</div></div>' +
   '</div>';
 
-  // Stats row — KPI numbers with status colors
+  // Stats row — KPI numbers with status colors; Bug card uses donut ring
   html += '<div class="delivery-kpi" style="grid-template-columns:repeat(4, 1fr)">';
   var stats = [
     { label: '关联项目', value: p.project_count || 0, color: 'var(--accent)', icon: '🔗', click: true, clickAction: 'switchToProdMaintenance()' },
     { label: '发布次数', value: p.releases || 0, color: 'var(--warn)', icon: '🚀' },
     { label: '需求总数', value: p.total_stories || 0, color: 'var(--success)', icon: '📋' },
-    { label: 'Bug 总数', value: p.total_bugs || 0, color: 'var(--danger)', icon: '🐛' },
   ];
   stats.forEach(function(s) {
     html += '<div class="dkpi"' + (s.click ? ' style="cursor:pointer" onclick="' + (s.clickAction || ('gotoView(\'topology\');document.getElementById(\'topo-prod\').value=\'' + escHtml(p.code || p.name) + '\';setTimeout(function(){if(typeof onTopoSearch==\'function\')onTopoSearch()},100)')) + '" title="点击查看关联项目"' : '') + '>' +
       '<div class="dkpi-lbl">' + s.icon + ' ' + s.label + '</div>' +
       '<div class="dkpi-val" style="color:' + s.color + '">' + s.value + '</div></div>';
   });
+  // Bug KPI — donut ring with source breakdown
+  var zentaoBugs = p.total_bugs || 0;
+  var pmaBugs = p.pma_bugs || 0;
+  var totalBugs = zentaoBugs + pmaBugs;
+  var bugPctZentao = totalBugs > 0 ? Math.round(zentaoBugs / totalBugs * 100) : 0;
+  var bugPctPma = totalBugs > 0 ? Math.round(pmaBugs / totalBugs * 100) : 0;
+  // Build conic-gradient: Zentao=var(--danger) PMA=#EAB308
+  var ringParts = [];
+  if (zentaoBugs > 0) ringParts.push('var(--yellow) 0% ' + bugPctZentao + '%');
+  if (pmaBugs > 0) ringParts.push('var(--accent) ' + bugPctZentao + '% ' + (bugPctZentao + bugPctPma) + '%');
+  var ringGradient = ringParts.length ? 'background:conic-gradient(' + ringParts.join(',') + ');' : '';
+  var bugRingHtml = '<div class="dkpi" title="禅道: ' + zentaoBugs + ' | PMA: ' + pmaBugs + '">' +
+    '<div class="dkpi-lbl">🐛 Bug 总数</div>' +
+    '<div style="display:flex;align-items:center;gap:10px">' +
+      '<div style="position:relative;width:52px;height:52px;flex-shrink:0">' +
+        '<div style="width:44px;height:44px;border-radius:50%;' + ringGradient + 'margin:4px"></div>' +
+        '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:30px;height:30px;border-radius:50%;background:var(--bg);display:flex;align-items:center;justify-content:center">' +
+          '<span style="font-size:14px;font-weight:700;font-family:var(--mono);color:var(--fg)">' + totalBugs + '</span></div>' +
+      '</div>' +
+      '<div style="display:flex;gap:4px;margin-top:2px">' +
+        '<button class="btn btn-xs" style="font-size:10px;color:var(--yellow);border-color:var(--yellow);padding:1px 5px" onclick="event.stopPropagation();window.open(\'' + (p.zentao_bugs_url || '#') + '\',\'_blank\')" title="禅道 Bug ' + zentaoBugs + '">禅道 ' + zentaoBugs + '</button>' +
+        '<button class="btn btn-xs" style="font-size:10px;color:var(--accent);border-color:var(--accent);padding:1px 5px" onclick="event.stopPropagation()" title="PMA Bug ' + pmaBugs + '（待完成）">PMA ' + pmaBugs + '</button>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+  html += bugRingHtml;
   html += '</div>';
 
 
@@ -841,7 +866,7 @@ function renderProdMaintenance(p) {
         '<td>' + renderTypeBadge(proj.project_type) + '</td>' +
         '<td>' + renderPill(proj.status) + '</td>' +
         '<td class="prog-cell">' + renderProgressCircle(parseFloat(proj.progress) || 0, 26, {label:''}) + '</td>' +
-        '<td style="font-size:12px;color:' + (proj.end ? 'var(--muted)' : 'var(--warn)') + '">' + (proj.end ? formatDate(proj.end) : '长期') + '</td>' +
+        '<td style="font-size:12px;color:' + (proj.end ? 'var(--muted)' : 'var(--yellow)') + '">' + (proj.end ? formatDate(proj.end) : '长期') + '</td>' +
       '</tr>';
     });
     html += '</tbody></table></div>';

@@ -103,7 +103,7 @@ async function toggleFav(type, id) {
       if (s) {
         s.setAttribute('data-fav', wasFav ? '1' : '0');
         var p = s.querySelector('path');
-        if (p) { p.setAttribute('fill', wasFav ? '#eab308' : 'none'); p.setAttribute('stroke', wasFav ? '#eab308' : 'var(--muted)'); }
+        if (p) { p.setAttribute('fill', wasFav ? 'var(--yellow)' : 'none'); p.setAttribute('stroke', wasFav ? 'var(--yellow)' : 'var(--muted)'); }
       }
     });
   }
@@ -124,7 +124,7 @@ function _favSparkle(el) {
   svg.style.animation = 'fav-sparkle 0.5s ease-out';
   var rect = svg.getBoundingClientRect();
   var cx = rect.left + rect.width/2, cy = rect.top + rect.height/2;
-  var colors = ['#eab308','#fbbf24','#f59e0b','#eab308','#fbbf24','#f59e0b','#eab308','#f59e0b'];
+  var colors = ['var(--yellow)','#fbbf24','#f59e0b','var(--yellow)','#fbbf24','#f59e0b','var(--yellow)','#f59e0b'];
   for (var i=0; i<8; i++) {
     (function(idx){
       var dot = document.createElement('div');
@@ -141,8 +141,8 @@ function favStar(type, id, opts) {
   opts = opts || {};
   var fav = isFav(type, id);
   var s = parseInt(opts.size) || 16;
-  var color = fav ? '#eab308' : 'var(--muted)';
-  var fill = fav ? '#eab308' : 'none';
+  var color = fav ? 'var(--yellow)' : 'var(--muted)';
+  var fill = fav ? 'var(--yellow)' : 'none';
   var sw = 1.5;
   var title = fav ? (opts.unfavTitle || '取消收藏') : (opts.favTitle || '收藏');
   var stop = opts.stopPropagation ? 'event.stopPropagation();' : '';

@@ -230,6 +230,9 @@ def _product_detail(p: PmaProduct, db: Session) -> dict:
     if customer_ids:
         customer_names = [r[0] for r in db.query(PmaCustomer.name).filter(PmaCustomer.id.in_(customer_ids)).all()]
     customers = list(set(customer_names))
+    # PMA local bugs count for this product
+    from backend.models.bug import PmaBug
+    pma_bug_count = db.query(PmaBug).filter(PmaBug.product_id == p.id).count()
     tags_str = p.tags or ""
     return {
         "id": p.id, "code": p.code, "name": p.name,
@@ -238,6 +241,7 @@ def _product_detail(p: PmaProduct, db: Session) -> dict:
         "program_name": p.program_name,
         "total_stories": p.total_stories,
         "total_bugs": p.total_bugs,
+        "pma_bugs": pma_bug_count,
         "releases": p.releases,
         "category": cat,
         "nas_path": p.nas_path,

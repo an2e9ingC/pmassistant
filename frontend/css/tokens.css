@@ -1,24 +1,34 @@
 /* ═══════════════════════════════════════════════════
-   DESIGN TOKENS
+   DESIGN TOKENS — Color System
+   Red / Orange / Yellow / Green / Blue / Purple / Gray
+   Each has a -lt variant for light backgrounds.
+   Legacy semantic aliases (*-lt pairs) kept for compat.
 ═══════════════════════════════════════════════════ */
 :root {
+  /* ── Palette ── */
+  --red:        #DC2626;  --red-lt:     #FEE2E2;
+  --orange:     #EA580C;  --orange-lt:  #FFF7ED;
+  --yellow:     #EAB308;  --yellow-lt:  #FEFCE8;
+  --green:      #16A34A;  --green-lt:   #DCFCE7;
+  --blue:       #2563EB;  --blue-lt:    #EFF6FF;
+  --purple:     #7C3AED;  --purple-lt:  #F3EEFF;
+  --gray:       #6B7280;
+
+  /* ── Legacy semantic aliases ── */
+  --danger:     var(--red);     --danger-lt:  var(--red-lt);
+  --warn:       var(--orange);  --warn-lt:    var(--orange-lt);
+  --success:    var(--green);   --success-lt: var(--green-lt);
+  --accent:     var(--blue);    --accent-lt:  var(--blue-lt);
+  --accent-h:   #2260D8;
+  --fav:        var(--purple);  --fav-lt:     var(--purple-lt);
+
+  /* ── Surfaces ── */
   --bg:          #F4F6FB;
   --surface:     #FFFFFF;
   --surface2:    #F8FAFD;
   --fg:          #17191F;
   --muted:       #6B7694;
   --border:      #E3E8F4;
-  --accent:      #2D6FEC;
-  --accent-h:    #2260D8;
-  --accent-lt:   #EDF2FE;
-  --success:     #15803D;
-  --success-lt:  #DCFCE7;
-  --warn:        #B45309;
-  --warn-lt:     #FEF3C7;
-  --danger:      #DC2626;
-  --danger-lt:   #FEE2E2;
-  --fav:         #7C3AED;
-  --fav-lt:      #F3EEFF;
   --sidebar-w:   228px;
   --header-h:    54px;
   --font:        'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
@@ -29,23 +39,27 @@
   --sh-md:       0 4px 14px rgba(16,24,48,0.09);
 }
 [data-theme="dark"] {
+  --red:        #F87171;  --red-lt:     #1E0808;
+  --orange:     #FB923C;  --orange-lt:  #201000;
+  --yellow:     #FACC15;  --yellow-lt:  #201800;
+  --green:      #4ADE80;  --green-lt:   #0A2218;
+  --blue:       #60A5FA;  --blue-lt:    #0C1A35;
+  --purple:     #A78BFA;  --purple-lt:  #1C1535;
+  --gray:       #9CA3AF;
+
+  --danger:     var(--red);     --danger-lt:  var(--red-lt);
+  --warn:       var(--orange);  --warn-lt:    var(--orange-lt);
+  --success:    var(--green);   --success-lt: var(--green-lt);
+  --accent:     var(--blue);    --accent-lt:  var(--blue-lt);
+  --accent-h:   #5E93FF;
+  --fav:        var(--purple);  --fav-lt:     var(--purple-lt);
+
   --bg:          #0B0E14;
   --surface:     #141820;
   --surface2:    #1A1F2C;
   --fg:          #E4E9F6;
   --muted:       #717DA0;
   --border:      #232839;
-  --accent:      #4D86F7;
-  --accent-h:    #5E93FF;
-  --accent-lt:   #151E35;
-  --success:     #34D399;
-  --success-lt:  #0A2218;
-  --warn:        #FBBF24;
-  --warn-lt:     #201800;
-  --danger:      #F87171;
-  --danger-lt:   #1E0808;
-  --fav:         #A78BFA;
-  --fav-lt:      #1C1535;
   --sh:          0 1px 3px rgba(0,0,0,0.35), 0 1px 2px rgba(0,0,0,0.3);
   --sh-md:       0 4px 14px rgba(0,0,0,0.45);
 }
