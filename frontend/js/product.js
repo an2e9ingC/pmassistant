@@ -361,7 +361,7 @@ function renderProdDetailHeader(p, docs) {
     if (!s || s.total === 0) return;
     var pct = Math.round(s.done / s.total * 100);
     var color = pct >= 100 ? 'var(--success)' : (pct > 0 ? 'var(--warn)' : 'var(--muted)');
-    ringsHtml += '<div style="text-align:center;flex-shrink:0;cursor:pointer" onclick="switchProdTab(\'docs\')" title="' + escHtml(st) + ': ' + s.done + '/' + s.total + '">' +
+    ringsHtml += '<div style="text-align:center;flex-shrink:0;cursor:pointer;transition:transform 0.15s" onmouseenter="this.style.transform=\'scale(1.2)\'" onmouseleave="this.style.transform=\'scale(1)\'" onclick="switchProdTab(\'docs\');setTimeout(function(){_scrollToDocStage(\'' + escJs(st) + '\')},100)" title="' + escHtml(st) + ': ' + s.done + '/' + s.total + '">' +
       renderProgressCircle(pct, 40, { label: '', color: color }) +
       '<div style="font-size:9px;color:var(--muted);margin-top:2px;max-width:48px;line-height:1.2">' + escHtml(st) + '</div>' +
       '</div>';
@@ -372,7 +372,7 @@ function renderProdDetailHeader(p, docs) {
     var s = stageStats[st];
     var pct = Math.round(s.done / s.total * 100);
     var color = pct >= 100 ? 'var(--success)' : (pct > 0 ? 'var(--warn)' : 'var(--muted)');
-    ringsHtml += '<div style="text-align:center;flex-shrink:0;cursor:pointer" onclick="switchProdTab(\'docs\')" title="' + escHtml(st) + ': ' + s.done + '/' + s.total + '">' +
+    ringsHtml += '<div style="text-align:center;flex-shrink:0;cursor:pointer;transition:transform 0.15s" onmouseenter="this.style.transform=\'scale(1.2)\'" onmouseleave="this.style.transform=\'scale(1)\'" onclick="switchProdTab(\'docs\');setTimeout(function(){_scrollToDocStage(\'' + escJs(st) + '\')},100)" title="' + escHtml(st) + ': ' + s.done + '/' + s.total + '">' +
       renderProgressCircle(pct, 40, { label: '', color: color }) +
       '<div style="font-size:9px;color:var(--muted);margin-top:2px;max-width:48px;line-height:1.2">' + escHtml(st) + '</div>' +
       '</div>';
@@ -390,7 +390,7 @@ function renderProdDetailHeader(p, docs) {
       '</div>' +
       (p.code ? '<div class="detail-subtitle" style="font-family:var(--mono);font-size:12px;color:var(--muted)">' + escHtml(p.code) + '</div>' : '') +
     '</div>' +
-    '<div style="flex-shrink:0;margin-left:auto;display:flex;gap:8px;align-items:flex-start">' + ringsHtml + '</div>';
+    '<div style="flex-shrink:0;margin-left:auto;display:flex;gap:16px;align-items:flex-start">' + ringsHtml + '</div>';
 }
 
 // ── Tab: 基本信息 ──
@@ -741,6 +741,23 @@ function showBlockDiagramLightbox(imgUrl) {
 
 // ── Inline: 产品文档（在基本信息中展示） ──
 
+function _scrollToDocStage(st) {
+  var el = document.getElementById('doc-stage-' + st);
+  if (!el) return;
+  // Inject highlight style once
+  if (!document.getElementById('doc-stage-hl-style')) {
+    var style = document.createElement('style');
+    style.id = 'doc-stage-hl-style';
+    style.textContent = '.doc-stage-highlight{animation:doc-stage-pulse 0.6s ease-out 2;box-shadow:inset 0 0 0 3px var(--accent)}@keyframes doc-stage-pulse{0%,100%{box-shadow:inset 0 0 0 3px var(--accent)}50%{box-shadow:inset 0 0 0 6px var(--accent),0 0 16px rgba(37,99,235,0.3)}}';
+    document.head.appendChild(style);
+  }
+  // Remove previous highlight
+  document.querySelectorAll('.doc-stage-highlight').forEach(function(e) { e.classList.remove('doc-stage-highlight'); });
+  el.classList.add('doc-stage-highlight');
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  setTimeout(function() { el.classList.remove('doc-stage-highlight'); }, 2000);
+}
+
 function _renderProdDocsInline(docs) {
   var el = document.getElementById('prod-docs-inline');
   if (!el) return;
@@ -794,7 +811,7 @@ function _renderProdDocsInline(docs) {
       var isLast = i === items.length - 1;
       html += '<tr>';
       if (i === 0) {
-        html += '<td rowspan="' + items.length + '" style="vertical-align:middle;text-align:center;font-weight:600;' + cellStyle + 'color:var(--accent);font-size:12px">' + escHtml(st) + '<br><span style="font-size:10px;color:var(--muted)">' + items.length + ' 项</span></td>';
+        html += '<td rowspan="' + items.length + '" style="vertical-align:middle;text-align:center;font-weight:600;' + cellStyle + 'color:var(--accent);font-size:12px" id="doc-stage-' + escHtml(st) + '">' + escHtml(st) + '<br><span style="font-size:10px;color:var(--muted)">' + items.length + ' 项</span></td>';
       }
       // Status pill — system auto-detects
       var hasError = (!d.done && d.location) || d.mismatch;
