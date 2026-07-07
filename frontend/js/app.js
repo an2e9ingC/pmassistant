@@ -1482,6 +1482,11 @@ function _renderUcStats() {
     '<div class="profile-stat hours"><div class="profile-stat-val" id="uc-week-total">...</div><div class="profile-stat-lbl">本周工时</div></div>';
 }
 
+function _ucEnsureBugsJs(fn) {
+  // Lazy-load bugs.js, then call fn (handles bug onclick from user center)
+  return 'loadViewScript(\'/js/bugs.js?v=' + APP_VERSION + '\',function(){' + fn + '})';
+}
+
 async function _ucLoadBugs() {
   document.getElementById('uc-filter-bar').innerHTML = '';
   document.getElementById('uc-table-head').innerHTML = '<tr><th>编号</th><th>标题</th><th>产品</th><th>状态</th><th>严重</th><th>操作</th></tr>';
@@ -1490,13 +1495,13 @@ async function _ucLoadBugs() {
     var tbody = document.getElementById('uc-table-tbody');
     if (!bugs || !bugs.length) { tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">暂无Bug</div></td></tr>'; return; }
     tbody.innerHTML = bugs.map(function(b) {
-      return '<tr style="cursor:pointer" onclick="openBugDetail('+b.id+')">' +
+      return '<tr style="cursor:pointer" onclick="' + _ucEnsureBugsJs('openBugDetail('+b.id+')') + '">' +
         '<td style="font-family:var(--mono);font-size:11px">#' + b.id + '</td>' +
         '<td style="text-align:left;font-weight:530">' + escHtml(b.title) + '</td>' +
         '<td style="font-size:12px">' + escHtml(b.product_name||'-') + '</td>' +
         '<td>' + renderPill(b.status||'open') + '</td>' +
         '<td>' + (b.severity||'-') + '</td>' +
-        '<td onclick="event.stopPropagation()">' + iconEdit('openBugDialog('+b.id+')','编辑') + iconDelete('deleteBugById('+b.id+')','删除') + '</td>' +
+        '<td onclick="event.stopPropagation()">' + iconEdit(_ucEnsureBugsJs('openBugDialog('+b.id+')'),'编辑') + iconDelete(_ucEnsureBugsJs('deleteBugById('+b.id+')'),'删除') + '</td>' +
       '</tr>';
     }).join('');
   } catch(e) { document.getElementById('uc-table-tbody').innerHTML = '<tr><td colspan="6"><div class="error-state">加载失败</div></td></tr>'; }
