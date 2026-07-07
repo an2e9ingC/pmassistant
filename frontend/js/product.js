@@ -343,7 +343,7 @@ function renderProdInfo(p) {
   html += '<div class="delivery-kpi" style="grid-template-columns:repeat(4, 1fr);margin-bottom:16px">' +
     '<div class="dkpi"><div class="dkpi-lbl">产品编号</div><div class="dkpi-val" style="font-family:var(--mono);font-size:16px;font-weight:600;color:var(--fg)">' + escHtml(p.code || '#' + p.id) + '</div></div>' +
     '<div class="dkpi" style="cursor:pointer" onclick="' +
-      (p.linked_node_ids && p.linked_node_ids.length ? 'gotoView(\'product-management\');_pmSelectedNodeId=' + p.linked_node_ids[0] + ';setTimeout(function(){if(typeof initProductManagement==\'function\')initProductManagement();},100)' : '') +
+      (p.linked_node_ids && p.linked_node_ids.length ? '_pmSelectedNodeId=' + p.linked_node_ids[0] + ';gotoView(\'product-management\')' : '') +
       '" title="点击跳转到产品管理">' +
       '<div class="dkpi-lbl">所属分类</div><div class="dkpi-val" style="font-size:16px;font-weight:600;color:var(--accent)">' + escHtml(productType) + '</div></div>' +
     '<div class="dkpi"><div class="dkpi-lbl">状态</div><div class="dkpi-val" style="font-size:16px;font-weight:600;color:' + (p.status === 'normal' ? 'var(--success)' : p.status === 'closed' ? 'var(--muted)' : 'var(--warn)') + '">' + (p.status === 'normal' ? '正常' : p.status === 'closed' ? '已关闭' : (p.status || '—')) + '</div></div>' +
@@ -415,7 +415,7 @@ function renderProdDocs(p) {
   var nodeIds = (p.linked_node_ids && p.linked_node_ids.length) ? p.linked_node_ids : [];
   var templateLink = '';
   if (nodeIds.length) {
-    templateLink = '<a id="prod-docs-template-link" href="javascript:void(0)" onclick="gotoView(\'doc-templates\');_selectedNodeId=' + nodeIds[0] + ';setTimeout(function(){switchDocTemplateTab(\'product\',document.querySelector(\'#view-doc-templates .map-tab:nth-child(2)\'))},100)" style="font-size:11px;color:var(--accent);text-decoration:none;margin-left:8px">查看文档模板详情 →</a>';
+    templateLink = '<a id="prod-docs-template-link" href="javascript:void(0)" onclick="_selectedNodeId=' + nodeIds[0] + ';gotoView(\'doc-templates\');setTimeout(function(){switchDocTemplateTab(\'product\')},50)" style="font-size:11px;color:var(--accent);text-decoration:none;margin-left:8px">查看文档模板详情 →</a>';
   }
   document.getElementById('prodsec-docs').innerHTML =
     '<div class="section-hd"><div class="section-title">产品文档</div>' + templateLink + '</div>' +

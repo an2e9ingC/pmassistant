@@ -5,7 +5,7 @@
 ═══════════════════════════════════════════════════ */
 
 var _pmTree = [];              // [{id, name, parent_id, level, product_count, project_count, children}]
-var _pmSelectedNodeId = null;  // currently selected tree node ID
+var _pmSelectedNodeId = _pmSelectedNodeId || null;  // preserve preset from onclick before script load
 var _pmNodeProducts = [];      // products linked to selected node (for L2 → products)
 var _pmNodeChildren = [];      // child nodes of selected node (for L1 → L2 list)
 var _pmNodeTemplates = [];     // doc templates for selected node
@@ -32,10 +32,16 @@ async function initProductManagement() {
     try { _pmAllProducts = (await API.get('/product-management/all-products')) || []; } catch (e) { _pmAllProducts = []; }
     try { _pmAllProjects = (await API.get('/product-management/all-projects')) || []; } catch (e) { _pmAllProjects = []; }
 
-    // Select first L2 or L1 by default
+    // Select first L2 or L1 by default; if pre-selected, resolve to L2 ancestor
     if (!_pmSelectedNodeId || !_pmFindNodeById(_pmSelectedNodeId)) {
       var firstL2 = _pmFindFirstL2(_pmTree);
       _pmSelectedNodeId = firstL2 || (_pmTree.length ? _pmTree[0].id : null);
+    } else {
+      // If pre-selected node is L3 (product model), navigate to its L2 parent
+      var sel = _pmFindNodeById(_pmSelectedNodeId);
+      if (sel && sel.level === 3 && sel.parent_id) {
+        _pmSelectedNodeId = sel.parent_id;
+      }
     }
     await _pmLoadContent();
     renderProductManagementPage();

@@ -47,6 +47,7 @@ function _roleSelect(selected) {
 function switchDocTemplateTab(tab, el) {
   _currentTab = tab;
   document.querySelectorAll('#view-doc-templates .map-tab').forEach(function(t) { t.classList.remove('active'); });
+  if (!el) el = document.getElementById('dttab-' + tab);
   if (el) el.classList.add('active');
   document.getElementById('dtsec-project').style.display = tab === 'project' ? '' : 'none';
   document.getElementById('dtsec-product').style.display = tab === 'product' ? '' : 'none';
@@ -775,7 +776,7 @@ async function syncAllProjects() {
 ═══════════════════════════════════════════════════ */
 
 var _productTree = [];           // [{id, name, parent_id, level, template_count, children[...]}]
-var _selectedNodeId = null;      // currently selected product node ID
+var _selectedNodeId = _selectedNodeId || null;      // preserve preset from onclick before script load
 var _productTemplates = [];      // doc templates for selected node (all stages)
 var _productStage = '通用';       // currently selected stage filter
 var _productPendingOps = [];     // pending operations queue (add/edit/delete/reorder)
