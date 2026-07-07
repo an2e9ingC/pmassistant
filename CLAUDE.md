@@ -26,6 +26,7 @@
 ### 典型工作流
 
 ```
+0. Re-Index workspace codebase-memory -> 先基于工作区的代码重新构建最新的codebase-memory
 1. search_graph(query="关键词")  → 定位相关函数/类/路由
 2. trace_path(function_name, mode="calls")  → 理解调用链，评估修改影响范围
 3. get_code_snippet(qualified_name)  → 获取精确源码
