@@ -203,7 +203,28 @@ def _product_item(p: PmaProduct, db: Session) -> dict:
         "is_local": bool(p.is_local),
         "synced_at": to_local_str(p.synced_at) or None,
         "doc_completion": _doc_completion(p.id, db),
+        "doc_stages": _doc_stages(p.id, db),
     }
+
+
+def _doc_stages(product_id: int, db: Session) -> list[dict]:
+    """Return per-stage-type document completion for a product."""
+    from backend.models.document import ProductDocument
+    docs = db.query(ProductDocument).filter(ProductDocument.product_id == product_id).all()
+    stages = {}
+    for d in docs:
+        st = d.stage_type or "通用"
+        if st not in stages:
+            stages[st] = {"stage_type": st, "total": 0, "done": 0}
+        stages[st]["total"] += 1
+        if d.status == "submitted":
+            stages[st]["done"] += 1
+    result = []
+    for st, s in stages.items():
+        s["pct"] = round(s["done"] / s["total"] * 100) if s["total"] else 0
+        result.append(s)
+    result.sort(key=lambda x: x["stage_type"])
+    return result
 
 
 def _doc_completion(product_id: int, db: Session) -> int:

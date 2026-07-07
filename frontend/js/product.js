@@ -193,6 +193,32 @@ function _povRenderProducts() {
     if (tagTexts.length) {
       tagsHtml = '<div class="prod-tags">' + tagTexts.slice(0,4).map(function(t,j){ return '<span class="prod-tag t' + (j%5) + '">' + escHtml(t) + '</span>'; }).join('') + '</div>';
     }
+    // Per-stage doc completion rings
+    var stageOrder = ['硬件开发', '结构设计', 'BSP开发', '软件开发', '测试'];
+    var docStages = p.doc_stages || [];
+    var stageMap = {};
+    docStages.forEach(function(s) { stageMap[s.stage_type] = s; });
+    var ringsHtml = '';
+    stageOrder.forEach(function(st) {
+      var s = stageMap[st];
+      if (!s || s.total === 0) return;
+      var color = s.pct >= 100 ? 'var(--success)' : (s.pct > 0 ? 'var(--orange)' : 'var(--muted)');
+      ringsHtml += '<div style="text-align:center;cursor:pointer" onclick="event.stopPropagation();_prodDetailTargetTab=\'docs\';openProductDetail(' + p.id + ')" title="' + escHtml(st) + ': ' + s.done + '/' + s.total + '">' +
+        renderProgressCircle(s.pct, 32, { label: '', color: color }) +
+        '<div style="font-size:8px;color:var(--muted);margin-top:1px;line-height:1.1">' + escHtml(st.replace('开发','') || st) + '</div>' +
+      '</div>';
+    });
+    Object.keys(stageMap).forEach(function(st) {
+      if (stageOrder.indexOf(st) >= 0) return;
+      var s = stageMap[st];
+      var color = s.pct >= 100 ? 'var(--success)' : (s.pct > 0 ? 'var(--orange)' : 'var(--muted)');
+      ringsHtml += '<div style="text-align:center;cursor:pointer" onclick="event.stopPropagation();_prodDetailTargetTab=\'docs\';openProductDetail(' + p.id + ')" title="' + escHtml(st) + ': ' + s.done + '/' + s.total + '">' +
+        renderProgressCircle(s.pct, 32, { label: '', color: color }) +
+        '<div style="font-size:8px;color:var(--muted);margin-top:1px;line-height:1.1">' + escHtml(st.replace('开发','') || st) + '</div>' +
+      '</div>';
+    });
+    var sourceBadge = '<span class="prod-src ' + (p.is_local ? 'local' : 'synced') + '">' + (p.is_local ? 'PMA 本地' : '禅道同步') + '</span>';
+
     return '<div class="pov-prod-card" style="position:relative" onclick="openProductDetail(\'' + p.id + '\')">' +
       '<span style="position:absolute;top:10px;right:10px;z-index:1">' + favStar('product', p.id, {stopPropagation:true, size:'20px'}) + '</span>' +
       '<div class="pov-prod-header"><div>' +
@@ -200,10 +226,7 @@ function _povRenderProducts() {
         '<div class="prod-name">' + escHtml(p.name) + '</div>' +
       '</div></div>' +
       (tagsHtml || '') +
-      '<div class="prod-footer">' +
-        '<span class="prod-src ' + (p.is_local ? 'local' : 'synced') + '">' + (p.is_local ? 'PMA 本地' : '禅道同步') + '</span>' +
-        renderProgressCircle(p.doc_completion || 0, 36, { label: '资料', color: (p.doc_completion >= 100 ? 'var(--success)' : 'var(--danger)') }) +
-      '</div>' +
+      (ringsHtml ? '<div class="prod-footer" style="display:flex;gap:6px;align-items:flex-end">' + sourceBadge + '<div style="display:flex;gap:4px;margin-left:auto">' + ringsHtml + '</div></div>' : '<div class="prod-footer">' + sourceBadge + '</div>') +
     '</div>';
   }).join('');
 }
@@ -280,6 +303,7 @@ function switchProdTab(id, el) {
   document.querySelectorAll('#view-product-detail .dtab').forEach(function(t) { t.classList.remove('active'); });
   var sec = document.getElementById('prodsec-' + id);
   if (sec) sec.classList.add('active');
+  if (!el) el = document.querySelector('#view-product-detail .dtab[onclick*="switchProdTab(\\\'' + id + '\\\'"]');
   if (el) el.classList.add('active');
   if (id === 'maintenance' && _prodDetail) renderProdMaintenance(_prodDetail);
   if (id === 'activities') loadProdActivities();
@@ -337,7 +361,7 @@ function renderProdDetailHeader(p, docs) {
     if (!s || s.total === 0) return;
     var pct = Math.round(s.done / s.total * 100);
     var color = pct >= 100 ? 'var(--success)' : (pct > 0 ? 'var(--warn)' : 'var(--muted)');
-    ringsHtml += '<div style="text-align:center;flex-shrink:0">' +
+    ringsHtml += '<div style="text-align:center;flex-shrink:0;cursor:pointer" onclick="switchProdTab(\'docs\')" title="' + escHtml(st) + ': ' + s.done + '/' + s.total + '">' +
       renderProgressCircle(pct, 40, { label: '', color: color }) +
       '<div style="font-size:9px;color:var(--muted);margin-top:2px;max-width:48px;line-height:1.2">' + escHtml(st) + '</div>' +
       '</div>';
@@ -348,7 +372,7 @@ function renderProdDetailHeader(p, docs) {
     var s = stageStats[st];
     var pct = Math.round(s.done / s.total * 100);
     var color = pct >= 100 ? 'var(--success)' : (pct > 0 ? 'var(--warn)' : 'var(--muted)');
-    ringsHtml += '<div style="text-align:center;flex-shrink:0">' +
+    ringsHtml += '<div style="text-align:center;flex-shrink:0;cursor:pointer" onclick="switchProdTab(\'docs\')" title="' + escHtml(st) + ': ' + s.done + '/' + s.total + '">' +
       renderProgressCircle(pct, 40, { label: '', color: color }) +
       '<div style="font-size:9px;color:var(--muted);margin-top:2px;max-width:48px;line-height:1.2">' + escHtml(st) + '</div>' +
       '</div>';
