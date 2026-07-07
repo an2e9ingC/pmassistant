@@ -308,15 +308,52 @@ async function loadProductDetail(id) {
   try {
     var detail = await API.get('/products/' + id);
     _prodDetail = detail;
-    renderProdDetailHeader(detail);
+    // Load docs first so header can show per-stage completion rings
+    var docs = [];
+    try { docs = await API.get('/products/' + id + '/documents') || []; } catch(e) {}
+    renderProdDetailHeader(detail, docs);
     renderProdInfo(detail);
-    renderProdDocs(detail);
+    renderProdDocs(detail, docs);  // pass pre-loaded docs to avoid duplicate fetch
   } catch(e) {
     document.getElementById('prod-detail-header').innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '</div>';
   }
 }
 
-function renderProdDetailHeader(p) {
+function renderProdDetailHeader(p, docs) {
+  // Compute per-stage completion
+  var stageStats = {};
+  var stageOrder = ['硬件开发', '结构设计', 'BSP开发', '软件开发', '测试'];
+  (docs || []).forEach(function(d) {
+    var st = d.stage_type || '通用';
+    if (!stageStats[st]) stageStats[st] = { total: 0, done: 0 };
+    stageStats[st].total++;
+    if (d.done) stageStats[st].done++;
+  });
+
+  // Build per-stage progress rings
+  var ringsHtml = '';
+  stageOrder.forEach(function(st) {
+    var s = stageStats[st];
+    if (!s || s.total === 0) return;
+    var pct = Math.round(s.done / s.total * 100);
+    var color = pct >= 100 ? 'var(--success)' : (pct > 0 ? 'var(--warn)' : 'var(--muted)');
+    ringsHtml += '<div style="text-align:center;flex-shrink:0">' +
+      renderProgressCircle(pct, 40, { label: '', color: color }) +
+      '<div style="font-size:9px;color:var(--muted);margin-top:2px;max-width:48px;line-height:1.2">' + escHtml(st) + '</div>' +
+      '</div>';
+  });
+  // Also show unsorted stages
+  Object.keys(stageStats).forEach(function(st) {
+    if (stageOrder.indexOf(st) >= 0) return;
+    var s = stageStats[st];
+    var pct = Math.round(s.done / s.total * 100);
+    var color = pct >= 100 ? 'var(--success)' : (pct > 0 ? 'var(--warn)' : 'var(--muted)');
+    ringsHtml += '<div style="text-align:center;flex-shrink:0">' +
+      renderProgressCircle(pct, 40, { label: '', color: color }) +
+      '<div style="font-size:9px;color:var(--muted);margin-top:2px;max-width:48px;line-height:1.2">' + escHtml(st) + '</div>' +
+      '</div>';
+  });
+
   document.getElementById('prod-detail-header').innerHTML =
     '<div class="detail-meta">' +
       '<div class="detail-title">' +
@@ -329,7 +366,7 @@ function renderProdDetailHeader(p) {
       '</div>' +
       (p.code ? '<div class="detail-subtitle" style="font-family:var(--mono);font-size:12px;color:var(--muted)">' + escHtml(p.code) + '</div>' : '') +
     '</div>' +
-    '<div style="flex-shrink:0;margin-left:auto">' + renderProgressCircle(p.doc_completion || 0, 56, { label: '资料完整度', color: (p.doc_completion >= 100 ? 'var(--success)' : 'var(--danger)') }) + '</div>';
+    '<div style="flex-shrink:0;margin-left:auto;display:flex;gap:8px;align-items:flex-start">' + ringsHtml + '</div>';
 }
 
 // ── Tab: 基本信息 ──
@@ -411,7 +448,7 @@ function renderProdInfo(p) {
   });
 }
 
-function renderProdDocs(p) {
+function renderProdDocs(p, preDocs) {
   var nodeIds = (p.linked_node_ids && p.linked_node_ids.length) ? p.linked_node_ids : [];
   var templateLink = '';
   if (nodeIds.length) {
@@ -421,7 +458,9 @@ function renderProdDocs(p) {
     '<div class="section-hd"><div class="section-title">产品文档</div>' + templateLink + '</div>' +
     '<div id="prod-docs-inline"><div class="loading-spinner" style="padding:20px">加载中...</div></div>';
 
-  API.get('/products/' + p.id + '/documents').then(function(docs) {
+  // Use pre-loaded docs if available, otherwise fetch
+  var loadDocs = preDocs ? Promise.resolve(preDocs) : API.get('/products/' + p.id + '/documents');
+  loadDocs.then(function(docs) {
     _renderProdDocsInline(docs || []);
     // Always re-scan on tab open: check file existence + refresh SVN metadata (rev changes etc.)
     _prodDocScanning = true;
