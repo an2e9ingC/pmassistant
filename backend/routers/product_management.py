@@ -327,7 +327,7 @@ def update_product_projects(
         from backend.models.zentao import PmaProduct, CachedProject
         prod = db.query(PmaProduct).filter(PmaProduct.id == product_id).first()
         # Get old linked project IDs for change tracking
-        from backend.models.local import ProductProjectLink as _PPL
+        from backend.models.zentao import ProductProjectLink as _PPL
         old_links = db.query(_PPL).filter(_PPL.product_id == product_id).all()
         old_ids = sorted([l.project_id for l in old_links])
         result = pm_service.update_product_projects(db, product_id, body.project_ids)
