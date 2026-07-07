@@ -413,13 +413,41 @@ function renderProdInfo(p) {
 
   // Stats row — KPI numbers with status colors; Bug card uses donut ring
   html += '<div class="delivery-kpi" style="grid-template-columns:repeat(4, 1fr)">';
+  // 关联项目 — bubble animation sliding right-to-left
+  var projectsList = p.projects || [];
+  html += '<div class="dkpi" style="cursor:pointer;position:relative;overflow:hidden" onclick="switchToProdMaintenance()" title="点击查看关联项目">' +
+    '<div class="dkpi-lbl">🔗 关联项目</div>' +
+    '<div class="dkpi-val" style="color:var(--accent);position:relative;z-index:1">' + (p.project_count || 0) + '</div>';
+  if (projectsList.length > 0) {
+    if (!document.getElementById('proj-bubble-style')) {
+      var style = document.createElement('style');
+      style.id = 'proj-bubble-style';
+      // 0-30% visible slide-and-fade, 30-100% invisible tail — clean gap between bubbles
+      style.textContent = '@keyframes projBubbleSlide{0%{transform:translateX(0);opacity:0}5%{opacity:0.7}20%{opacity:0.2}30%{transform:translateX(-200px);opacity:0}100%{transform:translateX(-200px);opacity:0}}.proj-bubble{position:absolute;right:8px;font-size:11px;white-space:nowrap;color:var(--accent);pointer-events:none;animation-name:projBubbleSlide;animation-iteration-count:infinite;animation-timing-function:linear;animation-fill-mode:backwards}';
+      document.head.appendChild(style);
+    }
+    // Per-layer accumulator: ensure previous bubble is invisible before next starts
+    var layerNext = [0, 0, 0, 0];
+    projectsList.forEach(function(proj, i) {
+      var name = proj.name || proj.code || '';
+      var nameLen = Math.max(1, name.length);
+      var layer = i % 4;
+      var topPct = 30 + layer * 18;
+      var dur = nameLen * 0.5 + 3;
+      var delay = layerNext[layer];
+      // Minimum 5s gap ensures previous bubble fully invisible before next appears
+      layerNext[layer] += Math.max(dur * 0.5, 5);
+      html += '<span class="proj-bubble" style="top:' + topPct + '%;animation-duration:' + dur.toFixed(1) + 's;animation-delay:' + delay.toFixed(1) + 's">' + escHtml(name) + '</span>';
+    });
+  }
+  html += '</div>';
+  // Other stats
   var stats = [
-    { label: '关联项目', value: p.project_count || 0, color: 'var(--accent)', icon: '🔗', click: true, clickAction: 'switchToProdMaintenance()' },
     { label: '发布次数', value: p.releases || 0, color: 'var(--warn)', icon: '🚀' },
     { label: '需求总数', value: p.total_stories || 0, color: 'var(--success)', icon: '📋' },
   ];
   stats.forEach(function(s) {
-    html += '<div class="dkpi"' + (s.click ? ' style="cursor:pointer" onclick="' + (s.clickAction || ('gotoView(\'topology\');document.getElementById(\'topo-prod\').value=\'' + escHtml(p.code || p.name) + '\';setTimeout(function(){if(typeof onTopoSearch==\'function\')onTopoSearch()},100)')) + '" title="点击查看关联项目"' : '') + '>' +
+    html += '<div class="dkpi">' +
       '<div class="dkpi-lbl">' + s.icon + ' ' + s.label + '</div>' +
       '<div class="dkpi-val" style="color:' + s.color + '">' + s.value + '</div></div>';
   });
