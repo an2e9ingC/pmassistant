@@ -1337,6 +1337,8 @@ function initUserCenter() {
   var permBadges = perms.map(function(p) { return '<span class="profile-role-tag">' + escHtml(permLabels[p]||p) + '</span>'; }).join('');
 
   container.innerHTML =
+    // Wrap in flex column to fill available viewport height
+    '<div style="display:flex;flex-direction:column;height:calc(100vh - 54px - 48px)">' +
     // Profile bar
     '<div class="profile-bar">' +
       '<div class="profile-avatar">' + escHtml((user.display_name||user.username).charAt(0).toUpperCase()) + '</div>' +
@@ -1355,53 +1357,44 @@ function initUserCenter() {
     // Expand panel
     '<div class="profile-expand" id="uc-expand"><div class="profile-expand-inner"><div id="uc-expand-content"></div></div></div>' +
     // Task list + Calendar
-    '<div class="dash-grid-task">' +
-      '<div>' +
-        '<div class="sec-hd"><h2 id="uc-list-heading">我的任务</h2>' +
-          '<div style="display:flex;align-items:center;gap:10px">' +
-            '<div class="view-switch">' +
-              '<button class="view-switch-btn active" onclick="_ucSwitchView(\'tasks\')">任务</button>' +
-              '<button class="view-switch-btn" onclick="_ucSwitchView(\'bugs\')">Bug</button>' +
-            '</div>' +
-            '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" id="uc-new-btn" onclick="_ucNewItem()">+ 新建任务</button>' +
+    '<div class="dash-grid-task" style="flex:1;min-height:0">' +
+      '<div style="display:flex;flex-direction:column">' +
+        '<div style="flex:1;display:flex;flex-direction:column;min-height:0">' +
+          '<div class="sec-hd"><h2>我的任务</h2>' +
+            '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="_ucNewTask()">+ 新建任务</button>' +
           '</div>' +
+          '<div class="task-filter-bar" id="uc-tasks-filter-bar"></div>' +
+          '<div class="panel" style="flex:1;overflow:hidden"><div class="task-table-wrap" style="max-height:100%;overflow-y:auto"><table class="task-table"><thead id="uc-tasks-table-head"></thead><tbody id="uc-tasks-table-tbody"></tbody></table></div></div>' +
         '</div>' +
-        '<div class="task-filter-bar" id="uc-filter-bar"></div>' +
-        '<div class="panel"><div class="task-table-wrap"><table class="task-table"><thead id="uc-table-head"></thead><tbody id="uc-table-tbody"></tbody></table></div></div>' +
+        '<div style="flex:1;display:flex;flex-direction:column;min-height:0;margin-top:18px">' +
+          '<div class="sec-hd"><h2>我的Bug</h2>' +
+            '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="_ucNewBug()">+ 新建Bug</button>' +
+          '</div>' +
+          '<div class="task-filter-bar" id="uc-bugs-filter-bar"></div>' +
+          '<div class="panel" style="flex:1;overflow:hidden"><div class="task-table-wrap" style="max-height:100%;overflow-y:auto"><table class="task-table"><thead id="uc-bugs-table-head"></thead><tbody id="uc-bugs-table-tbody"></tbody></table></div></div>' +
+        '</div>' +
       '</div>' +
       '<div>' +
         '<div id="uc-calendar"></div>' +
       '</div>' +
-    '</div>';
+    '</div>' +
+    '</div>'; // close flex wrapper
 
   // Calendar navigation callback
   _calChangeCallback = function() { _ucLoadCalendar(user); };
-  // Load data (calendar loads inside _ucLoadTasks after task data is ready)
+  // Load both tasks and bugs
   _ucLoadTasks(user);
+  _ucLoadBugs();
 }
 
 var _ucTasks = [];
 var _ucFilterStatus = 'all';
+var _ucFilterProd = '';
 var _ucFilterProj = '';
-var _ucView = 'tasks';
 
-function _ucSwitchView(v) {
-  _ucView = v;
-  document.getElementById('uc-list-heading').textContent = v === 'tasks' ? '我的任务' : '我的Bug';
-  document.querySelectorAll('.view-switch-btn').forEach(function(b,i){ b.classList.toggle('active', (i===0&&v==='tasks')||(i===1&&v==='bugs')); });
-  var btn = document.getElementById('uc-new-btn');
-  if (btn) { btn.textContent = v === 'tasks' ? '+ 新建任务' : '+ 新建Bug'; }
-  if (v === 'tasks') { _renderUcFilterBar(); _renderUcTableHead(); _renderUcTaskTable(); }
-  else { _ucLoadBugs(); }
-}
-
-function _ucNewItem() {
-  if (_ucView === 'bugs') {
-    if (typeof openBugDialog === 'function') openBugDialog();
-    else if (typeof loadViewScript === 'function') loadViewScript('/js/bugs.js?v=' + APP_VERSION, function() { openBugDialog(); });
-  } else {
-    _ucNewTask();
-  }
+function _ucNewBug() {
+  if (typeof openBugDialog === 'function') openBugDialog();
+  else if (typeof loadViewScript === 'function') loadViewScript('/js/bugs.js?v=' + APP_VERSION, function() { openBugDialog(); });
 }
 
 function _ucLoadTasks(user) {
@@ -1414,22 +1407,29 @@ function _ucLoadTasks(user) {
     // Re-render calendar with pie charts once task data is available
     _ucLoadCalendar(user);
   }).catch(function() {
-    document.getElementById('uc-table-tbody').innerHTML = '<tr><td colspan="12"><div class="empty-state">加载失败</div></td></tr>';
+    document.getElementById('uc-tasks-table-tbody').innerHTML = '<tr><td colspan="13"><div class="empty-state">加载失败</div></td></tr>';
   });
 }
 
 function _renderUcFilterBar() {
   var counts = {todo:0, in_progress:0, review:0, done:0};
-  var projSet = {};
-  _ucTasks.forEach(function(t) { counts[t.status||'todo'] = (counts[t.status]||0)+1; if(t.project_name) projSet[t.project_name]=1; });
+  var projSet = {}, prodSet = {};
+  _ucTasks.forEach(function(t) {
+    counts[t.status||'todo'] = (counts[t.status]||0)+1;
+    if(t.project_name) projSet[t.project_name]=1;
+    if(t.product_name) prodSet[t.product_name]=1;
+  });
   var projs = Object.keys(projSet).sort();
+  var prods = Object.keys(prodSet).sort();
   var tabs = [{k:'all',l:'全部',c:_ucTasks.length},{k:'todo',l:'待办',c:counts.todo||0},{k:'in_progress',l:'进行中',c:counts.in_progress||0},{k:'review',l:'评审中',c:counts.review||0},{k:'done',l:'已完成',c:counts.done||0}];
-  document.getElementById('uc-filter-bar').innerHTML =
+  var prodSel = prods.length ? '<select class="proj-select" onchange="_ucFilterProd=this.value;_renderUcTaskTable()"><option value="">全部产品</option>' + prods.map(function(p) { return '<option value="'+escHtml(p)+'"'+(_ucFilterProd===p?' selected':'')+'>'+escHtml(p)+'</option>'; }).join('') + '</select>' : '';
+  var projSel = projs.length ? '<select class="proj-select" onchange="_ucFilterProj=this.value;_renderUcTaskTable()"><option value="">全部项目</option>' + projs.map(function(p) { return '<option value="'+escHtml(p)+'"'+(_ucFilterProj===p?' selected':'')+'>'+escHtml(p)+'</option>'; }).join('') + '</select>' : '';
+  document.getElementById('uc-tasks-filter-bar').innerHTML =
     '<div class="task-tabs">' + tabs.map(function(t) { return '<button class="task-tab' + (_ucFilterStatus===t.k?' active':'') + '" onclick="_ucSetFilter(\''+t.k+'\')">'+t.l+'<span class="task-tab-count">'+t.c+'</span></button>'; }).join('') + '</div>' +
-    '<select class="proj-select" onchange="_ucFilterProj=this.value;_renderUcTaskTable()"><option value="">全部项目</option>' + projs.map(function(p) { return '<option value="'+escHtml(p)+'"'+(_ucFilterProj===p?' selected':'')+'>'+escHtml(p)+'</option>'; }).join('') + '</select>';
+    prodSel + projSel;
 }
 
-function _ucSetFilter(s) { _ucFilterStatus = s; _renderUcFilterBar(); _renderUcTaskTable(); }
+function _ucSetFilter(s) { _ucFilterStatus = s; _ucFilterProd = ''; _ucFilterProj = ''; _renderUcFilterBar(); _renderUcTaskTable(); }
 
 function _ucOpenTask(taskId) {
   if (typeof openTaskViewDialog === 'function') { openTaskViewDialog(taskId); }
@@ -1437,23 +1437,25 @@ function _ucOpenTask(taskId) {
 }
 
 function _renderUcTableHead() {
-  document.getElementById('uc-table-head').innerHTML = '<tr><th>编号</th><th>项目名称</th><th>任务</th><th>阶段</th><th>状态</th><th>优先级</th><th>负责人</th><th>预估</th><th>实际</th><th>进度</th><th>截止</th><th>操作</th></tr>';
+  document.getElementById('uc-tasks-table-head').innerHTML = '<tr><th>产品</th><th>编号</th><th>项目名称</th><th>任务</th><th>阶段</th><th>状态</th><th>优先级</th><th>负责人</th><th>预估</th><th>实际</th><th>进度</th><th>截止</th><th>操作</th></tr>';
 }
 
 function _renderUcTaskTable() {
   var filtered = _ucTasks.filter(function(t) {
     if (_ucFilterStatus !== 'all' && t.status !== _ucFilterStatus) return false;
+    if (_ucFilterProd && t.product_name !== _ucFilterProd) return false;
     if (_ucFilterProj && t.project_name !== _ucFilterProj) return false;
     return true;
   });
-  var tbody = document.getElementById('uc-table-tbody');
-  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="12"><div class="empty-state">暂无匹配任务</div></td></tr>'; return; }
+  var tbody = document.getElementById('uc-tasks-table-tbody');
+  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="13"><div class="empty-state">暂无匹配任务</div></td></tr>'; return; }
   tbody.innerHTML = filtered.map(function(t) {
     var stageName = t.stage_name || t.execution_name || '-';
     var pct = t.progress || 0;
     var overdue = t.due_date && t.status !== 'done' && t.status !== 'closed' && t.due_date < fmtLocalDate();
     var assignee = t.assignee_name || t.assignee_username || (t.assignee_id||'-');
     return '<tr style="cursor:pointer" onclick="_ucOpenTask('+t.id+')">' +
+      '<td style="font-size:12px">' + escHtml(t.product_name || '-') + '</td>' +
       '<td>' + (t.project_code ? projCodeTag(t.project_code, t.project_id) : '-') + '</td>' +
       '<td style="text-align:left;font-size:12px">' + escHtml(t.project_name || '-') + '</td>' +
       '<td style="text-align:left;font-weight:530">' + escHtml(t.title) + '</td>' +
@@ -1488,26 +1490,42 @@ function _ucEnsureBugsJs(fn) {
 }
 
 var _ucBugTab = 'assignee'; // 'assignee' | 'reporter'
+var _ucBugFilterProd = '';
+var _ucBugFilterProj = '';
 
 function _ucRenderBugFilter(bugs, uid) {
   var assigned = (bugs||[]).filter(function(b) { return b.assignee_id === uid; });
   var reported = (bugs||[]).filter(function(b) { return b.reporter_id === uid; });
-  document.getElementById('uc-filter-bar').innerHTML =
+  // Collect unique product and project names from all bugs
+  var prodSet = {}, projSet = {};
+  (bugs||[]).forEach(function(b) {
+    if (b.product_name) prodSet[b.product_name] = 1;
+    if (b.project_name) projSet[b.project_name] = 1;
+  });
+  var prods = Object.keys(prodSet).sort();
+  var projs = Object.keys(projSet).sort();
+  var prodSel = prods.length ? '<select class="proj-select" onchange="_ucBugFilterProd=this.value;_ucLoadBugs()"><option value="">全部产品</option>' + prods.map(function(p) { return '<option value="'+escHtml(p)+'"'+(_ucBugFilterProd===p?' selected':'')+'>'+escHtml(p)+'</option>'; }).join('') + '</select>' : '';
+  var projSel = projs.length ? '<select class="proj-select" onchange="_ucBugFilterProj=this.value;_ucLoadBugs()"><option value="">全部项目</option>' + projs.map(function(p) { return '<option value="'+escHtml(p)+'"'+(_ucBugFilterProj===p?' selected':'')+'>'+escHtml(p)+'</option>'; }).join('') + '</select>' : '';
+  document.getElementById('uc-bugs-filter-bar').innerHTML =
     '<div class="task-tabs">' +
       '<button class="task-tab' + (_ucBugTab==='assignee'?' active':'') + '" onclick="_ucBugTab=\'assignee\';_ucLoadBugs()">待我处理<span class="task-tab-count">' + assigned.length + '</span></button>' +
       '<button class="task-tab' + (_ucBugTab==='reporter'?' active':'') + '" onclick="_ucBugTab=\'reporter\';_ucLoadBugs()">我创建的<span class="task-tab-count">' + reported.length + '</span></button>' +
-    '</div>';
-  return _ucBugTab === 'assignee' ? assigned : reported;
+    '</div>' + prodSel + projSel;
+  var result = _ucBugTab === 'assignee' ? assigned : reported;
+  // Apply product/project filters
+  if (_ucBugFilterProd) result = result.filter(function(b) { return b.product_name === _ucBugFilterProd; });
+  if (_ucBugFilterProj) result = result.filter(function(b) { return b.project_name === _ucBugFilterProj; });
+  return result;
 }
 
 async function _ucLoadBugs() {
-  document.getElementById('uc-table-head').innerHTML = '<tr><th>编号</th><th>标题</th><th>产品</th><th>项目</th><th>组件</th><th>严重</th><th>优先级</th><th>状态</th><th>负责人</th><th>创建人</th><th>操作</th></tr>';
+  document.getElementById('uc-bugs-table-head').innerHTML = '<tr><th>编号</th><th>标题</th><th>产品</th><th>项目</th><th>组件</th><th>严重</th><th>优先级</th><th>状态</th><th>负责人</th><th>创建人</th><th>操作</th></tr>';
   try {
     var user = getCurrentUser();
     var uid = user ? user.id : null;
     var bugs = await API.get('/bugs/my');
     var filtered = _ucRenderBugFilter(bugs, uid);
-    var tbody = document.getElementById('uc-table-tbody');
+    var tbody = document.getElementById('uc-bugs-table-tbody');
     if (!filtered.length) {
       var label = _ucBugTab === 'assignee' ? '暂无待处理的Bug' : '暂无创建的Bug';
       tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state">' + label + '</div></td></tr>';
@@ -1532,7 +1550,7 @@ async function _ucLoadBugs() {
         '<td onclick="event.stopPropagation()">' + iconEdit(_ucEnsureBugsJs('openBugDialog('+b.id+')'),'编辑') + iconDelete(_ucEnsureBugsJs('deleteBugById('+b.id+')'),'删除') + '</td>' +
       '</tr>';
     }).join('');
-  } catch(e) { document.getElementById('uc-table-tbody').innerHTML = '<tr><td colspan="11"><div class="error-state">加载失败</div></td></tr>'; }
+  } catch(e) { document.getElementById('uc-bugs-table-tbody').innerHTML = '<tr><td colspan="11"><div class="error-state">加载失败</div></td></tr>'; }
 }
 
 function _ucNewTask() {

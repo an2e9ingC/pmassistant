@@ -303,11 +303,25 @@ def _task_dict(t: Task, db=None) -> dict:
             proj_name = proj.name
             proj_code = proj.code
 
+    # Resolve product via project → ProductProjectLink
+    prod_id = None
+    prod_name = None
+    if t.project_id and db:
+        from backend.models.zentao import ProductProjectLink as PPL, PmaProduct
+        plink = db.query(PPL).filter(PPL.project_id == t.project_id).first()
+        if plink:
+            prod = db.query(PmaProduct).filter(PmaProduct.id == plink.product_id).first()
+            if prod:
+                prod_id = prod.id
+                prod_name = prod.name
+
     return {
         "id": t.id,
         "project_id": t.project_id,
         "project_name": proj_name,
         "project_code": proj_code,
+        "product_id": prod_id,
+        "product_name": prod_name,
         "execution_id": t.execution_id,
         "stage_name": t.stage_name,
         "execution_name": exec_name or t.stage_name,
