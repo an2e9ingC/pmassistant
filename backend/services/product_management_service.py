@@ -257,6 +257,26 @@ def update_local_product(db: Session, product_id: int, data: dict) -> dict:
     return _product_item(product, db)
 
 
+def _remove_product_from_favorites(db: Session, product_id: int) -> int:
+    """Remove a deleted product ID from all users' favorites JSON. Returns # of users cleaned."""
+    import json
+    from backend.models.local import LocalUser
+    cleaned = 0
+    users = db.query(LocalUser).all()
+    for u in users:
+        try:
+            favs = json.loads(u.favorites or '{"products":[],"projects":[]}')
+            if isinstance(favs, list):
+                favs = {"products": favs, "projects": []}
+            if product_id in favs.get("products", []):
+                favs["products"].remove(product_id)
+                u.favorites = json.dumps(favs)
+                cleaned += 1
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return cleaned
+
+
 def delete_local_product(db: Session, product_id: int) -> dict:
     """Delete a PMA-local product and its related data."""
     from backend.models.document import ProductDocument
@@ -274,6 +294,9 @@ def delete_local_product(db: Session, product_id: int) -> dict:
     db.query(ProductProjectLink).filter(ProductProjectLink.product_id == product_id).delete()
     db.query(ProductNodeLink).filter(ProductNodeLink.product_id == product_id).delete()
     db.query(ProductDocument).filter(ProductDocument.product_id == product_id).delete()
+
+    # Clean up favorites: remove deleted product ID from all users' favorites
+    _remove_product_from_favorites(db, product_id)
 
     db.delete(product)
     db.commit()

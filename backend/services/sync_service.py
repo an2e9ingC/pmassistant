@@ -449,6 +449,8 @@ class SyncService:
             ).all()
             for sp in stale:
                 db.query(ProductProjectLink).filter(ProductProjectLink.product_id == sp.id).delete()
+                from backend.services.product_management_service import _remove_product_from_favorites
+                _remove_product_from_favorites(db, sp.id)
                 db.delete(sp)
                 deleted += 1
             if deleted:
