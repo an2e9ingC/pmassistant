@@ -1429,7 +1429,16 @@ function _renderUcFilterBar() {
     prodSel + projSel;
 }
 
-function _ucSetFilter(s) { _ucFilterStatus = s; _ucFilterProd = ''; _ucFilterProj = ''; _renderUcFilterBar(); _renderUcTaskTable(); }
+function _ucSetFilter(s) { _ucFilterStatus = s; _ucFilterProd = ''; _ucFilterProj = ''; _renderUcFilterBar(); _renderUcTaskTable(); _ucRefreshTaskStats(); }
+
+function _ucRefreshTaskStats() {
+  var cal = document.getElementById('uc-calendar');
+  if (!cal) return;
+  var old = document.getElementById('uc-task-stats');
+  if (old) old.remove();
+  var html = _ucBuildTaskStats();
+  if (html) cal.insertAdjacentHTML('afterbegin', html);
+}
 
 function _ucOpenTask(taskId) {
   if (typeof openTaskViewDialog === 'function') { openTaskViewDialog(taskId); }
@@ -1492,6 +1501,7 @@ function _ucEnsureBugsJs(fn) {
 var _ucBugTab = 'assignee'; // 'assignee' | 'reporter'
 var _ucBugFilterProd = '';
 var _ucBugFilterProj = '';
+var _ucBugFilterStatus = '';
 
 function _ucRenderBugFilter(bugs, uid) {
   var assigned = (bugs||[]).filter(function(b) { return b.assignee_id === uid; });
@@ -1504,15 +1514,18 @@ function _ucRenderBugFilter(bugs, uid) {
   });
   var prods = Object.keys(prodSet).sort();
   var projs = Object.keys(projSet).sort();
+  var statuses = [{v:'',l:'全部状态'},{v:'open',l:'待确认'},{v:'confirmed',l:'已确认'},{v:'in_progress',l:'处理中'},{v:'resolved',l:'已解决'},{v:'closed',l:'已关闭'}];
+  var statusSel = '<select class="proj-select" onchange="_ucBugFilterStatus=this.value;_ucLoadBugs()">' + statuses.map(function(s) { return '<option value="'+s.v+'"'+(_ucBugFilterStatus===s.v?' selected':'')+'>'+s.l+'</option>'; }).join('') + '</select>';
   var prodSel = prods.length ? '<select class="proj-select" onchange="_ucBugFilterProd=this.value;_ucLoadBugs()"><option value="">全部产品</option>' + prods.map(function(p) { return '<option value="'+escHtml(p)+'"'+(_ucBugFilterProd===p?' selected':'')+'>'+escHtml(p)+'</option>'; }).join('') + '</select>' : '';
   var projSel = projs.length ? '<select class="proj-select" onchange="_ucBugFilterProj=this.value;_ucLoadBugs()"><option value="">全部项目</option>' + projs.map(function(p) { return '<option value="'+escHtml(p)+'"'+(_ucBugFilterProj===p?' selected':'')+'>'+escHtml(p)+'</option>'; }).join('') + '</select>' : '';
   document.getElementById('uc-bugs-filter-bar').innerHTML =
     '<div class="task-tabs">' +
       '<button class="task-tab' + (_ucBugTab==='assignee'?' active':'') + '" onclick="_ucBugTab=\'assignee\';_ucLoadBugs()">待我处理<span class="task-tab-count">' + assigned.length + '</span></button>' +
       '<button class="task-tab' + (_ucBugTab==='reporter'?' active':'') + '" onclick="_ucBugTab=\'reporter\';_ucLoadBugs()">我创建的<span class="task-tab-count">' + reported.length + '</span></button>' +
-    '</div>' + prodSel + projSel;
+    '</div>' + statusSel + prodSel + projSel;
   var result = _ucBugTab === 'assignee' ? assigned : reported;
-  // Apply product/project filters
+  // Apply product/project/status filters
+  if (_ucBugFilterStatus) result = result.filter(function(b) { return (b.status || 'open') === _ucBugFilterStatus; });
   if (_ucBugFilterProd) result = result.filter(function(b) { return b.product_name === _ucBugFilterProd; });
   if (_ucBugFilterProj) result = result.filter(function(b) { return b.project_name === _ucBugFilterProj; });
   return result;
@@ -1551,6 +1564,7 @@ async function _ucLoadBugs() {
       '</tr>';
     }).join('');
   } catch(e) { document.getElementById('uc-bugs-table-tbody').innerHTML = '<tr><td colspan="11"><div class="error-state">加载失败</div></td></tr>'; }
+  _ucLoadBugStats(); // refresh bug stats pie to match current tab
 }
 
 function _ucNewTask() {
@@ -1567,6 +1581,88 @@ async function _ucDeleteTask(taskId) {
   } catch(e) { showToast('删除失败: ' + (e.message || ''), 'error'); }
 }
 function _fmtLocalDate(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
+function _ucLoadBugStats() {
+  var cal = document.getElementById('uc-calendar');
+  if (!cal) return;
+  API.get('/bugs/my').then(function(bugs) {
+    var user = getCurrentUser();
+    var uid = user ? user.id : null;
+    // Filter by tab: assignee or reporter
+    var filtered = _ucBugTab === 'assignee'
+      ? (bugs||[]).filter(function(b) { return b.assignee_id === uid; })
+      : (bugs||[]).filter(function(b) { return b.reporter_id === uid; });
+    // Exclude resolved/closed
+    var activeBugs = filtered.filter(function(b) { return b.status !== 'resolved' && b.status !== 'closed'; });
+    var title = (_ucBugTab === 'assignee' ? '待我处理' : '我创建的') + ' · 产品分布（活跃）';
+    // Remove old bug stats card
+    var old = document.getElementById('uc-bug-stats');
+    if (old) old.remove();
+    if (typeof _buildPieChart !== 'function') return;
+    var byProd = {}, prodList = [], prodColors = ['var(--accent)','var(--warn)','var(--success)','var(--danger)','var(--purple)'];
+    if (activeBugs.length > 0) {
+      activeBugs.forEach(function(b) {
+        var pn = b.product_name || '未知';
+        if (!byProd[pn]) { byProd[pn] = 0; prodList.push({key: pn, label: pn}); }
+        byProd[pn]++;
+      });
+      prodList.sort(function(a,b) { return byProd[b.key] - byProd[a.key]; });
+      prodList.forEach(function(s, i) { s.color = prodColors[i % prodColors.length]; });
+    }
+    var bugHtml = '<div class="panel panel-pad" style="margin-top:18px" id="uc-bug-stats">' +
+      '<div class="sec-hd"><h2>Bug统计</h2></div>' +
+      '<div style="display:flex;gap:8px">' +
+        _buildPieChart(activeBugs.length ? prodList : [{key:'—',label:'—',color:'var(--muted)'}], activeBugs.length ? byProd : {'—':0}, activeBugs.length, title) +
+      '</div></div>';
+    cal.insertAdjacentHTML('beforeend', bugHtml);
+  }).catch(function(){});
+}
+
+function _ucBuildTaskStats() {
+  var cols = [
+    {key:'todo',label:'待办',color:'var(--muted)'},
+    {key:'in_progress',label:'进行中',color:'var(--accent)'},
+    {key:'review',label:'评审中',color:'var(--warn)'},
+    {key:'done',label:'已完成',color:'var(--success)'},
+  ];
+  var tasks = _ucTasks || [];
+  // Apply status filter
+  if (_ucFilterStatus && _ucFilterStatus !== 'all') {
+    tasks = tasks.filter(function(t) { return (t.status || 'todo') === _ucFilterStatus; });
+  }
+  var totalTasks = tasks.length;
+  if (typeof _buildPieChart !== 'function') return '';
+  if (totalTasks === 0) {
+    // Show empty card so the section remains visible
+    var emptyCounts = {}; cols.forEach(function(c) { emptyCounts[c.key] = 0; });
+    return '<div class="panel panel-pad" style="margin-bottom:18px" id="uc-task-stats">' +
+      '<div class="sec-hd"><h2>任务统计</h2></div>' +
+      '<div style="display:flex;gap:8px">' +
+        _buildPieChart(cols, emptyCounts, 0, '状态分布') +
+        _buildPieChart([{key:'—',label:'—',color:'var(--muted)'}], {'—':0}, 0, '项目分布') +
+      '</div></div>';
+  }
+  var byStatus = {}; cols.forEach(function(c){byStatus[c.key]=0;});
+  tasks.forEach(function(t){var s=t.status||'todo';byStatus[s]=(byStatus[s]||0)+1;});
+  var statusCounts = {}; cols.forEach(function(c){statusCounts[c.key]=byStatus[c.key]||0;});
+
+  // Project distribution: top 3 by count
+  var byProj = {}, projColors = ['var(--accent)','var(--success)','var(--warn)'];
+  var projList = [];
+  tasks.forEach(function(t){var pn=t.project_code||t.project_name||'未知';if(!byProj[pn]){byProj[pn]=0;projList.push({key:pn,label:pn});}byProj[pn]++;});
+  projList.sort(function(a,b){return byProj[b.key]-byProj[a.key];});
+  projList = projList.slice(0,3);
+  while (projList.length < 3) { var dummy = '—'; projList.push({key:dummy+projList.length,label:dummy}); byProj[dummy+projList.length]=0; }
+  projList.forEach(function(s,i){s.color=projColors[i];});
+
+  var activeCols = cols.filter(function(c){return (statusCounts[c.key]||0)>0;});
+  return '<div class="panel panel-pad" style="margin-bottom:18px" id="uc-task-stats">' +
+    '<div class="sec-hd"><h2>任务统计</h2></div>' +
+    '<div style="display:flex;gap:8px">' +
+      _buildPieChart(activeCols, statusCounts, totalTasks, '状态分布') +
+      _buildPieChart(projList, byProj, totalTasks, '项目分布') +
+    '</div></div>';
+}
 
 function _ucLoadCalendar(user) {
   // Use the month currently displayed in the calendar (supports navigation)
@@ -1586,40 +1682,10 @@ function _ucLoadCalendar(user) {
     var total = data?(data.total||0):0;
     document.getElementById('uc-week-total').textContent = total.toFixed(1)+'h';
 
-    var tasks = _ucTasks || [];
-    var totalTasks = tasks.length;
     var html = '';
 
-    // Pie charts card
-    if (totalTasks > 0 && typeof _buildPieChart === 'function') {
-      var cols = [
-        {key:'todo',label:'待办',color:'var(--muted)'},
-        {key:'in_progress',label:'进行中',color:'var(--accent)'},
-        {key:'review',label:'评审中',color:'var(--warn)'},
-        {key:'done',label:'已完成',color:'var(--success)'},
-      ];
-      var byStatus = {}; cols.forEach(function(c){byStatus[c.key]=0;});
-      tasks.forEach(function(t){var s=t.status||'todo';byStatus[s]=(byStatus[s]||0)+1;});
-      var statusCounts = {}; cols.forEach(function(c){statusCounts[c.key]=byStatus[c.key]||0;});
-
-      // Project distribution: top 3 by count, show project code only, fill missing with —
-      var byProj = {}, projColors = ['var(--accent)','var(--success)','var(--warn)'];
-      var projList = [];
-      tasks.forEach(function(t){var pn=t.project_code||t.project_name||'未知';if(!byProj[pn]){byProj[pn]=0;projList.push({key:pn,label:pn});}byProj[pn]++;});
-      projList.sort(function(a,b){return byProj[b.key]-byProj[a.key];});
-      projList = projList.slice(0,3);
-      while (projList.length < 3) { var dummy = '—'; projList.push({key:dummy+projList.length,label:dummy}); byProj[dummy+projList.length]=0; }
-      projList.forEach(function(s,i){s.color=projColors[i];s.label=s.label;}); // project_code already in API
-
-      // Filter to only active groups for status pie
-      var activeCols = cols.filter(function(c){return (statusCounts[c.key]||0)>0;});
-      html += '<div class="panel panel-pad" style="margin-bottom:18px">' +
-        '<div class="sec-hd"><h2>任务统计</h2></div>' +
-        '<div style="display:flex;gap:8px">' +
-          _buildPieChart(activeCols,statusCounts,totalTasks,'状态分布') +
-          _buildPieChart(projList,byProj,totalTasks,'项目分布') +
-        '</div></div>';
-    }
+    // Task stats
+    html += _ucBuildTaskStats();
 
     // Calendar card
     html += '<div class="panel panel-pad">' +
@@ -1629,6 +1695,9 @@ function _ucLoadCalendar(user) {
     }
     html += '</div>';
     cal.innerHTML = html;
+
+    // Bug stats: load after calendar renders
+    _ucLoadBugStats();
   }).catch(function(){});
 }
 
