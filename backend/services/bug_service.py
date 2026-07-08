@@ -37,7 +37,7 @@ def get_bug(db, bug_id):
     b = db.query(PmaBug).filter(PmaBug.id == bug_id).first()
     if not b: return None
     d = _bug_dict(b, db)
-    d["analyses"] = [_analysis_dict(a) for a in db.query(BugAnalysis).filter(BugAnalysis.bug_id == bug_id).order_by(BugAnalysis.created_at.asc()).all()]
+    d["analyses"] = [_analysis_dict(a, db) for a in db.query(BugAnalysis).filter(BugAnalysis.bug_id == bug_id).order_by(BugAnalysis.created_at.asc()).all()]
     d["transfers"] = [_transfer_dict(t, db) for t in db.query(BugTransfer).filter(BugTransfer.bug_id == bug_id).order_by(BugTransfer.created_at.asc()).all()]
     d["attachments"] = [_attachment_dict(a) for a in db.query(BugAttachment).filter(BugAttachment.bug_id == bug_id, BugAttachment.analysis_id.is_(None)).all()]
     return d
@@ -101,20 +101,29 @@ def get_worklogs(db, bug_id):
             for w in logs]
 
 def create_worklog(db, data, user_id):
+    d = data.get("date")
+    if d and isinstance(d, str):
+        from datetime import datetime as dt
+        d = dt.strptime(d, "%Y-%m-%d").date()
     w = BugWorkLog(bug_id=data["bug_id"], user_id=user_id,
-                   hours=data["hours"], date=data.get("date") or date.today(),
+                   hours=data["hours"], date=d or date.today(),
                    description=data.get("description", ""))
     db.add(w); db.commit()
     _recalc_bug_hours(db, data["bug_id"])
-    return _worklog_dict(w)
+    return _worklog_dict(w, db)
 
 def update_worklog(db, wl_id, data):
     w = db.query(BugWorkLog).filter(BugWorkLog.id == wl_id).first()
     if not w: return None
     for k in ("hours","date","description"):
-        if k in data: setattr(w, k, data[k])
+        if k in data:
+            v = data[k]
+            if k == "date" and isinstance(v, str):
+                from datetime import datetime as dt
+                v = dt.strptime(v, "%Y-%m-%d").date()
+            setattr(w, k, v)
     db.commit(); _recalc_bug_hours(db, w.bug_id)
-    return _worklog_dict(w)
+    return _worklog_dict(w, db)
 
 def delete_worklog(db, wl_id):
     w = db.query(BugWorkLog).filter(BugWorkLog.id == wl_id).first()
@@ -129,7 +138,7 @@ def create_analysis(db, data, user_id):
     a = BugAnalysis(bug_id=data["bug_id"], user_id=user_id, content=data["content"],
                     attachments=data.get("attachments"))
     db.add(a); db.commit()
-    return _analysis_dict(a)
+    return _analysis_dict(a, db)
 
 def update_analysis(db, aid, data):
     a = db.query(BugAnalysis).filter(BugAnalysis.id == aid).first()
@@ -137,7 +146,7 @@ def update_analysis(db, aid, data):
     if "content" in data: a.content = data["content"]
     if "attachments" in data: a.attachments = data["attachments"]
     db.commit()
-    return _analysis_dict(a)
+    return _analysis_dict(a, db)
 
 def delete_analysis(db, aid):
     a = db.query(BugAnalysis).filter(BugAnalysis.id == aid).first()
@@ -265,20 +274,29 @@ def _bug_dict(b, db=None):
             "created_at":to_local_str(b.created_at) if b.created_at else None,
             "updated_at":to_local_str(b.updated_at) if b.updated_at else None}
 
-def _analysis_dict(a):
+def _analysis_dict(a, db=None):
     from backend.models.local import LocalUser
-    return {"id":a.id,"bug_id":a.bug_id,"user_id":a.user_id,"content":a.content,"attachments":a.attachments or [],
-            "created_at":to_local_str(a.created_at) if a.created_at else None}
+    result = {"id":a.id,"bug_id":a.bug_id,"user_id":a.user_id,"content":a.content,"attachments":a.attachments or [],
+              "created_at":to_local_str(a.created_at) if a.created_at else None}
+    if db:
+        u = db.query(LocalUser).filter(LocalUser.id == a.user_id).first()
+        result["username"] = u.display_name or u.username if u else None
+    return result
 
 def _attachment_dict(a):
     return {"id":a.id,"bug_id":a.bug_id,"analysis_id":a.analysis_id,"filename":a.filename,"mime_type":a.mime_type,
             "file_path":a.file_path,"file_size":a.file_size,"url":f"/api/attachments/{a.id}",
             "created_at":to_local_str(a.created_at) if a.created_at else None}
 
-def _worklog_dict(w):
-    return {"id":w.id,"bug_id":w.bug_id,"user_id":w.user_id,"hours":w.hours,
-            "date":str(w.date) if w.date else None,"description":w.description,
-            "created_at":to_local_str(w.created_at) if w.created_at else None}
+def _worklog_dict(w, db=None):
+    from backend.models.local import LocalUser
+    result = {"id":w.id,"bug_id":w.bug_id,"user_id":w.user_id,"hours":w.hours,
+              "date":str(w.date) if w.date else None,"description":w.description,
+              "created_at":to_local_str(w.created_at) if w.created_at else None}
+    if db:
+        u = db.query(LocalUser).filter(LocalUser.id == w.user_id).first()
+        result["username"] = u.display_name or u.username if u else None
+    return result
 
 def _transfer_dict(t, db=None):
     fp_n=tp_n=un="?"

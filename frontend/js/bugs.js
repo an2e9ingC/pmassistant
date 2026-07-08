@@ -190,7 +190,7 @@ async function openBugDetail(bugId) {
   // Load worklogs + analyses
   API.get('/bugs/'+bugId+'/worklogs').then(function(logs) {
     var el = document.getElementById('bv-worklogs');
-    if (el) el.innerHTML = _renderWorklogTable(logs||[]);
+    if (el) el.innerHTML = _renderWorklogTable(logs||[], bugId);
   });
   _loadBugAnalyses(bugId);
 }
@@ -405,7 +405,7 @@ function openBugWorklogDialog(bugId) {
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">描述</label>' +
     '<textarea class="search-inp" id="bwl-desc" rows="2" style="width:100%;margin-top:2px;resize:vertical"></textarea></div></div>';
   openDialog('记录工时', html, [
-    {text:'取消',onclick:'closeSharedDialog()'},
+    {text:'取消',onclick:'closeSharedDialog();openBugDetail('+bugId+')'},
     {text:'提交',cls:'btn-primary',onclick:'_submitBugWorklog('+bugId+')'}], {maxWidth:400});
 }
 
@@ -414,18 +414,60 @@ async function _submitBugWorklog(bugId) {
   if (!h||h<=0) { showToast('请输入有效的工时数','error'); return; }
   try {
     await API.post('/bugs/'+bugId+'/worklogs', {bug_id:bugId, hours:h, date:document.getElementById('bwl-date').value, description:document.getElementById('bwl-desc').value.trim()});
-    showToast('工时已记录','success'); closeSharedDialog();
-    var data = await API.get('/bugs/'+bugId);
-    var el = document.getElementById('bv-worklogs');
-    if (el) { API.get('/bugs/'+bugId+'/worklogs').then(function(logs){ el.innerHTML = _renderWorklogTable(logs||[]); }); }
+    showToast('工时已记录','success');
+    closeSharedDialog();
+    openBugDetail(bugId);
   } catch(e) { showToast('记录失败: '+(e.message||''),'error'); }
 }
 
-function _renderWorklogTable(logs) {
+function _renderWorklogTable(logs, bugId) {
   if (!logs||!logs.length) return '<div style="color:var(--muted);font-size:12px">暂无工时记录</div>';
-  var h = '<table class="proj-table" style="font-size:12px"><thead><tr><th>日期</th><th>用户</th><th>工时(h)</th><th>描述</th></tr></thead><tbody>';
-  logs.forEach(function(w) { h += '<tr><td>'+(w.date||'?')+'</td><td>'+escHtml(w.username||'?')+'</td><td>'+w.hours.toFixed(1)+'</td><td style="text-align:left">'+escHtml(w.description||'')+'</td></tr>'; });
+  var h = '<table class="proj-table" style="font-size:12px"><thead><tr><th>日期</th><th>用户</th><th>工时(h)</th><th>描述</th><th style="width:50px"></th></tr></thead><tbody>';
+  logs.forEach(function(w) { h += '<tr><td>'+(w.date||'?')+'</td><td>'+escHtml(w.username||'?')+'</td><td>'+w.hours.toFixed(1)+'</td><td style="text-align:left">'+escHtml(w.description||'')+'</td>' +
+    '<td style="white-space:nowrap">' +
+      iconEdit('openBugWorklogEditDialog('+bugId+','+w.id+')') +
+      iconDelete('deleteBugWorklog('+bugId+','+w.id+')') +
+    '</td></tr>'; });
   return h + '</tbody></table>';
+}
+
+function openBugWorklogEditDialog(bugId, wlId) {
+  API.get('/bugs/'+bugId+'/worklogs').then(function(logs) {
+    var w = (logs||[]).find(function(l){return l.id===wlId;});
+    if (!w) { showToast('未找到工时记录','error'); return; }
+    var html = '<div>' +
+      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">日期 *</label>' +
+        '<input class="search-inp" id="bwl-date" type="date" value="'+(w.date||'')+'" style="width:100%;margin-top:2px"></div>' +
+      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工时(h) *</label>' +
+        '<input class="search-inp" id="bwl-hours" type="number" step="0.5" min="0.5" value="'+w.hours+'" style="width:100%;margin-top:2px"></div>' +
+      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">描述</label>' +
+        '<textarea class="search-inp" id="bwl-desc" rows="2" style="width:100%;margin-top:2px;resize:vertical">'+escHtml(w.description||'')+'</textarea></div>' +
+    '</div>';
+    openDialog('编辑工时', html, [
+      {text:'取消',onclick:'closeSharedDialog();openBugDetail('+bugId+')'},
+      {text:'保存',cls:'btn-primary',onclick:'_submitBugWorklogEdit('+bugId+','+wlId+')'}
+    ], {maxWidth:400});
+  });
+}
+
+async function _submitBugWorklogEdit(bugId, wlId) {
+  var h = parseFloat(document.getElementById('bwl-hours').value);
+  if (!h||h<=0) { showToast('请输入有效的工时数','error'); return; }
+  try {
+    await API.put('/bugs/'+bugId+'/worklogs/'+wlId, {hours:h, date:document.getElementById('bwl-date').value, description:document.getElementById('bwl-desc').value.trim()});
+    showToast('工时已更新','success');
+    closeSharedDialog();
+    openBugDetail(bugId);
+  } catch(e) { showToast('编辑失败: '+(e.message||''),'error'); }
+}
+
+async function deleteBugWorklog(bugId, wlId) {
+  if (!confirm('确定删除该工时记录？')) return;
+  try {
+    await API.del('/bugs/'+bugId+'/worklogs/'+wlId);
+    showToast('已删除','success');
+    openBugDetail(bugId);
+  } catch(e) { showToast('删除失败: '+(e.message||''),'error'); }
 }
 
 /* ── Analysis ── */
@@ -434,7 +476,7 @@ function openBugAnalysisDialog(bugId) {
   var html = '<div><label style="font-size:11px;color:var(--muted)">分析内容（Markdown）</label>' +
     '<textarea class="search-inp" id="ba-content" rows="5" style="width:100%;box-sizing:border-box;margin-top:4px;resize:vertical"></textarea></div>';
   openDialog('添加分析记录', html, [
-    {text:'取消',onclick:'closeSharedDialog()'},
+    {text:'取消',onclick:'closeSharedDialog();openBugDetail('+bugId+')'},
     {text:'提交',cls:'btn-primary',onclick:'_submitBugAnalysis('+bugId+')'}], {maxWidth:500});
 }
 
@@ -443,8 +485,9 @@ async function _submitBugAnalysis(bugId) {
   if (!c) { showToast('请输入分析内容','error'); return; }
   try {
     await API.post('/bugs/'+bugId+'/analysis', {bug_id:bugId, content:c});
-    showToast('分析已添加','success'); closeSharedDialog();
-    _loadBugAnalyses(bugId);
+    showToast('分析已添加','success');
+    closeSharedDialog();
+    openBugDetail(bugId);
   } catch(e) { showToast('提交失败: '+(e.message||''),'error'); }
 }
 
@@ -456,8 +499,9 @@ function _loadBugAnalyses(bugId) {
     if (!analyses.length) { el.innerHTML = '<div style="color:var(--muted);font-size:12px">暂无分析记录</div>'; return; }
     var h = '';
     analyses.forEach(function(a) {
+      var userHtml = a.username ? ' · ' + escHtml(a.username) : '';
       h += '<div style="border-left:2px solid var(--accent);padding:4px 0 8px 12px;margin-bottom:4px">' +
-        '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">'+(a.created_at||'?')+'</div>' +
+        '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">'+(a.created_at||'?') + userHtml + '</div>' +
         '<div class="markdown-body" style="font-size:13px;line-height:1.6">'+renderMarkdown(a.content)+'</div></div>';
     });
     el.innerHTML = h;

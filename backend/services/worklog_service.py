@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import func as sa_func
 
 from backend.models.task import WorkLog, Task
+from backend.models.bug import BugWorkLog, PmaBug
 from backend.database import to_local_str
 
 
@@ -130,7 +131,8 @@ def get_calendar(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
 ) -> dict:
-    """Calendar view: daily hours grouped by date, with task breakdown."""
+    """Calendar view: daily hours grouped by date, with task/bug breakdown."""
+    # Task worklogs
     q = db.query(WorkLog)
     if user_id:
         q = q.filter(WorkLog.user_id == user_id)
@@ -140,9 +142,21 @@ def get_calendar(
         q = q.filter(WorkLog.date <= _parse_date(date_to))
     logs = q.order_by(WorkLog.date.desc()).all()
 
-    # Batch-load all referenced tasks in one query
+    # Bug worklogs
+    bq = db.query(BugWorkLog)
+    if user_id:
+        bq = bq.filter(BugWorkLog.user_id == user_id)
+    if date_from:
+        bq = bq.filter(BugWorkLog.date >= _parse_date(date_from))
+    if date_to:
+        bq = bq.filter(BugWorkLog.date <= _parse_date(date_to))
+    bug_logs = bq.order_by(BugWorkLog.date.desc()).all()
+
+    # Batch-load tasks and bugs
     task_ids = {w.task_id for w in logs}
     task_map = _fetch_task_map(db, task_ids)
+    bug_ids = {b.bug_id for b in bug_logs}
+    bug_map = {b.id: b for b in db.query(PmaBug).filter(PmaBug.id.in_(bug_ids)).all()} if bug_ids else {}
 
     # Group by date
     daily_map = {}
@@ -158,6 +172,21 @@ def get_calendar(
             "hours": w.hours,
             "project_id": task.project_id if task else None,
             "description": w.description,
+            "source": "task",
+        })
+    for bw in bug_logs:
+        d = str(bw.date)
+        if d not in daily_map:
+            daily_map[d] = {"date": d, "total_hours": 0.0, "tasks": []}
+        bug = bug_map.get(bw.bug_id)
+        daily_map[d]["total_hours"] += bw.hours or 0.0
+        daily_map[d]["tasks"].append({
+            "task_id": None,
+            "title": ("Bug #" + str(bw.bug_id) + " " + bug.title) if bug else ("Bug #" + str(bw.bug_id)),
+            "hours": bw.hours,
+            "project_id": None,
+            "description": bw.description,
+            "source": "bug",
         })
 
     daily = sorted(daily_map.values(), key=lambda x: x["date"], reverse=True)
@@ -176,7 +205,8 @@ def get_summary(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
 ) -> dict:
-    """Multi-dimensional worklog summary."""
+    """Multi-dimensional worklog summary (task + bug)."""
+    # Task worklogs
     q = db.query(WorkLog)
     if user_id:
         q = q.filter(WorkLog.user_id == user_id)
@@ -192,34 +222,45 @@ def get_summary(
 
     logs = q.all()
 
-    # Batch-load all referenced tasks in one query
-    task_ids = {w.task_id for w in logs}
-    task_map = _fetch_task_map(db, task_ids)
+    # Bug worklogs (not filtered by project_id — bugs don't have project association in worklog context)
+    bq = db.query(BugWorkLog)
+    if user_id:
+        bq = bq.filter(BugWorkLog.user_id == user_id)
+    if date_from:
+        bq = bq.filter(BugWorkLog.date >= _parse_date(date_from))
+    if date_to:
+        bq = bq.filter(BugWorkLog.date <= _parse_date(date_to))
+    bug_logs = bq.all()
 
     by_user = {}
     by_project = {}
     by_date = {}
+    total = 0.0
 
     for w in logs:
+        total += w.hours or 0.0
         uid = w.user_id
         if uid not in by_user:
             by_user[uid] = 0.0
         by_user[uid] += w.hours or 0.0
-
         d = str(w.date)
         if d not in by_date:
             by_date[d] = 0.0
         by_date[d] += w.hours or 0.0
 
-        task = task_map.get(w.task_id)
-        if task:
-            pid = task.project_id
-            if pid not in by_project:
-                by_project[pid] = 0.0
-            by_project[pid] += w.hours or 0.0
+    for bw in bug_logs:
+        total += bw.hours or 0.0
+        uid = bw.user_id
+        if uid not in by_user:
+            by_user[uid] = 0.0
+        by_user[uid] += bw.hours or 0.0
+        d = str(bw.date)
+        if d not in by_date:
+            by_date[d] = 0.0
+        by_date[d] += bw.hours or 0.0
 
     return {
-        "total_hours": sum(w.hours or 0.0 for w in logs),
+        "total_hours": total,
         "by_user": by_user,
         "by_project": by_project,
         "by_date": by_date,
