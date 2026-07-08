@@ -148,7 +148,9 @@ async function openBugDetail(bugId) {
   var sevs = {1:'致命',2:'严重',3:'一般',4:'建议'};
 
   var html = '';
-  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">' +
+  html += '<div style="display:flex;flex-direction:column;max-height:78vh">' +
+    '<div style="flex-shrink:0">' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">' +
     '<div class="card" style="padding:14px"><div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px">基本信息</div>' +
       '<div style="font-size:13px;font-weight:600;margin-bottom:6px">' + escHtml(b.title) + '</div>' +
       '<div style="font-size:12px;line-height:1.8">' +
@@ -166,26 +168,38 @@ async function openBugDetail(bugId) {
         '<div><span style="color:var(--muted)">负责人:</span> ' + escHtml(b.assignee_name||'未分配') + '</div>' +
         '<div><span style="color:var(--muted)">创建人:</span> ' + escHtml(b.reporter_name||'') + '</div>' +
         '<div>预估 '+(b.estimate_hours||0)+'h / 实际 '+(b.consumed_hours||0)+'h</div>' +
-      '</div></div></div>';
+      '</div></div></div>'; // close second-card, info-grid, flex-shrink:0
 
-  if (b.description) html += '<div class="card" style="padding:14px;margin-bottom:12px"><div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px">描述</div>' +
-    '<div class="markdown-body" style="font-size:13px;line-height:1.6;max-height:300px;overflow-y:auto">' + renderMarkdown(b.description) + '</div></div>';
-
-  html += '<div class="card" style="padding:14px;margin-bottom:12px"><div style="display:flex;justify-content:space-between;margin-bottom:8px">' +
-    '<span style="font-size:11px;font-weight:600;color:var(--muted)">工时日志 ('+(b.consumed_hours||0).toFixed(1)+'h)</span>' +
-    '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openBugWorklogDialog('+bugId+')">+ 记录工时</button></div>' +
-    '<div id="bv-worklogs">加载中...</div></div>';
-
-  html += '<div class="card" style="padding:14px;margin-bottom:12px"><div style="display:flex;justify-content:space-between;margin-bottom:8px">' +
-    '<span style="font-size:11px;font-weight:600;color:var(--muted)">分析记录</span>' +
-    '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openBugAnalysisDialog('+bugId+')">+ 添加</button></div>' +
-    '<div id="bv-analyses" style="max-height:250px;overflow-y:auto"><div class="loading-spinner">加载中...</div></div></div>';
+  // Description (left) + Worklog+Analysis (right, stacked vertically)
+  html += '<div style="display:flex;gap:10px;flex:1;min-height:0">' +
+    // Left: Description (50% width)
+    '<div style="flex:1;min-width:0">' +
+    '<div class="card" style="padding:14px;display:flex;flex-direction:column;height:100%">' +
+      '<div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px">描述</div>' +
+      '<div class="markdown-body" style="font-size:13px;line-height:1.6;flex:1;overflow-y:auto">' + (b.description ? renderMarkdown(b.description) : '<span style="color:var(--muted)">暂无描述</span>') + '</div>' +
+    '</div>' +
+    '</div>' +
+    // Right: Worklog (top) + Analysis (bottom), stacked, 50% width
+    '<div style="flex:1;display:flex;flex-direction:column;gap:10px;min-width:0">' +
+      '<div class="card" style="padding:14px;flex:1;display:flex;flex-direction:column;min-height:0">' +
+        '<div style="display:flex;justify-content:space-between;margin-bottom:6px">' +
+          '<span style="font-size:11px;font-weight:600;color:var(--muted)">工时日志 ('+(b.consumed_hours||0).toFixed(1)+'h)</span>' +
+          '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openBugWorklogDialog('+bugId+')">+ 记录工时</button></div>' +
+        '<div id="bv-worklogs" style="flex:1;overflow-y:auto;overflow-x:hidden;font-size:12px;min-height:140px">加载中...</div></div>' +
+      '<div class="card" style="padding:14px;flex:1;display:flex;flex-direction:column;min-height:0">' +
+        '<div style="display:flex;justify-content:space-between;margin-bottom:6px">' +
+          '<span style="font-size:11px;font-weight:600;color:var(--muted)">分析记录</span>' +
+          '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openBugAnalysisDialog('+bugId+')">+ 添加</button></div>' +
+        '<div id="bv-analyses" style="flex:1;overflow-y:auto;overflow-x:hidden;min-height:160px">加载中...</div></div>' +
+    '</div>' +
+  '</div>' + // close 6:4 horizontal flex
+  '</div>'; // close max-height wrapper
 
   var btns = [
     {text:'提交到GitLab',cls:'btn',onclick:'_bugSubmitGitlab('+bugId+')',enabled:!!(b.component_id && !b.gitlab_url)},
     {text:'编辑',cls:'btn-primary',onclick:'openBugDialog('+bugId+');closeSharedDialog()'},
     {text:'关闭',onclick:'closeSharedDialog()'}];
-  openDialog('Bug #' + bugId, html, btns, {maxWidth:'65%'});
+  openDialog('Bug #' + bugId, html, btns, {maxWidth:'90%'});
 
   // Load worklogs + analyses
   API.get('/bugs/'+bugId+'/worklogs').then(function(logs) {
@@ -209,7 +223,9 @@ function openBugDialog(bugId) {
 function _showBugForm(b) {
   var isEdit = !!b; var t = b || {};
   window._bfProdId = t.product_id || null;
-  var html = '<div style="max-height:60vh;overflow-y:auto;padding-right:4px">' +
+  var html = '<div style="display:flex;flex-direction:column;height:76vh">' +
+    // Fields section — flex-shrink:0 (fixed height)
+    '<div style="flex-shrink:0">' +
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">标题 *</label>' +
     '<input class="search-inp" id="bf-title" value="'+escHtml(t.title||'')+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
     // Row: 产品 | 项目 (full width each, 2-col)
@@ -252,21 +268,27 @@ function _showBugForm(b) {
     '<div style="margin-top:8px"><label style="font-size:11px;color:var(--muted)">描述模板 <span style="font-weight:400">（可选）</span></label>' +
     '<select class="search-inp" id="bf-desc-tpl" onchange="_bugApplyDescTemplate()" style="width:100%;box-sizing:border-box;margin-top:2px">' +
       '<option value="">不使用模板</option></select></div>' +
-    '<div style="margin-top:8px"><div style="display:flex;align-items:center;justify-content:space-between">' +
-      '<label style="font-size:11px;color:var(--muted)">描述（Markdown）</label>' +
-      '<button class="btn btn-xs" onclick="_bugToggleMdPreview()" style="font-size:10px;padding:1px 6px">预览</button>' +
+    '</div>' + // close flex-shrink:0
+    // Description — flex:1 takes all extra height
+    '<div style="flex:1;display:flex;flex-direction:column;min-height:0;margin-top:8px">' +
+      '<div style="flex-shrink:0;display:flex;align-items:center;justify-content:space-between">' +
+        '<label style="font-size:11px;color:var(--muted)">描述（Markdown）</label>' +
+        '<button class="btn btn-xs" onclick="_bugToggleMdPreview()" style="font-size:10px;padding:1px 6px">预览</button>' +
+      '</div>' +
+      '<div style="flex:1;min-height:0;margin-top:2px">' +
+        '<textarea class="search-inp" id="bf-desc" style="width:100%;height:100%;box-sizing:border-box;resize:none">'+escHtml(t.description||'')+'</textarea>' +
+      '</div>' +
+      '<div id="bf-desc-preview" class="markdown-body" style="display:none;flex:1;overflow-y:auto;padding:8px;border:1px solid var(--border);border-radius:6px;margin-top:2px;font-size:13px"></div>' +
+      '<div style="flex-shrink:0;display:flex;gap:8px;margin-top:4px;align-items:center">' +
+        '<label class="btn btn-sm" style="cursor:pointer;font-size:10px;padding:2px 8px">📎 附件<input type="file" id="bf-file-input" style="display:none" onchange="_bugUploadAttach()" multiple></label>' +
+        '<span style="font-size:10px;color:var(--muted)">支持粘贴图片 (Ctrl+V)</span>' +
+      '</div>' +
     '</div>' +
-    '<textarea class="search-inp" id="bf-desc" rows="6" style="width:100%;box-sizing:border-box;margin-top:2px;resize:vertical">'+escHtml(t.description||'')+'</textarea>' +
-    '<div id="bf-desc-preview" class="markdown-body" style="display:none;max-height:200px;overflow-y:auto;padding:8px;border:1px solid var(--border);border-radius:6px;margin-top:2px;font-size:13px"></div>' +
-    '<div style="display:flex;gap:8px;margin-top:4px;align-items:center">' +
-      '<label class="btn btn-sm" style="cursor:pointer;font-size:10px;padding:2px 8px">📎 附件<input type="file" id="bf-file-input" style="display:none" onchange="_bugUploadAttach()" multiple></label>' +
-      '<span style="font-size:10px;color:var(--muted)">支持粘贴图片 (Ctrl+V)</span>' +
-    '</div></div>' +
   '</div>';
   var title = isEdit ? '编辑Bug #'+t.id : '新建Bug';
   openDialog(title, html, [
     {text:'取消',onclick:'closeSharedDialog()'},
-    {text:isEdit?'保存':'创建',cls:'btn-primary',onclick:'_submitBug('+(t.id||'null')+')'}], {maxWidth:'60%'});
+    {text:isEdit?'保存':'创建',cls:'btn-primary',onclick:'_submitBug('+(t.id||'null')+')'}], {maxWidth:'calc(80vh * 1.618)'});
   // Load bug description templates (independent of product selection)
   API.get('/product-doc-templates/bug-templates').then(function(btpls) {
   window._bfDescTemplates = btpls || [];
@@ -293,7 +315,9 @@ function _showBugForm(b) {
   }
   if (isEdit && t.severity) { setTimeout(function() { var s=document.getElementById('bf-severity'); if(s)s.value=t.severity; },100); }
   if (isEdit && t.priority) { setTimeout(function() { var s=document.getElementById('bf-priority'); if(s)s.value=t.priority; },100); }
+  if (isEdit && t.type) { setTimeout(function() { var s=document.getElementById('bf-type'); if(s)s.value=t.type; },100); }
   if (isEdit && t.status) { setTimeout(function() { var s=document.getElementById('bf-status'); if(s)s.value=t.status; },100); }
+  if (isEdit && t.component_id) { setTimeout(function() { var s=document.getElementById('bf-component'); if(s)s.value=t.component_id; },200); }
   // Create user combo + init features
   setTimeout(function() {
     var wrap = document.getElementById('bf-assignee-wrap');
@@ -422,12 +446,26 @@ async function _submitBugWorklog(bugId) {
 
 function _renderWorklogTable(logs, bugId) {
   if (!logs||!logs.length) return '<div style="color:var(--muted);font-size:12px">暂无工时记录</div>';
-  var h = '<table class="proj-table" style="font-size:12px"><thead><tr><th>日期</th><th>用户</th><th>工时(h)</th><th>描述</th><th style="width:50px"></th></tr></thead><tbody>';
-  logs.forEach(function(w) { h += '<tr><td>'+(w.date||'?')+'</td><td>'+escHtml(w.username||'?')+'</td><td>'+w.hours.toFixed(1)+'</td><td style="text-align:left">'+escHtml(w.description||'')+'</td>' +
-    '<td style="white-space:nowrap">' +
-      iconEdit('openBugWorklogEditDialog('+bugId+','+w.id+')') +
-      iconDelete('deleteBugWorklog('+bugId+','+w.id+')') +
-    '</td></tr>'; });
+  var h = '<table style="font-size:12px;width:100%;table-layout:fixed;border-collapse:collapse">' +
+    '<thead><tr style="background:var(--surface2);border-bottom:2px solid var(--border)">' +
+      '<th style="width:68px;padding:5px 4px;text-align:center;white-space:nowrap">日期</th>' +
+      '<th style="width:44px;padding:5px 4px;text-align:center;white-space:nowrap">用户</th>' +
+      '<th style="width:42px;padding:5px 4px;text-align:center;white-space:nowrap">工时(h)</th>' +
+      '<th style="padding:5px 4px;text-align:center;white-space:nowrap">描述</th>' +
+      '<th style="width:34px;padding:5px 2px;white-space:nowrap"></th>' +
+    '</tr></thead><tbody>';
+  logs.forEach(function(w, i) {
+    var bg = i % 2 === 1 ? 'background:var(--surface2)' : '';
+    h += '<tr style="border-bottom:1px solid var(--border);' + bg + '">' +
+      '<td style="padding:4px;text-align:center;font-size:11px">'+(w.date||'?')+'</td>' +
+      '<td style="padding:4px;text-align:center;font-size:11px">'+escHtml(w.username||'?')+'</td>' +
+      '<td style="padding:4px;text-align:center">'+w.hours.toFixed(1)+'</td>' +
+      '<td style="padding:4px;text-align:left;white-space:normal;word-break:break-word">'+escHtml(w.description||'')+'</td>' +
+      '<td style="padding:2px;text-align:center;white-space:nowrap">' +
+        iconEdit('openBugWorklogEditDialog('+bugId+','+w.id+')') +
+        iconDelete('deleteBugWorklog('+bugId+','+w.id+')') +
+      '</td></tr>';
+  });
   return h + '</tbody></table>';
 }
 
