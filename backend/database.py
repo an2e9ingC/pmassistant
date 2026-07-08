@@ -417,7 +417,6 @@ def init_db():
     from backend.models.document import DocumentTemplate, ProjectDocument, ProductDocTemplate, ProductLine, PmaTag, ProductDocument, ProductNamingOption, BugTemplate  # noqa: F401
     from backend.models.standard import ProcessStandard  # noqa: F401
     from backend.models.task import Task, WorkLog, TaskComment  # noqa: F401
-    from backend.models.log_entry import LogEntry  # noqa: F401
     from backend.models.zentao import (  # noqa: F401
         CachedProject,
         CachedExecution,

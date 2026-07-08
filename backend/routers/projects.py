@@ -533,7 +533,8 @@ def delete_project(
     db.commit()
 
     # Log to audit
+    from backend.audit_categories import AUDIT_CAT_PROJECT
     from backend.routers.logs import log_audit
-    log_audit(db, user, "project_delete", f"删除项目「{proj_name}」（ID: {project_id}）", "项目", "high")
+    log_audit(db, user, "project_delete", f"删除项目「{proj_name}」（ID: {project_id}）", AUDIT_CAT_PROJECT, "high")
 
     return {"code": 0, "data": {"id": project_id, "name": proj_name}, "message": f"项目「{proj_name}」已删除"}

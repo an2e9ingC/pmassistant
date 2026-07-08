@@ -1,6 +1,6 @@
 # PMA 数据库文档
 
-> 最后更新：2026-07-05  
+> 最后更新：2026-07-08  
 > 数据库：SQLite（文件 `data/pma-$PORT.db`）  
 > ORM：SQLAlchemy + DeclarativeBase（`backend/database.py`）  
 > 迁移策略：`Base.metadata.create_all()` + 启动时内联 SQL 补丁（`_migrate_sqlite()` / `_migrate_product_hierarchy()`）
@@ -14,7 +14,7 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 | 类别 | 前缀/特征 | 说明 |
 |------|----------|------|
 | **ZenTao 缓存表** | `zenta_*` | 从 ZenTao API 同步的项目、产品、任务、Bug、用户、发布等数据，只读缓存 |
-| **PMA 本地表** | `local_*`, `pma_*`, `delivery_*`, `project_*`, `product_*`, `audit_*`, `sync_*`, `log_*`, `document_*`, `process_*`, `customer_*` | PMA 自身的业务数据和系统数据 |
+| **PMA 本地表** | `local_*`, `pma_*`, `delivery_*`, `project_*`, `product_*`, `audit_*`, `sync_*`, `document_*`, `process_*`, `customer_*` | PMA 自身的业务数据和系统数据 |
 
 **核心原则**：PMA 是只读聚合仪表盘，对 ZenTao/GitLab/NAS 绝不回写。`zenta_*` 表仅做全量同步缓存。
 
@@ -63,7 +63,6 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 | `project_users` | —（无 ORM 模型） | 0 | 关系表 | 项目与本地用户的关联表（预留，尚未使用） |
 | `sync_logs` | `SyncLog` | 5228 | 系统 | 每次 ZenTao 数据同步的执行记录：实体类型、耗时、新增/更新数量、错误信息 |
 | `audit_logs` | `AuditLog` | 16 | 系统 | 用户操作审计日志：谁在何时执行了什么操作，含级别和分类 |
-| `log_entries` | `LogEntry` | 7849 | 系统 | 应用运行日志：模块、级别、消息，持久化到数据库便于查询 |
 | `process_standards` | `ProcessStandard` | 5 | 系统 | 流程标准配置：按分类存储 key-value 标准定义 |
 
 ---
@@ -80,7 +79,6 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 | `backend/models/delivery.py` | `DeliveryRecord` |
 | `backend/models/bug.py` | `CachedBug`, `PmaBug`, `BugWorkLog`, `BugAnalysis`, `BugAttachment`, `BugTransfer` |
 | `backend/models/task.py` | `Task`, `WorkLog`, `TaskComment` |
-| `backend/models/log_entry.py` | `LogEntry` |
 | `backend/models/standard.py` | `ProcessStandard` |
 | `backend/models/__init__.py` | 聚合导出所有模型 |
 
@@ -672,6 +670,8 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 
 #### 5.4.2 `audit_logs` — 审计日志
 
+> 详见 [日志系统说明](audit-log.md)
+
 | # | 列名 | 类型 | 约束 | 说明 |
 |---|------|------|------|------|
 | 1 | `id` | INTEGER | **PK** | — |
@@ -682,19 +682,7 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 | 6 | `detail` | VARCHAR(512) | NULLABLE | 详情 |
 | 7 | `created_at` | DATETIME | default=now | — |
 
-#### 5.4.3 `log_entries` — 应用日志
-
-| # | 列名 | 类型 | 约束 | 说明 |
-|---|------|------|------|------|
-| 1 | `id` | INTEGER | **PK** | — |
-| 2 | `timestamp` | DATETIME | default=now, INDEX | 时间戳 |
-| 3 | `level` | VARCHAR(16) | INDEX | 日志级别（DEBUG/INFO/WARNING/ERROR） |
-| 4 | `logger` | VARCHAR(128) | — | 日志来源 |
-| 5 | `message` | TEXT | — | 日志内容 |
-| 6 | `module` | VARCHAR(256) | NULLABLE | 模块名 |
-| 7 | `created_at` | DATETIME | default=now | — |
-
-#### 5.4.4 `process_standards` — 流程标准
+#### 5.4.3 `process_standards` — 流程标准
 
 | # | 列名 | 类型 | 约束 | 说明 |
 |---|------|------|------|------|

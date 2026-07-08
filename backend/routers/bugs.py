@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.middleware.auth import get_current_user, require_perm, require_any_perm
 from backend.services import bug_service
+from backend.audit_categories import AUDIT_CAT_BUG
 from backend.routers.logs import log_audit
 from fastapi.responses import StreamingResponse
 
@@ -107,7 +108,7 @@ def get_bug(bug_id: int, db: Session = Depends(get_db), _=Depends(get_current_us
 @router.post("", response_model=dict)
 def create_bug(body: BugCreate, db: Session = Depends(get_db), user=Depends(get_current_user)):
     b = bug_service.create_bug(db, {**body.model_dump(), "reporter_id": user.id})
-    log_audit(db, user, "bug_create", f"创建Bug「{body.title}」", "Bug", "medium")
+    log_audit(db, user, "bug_create", f"创建Bug「{body.title}」", AUDIT_CAT_BUG, "medium")
     return {"code": 0, "data": b, "message": "ok"}
 
 
@@ -115,7 +116,7 @@ def create_bug(body: BugCreate, db: Session = Depends(get_db), user=Depends(get_
 def update_bug(bug_id: int, body: BugUpdate, db: Session = Depends(get_db), user=Depends(get_current_user)):
     b = bug_service.update_bug(db, bug_id, body.model_dump(exclude_none=True))
     if not b: raise HTTPException(status_code=404, detail="Bug not found")
-    log_audit(db, user, "bug_update", f"更新Bug #{bug_id}", "Bug", "medium")
+    log_audit(db, user, "bug_update", f"更新Bug #{bug_id}", AUDIT_CAT_BUG, "medium")
     return {"code": 0, "data": b, "message": "ok"}
 
 
@@ -123,7 +124,7 @@ def update_bug(bug_id: int, body: BugUpdate, db: Session = Depends(get_db), user
 def delete_bug(bug_id: int, db: Session = Depends(get_db), user=Depends(require_perm("task_edit"))):
     ok = bug_service.delete_bug(db, bug_id)
     if not ok: raise HTTPException(status_code=404, detail="Bug not found")
-    log_audit(db, user, "bug_delete", f"删除Bug #{bug_id}", "Bug", "high")
+    log_audit(db, user, "bug_delete", f"删除Bug #{bug_id}", AUDIT_CAT_BUG, "high")
     return {"code": 0, "message": "ok"}
 
 
@@ -138,7 +139,7 @@ def list_worklogs(bug_id: int, db: Session = Depends(get_db), _=Depends(get_curr
 def create_worklog(bug_id: int, body: WorklogCreate, db: Session = Depends(get_db), user=Depends(require_perm("worklog_edit"))):
     body.bug_id = bug_id
     w = bug_service.create_worklog(db, body.model_dump(), user.id)
-    log_audit(db, user, "bug_worklog_add", f"Bug #{bug_id} 记录工时 {body.hours}h", "Bug", "low")
+    log_audit(db, user, "bug_worklog_add", f"Bug #{bug_id} 记录工时 {body.hours}h", AUDIT_CAT_BUG, "low")
     return {"code": 0, "data": w, "message": "ok"}
 
 
@@ -146,7 +147,7 @@ def create_worklog(bug_id: int, body: WorklogCreate, db: Session = Depends(get_d
 def update_worklog(bug_id: int, wl_id: int, body: WorklogUpdate, db: Session = Depends(get_db), user=Depends(require_perm("worklog_edit"))):
     w = bug_service.update_worklog(db, wl_id, body.model_dump(exclude_none=True))
     if not w: raise HTTPException(status_code=404, detail="Worklog not found")
-    log_audit(db, user, "bug_worklog_edit", f"Bug #{bug_id} 编辑工时", "Bug", "low")
+    log_audit(db, user, "bug_worklog_edit", f"Bug #{bug_id} 编辑工时", AUDIT_CAT_BUG, "low")
     return {"code": 0, "data": w, "message": "ok"}
 
 
@@ -154,7 +155,7 @@ def update_worklog(bug_id: int, wl_id: int, body: WorklogUpdate, db: Session = D
 def delete_worklog(bug_id: int, wl_id: int, db: Session = Depends(get_db), user=Depends(require_perm("worklog_edit"))):
     ok = bug_service.delete_worklog(db, wl_id)
     if not ok: raise HTTPException(status_code=404, detail="Worklog not found")
-    log_audit(db, user, "bug_worklog_delete", f"Bug #{bug_id} 删除工时", "Bug", "high")
+    log_audit(db, user, "bug_worklog_delete", f"Bug #{bug_id} 删除工时", AUDIT_CAT_BUG, "high")
     return {"code": 0, "message": "ok"}
 
 
@@ -164,7 +165,7 @@ def delete_worklog(bug_id: int, wl_id: int, db: Session = Depends(get_db), user=
 def create_analysis(bug_id: int, body: AnalysisCreate, db: Session = Depends(get_db), user=Depends(get_current_user)):
     body.bug_id = bug_id
     a = bug_service.create_analysis(db, body.model_dump(), user.id)
-    log_audit(db, user, "bug_analysis_add", f"Bug #{bug_id} 添加分析", "Bug", "medium")
+    log_audit(db, user, "bug_analysis_add", f"Bug #{bug_id} 添加分析", AUDIT_CAT_BUG, "medium")
     return {"code": 0, "data": a, "message": "ok"}
 
 
@@ -172,7 +173,7 @@ def create_analysis(bug_id: int, body: AnalysisCreate, db: Session = Depends(get
 def update_analysis(bug_id: int, aid: int, body: AnalysisUpdate, db: Session = Depends(get_db), user=Depends(get_current_user)):
     a = bug_service.update_analysis(db, aid, body.model_dump(exclude_none=True))
     if not a: raise HTTPException(status_code=404, detail="Analysis not found")
-    log_audit(db, user, "bug_analysis_edit", f"Bug #{bug_id} 编辑分析", "Bug", "medium")
+    log_audit(db, user, "bug_analysis_edit", f"Bug #{bug_id} 编辑分析", AUDIT_CAT_BUG, "medium")
     return {"code": 0, "data": a, "message": "ok"}
 
 
@@ -180,7 +181,7 @@ def update_analysis(bug_id: int, aid: int, body: AnalysisUpdate, db: Session = D
 def delete_analysis(bug_id: int, aid: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
     ok = bug_service.delete_analysis(db, aid)
     if not ok: raise HTTPException(status_code=404, detail="Analysis not found")
-    log_audit(db, user, "bug_analysis_delete", f"Bug #{bug_id} 删除分析", "Bug", "high")
+    log_audit(db, user, "bug_analysis_delete", f"Bug #{bug_id} 删除分析", AUDIT_CAT_BUG, "high")
     return {"code": 0, "message": "ok"}
 
 
@@ -191,7 +192,7 @@ async def upload_attachment(bug_id: int, file: UploadFile = File(...), analysis_
                             db: Session = Depends(get_db), user=Depends(get_current_user)):
     data = await file.read()
     a = bug_service.save_attachment(db, bug_id, analysis_id, file.filename, file.content_type or "application/octet-stream", data, user.id)
-    log_audit(db, user, "bug_attachment_add", f"Bug #{bug_id} 上传附件: {file.filename}", "Bug", "low")
+    log_audit(db, user, "bug_attachment_add", f"Bug #{bug_id} 上传附件: {file.filename}", AUDIT_CAT_BUG, "low")
     return {"code": 0, "data": a, "message": "ok"}
 
 
@@ -201,14 +202,14 @@ async def upload_attachment(bug_id: int, file: UploadFile = File(...), analysis_
 def import_one(body: ImportRequest, db: Session = Depends(get_db), user=Depends(require_perm("sync"))):
     b = bug_service.import_from_zentao(db, body.zentao_bug_id, body.product_id, user.id, body.project_id)
     if not b: raise HTTPException(status_code=404, detail="Zentao bug not found")
-    log_audit(db, user, "bug_import", f"导入禅道Bug #{body.zentao_bug_id}", "Bug", "medium")
+    log_audit(db, user, "bug_import", f"导入禅道Bug #{body.zentao_bug_id}", AUDIT_CAT_BUG, "medium")
     return {"code": 0, "data": b, "message": "ok"}
 
 
 @router.post("/import-batch", response_model=dict)
 def import_batch(body: BatchImportRequest, db: Session = Depends(get_db), user=Depends(require_perm("sync"))):
     r = bug_service.import_batch(db, body.zentao_bug_ids, body.product_id, user.id)
-    log_audit(db, user, "bug_import_batch", f"批量导入禅道Bug {len(body.zentao_bug_ids)}条", "Bug", "medium")
+    log_audit(db, user, "bug_import_batch", f"批量导入禅道Bug {len(body.zentao_bug_ids)}条", AUDIT_CAT_BUG, "medium")
     return {"code": 0, "data": r, "message": "ok"}
 
 
@@ -218,7 +219,7 @@ def import_batch(body: BatchImportRequest, db: Session = Depends(get_db), user=D
 def transfer_bug(bug_id: int, body: TransferCreate, db: Session = Depends(get_db), user=Depends(get_current_user)):
     b = bug_service.transfer_bug(db, bug_id, body.to_project_id, body.transfer_type, user.id)
     if not b: raise HTTPException(status_code=404, detail="Bug not found")
-    log_audit(db, user, "bug_transfer", f"Bug #{bug_id} {body.transfer_type}→项目{body.to_project_id}", "Bug", "medium")
+    log_audit(db, user, "bug_transfer", f"Bug #{bug_id} {body.transfer_type}→项目{body.to_project_id}", AUDIT_CAT_BUG, "medium")
     return {"code": 0, "data": b, "message": "ok"}
 
 
@@ -260,7 +261,7 @@ async def submit_to_gitlab(bug_id: int, db: Session = Depends(get_db), user=Depe
         bug_service.update_bug(db, bug_id, {"gitlab_url": gitlab_url, "gitlab_iid": gitlab_iid, "status": "in_progress"})
         bug_service.create_analysis(db, {"bug_id": bug_id, "content": f"已提交到 GitLab: {gitlab_url}"}, user.id)
 
-        log_audit(db, user, "bug_gitlab_submit", f"Bug #{bug_id} → GitLab Issue {proj_path}#{gitlab_iid}", "Bug", "medium")
+        log_audit(db, user, "bug_gitlab_submit", f"Bug #{bug_id} → GitLab Issue {proj_path}#{gitlab_iid}", AUDIT_CAT_BUG, "medium")
         return {"code": 0, "data": {"gitlab_url": gitlab_url, "gitlab_iid": gitlab_iid}, "message": "已提交到 GitLab"}
     except Exception as e:
         msg = str(e)[:200]

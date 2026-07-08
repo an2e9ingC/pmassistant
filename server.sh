@@ -76,6 +76,18 @@ do_start() {
     # Ensure data directory exists
     mkdir -p "$SCRIPT_DIR/data"
 
+    # Rotate server log if too large (max 10MB, keep 5 backups)
+    if [ -f "$SERVER_LOG" ]; then
+        local server_log_size=$(stat -c%s "$SERVER_LOG" 2>/dev/null || echo 0)
+        if [ "$server_log_size" -gt 10485760 ]; then
+            for i in 5 4 3 2 1; do
+                [ -f "${SERVER_LOG}.${i}" ] && mv "${SERVER_LOG}.${i}" "${SERVER_LOG}.$((i+1))" 2>/dev/null
+            done
+            mv "$SERVER_LOG" "${SERVER_LOG}.1" 2>/dev/null
+            echo "[PMA:$PORT] server log rotated (was $(du -h "$SERVER_LOG.1" 2>/dev/null | cut -f1))"
+        fi
+    fi
+
     echo -n "[PMA:$PORT] 启动服务器..."
     # Clear shutdown notice on fresh start
     rm -f "$NOTICE_FILE"

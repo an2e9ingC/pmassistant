@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.middleware.auth import get_current_user, require_perm
+from backend.audit_categories import AUDIT_CAT_TEMPLATE
 from backend.routers.logs import log_audit
 from backend.services import document_service
 
@@ -39,7 +40,7 @@ def create_tag(
     user=Depends(require_perm("doc_template")),
 ):
     tag = document_service.create_tag(db, body.model_dump())
-    log_audit(db, user, "pma_tag_add", f"{body.name} ({body.category or '通用'})", "管理", "medium")
+    log_audit(db, user, "pma_tag_add", f"{body.name} ({body.category or '通用'})", AUDIT_CAT_TEMPLATE, "medium")
     return {"code": 0, "data": tag, "message": "ok"}
 
 
@@ -53,7 +54,7 @@ def update_tag(
     tag = document_service.update_tag(db, tag_id, body.model_dump(exclude_none=True))
     if not tag:
         raise HTTPException(status_code=404, detail="Tag not found")
-    log_audit(db, user, "pma_tag_edit", f"id={tag_id}", "管理", "medium")
+    log_audit(db, user, "pma_tag_edit", f"id={tag_id}", AUDIT_CAT_TEMPLATE, "medium")
     return {"code": 0, "data": tag, "message": "ok"}
 
 
@@ -66,5 +67,5 @@ def delete_tag(
     ok = document_service.delete_tag(db, tag_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Tag not found")
-    log_audit(db, user, "pma_tag_del", f"id={tag_id}", "管理", "high")
+    log_audit(db, user, "pma_tag_del", f"id={tag_id}", AUDIT_CAT_TEMPLATE, "high")
     return {"code": 0, "data": None, "message": "ok"}

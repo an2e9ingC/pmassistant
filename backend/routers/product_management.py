@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.middleware.auth import get_current_user, require_perm
+from backend.audit_categories import AUDIT_CAT_PRODUCT, AUDIT_CAT_PROJECT
 from backend.routers.logs import log_audit
 from backend.services import product_management_service as pm_service
 from backend.services import product_service as prod_service
@@ -121,7 +122,7 @@ def link_product_to_node(
         node = db.query(ProductLine).filter(ProductLine.id == body.node_id).first()
         log_audit(db, user, "product_node_link",
                   f"关联产品「{prod.name if prod else body.product_id}」到节点「{node.name if node else body.node_id}」",
-                  "产品", "medium")
+                  AUDIT_CAT_PRODUCT, "medium")
         log_product_activity(db, body.product_id, user.username, "关联节点", f"node:{node.name if node else body.node_id}")
         return {"code": 0, "data": result, "message": "ok"}
     except ValueError as e:
@@ -144,7 +145,7 @@ def unlink_product_from_node(
         node = db.query(ProductLine).filter(ProductLine.id == node_id).first()
         log_audit(db, user, "product_node_unlink",
                   f"取消关联「{prod.name if prod else product_id}」从节点「{node.name if node else node_id}」",
-                  "产品", "medium")
+                  AUDIT_CAT_PRODUCT, "medium")
         log_product_activity(db, product_id, user.username, "取消关联节点", f"node:{node.name if node else node_id}")
         return {"code": 0, "data": result, "message": "ok"}
     except ValueError as e:
@@ -174,7 +175,7 @@ def create_local_product(
         node = db.query(ProductLine).filter(ProductLine.id == body.node_id).first()
         log_audit(db, user, "local_product_create",
                   f"创建PMA本地产品「{body.name}」（编号: {body.code}, 节点: {node.name if node else body.node_id}）",
-                  "产品", "medium")
+                  AUDIT_CAT_PRODUCT, "medium")
         log_product_activity(db, product["id"], user.username, "创建产品", f"name:{body.name} code:{body.code}")
         return {"code": 0, "data": product, "message": "ok"}
     except ValueError as e:
@@ -204,7 +205,7 @@ def update_local_product(
         if body.description is not None and old and old.get("description") != body.description:
             changes.append(f"description:'{old.get('description','')}'->'{body.description}'")
         detail = "; ".join(changes) if changes else "无变更"
-        log_audit(db, user, "local_product_update", detail, "产品", "medium")
+        log_audit(db, user, "local_product_update", detail, AUDIT_CAT_PRODUCT, "medium")
         log_product_activity(db, product_id, user.username, "编辑产品", detail)
         return {"code": 0, "data": product, "message": "ok"}
     except ValueError as e:
@@ -222,7 +223,7 @@ def delete_local_product(
         result = pm_service.delete_local_product(db, product_id)
         log_audit(db, user, "local_product_delete",
                   f"删除产品「{result.get('name', '?')}」（ID: {product_id}）",
-                  "产品", "high")
+                  AUDIT_CAT_PRODUCT, "high")
         log_product_activity(db, product_id, user.username, "删除产品", result.get('name', '?'))
         return {"code": 0, "data": result, "message": "ok"}
     except ValueError as e:
@@ -263,7 +264,7 @@ def create_local_project(
         )
         log_audit(db, user, "local_project_create",
                   f"name={body.name}, code={body.code}, products={len(body.product_ids)}",
-                  "项目", "medium")
+                  AUDIT_CAT_PROJECT, "medium")
         return {"code": 0, "data": project, "message": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -283,7 +284,7 @@ def update_local_project(
         )
         log_audit(db, user, "local_project_update",
                   f"project_id={project_id}",
-                  "项目", "medium")
+                  AUDIT_CAT_PROJECT, "medium")
         return {"code": 0, "data": project, "message": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -342,7 +343,7 @@ def update_product_projects(
             proj_names = [p.name for p in projs]
         log_audit(db, user, "product_projects_update",
                   f"更新产品「{prod.name if prod else product_id}」关联项目: {', '.join(proj_names) if proj_names else '清空'}（共{len(body.project_ids)}个）",
-                  "产品", "medium")
+                  AUDIT_CAT_PRODUCT, "medium")
         return {"code": 0, "data": result, "message": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

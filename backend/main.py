@@ -35,6 +35,9 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     handlers=[logging.StreamHandler(), _file_handler],
 )
+# Suppress noisy third-party / internal loggers
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("backend.services.doc_scanner").setLevel(logging.ERROR)
 logger = logging.getLogger(__name__)
 
 
@@ -42,12 +45,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     logger.info("Starting PMA backend...")
     init_db()
-    from backend.services.log_handler import DatabaseLogHandler
-    _db_handler = DatabaseLogHandler()
-    _db_handler.setFormatter(logging.Formatter("%(message)s"))
-    _db_handler.setLevel(logging.DEBUG)
-    logging.getLogger().addHandler(_db_handler)
-    logger.info("Database initialized + DB log handler attached")
+    logger.info("Database initialized")
 
     # Start background auto-sync task
     import asyncio

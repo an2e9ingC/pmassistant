@@ -1,0 +1,10 @@
+"""Audit log category constants — single source of truth for log_audit() calls."""
+
+AUDIT_CAT_PRODUCT  = "产品"
+AUDIT_CAT_PROJECT  = "项目"
+AUDIT_CAT_TASK     = "任务"
+AUDIT_CAT_BUG      = "Bug"
+AUDIT_CAT_USER     = "用户"
+AUDIT_CAT_CUSTOMER = "客户"
+AUDIT_CAT_TEMPLATE = "模板规范"
+AUDIT_CAT_SYSTEM   = "系统"

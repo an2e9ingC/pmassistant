@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.config import settings
 from backend.middleware.auth import require_admin, require_perm, get_current_user
+from backend.audit_categories import AUDIT_CAT_SYSTEM
 from backend.routers.logs import log_audit
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -260,7 +261,7 @@ def clear_database(_=Depends(require_admin), cu = Depends(get_current_user)):
         for t in tables:
             count += db.query(t).delete()
         db.commit()
-        log_audit(db, cu, "clear_database", f"deleted={count} records")
+        log_audit(db, cu, "clear_database", f"deleted={count} records", AUDIT_CAT_SYSTEM)
         return {"code": 0, "data": {"deleted": count}, "message": f"已清除 {count} 条缓存数据"}
     except Exception as e:
         db.rollback()
@@ -393,7 +394,7 @@ def clear_svn_data(db: Session = Depends(get_db), user=Depends(require_perm("syn
               ProductDocument.svn_author: None, ProductDocument.svn_last_modified: None,
               ProductDocument.svn_rev: None}, synchronize_session=False)
     db.commit()
-    log_audit(db, user, "clear_svn", f"清除SVN同步数据: {cleared}条", "SVN", "high")
+    log_audit(db, user, "clear_svn", f"清除SVN同步数据: {cleared}条", AUDIT_CAT_SYSTEM, "high")
     return {"code": 0, "data": {"cleared": cleared}, "message": f"已清除{cleared}条SVN数据"}
 
 

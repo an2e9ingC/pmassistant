@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db, to_local_str
 from backend.middleware.auth import require_admin, get_current_user
 from backend.models.local import LocalUser, Role, UserRole
+from backend.audit_categories import AUDIT_CAT_USER
 from backend.routers.logs import log_audit
 from backend.services.auth_service import hash_password
 
@@ -113,7 +114,7 @@ def update_role(role_id: int, payload: dict, db: Session = Depends(get_db), user
     if "description" in payload:
         role.description = payload["description"]
     db.commit()
-    log_audit(db, user, "role_update", f"{role.key}: {role.permissions}", "管理", "high")
+    log_audit(db, user, "role_update", f"{role.key}: {role.permissions}", AUDIT_CAT_USER, "high")
     return {"code": 0, "message": "角色已更新"}
 
 
@@ -125,18 +126,19 @@ class RoleCreate(BaseModel):
 
 
 @router.post("/roles", response_model=dict)
-def create_role(payload: RoleCreate, db: Session = Depends(get_db), _=Depends(require_admin)):
+def create_role(payload: RoleCreate, db: Session = Depends(get_db), user=Depends(require_admin)):
     if db.query(Role).filter(Role.key == payload.key).first():
         raise HTTPException(status_code=400, detail="角色key已存在")
     role = Role(key=payload.key, label=payload.label, permissions=payload.permissions, description=payload.description)
     db.add(role)
     db.commit()
     db.refresh(role)
+    log_audit(db, user, "role_create", f"{role.key}: {role.permissions}", AUDIT_CAT_USER, "medium")
     return {"code": 0, "data": {"id": role.id, "key": role.key, "label": role.label}, "message": "角色已创建"}
 
 
 @router.delete("/roles/{role_id}", response_model=dict)
-def delete_role(role_id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
+def delete_role(role_id: int, db: Session = Depends(get_db), user=Depends(require_admin)):
     role = db.query(Role).filter(Role.id == role_id).first()
     if not role:
         raise HTTPException(status_code=404, detail="角色不存在")
@@ -146,6 +148,7 @@ def delete_role(role_id: int, db: Session = Depends(get_db), _=Depends(require_a
     db.query(UserRole).filter(UserRole.role_id == role_id).delete()
     db.delete(role)
     db.commit()
+    log_audit(db, user, "role_delete", f"{role.key}: {role.permissions}", AUDIT_CAT_USER, "high")
     return {"code": 0, "message": "角色已删除"}
 
 
@@ -162,10 +165,10 @@ def get_user_roles(user_id: int, db: Session = Depends(get_db), _=Depends(requir
 
 
 @router.put("/{user_id}/roles", response_model=dict)
-def set_user_roles(user_id: int, payload: dict, db: Session = Depends(get_db), _=Depends(require_admin)):
+def set_user_roles(user_id: int, payload: dict, db: Session = Depends(get_db), user=Depends(require_admin)):
     """Set user's role memberships. payload: { role_ids: [1, 2, 3] }"""
-    user = db.query(LocalUser).filter(LocalUser.id == user_id).first()
-    if not user:
+    target = db.query(LocalUser).filter(LocalUser.id == user_id).first()
+    if not target:
         raise HTTPException(status_code=404, detail="用户不存在")
     role_ids = payload.get("role_ids", [])
     if not isinstance(role_ids, list):
@@ -179,6 +182,7 @@ def set_user_roles(user_id: int, payload: dict, db: Session = Depends(get_db), _
             if role:
                 db.add(UserRole(user_id=user_id, role_id=rid))
         db.commit()
+        log_audit(db, user, "user_role_assign", f"用户 {target.username} 角色更新为: {role_ids}", AUDIT_CAT_USER, "high")
         logger.info(f"User roles updated: user_id={user_id} roles={role_ids}")
         return {"code": 0, "data": role_ids, "message": "用户角色已更新"}
     except Exception as e:
@@ -231,28 +235,35 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db), _=Depends(re
 
 
 @router.put("/{user_id}", response_model=dict)
-def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db), _=Depends(require_admin)):
+def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db), cu=Depends(require_admin)):
     user = db.query(LocalUser).filter(LocalUser.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
+    changes = []
     if payload.role is not None:
         if payload.role not in ROLES:
             raise HTTPException(status_code=400, detail=f"无效角色，可选: {', '.join(ROLES)}")
         user.role = payload.role
+        changes.append(f"role={payload.role}")
     if payload.password:
         if user.auth_source == "gitlab":
             raise HTTPException(status_code=400, detail="GitLab 用户无需本地密码")
         user.password_hash = hash_password(payload.password)
+        changes.append("password_changed")
     if payload.is_active is not None:
         user.is_active = payload.is_active
+        changes.append(f"active={payload.is_active}")
     if payload.permissions is not None:
         user.permissions = payload.permissions
+        changes.append(f"permissions={payload.permissions}")
     db.commit()
+    if changes:
+        log_audit(db, cu, "user_update", f"用户 {user.username}: {'; '.join(changes)}", AUDIT_CAT_USER, "medium")
     return {"code": 0, "message": "用户已更新"}
 
 
 @router.put("/{user_id}/permissions", response_model=dict)
-def update_user_permissions(user_id: int, payload: dict, db: Session = Depends(get_db), _=Depends(require_admin)):
+def update_user_permissions(user_id: int, payload: dict, db: Session = Depends(get_db), cu=Depends(require_admin)):
     """Bulk update user permissions."""
     user = db.query(LocalUser).filter(LocalUser.id == user_id).first()
     if not user:
@@ -263,11 +274,12 @@ def update_user_permissions(user_id: int, payload: dict, db: Session = Depends(g
     valid = [p for p in perms if p in ALL_PERMISSIONS]
     user.permissions = ",".join(valid)
     db.commit()
+    log_audit(db, cu, "user_permissions_update", f"用户 {user.username} 权限更新为: {sorted(valid)}", AUDIT_CAT_USER, "high")
     return {"code": 0, "data": {"permissions": sorted(valid)}, "message": "权限已更新"}
 
 
 @router.put("/{user_id}/password", response_model=dict)
-def reset_user_password(user_id: int, payload: PasswordReset, db: Session = Depends(get_db), _=Depends(require_admin)):
+def reset_user_password(user_id: int, payload: PasswordReset, db: Session = Depends(get_db), cu=Depends(require_admin)):
     user = db.query(LocalUser).filter(LocalUser.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
@@ -275,6 +287,7 @@ def reset_user_password(user_id: int, payload: PasswordReset, db: Session = Depe
         raise HTTPException(status_code=400, detail="GitLab 用户无需本地密码")
     user.password_hash = hash_password(payload.password)
     db.commit()
+    log_audit(db, cu, "user_password_reset", f"用户 {user.username} 密码已重置", AUDIT_CAT_USER, "high")
     return {"code": 0, "message": "密码已重置"}
 
 
@@ -288,7 +301,7 @@ def delete_user(user_id: int, db: Session = Depends(get_db), _=Depends(require_a
         db.query(UserRole).filter(UserRole.user_id == user_id).delete()
         db.delete(user)
         db.commit()
-        log_audit(db, cu, "delete_user", f"username={uname!r}", "用户", "high")
+        log_audit(db, cu, "delete_user", f"username={uname!r}", AUDIT_CAT_USER, "high")
         logger.info(f"User deleted: id={user_id} username={uname!r}")
         return {"code": 0, "message": "用户已删除"}
     except Exception as e:

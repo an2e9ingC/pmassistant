@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.middleware.auth import get_current_user, require_perm
+from backend.audit_categories import AUDIT_CAT_TEMPLATE
 from backend.routers.logs import log_audit
 from backend.models.standard import ProcessStandard
 
@@ -62,5 +63,5 @@ def update_standard(
     if body.description is not None:
         s.description = body.description
     db.commit()
-    log_audit(db, user, "standard_edit", f"{s.category}/{s.key}: {s.value}", "管理", "medium")
+    log_audit(db, user, "standard_edit", f"{s.category}/{s.key}: {s.value}", AUDIT_CAT_TEMPLATE, "medium")
     return {"code": 0, "data": {"id": s.id, "key": s.key, "value": s.value, "description": s.description}, "message": "ok"}

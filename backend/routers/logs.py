@@ -1,30 +1,31 @@
 from __future__ import annotations
+import logging
 import os
 import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import desc
 
-from backend.database import SessionLocal, get_db, to_local_str
+from backend.audit_categories import AUDIT_CAT_SYSTEM
+from backend.database import get_db, to_local_str
 from backend.middleware.auth import require_admin, get_current_user
 from backend.models.local import AuditLog, LocalUser
-from backend.models.log_entry import LogEntry
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
 
 
 def log_audit(db: Session, user: LocalUser, action: str, detail: str = "", category: str = "", level: str = "medium"):
-    """Write an audit log entry (dual-write: file + database per design-spec §7).
+    """Write a structured audit log entry to the database (audit_logs table).
+
+    Also writes a plain-text copy to the file log for backup/debugging.
 
     category: dynamic—query /api/logs/audit/categories for available values
-    level: high(删除/权限)/medium(编辑/新增)/low(配置/查看)
+    level: high(删除/权限变更)/medium(编辑/新增)/low(配置/查看)
     """
-    import logging
     logger = logging.getLogger("backend.routers.logs")
     uname = user.username if user else "system"
-    # File log
+    # File log (plain-text backup)
     log_msg = f"[操作日志] {uname} | {action} | {detail}"
     if level == "high":
         logger.warning(log_msg)
@@ -32,13 +33,14 @@ def log_audit(db: Session, user: LocalUser, action: str, detail: str = "", categ
         logger.info(log_msg)
     else:
         logger.info(log_msg)
-    # Database audit table
+    # Database audit table (structured, authoritative)
     try:
         db.add(AuditLog(username=uname, action=action, detail=detail or "",
                          category=category or "", level=level))
         db.commit()
     except Exception as e:
         logger.error(f"Audit log write failed: {e}")
+
 
 # Resolve log file path (same directory as database, port-specific)
 import backend.database as _db_module
@@ -50,31 +52,8 @@ MAX_LINES = 2000
 LEVEL_ORDER = {"DEBUG": 10, "INFO": 20, "WARNING": 30, "ERROR": 40, "CRITICAL": 50}
 
 
-def _read_from_db(db, level, search, tail):
-    """Query log entries from database. Returns list of formatted lines."""
-    q = db.query(LogEntry)
-
-    if level:
-        min_lvl = LEVEL_ORDER.get(level.upper(), 0)
-        allowed = [l for l, v in LEVEL_ORDER.items() if v >= min_lvl]
-        q = q.filter(LogEntry.level.in_(allowed))
-    else:
-        q = q.filter(LogEntry.level.in_(["INFO", "WARNING", "ERROR", "CRITICAL"]))
-
-    if search:
-        q = q.filter(LogEntry.message.ilike(f"%{search}%"))
-
-    entries = q.order_by(desc(LogEntry.timestamp)).limit(tail).all()
-
-    lines = []
-    for e in reversed(entries):
-        ts = to_local_str(e.timestamp) if e.timestamp else ""
-        lines.append(f"{ts} {e.level:8s} {e.logger}: {e.message}")
-    return lines
-
-
 def _read_from_file(tail, level, search):
-    """Fallback: read log lines from file."""
+    """Read log lines from file with optional filtering."""
     if not os.path.exists(LOG_FILE):
         return []
     with open(LOG_FILE, "r", encoding="utf-8") as f:
@@ -106,19 +85,8 @@ def view_logs(
     search: Optional[str] = Query(None),
     _=Depends(require_admin),
 ):
-    """Return recent log entries with optional filtering. Admin only."""
-    lines = []
-    db = SessionLocal()
-    try:
-        lines = _read_from_db(db, level, search, tail)
-    except Exception:
-        pass  # DB table may not exist yet; fall through to file
-    finally:
-        db.close()
-
-    if not lines:
-        lines = _read_from_file(tail, level, search)
-
+    """Return recent log entries from file. Admin only."""
+    lines = _read_from_file(tail, level, search)
     return {"code": 0, "data": "\n".join(lines), "message": "ok"}
 
 
@@ -140,23 +108,20 @@ def log_levels(_=Depends(require_admin)):
 
 @router.post("/clear", response_model=dict)
 def clear_logs(db: Session = Depends(get_db), _=Depends(require_admin), cu = Depends(get_current_user)):
-    """Truncate the log file and clear DB log entries (NOT audit logs)."""
+    """Truncate the system log file (does NOT touch audit_logs)."""
     try:
         open(LOG_FILE, "w").close()
-        db.query(LogEntry).delete()
-        db.commit()
-        log_audit(db, cu, "clear_logs", "system logs cleared")
+        log_audit(db, cu, "clear_logs", "system logs cleared", AUDIT_CAT_SYSTEM)
         return {"code": 0, "message": "日志已清除"}
     except Exception as e:
         return {"code": 1, "message": f"清除失败: {e}"}
 
 
-# ── Audit Logs (separate from system logs, admin-only delete) ──
+# ── Audit Logs (structured user operation records, admin-only delete) ──
 
 @router.get("/audit/categories", response_model=dict)
 def audit_categories(db: Session = Depends(get_db), _=Depends(require_admin)):
     """Return distinct categories from existing audit logs (dynamic, not hardcoded)."""
-    from backend.models.local import AuditLog
     rows = db.query(AuditLog.category).filter(AuditLog.category != "").distinct().all()
     categories = sorted([r[0] for r in rows if r[0]])
     return {"code": 0, "data": categories, "message": "ok"}
@@ -165,7 +130,7 @@ def audit_categories(db: Session = Depends(get_db), _=Depends(require_admin)):
 @router.get("/audit", response_model=dict)
 def view_audit_logs(
     tail: int = Query(100, ge=10, le=500),
-    category: str = Query("", description="Filter by category (动态获取自 /audit/categories)"),
+    category: str = Query("", description="Filter by category"),
     level: str = Query("", description="Filter by level (high/medium/low)"),
     search: str = Query("", description="Search in action and detail"),
     page: int = Query(1, ge=1),
@@ -208,6 +173,7 @@ def view_audit_logs(
 
 @router.post("/audit/clear", response_model=dict)
 def clear_audit_logs(db: Session = Depends(get_db), _=Depends(require_admin)):
+    """Clear all audit log entries (admin only). Requires frontend password verification."""
     db.query(AuditLog).delete()
     db.commit()
     return {"code": 0, "message": "操作日志已清除"}

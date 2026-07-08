@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.middleware.auth import get_current_user, require_admin, require_perm
+from backend.audit_categories import AUDIT_CAT_TEMPLATE
 from backend.routers.logs import log_audit
 from backend.services import document_service
 
@@ -54,7 +55,7 @@ def create_project_type(
         raise HTTPException(status_code=400, detail=f"项目类型 '{project_type}' 已存在")
     customs[project_type] = label
     _save_custom_project_types(db, customs)
-    log_audit(db, user, "doc_ptype_add", f"{project_type}: {label}", "管理", "medium")
+    log_audit(db, user, "doc_ptype_add", f"{project_type}: {label}", AUDIT_CAT_TEMPLATE, "medium")
     return {"code": 0, "data": {"id": project_type, "label": label, "stages": [], "builtin": False}, "message": "ok"}
 
 
@@ -88,7 +89,7 @@ def create_template(
     if "project_type" not in data or not data["project_type"]:
         data["project_type"] = "RD"
     tpl = document_service.create_template(db, data)
-    log_audit(db, user, "doc_template_add", f"[{data['project_type']}] {body.stage_type}/{body.doc_name}", "管理", "medium")
+    log_audit(db, user, "doc_template_add", f"[{data['project_type']}] {body.stage_type}/{body.doc_name}", AUDIT_CAT_TEMPLATE, "medium")
     return {"code": 0, "data": tpl, "message": "ok"}
 
 
@@ -104,7 +105,7 @@ def update_template(
     )
     if not tpl:
         raise HTTPException(status_code=404, detail="Template not found")
-    log_audit(db, user, "doc_template_edit", f"id={template_id} {body.doc_name or ''}", "管理", "medium")
+    log_audit(db, user, "doc_template_edit", f"id={template_id} {body.doc_name or ''}", AUDIT_CAT_TEMPLATE, "medium")
     return {"code": 0, "data": tpl, "message": "ok"}
 
 
@@ -121,7 +122,7 @@ def delete_template(
     detail = f"{tpl.stage_type}/{tpl.doc_name}"
     db.delete(tpl)
     db.commit()
-    log_audit(db, user, "doc_template_del", detail, "管理", "high")
+    log_audit(db, user, "doc_template_del", detail, AUDIT_CAT_TEMPLATE, "high")
     return {"code": 0, "data": None, "message": "ok"}
 
 
@@ -137,7 +138,7 @@ def rename_stage_type(
     user=Depends(require_perm("doc_template")),
 ):
     count = document_service.rename_stage_type(db, body.old_name, body.new_name)
-    log_audit(db, user, "doc_stage_rename", f"{body.old_name} -> {body.new_name} ({count} docs)", "管理", "medium")
+    log_audit(db, user, "doc_stage_rename", f"{body.old_name} -> {body.new_name} ({count} docs)", AUDIT_CAT_TEMPLATE, "medium")
     return {"code": 0, "data": {"updated": count}, "message": "ok"}
 
 
@@ -152,7 +153,7 @@ def sync_all_projects(
         db, user, "doc_template_sync_all",
         f"{result['synced']}/{result['total']} projects synced"
         + (f", {result['failed']} failed" if result['failed'] else ""),
-        "管理", "medium",
+        AUDIT_CAT_TEMPLATE, "medium",
     )
     return {"code": 0, "data": result, "message": "ok"}
 
@@ -170,7 +171,7 @@ def delete_stage_type(
     if stage_type in customs:
         customs.remove(stage_type)
         _save_custom_stage_types(db, project_type, customs)
-    log_audit(db, user, "doc_stage_del", f"[{project_type}] {stage_type} ({count} docs)", "管理", "high")
+    log_audit(db, user, "doc_stage_del", f"[{project_type}] {stage_type} ({count} docs)", AUDIT_CAT_TEMPLATE, "high")
     return {"code": 0, "data": {"deleted": count}, "message": "ok"}
 
 
@@ -202,7 +203,7 @@ def add_stage_type(
     customs.append(stage_type)
     _save_custom_stage_types(db, project_type, customs)
     detail = f"[{project_type}] {stage_type}"
-    log_audit(db, user, "doc_stage_add", detail, "管理", "medium")
+    log_audit(db, user, "doc_stage_add", detail, AUDIT_CAT_TEMPLATE, "medium")
     logger.info("doc_stage_add: %s by %s", detail, user.username)
     return {"code": 0, "data": {"stage_type": stage_type}, "message": "ok"}
 
@@ -229,7 +230,7 @@ def reorder_stage_types(
     else:
         custom_stages = body.stages
     _save_custom_stage_types(db, body.project_type, custom_stages)
-    log_audit(db, user, "doc_stage_reorder", f"[{body.project_type}] {' → '.join(custom_stages)}", "管理", "medium")
+    log_audit(db, user, "doc_stage_reorder", f"[{body.project_type}] {' → '.join(custom_stages)}", AUDIT_CAT_TEMPLATE, "medium")
     logger.info("doc_stage_reorder: [%s] %s stages by %s", body.project_type, len(custom_stages), user.username)
     return {"code": 0, "data": {"stages": custom_stages}, "message": "ok"}
 
@@ -252,5 +253,5 @@ def reset_project_documents(
     else:
         count = 0
     db.commit()
-    log_audit(db, user, "doc_reset", f"Cleared {count} project documents for {stage_types}", "管理", "medium")
+    log_audit(db, user, "doc_reset", f"Cleared {count} project documents for {stage_types}", AUDIT_CAT_TEMPLATE, "medium")
     return {"code": 0, "data": {"deleted": count}, "message": f"已清除 {count} 条，涉及阶段: {', '.join(stage_types)}"}

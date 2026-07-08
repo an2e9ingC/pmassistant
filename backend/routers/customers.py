@@ -8,9 +8,9 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.middleware.auth import get_current_user, require_perm
+from backend.audit_categories import AUDIT_CAT_CUSTOMER
 from backend.routers.logs import log_audit
 from backend.models.zentao import PmaCustomer, CachedProject, PmaProduct, CustomerProjectLink, CustomerProductLink, ProductProjectLink
-from backend.routers.logs import log_audit
 
 router = APIRouter(prefix="/api/customers", tags=["customers"])
 
@@ -88,7 +88,7 @@ def delete_customer(customer_id: int, db: Session = Depends(get_db), _=Depends(r
     db.query(CustomerProductLink).filter(CustomerProductLink.customer_id == customer_id).delete()
     db.delete(c)
     db.commit()
-    log_audit(db, cu, "delete_customer", f"name={cname!r}", "客户", "high")
+    log_audit(db, cu, "delete_customer", f"name={cname!r}", AUDIT_CAT_CUSTOMER, "high")
     return {"code": 0, "message": "客户已删除"}
 
 

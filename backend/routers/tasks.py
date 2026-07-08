@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.middleware.auth import get_current_user, require_perm
 from backend.services import task_service
+from backend.audit_categories import AUDIT_CAT_TASK
 from backend.routers.logs import log_audit
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
@@ -168,7 +169,7 @@ def extend_estimate(
     t = task_service.extend_task_estimate(db, task_id, body.additional_hours)
     if not t:
         raise HTTPException(status_code=404, detail="Task not found")
-    log_audit(db, user, "task_extend", f"任务 #{task_id} 延长预估 {body.additional_hours}h", "任务", "medium")
+    log_audit(db, user, "task_extend", f"任务 #{task_id} 延长预估 {body.additional_hours}h", AUDIT_CAT_TASK, "medium")
     return {"code": 0, "data": t, "message": "已延长预估"}
 
 

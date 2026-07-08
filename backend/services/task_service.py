@@ -357,12 +357,13 @@ def _log_audit(db: Session, project_id: int, username: Optional[str], action: st
     if not username:
         return
     try:
+        from backend.audit_categories import AUDIT_CAT_TASK
         from backend.models.local import AuditLog, ProjectActivity
         log = AuditLog(
             username=username,
             action=action,
             detail=detail,
-            category="任务管理",
+            category=AUDIT_CAT_TASK,
             level="low",
         )
         db.add(log)

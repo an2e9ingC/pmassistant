@@ -292,6 +292,8 @@ async function loadAuditLogs() {
 
 async function clearAuditLogs() {
   if (!confirm('确定清空所有操作日志？此操作不可撤销。')) return;
+  var ok = await verifyPassword('清除操作日志', 'pw_verify_clear_audit');
+  if (!ok) return;
   try {
     await API.post('/logs/audit/clear');
     showToast('操作日志已清除', 'success');

@@ -113,6 +113,7 @@ NAS 文件 ───────────┘
 |------|------|------|
 | 开发指南 | `CLAUDE.md` | 本文档，AI/开发者必读 |
 | 数据库文档 | `docs/db.md` | 完整 schema、表关系、权限体系、数据保护方案 |
+| 日志系统说明 | `docs/audit-log.md` | 操作日志 + 系统日志架构、category 定义、开发规范 |
 | 开发计划 | `docs/dev-plan.md` | 版本历史与开发路线 |
 | UI 设计规范 | `docs/design-spec.md` | 加载状态、通知、徽章、主题规则 |
 | 部署运维 | `docs/deploy-guide.md` | 部署与运维参考 |
@@ -169,13 +170,21 @@ NAS 文件 ───────────┘
 
 ### 操作日志规范
 
-**所有后端增删改操作必须调用 `log_audit`**（`backend/routers/logs.py`），双写系统日志 + `audit_logs` 表：
+> 详见 [docs/audit-log.md](docs/audit-log.md)
+
+**所有后端增删改操作必须调用 `log_audit`**（`backend/routers/logs.py`），写入 `audit_logs` 表（同时备份到 `pma-8000.log`）：
 
 | 操作类型 | level | 示例 |
 |---------|-------|------|
 | 删除、权限变更、数据清除 | `"high"` | 删除用户、清除SVN数据 |
 | 编辑、新增 | `"medium"` | 创建Bug、编辑模板 |
 | 配置、查看 | `"low"` | 修改设置 |
+
+**Category 必须使用常量**（`backend/audit_categories.py`），禁止硬编码字符串：
+```python
+from backend.audit_categories import AUDIT_CAT_USER
+log_audit(db, user, "delete_user", f"username={uname!r}", AUDIT_CAT_USER, "high")
+```
 
 ### 交付前自检
 
