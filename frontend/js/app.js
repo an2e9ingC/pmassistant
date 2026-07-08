@@ -1487,24 +1487,52 @@ function _ucEnsureBugsJs(fn) {
   return 'loadViewScript(\'/js/bugs.js?v=' + APP_VERSION + '\',function(){' + fn + '})';
 }
 
+var _ucBugTab = 'assignee'; // 'assignee' | 'reporter'
+
+function _ucRenderBugFilter(bugs, uid) {
+  var assigned = (bugs||[]).filter(function(b) { return b.assignee_id === uid; });
+  var reported = (bugs||[]).filter(function(b) { return b.reporter_id === uid; });
+  document.getElementById('uc-filter-bar').innerHTML =
+    '<div class="task-tabs">' +
+      '<button class="task-tab' + (_ucBugTab==='assignee'?' active':'') + '" onclick="_ucBugTab=\'assignee\';_ucLoadBugs()">待我处理<span class="task-tab-count">' + assigned.length + '</span></button>' +
+      '<button class="task-tab' + (_ucBugTab==='reporter'?' active':'') + '" onclick="_ucBugTab=\'reporter\';_ucLoadBugs()">我创建的<span class="task-tab-count">' + reported.length + '</span></button>' +
+    '</div>';
+  return _ucBugTab === 'assignee' ? assigned : reported;
+}
+
 async function _ucLoadBugs() {
-  document.getElementById('uc-filter-bar').innerHTML = '';
-  document.getElementById('uc-table-head').innerHTML = '<tr><th>编号</th><th>标题</th><th>产品</th><th>状态</th><th>严重</th><th>操作</th></tr>';
+  document.getElementById('uc-table-head').innerHTML = '<tr><th>编号</th><th>标题</th><th>产品</th><th>项目</th><th>组件</th><th>严重</th><th>优先级</th><th>状态</th><th>负责人</th><th>创建人</th><th>操作</th></tr>';
   try {
+    var user = getCurrentUser();
+    var uid = user ? user.id : null;
     var bugs = await API.get('/bugs/my');
+    var filtered = _ucRenderBugFilter(bugs, uid);
     var tbody = document.getElementById('uc-table-tbody');
-    if (!bugs || !bugs.length) { tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">暂无Bug</div></td></tr>'; return; }
-    tbody.innerHTML = bugs.map(function(b) {
+    if (!filtered.length) {
+      var label = _ucBugTab === 'assignee' ? '暂无待处理的Bug' : '暂无创建的Bug';
+      tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state">' + label + '</div></td></tr>';
+      return;
+    }
+    var sevLabels = {1:'致命',2:'严重',3:'一般',4:'建议'};
+    var sevColors = {1:'var(--danger)',2:'var(--warn)',3:'var(--muted)',4:'var(--success)'};
+    var prioLabels = {low:'低',medium:'中',high:'高',critical:'紧急'};
+    var prioColors = {low:'var(--muted)',medium:'var(--fg)',high:'var(--warn)',critical:'var(--danger)'};
+    tbody.innerHTML = filtered.map(function(b) {
       return '<tr style="cursor:pointer" onclick="' + _ucEnsureBugsJs('openBugDetail('+b.id+')') + '">' +
         '<td style="font-family:var(--mono);font-size:11px">#' + b.id + '</td>' +
-        '<td style="text-align:left;font-weight:530">' + escHtml(b.title) + '</td>' +
+        '<td style="text-align:left;font-weight:530;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(b.title) + '</td>' +
         '<td style="font-size:12px">' + escHtml(b.product_name||'-') + '</td>' +
+        '<td style="font-size:12px">' + escHtml(b.project_name||'-') + '</td>' +
+        '<td style="font-size:11px">' + escHtml(b.component_name||'-') + '</td>' +
+        '<td><span style="font-size:11px;color:' + (sevColors[b.severity]||sevColors[3]) + ';font-weight:600">' + (sevLabels[b.severity]||'一般') + '</span></td>' +
+        '<td><span style="font-size:11px;color:' + (prioColors[b.priority]||prioColors.medium) + '">' + (prioLabels[b.priority]||b.priority||'中') + '</span></td>' +
         '<td>' + renderPill(b.status||'open') + '</td>' +
-        '<td>' + (b.severity||'-') + '</td>' +
+        '<td style="font-size:12px">' + escHtml(b.assignee_name||'-') + '</td>' +
+        '<td style="font-size:12px">' + escHtml(b.reporter_name||'-') + '</td>' +
         '<td onclick="event.stopPropagation()">' + iconEdit(_ucEnsureBugsJs('openBugDialog('+b.id+')'),'编辑') + iconDelete(_ucEnsureBugsJs('deleteBugById('+b.id+')'),'删除') + '</td>' +
       '</tr>';
     }).join('');
-  } catch(e) { document.getElementById('uc-table-tbody').innerHTML = '<tr><td colspan="6"><div class="error-state">加载失败</div></td></tr>'; }
+  } catch(e) { document.getElementById('uc-table-tbody').innerHTML = '<tr><td colspan="11"><div class="error-state">加载失败</div></td></tr>'; }
 }
 
 function _ucNewTask() {
