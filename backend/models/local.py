@@ -21,6 +21,9 @@ class LocalUser(Base):
     is_active = Column(Boolean, default=True)
     favorites = Column(Text, default="[]")  # JSON array of product IDs
     seen_version = Column(String(32), nullable=True)  # last seen changelog version
+    last_login_at = Column(DateTime, nullable=True)  # last login timestamp
+    last_login_ip = Column(String(64), nullable=True)  # last login IP address
+    last_login_ua = Column(String(256), nullable=True)  # last login User-Agent (browser info)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 

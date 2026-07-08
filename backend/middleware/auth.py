@@ -1,3 +1,6 @@
+import time
+from typing import Dict
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
@@ -8,6 +11,17 @@ from backend.database import get_db
 from backend.models.local import LocalUser
 
 security = HTTPBearer()
+
+# In-memory last-seen tracker: {user_id: timestamp}
+# Updated on every authenticated request — used for real-time online detection
+_user_last_seen: Dict[int, float] = {}
+_ONLINE_WINDOW = 60  # seconds — user is "online" if seen within this window
+
+
+def is_user_online(user_id: int) -> bool:
+    """Check if a user has been active within the online window."""
+    ts = _user_last_seen.get(user_id)
+    return ts is not None and (time.time() - ts) < _ONLINE_WINDOW
 
 
 def get_current_user(
@@ -30,6 +44,16 @@ def get_current_user(
     user = db.query(LocalUser).filter(LocalUser.id == user_id).first()
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
+
+    # Record activity timestamp for real-time online status (no DB write)
+    global _user_last_seen
+    _user_last_seen[user.id] = time.time()
+
+    # Periodically purge stale entries (keep dict small)
+    if len(_user_last_seen) > 1000:
+        now = time.time()
+        _user_last_seen = {uid: ts for uid, ts in _user_last_seen.items() if now - ts < 3600}
+
     return user
 
 

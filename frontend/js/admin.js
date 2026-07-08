@@ -345,7 +345,7 @@ function switchUserTab(tab) {
 
 async function initUserManagement() {
   _userList = [];
-  document.getElementById('users-tbody').innerHTML = '<tr><td colspan="7"><div class="loading-spinner">加载中...</div></td></tr>';
+  document.getElementById('users-tbody').innerHTML = '<tr><td colspan="8"><div class="loading-spinner">加载中...</div></td></tr>';
   document.getElementById('roles-tbody').innerHTML = '<tr><td colspan="7"><div class="loading-spinner">加载中...</div></td></tr>';
   try {
     var rolesPromise = API.get('/admin/users/roles');
@@ -358,7 +358,7 @@ async function initUserManagement() {
     renderUserKPIs();
     renderRoleKPIs();
   } catch(e) {
-    document.getElementById('users-tbody').innerHTML = '<tr><td colspan="7"><div class="error-state">加载失败: ' + escHtml(e.message) + '</div></td></tr>';
+    document.getElementById('users-tbody').innerHTML = '<tr><td colspan="8"><div class="error-state">加载失败: ' + escHtml(e.message) + '</div></td></tr>';
   }
 }
 
@@ -568,7 +568,7 @@ function renderUserTable() {
   if (_userFilter === 'active') users = users.filter(function(u) { return u.is_active; });
   else if (_userFilter === 'disabled') users = users.filter(function(u) { return !u.is_active; });
   if (!users.length) {
-    tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state" style="padding:16px">暂无匹配用户</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state" style="padding:16px">暂无匹配用户</div></td></tr>';
     return;
   }
   tbody.innerHTML = users.map(function(u, idx) {
@@ -594,12 +594,24 @@ function renderUserTable() {
       (u.auth_source === 'gitlab' ? 'var(--accent-lt)' : 'var(--muted-lt)') + ';color:' +
       (u.auth_source === 'gitlab' ? 'var(--accent)' : 'var(--muted)') + '">' +
       (u.auth_source === 'gitlab' ? 'GitLab' : '本地') + '</span>';
+    // Login status column
+    var loginHtml = '';
+    if (u.is_online) {
+      var tooltip = (u.last_login_ua || '') + ' / ' + (u.last_login_ip || '') + ' / ' + (u.last_login_at || '');
+      loginHtml = '<span class="pill" style="background:var(--success-lt);color:var(--success);cursor:default" title="' + escHtml(tooltip) + '">在线</span>';
+    } else if (u.last_login_at) {
+      var tip2 = '最后登录: ' + (u.last_login_at || '') + '\n' + (u.last_login_ua || '') + ' / ' + (u.last_login_ip || '');
+      loginHtml = '<span style="font-size:11px;color:var(--muted);cursor:default" title="' + escHtml(tip2) + '">离线</span>';
+    } else {
+      loginHtml = '<span style="font-size:11px;color:var(--muted)">从未登录</span>';
+    }
     return '<tr>' +
       '<td style="font-family:var(--mono);color:var(--muted);text-align:center">' + (idx + 1) + '</td>' +
       '<td style="font-size:13px;font-weight:500">' + escHtml(u.username) + '</td>' +
       '<td style="font-size:12px">' + authSourceHtml + '</td>' +
       '<td>' + (roleBadges || '<span style="font-size:11px;color:var(--muted)">未分配</span>') + '</td>' +
       '<td>' + statusHtml + '</td>' +
+      '<td style="font-size:11px">' + loginHtml + '</td>' +
       '<td style="font-size:12px;color:var(--muted)">' + escHtml(u.created_at || '') + '</td>' +
       '<td style="white-space:nowrap">' +
         iconEdit('openUserEditDialog(' + u.id + ')') +

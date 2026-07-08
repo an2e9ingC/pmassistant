@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-> 当前版本：v2026.07.08-beta1 | 最后更新：2026-07-08
+> 当前版本：v2026.07.08-beta2 | 最后更新：2026-07-08
 
 ---
 
@@ -9,26 +9,29 @@
 | 模块 | 状态 | 说明 |
 |------|------|------|
 | 项目脚手架 | ✅ 完成 | FastAPI + SQLite + Docker Compose |
-| 数据库层 | ✅ 完成 | 18 张表（4 本地 + 14 缓存） |
-| 禅道同步 | ✅ 完成 | 全量/增量 + 并发优化 + 暂停/取消 |
-| 认证系统 | ✅ 完成 | JWT + bcrypt + 角色组权限体系 |
-| Dashboard | ✅ 完成 | KPI 卡片 + 4 分类 + 项目集过滤 + 告警联动 |
-| 项目详情 | ✅ 完成 | 甘特图 + 阶段详情 + 文档 + 交付 + 资料 + 笔记 |
-| 产品管理 | ✅ 完成 | 产品总览 + 产品详情 + 状态过滤 |
+| 数据库层 | ✅ 完成 | 46 张表（含 ZenTao 缓存 + PMA 本地业务表） |
+| 禅道同步 | ✅ 完成 | 全量同步 + 暂停/取消 + 实时进度 |
+| 认证系统 | ✅ 完成 | JWT + bcrypt + GitLab OAuth + RBAC 角色权限 |
+| Dashboard | ✅ 完成 | KPI 卡片 + 分类筛选 + 项目集过滤 + 告警联动 + Bug 环形图 |
+| 项目详情 | ✅ 完成 | 甘特图 + 阶段详情 + 文档模板 + 交付状态 + SVN 同步 + 笔记 |
+| 产品管理 | ✅ 完成 | 产品总览 + 详情 + 三级节点 + 框图 + 文档分类进度圆环 |
 | 产品拓扑 | ✅ 完成 | 三维度 AND 搜索 |
-| 交付管理 | ✅ 完成 | DeliveryRecord CRUD |
-| Bug 统计 | ✅ 完成 | Zentao bug 同步 + 统计 |
-| 项目报表 | ✅ 完成 | 周报/月报 + Bug 统计 |
-| 用户管理 | ✅ 完成 | CRUD + 批量添加 + 角色组多选 |
-| 权限管理 | ✅ 完成 | Role/UserRole 多对多 + 权限管理页 |
-| 数据源配置 | ✅ 完成 | 禅道/GitLab/NAS + .env 持久化 |
-| 系统日志 | ✅ 完成 | DB + 文件双写 + 实时查看 + 全局异常捕获 |
-| 自动同步 | ✅ 完成 | 后台 asyncio + 前端进度 + 气泡通知 |
+| 任务管理 | ✅ 完成 | PMA 本地任务 CRUD + 工时 + 批量导入 + 工时延长 |
+| Bug 管理 | ✅ 完成 | PMA 本地 Bug CRUD + 禅道导入 + GitLab Issue 联动 |
+| 客户管理 | ✅ 完成 | 客户 CRUD + 项目/产品关联 |
+| 项目报表 | ✅ 完成 | 周报/月报/季报/年报 |
+| 用户管理 | ✅ 完成 | CRUD + 角色组多选 + 在线状态检测 |
+| 权限管理 | ✅ 完成 | Role/UserRole 多对多 + 9 种细粒度权限 |
+| 数据源配置 | ✅ 完成 | 禅道/GitLab/NAS 在线配置 + .env 持久化 |
+| 系统日志 | ✅ 完成 | 文件日志实时查看 + 操作审计日志（8 分类 67+ action） |
+| 自动同步 | ✅ 完成 | 后台 asyncio + 前端进度 + 气泡通知 + 三源独立 |
 | 主题切换 | ✅ 完成 | 浅色/深色 + CSS var(--xxx) |
-| 部署 | ⚠️ 待验证 | Docker Compose 就绪 |
-| GitLab 集成 | ✅ 完成 | 禅道 Release 同步 + GitLab URL 校验 + 告警 + 3 源独立通知 |
-| 文档模板 | ✅ 完成 | 阶段类型独立持久化 + 0 模板阶段可见 + 增删改查 |
+| 部署 | ⚠️ 待验证 | Docker Compose 就绪（生产部署未验证） |
+| GitLab 集成 | ✅ 完成 | Release 同步 + URL 校验 + OAuth + Issue/MR |
+| 文档模板 | ✅ 完成 | 项目/产品双模板体系 + 阶段持久化 + SVN 自动匹配 |
+| SVN 集成 | ✅ 完成 | 文档元数据 PROPFIND + 变更记录 + 自动匹配 |
 | NAS 监控 | ❌ Phase 2 | 售前项目检测 |
+| Release Notes | 📄 新增 | 详见 [docs/release-notes.md](release-notes.md) |
 
 ---
 
@@ -44,7 +47,7 @@
 
 ### 1.2 数据库层
 - [x] SQLAlchemy 引擎 + Session + Base + 自动列迁移
-- [x] 本地模型：`LocalUser`、`Role`、`UserRole`、`SyncLog`、`DeliveryRecord`、`ProjectNote`、`LogEntry`
+- [x] 本地模型：`LocalUser`、`Role`、`UserRole`、`SyncLog`、`DeliveryRecord`、`ProjectNote`、`AuditLog`、`ProjectActivity`、`ProductActivity`
 - [x] 禅道缓存模型：`CachedProject`、`CachedExecution`、`CachedTask`、`CachedUser`、`CachedProduct`、`CachedCustomer`、`CachedBug`、`ProductProjectLink`、`CustomerProjectLink`
 - [x] 启动时自动建表 + 迁移 + seed 默认角色（14 个）+ admin 用户
 
@@ -160,6 +163,8 @@
 
 ## 待完成
 
+> 详见 [release-notes.md](release-notes.md) §3 待完善功能
+
 ### Phase 2
 - [x] 交付状态 PMA 本地配置（应交付总数、交付备注、计划 vs 实际对比）
 - [x] 文档齐套性（模板配置 + 项目文档初始化 + 状态跟踪 + 告警集成）
@@ -226,6 +231,7 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-07-08 | v2026.07.08-beta2 | feat: #95 用户列表登录状态—内存实时追踪60s窗口+IP/UA记录+bootstrap升级美化 |
 | 2026-07-08 | v2026.07.08-beta1 | refactor: 日志系统重构—DB只存操作审计+category标准化常量+补全用户操作审计+server.log轮转 |
 | 2026-07-07 | v2026.07.07-beta18 | feat: 关联项目气泡动画—右→左滑动+动态间隔+去底色+animation-fill-mode防初始全显 |
 | 2026-07-07 | v2026.07.07-beta16 | fix: 深色模式失效—tokens.css :root块缺少闭合}导致[data-theme="dark"]被丢弃 |

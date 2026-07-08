@@ -205,7 +205,7 @@ def get_role_users(role_id: int, db: Session = Depends(get_db), _=Depends(requir
 
 @router.get("", response_model=dict)
 def list_users(db: Session = Depends(get_db), _=Depends(require_admin)):
-    from backend.middleware.auth import _get_perms
+    from backend.middleware.auth import _get_perms, is_user_online
     users = db.query(LocalUser).order_by(LocalUser.id).all()
     return {
         "code": 0,
@@ -221,6 +221,10 @@ def list_users(db: Session = Depends(get_db), _=Depends(require_admin)):
                 "is_active": u.is_active,
                 "auth_source": u.auth_source or "local",
                 "created_at": to_local_str(u.created_at),
+                "last_login_at": to_local_str(u.last_login_at) if u.last_login_at else None,
+                "last_login_ip": u.last_login_ip or None,
+                "last_login_ua": u.last_login_ua or None,
+                "is_online": is_user_online(u.id),
             }
             for u in users
         ],

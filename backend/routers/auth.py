@@ -1,7 +1,9 @@
 import secrets
 import time
 from typing import Dict
-from fastapi import APIRouter, Depends, HTTPException, Query
+from datetime import datetime, timezone
+import re
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -20,11 +22,42 @@ _OAUTH_STATE_TTL = 600  # 10 minutes
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
+def _parse_ua(ua_string: str) -> str:
+    """Extract browser name and version from User-Agent string."""
+    if not ua_string:
+        return ""
+    # Chrome/Edge
+    m = re.search(r'(?:Edg|Chrome)/([\d.]+)', ua_string)
+    if m:
+        if 'Edg/' in ua_string:
+            return f"Edge {m.group(1)}"
+        return f"Chrome {m.group(1)}"
+    # Firefox
+    m = re.search(r'Firefox/([\d.]+)', ua_string)
+    if m:
+        return f"Firefox {m.group(1)}"
+    # Safari
+    m = re.search(r'Version/([\d.]+).*Safari', ua_string)
+    if m:
+        return f"Safari {m.group(1)}"
+    # Fallback: first 80 chars
+    return ua_string[:80]
+
+
 @router.post("/login", response_model=dict)
-def login(body: LoginRequest, db: Session = Depends(get_db)):
+def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)):
     user = authenticate_user(db, body.username, body.password)
     if not user:
         raise HTTPException(status_code=401, detail="用户名或密码错误")
+
+    # Record login info
+    user.last_login_at = datetime.now(timezone.utc)
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    user.last_login_ip = (forwarded.split(",")[0].strip() if forwarded
+                          else request.headers.get("X-Real-IP", "") or
+                          (request.client.host if request.client else ""))
+    user.last_login_ua = _parse_ua(request.headers.get("User-Agent", ""))
+    db.commit()
 
     token = create_access_token(user.id)
     user_info = UserInfo.model_validate(user).model_dump()
@@ -189,7 +222,7 @@ def gitlab_oauth_authorize():
 
 
 @router.get("/gitlab/callback", response_class=RedirectResponse)
-async def gitlab_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
+async def gitlab_oauth_callback(code: str, state: str, request: Request, db: Session = Depends(get_db)):
     """Handle GitLab OAuth callback: exchange code for token, fetch user info,
     provision/update local user, and redirect to frontend with PMA JWT."""
     from backend.services.gitlab_client import GitLabClient
@@ -289,6 +322,14 @@ async def gitlab_oauth_callback(code: str, state: str, db: Session = Depends(get
         public_role = db.query(Role).filter(Role.key == "public").first()
         if public_role:
             db.add(UserRole(user_id=local_user.id, role_id=public_role.id))
+
+    # Record login info (IP + User-Agent)
+    local_user.last_login_at = datetime.now(timezone.utc)
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    local_user.last_login_ip = (forwarded.split(",")[0].strip() if forwarded
+                                else request.headers.get("X-Real-IP", "") or
+                                (request.client.host if request.client else ""))
+    local_user.last_login_ua = _parse_ua(request.headers.get("User-Agent", ""))
 
     db.commit()
 
