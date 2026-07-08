@@ -1,19 +1,29 @@
 # Project Management Assistant - Software Requirements Specification
 # 项目管理助手 - 软件需求规格说明书
 
-> Version: 1.2
-> Date: 2026-05-21 | Updated: 2026-06-06
+> Version: 1.3
+> Date: 2026-05-21 | Updated: 2026-07-08
 > Language: Chinese (Main) / English (Technical Terms)
 >
-> **Implementation Status** (as of v2026.06.06-beta2):
+> **Implementation Status** (as of v2026.07.08-beta1):
 > ✅ FR-001~003 (进展/阶段/阻塞), ✅ FR-004 (风险通知), ✅ FR-005~006 (产品项目映射),
 > ✅ FR-007~011 (交付管理), ✅ FR-012 (研发/生产区分), ✅ FR-013 (Bug统计),
-> ✅ FR-015 (项目报表), ✅ FR-020 (code回退), ✅ FR-026 (Dashboard分类卡片),
-> ✅ FR-027~031 (产品管理+侧边栏+客户提取)
-> ❌ FR-014 (Gitlab统计), ❌ FR-016 (售前检测), ❌ FR-022 (外协跟踪)
+> ✅ FR-014 (GitLab统计), ✅ FR-015 (项目报表), ✅ FR-020 (code回退),
+> ✅ FR-026 (Dashboard分类卡片), ✅ FR-027~031 (产品管理+侧边栏+客户提取)
+> ❌ FR-016 (售前检测), ❌ FR-022 (外协跟踪)
 >
-> **新增（超出原 FR 范围）**:
-> ✅ 权限系统 (Role/UserRole 多对多 + 5 种权限), ✅ 全局异常日志, ✅ GitLab Issue/MR 模板
+> **超出原 FR 范围的新增功能**:
+> ✅ RBAC 权限系统 (Role/UserRole 多对多 + 9 种权限)
+> ✅ 操作审计日志 (8 分类 67+ action，结构化 DB 存储)
+> ✅ GitLab Issue/MR 模板 + OAuth 用户认证
+> ✅ PMA 本地 Bug 管理系统（含禅道导入 + GitLab 联动）
+> ✅ PMA 本地任务管理（含工时 + 批量导入）
+> ✅ SVN 文档元数据自动同步 + 文档齐套性检测
+> ✅ 产品系统框图（vsdx 预览）
+> ✅ 深色模式主题
+> ✅ 系统日志 + 操作日志双体系
+>
+> 详见 [release-notes.md](release-notes.md)
 
 ---
 

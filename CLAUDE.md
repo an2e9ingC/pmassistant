@@ -114,6 +114,7 @@ NAS 文件 ───────────┘
 | 开发指南 | `CLAUDE.md` | 本文档，AI/开发者必读 |
 | 数据库文档 | `docs/db.md` | 完整 schema、表关系、权限体系、数据保护方案 |
 | 日志系统说明 | `docs/audit-log.md` | 操作日志 + 系统日志架构、category 定义、开发规范 |
+| 试用发布说明 | `docs/release-notes.md` | Beta 版本功能清单、已知限制、快速开始 |
 | 开发计划 | `docs/dev-plan.md` | 版本历史与开发路线 |
 | UI 设计规范 | `docs/design-spec.md` | 加载状态、通知、徽章、主题规则 |
 | 部署运维 | `docs/deploy-guide.md` | 部署与运维参考 |
