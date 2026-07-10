@@ -35,6 +35,7 @@ var _configSections = [
     { key: 'app_secret', label: 'OAuth Application Secret', type: 'password', ph: '' },
     { key: 'oauth_enabled', label: '启用 GitLab OAuth 登录', type: 'toggle', ph: '' },
     { key: 'oauth_redirect_uri', label: 'OAuth 回调地址', type: 'url', ph: 'http://192.168.1.x:8000/api/auth/gitlab/callback' },
+    { key: 'project_path', label: 'PMA 项目路径 (Issue/成员)', type: 'text', ph: 'group/subgroup/pma' },
   ]},
   { key: 'nas', title: 'NAS 存储', summaryKey: 'host', summaryPrefix: '主机: ', fields: [
     { key: 'host', label: '主机地址', type: 'text', ph: '192.168.x.x' },

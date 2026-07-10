@@ -28,6 +28,7 @@ class Settings:
     ZENTAO_AUTH_PASSWORD: str = ""
     GITLAB_BASE_URL: str = "http://192.168.0.128/api/v4"
     GITLAB_TOKEN: str = ""
+    GITLAB_PROJECT_PATH: str = ""       # PMA project path on GitLab, e.g. "bsp_dev/fake_it/pma"
     GITLAB_APP_ID: str = ""             # GitLab OAuth Application ID
     GITLAB_APP_SECRET: str = ""         # GitLab OAuth Application Secret
     GITLAB_OAUTH_ENABLED: bool = False  # Enable GitLab OAuth login

@@ -6,6 +6,8 @@ Endpoints for:
 - Trigger GitLab URL validation
 - Create GitLab issues (bug/feature feedback)
 """
+from urllib.parse import quote
+
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -17,6 +19,19 @@ from backend.models.zentao import CachedRelease, PmaProduct
 from backend.config import settings
 
 router = APIRouter(prefix="/api/gitlab", tags=["gitlab"])
+
+
+def _get_project_path():
+    """Return the configured GitLab PMA project path. Raises RuntimeError if not set."""
+    path = getattr(settings, "GITLAB_PROJECT_PATH", None) or ""
+    if not path:
+        raise RuntimeError("GITLAB_PROJECT_PATH 未配置，请在数据源配置中设置 GitLab 项目路径")
+    return path
+
+
+def _project_path_encoded():
+    """Return URL-encoded project path for GitLab API URLs."""
+    return quote(_get_project_path(), safe="")
 
 
 @router.get("/status", response_model=dict)
@@ -187,11 +202,12 @@ async def get_project_members(_=Depends(get_current_user)):
     """Get PMA project members from GitLab (for assignee selection)."""
     if not settings.GITLAB_TOKEN:
         return {"code": 0, "data": [], "message": "GitLab Token 未配置"}
+    project_path = _get_project_path()
 
     from backend.services.gitlab_client import GitLabClient
     client = GitLabClient()
     try:
-        members = await client.get_members("bsp_dev/fake_it/pma")
+        members = await client.get_members(project_path)
         items = [{
             "id": m.get("id"),
             "username": m.get("username", ""),
@@ -202,7 +218,7 @@ async def get_project_members(_=Depends(get_current_user)):
         # Get last committer as default assignee
         default_assignee_id = None
         try:
-            last = await client.get_last_committer("bsp_dev/fake_it/pma")
+            last = await client.get_last_committer(project_path)
             if last:
                 for m in members:
                     if m.get("username", "").lower() == (last.get("name") or "").lower():
@@ -270,7 +286,7 @@ async def create_issue(
     client = GitLabClient(token=effective_token)
     try:
         result = await client.create_issue(
-            project_path="bsp_dev/fake_it/pma",
+            project_path=_get_project_path(),
             title=title,
             description=template,
             labels=all_labels,
@@ -281,7 +297,7 @@ async def create_issue(
                 try:
                     await client._request(
                         "PUT",
-                        f"/projects/bsp_dev%2Ffake_it%2Fpma/issues/{issue_iid}",
+                        f"/projects/{_project_path_encoded()}/issues/{issue_iid}",
                         json={"assignee_ids": [body.assignee_id]},
                     )
                 except Exception as e:
@@ -313,7 +329,7 @@ async def get_issue(
     """
     from backend.config import settings
 
-    project_path = getattr(settings, "GITLAB_PROJECT_PATH", None) or "bsp_dev/fake_it/pma"
+    project_path = _get_project_path()
     token = getattr(settings, "GITLAB_TOKEN", None) or ""
     if not token:
         return {"code": 1, "message": "GitLab Token 未配置"}
@@ -363,7 +379,7 @@ async def upload_file(
     if not token:
         return {"code": 1, "message": "GitLab Token 未配置"}
 
-    url = f"{settings.GITLAB_BASE_URL.rstrip('/')}/projects/bsp_dev%2Ffake_it%2Fpma/uploads"
+    url = f"{settings.GITLAB_BASE_URL.rstrip('/')}/projects/{_project_path_encoded()}/uploads"
     files = {"file": (file.filename, await file.read(), file.content_type)}
 
     async with httpx.AsyncClient(timeout=30.0) as client:

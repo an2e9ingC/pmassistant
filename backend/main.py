@@ -47,6 +47,48 @@ async def lifespan(app: FastAPI):
     init_db()
     logger.info("Database initialized")
 
+    # ── Startup connection self-test: enabled sources must pass ──
+    import json, urllib.request, urllib.error, sys
+    from backend.routers.config import _load_config
+
+    cfg = _load_config()
+    sources = {
+        "zentao": ("禅道", cfg.get("zentao", {}).get("base_url", ""), None),
+        "gitlab": ("GitLab", cfg.get("gitlab", {}).get("base_url", ""), cfg.get("gitlab", {}).get("token", "")),
+        "svn":    ("SVN",    cfg.get("svn", {}).get("base_url", ""),    None),
+    }
+    for key, (label, url, token) in sources.items():
+        enabled = cfg.get(key, {}).get("enabled", True)
+        if not enabled:
+            logger.info(f"[启动自检] {label}: 已禁用，跳过")
+            continue
+        if not url:
+            logger.warning(f"[启动自检] {label}: 未配置地址，跳过")
+            continue
+        try:
+            if key == "gitlab":
+                test_url = url.rstrip("/") + "/version"
+                req = urllib.request.Request(test_url, headers={"PRIVATE-TOKEN": token})
+            elif key == "svn":
+                data = b'<?xml version="1.0" encoding="utf-8"?><propfind xmlns="DAV:"><prop><resourcetype/></prop></propfind>'
+                req = urllib.request.Request(url, data=data, method="PROPFIND",
+                                              headers={"Depth": "0", "Content-Type": "application/xml"})
+                username = cfg.get("svn", {}).get("username", "")
+                password = cfg.get("svn", {}).get("password", "")
+                if username and password:
+                    import base64
+                    req.add_header("Authorization", f"Basic {base64.b64encode(f'{username}:{password}'.encode()).decode()}")
+            else:  # zentao
+                req = urllib.request.Request(url, method="GET")
+            resp = urllib.request.urlopen(req, timeout=10)
+            logger.info(f"[启动自检] {label}: OK (HTTP {resp.status})")
+        except urllib.error.HTTPError as e:
+            logger.critical(f"[启动自检] {label}: HTTP {e.code} — {e.reason}，启动失败")
+            sys.exit(1)
+        except Exception as e:
+            logger.critical(f"[启动自检] {label}: 连接失败 — {e}，启动失败")
+            sys.exit(1)
+
     # Start background auto-sync task
     import asyncio
     from backend.services.sync_service import SyncService, _auto_sync_notify

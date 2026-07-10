@@ -87,6 +87,7 @@ def _load_config() -> dict:
             "app_secret": os.environ.get("GITLAB_APP_SECRET", ""),
             "oauth_enabled": os.environ.get("GITLAB_OAUTH_ENABLED", "").lower() in ("1", "true", "yes"),
             "oauth_redirect_uri": os.environ.get("GITLAB_OAUTH_REDIRECT_URI", ""),
+            "project_path": os.environ.get("GITLAB_PROJECT_PATH", ""),
             "enabled": os.environ.get("GITLAB_ENABLED", "true").lower() in ("1", "true", "yes"),
         },
         "nas": {
@@ -135,6 +136,7 @@ def _save_config(cfg: dict) -> None:
         "gitlab.app_secret": "GITLAB_APP_SECRET",
         "gitlab.oauth_enabled": "GITLAB_OAUTH_ENABLED",
         "gitlab.oauth_redirect_uri": "GITLAB_OAUTH_REDIRECT_URI",
+        "gitlab.project_path": "GITLAB_PROJECT_PATH",
         "gitlab.enabled": "GITLAB_ENABLED",
         "nas.host": "NAS_HOST",
         "nas.username": "NAS_USERNAME",
