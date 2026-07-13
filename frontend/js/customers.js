@@ -21,8 +21,8 @@ function renderCustTable() {
     return '<tr>' +
       '<td><button class="gs-btn gs-cust" onclick="openCustomerDetail(' + c.id + ')">' + escHtml(c.name) + '</button></td>' +
       '<td style="font-size:12px;color:var(--muted)">' + escHtml(c.full_name || '—') + '</td>' +
-      '<td><span style="padding:2px 8px;border-radius:10px;font-size:12px;font-weight:540;background:var(--accent-lt);color:var(--accent)">' + (c.project_count || 0) + '</span></td>' +
-      '<td><span style="padding:2px 8px;border-radius:10px;font-size:12px;font-weight:540;background:var(--success-lt);color:var(--success)">' + (c.product_count || 0) + '</span></td>' +
+      '<td><span onclick="event.stopPropagation();openCustomerDetail(' + c.id + ')" style="cursor:pointer;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:540;background:var(--accent-lt);color:var(--accent)" title="查看客户详情">' + (c.project_count || 0) + '</span></td>' +
+      '<td><span onclick="event.stopPropagation();openCustomerDetail(' + c.id + ')" style="cursor:pointer;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:540;background:var(--success-lt);color:var(--success)" title="查看客户详情">' + (c.product_count || 0) + '</span></td>' +
       '<td style="white-space:nowrap">' +
         iconEdit('openCustEditDialog(' + c.id + ')') +
         iconDelete('deleteCust(' + c.id + ',\'' + escHtml(c.name) + '\')') +
