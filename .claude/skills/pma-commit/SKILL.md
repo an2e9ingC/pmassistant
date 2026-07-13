@@ -50,8 +50,9 @@ Co-Authored-By: <model-name> / <tool-name>
 - **每次 commit 必须同步更新 `docs/dev-plan.md`**：页头版本号同步为 `#app-version` 当前值，并在变更记录表追加新条目
 
   ```bash
-  # 追加条目到表头下方（不依赖上一行版本号）
-  sed -i "/^|------|------|------|$/a | $(date +%Y-%m-%d) | v2026.0X.0X-betaN | type: 简短描述 |" docs/dev-plan.md
+  # 追加条目到变更记录表（定位到 "## 变更记录" 后的第二个表头分隔行）
+  LINE=$(awk '/^## 变更记录/{found=1} found && /^\|------\|------\|------\|$/{print NR; exit}' docs/dev-plan.md)
+  sed -i "${LINE}a | $(date +%Y-%m-%d) | v2026.0X.0X-betaN | type: 简短描述 |" docs/dev-plan.md
   ```
 - **AI 生成 commit 必须加 `Co-Authored-By:`**
 - **commit 重启后必须更新 codebase-memory 索引**：
