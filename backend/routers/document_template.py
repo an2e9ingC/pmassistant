@@ -138,6 +138,17 @@ def rename_stage_type(
     user=Depends(require_perm("doc_template")),
 ):
     count = document_service.rename_stage_type(db, body.old_name, body.new_name)
+    # Also update custom stage types if the old name is a custom stage
+    from backend.services.document_service import (
+        _get_custom_stage_types, _save_custom_stage_types,
+        _get_custom_project_types, PROJECT_TYPE_DEFS,
+    )
+    all_types = list(PROJECT_TYPE_DEFS.keys()) + list(_get_custom_project_types(db).keys())
+    for pt in all_types:
+        customs = _get_custom_stage_types(db, pt)
+        if body.old_name in customs:
+            customs[customs.index(body.old_name)] = body.new_name
+            _save_custom_stage_types(db, pt, customs)
     log_audit(db, user, "doc_stage_rename", f"{body.old_name} -> {body.new_name} ({count} docs)", AUDIT_CAT_TEMPLATE, "medium")
     return {"code": 0, "data": {"updated": count}, "message": "ok"}
 
