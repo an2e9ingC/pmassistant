@@ -1368,7 +1368,7 @@ function initUserCenter() {
         '</div>' +
         '<div style="flex:1;display:flex;flex-direction:column;min-height:0;margin-top:18px">' +
           '<div class="sec-hd"><h2>我的Bug</h2>' +
-            '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="_ucNewBug()">+ 新建Bug</button>' +
+            '<button class="btn btn-sm" style="font-size:11px;padding:3px 10px;background:var(--danger);color:#fff;border-color:var(--danger)" onclick="_ucNewBug()">+ 新建Bug</button>' +
           '</div>' +
           '<div class="task-filter-bar" id="uc-bugs-filter-bar"></div>' +
           '<div class="panel" style="flex:1;overflow:hidden"><div class="task-table-wrap" style="max-height:100%;overflow-y:auto"><table class="task-table"><thead id="uc-bugs-table-head"></thead><tbody id="uc-bugs-table-tbody"></tbody></table></div></div>' +
@@ -1393,6 +1393,13 @@ var _ucFilterProd = '';
 var _ucFilterProj = '';
 
 function _ucNewBug() {
+  // Auto-fill product/project context from current page
+  var ctx = {};
+  var prodId = sessionStorage.getItem('pm_last_prod_id');
+  if (prodId) ctx.product = parseInt(prodId);
+  var projId = sessionStorage.getItem('pm_last_proj_id');
+  if (projId) ctx.project = parseInt(projId);
+  if (ctx.product || ctx.project) window._bugPreFill = ctx;
   if (typeof openBugDialog === 'function') openBugDialog();
   else if (typeof loadViewScript === 'function') loadViewScript('/js/bugs.js?v=' + APP_VERSION, function() { openBugDialog(); });
 }
@@ -1568,6 +1575,9 @@ async function _ucLoadBugs() {
 }
 
 function _ucNewTask() {
+  // Auto-fill project context from current page
+  var pid = sessionStorage.getItem('pm_last_proj_id');
+  if (pid) window._taskProjectId = parseInt(pid);
   if (typeof openTaskDialog === 'function') { openTaskDialog(); }
   else if (typeof loadViewScript === 'function') { loadViewScript('/js/tasks.js?v=' + APP_VERSION, function() { openTaskDialog(); }); }
 }

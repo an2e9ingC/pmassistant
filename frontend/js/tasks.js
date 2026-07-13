@@ -436,7 +436,7 @@ function _submitViewComment(taskId) {
 function openTaskDialog(taskId) {
   var isEdit = !!taskId;
   var title = isEdit ? '编辑任务' : '新建任务';
-  _tfProjectId = _taskProjectId; // default to page context
+  _tfProjectId = _taskProjectId || window._taskProjectId; // default to page context
   _tfAssigneeId = null;
 
   if (isEdit) {
@@ -468,13 +468,13 @@ function _showTaskForm(title, task) {
     // ── 基本信息 ──
     '<div style="' + _card + '">' +
       '<div style="' + _cardHd + '">基本信息</div>' +
+      '<div style="margin-bottom:6px"><label style="' + _lbl + '">标题 *</label><input class="search-inp" id="tf-title" value="' + escHtml(t.title || '') + '" style="' + inp + '"></div>' +
       '<div style="margin-bottom:6px"><label style="' + _lbl + '">所属项目 *</label>' +
         '<div style="margin-top:2px">' + createProjectCombo({
           comboId: 'tf-proj-combo', inputId: 'tf-project-input', dropdownId: 'tf-proj-dropdown',
           selectedIdFn: function() { return _tfProjectId; },
           onSelect: function(p) { _tfProjectId = p.id; _loadTfExecutions(p.id); }
         }) + '</div></div>' +
-      '<div style="margin-bottom:6px"><label style="' + _lbl + '">标题 *</label><input class="search-inp" id="tf-title" value="' + escHtml(t.title || '') + '" style="' + inp + '"></div>' +
       '<div style="' + _grid2 + '">' +
         '<div><label style="' + _lbl + '">阶段</label><select class="search-inp" id="tf-execution" style="' + inp + '"><option value="">选择阶段...</option>' + execOpts + '</select></div>' +
         '<div><label style="' + _lbl + '">负责人</label><div style="margin-top:2px">' + createUserCombo({
@@ -594,6 +594,16 @@ function _loadTfExecutions(projectId, selectedId) {
   if (projId) {
     var curExecVal = t.execution_id ? String(t.execution_id) : (t.stage_name ? '_' + t.stage_name : '');
     _loadTfExecutions(projId, curExecVal);
+  }
+
+  // Pre-fill project name if context is set (new task from project detail page)
+  if (!isEdit && _tfProjectId) {
+    setTimeout(function() {
+      loadAllProjects().then(function() {
+        var p = _allProjects.find(function(x) { return x.id == _tfProjectId; });
+        if (p) document.getElementById('tf-project-input').value = p.name;
+      });
+    }, 80);
   }
 
   // Async: load worklogs and comments (edit mode)

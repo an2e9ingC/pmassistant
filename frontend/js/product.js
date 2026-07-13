@@ -268,6 +268,7 @@ setTimeout(function() {
 
 function openProductDetail(id) {
   _prodDetailCurId = id;
+  sessionStorage.setItem('pm_last_prod_id', id);
   gotoView('product-detail');
 }
 

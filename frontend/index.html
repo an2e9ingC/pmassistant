@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="app-version" content="v2026.07.13-beta3">
+<meta name="app-version" content="v2026.07.13-beta4">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>PM Assistant · 集成禅道 & GitLab</title>
 <script>
@@ -212,6 +212,16 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
   <header class="topbar">
     <div class="topbar-title" id="topbar-title">项目总览</div>
     <span id="branch-badge" title="当前开发分支">trunk</span>
+    <div class="topbar-actions" style="display:flex;align-items:center;gap:6px;margin-left:16px">
+      <button class="btn btn-sm" onclick="_ucNewTask()" title="新建任务" style="display:flex;align-items:center;gap:4px;padding:4px 10px;font-size:12px;background:var(--accent);color:#fff;border-color:var(--accent)">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
+        新建任务
+      </button>
+      <button class="btn btn-sm" onclick="_ucNewBug()" title="新建Bug" style="display:flex;align-items:center;gap:4px;padding:4px 10px;font-size:12px;background:var(--danger);color:#fff;border-color:var(--danger)">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="6"/><line x1="8" y1="5" x2="8" y2="9"/><circle cx="8" cy="12" r="0.8" fill="currentColor" stroke="none"/></svg>
+        新建Bug
+      </button>
+    </div>
     <div class="topbar-right">
       <div class="src-tags" id="topbar-sources">
         <span class="src-tag pending" id="src-zentao" onclick="showSrcMenu('zentao',event)"><span class="src-tag-label">禅道</span><span class="src-tag-tip" id="src-zentao-tip"></span></span>

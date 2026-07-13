@@ -222,7 +222,15 @@ function openBugDialog(bugId) {
 
 function _showBugForm(b) {
   var isEdit = !!b; var t = b || {};
-  window._bfProdId = t.product_id || null;
+  // Accept pre-fill context from topbar quick-create (app.js sets _bugPreFill)
+  var ctx = window._bugPreFill || {};
+  if (!isEdit) {
+    if (ctx.product) t.product_id = ctx.product;
+    if (ctx.project) t.project_id = ctx.project;
+  }
+  window._bfProdId = t.product_id || ctx.product || null;
+  window._bfProjId = t.project_id || ctx.project || null;
+  window._bugPreFill = null;  // consume once
   var html = '<div style="display:flex;flex-direction:column;height:76vh">' +
     // Fields section — flex-shrink:0 (fixed height)
     '<div style="flex-shrink:0">' +
