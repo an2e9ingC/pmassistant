@@ -116,21 +116,45 @@ def get_customer_detail(customer_id: int, db: Session = Depends(get_db), _=Depen
     proj_links = db.query(CustomerProjectLink).filter(CustomerProjectLink.customer_id == customer_id).all()
     project_ids = [l.project_id for l in proj_links]
     projects = db.query(CachedProject).filter(CachedProject.id.in_(project_ids)).all() if project_ids else []
+    # Product info for each project (from ProductProjectLink)
+    proj_product_map = {}
+    if project_ids:
+        ppl = db.query(ProductProjectLink).filter(ProductProjectLink.project_id.in_(project_ids)).all()
+        prod_ids = list(set(l.product_id for l in ppl))
+        all_prods = {p.id: p for p in db.query(PmaProduct).filter(PmaProduct.id.in_(prod_ids)).all()} if prod_ids else {}
+        for l in ppl:
+            proj_product_map.setdefault(l.project_id, []).append(
+                {"id": l.product_id, "code": all_prods[l.product_id].code if l.product_id in all_prods else "",
+                 "name": all_prods[l.product_id].name if l.product_id in all_prods else ""})
+
     # Associated products: direct links + indirect via projects (product → project → customer)
     direct_prod_links = db.query(CustomerProductLink).filter(CustomerProductLink.customer_id == customer_id).all()
     direct_product_ids = set(l.product_id for l in direct_prod_links)
     indirect_product_ids = set()
     if project_ids:
-        ppl = db.query(ProductProjectLink).filter(ProductProjectLink.project_id.in_(project_ids)).all()
-        indirect_product_ids = set(l.product_id for l in ppl)
+        indirect_ppl = db.query(ProductProjectLink).filter(ProductProjectLink.project_id.in_(project_ids)).all()
+        indirect_product_ids = set(l.product_id for l in indirect_ppl)
     all_product_ids = direct_product_ids | indirect_product_ids
     products = db.query(PmaProduct).filter(PmaProduct.id.in_(all_product_ids)).all() if all_product_ids else []
+    # Project info for each product (all historically linked projects)
+    prod_project_map = {}
+    if all_product_ids:
+        all_ppl = db.query(ProductProjectLink).filter(ProductProjectLink.product_id.in_(all_product_ids)).all()
+        proj_ids = list(set(l.project_id for l in all_ppl))
+        all_projs = {p.id: p for p in db.query(CachedProject).filter(CachedProject.id.in_(proj_ids)).all()} if proj_ids else {}
+        for l in all_ppl:
+            if l.project_id in all_projs:
+                prod_project_map.setdefault(l.product_id, []).append(
+                    {"id": l.project_id, "code": all_projs[l.project_id].code or ""})
+
     return {
         "code": 0,
         "data": {
             "id": c.id, "name": c.name, "full_name": c.full_name or "",
-            "projects": [{"id": p.id, "name": p.name, "code": p.code, "status": p.status} for p in projects],
-            "products": [{"id": p.id, "name": p.name, "code": p.code, "status": p.status} for p in products],
+            "projects": [{"id": p.id, "name": p.name, "code": p.code, "status": p.status,
+                          "products": proj_product_map.get(p.id, [])} for p in projects],
+            "products": [{"id": p.id, "name": p.name, "code": p.code, "status": p.status,
+                          "projects": prod_project_map.get(p.id, [])} for p in products],
         },
         "message": "ok",
     }

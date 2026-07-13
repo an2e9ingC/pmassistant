@@ -110,8 +110,8 @@ function openCustomerDetail(id) {
 async function initCustomerDetail() {
   var id = localStorage.getItem('pm_cust_id');
   if (!id) { gotoView('customers'); return; }
-  document.getElementById('cust-det-proj-tbody').innerHTML = '<tr><td colspan="4"><div class="loading-spinner">加载中...</div></td></tr>';
-  document.getElementById('cust-det-prod-tbody').innerHTML = '<tr><td colspan="4"><div class="loading-spinner">加载中...</div></td></tr>';
+  document.getElementById('cust-det-proj-tbody').innerHTML = '<tr><td colspan="5"><div class="loading-spinner">加载中...</div></td></tr>';
+  document.getElementById('cust-det-prod-tbody').innerHTML = '<tr><td colspan="5"><div class="loading-spinner">加载中...</div></td></tr>';
   try {
     var c = await API.get('/customers/' + id);
     document.getElementById('cust-det-fullname').textContent = c.full_name || '';
@@ -121,29 +121,37 @@ async function initCustomerDetail() {
     var projTbody = document.getElementById('cust-det-proj-tbody');
     if (c.projects && c.projects.length) {
       projTbody.innerHTML = c.projects.map(function(p, i) {
-        return '<tr onclick="openProject(\'' + p.id + '\')" style="cursor:pointer">' +
+        var prodTags = (p.products || []).map(function(pr) {
+          return '<span style="display:inline-block;margin:1px 2px;padding:1px 6px;border-radius:3px;font-size:10.5px;background:var(--success-lt);color:var(--success);cursor:pointer" onclick="event.stopPropagation();openProductFromCust(' + pr.id + ')" title="' + escHtml(pr.name || '') + '">' + escHtml(pr.code || '#'+pr.id) + '</span>';
+        }).join('');
+        return '<tr>' +
           '<td style="color:var(--muted);font-size:12px">' + (i + 1) + '</td>' +
-          '<td><span style="font-family:var(--mono);font-size:11.5px;color:var(--accent)">' + escHtml(p.code || '#'+p.id) + '</span></td>' +
+          '<td><span style="font-family:var(--mono);font-size:11.5px;color:var(--accent);cursor:pointer" onclick="event.stopPropagation();openProject(\'' + p.id + '\')">' + escHtml(p.code || '#'+p.id) + '</span></td>' +
           '<td>' + escHtml(p.name) + '</td>' +
           '<td>' + renderPill(p.status) + '</td>' +
+          '<td>' + (prodTags || '<span style="color:var(--muted);font-size:11px">—</span>') + '</td>' +
         '</tr>';
       }).join('');
     } else {
-      projTbody.innerHTML = '<tr><td colspan="4"><div class="empty-state" style="padding:12px">暂无关联项目</div></td></tr>';
+      projTbody.innerHTML = '<tr><td colspan="5"><div class="empty-state" style="padding:12px">暂无关联项目</div></td></tr>';
     }
     // Products table
     var prodTbody = document.getElementById('cust-det-prod-tbody');
     if (c.products && c.products.length) {
       prodTbody.innerHTML = c.products.map(function(p, i) {
-        return '<tr onclick="openProductFromCust(' + p.id + ')" style="cursor:pointer">' +
+        var projTags = (p.projects || []).map(function(pj) {
+          return '<span style="display:inline-block;margin:1px 2px;padding:1px 6px;border-radius:3px;font-size:10.5px;background:var(--accent-lt);color:var(--accent);cursor:pointer" onclick="event.stopPropagation();openProject(\'' + pj.id + '\')" title="' + escHtml(pj.code || '') + '">' + escHtml(pj.code || '#'+pj.id) + '</span>';
+        }).join('');
+        return '<tr>' +
           '<td style="color:var(--muted);font-size:12px">' + (i + 1) + '</td>' +
-          '<td><span style="font-family:var(--mono);font-size:11.5px;color:var(--accent)">' + escHtml(p.code || '#'+p.id) + '</span></td>' +
+          '<td><span style="font-family:var(--mono);font-size:11.5px;color:var(--accent);cursor:pointer" onclick="event.stopPropagation();openProductFromCust(' + p.id + ')">' + escHtml(p.code || '#'+p.id) + '</span></td>' +
           '<td>' + escHtml(p.name) + '</td>' +
           '<td>' + renderPill(p.status) + '</td>' +
+          '<td>' + (projTags || '<span style="color:var(--muted);font-size:11px">—</span>') + '</td>' +
         '</tr>';
       }).join('');
     } else {
-      prodTbody.innerHTML = '<tr><td colspan="4"><div class="empty-state" style="padding:12px">暂无关联产品</div></td></tr>';
+      prodTbody.innerHTML = '<tr><td colspan="5"><div class="empty-state" style="padding:12px">暂无关联产品</div></td></tr>';
     }
   } catch(e) {
     document.getElementById('cust-det-name-head').textContent = '加载失败';
