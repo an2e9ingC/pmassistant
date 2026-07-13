@@ -182,19 +182,22 @@ def get_project_types(db: Session) -> list[dict]:
 
 
 def get_stage_types_for_project_type(db: Session, project_type: str) -> list[str]:
-    """Return stage types for a given project_type (predefined + persisted custom stages).
+    """Return stage types for a given project_type, respecting user's saved order.
     Excluded predefined stages are filtered out."""
-    if project_type in PROJECT_TYPE_DEFS:
-        stages = list(PROJECT_TYPE_DEFS[project_type]["stages"])
+    excluded = _get_excluded_stages(db, project_type)
+    # Check if user has saved a custom order (now includes all stages)
+    saved = _get_custom_stage_types(db, project_type)
+    if saved:
+        stages = [s for s in saved if s not in excluded]
+    elif project_type in PROJECT_TYPE_DEFS:
+        stages = [s for s in PROJECT_TYPE_DEFS[project_type]["stages"] if s not in excluded]
     else:
         stages = []
-    # Filter out excluded (deleted) predefined stages
-    excluded = _get_excluded_stages(db, project_type)
-    stages = [s for s in stages if s not in excluded]
-    # Include persisted custom stage types for this project_type
-    for st in _get_custom_stage_types(db, project_type):
-        if st not in stages:
-            stages.append(st)
+    # Append predefined stages not yet in saved order (e.g. newly added predefined stages)
+    if project_type in PROJECT_TYPE_DEFS:
+        for s in PROJECT_TYPE_DEFS[project_type]["stages"]:
+            if s not in stages and s not in excluded:
+                stages.append(s)
     # For custom types, also derive from existing templates in the DB
     from sqlalchemy import distinct
     for (st,) in db.query(distinct(DocumentTemplate.stage_type)).filter(
