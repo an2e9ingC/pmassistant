@@ -76,7 +76,7 @@ def worklog_summary(
 def create_worklog(
     payload: WorkLogCreate,
     db: Session = Depends(get_db),
-    user=Depends(require_perm("worklog_edit")),
+    user=Depends(get_current_user),
 ):
     w = worklog_service.create_worklog(db, payload.model_dump(), user.id)
     return {"code": 0, "data": w, "message": "ok"}
@@ -87,7 +87,7 @@ def update_worklog(
     worklog_id: int,
     payload: WorkLogUpdate,
     db: Session = Depends(get_db),
-    _=Depends(require_perm("worklog_edit")),
+    _=Depends(get_current_user),
 ):
     w = worklog_service.update_worklog(db, worklog_id, payload.model_dump(exclude_unset=True))
     if not w:
@@ -99,7 +99,7 @@ def update_worklog(
 def delete_worklog(
     worklog_id: int,
     db: Session = Depends(get_db),
-    _=Depends(require_perm("worklog_edit")),
+    _=Depends(get_current_user),
 ):
     ok = worklog_service.delete_worklog(db, worklog_id)
     if not ok:

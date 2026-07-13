@@ -278,7 +278,7 @@ def next_project_code(
 def create_local_project(
     body: LocalProjectCreate,
     db: Session = Depends(get_db),
-    user=Depends(require_perm("product_link")),
+    user=Depends(require_perm("project_edit")),
 ):
     """Create a PMA-local project (must link at least 1 product)."""
     try:
@@ -304,7 +304,7 @@ def update_local_project(
     project_id: int,
     body: LocalProjectUpdate,
     db: Session = Depends(get_db),
-    user=Depends(require_perm("product_link")),
+    user=Depends(require_perm("project_edit")),
 ):
     """Update a PMA-local project."""
     try:

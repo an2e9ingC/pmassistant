@@ -8,7 +8,6 @@ var TOAST_PERM_LABELS = {
   product_link: '产品维护',
   customer_link: '客户维护',
   task_edit: '任务管理',
-  worklog_edit: '工时填报',
 };
 
 // ── View init wrappers (complex init logic extracted from gotoView) ──
@@ -18,8 +17,8 @@ function initDashboard() {
   if (dashNewProjBtn) {
     var user = getCurrentUser();
     var perms = (user && user.permissions) ? user.permissions.split(',') : [];
-    var isAdmin = user && (user.role === 'admin' || perms.indexOf('admin') >= 0);
-    dashNewProjBtn.style.display = isAdmin ? '' : 'none';
+    var canCreate = perms.indexOf('admin') >= 0 || perms.indexOf('project_edit') >= 0;
+    dashNewProjBtn.style.display = canCreate ? '' : 'none';
   }
   renderDashboard();
   var lastPid = sessionStorage.getItem('pm_last_proj_id');
@@ -1333,7 +1332,7 @@ function initUserCenter() {
   if (!user) { container.innerHTML = '<div class="error-state">未登录</div>'; return; }
   var isGitlab = user.auth_source === 'gitlab';
   var perms = (user.permissions || '').split(',').filter(Boolean);
-  var permLabels = {'admin':'系统管理','sync':'数据同步','project_edit':'项目维护','product_link':'产品维护','customer_link':'客户维护','doc_template':'文档模板配置','stage_mapping':'阶段映射','task_edit':'任务管理','worklog_edit':'工时填报'};
+  var permLabels = {'admin':'系统管理','sync':'数据同步','project_edit':'项目维护','product_link':'产品维护','customer_link':'客户维护','doc_template':'文档模板配置','stage_mapping':'阶段映射','task_edit':'任务管理'};
   var permBadges = perms.map(function(p) { return '<span class="profile-role-tag">' + escHtml(permLabels[p]||p) + '</span>'; }).join('');
 
   container.innerHTML =

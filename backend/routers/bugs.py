@@ -136,7 +136,7 @@ def list_worklogs(bug_id: int, db: Session = Depends(get_db), _=Depends(get_curr
 
 
 @router.post("/{bug_id}/worklogs", response_model=dict)
-def create_worklog(bug_id: int, body: WorklogCreate, db: Session = Depends(get_db), user=Depends(require_perm("worklog_edit"))):
+def create_worklog(bug_id: int, body: WorklogCreate, db: Session = Depends(get_db), user=Depends(get_current_user)):
     body.bug_id = bug_id
     w = bug_service.create_worklog(db, body.model_dump(), user.id)
     log_audit(db, user, "bug_worklog_add", f"Bug #{bug_id} 记录工时 {body.hours}h", AUDIT_CAT_BUG, "low")
@@ -144,7 +144,7 @@ def create_worklog(bug_id: int, body: WorklogCreate, db: Session = Depends(get_d
 
 
 @router.put("/{bug_id}/worklogs/{wl_id}", response_model=dict)
-def update_worklog(bug_id: int, wl_id: int, body: WorklogUpdate, db: Session = Depends(get_db), user=Depends(require_perm("worklog_edit"))):
+def update_worklog(bug_id: int, wl_id: int, body: WorklogUpdate, db: Session = Depends(get_db), user=Depends(get_current_user)):
     w = bug_service.update_worklog(db, wl_id, body.model_dump(exclude_none=True))
     if not w: raise HTTPException(status_code=404, detail="Worklog not found")
     log_audit(db, user, "bug_worklog_edit", f"Bug #{bug_id} 编辑工时", AUDIT_CAT_BUG, "low")
@@ -152,7 +152,7 @@ def update_worklog(bug_id: int, wl_id: int, body: WorklogUpdate, db: Session = D
 
 
 @router.delete("/{bug_id}/worklogs/{wl_id}", response_model=dict)
-def delete_worklog(bug_id: int, wl_id: int, db: Session = Depends(get_db), user=Depends(require_perm("worklog_edit"))):
+def delete_worklog(bug_id: int, wl_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
     ok = bug_service.delete_worklog(db, wl_id)
     if not ok: raise HTTPException(status_code=404, detail="Worklog not found")
     log_audit(db, user, "bug_worklog_delete", f"Bug #{bug_id} 删除工时", AUDIT_CAT_BUG, "high")
