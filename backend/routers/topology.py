@@ -17,11 +17,12 @@ def get_topology(
     project: Optional[str] = Query(None),
     product: Optional[str] = Query(None),
     customer: Optional[str] = Query(None),
+    q: Optional[str] = Query(None, description="Fuzzy search across all dimensions"),
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
     items = topology_service.search_topology(
-        db, project=project, product=product, customer=customer
+        db, project=project, product=product, customer=customer, query=q
     )
     return {
         "code": 0,

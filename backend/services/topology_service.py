@@ -12,48 +12,69 @@ def search_topology(
     project: Optional[str] = None,
     product: Optional[str] = None,
     customer: Optional[str] = None,
+    query: Optional[str] = None,
 ) -> List[Dict]:
-    """Return project-product-customer associations filtered by 3 dimensions (AND logic).
+    """Return project-product-customer associations filtered by dimensions.
 
-    Each dimension filter is optional; all provided filters are combined with AND.
+    - query: fuzzy search across ALL dimensions with OR logic
+    - project/product/customer: AND logic (existing 3D search)
     """
     q = db.query(CachedProject)
 
-    # Project dimension filter
-    if project:
-        pattern = f"%{project}%"
-        q = q.filter(
-            (CachedProject.code.ilike(pattern)) |
-            (CachedProject.name.ilike(pattern))
-        )
-
-    # Product dimension filter — subquery via ProductProjectLink
-    if product:
-        pattern = f"%{product}%"
-        sub_ids = (
+    # Fuzzy search: OR across all three dimensions
+    if query:
+        pattern = f"%{query}%"
+        sub_prod = (
             db.query(ProductProjectLink.project_id)
             .join(PmaProduct, PmaProduct.id == ProductProjectLink.product_id)
             .filter(
                 (PmaProduct.name.ilike(pattern)) |
                 (PmaProduct.code.ilike(pattern))
             )
-            .subquery()
         )
-        q = q.filter(CachedProject.id.in_(sub_ids))
-
-    # Customer dimension filter — search both project.customer_name and linked customers
-    if customer:
-        pattern = f"%{customer}%"
-        # Projects linked via CustomerProjectLink
-        linked_ids = (
+        sub_cust = (
             db.query(CustomerProjectLink.project_id)
             .join(PmaCustomer, PmaCustomer.id == CustomerProjectLink.customer_id)
             .filter(PmaCustomer.name.ilike(pattern))
         )
         q = q.filter(
+            (CachedProject.code.ilike(pattern)) |
+            (CachedProject.name.ilike(pattern)) |
             CachedProject.customer_name.ilike(pattern) |
-            CachedProject.id.in_(linked_ids)
+            CachedProject.id.in_(sub_prod) |
+            CachedProject.id.in_(sub_cust)
         )
+    else:
+        # 3D AND search
+        if project:
+            pattern = f"%{project}%"
+            q = q.filter(
+                (CachedProject.code.ilike(pattern)) |
+                (CachedProject.name.ilike(pattern))
+            )
+        if product:
+            pattern = f"%{product}%"
+            sub_ids = (
+                db.query(ProductProjectLink.project_id)
+                .join(PmaProduct, PmaProduct.id == ProductProjectLink.product_id)
+                .filter(
+                    (PmaProduct.name.ilike(pattern)) |
+                    (PmaProduct.code.ilike(pattern))
+                )
+                .subquery()
+            )
+            q = q.filter(CachedProject.id.in_(sub_ids))
+        if customer:
+            pattern = f"%{customer}%"
+            linked_ids = (
+                db.query(CustomerProjectLink.project_id)
+                .join(PmaCustomer, PmaCustomer.id == CustomerProjectLink.customer_id)
+                .filter(PmaCustomer.name.ilike(pattern))
+            )
+            q = q.filter(
+                CachedProject.customer_name.ilike(pattern) |
+                CachedProject.id.in_(linked_ids)
+            )
 
     projects = q.order_by(CachedProject.id).all()
 

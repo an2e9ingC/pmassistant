@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="app-version" content="v2026.07.13-beta8">
+<meta name="app-version" content="v2026.07.13-beta9">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>PM Assistant · 集成禅道 & GitLab</title>
 <script>
@@ -99,13 +99,6 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
     </div>
     <div class="nav-group">
       <div class="nav-group-label">工具</div>
-      <div class="nav-item" id="nav-topology" onclick="gotoView('topology')">
-        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-          <circle cx="6.5" cy="6.5" r="5"/>
-          <line x1="10.5" y1="10.5" x2="14" y2="14"/>
-        </svg>
-        快速检索
-      </div>
       <div class="nav-item" id="nav-gitlab-releases" onclick="gotoView('gitlab-releases')">
         <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M8 2L2 5v6l6 3 6-3V5L8 2z"/>
@@ -213,6 +206,10 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
     <div class="topbar-title" id="topbar-title">项目总览</div>
     <span id="branch-badge" title="当前开发分支">trunk</span>
     <div class="topbar-actions" style="display:flex;align-items:center;gap:6px;margin-left:16px">
+      <button class="btn btn-sm" onclick="gotoView('topology')" title="快速搜索" style="display:flex;align-items:center;gap:4px;padding:4px 10px;font-size:12px;background:var(--purple);color:#fff;border-color:var(--purple)">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>
+        搜索
+      </button>
       <button class="btn btn-sm" onclick="_ucNewTask()" title="新建任务" style="display:flex;align-items:center;gap:4px;padding:4px 10px;font-size:12px;background:var(--accent);color:#fff;border-color:var(--accent)">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
         新建任务
@@ -745,24 +742,24 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
 
     <!-- ══════════════════════ VIEW — TOPOLOGY ══════════════════════ -->
     <div class="view" id="view-topology">
-      <div class="topo-search-bar">
-        <div class="search-wrap">
-          <span style="font-size:13px;color:var(--muted);white-space:nowrap;margin-right:4px;font-weight:500">项目</span>
-          <svg class="search-ico" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>
-          <input class="search-inp" id="topo-proj" placeholder="编号/名称..." oninput="onTopoSearch()">
-          <button class="search-clear" onclick="clearSearch('topo-proj',onTopoSearch)" title="清除">&times;</button>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div style="background:var(--accent-lt);border:1px solid var(--accent);border-radius:var(--r-lg);padding:12px 16px">
+          <div style="font-size:13px;font-weight:600;color:var(--accent);margin-bottom:6px">💡 模糊搜索</div>
+          <div style="font-size:10.5px;color:var(--muted);margin-bottom:8px">输入任一关键字，全局匹配项目编号/名称、产品编号/名称、客户名称（OR 逻辑）</div>
+          <div class="search-wrap" style="width:100%">
+            <svg class="search-ico" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>
+            <input class="search-inp" id="topo-fuzzy" placeholder="输入关键字..." oninput="onFuzzySearch()" style="font-size:13px;width:100%">
+            <button class="search-clear" onclick="clearSearch('topo-fuzzy',onFuzzySearch)" title="清除">&times;</button>
+          </div>
         </div>
-        <div class="search-wrap">
-          <span style="font-size:13px;color:var(--muted);white-space:nowrap;margin-right:4px;font-weight:500">产品</span>
-          <svg class="search-ico" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>
-          <input class="search-inp" id="topo-prod" placeholder="名称..." oninput="onTopoSearch()">
-          <button class="search-clear" onclick="clearSearch('topo-prod',onTopoSearch)" title="清除">&times;</button>
-        </div>
-        <div class="search-wrap">
-          <span style="font-size:13px;color:var(--muted);white-space:nowrap;margin-right:4px;font-weight:500">客户</span>
-          <svg class="search-ico" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>
-          <input class="search-inp" id="topo-cust" placeholder="名称..." oninput="onTopoSearch()">
-          <button class="search-clear" onclick="clearSearch('topo-cust',onTopoSearch)" title="清除">&times;</button>
+        <div style="background:var(--success-lt);border:1px solid var(--success);border-radius:var(--r-lg);padding:12px 16px">
+          <div style="font-size:13px;font-weight:600;color:var(--success);margin-bottom:6px">🔍 三维搜索</div>
+          <div style="font-size:10.5px;color:var(--muted);margin-bottom:8px">在三个维度分别输入关键字，同时满足才返回结果（AND 逻辑）</div>
+          <div class="topo-search-bar" style="flex-direction:column;gap:6px">
+            <div class="search-wrap"><span style="font-size:12px;color:var(--muted);white-space:nowrap;margin-right:4px;font-weight:500;width:36px;text-align:right">项目</span><svg class="search-ico" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg><input class="search-inp" id="topo-proj" placeholder="编号/名称..." oninput="onTopoSearch()"><button class="search-clear" onclick="clearSearch('topo-proj',onTopoSearch)" title="清除">&times;</button></div>
+            <div class="search-wrap"><span style="font-size:12px;color:var(--muted);white-space:nowrap;margin-right:4px;font-weight:500;width:36px;text-align:right">产品</span><svg class="search-ico" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg><input class="search-inp" id="topo-prod" placeholder="名称..." oninput="onTopoSearch()"><button class="search-clear" onclick="clearSearch('topo-prod',onTopoSearch)" title="清除">&times;</button></div>
+            <div class="search-wrap"><span style="font-size:12px;color:var(--muted);white-space:nowrap;margin-right:4px;font-weight:500;width:36px;text-align:right">客户</span><svg class="search-ico" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg><input class="search-inp" id="topo-cust" placeholder="名称..." oninput="onTopoSearch()"><button class="search-clear" onclick="clearSearch('topo-cust',onTopoSearch)" title="清除">&times;</button></div>
+          </div>
         </div>
       </div>
       <div class="card table-scroll" style="max-height:calc(100vh - 260px);margin-top:12px">
