@@ -350,6 +350,15 @@ def create_local_project(
                 db.add(ProductProjectLink(product_id=pid, project_id=project.id))
 
     db.commit()
+
+    # Initialize documents and tasks from templates
+    try:
+        from backend.services.document_service import _sync_from_templates, _sync_tasks_from_templates
+        _sync_from_templates(db, project.id, project_type)
+        _sync_tasks_from_templates(db, project.id, project_type)
+    except Exception:
+        pass  # non-critical: templates will sync on first page view
+
     return _project_item(project, db)
 
 
