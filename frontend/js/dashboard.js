@@ -116,7 +116,8 @@ function onProjSearch(v) {
   curSearchVal = v;
   clearTimeout(_searchTimer);
   _searchTimer = setTimeout(function() {
-    loadProjectTable(curTypeFilter);
+    // Search across ALL types, ignore active filter
+    loadProjectTable('all');
   }, 300);
 }
 

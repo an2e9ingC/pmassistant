@@ -163,8 +163,9 @@ function _povRenderProducts() {
     products = products.filter(function(p) { return favIds.indexOf(p.id) >= 0; });
   }
 
-  // Search
+  // Search (searches ALL products, ignoring tree filter)
   if (_prodSearchVal) {
+    products = _allProducts;  // reset to ALL products before search
     var q = _prodSearchVal.toLowerCase();
     products = products.filter(function(p) {
       return (p.code || '').toLowerCase().indexOf(q) >= 0 ||
