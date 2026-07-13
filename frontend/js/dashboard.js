@@ -353,20 +353,18 @@ async function showDashboardCreateProjectDialog() {
     : '<span style="font-size:12px;color:var(--muted)">暂无可选产品，请先在禅道同步或本地创建产品</span>';
 
   openDialog('新建项目',
-    '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">项目名称 *</label>' +
-    '<input class="search-inp" id="dash-newproj-name" placeholder="如：某型计算刀片" style="width:100%;box-sizing:border-box;margin-top:4px"></div>' +
-    '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">项目编号 *</label>' +
-    '<input class="search-inp" id="dash-newproj-code" placeholder="如：PROJ-001" style="width:100%;box-sizing:border-box;margin-top:4px"></div>' +
     '<div style="display:flex;gap:10px;margin-bottom:10px">' +
-      '<div style="flex:1"><label style="font-size:11px;color:var(--muted)">类型</label>' +
-      '<select id="dash-newproj-type" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);margin-top:4px">' +
-        typeOptions +
-      '</select></div>' +
+      '<div style="flex:1"><label style="font-size:11px;color:var(--muted)">项目编号 *（自动生成）</label>' +
+      '<input class="search-inp" id="dash-newproj-code" readonly style="width:100%;box-sizing:border-box;margin-top:4px;background:var(--bg);color:var(--muted);cursor:not-allowed"></div>' +
       '<div style="flex:1"><label style="font-size:11px;color:var(--muted)">状态</label>' +
       '<select id="dash-newproj-status" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);margin-top:4px">' +
         '<option value="wait">未开始</option><option value="doing">进行中</option><option value="done">已完成</option>' +
       '</select></div>' +
     '</div>' +
+    '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">类型 *</label>' +
+    '<select id="dash-newproj-type" onchange="_autoGenCode()" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);margin-top:4px">' + typeOptions + '</select></div>' +
+    '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">项目名称 *</label>' +
+    '<input class="search-inp" id="dash-newproj-name" placeholder="如：某型计算刀片" style="width:100%;box-sizing:border-box;margin-top:4px"></div>' +
     '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">描述</label>' +
     '<textarea class="search-inp" id="dash-newproj-desc" rows="2" placeholder="项目描述（可选）" style="width:100%;box-sizing:border-box;margin-top:4px;resize:vertical"></textarea></div>' +
     '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">关联产品 * <span style="font-weight:400;color:var(--danger)">（至少选1个）</span></label>' +
@@ -374,6 +372,16 @@ async function showDashboardCreateProjectDialog() {
     [{text: '取消', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
      {text: '创建', cls: 'btn-primary', onclick: 'dashboardCreateProject()'}],
     {hideClose: true});
+  setTimeout(function() { _autoGenCode(); }, 100);
+}
+
+function _autoGenCode() {
+  var pt = document.getElementById('dash-newproj-type').value;
+  var el = document.getElementById('dash-newproj-code');
+  el.value = '生成中...';
+  API.get('/product-management/next-project-code?project_type=' + encodeURIComponent(pt)).then(function(d) {
+    el.value = d.code || '';
+  }).catch(function() { el.value = ''; });
 }
 
 async function dashboardCreateProject() {
@@ -384,7 +392,7 @@ async function dashboardCreateProject() {
   var desc = document.getElementById('dash-newproj-desc').value.trim();
 
   if (!name) { showToast('请输入项目名称', 'error'); return; }
-  if (!code) { showToast('请输入项目编号', 'error'); return; }
+  if (!code) { showToast('项目编号生成失败，请重试', 'error'); return; }
 
   var productIds = [];
   document.querySelectorAll('.dash-newproj-prod:checked').forEach(function(cb) {

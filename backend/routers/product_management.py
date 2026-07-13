@@ -243,6 +243,35 @@ def get_all_products(
     return {"code": 0, "data": items, "message": "ok"}
 
 
+# ── Auto Project Code ──
+
+@router.get("/next-project-code", response_model=dict)
+def next_project_code(
+    project_type: str = Query("RD"),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    """Return the next available project code based on project type."""
+    from sqlalchemy import func as _func
+    from backend.models.zentao import CachedProject
+    prefix = "LSJ" if project_type == "SJ" else "PE"
+    start = 538 if prefix == "LSJ" else 456
+    # Find the maximum code number for this prefix
+    result = db.query(_func.max(CachedProject.code)).filter(
+        CachedProject.code.like(f"{prefix}%")
+    ).scalar()
+    if result:
+        try:
+            num = int(result[len(prefix):])
+            next_num = max(start, num + 1)
+        except (ValueError, TypeError):
+            next_num = start
+    else:
+        next_num = start
+    code = f"{prefix}{next_num:04d}"
+    return {"code": 0, "data": {"code": code}, "message": "ok"}
+
+
 # ── PMA-local Project CRUD ──
 
 @router.post("/projects", response_model=dict)
