@@ -84,6 +84,25 @@ class BugTemplate(Base):
     created_at = Column(DateTime, default=func.now())
 
 
+class TaskTemplate(Base):
+    """Global task template per stage type and project type. Configurable via admin UI.
+
+    When a project is initialized, tasks are auto-created from these templates
+    in the corresponding stages and assigned to the responsible_role person.
+    """
+    __tablename__ = "task_templates"
+
+    id = Column(Integer, primary_key=True)
+    project_type = Column(String(32), nullable=False, default="RD", server_default="RD", index=True)
+    stage_type = Column(String(64), nullable=False, index=True)
+    task_name = Column(String(256), nullable=False)
+    sort_order = Column(Integer, default=0)
+    description = Column(String(512), nullable=True)
+    responsible_role = Column(String(128), nullable=True)  # 责任人/岗位
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
 class ProductLine(Base):
     """Hierarchical product tree nodes (3 levels).
     Level 1 = 产品线, Level 2 = 产品系列, Level 3 = 产品型号.

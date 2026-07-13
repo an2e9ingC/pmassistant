@@ -282,3 +282,100 @@ def reset_project_documents(
     db.commit()
     log_audit(db, user, "doc_reset", f"Cleared {count} project documents for {stage_types}", AUDIT_CAT_TEMPLATE, "medium")
     return {"code": 0, "data": {"deleted": count}, "message": f"已清除 {count} 条，涉及阶段: {', '.join(stage_types)}"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Task Template Routes
+# ═══════════════════════════════════════════════════════════
+
+task_router = APIRouter(prefix="/api/task-templates", tags=["task-templates"])
+
+
+class TaskTemplateCreate(BaseModel):
+    project_type: str = "RD"
+    stage_type: str
+    task_name: str
+    sort_order: int = 0
+    responsible_role: Optional[str] = None
+    description: Optional[str] = None
+
+
+class TaskTemplateUpdate(BaseModel):
+    stage_type: Optional[str] = None
+    task_name: Optional[str] = None
+    sort_order: Optional[int] = None
+    description: Optional[str] = None
+    responsible_role: Optional[str] = None
+
+
+@task_router.get("", response_model=dict)
+def list_task_templates(
+    project_type: str = Query("RD"),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    grouped = document_service.get_task_templates_grouped(db, project_type)
+    return {"code": 0, "data": grouped, "message": "ok"}
+
+
+@task_router.post("", response_model=dict)
+def create_task_template(
+    body: TaskTemplateCreate,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("doc_template")),
+):
+    data = body.model_dump()
+    if "project_type" not in data or not data["project_type"]:
+        data["project_type"] = "RD"
+    tpl = document_service.create_task_template(db, data)
+    log_audit(db, user, "task_template_add", f"[{data['project_type']}] {body.stage_type}/{body.task_name}", AUDIT_CAT_TEMPLATE, "medium")
+    return {"code": 0, "data": tpl, "message": "ok"}
+
+
+@task_router.put("/{template_id}", response_model=dict)
+def update_task_template(
+    template_id: int,
+    body: TaskTemplateUpdate,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("doc_template")),
+):
+    tpl = document_service.update_task_template(
+        db, template_id, body.model_dump(exclude_none=True)
+    )
+    if not tpl:
+        raise HTTPException(status_code=404, detail="Task template not found")
+    log_audit(db, user, "task_template_edit", f"id={template_id} {body.task_name or ''}", AUDIT_CAT_TEMPLATE, "medium")
+    return {"code": 0, "data": tpl, "message": "ok"}
+
+
+@task_router.delete("/{template_id}", response_model=dict)
+def delete_task_template(
+    template_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("doc_template")),
+):
+    from backend.models.document import TaskTemplate
+    tpl = db.query(TaskTemplate).filter(TaskTemplate.id == template_id).first()
+    if not tpl:
+        raise HTTPException(status_code=404, detail="Task template not found")
+    detail = f"{tpl.stage_type}/{tpl.task_name}"
+    db.delete(tpl)
+    db.commit()
+    log_audit(db, user, "task_template_del", detail, AUDIT_CAT_TEMPLATE, "high")
+    return {"code": 0, "data": None, "message": "ok"}
+
+
+@task_router.post("/sync-all", response_model=dict)
+def sync_all_projects_tasks(
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("doc_template")),
+):
+    """Apply current task templates to all projects — create tasks from templates."""
+    result = document_service.sync_all_projects_tasks(db)
+    log_audit(
+        db, user, "task_template_sync_all",
+        f"{result['synced']}/{result['total']} projects synced"
+        + (f", {result['failed']} failed" if result['failed'] else ""),
+        AUDIT_CAT_TEMPLATE, "medium",
+    )
+    return {"code": 0, "data": result, "message": "ok"}

@@ -565,6 +565,23 @@ def _resolve_customer(p: CachedProject, linked_customers: list = None) -> str:
     return "、".join(linked_customers or []) if linked_customers else ""
 
 
+def _resolve_user_for_role(db: Session, responsible_role: str):
+    """Resolve a responsible_role label (e.g. '硬件开发') to a local_users id via local_roles.
+
+    Returns user id if found, None otherwise.
+    """
+    from backend.models.local import Role, UserRole
+    if not responsible_role:
+        return None
+    role = db.query(Role).filter(Role.label == responsible_role).first()
+    if not role:
+        return None
+    ur = db.query(UserRole).filter(UserRole.role_id == role.id).first()
+    if not ur:
+        return None
+    return ur.user_id
+
+
 def _batch_cust_map(db: Session, project_ids: list[int]) -> dict:
     """Batch-load linked customer names for multiple projects.
     Returns {project_id: [customer_name, ...]}."""

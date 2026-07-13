@@ -6,8 +6,9 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from backend.database import to_local_str
-from backend.models.document import DocumentTemplate, ProjectDocument, ProductDocTemplate, ProductLine, PmaTag
+from backend.models.document import DocumentTemplate, ProjectDocument, ProductDocTemplate, ProductLine, PmaTag, TaskTemplate
 from backend.models.zentao import CachedExecution, CachedProject
+from backend.models.task import Task
 
 # Standard stage names from requirements spec (Section 4.1 Project Lifecycle).
 # These are the authoritative stage definitions; Zentao execution names must
@@ -368,8 +369,12 @@ def get_or_init_project_documents(db: Session, project_id: int, project_type: st
     Initialization is incremental: each execution is checked individually,
     so fixing a stage_name for a previously unmatched execution will
     immediately generate documents for it.
+
+    Also syncs task templates: auto-creates tasks from task templates in
+    the corresponding project stages.
     """
     _sync_from_templates(db, project_id, project_type)
+    _sync_tasks_from_templates(db, project_id, project_type)
     return _query_project_documents(db, project_id)
 
 
@@ -384,7 +389,7 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
     Called on every document query so template changes propagate immediately.
     Preserves user-set status for documents that still exist in the template.
     """
-    standard_stages = get_stage_types_for_project(project_type)
+    standard_stages = get_stage_types_for_project_type(db, project_type)
 
     executions = (
         db.query(CachedExecution)
@@ -741,6 +746,247 @@ def sync_all_projects(db: Session) -> dict:
         try:
             _sync_from_templates(db, p.id, ptype)
             synced.append(f"{p.id}:{p.name}")
+        except Exception as exc:
+            failed.append(f"{p.id}:{p.name} ({exc})")
+
+    return {
+        "total": len(projects),
+        "synced": len(synced),
+        "failed": len(failed),
+        "synced_list": synced,
+        "failed_list": failed,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Task Template CRUD + Sync
+# ---------------------------------------------------------------------------
+
+
+def _task_template_dict(t: TaskTemplate) -> dict:
+    return {
+        "id": t.id,
+        "project_type": t.project_type,
+        "stage_type": t.stage_type,
+        "task_name": t.task_name,
+        "sort_order": t.sort_order,
+        "description": t.description or "",
+        "responsible_role": t.responsible_role or "",
+    }
+
+
+def get_task_templates_grouped(db: Session, project_type: str = "RD") -> dict:
+    """Return all task templates for a project_type, grouped by stage_type."""
+    templates = db.query(TaskTemplate).filter(
+        TaskTemplate.project_type == project_type
+    ).order_by(
+        TaskTemplate.stage_type, TaskTemplate.sort_order
+    ).all()
+    grouped: dict[str, list[dict]] = {}
+
+    # Ensure all known stage types for this project_type appear
+    for st in get_stage_types_for_project_type(db, project_type):
+        grouped[st] = []
+
+    for t in templates:
+        grouped.setdefault(t.stage_type, []).append(_task_template_dict(t))
+    return grouped
+
+
+def create_task_template(db: Session, data: dict) -> dict:
+    """Create a new task template."""
+    tpl = TaskTemplate(
+        project_type=data.get("project_type", "RD"),
+        stage_type=data["stage_type"],
+        task_name=data["task_name"],
+        sort_order=data.get("sort_order", 0),
+        description=data.get("description"),
+        responsible_role=data.get("responsible_role"),
+    )
+    db.add(tpl)
+    db.commit()
+    db.refresh(tpl)
+    return _task_template_dict(tpl)
+
+
+def update_task_template(db: Session, template_id: int, data: dict) -> Optional[dict]:
+    """Update an existing task template."""
+    tpl = db.query(TaskTemplate).filter(TaskTemplate.id == template_id).first()
+    if not tpl:
+        return None
+    for field in ("stage_type", "task_name", "sort_order", "description", "responsible_role"):
+        if field in data:
+            setattr(tpl, field, data[field])
+    db.commit()
+    db.refresh(tpl)
+    return _task_template_dict(tpl)
+
+
+def delete_task_template(db: Session, template_id: int) -> bool:
+    """Delete a task template."""
+    tpl = db.query(TaskTemplate).filter(TaskTemplate.id == template_id).first()
+    if not tpl:
+        return False
+    db.delete(tpl)
+    db.commit()
+    return True
+
+
+def _sync_tasks_from_templates(db: Session, project_id: int, project_type: str = "RD") -> int:
+    """Sync project tasks with current task templates: add new tasks from templates.
+
+    Only creates tasks that don't already exist (matched by template_id + project_id + execution_id/stage_name).
+    Does NOT delete tasks if templates are removed — tasks may have progress/worklogs.
+
+    Returns count of newly created tasks.
+    """
+    from backend.services.project_service import _resolve_user_for_role
+
+    standard_stages = get_stage_types_for_project_type(db, project_type)
+
+    executions = (
+        db.query(CachedExecution)
+        .filter(CachedExecution.project_id == project_id)
+        .order_by(CachedExecution.id)
+        .all()
+    )
+
+    created_count = 0
+
+    for e in executions:
+        stage_name = (e.name or "").strip()
+        if not stage_name:
+            continue
+        result = _match_stage_type(stage_name, standard_stages)
+        if not result:
+            continue
+        matched_type = result[0]
+
+        templates = (
+            db.query(TaskTemplate)
+            .filter(TaskTemplate.stage_type == matched_type,
+                    TaskTemplate.project_type == project_type)
+            .order_by(TaskTemplate.sort_order)
+            .all()
+        )
+
+        for tpl in templates:
+            # Check if a task from this template already exists for this project+execution
+            existing = db.query(Task).filter(
+                Task.template_id == tpl.id,
+                Task.project_id == project_id,
+                Task.execution_id == e.id,
+            ).first()
+            if existing:
+                # Update title/responsible role if template changed
+                changed = False
+                if existing.title != tpl.task_name:
+                    existing.title = tpl.task_name
+                    changed = True
+                if existing.description != (tpl.description or None):
+                    existing.description = tpl.description or None
+                    changed = True
+                if existing.stage_name != matched_type:
+                    existing.stage_name = matched_type
+                    changed = True
+                if tpl.responsible_role:
+                    user_id = _resolve_user_for_role(db, tpl.responsible_role)
+                    if user_id and existing.assignee_id != user_id:
+                        existing.assignee_id = user_id
+                        changed = True
+                if changed:
+                    created_count += 1  # count updates as changes
+                continue
+
+            # Resolve responsible_role to a user
+            assignee_id = None
+            if tpl.responsible_role:
+                assignee_id = _resolve_user_for_role(db, tpl.responsible_role)
+
+            task = Task(
+                project_id=project_id,
+                execution_id=e.id,
+                stage_name=matched_type,
+                title=tpl.task_name,
+                description=tpl.description or None,
+                status="todo",
+                priority="medium",
+                type="development",
+                assignee_id=assignee_id,
+                reporter_id=1,  # admin as reporter for auto-created tasks
+                template_id=tpl.id,
+                sort_order=tpl.sort_order,
+            )
+            db.add(task)
+            created_count += 1
+
+    # Phase 2: unmatched stages — create tasks with execution_id=0
+    matched_stages = set()
+    for e in executions:
+        stage_name = (e.name or "").strip()
+        if stage_name:
+            result = _match_stage_type(stage_name, standard_stages)
+            if result:
+                matched_stages.add(result[0])
+
+    for st in standard_stages:
+        if st in matched_stages:
+            continue
+        templates = (
+            db.query(TaskTemplate)
+            .filter(TaskTemplate.stage_type == st,
+                    TaskTemplate.project_type == project_type)
+            .order_by(TaskTemplate.sort_order)
+            .all()
+        )
+        for tpl in templates:
+            # Check for existing placeholder task
+            existing = db.query(Task).filter(
+                Task.template_id == tpl.id,
+                Task.project_id == project_id,
+                Task.stage_name == st,
+                Task.execution_id == 0,
+            ).first()
+            if existing:
+                continue
+
+            assignee_id = None
+            if tpl.responsible_role:
+                assignee_id = _resolve_user_for_role(db, tpl.responsible_role)
+
+            task = Task(
+                project_id=project_id,
+                execution_id=0,
+                stage_name=st,
+                title=tpl.task_name,
+                description=tpl.description or None,
+                status="todo",
+                priority="medium",
+                type="development",
+                assignee_id=assignee_id,
+                reporter_id=1,
+                template_id=tpl.id,
+                sort_order=tpl.sort_order,
+            )
+            db.add(task)
+            created_count += 1
+
+    if created_count > 0:
+        db.commit()
+    return created_count
+
+
+def sync_all_projects_tasks(db: Session) -> dict:
+    """Sync all projects' tasks with current task templates."""
+    projects = db.query(CachedProject).order_by(CachedProject.id).all()
+    synced: list[str] = []
+    failed: list[str] = []
+
+    for p in projects:
+        ptype = (p.project_type or "RD").strip()
+        try:
+            count = _sync_tasks_from_templates(db, p.id, ptype)
+            synced.append(f"{p.id}:{p.name} (+{count})")
         except Exception as exc:
             failed.append(f"{p.id}:{p.name} ({exc})")
 
