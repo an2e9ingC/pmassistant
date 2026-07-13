@@ -346,7 +346,7 @@ function switchUserTab(tab) {
 
 async function initUserManagement() {
   _userList = [];
-  document.getElementById('users-tbody').innerHTML = '<tr><td colspan="8"><div class="loading-spinner">加载中...</div></td></tr>';
+  document.getElementById('users-tbody').innerHTML = '<tr><td colspan="9"><div class="loading-spinner">加载中...</div></td></tr>';
   document.getElementById('roles-tbody').innerHTML = '<tr><td colspan="7"><div class="loading-spinner">加载中...</div></td></tr>';
   try {
     var rolesPromise = API.get('/admin/users/roles');
@@ -359,7 +359,7 @@ async function initUserManagement() {
     renderUserKPIs();
     renderRoleKPIs();
   } catch(e) {
-    document.getElementById('users-tbody').innerHTML = '<tr><td colspan="8"><div class="error-state">加载失败: ' + escHtml(e.message) + '</div></td></tr>';
+    document.getElementById('users-tbody').innerHTML = '<tr><td colspan="9"><div class="error-state">加载失败: ' + escHtml(e.message) + '</div></td></tr>';
   }
 }
 
@@ -569,7 +569,7 @@ function renderUserTable() {
   if (_userFilter === 'active') users = users.filter(function(u) { return u.is_active; });
   else if (_userFilter === 'disabled') users = users.filter(function(u) { return !u.is_active; });
   if (!users.length) {
-    tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state" style="padding:16px">暂无匹配用户</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state" style="padding:16px">暂无匹配用户</div></td></tr>';
     return;
   }
   tbody.innerHTML = users.map(function(u, idx) {
@@ -613,6 +613,7 @@ function renderUserTable() {
       '<td>' + (roleBadges || '<span style="font-size:11px;color:var(--muted)">未分配</span>') + '</td>' +
       '<td>' + statusHtml + '</td>' +
       '<td style="font-size:11px">' + loginHtml + '</td>' +
+      '<td style="font-size:12px;color:var(--muted)">' + escHtml(u.last_login_at || '—') + '</td>' +
       '<td style="font-size:12px;color:var(--muted)">' + escHtml(u.created_at || '') + '</td>' +
       '<td style="white-space:nowrap">' +
         iconEdit('openUserEditDialog(' + u.id + ')') +

@@ -2084,10 +2084,14 @@ async function checkNewVersion() {
     // Collect entries newer than lastVer (exclusive) up to curVer (inclusive)
     // allEntries is newest-first from dev-plan.md; reverse to show oldest first
     var newEntries = [];
+    var foundLast = false;
     for (var i = 0; i < allEntries.length; i++) {
-      if (allEntries[i].version === lastVer) break;  // stop at last seen
+      if (allEntries[i].version === lastVer) { foundLast = true; break; }
       newEntries.push(allEntries[i]);
     }
+    // If lastVer not in changelog (new user, edited entries, skipped versions),
+    // limit to most recent 3 entries to avoid showing entire history
+    if (!foundLast && newEntries.length > 3) newEntries = newEntries.slice(0, 3);
     newEntries.reverse();
 
     // If no entries found in range, show missing notice
