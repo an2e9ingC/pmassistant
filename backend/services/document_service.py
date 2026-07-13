@@ -182,11 +182,15 @@ def get_project_types(db: Session) -> list[dict]:
 
 
 def get_stage_types_for_project_type(db: Session, project_type: str) -> list[str]:
-    """Return stage types for a given project_type (predefined + persisted custom stages)."""
+    """Return stage types for a given project_type (predefined + persisted custom stages).
+    Excluded predefined stages are filtered out."""
     if project_type in PROJECT_TYPE_DEFS:
         stages = list(PROJECT_TYPE_DEFS[project_type]["stages"])
     else:
         stages = []
+    # Filter out excluded (deleted) predefined stages
+    excluded = _get_excluded_stages(db, project_type)
+    stages = [s for s in stages if s not in excluded]
     # Include persisted custom stage types for this project_type
     for st in _get_custom_stage_types(db, project_type):
         if st not in stages:
@@ -224,6 +228,7 @@ def get_templates_grouped(db: Session, project_type: str = "RD") -> dict:
 
 
 CUSTOM_STAGE_TYPES_PREFIX = "custom_stage_types"  # PmaSetting key prefix, per-type: custom_stage_types_RD, etc.
+EXCLUDED_STAGES_PREFIX = "excluded_stages"  # PmaSetting key prefix for deleted predefined stages
 
 
 def _get_custom_stage_types(db: Session, project_type: str = "") -> list[str]:
@@ -238,6 +243,22 @@ def _save_custom_stage_types(db: Session, project_type: str, stage_types: list[s
     """Persist custom stage types for a project_type to PmaSetting."""
     from backend.models.local import PmaSetting
     key = f"{CUSTOM_STAGE_TYPES_PREFIX}_{project_type}"
+    val = ",".join(stage_types)
+    PmaSetting.set(db, key, val)
+
+
+def _get_excluded_stages(db: Session, project_type: str) -> list[str]:
+    """Read persisted excluded (deleted) predefined stages for a project_type."""
+    from backend.models.local import PmaSetting
+    key = f"{EXCLUDED_STAGES_PREFIX}_{project_type}"
+    val = PmaSetting.get(db, key, "")
+    return [s.strip() for s in val.split(",") if s.strip()]
+
+
+def _save_excluded_stages(db: Session, project_type: str, stage_types: list[str]):
+    """Persist excluded predefined stages for a project_type to PmaSetting."""
+    from backend.models.local import PmaSetting
+    key = f"{EXCLUDED_STAGES_PREFIX}_{project_type}"
     val = ",".join(stage_types)
     PmaSetting.set(db, key, val)
 
@@ -307,11 +328,12 @@ def rename_stage_type(db: Session, old_name: str, new_name: str) -> int:
     return count
 
 
-def delete_stage_type(db: Session, stage_type: str) -> int:
-    """Delete all templates for a stage type."""
-    count = db.query(DocumentTemplate).filter(
-        DocumentTemplate.stage_type == stage_type
-    ).delete()
+def delete_stage_type(db: Session, stage_type: str, project_type: str = "") -> int:
+    """Delete all templates for a stage type, optionally scoped to a project type."""
+    q = db.query(DocumentTemplate).filter(DocumentTemplate.stage_type == stage_type)
+    if project_type:
+        q = q.filter(DocumentTemplate.project_type == project_type)
+    count = q.delete()
     db.commit()
     return count
 

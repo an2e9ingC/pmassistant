@@ -164,13 +164,22 @@ def delete_stage_type(
     db: Session = Depends(get_db),
     user=Depends(require_perm("doc_template")),
 ):
-    count = document_service.delete_stage_type(db, stage_type)
-    # Also remove from persisted custom stage types (per project_type)
-    from backend.services.document_service import _get_custom_stage_types, _save_custom_stage_types
-    customs = _get_custom_stage_types(db, project_type)
-    if stage_type in customs:
-        customs.remove(stage_type)
-        _save_custom_stage_types(db, project_type, customs)
+    from backend.services.document_service import (
+        _get_custom_stage_types, _save_custom_stage_types,
+        _get_excluded_stages, _save_excluded_stages, PROJECT_TYPE_DEFS,
+    )
+    count = document_service.delete_stage_type(db, stage_type, project_type)
+    # If this is a predefined stage, add to excluded list; otherwise remove from custom
+    if project_type in PROJECT_TYPE_DEFS and stage_type in PROJECT_TYPE_DEFS[project_type]["stages"]:
+        excluded = _get_excluded_stages(db, project_type)
+        if stage_type not in excluded:
+            excluded.append(stage_type)
+            _save_excluded_stages(db, project_type, excluded)
+    else:
+        customs = _get_custom_stage_types(db, project_type)
+        if stage_type in customs:
+            customs.remove(stage_type)
+            _save_custom_stage_types(db, project_type, customs)
     log_audit(db, user, "doc_stage_del", f"[{project_type}] {stage_type} ({count} docs)", AUDIT_CAT_TEMPLATE, "high")
     return {"code": 0, "data": {"deleted": count}, "message": "ok"}
 
@@ -182,14 +191,26 @@ def add_stage_type(
     db: Session = Depends(get_db),
     user=Depends(require_perm("doc_template")),
 ):
-    """Persist a new custom stage type for a project type."""
+    """Persist a new custom stage type for a project type.
+    If the stage_type is a previously deleted predefined stage, it will be restored."""
     import logging
     logger = logging.getLogger(__name__)
-    from backend.services.document_service import _get_custom_stage_types, _save_custom_stage_types, PROJECT_TYPE_DEFS
-    # Only check predefined for this specific project_type
+    from backend.services.document_service import (
+        _get_custom_stage_types, _save_custom_stage_types,
+        _get_excluded_stages, _save_excluded_stages, PROJECT_TYPE_DEFS,
+    )
+    # If this is a previously deleted predefined stage, restore it (remove from excluded)
     if project_type in PROJECT_TYPE_DEFS:
         predefined = set(PROJECT_TYPE_DEFS[project_type]["stages"])
         if stage_type in predefined:
+            excluded = _get_excluded_stages(db, project_type)
+            if stage_type in excluded:
+                excluded.remove(stage_type)
+                _save_excluded_stages(db, project_type, excluded)
+                detail = f"[{project_type}] {stage_type} (恢复预定义阶段)"
+                log_audit(db, user, "doc_stage_add", detail, AUDIT_CAT_TEMPLATE, "medium")
+                logger.info("doc_stage_add restore: %s by %s", detail, user.username)
+                return {"code": 0, "data": {"stage_type": stage_type}, "message": "预定义阶段已恢复"}
             msg = f"'{stage_type}' 是 {PROJECT_TYPE_DEFS[project_type]['label']} 预定义阶段，无需添加"
             logger.warning("doc_stage_add blocked: %s", msg)
             return {"code": 1, "message": msg}
