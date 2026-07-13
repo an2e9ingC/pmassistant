@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="app-version" content="v2026.07.10-beta1">
+<meta name="app-version" content="v2026.07.13-beta1">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>PM Assistant · 集成禅道 & GitLab</title>
 <script>
@@ -944,8 +944,8 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
         <div>
           <div class="section-hd"><div class="section-title">关联项目</div></div>
           <div class="card table-scroll" style="max-height:400px">
-            <table class="proj-table">
-              <thead><tr><th>项目</th><th width="12%">状态</th></tr></thead>
+            <table class="proj-table tbl-accent">
+              <thead><tr><th width="8%">序号</th><th width="18%">编号</th><th>项目</th><th width="12%">状态</th></tr></thead>
               <tbody id="cust-det-proj-tbody"></tbody>
             </table>
           </div>
@@ -953,8 +953,8 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
         <div>
           <div class="section-hd"><div class="section-title">关联产品</div></div>
           <div class="card table-scroll" style="max-height:400px">
-            <table class="proj-table">
-              <thead><tr><th>产品</th><th width="12%">状态</th></tr></thead>
+            <table class="proj-table tbl-success">
+              <thead><tr><th width="8%">序号</th><th width="18%">编号</th><th>产品</th><th width="12%">状态</th></tr></thead>
               <tbody id="cust-det-prod-tbody"></tbody>
             </table>
           </div>
@@ -1181,10 +1181,5 @@ async function triggerSync() {
 <!-- Broadcast notification bar -->
 <div id="alert-ticker" style="display:none;position:fixed;bottom:0;left:var(--sidebar-w);right:0;z-index:900;background:var(--surface);border-top:1px solid var(--border);overflow:hidden;white-space:nowrap;font-size:12px;padding:6px 0"><div id="alert-ticker-inner" style="display:inline-block;animation-name:ticker-scroll;animation-duration:100s;animation-timing-function:linear;animation-iteration-count:infinite"></div></div>
 <div id="notif-bar" style="display:none"></div>
-<style>
-@keyframes ticker-scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
-@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
-#alert-ticker:hover #alert-ticker-inner { animation-play-state: paused; }
-</style>
 </body>
 </html>

@@ -203,6 +203,10 @@
 .table-scroll .proj-table td { border-bottom: 1px solid var(--border); }
 .table-scroll .proj-table tr:last-child td { border-bottom: none; }
 
+/* Table header color variants */
+.proj-table.tbl-accent thead th { background: var(--accent); color: #fff; }
+.proj-table.tbl-success thead th { background: var(--success); color: #fff; }
+
 /* Zentao quick link */
 
 .ru-user-tag {

@@ -110,8 +110,8 @@ function openCustomerDetail(id) {
 async function initCustomerDetail() {
   var id = localStorage.getItem('pm_cust_id');
   if (!id) { gotoView('customers'); return; }
-  document.getElementById('cust-det-proj-tbody').innerHTML = '<tr><td colspan="2"><div class="loading-spinner">加载中...</div></td></tr>';
-  document.getElementById('cust-det-prod-tbody').innerHTML = '<tr><td colspan="2"><div class="loading-spinner">加载中...</div></td></tr>';
+  document.getElementById('cust-det-proj-tbody').innerHTML = '<tr><td colspan="4"><div class="loading-spinner">加载中...</div></td></tr>';
+  document.getElementById('cust-det-prod-tbody').innerHTML = '<tr><td colspan="4"><div class="loading-spinner">加载中...</div></td></tr>';
   try {
     var c = await API.get('/customers/' + id);
     document.getElementById('cust-det-fullname').textContent = c.full_name || '';
@@ -120,26 +120,30 @@ async function initCustomerDetail() {
     // Projects table
     var projTbody = document.getElementById('cust-det-proj-tbody');
     if (c.projects && c.projects.length) {
-      projTbody.innerHTML = c.projects.map(function(p) {
+      projTbody.innerHTML = c.projects.map(function(p, i) {
         return '<tr onclick="openProject(\'' + p.id + '\')" style="cursor:pointer">' +
-          '<td><span style="font-family:var(--mono);font-size:11.5px;color:var(--accent)">' + escHtml(p.code || '#'+p.id) + '</span> ' + escHtml(p.name) + '</td>' +
+          '<td style="color:var(--muted);font-size:12px">' + (i + 1) + '</td>' +
+          '<td><span style="font-family:var(--mono);font-size:11.5px;color:var(--accent)">' + escHtml(p.code || '#'+p.id) + '</span></td>' +
+          '<td>' + escHtml(p.name) + '</td>' +
           '<td>' + renderPill(p.status) + '</td>' +
         '</tr>';
       }).join('');
     } else {
-      projTbody.innerHTML = '<tr><td colspan="2"><div class="empty-state" style="padding:12px">暂无关联项目</div></td></tr>';
+      projTbody.innerHTML = '<tr><td colspan="4"><div class="empty-state" style="padding:12px">暂无关联项目</div></td></tr>';
     }
     // Products table
     var prodTbody = document.getElementById('cust-det-prod-tbody');
     if (c.products && c.products.length) {
-      prodTbody.innerHTML = c.products.map(function(p) {
+      prodTbody.innerHTML = c.products.map(function(p, i) {
         return '<tr onclick="openProductFromCust(' + p.id + ')" style="cursor:pointer">' +
-          '<td><span style="font-family:var(--mono);font-size:11.5px;color:var(--accent)">' + escHtml(p.code || '#'+p.id) + '</span> ' + escHtml(p.name) + '</td>' +
+          '<td style="color:var(--muted);font-size:12px">' + (i + 1) + '</td>' +
+          '<td><span style="font-family:var(--mono);font-size:11.5px;color:var(--accent)">' + escHtml(p.code || '#'+p.id) + '</span></td>' +
+          '<td>' + escHtml(p.name) + '</td>' +
           '<td>' + renderPill(p.status) + '</td>' +
         '</tr>';
       }).join('');
     } else {
-      prodTbody.innerHTML = '<tr><td colspan="2"><div class="empty-state" style="padding:12px">暂无关联产品</div></td></tr>';
+      prodTbody.innerHTML = '<tr><td colspan="4"><div class="empty-state" style="padding:12px">暂无关联产品</div></td></tr>';
     }
   } catch(e) {
     document.getElementById('cust-det-name-head').textContent = '加载失败';

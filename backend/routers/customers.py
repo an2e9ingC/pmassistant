@@ -15,6 +15,23 @@ from backend.models.zentao import PmaCustomer, CachedProject, PmaProduct, Custom
 router = APIRouter(prefix="/api/customers", tags=["customers"])
 
 
+def _customer_product_count(db: Session, customer_id: int) -> int:
+    """Count products linked to a customer: direct + indirect via projects."""
+    # Direct: CustomerProductLink
+    direct = set(
+        r[0] for r in db.query(CustomerProductLink.product_id)
+        .filter(CustomerProductLink.customer_id == customer_id).all()
+    )
+    # Indirect: product → project → customer
+    project_ids = [r[0] for r in db.query(CustomerProjectLink.project_id)
+                   .filter(CustomerProjectLink.customer_id == customer_id).all()]
+    indirect = set()
+    if project_ids:
+        indirect = set(r[0] for r in db.query(ProductProjectLink.product_id)
+                       .filter(ProductProjectLink.project_id.in_(project_ids)).all())
+    return len(direct | indirect)
+
+
 class CustomerCreate(BaseModel):
     name: str
     full_name: Optional[str] = None
@@ -43,9 +60,7 @@ def list_customers(
                 "project_count": db.query(CustomerProjectLink).filter(
                     CustomerProjectLink.customer_id == c.id
                 ).count(),
-                "product_count": db.query(CustomerProductLink).filter(
-                    CustomerProductLink.customer_id == c.id
-                ).count(),
+                "product_count": _customer_product_count(db, c.id),
             }
             for c in customers
         ],
@@ -97,14 +112,19 @@ def get_customer_detail(customer_id: int, db: Session = Depends(get_db), _=Depen
     c = db.query(PmaCustomer).filter(PmaCustomer.id == customer_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="客户不存在")
-    # Associated projects
+    # Associated projects (direct)
     proj_links = db.query(CustomerProjectLink).filter(CustomerProjectLink.customer_id == customer_id).all()
     project_ids = [l.project_id for l in proj_links]
     projects = db.query(CachedProject).filter(CachedProject.id.in_(project_ids)).all() if project_ids else []
-    # Associated products
-    prod_links = db.query(CustomerProductLink).filter(CustomerProductLink.customer_id == customer_id).all()
-    product_ids = [l.product_id for l in prod_links]
-    products = db.query(PmaProduct).filter(PmaProduct.id.in_(product_ids)).all() if product_ids else []
+    # Associated products: direct links + indirect via projects (product → project → customer)
+    direct_prod_links = db.query(CustomerProductLink).filter(CustomerProductLink.customer_id == customer_id).all()
+    direct_product_ids = set(l.product_id for l in direct_prod_links)
+    indirect_product_ids = set()
+    if project_ids:
+        ppl = db.query(ProductProjectLink).filter(ProductProjectLink.project_id.in_(project_ids)).all()
+        indirect_product_ids = set(l.product_id for l in ppl)
+    all_product_ids = direct_product_ids | indirect_product_ids
+    products = db.query(PmaProduct).filter(PmaProduct.id.in_(all_product_ids)).all() if all_product_ids else []
     return {
         "code": 0,
         "data": {
