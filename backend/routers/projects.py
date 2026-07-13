@@ -532,6 +532,10 @@ def delete_project(
     db.delete(project)
     db.commit()
 
+    # Clean orphaned favorites
+    from backend.database import clean_orphan_favorites
+    clean_orphan_favorites(db)
+
     # Log to audit
     from backend.audit_categories import AUDIT_CAT_PROJECT
     from backend.routers.logs import log_audit

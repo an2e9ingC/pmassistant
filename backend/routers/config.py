@@ -263,6 +263,8 @@ def clear_database(_=Depends(require_admin), cu = Depends(get_current_user)):
         for t in tables:
             count += db.query(t).delete()
         db.commit()
+        from backend.database import clean_orphan_favorites
+        clean_orphan_favorites(db)
         log_audit(db, cu, "clear_database", f"deleted={count} records", AUDIT_CAT_SYSTEM)
         return {"code": 0, "data": {"deleted": count}, "message": f"已清除 {count} 条缓存数据"}
     except Exception as e:

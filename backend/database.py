@@ -4,7 +4,7 @@ from datetime import datetime as _datetime
 from urllib.parse import quote as _urlquote
 
 from sqlalchemy import create_engine, event, func as _sql_func
-from sqlalchemy.orm import sessionmaker, DeclarativeBase
+from sqlalchemy.orm import Session, sessionmaker, DeclarativeBase
 
 from backend.config import settings, BEIJING_OFFSET, BEIJING_TZ, beijing_now, to_beijing_str
 
@@ -408,6 +408,40 @@ def _clear_gitlab_tokens():
             logger.info(f"Cleared GitLab tokens for {count} user(s) — re-auth required")
     except Exception as e:
         logger.warning(f"Failed to clear GitLab tokens: {e}")
+
+
+def clean_orphan_favorites(db: Session):
+    """Remove invalid project/product IDs from all users' favorites after data deletion."""
+    import json as _json
+    try:
+        from backend.models.local import LocalUser
+        from backend.models.zentao import CachedProject, PmaProduct
+        valid_proj = set(r[0] for r in db.query(CachedProject.id).all())
+        valid_prod = set(r[0] for r in db.query(PmaProduct.id).all())
+        users = db.query(LocalUser).all()
+        fixed = 0
+        for u in users:
+            try:
+                favs = _json.loads(u.favorites) if u.favorites else {"products": [], "projects": []}
+            except (_json.JSONDecodeError, TypeError):
+                favs = {"products": [], "projects": []}
+            if isinstance(favs, list):
+                favs = {"products": [], "projects": favs}
+            proj_ids = favs.get("projects", [])
+            prod_ids = favs.get("products", [])
+            new_proj = [p for p in proj_ids if p in valid_proj]
+            new_prod = [p for p in prod_ids if p in valid_prod]
+            if len(new_proj) != len(proj_ids) or len(new_prod) != len(prod_ids):
+                favs["projects"] = new_proj
+                favs["products"] = new_prod
+                u.favorites = _json.dumps(favs)
+                fixed += 1
+        if fixed:
+            db.commit()
+            import logging as _log
+            _log.getLogger(__name__).info(f"Cleaned orphan favorites for {fixed} user(s)")
+    except Exception:
+        pass  # best-effort, don't block the main operation
 
 
 def init_db():
