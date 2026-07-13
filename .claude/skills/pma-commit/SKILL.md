@@ -47,7 +47,12 @@ Co-Authored-By: <model-name> / <tool-name>
   2. `git add ... && git commit -m "..."`
   3. `./server.sh -p <PORT> restart`
 - **数据层变更必须同步更新 `docs/db.md`**
-- **每次 commit 必须同步更新 `docs/dev-plan.md`**：版本历史表追加条目 + 页头版本号同步为 `#app-version` 当前值
+- **每次 commit 必须同步更新 `docs/dev-plan.md`**：页头版本号同步为 `#app-version` 当前值，并在变更记录表追加新条目
+
+  ```bash
+  # 追加条目到表头下方（不依赖上一行版本号）
+  sed -i "/^|------|------|------|$/a | $(date +%Y-%m-%d) | v2026.0X.0X-betaN | type: 简短描述 |" docs/dev-plan.md
+  ```
 - **AI 生成 commit 必须加 `Co-Authored-By:`**
 - **commit 重启后必须更新 codebase-memory 索引**：
   1. `./server.sh -p <PORT> restart`（见上）
