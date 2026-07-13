@@ -546,7 +546,7 @@ function ganttPx(ds, range, totalWidth) {
 
 function renderProgressRing(pct) {
   pct = Math.round(Math.max(0, Math.min(100, pct || 0)));
-  var size = 36, cx = 18, r = 13;
+  var size = 48, cx = 24, r = 17;
   var circ = 2 * Math.PI * r;
   var offset = circ * (1 - pct / 100);
   var color = pct >= 100 ? 'var(--success)' : pct > 0 ? 'var(--accent)' : 'var(--border)';
@@ -555,7 +555,7 @@ function renderProgressRing(pct) {
     '<circle cx="' + cx + '" cy="' + cx + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="3" ' +
       'stroke-dasharray="' + circ.toFixed(1) + '" stroke-dashoffset="' + offset.toFixed(1) + '" ' +
       'stroke-linecap="round" transform="rotate(-90 ' + cx + ' ' + cx + ')"/>' +
-    '<text x="' + cx + '" y="' + cx + '" text-anchor="middle" dy="0.35em" font-size="12" font-weight="600" fill="var(--muted)">' + pct + '</text>' +
+    '<text x="' + cx + '" y="' + cx + '" text-anchor="middle" dy="0.35em" font-size="15" font-weight="600" fill="var(--muted)">' + pct + '</text>' +
     '</svg>';
 }
 
