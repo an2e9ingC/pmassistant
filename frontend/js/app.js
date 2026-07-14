@@ -1319,8 +1319,9 @@ async function init() {
   var hashParams = parsed.params;
   var lastView = hashView || localStorage.getItem('pm_view') || 'user-center';
   gotoView(lastView, {params: hashView ? hashParams : [], pushState: false});
-  if (!hashView && window.location.hash !== '#/' + lastView) {
-    history.replaceState({ view: lastView, params: [] }, '', '#/' + lastView);
+  // Ensure initial history state exists so back button works from the first navigation
+  if (!history.state || !history.state.view) {
+    history.replaceState({ view: lastView, params: hashParams }, '', '#/' + lastView);
   }
 
   // Global ESC handler: first ESC blurs input, second closes dialog / clears search
