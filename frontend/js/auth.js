@@ -57,7 +57,7 @@ async function onLogin(e) {
     API.token = json.data.access_token;
     localStorage.setItem('pma_token', json.data.access_token);
     localStorage.setItem('pma_user', JSON.stringify(json.data.user));
-    window.location.href = '/';
+    window.location.href = '/#/user-center';
   } catch(err) {
     errorEl.textContent = '网络错误，请检查服务器连接';
     btn.disabled = false;
@@ -186,7 +186,7 @@ async function loginWithGitlab() {
     var pollTimer = setInterval(function() {
       if (isLoggedIn()) {
         clearInterval(pollTimer);
-        window.location.href = '/';
+        window.location.href = '/#/user-center';
         return;
       }
       if (popup.closed) {
@@ -213,10 +213,10 @@ function handleGitlabCallback() {
       // If opened as popup, redirect opener and close self
       if (window.opener && window.opener !== window) {
         try {
-          window.opener.location.href = '/';
+          window.opener.location.href = '/#/user-center';
         } catch(e) {
           // Cross-origin — fall through to redirect self
-          window.location.href = '/';
+          window.location.href = '/#/user-center';
           return;
         }
         window.close();
@@ -226,7 +226,7 @@ function handleGitlabCallback() {
       if (window.history && window.history.replaceState) {
         window.history.replaceState({}, document.title, '/login');
       }
-      window.location.href = '/';
+      window.location.href = '/#/user-center';
     }
   }
 }
