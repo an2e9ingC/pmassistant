@@ -91,13 +91,15 @@ def search_topology(
     products_map: Dict[int, List[dict]] = {}
     product_ids = set(link.product_id for link in links)
     prods = {
-        p.id: p.name
+        p.id: {"name": p.name, "code": p.code}
         for p in db.query(PmaProduct).filter(PmaProduct.id.in_(product_ids)).all()
     }
     for link in links:
-        name = prods.get(link.product_id)
-        if name:
-            products_map.setdefault(link.project_id, []).append({"id": link.product_id, "name": name})
+        pinfo = prods.get(link.product_id)
+        if pinfo:
+            name = pinfo["name"]
+            prod_code = pinfo["code"] or ""
+            products_map.setdefault(link.project_id, []).append({"id": link.product_id, "name": name, "code": prod_code})
 
     # Batch-load linked customers
     cust_links = (

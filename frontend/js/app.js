@@ -1010,7 +1010,7 @@ async function loadAlertTicker() {
       var dot = a.severity === 'red' ? '#f87171' : '#fbbf24';
       html += '<span style="display:inline-block;margin:0 12px;padding:2px 8px;border-radius:3px;background:var(--bg)">' +
         '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:' + dot + ';margin-right:4px;vertical-align:middle"></span>' +
-        '<span style="color:var(--accent);cursor:pointer" onclick="openProject(\'' + a.project_id + '\')">' + escHtml(a.project_code || '') + '</span>' +
+        '<span style="color:var(--accent);cursor:pointer" onclick="openProject(\'' + escHtml(a.project_code || '') + '\')">' + escHtml(a.project_code || '') + '</span>' +
         (a.project_name ? ' <span style="color:var(--muted);font-size:11px">' + escHtml(a.project_name) + '</span>' : '') +
         ' <span style="color:var(--fg)">' + escHtml(a.message) + '</span>' +
       '</span>';
@@ -1513,7 +1513,7 @@ function _renderUcTaskTable() {
     var assignee = t.assignee_name || t.assignee_username || (t.assignee_id||'-');
     return '<tr style="cursor:pointer" onclick="_ucOpenTask('+t.id+')">' +
       '<td style="font-size:12px">' + escHtml(t.product_name || '-') + '</td>' +
-      '<td>' + (t.project_code ? projCodeTag(t.project_code, t.project_id) : '-') + '</td>' +
+      '<td>' + (t.project_code ? projCodeTag(t.project_code, 'openProject(\'' + escHtml(t.project_code).replace(/'/g, "\\'") + '\')') : '-') + '</td>' +
       '<td style="text-align:left;font-size:12px">' + escHtml(t.project_name || '-') + '</td>' +
       '<td style="text-align:left;font-weight:530">' + escHtml(t.title) + '</td>' +
       '<td style="font-size:11px;color:var(--muted)">' + escHtml(stageName) + '</td>' +
