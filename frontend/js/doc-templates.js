@@ -11,7 +11,6 @@ var _nextTempId = -1;        // negative IDs for unsaved templates
 var _originalGrouped = null; // snapshot before edits, for "discard"
 var _currentProjectType = 'RD'; // selected project type tab
 var _projectTypes = [];      // [{id, label, stages, builtin}]
-var _currentTemplateMode = 'doc'; // 'doc' or 'task'
 
 // Fixed stage order matching the project lifecycle
 var STAGE_ORDER = [
@@ -230,17 +229,19 @@ function renderTemplatesPage() {
   var user = getCurrentUser();
   var perms = (user && user.permissions) ? user.permissions.split(',') : [];
   var canEdit = user && (user.role === 'admin' || perms.indexOf('doc_template') >= 0);
-  var isTaskMode = _currentTemplateMode === 'task';
 
-  // Use natural key order (server returns predfined in STAGE_ORDER and custom in saved order)
-  // _sortStageTypes is only used for initial default selection
   var stageTypes = Object.keys(_templatesGrouped);
 
-  // Project type tabs bar
+  // Project type tabs bar (with edit/delete icons)
   var ptypeTabs = '<div class="map-tabs" style="margin-bottom:12px">';
   _projectTypes.forEach(function(pt) {
-    ptypeTabs += '<div class="map-tab' + (pt.id === _currentProjectType ? ' active' : '') + '" onclick="selectProjectTypeTab(\'' + escHtml(pt.id) + '\')">' +
-      escHtml(pt.label) + (pt.builtin ? '' : ' <span style="font-size:9px;opacity:0.7">自定义</span>') +
+    var isActive = pt.id === _currentProjectType;
+    var labelEsc = escHtml(pt.label).replace(/'/g, "\\'");
+    ptypeTabs += '<div class="map-tab' + (isActive ? ' active' : '') + '" onclick="selectProjectTypeTab(\'' + escHtml(pt.id) + '\')">' +
+      '<span class="ptype-label" onclick="event.stopPropagation();showRenameProjectTypeDialog(\'' + escHtml(pt.id) + '\',\'' + labelEsc + '\')" title="点击编辑名称" style="cursor:text">' + escHtml(pt.label) + '</span>' +
+      (pt.builtin ? '' : ' <span style="font-size:9px;opacity:0.7">自定义</span>') +
+      (canEdit ? '<span style="margin-left:4px;opacity:0.4;cursor:pointer;font-size:11px" onclick="event.stopPropagation();showRenameProjectTypeDialog(\'' + escHtml(pt.id) + '\',\'' + labelEsc + '\')" title="重命名">✎</span>' : '') +
+      (canEdit && !pt.builtin ? '<span style="margin-left:2px;opacity:0.4;cursor:pointer;color:var(--danger);font-size:12px" onclick="event.stopPropagation();deleteProjectType(\'' + escHtml(pt.id) + '\',\'' + labelEsc + '\')" title="删除项目类型">✕</span>' : '') +
       '</div>';
   });
   if (canEdit) {
@@ -248,15 +249,9 @@ function renderTemplatesPage() {
   }
   ptypeTabs += '</div>';
 
-  // Template mode toggle: 文档模板 | 任务模板
-  var modeToggle = '<div style="display:flex;gap:6px;margin-bottom:8px">' +
-    '<button class="btn btn-sm' + (!isTaskMode ? ' btn-primary' : '') + '" style="font-size:11px;padding:2px 12px" onclick="toggleTemplateMode(\'doc\')">文档模板</button>' +
-    '<button class="btn btn-sm' + (isTaskMode ? ' btn-primary' : '') + '" style="font-size:11px;padding:2px 12px" onclick="toggleTemplateMode(\'task\')">任务模板</button>' +
-    '</div>';
-
   if (!stageTypes.length) {
-    var emptyHtml = ptypeTabs + modeToggle +
-      '<div class="empty-state" style="padding:40px">暂无阶段类型<br><span style="font-size:11px;color:var(--muted)">请先添加阶段类型，再配置' + (isTaskMode ? '任务' : '文档') + '模板</span></div>';
+    var emptyHtml = ptypeTabs +
+      '<div class="empty-state" style="padding:40px">暂无阶段类型<br><span style="font-size:11px;color:var(--muted)">请先添加阶段类型，再配置文档和任务模板</span></div>';
     if (canEdit) {
       emptyHtml += '<div style="text-align:center;margin-top:12px">' +
         '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="showAddStageDialog()">+ 新增阶段类型</button>' +
@@ -271,11 +266,11 @@ function renderTemplatesPage() {
     _selectedStage = stageTypes[0];
   }
 
-  var items = isTaskMode ? (_taskTemplatesGrouped[_selectedStage] || []) : (_templatesGrouped[_selectedStage] || []);
-
-  // Left panel: stage type list with drag-drop + edit/delete
+  // Left panel: stage type list with drag-drop + edit/delete, showing combined count
   var leftHtml = stageTypes.map(function(st, i) {
-    var count = isTaskMode ? (_taskTemplatesGrouped[st] || []).length : (_templatesGrouped[st] || []).length;
+    var docCount = (_templatesGrouped[st] || []).length;
+    var taskCount = (_taskTemplatesGrouped[st] || []).length;
+    var totalCount = docCount + taskCount;
     var sel = st === _selectedStage ? ' selected' : '';
     return '<div class="dt-stage-item' + sel + '" data-drag-index="' + i + '" draggable="true"' +
       ' onclick="selectDocTemplateStage(\'' + escHtml(st) + '\')"' +
@@ -284,7 +279,7 @@ function renderTemplatesPage() {
       ' ondrop="_trDropStage.call(this,event)"' +
       ' style="cursor:' + (sel ? 'default' : 'grab') + '">' +
       '<span style="flex:1">' + escHtml(st) + '</span>' +
-      '<span class="dt-stage-count">' + count + '</span>' +
+      '<span class="dt-stage-count">' + totalCount + '</span>' +
       (canEdit ? '<span class="dt-stage-acts">' +
         iconEdit('event.stopPropagation();showRenameStageDialog(\'' + escHtml(st) + '\')', '重命名') +
         iconDelete('event.stopPropagation();deleteStageType(\'' + escHtml(st) + '\')', '删除') +
@@ -293,110 +288,14 @@ function renderTemplatesPage() {
   }).join('') +
   (canEdit ? '<div class="dt-stage-item" style="justify-content:center;color:var(--accent);font-size:12px;cursor:pointer;border:1px dashed var(--border)" onclick="showAddStageDialog()">+ 新增阶段类型</div>' : '');
 
-  // Right panel
-  var pendingOps = isTaskMode ? _taskPendingOps : _pendingOps;
-  var pendingCount = pendingOps.length;
-  var saveBtnHtml = '';
-  if (canEdit && pendingCount > 0) {
-    saveBtnHtml = '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px;padding-left:14px;padding-right:14px;margin-left:8px" onclick="' + (isTaskMode ? 'saveAllTaskChanges' : 'saveAllChanges') + '()">保存配置 (' + pendingCount + ')</button>' +
-      '<button class="btn btn-sm" style="margin-left:4px;color:var(--warn);border-color:var(--warn)" onclick="' + (isTaskMode ? 'discardTaskChanges' : 'discardChanges') + '()">放弃</button>';
-  } else if (canEdit && pendingCount === 0) {
-    saveBtnHtml = '<span style="font-size:11px;color:var(--muted);margin-left:8px">✓ 已保存</span>';
-  }
-  var syncAllHtml = canEdit
-    ? '<button class="btn btn-sm" style="margin-left:8px;color:var(--accent);border-color:var(--accent)" onclick="' + (isTaskMode ? 'syncAllProjectsTasks' : 'syncAllProjects') + '()" title="将当前模板应用到全部项目">↻ 应用到全部项目</button>'
-    : '';
-  var labelSuffix = isTaskMode ? '任务清单' : '文档清单';
-  var addBtnLabel = isTaskMode ? '+ 添加任务' : '+ 添加文档';
-  var addBtnFn = isTaskMode ? 'showAddTaskTemplateForm()' : 'showAddTemplateForm()';
+  // Right panel with TWO sections: doc templates + task templates
   var rightHtml = '<div class="dt-right">' +
-    '<div class="dt-right-head">' +
-      '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px">' +
-        '<div class="section-title">' + escHtml(_selectedStage) + ' — ' + labelSuffix + '</div>' +
-        saveBtnHtml +
-        syncAllHtml +
-      '</div>' +
-      (canEdit ? '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="' + addBtnFn + '">' + addBtnLabel + '</button>' : '') +
+    _renderDocTemplateSection(_selectedStage, canEdit) +
+    _renderTaskTemplateSection(_selectedStage, canEdit) +
     '</div>';
 
-  if (items.length) {
-    if (isTaskMode) {
-      // Task template table
-      rightHtml += '<div class="table-scroll"><table class="stage-table"><thead><tr>' +
-        '<th style="width:50px">序号</th>' +
-        '<th>任务名称</th>' +
-        '<th style="width:100px">责任人</th>' +
-        '<th>说明</th>' +
-        (canEdit ? '<th style="width:90px;white-space:nowrap">操作</th>' : '') +
-      '</tr></thead><tbody>';
-      items.forEach(function(t, i) {
-        rightHtml += '<tr>' +
-          '<td data-drag-index="' + i + '" draggable="true"' +
-          ' ondragstart="_trDragStart.call(this,event)" ondragend="_trDragEnd.call(this,event)"' +
-          ' ondragover="_trDragOver.call(this,event)" ondragleave="_trDragLeave.call(this,event)"' +
-          ' ondrop="_trDrop.call(this,event,_taskTemplatesGrouped[_selectedStage] || [],renderTaskTemplatesAfterReorder)"' +
-          ' style="font-family:var(--mono);color:var(--muted);text-align:center;cursor:grab" title="拖动排序">' + (t.sort_order != null ? t.sort_order : '—') + '</td>' +
-          '<td style="font-weight:500">' + escHtml(t.task_name) + '</td>' +
-          '<td style="font-size:12px;white-space:nowrap">' + escHtml(t.responsible_role || '—') + '</td>' +
-          '<td style="font-size:12px;color:var(--muted)">' + escHtml(t.description || '') + '</td>' +
-          (canEdit
-            ? '<td style="white-space:nowrap;text-align:center" ondragover="event.stopPropagation()" ondrop="event.stopPropagation()">' +
-                iconCopy('copyTaskTemplate(' + t.id + ')') +
-                iconEdit('showEditTaskTemplateForm(' + t.id + ')') +
-                iconDelete('deleteTaskTemplate(' + t.id + ')') +
-              '</td>'
-            : '') +
-        '</tr>';
-      });
-      rightHtml += '</tbody></table></div>';
-      rightHtml += '<div style="font-size:10.5px;color:var(--muted);margin-top:4px">💡 拖动序号列可调整任务顺序</div>';
-    } else {
-      // Document template table (original)
-      rightHtml += '<div class="table-scroll"><table class="stage-table"><thead><tr>' +
-        '<th style="width:50px">序号</th>' +
-        '<th>文档名称</th>' +
-        '<th style="width:80px">责任人</th>' +
-        '<th style="width:60px">类型</th>' +
-        '<th>路径</th>' +
-        '<th>说明</th>' +
-        (canEdit ? '<th style="width:90px;white-space:nowrap">操作</th>' : '') +
-      '</tr></thead><tbody>';
-
-      var typeLabels = DOC_TYPE_LABELS;
-      items.forEach(function(d, i) {
-        rightHtml += '<tr>' +
-          '<td data-drag-index="' + i + '" draggable="true"' +
-          ' ondragstart="_trDragStart.call(this,event)" ondragend="_trDragEnd.call(this,event)"' +
-          ' ondragover="_trDragOver.call(this,event)" ondragleave="_trDragLeave.call(this,event)"' +
-          ' ondrop="_trDrop.call(this,event,_templatesGrouped[_selectedStage] || [],renderTemplatesAfterReorder)"' +
-          ' style="font-family:var(--mono);color:var(--muted);text-align:center;cursor:grab" title="拖动排序">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
-          '<td style="font-weight:500">' + escHtml(d.doc_name) + '</td>' +
-          '<td style="font-size:12px;white-space:nowrap;width:80px">' + escHtml(d.responsible_role || '—') + '</td>' +
-          '<td style="font-size:11px">' + escHtml(typeLabels[d.doc_type] || '—') + '</td>' +
-          '<td style="font-size:11px">' + (d.base_path || d.file_pattern
-            ? (d.base_path ? '<div style="color:var(--muted)">' + escHtml(d.base_path) + '</div>' : '') +
-              (d.file_pattern ? '<div style="font-family:var(--mono);color:var(--accent)">' + escHtml(d.file_pattern) + '</div>' : '')
-            : (d.doc_path ? '<a href="' + escHtml(d.doc_path) + '" target="_blank" style="color:var(--accent);text-decoration:none">' + escHtml(d.doc_path) + ' ↗</a>' : '—')) + '</td>' +
-          '<td style="font-size:12px;color:var(--muted)">' + escHtml(d.description || '') + '</td>' +
-          (canEdit
-            ? '<td style="white-space:nowrap;text-align:center" ondragover="event.stopPropagation()" ondrop="event.stopPropagation()">' +
-                iconCopy('copyTemplate(' + d.id + ')') +
-                iconEdit('showEditTemplateForm(' + d.id + ')') +
-                iconDelete('deleteTemplate(' + d.id + ')') +
-              '</td>'
-            : '') +
-        '</tr>';
-      });
-      rightHtml += '</tbody></table></div>';
-      rightHtml += '<div style="font-size:10.5px;color:var(--muted);margin-top:4px">💡 拖动序号列可调整文档顺序</div>';
-    }
-  } else {
-    rightHtml += '<div class="empty-state" style="padding:20px">该阶段类型暂无' + (isTaskMode ? '任务' : '文档') + '模板</div>';
-  }
-  rightHtml += '</div>';
-
   document.getElementById('dtsec-project').innerHTML =
-    ptypeTabs + modeToggle +
+    ptypeTabs +
     '<div class="dt-layout">' +
       '<div class="dt-left">' +
         '<div class="section-title" style="margin-bottom:10px">阶段类型</div>' +
@@ -409,6 +308,140 @@ function renderTemplatesPage() {
 function selectDocTemplateStage(stageType) {
   _selectedStage = stageType;
   renderTemplatesPage();
+}
+
+/* ── Section Renderers for Doc & Task Templates ── */
+
+function _renderDocTemplateSection(stageName, canEdit) {
+  var docs = _templatesGrouped[stageName] || [];
+  var pendingCount = _pendingOps.length;
+  var html = '<div class="dt-section">';
+
+  // Section header
+  html += '<div class="dt-section-head">';
+  html += '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px">';
+  html += '<div class="section-title">' + escHtml(stageName) + ' — 文档清单 (' + docs.length + ')</div>';
+  if (canEdit && pendingCount > 0) {
+    html += '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px;padding-left:14px;padding-right:14px;margin-left:8px" onclick="saveAllChanges()">保存配置 (' + pendingCount + ')</button>' +
+      '<button class="btn btn-sm" style="margin-left:4px;color:var(--warn);border-color:var(--warn)" onclick="discardChanges()">放弃</button>';
+  } else if (canEdit && pendingCount === 0) {
+    html += '<span style="font-size:11px;color:var(--muted);margin-left:8px">✓ 已保存</span>';
+  }
+  if (canEdit) {
+    html += '<button class="btn btn-sm" style="margin-left:8px;color:var(--accent);border-color:var(--accent)" onclick="syncAllProjects()" title="将当前模板应用到全部项目">↻ 应用到全部项目</button>';
+  }
+  html += '</div>';
+  if (canEdit) {
+    html += '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="showAddTemplateForm()">+ 添加文档</button>';
+  }
+  html += '</div>';
+
+  // Table or empty state
+  if (docs.length) {
+    html += '<div class="table-scroll"><table class="stage-table"><thead><tr>' +
+      '<th style="width:50px">序号</th>' +
+      '<th>文档名称</th>' +
+      '<th style="width:80px">责任人</th>' +
+      '<th style="width:60px">类型</th>' +
+      '<th>路径</th>' +
+      '<th>说明</th>' +
+      (canEdit ? '<th style="width:90px;white-space:nowrap">操作</th>' : '') +
+    '</tr></thead><tbody>';
+    var typeLabels = DOC_TYPE_LABELS;
+    docs.forEach(function(d, i) {
+      html += '<tr>' +
+        '<td data-drag-index="' + i + '" draggable="true"' +
+        ' ondragstart="_trDragStart.call(this,event)" ondragend="_trDragEnd.call(this,event)"' +
+        ' ondragover="_trDragOver.call(this,event)" ondragleave="_trDragLeave.call(this,event)"' +
+        ' ondrop="_trDrop.call(this,event,_templatesGrouped[stageName] || [],renderTemplatesAfterReorder)"' +
+        ' style="font-family:var(--mono);color:var(--muted);text-align:center;cursor:grab" title="拖动排序">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
+        '<td style="font-weight:500">' + escHtml(d.doc_name) + '</td>' +
+        '<td style="font-size:12px;white-space:nowrap;width:80px">' + escHtml(d.responsible_role || '—') + '</td>' +
+        '<td style="font-size:11px">' + escHtml(typeLabels[d.doc_type] || '—') + '</td>' +
+        '<td style="font-size:11px">' + (d.base_path || d.file_pattern
+          ? (d.base_path ? '<div style="color:var(--muted)">' + escHtml(d.base_path) + '</div>' : '') +
+            (d.file_pattern ? '<div style="font-family:var(--mono);color:var(--accent)">' + escHtml(d.file_pattern) + '</div>' : '')
+          : (d.doc_path ? '<a href="' + escHtml(d.doc_path) + '" target="_blank" style="color:var(--accent);text-decoration:none">' + escHtml(d.doc_path) + ' ↗</a>' : '—')) + '</td>' +
+        '<td style="font-size:12px;color:var(--muted)">' + escHtml(d.description || '') + '</td>' +
+        (canEdit
+          ? '<td style="white-space:nowrap;text-align:center" ondragover="event.stopPropagation()" ondrop="event.stopPropagation()">' +
+              iconCopy('copyTemplate(' + d.id + ')') +
+              iconEdit('showEditTemplateForm(' + d.id + ')') +
+              iconDelete('deleteTemplate(' + d.id + ')') +
+            '</td>'
+          : '') +
+      '</tr>';
+    });
+    html += '</tbody></table></div>';
+    html += '<div style="font-size:10.5px;color:var(--muted);margin-top:4px">💡 拖动序号列可调整文档顺序</div>';
+  } else {
+    html += '<div class="empty-state" style="padding:16px">暂无文档模板</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function _renderTaskTemplateSection(stageName, canEdit) {
+  var tasks = _taskTemplatesGrouped[stageName] || [];
+  var pendingCount = _taskPendingOps.length;
+  var html = '<div class="dt-section">';
+
+  // Section header
+  html += '<div class="dt-section-head">';
+  html += '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px">';
+  html += '<div class="section-title">' + escHtml(stageName) + ' — 任务清单 (' + tasks.length + ')</div>';
+  if (canEdit && pendingCount > 0) {
+    html += '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px;padding-left:14px;padding-right:14px;margin-left:8px" onclick="saveAllTaskChanges()">保存配置 (' + pendingCount + ')</button>' +
+      '<button class="btn btn-sm" style="margin-left:4px;color:var(--warn);border-color:var(--warn)" onclick="discardTaskChanges()">放弃</button>';
+  } else if (canEdit && pendingCount === 0 && tasks.length >= 0) {
+    html += '<span style="font-size:11px;color:var(--muted);margin-left:8px">✓ 已保存</span>';
+  }
+  if (canEdit) {
+    html += '<button class="btn btn-sm" style="margin-left:8px;color:var(--accent);border-color:var(--accent)" onclick="syncAllProjectsTasks()" title="将当前任务模板应用到全部项目">↻ 应用到全部项目</button>';
+  }
+  html += '</div>';
+  if (canEdit) {
+    html += '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="showAddTaskTemplateForm()">+ 添加任务</button>';
+  }
+  html += '</div>';
+
+  // Table or empty state
+  if (tasks.length) {
+    html += '<div class="table-scroll"><table class="stage-table"><thead><tr>' +
+      '<th style="width:50px">序号</th>' +
+      '<th>任务名称</th>' +
+      '<th style="width:100px">责任人</th>' +
+      '<th>说明</th>' +
+      (canEdit ? '<th style="width:90px;white-space:nowrap">操作</th>' : '') +
+    '</tr></thead><tbody>';
+    tasks.forEach(function(t, i) {
+      html += '<tr>' +
+        '<td data-drag-index="' + i + '" draggable="true"' +
+        ' ondragstart="_trDragStart.call(this,event)" ondragend="_trDragEnd.call(this,event)"' +
+        ' ondragover="_trDragOver.call(this,event)" ondragleave="_trDragLeave.call(this,event)"' +
+        ' ondrop="_trDrop.call(this,event,_taskTemplatesGrouped[stageName] || [],renderTaskTemplatesAfterReorder)"' +
+        ' style="font-family:var(--mono);color:var(--muted);text-align:center;cursor:grab" title="拖动排序">' + (t.sort_order != null ? t.sort_order : '—') + '</td>' +
+        '<td style="font-weight:500">' + escHtml(t.task_name) + '</td>' +
+        '<td style="font-size:12px;white-space:nowrap">' + escHtml(t.responsible_role || '—') + '</td>' +
+        '<td style="font-size:12px;color:var(--muted)">' + escHtml(t.description || '') + '</td>' +
+        (canEdit
+          ? '<td style="white-space:nowrap;text-align:center" ondragover="event.stopPropagation()" ondrop="event.stopPropagation()">' +
+              iconCopy('copyTaskTemplate(' + t.id + ')') +
+              iconEdit('showEditTaskTemplateForm(' + t.id + ')') +
+              iconDelete('deleteTaskTemplate(' + t.id + ')') +
+            '</td>'
+          : '') +
+      '</tr>';
+    });
+    html += '</tbody></table></div>';
+    html += '<div style="font-size:10.5px;color:var(--muted);margin-top:4px">💡 拖动序号列可调整任务顺序</div>';
+  } else {
+    html += '<div class="empty-state" style="padding:16px">暂无任务模板</div>';
+  }
+
+  html += '</div>';
+  return html;
 }
 
 /* ── Add/Edit Template Forms ── */
@@ -612,14 +645,6 @@ function deleteTemplate(id) {
       if (arr[i].id === id) { arr.splice(i, 1); break; }
     }
   }
-  renderTemplatesPage();
-}
-
-/* ── Task Template Mode Toggle ── */
-
-function toggleTemplateMode(mode) {
-  if (mode === _currentTemplateMode) return;
-  _currentTemplateMode = mode;
   renderTemplatesPage();
 }
 
@@ -935,6 +960,75 @@ function deleteStageType(stageType) {
     return;
   }
   renderTemplatesPage();
+}
+
+/* ── Project Type Rename / Delete ── */
+
+function showRenameProjectTypeDialog(ptypeId, currentLabel) {
+  var html = '<div class="note-dialog-overlay">' +
+    '<div class="note-dialog" style="max-width:380px">' +
+      '<div class="note-dialog-head"><span class="note-dialog-title">重命名项目类型</span>' +
+        '<button class="note-dialog-close" onclick="this.closest(\'.note-dialog-overlay\').remove()">&times;</button></div>' +
+      '<div style="margin-bottom:10px;font-size:12px;color:var(--muted)">当前名称: <b>' + escHtml(currentLabel) + '</b></div>' +
+      '<input class="search-inp" id="ptype-rename-input" value="' + escHtml(currentLabel) + '" style="margin-bottom:12px">' +
+      '<div style="display:flex;justify-content:flex-end;gap:8px">' +
+        '<button class="btn" onclick="this.closest(\'.note-dialog-overlay\').remove()">取消</button>' +
+        '<button class="btn btn-primary" onclick="renameProjectType(\'' + escHtml(ptypeId) + '\')">保存</button>' +
+      '</div>' +
+    '</div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+  document.getElementById('ptype-rename-input').focus();
+  document.getElementById('ptype-rename-input').select();
+}
+
+async function renameProjectType(ptypeId) {
+  var newLabel = document.getElementById('ptype-rename-input').value.trim();
+  if (!newLabel) { showToast('请输入新名称', 'error'); return; }
+  // Check if unchanged
+  var current = _projectTypes.find(function(p) { return p.id === ptypeId; });
+  if (current && current.label === newLabel) {
+    document.querySelector('.note-dialog-overlay').remove();
+    return;
+  }
+  try {
+    await API.put('/doc-templates/project-types/' + encodeURIComponent(ptypeId) + '?label=' + encodeURIComponent(newLabel));
+    document.querySelector('.note-dialog-overlay').remove();
+    // Update local cache
+    if (current) current.label = newLabel;
+    showToast('项目类型已重命名: ' + newLabel, 'success');
+    renderTemplatesPage();
+  } catch(e) {
+    showToast('重命名失败: ' + (e.message || ''), 'error');
+  }
+}
+
+function deleteProjectType(ptypeId, label) {
+  var html = '<div style="font-size:13px;margin-bottom:16px">' +
+    '确认删除项目类型 <b>"' + escHtml(label) + '"</b>？' +
+    '<div style="margin-top:8px;font-size:11px;color:var(--danger)">将同时删除该项目类型下的所有阶段类型、文档模板和任务模板，此操作不可撤销。</div>' +
+    '</div>';
+  openDialog('删除项目类型', html, [
+    {text: '取消', onclick: 'closeSharedDialog()'},
+    {text: '确认删除', cls: 'btn-danger', onclick: 'confirmDeleteProjectType(\'' + escHtml(ptypeId) + '\')'}
+  ], {hideClose: true});
+}
+
+async function confirmDeleteProjectType(ptypeId) {
+  closeSharedDialog();
+  try {
+    await API.del('/doc-templates/project-types/' + encodeURIComponent(ptypeId));
+    // Remove from local list
+    _projectTypes = _projectTypes.filter(function(pt) { return pt.id !== ptypeId; });
+    // Switch to first available type if current was deleted
+    if (_currentProjectType === ptypeId) {
+      _currentProjectType = _projectTypes.length ? _projectTypes[0].id : 'RD';
+      await loadTemplatesForType(_currentProjectType);
+    }
+    showToast('项目类型已删除', 'success');
+    renderTemplatesPage();
+  } catch(e) {
+    showToast('删除失败: ' + (e.message || ''), 'error');
+  }
 }
 
 /* ── Save / Discard ── */

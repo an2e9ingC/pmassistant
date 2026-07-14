@@ -59,6 +59,81 @@ def create_project_type(
     return {"code": 0, "data": {"id": project_type, "label": label, "stages": [], "builtin": False}, "message": "ok"}
 
 
+@router.put("/project-types/{project_type}", response_model=dict)
+def update_project_type(
+    project_type: str,
+    label: str = Query(..., description="New display label"),
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("doc_template")),
+):
+    """Update a project type's display label."""
+    from backend.services.document_service import (
+        PROJECT_TYPE_DEFS, _get_custom_project_types, _save_custom_project_types,
+        _get_project_type_labels, _save_project_type_labels,
+    )
+    old_label = None
+
+    if project_type in PROJECT_TYPE_DEFS:
+        old_label = PROJECT_TYPE_DEFS[project_type]["label"]
+        # Store as label override
+        overrides = _get_project_type_labels(db)
+        overrides[project_type] = label
+        _save_project_type_labels(db, overrides)
+        # Also update in-memory for this session
+        PROJECT_TYPE_DEFS[project_type]["label"] = label
+    else:
+        customs = _get_custom_project_types(db)
+        if project_type not in customs:
+            raise HTTPException(status_code=404, detail=f"项目类型 '{project_type}' 不存在")
+        old_label = customs[project_type]
+        customs[project_type] = label
+        _save_custom_project_types(db, customs)
+
+    log_audit(db, user, "doc_ptype_edit", f"{project_type}: {old_label} -> {label}", AUDIT_CAT_TEMPLATE, "medium")
+    return {"code": 0, "data": {"id": project_type, "label": label}, "message": "ok"}
+
+
+@router.delete("/project-types/{project_type}", response_model=dict)
+def delete_project_type(
+    project_type: str,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("doc_template")),
+):
+    """Delete a custom project type and all its associated templates."""
+    from backend.services.document_service import (
+        PROJECT_TYPE_DEFS, _get_custom_project_types, _save_custom_project_types,
+        _get_project_type_labels, _save_project_type_labels,
+        delete_project_type_and_cleanup,
+    )
+
+    # Builtin types cannot be deleted
+    if project_type in PROJECT_TYPE_DEFS:
+        raise HTTPException(status_code=400, detail="不能删除内置项目类型")
+
+    customs = _get_custom_project_types(db)
+    if project_type not in customs:
+        raise HTTPException(status_code=404, detail=f"项目类型 '{project_type}' 不存在")
+
+    label = customs.pop(project_type)
+    _save_custom_project_types(db, customs)
+
+    # Remove label override if exists
+    overrides = _get_project_type_labels(db)
+    if project_type in overrides:
+        del overrides[project_type]
+        _save_project_type_labels(db, overrides)
+
+    # Clean up all associated data
+    counts = delete_project_type_and_cleanup(db, project_type)
+
+    log_audit(
+        db, user, "doc_ptype_del",
+        f"{project_type}: {label} ({counts['doc_templates']} docs, {counts['task_templates']} tasks)",
+        AUDIT_CAT_TEMPLATE, "high",
+    )
+    return {"code": 0, "data": {"project_type": project_type, **counts}, "message": "ok"}
+
+
 @router.get("/stage-types", response_model=dict)
 def list_stage_types(
     project_type: str = Query("RD"),

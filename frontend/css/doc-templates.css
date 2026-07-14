@@ -308,3 +308,43 @@
   .pov-tab-bar { flex-wrap: wrap; }
   .pov-l1-tab { font-size: 12px; padding: 8px 14px; }
 }
+
+/* ── Dual-section layout for doc + task templates ── */
+
+.dt-section {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.dt-section:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.dt-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* ── Project type tab: editable label ── */
+
+.ptype-label:hover {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+}
+
+/* ── Danger button for delete confirmations ── */
+
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+}
+.btn-danger:hover {
+  opacity: 0.85;
+}

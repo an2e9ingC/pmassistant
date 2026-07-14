@@ -148,6 +148,7 @@ PROJECT_TYPE_DEFS: dict[str, dict] = {
 
 
 CUSTOM_PROJECT_TYPES_KEY = "custom_project_types"  # PmaSetting key, JSON: {"SW": "软件迭代项目", ...}
+PROJECT_TYPE_LABELS_KEY = "project_type_labels"  # PmaSetting key, JSON: {"RD": "研发项目v2", ...} — label overrides
 
 
 def _get_custom_project_types(db: Session) -> dict:
@@ -170,16 +171,64 @@ def _save_custom_project_types(db: Session, types: dict):
     PmaSetting.set(db, CUSTOM_PROJECT_TYPES_KEY, _json.dumps(types, ensure_ascii=False))
 
 
+def _get_project_type_labels(db: Session) -> dict:
+    """Read persisted label overrides for project types from PmaSetting."""
+    from backend.models.local import PmaSetting
+    import json as _json
+    val = PmaSetting.get(db, PROJECT_TYPE_LABELS_KEY, "")
+    if val:
+        try:
+            return _json.loads(val)
+        except Exception:
+            pass
+    return {}
+
+
+def _save_project_type_labels(db: Session, labels: dict):
+    """Persist label overrides for project types to PmaSetting as JSON."""
+    from backend.models.local import PmaSetting
+    import json as _json
+    PmaSetting.set(db, PROJECT_TYPE_LABELS_KEY, _json.dumps(labels, ensure_ascii=False))
+
+
 def get_project_types(db: Session) -> list[dict]:
     """Return all known project types (predefined + persisted custom)."""
+    label_overrides = _get_project_type_labels(db)
     result = []
     for ptype, info in PROJECT_TYPE_DEFS.items():
-        result.append({"id": ptype, "label": info["label"], "stages": info["stages"], "builtin": True})
+        label = label_overrides.get(ptype, info["label"])
+        result.append({"id": ptype, "label": label, "stages": info["stages"], "builtin": True})
     # Include persisted custom project types
     customs = _get_custom_project_types(db)
     for ptype, label in customs.items():
+        label = label_overrides.get(ptype, label)
         result.append({"id": ptype, "label": label, "stages": [], "builtin": False})
     return result
+
+
+def delete_project_type_and_cleanup(db: Session, project_type: str) -> dict:
+    """Delete a custom project type and all its associated data.
+
+    Returns counts of deleted items: {doc_templates, task_templates}."""
+    from backend.models.local import PmaSetting
+
+    # Delete DocumentTemplates for this project type
+    doc_count = db.query(DocumentTemplate).filter(
+        DocumentTemplate.project_type == project_type
+    ).delete()
+
+    # Delete TaskTemplates for this project type
+    task_count = db.query(TaskTemplate).filter(
+        TaskTemplate.project_type == project_type
+    ).delete()
+
+    # Clean up PmaSetting keys for this project type
+    PmaSetting.set(db, f"{CUSTOM_STAGE_TYPES_PREFIX}_{project_type}", "")
+    PmaSetting.set(db, f"{EXCLUDED_STAGES_PREFIX}_{project_type}", "")
+
+    db.commit()
+
+    return {"doc_templates": doc_count, "task_templates": task_count}
 
 
 def get_stage_types_for_project_type(db: Session, project_type: str) -> list[str]:
