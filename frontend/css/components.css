@@ -84,10 +84,12 @@
 
 /* ── Priority tag ── */
 .prio-tag { font-size: 11px; font-weight: 600; white-space: nowrap; }
-.prio-tag.low { color: var(--muted); }
-.prio-tag.medium { color: var(--accent); }
-.prio-tag.high { color: var(--orange); }
-.prio-tag.critical { color: var(--danger); }
+
+/* ── Confirm dialog (first-level) ── */
+.confirm-dlg { font-size: 14px; line-height: 1.6; }
+
+/* ── Danger button hover/focus inversion ── */
+.btn-danger:hover, .btn-danger:focus { background: #fff; color: var(--danger); }
 
 /* ═══════════════════════════════════════════════════
    DASHBOARD

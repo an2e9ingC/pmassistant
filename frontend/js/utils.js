@@ -82,13 +82,13 @@ function verifyPassword(action, settingKey) {
         '<div style="padding:4px 0">' +
           '<p style="font-size:13px;margin-bottom:12px">' + escHtml(action) + '</p>' +
           '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px">' +
-            '<code style="flex:1;font-size:15px;font-weight:700;color:var(--danger);word-break:break-all;font-family:var(--mono)" id="' + id + '-code">' + escHtml(confirmStr) + '</code>' +
-            '<button class="btn-icon" title="复制" onclick="_copyConfirmText(\'' + id + '\')" style="flex-shrink:0">' +
+            '<code style="flex:1;font-size:15px;font-weight:700;color:var(--danger);word-break:break-all;font-family:KaiTi,STKaiti,serif" id="' + id + '-code">' + escHtml(confirmStr) + '</code>' +
+            '<button class="btn-icon" title="复制" onclick="_copyConfirmText(\'' + id + '\')" style="flex-shrink:0;color:var(--fg)">' +
               '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="9" height="11" rx="1"/><path d="M11 2H3a1 1 0 0 0-1 1v9"/></svg></button>' +
           '</div>' +
           '<div class="user-form-field">' +
             '<label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">请输入上方红色文字确认</label>' +
-            '<input class="config-input" id="' + id + '-input" type="text" placeholder="输入确认文字..." style="width:100%;box-sizing:border-box;font-family:var(--mono)" onkeydown="if(event.key===\'Enter\')_confirmSubmit(\'' + id + '\')">' +
+            '<input class="config-input" id="' + id + '-input" type="text" placeholder="输入确认文字..." style="width:100%;box-sizing:border-box;font-family:KaiTi,STKaiti,serif" onkeydown="if(event.key===\'Enter\')_confirmSubmit(\'' + id + '\')">' +
             '<div id="' + id + '-msg" style="font-size:11px;min-height:16px;margin-top:4px"></div>' +
           '</div>' +
         '</div>' +

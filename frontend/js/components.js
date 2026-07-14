@@ -218,13 +218,13 @@ function renderPill(status) {
   return '<span class="pill ' + (status || 'pending') + '">' + (STATUS_TXT[status] || status) + '</span>';
 }
 
-var PRIORITY_ICONS = { low: '🟢', medium: '🟡', high: '🔴', critical: '⚡' };
 var PRIORITY_LABELS = { low: '低', medium: '中', high: '高', critical: '紧急' };
+var PRIORITY_COLORS = { low: 'var(--muted)', medium: 'var(--accent)', high: 'var(--orange)', critical: 'var(--danger)' };
 
 function renderPriority(priority) {
   var p = priority || 'medium';
-  return '<span class="prio-tag prio-' + p + '" title="优先级: ' + (PRIORITY_LABELS[p] || p) + '">' +
-    (PRIORITY_ICONS[p] || '🟡') + ' <span style="font-size:10px">' + (PRIORITY_LABELS[p] || p) + '</span></span>';
+  return '<span class="prio-tag prio-' + p + '" style="color:' + (PRIORITY_COLORS[p] || '') + '" title="优先级: ' + (PRIORITY_LABELS[p] || p) + '">' +
+    (PRIORITY_LABELS[p] || p) + '</span>';
 }
 
 // Deprecated: use renderProgressCircle instead

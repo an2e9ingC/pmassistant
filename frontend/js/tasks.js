@@ -286,14 +286,22 @@ function renderTaskTableCompact(tasks, execs) {
     var rowCount = stageTasks.length || 1;
     for (var i = 0; i < rowCount; i++) {
       var t = stageTasks[i];
-      html += '<tr class="task-stage-row" data-stage="' + escHtml(stageName) + '" id="' + (i === 0 ? 'task-stage-' + escHtml(stageName) : '') + '">';
+      html += '<tr class="task-stage-row" data-stage="' + escHtml(stageName) + '"' + (t ? ' data-task-id="' + t.id + '"' : '') + ' id="' + (i === 0 ? 'task-stage-' + escHtml(stageName) : '') + '">';
       if (i === 0) {
         html += '<td rowspan="' + rowCount + '" style="font-weight:600;vertical-align:middle;background:var(--bg);border-right:2px solid var(--border)">' + escHtml(stageName) + ' <sup style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:8px">' + stageTasks.length + '</sup></td>';
       }
       if (t) {
         html += _renderTaskRowCompact(t);
       } else {
-        html += '<td colspan="9" style="color:var(--muted);text-align:center;font-size:12px">—</td>';
+        html += '<td style="color:var(--muted);font-size:12px">—</td>' +
+          '<td style="color:var(--muted);font-size:12px">—</td>' +
+          '<td style="color:var(--muted);font-size:12px">—</td>' +
+          '<td style="color:var(--muted);font-size:12px">—</td>' +
+          '<td style="color:var(--muted);font-size:12px">—</td>' +
+          '<td style="color:var(--muted);font-size:12px">—</td>' +
+          '<td style="color:var(--muted);font-size:12px">—</td>' +
+          '<td style="color:var(--muted);font-size:12px">—</td>' +
+          '<td style="color:var(--muted);font-size:12px">—</td>';
       }
       html += '</tr>';
     }
@@ -322,7 +330,14 @@ function _renderTaskRowCompact(t) {
 
 function importTasksFromTemplates() {
   if (!_taskProjectId) { showToast('请先选择项目', 'error'); return; }
-  if (!confirm('将按项目模板为所有阶段创建任务，已有任务不会重复。确定继续？')) return;
+  var projLabel = _taskProjectName || _taskProjectId;
+  openDialog('导入模板任务',
+    '<div class="confirm-dlg">将按项目模板为 <b>' + escHtml(projLabel) + '</b> 的所有阶段创建任务。<br><br>已有任务不会重复创建。</div>',
+    [{text: '取消', onclick: 'closeSharedDialog()'},
+     {text: '确定导入', cls: 'btn-primary', onclick: 'closeSharedDialog();doImportTasksFromTemplates()'}],
+    {hideClose: true});
+}
+function doImportTasksFromTemplates() {
   API.post('/tasks/import-from-templates?project_id=' + encodeURIComponent(_taskProjectId), {}).then(function(data) {
     showToast(data.message || '导入完成', 'success');
     loadTaskData();
@@ -331,8 +346,16 @@ function importTasksFromTemplates() {
 
 async function clearAllTasks() {
   if (!_taskProjectId) { showToast('请先选择项目', 'error'); return; }
-  if (!confirm('将删除本项目所有 PMA 任务，此操作不可撤销。确定继续？')) return;
-  var ok = await verifyPassword('清空项目任务: ' + (_taskProjectName || _taskProjectId), 'pw_verify_clear_tasks');
+  var projLabel = _taskProjectName || _taskProjectId;
+  openDialog('清空所有任务',
+    '<div class="confirm-dlg">将删除 <b>' + escHtml(projLabel) + '</b> 的 <b style="color:var(--danger)">所有任务</b>。<br><br>此操作不可撤销！</div>',
+    [{text: '取消', onclick: 'closeSharedDialog()'},
+     {text: '确认清空', cls: 'btn-danger', onclick: 'closeSharedDialog();doClearAllTasks()'}],
+    {hideClose: true});
+}
+async function doClearAllTasks() {
+  var projLabel = _taskProjectName || _taskProjectId;
+  var ok = await verifyPassword('清空项目任务: ' + projLabel, 'pw_verify_clear_tasks');
   if (!ok) return;
   try {
     var data = await API.del('/tasks?project_id=' + encodeURIComponent(_taskProjectId));
@@ -1251,13 +1274,25 @@ async function submitComment(taskId) {
 /* ── Delete Task ── */
 
 async function deleteTask(taskId) {
-  if (!confirm('确认删除此任务？相关工时记录和评论也会被删除。')) return;
+  // Find task title for confirmation
+  var taskTitle = '';
+  var taskEl = document.querySelector('#task-content tr[data-task-id="' + taskId + '"] td:nth-child(2)');
+  if (!taskEl) taskEl = document.querySelector('#pma-tasks-content tr[data-task-id="' + taskId + '"] td:nth-child(2)');
+  if (taskEl) taskTitle = taskEl.textContent.trim();
+  openDialog('删除任务',
+    '<div class="confirm-dlg">确认删除任务 <b>' + escHtml(taskTitle || '#' + taskId) + '</b>？<br><br>相关工时记录和评论也会被删除。</div>',
+    [{text: '取消', onclick: 'closeSharedDialog()'},
+     {text: '确认删除', cls: 'btn-danger', onclick: 'closeSharedDialog();doDeleteTask(' + taskId + ',\'' + escHtml(taskTitle || '').replace(/'/g, "\\'") + '\')'}],
+    {hideClose: true});
+}
+async function doDeleteTask(taskId, taskTitle) {
+  var ok = await verifyPassword('删除任务: ' + (taskTitle || '#' + taskId), 'skip_task_delete');
+  if (!ok) return;
   try {
-    await verifyPassword('删除任务', 'skip_task_delete');
     await API.del('/tasks/' + taskId);
     showToast('任务已删除', 'success');
     loadTaskData();
   } catch(e) {
-    if (e.message !== 'cancel') showToast('删除失败: ' + (e.message || ''), 'error');
+    showToast('删除失败: ' + (e.message || ''), 'error');
   }
 }

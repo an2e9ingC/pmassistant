@@ -441,18 +441,24 @@ def _resolve_customer(p: CachedProject, linked_customers: list = None) -> str:
 def _resolve_user_for_role(db: Session, responsible_role: str):
     """Resolve a responsible_role label (e.g. '硬件开发') to a local_users id via local_roles.
 
-    Returns user id if found, None otherwise.
+    Returns user id if found. Falls back to CTO role if the specified role has no members.
+    Returns None only if neither the role nor CTO has members.
     """
     from backend.models.local import Role, UserRole
     if not responsible_role:
         return None
     role = db.query(Role).filter(Role.label == responsible_role).first()
-    if not role:
-        return None
-    ur = db.query(UserRole).filter(UserRole.role_id == role.id).first()
-    if not ur:
-        return None
-    return ur.user_id
+    if role:
+        ur = db.query(UserRole).filter(UserRole.role_id == role.id).first()
+        if ur:
+            return ur.user_id
+    # Fallback: assign to CTO if the role has no members
+    cto_role = db.query(Role).filter(Role.label == "CTO").first()
+    if cto_role:
+        ur = db.query(UserRole).filter(UserRole.role_id == cto_role.id).first()
+        if ur:
+            return ur.user_id
+    return None
 
 
 def _batch_cust_map(db: Session, project_ids: list[int]) -> dict:
