@@ -254,12 +254,16 @@ def clear_database(_=Depends(require_admin), cu = Depends(get_current_user)):
 
     db = SessionLocal()
     try:
+        # PmaProduct: only delete synced products (is_local != True)
+        count = db.query(PmaProduct).filter(PmaProduct.is_local != True).delete()
+        # CachedProject: only delete synced projects (is_local != True)
+        count += db.query(CachedProject).filter(CachedProject.is_local != True).delete()
+        # Remaining Zentao-only cached tables (all rows are synced)
         tables = [
-            CachedTask, CachedExecution, CachedProject, CachedUser,
+            CachedTask, CachedExecution, CachedUser,
             ProductProjectLink, PmaCustomer, CustomerProjectLink,
-            CachedBug, DeliveryRecord, PmaProduct,
+            CachedBug, DeliveryRecord,
         ]
-        count = 0
         for t in tables:
             count += db.query(t).delete()
         db.commit()

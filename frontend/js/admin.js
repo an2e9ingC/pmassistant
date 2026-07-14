@@ -109,6 +109,7 @@ function renderConfigForm(cfg) {
     html += '<div class="config-section ' + sec.key + '">' +
       '<div class="config-section-title" style="display:flex;align-items:center;gap:10px">' +
         '<span>' + sec.title + '</span>' +
+        (sec.key === 'zentao' ? '<button class="btn btn-xs" onclick="clearZenTaoData()" style="font-size:10px;padding:2px 8px;white-space:nowrap;flex-shrink:0;color:var(--danger);margin-left:8px" title="清除从禅道同步的全部项目/产品/任务/Bug/用户缓存">清除禅道数据</button>' : '') +
         '<span style="margin-left:auto;display:flex;align-items:center;gap:8px">' +
           '<span style="font-size:10px;color:var(--muted);white-space:nowrap">启用</span>' +
           '<input id="' + euid + '" class="config-input" type="checkbox"' +
@@ -294,6 +295,10 @@ async function testSourceConnection(source) {
     showToast('测试失败: ' + escHtml(e.message || '未知错误'), 'error');
   }
   if (btn) { btn.disabled = false; btn.textContent = '测试连接'; }
+}
+
+async function clearZenTaoData() {
+  await clearDatabase();
 }
 
 async function clearDatabase() {
