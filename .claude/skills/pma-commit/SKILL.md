@@ -41,8 +41,8 @@ Co-Authored-By: <model-name> / <tool-name>
 - **fix 类型 commit 必须在 body 首行简述根因**：`根因: <一句话描述bug根源>`
 - **feat/fix 必须有 body**（bullet 变更点）
 - **一个 commit 只含相关改动**
-- **每次 commit 必须包含数据库文件**：`git add data/pma-$PORT.db`
-- **提交前必须先停止服务**：
+- **数据库文件不再纳入版本控制**（`data/pma-*.db` 已加入 `.gitignore`），`init_db()` 自动建表
+- **提交前必须先停止服务**（避免 git 操作干扰服务进程的文件描述符）：
   1. `./server.sh -p <PORT> stop`
   2. `git add ... && git commit -m "..."`
   3. `./server.sh -p <PORT> restart`
