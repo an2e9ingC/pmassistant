@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.middleware.auth import get_current_user, require_perm
 from backend.services import task_service
+from backend.services.entity_resolver import resolve_project
 from backend.audit_categories import AUDIT_CAT_TASK
 from backend.routers.logs import log_audit
 
@@ -65,14 +66,18 @@ class TaskUpdate(BaseModel):
 
 @router.get("", response_model=dict)
 def list_tasks(
-    project_id: Optional[int] = Query(None),
+    project_id: Optional[str] = Query(None),
     execution_id: Optional[int] = Query(None),
     status: Optional[str] = Query(None),
     assignee_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
-    tasks = task_service.get_tasks(db, project_id, execution_id, status, assignee_id)
+    pid = None
+    if project_id:
+        p = resolve_project(db, project_id)
+        pid = p.id
+    tasks = task_service.get_tasks(db, pid, execution_id, status, assignee_id)
     return {"code": 0, "data": tasks, "message": "ok"}
 
 
@@ -87,11 +92,15 @@ def my_tasks(
 
 @router.get("/stats", response_model=dict)
 def task_stats(
-    project_id: Optional[int] = Query(None),
+    project_id: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
-    stats = task_service.get_task_stats(db, project_id)
+    pid = None
+    if project_id:
+        p = resolve_project(db, project_id)
+        pid = p.id
+    stats = task_service.get_task_stats(db, pid)
     return {"code": 0, "data": stats, "message": "ok"}
 
 

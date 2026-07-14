@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.middleware.auth import get_current_user, require_admin
 from backend.services import delivery_service
+from backend.services.entity_resolver import resolve_project
 from backend.services.project_service import log_project_activity
 
 router = APIRouter(prefix="/api/delivery", tags=["delivery"])
@@ -33,29 +34,32 @@ class DeliveryRecordUpdate(BaseModel):
     note: Optional[str] = None
 
 
-@router.get("/projects/{project_id}", response_model=dict)
-def get_delivery(project_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
-    data = delivery_service.get_delivery_summary(db, project_id)
+@router.get("/projects/{identifier}", response_model=dict)
+def get_delivery(identifier: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    project = resolve_project(db, identifier)
+    data = delivery_service.get_delivery_summary(db, project.id)
     return {"code": 0, "data": data, "message": "ok"}
 
 
-@router.get("/projects/{project_id}/records", response_model=dict)
-def list_records(project_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
-    records = delivery_service.list_delivery_records(db, project_id)
+@router.get("/projects/{identifier}/records", response_model=dict)
+def list_records(identifier: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    project = resolve_project(db, identifier)
+    records = delivery_service.list_delivery_records(db, project.id)
     return {"code": 0, "data": records, "message": "ok"}
 
 
-@router.post("/projects/{project_id}/records", response_model=dict)
+@router.post("/projects/{identifier}/records", response_model=dict)
 def create_record(
-    project_id: int,
+    identifier: str,
     body: DeliveryRecordCreate,
     db: Session = Depends(get_db),
     user=Depends(require_admin),
 ):
+    project = resolve_project(db, identifier)
     data = body.model_dump()
     data["serial_numbers"] = body.serial_numbers or []
-    record = delivery_service.create_delivery_record(db, project_id, data)
-    log_project_activity(db, project_id, user.username, "交付记录",
+    record = delivery_service.create_delivery_record(db, project.id, data)
+    log_project_activity(db, project.id, user.username, "交付记录",
         f"新增:{body.product_name} x{body.quantity}")
     return {"code": 0, "data": delivery_service.record_dict(record), "message": "ok"}
 
@@ -82,7 +86,7 @@ def update_record(
     record = delivery_service.update_delivery_record(db, record_id, data)
     if not record:
         raise HTTPException(status_code=404, detail="Record not found")
-    log_project_activity(db, record.project_id, user.username, "交付记录编辑",
+    log_project_activity(db, record.project.id, user.username, "交付记录编辑",
         "; ".join(del_changes) if del_changes else "无变更")
     return {"code": 0, "data": delivery_service.record_dict(record), "message": "ok"}
 
@@ -100,6 +104,6 @@ def delete_record(
     detail = f"{r.product_name} x{r.quantity} ({r.delivery_date})"
     db.delete(r)
     db.commit()
-    log_project_activity(db, r.project_id, user.username, "交付记录删除",
+    log_project_activity(db, r.project.id, user.username, "交付记录删除",
         f"删除: {detail}")
     return {"code": 0, "data": {"deleted": True}, "message": "ok"}

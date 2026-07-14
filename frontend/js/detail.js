@@ -5,6 +5,7 @@
 /* Combo Box — uses shared projectCombo component */
 
 var _comboCurId = null;
+var _comboCurCode = null;
 var _projDetail = null;
 var _projectProducts = [];
 var _userNames = [];
@@ -20,15 +21,16 @@ initProjectCombo({
   selectedIdFn: function() { return _comboCurId; },
   onSelect: function(p) {
     _comboCurId = p.id;
-    loadProjectDetail(p.id);
-    history.replaceState({ view: 'detail', params: [String(p.id), 'info'] }, '', buildHash('detail', String(p.id), 'info'));
+    _comboCurCode = p.code || String(p.id);
+    loadProjectDetail(_comboCurCode);
+    history.replaceState({ view: 'detail', params: [_comboCurCode, 'info'] }, '', buildHash('detail', _comboCurCode, 'info'));
   }
 });
 
 /* Project Detail Loading */
 
-async function loadProjectDetail(id) {
-  if (!id) return;
+async function loadProjectDetail(code) {
+  if (!code) return;
   await loadFavorites();
 
   // Show loading state
@@ -41,15 +43,15 @@ async function loadProjectDetail(id) {
   document.getElementById('resources-content').innerHTML = '<div class="loading-spinner">加载产品文档...</div>';
 
   try {
-    // Fetch all data in parallel
+    // Fetch all data in parallel (use code for API calls)
     var results = await Promise.all([
-      API.get('/projects/' + id),
-      API.get('/projects/' + id + '/gantt'),
-      API.get('/projects/' + id + '/stages'),
-      API.get('/projects/' + id + '/documents'),
-      API.get('/projects/' + id + '/delivery'),
-      API.get('/projects/' + id + '/resources'),
-      API.get('/projects/' + id + '/notes'),
+      API.get('/projects/' + code),
+      API.get('/projects/' + code + '/gantt'),
+      API.get('/projects/' + code + '/stages'),
+      API.get('/projects/' + code + '/documents'),
+      API.get('/projects/' + code + '/delivery'),
+      API.get('/projects/' + code + '/resources'),
+      API.get('/projects/' + code + '/notes'),
       // Load user names + customer names for delivery form dropdown
       API.get('/users/names').catch(function() { return []; }),
       API.get('/users/customers/names').catch(function() { return []; }),
@@ -86,7 +88,7 @@ async function loadProjectDetail(id) {
     _detailTargetTab = null;
     switchDTab(targetTab);
     // Update hash to reflect current tab
-    history.replaceState({ view: 'detail', params: [String(id), targetTab] }, '', buildHash('detail', String(id), targetTab));
+    history.replaceState({ view: 'detail', params: [_comboCurCode, targetTab] }, '', buildHash('detail', _comboCurCode, targetTab));
   } catch(e) {
     document.getElementById('detail-header').innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '</div>';
   }
@@ -191,7 +193,7 @@ function buildInfo(p, notes, delivery) {
       '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">关联产品（' + products.length + '）</div>';
   if (products.length) {
     html += '<div style="display:flex;flex-wrap:wrap;gap:4px">' +
-      products.map(function(prod) { return linkChip(prod.name, 'openProductDetail(' + prod.id + ')', prod.code || ''); }).join('') +
+      products.map(function(prod) { return linkChip(prod.name, 'openProductDetail(' + (prod.code || String(prod.id)) + ')', prod.code || ''); }).join('') +
     '</div>';
   } else {
     html += '<div style="font-size:12px;color:var(--muted);font-style:italic">暂无</div>';
@@ -250,7 +252,7 @@ function _hasProjectEditPerm() {
 }
 
 function editProjectBackground() {
-  if (!_comboCurId || !_projDetail) return;
+  if (!_comboCurCode || !_projDetail) return;
   var currentBg = (_projDetail && _projDetail.background) ? _projDetail.background : '';
   openDialog('编辑项目背景 — ' + escHtml(_projDetail.name || ''),
     '<div style="margin-bottom:12px">' +
@@ -268,7 +270,7 @@ async function saveProjectBackground() {
   var bg = (input && input.value) ? input.value : '';
   closeSharedDialog();
   try {
-    await API.put('/projects/' + _comboCurId + '/background', { background: bg });
+    await API.put('/projects/' + _comboCurCode + '/background', { background: bg });
     _projDetail.background = bg;
     showToast('已保存', 'ok');
     // Refresh the background display
@@ -386,8 +388,8 @@ function initGanttWheel() {
 }
 
 function refreshGantt() {
-  if (_comboCurId) {
-    API.get('/projects/' + _comboCurId + '/gantt').then(function(data) {
+  if (_comboCurCode) {
+    API.get('/projects/' + _comboCurCode + '/gantt').then(function(data) {
       buildGantt(data);
     });
   }
@@ -1073,11 +1075,11 @@ async function saveDocStatus(docId, status) {
   var body = { status: status };
   if (loc) body.location = loc;
   try {
-    await API.put('/projects/' + _comboCurId + '/documents/' + docId, body);
+    await API.put('/projects/' + _comboCurCode + '/documents/' + docId, body);
     showToast(status === 'submitted' ? '已标记为提交' : '状态已更新', 'success');
     cancelDocEdit();
     // Refresh documents tab
-    var docs = await API.get('/projects/' + _comboCurId + '/documents');
+    var docs = await API.get('/projects/' + _comboCurCode + '/documents');
     buildDocs(docs);
   } catch(e) {
     showToast('操作失败: ' + (e.message || '未知错误'), 'error');
@@ -1172,13 +1174,13 @@ async function saveDeliveryPlan() {
   var qty = parseInt(document.getElementById('del-plan-qty').value) || 0;
   var note = document.getElementById('del-plan-note').value.trim();
   try {
-    await API.put('/projects/' + _comboCurId + '/delivery-plan', {
+    await API.put('/projects/' + _comboCurCode + '/delivery-plan', {
       planned_delivery_qty: qty,
       delivery_note: note
     });
     showToast('交付计划已保存', 'success');
     // Refresh delivery data
-    var data = await API.get('/projects/' + _comboCurId + '/delivery');
+    var data = await API.get('/projects/' + _comboCurCode + '/delivery');
     buildDelivery(data);
   } catch(e) {
     showToast('保存失败: ' + (e.message || '未知错误'), 'error');
@@ -1338,11 +1340,11 @@ async function saveDeliveryRecord(recordId) {
     if (recordId) {
       await API.put('/delivery/records/' + recordId, body);
     } else {
-      await API.post('/delivery/projects/' + _comboCurId + '/records', body);
+      await API.post('/delivery/projects/' + _comboCurCode + '/records', body);
     }
     showToast(recordId ? '修改成功' : '添加成功', 'success');
     cancelDeliveryForm();
-    var data = await API.get('/projects/' + _comboCurId + '/delivery');
+    var data = await API.get('/projects/' + _comboCurCode + '/delivery');
     buildDelivery(data);
   } catch(e) {
     showToast('操作失败: ' + (e.message || '未知错误'), 'error');
@@ -1357,7 +1359,7 @@ async function deleteDeliveryRecord(id) {
   try {
     await API.del('/delivery/records/' + id);
     showToast('删除成功', 'success');
-    var data = await API.get('/projects/' + _comboCurId + '/delivery');
+    var data = await API.get('/projects/' + _comboCurCode + '/delivery');
     buildDelivery(data);
   } catch(e) {
     showToast('删除失败: ' + (e.message || '未知错误'), 'error');
@@ -1420,12 +1422,12 @@ function buildNotes(notes) {
 }
 
 async function openNoteDialog() {
-  if (!_comboCurId) return;
+  if (!_comboCurCode) return;
 
   // Fetch stages for the selector
   var stagesHtml = '<option value="">项目整体</option>';
   try {
-    var stages = await API.get('/projects/' + _comboCurId + '/stages');
+    var stages = await API.get('/projects/' + _comboCurCode + '/stages');
     if (stages && stages.length) {
       stages.forEach(function(s) {
         stagesHtml += '<option value="' + escHtml(s.name) + '">' + escHtml(s.name) + '</option>';
@@ -1469,13 +1471,13 @@ async function submitNote() {
   var msg = document.getElementById('note-dialog-msg');
   var content = inp.value.trim();
   if (!content) return;
-  if (!_comboCurId) return;
+  if (!_comboCurCode) return;
 
   try {
     msg.innerHTML = '<span style="color:var(--muted)">保存中...</span>';
-    await API.post('/projects/' + _comboCurId + '/notes', { content: content, stage_name: sel ? sel.value : '' });
+    await API.post('/projects/' + _comboCurCode + '/notes', { content: content, stage_name: sel ? sel.value : '' });
     closeNoteDialog();
-    var notes = await API.get('/projects/' + _comboCurId + '/notes');
+    var notes = await API.get('/projects/' + _comboCurCode + '/notes');
     buildNotes(notes);
   } catch(e) {
     msg.innerHTML = '<span style="color:var(--danger)">失败: ' + escHtml(e.message) + '</span>';
@@ -1497,21 +1499,21 @@ function switchDTab(id, el) {
   // Refresh tab content when switching to it
   if (id === 'maintenance') buildMaintenance();
   if (id === 'activities') loadActivities();
-  if (id === 'pma-tasks' && _comboCurId) {
+  if (id === 'pma-tasks' && _comboCurCode) {
     var projName = (document.getElementById('combo-input') || {}).value || '';
     if (!projName && typeof _allProjects !== 'undefined') {
-      var p = _allProjects.find(function(x) { return x.id == _comboCurId; });
+      var p = _allProjects.find(function(x) { return x.id == _comboCurCode; });
       if (p) projName = p.name;
     }
     if (typeof initProjectTasks === 'function') {
-      initProjectTasks(_comboCurId, projName);
+      initProjectTasks(_comboCurCode, projName);
     } else if (typeof loadViewScript === 'function') {
-      loadViewScript('/js/tasks.js?v=250630', function() { initProjectTasks(_comboCurId, projName); });
+      loadViewScript('/js/tasks.js?v=250630', function() { initProjectTasks(_comboCurCode, projName); });
     }
   }
   // Update hash to reflect current tab (replace: don't add history entry per tab switch)
-  if (_comboCurId && typeof buildHash === 'function') {
-    history.replaceState({ view: 'detail', params: [String(_comboCurId), id] }, '', buildHash('detail', String(_comboCurId), id));
+  if (_comboCurCode && typeof buildHash === 'function') {
+    history.replaceState({ view: 'detail', params: [String(_comboCurCode), id] }, '', buildHash('detail', String(_comboCurCode), id));
   }
 }
 
@@ -1546,14 +1548,14 @@ async function saveStageNameMapping(presetName) {
   if (!_mismatchExecId) { showToast('请重新点击告警标记', 'error'); return; }
 
   try {
-    await API.put('/projects/' + _comboCurId + '/stages/' + _mismatchExecId + '/sync-to-zentao', { stage_name: name });
+    await API.put('/projects/' + _comboCurCode + '/stages/' + _mismatchExecId + '/sync-to-zentao', { stage_name: name });
     showToast('PMA 映射已保存（请在禅道中手动修改执行名）', 'success');
     var dlg = document.querySelector('.stage-mismatch-dialog-overlay');
     if (dlg) dlg.remove();
     _mismatchExecId = null;
     var p = await Promise.all([
-      API.get('/projects/' + _comboCurId + '/stages'),
-      API.get('/projects/' + _comboCurId + '/documents'),
+      API.get('/projects/' + _comboCurCode + '/stages'),
+      API.get('/projects/' + _comboCurCode + '/documents'),
     ]);
     buildStages(p[0]);
     buildDocs(p[1]);
@@ -1565,7 +1567,7 @@ async function saveStageNameMapping(presetName) {
 /* ── Project Maintenance ── */
 
 function buildMaintenance() {
-  if (!_comboCurId) return;
+  if (!_comboCurCode) return;
   var user = getCurrentUser();
   var perms = (user && user.permissions) ? user.permissions.split(',') : [];
   var hasPerm = perms.indexOf('project_edit') >= 0 || perms.indexOf('admin') >= 0;
@@ -1745,10 +1747,10 @@ async function saveProjectEdit() {
   });
 
   try {
-    var result = await API.put('/projects/' + _comboCurId, payload);
+    var result = await API.put('/projects/' + _comboCurCode, payload);
     closeSharedDialog();
     showToast(result.message || '项目已更新', 'success');
-    loadProjectDetail(_comboCurId);
+    loadProjectDetail(_comboCurCode);
   } catch(e) {
     showToast('保存失败: ' + (e.message || '未知错误'), 'error');
   }
@@ -1763,7 +1765,7 @@ async function deleteCurrentProject() {
   var ok = await verifyPassword('删除项目: ' + (p.name || ''), 'pw_verify_maint_remove');
   if (!ok) return;
   try {
-    await API.del('/projects/' + _comboCurId);
+    await API.del('/projects/' + _comboCurCode);
     showToast('项目已删除', 'success');
     // Navigate back to project list
     if (typeof gotoView === 'function') {
@@ -1809,7 +1811,7 @@ var _maintAllProds = [];
 
 async function loadMaintProjectProducts() {
   try {
-    var linked = await API.get('/maintenance/projects/' + _comboCurId + '/products');
+    var linked = await API.get('/maintenance/projects/' + _comboCurCode + '/products');
     _maintLinkedProds = linked || [];
     var all = await API.get('/products?limit=200');
     _maintAllProds = (all.items || []).map(function(p) { return {id: p.id, name: p.name}; });
@@ -1824,7 +1826,7 @@ function maintOpenDialog_prod() {
   multiSelectDialog('编辑关联产品', _maintAllProds, linkedIds, {
     placeholder: '搜索产品...', maxWidth: 500
   }, function(ids) {
-    API.put('/maintenance/projects/' + _comboCurId + '/products', { ids: ids }).then(function() { loadMaintProjectProducts(); });
+    API.put('/maintenance/projects/' + _comboCurCode + '/products', { ids: ids }).then(function() { loadMaintProjectProducts(); });
   });
 }
 
@@ -1834,7 +1836,7 @@ function maintRemove_prod(pid) {
   verifyPassword('移除产品关联: ' + name, 'pw_verify_maint_remove').then(function(ok) {
     if (!ok) return;
     var ids = _maintLinkedProds.map(function(p) { return p.id; }).filter(function(id) { return id !== pid; });
-    API.put('/maintenance/projects/' + _comboCurId + '/products', { ids: ids }).then(function() { loadMaintProjectProducts(); });
+    API.put('/maintenance/projects/' + _comboCurCode + '/products', { ids: ids }).then(function() { loadMaintProjectProducts(); });
   });
 }
 
@@ -1845,7 +1847,7 @@ var _maintAllCustomers = [];
 
 async function loadMaintProjectCustomers() {
   try {
-    var linked = await API.get('/maintenance/projects/' + _comboCurId + '/customers');
+    var linked = await API.get('/maintenance/projects/' + _comboCurCode + '/customers');
     _maintLinkedCustomers = linked || [];
     var all = await API.get('/customers');
     _maintAllCustomers = (all || []).map(function(c) { return {id: c.id, name: c.name}; });
@@ -1860,7 +1862,7 @@ function maintOpenDialog_cust() {
   multiSelectDialog('编辑关联客户', _maintAllCustomers, linkedIds, {
     placeholder: '搜索客户...', maxWidth: 450
   }, function(ids) {
-    API.put('/maintenance/projects/' + _comboCurId + '/customers', { ids: ids }).then(function() { loadMaintProjectCustomers(); });
+    API.put('/maintenance/projects/' + _comboCurCode + '/customers', { ids: ids }).then(function() { loadMaintProjectCustomers(); });
   });
 }
 
@@ -1870,7 +1872,7 @@ function maintRemove_cust(cid) {
   verifyPassword('移除客户关联: ' + name, 'pw_verify_maint_remove').then(function(ok) {
     if (!ok) return;
     var ids = _maintLinkedCustomers.map(function(c) { return c.id; }).filter(function(id) { return id !== cid; });
-    API.put('/maintenance/projects/' + _comboCurId + '/customers', { ids: ids }).then(function() { loadMaintProjectCustomers(); });
+    API.put('/maintenance/projects/' + _comboCurCode + '/customers', { ids: ids }).then(function() { loadMaintProjectCustomers(); });
   });
 }
 
@@ -1882,7 +1884,7 @@ var _maintAllTagsFull = [];
 
 async function loadMaintProjectTags() {
   try {
-    var linked = await API.get('/maintenance/projects/' + _comboCurId + '/tags');
+    var linked = await API.get('/maintenance/projects/' + _comboCurCode + '/tags');
     _maintLinkedTags = linked || [];
     var allData = await API.get('/tags');
     var allList = allData || [];
@@ -1966,7 +1968,7 @@ async function maintToggle_tag(name) {
     linkedNames.push(name);
   }
   try {
-    await API.put('/maintenance/projects/' + _comboCurId + '/tags', { tags: linkedNames });
+    await API.put('/maintenance/projects/' + _comboCurCode + '/tags', { tags: linkedNames });
     _maintLinkedTags = linkedNames;
     _renderMaintTagDialogContent();
     _renderMaintTagSection();
@@ -2019,7 +2021,7 @@ function _renderMaintTagDialogContent() {
 
 function maintRemove_tag(name) {
   var tags = _maintLinkedTags.filter(function(t) { return t !== name; });
-  API.put('/maintenance/projects/' + _comboCurId + '/tags', { tags: tags }).then(function() { loadMaintProjectTags(); });
+  API.put('/maintenance/projects/' + _comboCurCode + '/tags', { tags: tags }).then(function() { loadMaintProjectTags(); });
 }
 
 /* ── Project Activities (进度明细) ── */
@@ -2036,7 +2038,7 @@ async function loadActivities() {
     var params = 'sort=' + _activitySort + '&limit=200';
     if (_activityFilterUser) params += '&username=' + encodeURIComponent(_activityFilterUser);
     if (_activityFilterAction) params += '&action=' + encodeURIComponent(_activityFilterAction);
-    var resp = await API.get('/projects/' + _comboCurId + '/activities?' + params);
+    var resp = await API.get('/projects/' + _comboCurCode + '/activities?' + params);
     var items = resp && resp.items ? resp.items : (Array.isArray(resp) ? resp : []);
     var opts = resp && resp.options ? resp.options : null;
     buildActivities(items, opts);

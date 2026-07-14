@@ -18,11 +18,12 @@ function renderCustTable() {
   var tbody = document.getElementById('cust-tbody');
   if (!_custList.length) { tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">暂无客户数据</div></td></tr>'; return; }
   tbody.innerHTML = _custList.map(function(c) {
+    var nameEsc = escHtml(c.name).replace(/'/g, "\\'");
     return '<tr>' +
-      '<td><button class="gs-btn gs-cust" onclick="openCustomerDetail(' + c.id + ')">' + escHtml(c.name) + '</button></td>' +
+      '<td><button class="gs-btn gs-cust" onclick="openCustomerDetail(\'' + nameEsc + '\')">' + escHtml(c.name) + '</button></td>' +
       '<td style="font-size:12px;color:var(--muted)">' + escHtml(c.full_name || '—') + '</td>' +
-      '<td><span onclick="event.stopPropagation();openCustomerDetail(' + c.id + ')" style="cursor:pointer;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:540;background:var(--accent-lt);color:var(--accent)" title="查看客户详情">' + (c.project_count || 0) + '</span></td>' +
-      '<td><span onclick="event.stopPropagation();openCustomerDetail(' + c.id + ')" style="cursor:pointer;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:540;background:var(--success-lt);color:var(--success)" title="查看客户详情">' + (c.product_count || 0) + '</span></td>' +
+      '<td><span onclick="event.stopPropagation();openCustomerDetail(\'' + nameEsc + '\')" style="cursor:pointer;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:540;background:var(--accent-lt);color:var(--accent)" title="查看客户详情">' + (c.project_count || 0) + '</span></td>' +
+      '<td><span onclick="event.stopPropagation();openCustomerDetail(\'' + nameEsc + '\')" style="cursor:pointer;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:540;background:var(--success-lt);color:var(--success)" title="查看客户详情">' + (c.product_count || 0) + '</span></td>' +
       '<td style="white-space:nowrap">' +
         iconEdit('openCustEditDialog(' + c.id + ')') +
         iconDelete('deleteCust(' + c.id + ',\'' + escHtml(c.name) + '\')') +
@@ -37,8 +38,8 @@ function openCustCreateDialog() {
       '<div class="note-dialog-head"><span class="note-dialog-title">添加客户</span>' +
         '<button class="note-dialog-close" onclick="closeCustDialog()">&times;</button></div>' +
       '<div class="user-form">' +
-        '<div class="user-form-field"><label>客户名称</label><input class="config-input" id="cust-name"></div>' +
-        '<div class="user-form-field"><label>全称（可选）</label><input class="config-input" id="cust-fullname"></div>' +
+        '<div class="user-form-field"><label>客户名称 <span style="font-weight:400;font-size:10px;color:var(--muted)">城市拼音首字母-公司名首字母</span></label><input class="config-input" id="cust-name" placeholder="如 CD-AKT"></div>' +
+        '<div class="user-form-field"><label>全称（可选） <span style="font-weight:400;font-size:10px;color:var(--muted)">公司实际中文全名</span></label><input class="config-input" id="cust-fullname" placeholder="如 领目科技有限公司"></div>' +
       '</div>' +
       '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:14px">' +
         '<span id="cust-msg" style="font-size:11px"></span>' +
@@ -102,18 +103,18 @@ async function deleteCust(id, name) {
 
 /* ── Customer Detail ── */
 
-function openCustomerDetail(id) {
-  localStorage.setItem('pm_cust_id', id);
-  gotoView('customer-detail', {params: [String(id)]});
+function openCustomerDetail(name) {
+  localStorage.setItem('pm_cust_name', name);
+  gotoView('customer-detail', {params: [name]});
 }
 
-async function initCustomerDetail(customerId) {
-  var id = customerId || localStorage.getItem('pm_cust_id');
-  if (!id) { gotoView('customers'); return; }
+async function initCustomerDetail(customerName) {
+  var name = customerName || localStorage.getItem('pm_cust_name');
+  if (!name) { gotoView('customers'); return; }
   document.getElementById('cust-det-proj-tbody').innerHTML = '<tr><td colspan="5"><div class="loading-spinner">加载中...</div></td></tr>';
   document.getElementById('cust-det-prod-tbody').innerHTML = '<tr><td colspan="5"><div class="loading-spinner">加载中...</div></td></tr>';
   try {
-    var c = await API.get('/customers/' + id);
+    var c = await API.get('/customers/' + encodeURIComponent(name));
     document.getElementById('cust-det-fullname').textContent = c.full_name || '';
     document.getElementById('cust-det-name-head').textContent = c.name;
     document.getElementById('topbar-title').textContent = c.name + ' · 客户详情';
@@ -122,11 +123,11 @@ async function initCustomerDetail(customerId) {
     if (c.projects && c.projects.length) {
       projTbody.innerHTML = c.projects.map(function(p, i) {
         var prodTags = (p.products || []).map(function(pr) {
-          return '<span style="display:inline-block;margin:1px 2px;padding:1px 6px;border-radius:3px;font-size:10.5px;background:var(--success-lt);color:var(--success);cursor:pointer" onclick="event.stopPropagation();openProductFromCust(' + pr.id + ')" title="' + escHtml(pr.name || '') + '">' + escHtml(pr.code || '#'+pr.id) + '</span>';
+          return '<span style="display:inline-block;margin:1px 2px;padding:1px 6px;border-radius:3px;font-size:10.5px;background:var(--success-lt);color:var(--success);cursor:pointer" onclick="event.stopPropagation();openProductFromCust(\'' + escHtml(pr.code || String(pr.id)).replace(/'/g, "\\'") + '\')" title="' + escHtml(pr.name || '') + '">' + escHtml(pr.code || '#'+pr.id) + '</span>';
         }).join('');
         return '<tr>' +
           '<td style="color:var(--muted);font-size:12px">' + (i + 1) + '</td>' +
-          '<td><span style="font-family:var(--mono);font-size:11.5px;color:var(--accent);cursor:pointer" onclick="event.stopPropagation();openProject(\'' + p.id + '\')">' + escHtml(p.code || '#'+p.id) + '</span></td>' +
+          '<td><span style="font-family:var(--mono);font-size:11.5px;color:var(--accent);cursor:pointer" onclick="event.stopPropagation();openProject(\'' + escHtml(p.code || String(p.id)).replace(/'/g, "\\'") + '\')">' + escHtml(p.code || '#'+p.id) + '</span></td>' +
           '<td>' + escHtml(p.name) + '</td>' +
           '<td>' + renderPill(p.status) + '</td>' +
           '<td>' + (prodTags || '<span style="color:var(--muted);font-size:11px">—</span>') + '</td>' +
@@ -140,11 +141,11 @@ async function initCustomerDetail(customerId) {
     if (c.products && c.products.length) {
       prodTbody.innerHTML = c.products.map(function(p, i) {
         var projTags = (p.projects || []).map(function(pj) {
-          return '<span style="display:inline-block;margin:1px 2px;padding:1px 6px;border-radius:3px;font-size:10.5px;background:var(--accent-lt);color:var(--accent);cursor:pointer" onclick="event.stopPropagation();openProject(\'' + pj.id + '\')" title="' + escHtml(pj.code || '') + '">' + escHtml(pj.code || '#'+pj.id) + '</span>';
+          return '<span style="display:inline-block;margin:1px 2px;padding:1px 6px;border-radius:3px;font-size:10.5px;background:var(--accent-lt);color:var(--accent);cursor:pointer" onclick="event.stopPropagation();openProject(\'' + escHtml(pj.code || String(pj.id)).replace(/'/g, "\\'") + '\')" title="' + escHtml(pj.code || '') + '">' + escHtml(pj.code || '#'+pj.id) + '</span>';
         }).join('');
         return '<tr>' +
           '<td style="color:var(--muted);font-size:12px">' + (i + 1) + '</td>' +
-          '<td><span style="font-family:var(--mono);font-size:11.5px;color:var(--accent);cursor:pointer" onclick="event.stopPropagation();openProductFromCust(' + p.id + ')">' + escHtml(p.code || '#'+p.id) + '</span></td>' +
+          '<td><span style="font-family:var(--mono);font-size:11.5px;color:var(--accent);cursor:pointer" onclick="event.stopPropagation();openProductFromCust(\'' + escHtml(p.code || String(p.id)).replace(/'/g, "\\'") + '\')">' + escHtml(p.code || '#'+p.id) + '</span></td>' +
           '<td>' + escHtml(p.name) + '</td>' +
           '<td>' + renderPill(p.status) + '</td>' +
           '<td>' + (projTags || '<span style="color:var(--muted);font-size:11px">—</span>') + '</td>' +
@@ -158,8 +159,6 @@ async function initCustomerDetail(customerId) {
   }
 }
 
-function openProductFromCust(pid) {
-  gotoView('product-detail');
-  // Wait for view to switch, then load product
-  setTimeout(function() { openProductDetail(pid); }, 150);
+function openProductFromCust(code) {
+  gotoView('product-detail', {params: [String(code), 'info']});
 }

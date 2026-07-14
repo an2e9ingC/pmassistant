@@ -9,6 +9,7 @@ from backend.database import get_db, to_local_str
 from backend.middleware.auth import get_current_user, require_perm
 from backend.models.local import ProjectNote, ProjectActivity
 from backend.models.zentao import CachedProject, CachedExecution
+from backend.services.entity_resolver import resolve_project
 from backend.services.project_service import log_project_activity
 from backend.services import project_service
 
@@ -65,10 +66,10 @@ def list_program_names(db: Session = Depends(get_db), _=Depends(get_current_user
 
 @user_router.get("/project-options", response_model=dict)
 def list_project_options(db: Session = Depends(get_db), _=Depends(get_current_user)):
-    """Return all projects (id+name) for linked-projects dropdown."""
+    """Return all projects (id+code+name) for linked-projects dropdown."""
     from backend.models.zentao import CachedProject
-    projects = db.query(CachedProject.id, CachedProject.name).order_by(CachedProject.id).all()
-    return {"code": 0, "data": [{"id": p[0], "name": p[1]} for p in projects], "message": "ok"}
+    projects = db.query(CachedProject.id, CachedProject.code, CachedProject.name).order_by(CachedProject.id).all()
+    return {"code": 0, "data": [{"id": p[0], "code": p[1], "name": p[2]} for p in projects], "message": "ok"}
 
 
 @router.get("", response_model=dict)
@@ -77,19 +78,21 @@ def list_projects(db: Session = Depends(get_db), _=Depends(get_current_user)):
     return {"code": 0, "data": items, "message": "ok"}
 
 
-@router.get("/{project_id}", response_model=dict)
-def get_project(project_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
-    detail = project_service.get_project_detail(db, project_id)
+@router.get("/{identifier}", response_model=dict)
+def get_project(identifier: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    project = resolve_project(db, identifier)
+    detail = project_service.get_project_detail(db, project.id)
     if not detail:
         raise HTTPException(status_code=404, detail="Project not found")
-    products = project_service.get_project_products(db, project_id)
+    products = project_service.get_project_products(db, project.id)
     detail["products"] = products
     return {"code": 0, "data": detail, "message": "ok"}
 
 
-@router.get("/{project_id}/stages", response_model=dict)
-def get_stages(project_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
-    result = project_service.get_project_stages(db, project_id)
+@router.get("/{identifier}/stages", response_model=dict)
+def get_stages(identifier: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    project = resolve_project(db, identifier)
+    result = project_service.get_project_stages(db, project.id)
     return {"code": 0, "data": result, "message": "ok"}
 
 
@@ -97,9 +100,9 @@ class StageNameUpdate(BaseModel):
     stage_name: str
 
 
-@router.put("/{project_id}/stages/{execution_id}/stage-name", response_model=dict)
+@router.put("/{identifier}/stages/{execution_id}/stage-name", response_model=dict)
 def update_stage_name(
-    project_id: int,
+    identifier: str,
     execution_id: int,
     body: StageNameUpdate,
     db: Session = Depends(get_db),
@@ -107,7 +110,7 @@ def update_stage_name(
 ):
     e = db.query(CachedExecution).filter(
         CachedExecution.id == execution_id,
-        CachedExecution.project_id == project_id,
+        CachedExecution.project_id == project.id,
     ).first()
     if not e:
         raise HTTPException(status_code=404, detail="Execution not found")
@@ -116,9 +119,9 @@ def update_stage_name(
     return {"code": 0, "data": {"id": e.id, "stage_name": e.stage_name}, "message": "ok"}
 
 
-@router.put("/{project_id}/stages/{execution_id}/sync-to-zentao", response_model=dict)
+@router.put("/{identifier}/stages/{execution_id}/sync-to-zentao", response_model=dict)
 async def sync_stage_name_to_zentao(
-    project_id: int,
+    identifier: str,
     execution_id: int,
     body: StageNameUpdate,
     db: Session = Depends(get_db),
@@ -132,7 +135,7 @@ async def sync_stage_name_to_zentao(
     """
     e = db.query(CachedExecution).filter(
         CachedExecution.id == execution_id,
-        CachedExecution.project_id == project_id,
+        CachedExecution.project_id == project.id,
     ).first()
     if not e:
         raise HTTPException(status_code=404, detail="Execution not found")
@@ -141,7 +144,7 @@ async def sync_stage_name_to_zentao(
     old_name = e.name
     e.stage_name = new_name
     db.commit()
-    log_project_activity(db, project_id, user.username, "阶段映射",
+    log_project_activity(db, project.id, user.username, "阶段映射",
         f"name:'{old_name}'->'{new_name}'")
 
     return {
@@ -155,9 +158,10 @@ async def sync_stage_name_to_zentao(
     }
 
 
-@router.get("/{project_id}/documents", response_model=dict)
-def get_documents(project_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
-    docs = project_service.get_project_documents(db, project_id)
+@router.get("/{identifier}/documents", response_model=dict)
+def get_documents(identifier: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    project = resolve_project(db, identifier)
+    docs = project_service.get_project_documents(db, project.id)
     return {"code": 0, "data": docs, "message": "ok"}
 
 
@@ -167,9 +171,9 @@ class DocumentUpdate(BaseModel):
     completed_at: Optional[str] = None
 
 
-@router.put("/{project_id}/documents/{doc_id}", response_model=dict)
+@router.put("/{identifier}/documents/{doc_id}", response_model=dict)
 def update_document(
-    project_id: int,
+    identifier: str,
     doc_id: int,
     body: DocumentUpdate,
     db: Session = Depends(get_db),
@@ -181,20 +185,22 @@ def update_document(
     )
     if not result:
         raise HTTPException(status_code=404, detail="Document not found")
-    log_project_activity(db, project_id, user.username, "文档状态",
+    log_project_activity(db, project.id, user.username, "文档状态",
         f"status:'{result.get('doc_name','')}'->'{result.get('status','')}'")
     return {"code": 0, "data": result, "message": "ok"}
 
 
-@router.get("/{project_id}/gantt", response_model=dict)
-def get_gantt(project_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
-    result = project_service.get_project_gantt(db, project_id)
+@router.get("/{identifier}/gantt", response_model=dict)
+def get_gantt(identifier: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    project = resolve_project(db, identifier)
+    result = project_service.get_project_gantt(db, project.id)
     return {"code": 0, "data": result, "message": "ok"}
 
 
-@router.get("/{project_id}/delivery", response_model=dict)
-def get_delivery(project_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
-    delivery = project_service.get_project_delivery(db, project_id)
+@router.get("/{identifier}/delivery", response_model=dict)
+def get_delivery(identifier: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    project = resolve_project(db, identifier)
+    delivery = project_service.get_project_delivery(db, project.id)
     return {"code": 0, "data": delivery, "message": "ok"}
 
 
@@ -203,14 +209,14 @@ class DeliveryPlanUpdate(BaseModel):
     delivery_note: Optional[str] = None
 
 
-@router.put("/{project_id}/delivery-plan", response_model=dict)
+@router.put("/{identifier}/delivery-plan", response_model=dict)
 def update_delivery_plan(
-    project_id: int,
+    identifier: str,
     body: DeliveryPlanUpdate,
     db: Session = Depends(get_db),
     user=Depends(require_perm("project_edit")),
 ):
-    project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
+    project = resolve_project(db, identifier)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     plan_changes = []
@@ -225,7 +231,7 @@ def update_delivery_plan(
             plan_changes.append(f"delivery_note:'{old_note}'->'{body.delivery_note}'")
         project.delivery_note = body.delivery_note
     db.commit()
-    log_project_activity(db, project_id, user.username, "交付计划",
+    log_project_activity(db, project.id, user.username, "交付计划",
         "; ".join(plan_changes) if plan_changes else "无变更")
     return {
         "code": 0,
@@ -237,9 +243,10 @@ def update_delivery_plan(
     }
 
 
-@router.get("/{project_id}/resources", response_model=dict)
-def get_resources(project_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
-    resources = project_service.get_project_resources(db, project_id)
+@router.get("/{identifier}/resources", response_model=dict)
+def get_resources(identifier: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    project = resolve_project(db, identifier)
+    resources = project_service.get_project_resources(db, project.id)
     return {"code": 0, "data": resources, "message": "ok"}
 
 
@@ -248,11 +255,12 @@ class NoteCreate(BaseModel):
     stage_name: str = ""
 
 
-@router.get("/{project_id}/notes", response_model=dict)
-def get_notes(project_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
+@router.get("/{identifier}/notes", response_model=dict)
+def get_notes(identifier: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    project = resolve_project(db, identifier)
     notes = (
         db.query(ProjectNote)
-        .filter(ProjectNote.project_id == project_id)
+        .filter(ProjectNote.project_id == project.id)
         .order_by(ProjectNote.created_at.desc())
         .limit(50)
         .all()
@@ -273,15 +281,15 @@ def get_notes(project_id: int, db: Session = Depends(get_db), _=Depends(get_curr
     }
 
 
-@router.post("/{project_id}/notes", response_model=dict)
+@router.post("/{identifier}/notes", response_model=dict)
 def add_note(
-    project_id: int,
+    identifier: str,
     payload: NoteCreate,
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
     note = ProjectNote(
-        project_id=project_id,
+        project_id=project.id,
         content=payload.content,
         stage_name=payload.stage_name,
         recorded_by=user.username,
@@ -289,7 +297,7 @@ def add_note(
     db.add(note)
     db.commit()
     db.refresh(note)
-    log_project_activity(db, project_id, user.username, "项目笔记",
+    log_project_activity(db, project.id, user.username, "项目笔记",
         f"{payload.stage_name or '项目整体'}: {payload.content[:80]}")
     return {
         "code": 0,
@@ -304,9 +312,9 @@ def add_note(
     }
 
 
-@router.get("/{project_id}/activities", response_model=dict)
+@router.get("/{identifier}/activities", response_model=dict)
 def get_activities(
-    project_id: int,
+    identifier: str,
     sort: str = "desc",  # "asc" or "desc"
     limit: int = 200,
     username: str = Query("", description="Filter by username"),
@@ -315,9 +323,10 @@ def get_activities(
     _=Depends(get_current_user),
 ):
     """Get project activity log (non-deletable audit trail)."""
+    project = resolve_project(db, identifier)
     order = ProjectActivity.id.desc() if sort == "desc" else ProjectActivity.id.asc()
     q = db.query(ProjectActivity).filter(
-        ProjectActivity.project_id == project_id
+        ProjectActivity.project_id == project.id
     )
     if username:
         q = q.filter(ProjectActivity.username == username)
@@ -326,15 +335,15 @@ def get_activities(
     rows = q.order_by(order).limit(limit).all()
 
     # Distinct filter options (always all values for this project, ignoring current filter)
-    opts_q = db.query(ProjectActivity).filter(ProjectActivity.project_id == project_id)
+    opts_q = db.query(ProjectActivity).filter(ProjectActivity.project_id == project.id)
     usernames = sorted(set(
         r[0] for r in db.query(ProjectActivity.username).filter(
-            ProjectActivity.project_id == project_id
+            ProjectActivity.project_id == project.id
         ).distinct().all() if r[0]
     ))
     actions = sorted(set(
         r[0] for r in db.query(ProjectActivity.action).filter(
-            ProjectActivity.project_id == project_id
+            ProjectActivity.project_id == project.id
         ).distinct().all() if r[0]
     ))
 
@@ -361,15 +370,15 @@ class BackgroundUpdate(BaseModel):
     background: str
 
 
-@router.put("/{project_id}/background", response_model=dict)
+@router.put("/{identifier}/background", response_model=dict)
 def update_project_background(
-    project_id: int,
+    identifier: str,
     payload: BackgroundUpdate,
     db: Session = Depends(get_db),
     user=Depends(require_perm("project_edit")),
 ):
     """Update the PMA-local project background description."""
-    project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
+    project = resolve_project(db, identifier)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     project.background = payload.background
@@ -381,10 +390,11 @@ class LinkedProjectsUpdate(BaseModel):
     ids: list = []  # list of int project IDs
 
 
-@router.get("/{project_id}/linked-projects", response_model=dict)
-def get_linked_projects(project_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
+@router.get("/{identifier}/linked-projects", response_model=dict)
+def get_linked_projects(identifier: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    project = resolve_project(db, identifier)
     """Get linked/sibling projects for a project."""
-    project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
+    project = resolve_project(db, identifier)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     ids_str = project.linked_project_ids or ""
@@ -399,15 +409,15 @@ def get_linked_projects(project_id: int, db: Session = Depends(get_db), _=Depend
     }
 
 
-@router.put("/{project_id}/linked-projects", response_model=dict)
+@router.put("/{identifier}/linked-projects", response_model=dict)
 def set_linked_projects(
-    project_id: int,
+    identifier: str,
     payload: LinkedProjectsUpdate,
     db: Session = Depends(get_db),
     user=Depends(require_perm("project_edit")),
 ):
     """Set linked/sibling projects."""
-    project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
+    project = resolve_project(db, identifier)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     project.linked_project_ids = ",".join(str(i) for i in payload.ids) if payload.ids else ""
@@ -441,15 +451,15 @@ class ProjectUpdate(BaseModel):
     is_local: Optional[bool] = None
 
 
-@router.put("/{project_id}", response_model=dict)
+@router.put("/{identifier}", response_model=dict)
 def update_project(
-    project_id: int,
+    identifier: str,
     payload: ProjectUpdate,
     db: Session = Depends(get_db),
     user=Depends(require_perm("project_edit")),
 ):
     """Update PMA-managed project fields."""
-    project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
+    project = resolve_project(db, identifier)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
@@ -472,28 +482,28 @@ def update_project(
             setattr(project, field, value)
 
     db.commit()
-    log_project_activity(db, project_id, user.username, "编辑项目",
+    log_project_activity(db, project.id, user.username, "编辑项目",
                          "; ".join(changes) if changes else "no changes")
 
     # Return updated project detail
-    detail = project_service.get_project_detail(db, project_id)
+    detail = project_service.get_project_detail(db, project.id)
     return {"code": 0, "data": detail, "message": f"已更新 {len(changes)} 个字段"}
 
 
 # ── Delete project ──
 
-@router.delete("/{project_id}", response_model=dict)
+@router.delete("/{identifier}", response_model=dict)
 def delete_project(
-    project_id: int,
+    identifier: str,
     db: Session = Depends(get_db),
     user=Depends(require_perm("project_edit")),
 ):
     """Delete a project and all related data (executions, tasks, documents, notes, links, activities, delivery records)."""
-    project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
+    project = resolve_project(db, identifier)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    proj_name = project.name or str(project_id)
+    proj_name = project.name or str(project.id)
 
     # Delete related records (cascade)
     from backend.models.zentao import ProductProjectLink, CustomerProjectLink
@@ -504,30 +514,30 @@ def delete_project(
     from backend.models.zentao import CachedTask
 
     # Product-project links
-    db.query(ProductProjectLink).filter(ProductProjectLink.project_id == project_id).delete()
+    db.query(ProductProjectLink).filter(ProductProjectLink.project_id == project.id).delete()
     # Customer-project links
-    db.query(CustomerProjectLink).filter(CustomerProjectLink.project_id == project_id).delete()
+    db.query(CustomerProjectLink).filter(CustomerProjectLink.project_id == project.id).delete()
     # Tasks
-    db.query(CachedTask).filter(CachedTask.project_id == project_id).delete()
+    db.query(CachedTask).filter(CachedTask.project_id == project.id).delete()
     # Executions
-    db.query(CachedExecution).filter(CachedExecution.project_id == project_id).delete()
+    db.query(CachedExecution).filter(CachedExecution.project_id == project.id).delete()
     # Bugs
-    db.query(CachedBug).filter(CachedBug.project_id == project_id).delete()
+    db.query(CachedBug).filter(CachedBug.project_id == project.id).delete()
     # Documents
-    db.query(ProjectDocument).filter(ProjectDocument.project_id == project_id).delete()
+    db.query(ProjectDocument).filter(ProjectDocument.project_id == project.id).delete()
     # Notes
-    db.query(ProjectNote).filter(ProjectNote.project_id == project_id).delete()
+    db.query(ProjectNote).filter(ProjectNote.project_id == project.id).delete()
     # Activities
-    db.query(ProjectActivity).filter(ProjectActivity.project_id == project_id).delete()
+    db.query(ProjectActivity).filter(ProjectActivity.project_id == project.id).delete()
     # Delivery records
-    db.query(DeliveryRecord).filter(DeliveryRecord.project_id == project_id).delete()
+    db.query(DeliveryRecord).filter(DeliveryRecord.project_id == project.id).delete()
     # PMA tasks + worklogs + comments
     from backend.models.task import Task as PmaTask, WorkLog, TaskComment
-    pma_task_ids = [r[0] for r in db.query(PmaTask.id).filter(PmaTask.project_id == project_id).all()]
+    pma_task_ids = [r[0] for r in db.query(PmaTask.id).filter(PmaTask.project_id == project.id).all()]
     if pma_task_ids:
         db.query(WorkLog).filter(WorkLog.task_id.in_(pma_task_ids)).delete()
         db.query(TaskComment).filter(TaskComment.task_id.in_(pma_task_ids)).delete()
-        db.query(PmaTask).filter(PmaTask.project_id == project_id).delete()
+        db.query(PmaTask).filter(PmaTask.project_id == project.id).delete()
     # Finally delete the project itself
     db.delete(project)
     db.commit()
@@ -539,6 +549,6 @@ def delete_project(
     # Log to audit
     from backend.audit_categories import AUDIT_CAT_PROJECT
     from backend.routers.logs import log_audit
-    log_audit(db, user, "project_delete", f"删除项目「{proj_name}」（ID: {project_id}）", AUDIT_CAT_PROJECT, "high")
+    log_audit(db, user, "project_delete", f"删除项目「{proj_name}」（ID: {project.id}）", AUDIT_CAT_PROJECT, "high")
 
-    return {"code": 0, "data": {"id": project_id, "name": proj_name}, "message": f"项目「{proj_name}」已删除"}
+    return {"code": 0, "data": {"id": project.id, "name": proj_name}, "message": f"项目「{proj_name}」已删除"}

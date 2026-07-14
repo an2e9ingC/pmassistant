@@ -31,21 +31,27 @@ function initDashboard() {
   }
 }
 
-function initDetailView(projectId, tabId) {
+function initDetailView(code, tabId) {
   loadAllProjects().then(function() {
-    if (projectId) {
-      document.getElementById('combo-input').value = '';
-      projComboSelect(projectId);
-      // Tab will be handled after loadProjectDetail completes
+    if (code) {
+      // Look up project by code to get integer id for combo
+      var p = _allProjects.find(function(x) { return x.code === code || String(x.id) === code; });
+      if (p) {
+        document.getElementById('combo-input').value = '';
+        projComboSelect(p.id);
+      }
       if (tabId && typeof setDetailTargetTab === 'function') {
         setDetailTargetTab(tabId);
       }
-    } else if (window._pendingProjectId) {
-      document.getElementById('combo-input').value = '';
-      projComboSelect(window._pendingProjectId);
-      window._pendingProjectId = null;
-    } else if (_comboCurId) {
-      loadProjectDetail(_comboCurId);
+    } else if (window._pendingProjectCode) {
+      var pc = _allProjects.find(function(x) { return x.code === window._pendingProjectCode || String(x.id) === window._pendingProjectCode; });
+      if (pc) {
+        document.getElementById('combo-input').value = '';
+        projComboSelect(pc.id);
+      }
+      window._pendingProjectCode = null;
+    } else if (_comboCurCode) {
+      loadProjectDetail(_comboCurCode);
     }
   });
 }

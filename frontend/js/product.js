@@ -204,7 +204,7 @@ function _povRenderProducts() {
       var s = stageMap[st];
       if (!s || s.total === 0) return;
       var color = s.pct >= 100 ? 'var(--success)' : (s.pct > 0 ? 'var(--orange)' : 'var(--muted)');
-      ringsHtml += '<div style="text-align:center;cursor:pointer" onclick="event.stopPropagation();_prodDetailTargetTab=\'docs\';openProductDetail(' + p.id + ')" title="' + escHtml(st) + ': ' + s.done + '/' + s.total + '">' +
+      ringsHtml += '<div style="text-align:center;cursor:pointer" onclick="event.stopPropagation();_prodDetailTargetTab=\'docs\';openProductDetail(\'' + escHtml(p.code || '').replace(/'/g, "\\'") + '\')" title="' + escHtml(st) + ': ' + s.done + '/' + s.total + '">' +
         renderProgressCircle(s.pct, 32, { label: '', color: color }) +
         '<div style="font-size:8px;color:var(--muted);margin-top:1px;line-height:1.1">' + escHtml(st.replace('开发','') || st) + '</div>' +
       '</div>';
@@ -213,14 +213,14 @@ function _povRenderProducts() {
       if (stageOrder.indexOf(st) >= 0) return;
       var s = stageMap[st];
       var color = s.pct >= 100 ? 'var(--success)' : (s.pct > 0 ? 'var(--orange)' : 'var(--muted)');
-      ringsHtml += '<div style="text-align:center;cursor:pointer" onclick="event.stopPropagation();_prodDetailTargetTab=\'docs\';openProductDetail(' + p.id + ')" title="' + escHtml(st) + ': ' + s.done + '/' + s.total + '">' +
+      ringsHtml += '<div style="text-align:center;cursor:pointer" onclick="event.stopPropagation();_prodDetailTargetTab=\'docs\';openProductDetail(\'' + escHtml(p.code || '').replace(/'/g, "\\'") + '\')" title="' + escHtml(st) + ': ' + s.done + '/' + s.total + '">' +
         renderProgressCircle(s.pct, 32, { label: '', color: color }) +
         '<div style="font-size:8px;color:var(--muted);margin-top:1px;line-height:1.1">' + escHtml(st.replace('开发','') || st) + '</div>' +
       '</div>';
     });
     var sourceBadge = '<span class="prod-src ' + (p.is_local ? 'local' : 'synced') + '">' + (p.is_local ? 'PMA 本地' : '禅道同步') + '</span>';
 
-    return '<div class="pov-prod-card" style="position:relative" onclick="openProductDetail(\'' + p.id + '\')">' +
+    return '<div class="pov-prod-card" style="position:relative" onclick="openProductDetail(\'' + escHtml(p.code || '').replace(/'/g, "\\'") + '\')">' +
       '<span style="position:absolute;top:10px;right:10px;z-index:1">' + favStar('product', p.id, {stopPropagation:true, size:'20px'}) + '</span>' +
       '<div class="pov-prod-header"><div>' +
         '<div class="prod-code">' + escHtml(p.code || '#' + p.id) + '</div>' +
@@ -267,38 +267,45 @@ setTimeout(function() {
   }
 }, 500);
 
-function openProductDetail(id, tabId) {
-  _prodDetailCurId = id;
-  sessionStorage.setItem('pm_last_prod_id', id);
-  gotoView('product-detail', {params: [String(id), tabId || 'info']});
+function openProductDetail(code, tabId) {
+  _prodDetailCurId = null;  // will be set by combo or init
+  _prodDetailCurCode = code;
+  sessionStorage.setItem('pm_last_prod_code', code);
+  gotoView('product-detail', {params: [String(code), tabId || 'info']});
 }
 
 /* ---- Product Detail ---- */
 
 var _prodDetailCurId = null;
+var _prodDetailCurCode = null;
 var _prodDocScanning = false;
 var _prodDetailTargetTab = null;  // set before navigation to jump to a specific tab
 var _prodComboAll = [];
 
-async function initProductDetail(productId, tabId) {
-  if (productId) {
-    _prodDetailCurId = parseInt(productId);
+async function initProductDetail(code, tabId) {
+  if (code) {
+    _prodDetailCurCode = code;
     if (tabId) _prodDetailTargetTab = tabId;
   }
   try {
     var data = await API.get('/products?limit=200');
     _prodComboAll = data.items || [];
   } catch(e) { _prodComboAll = []; }
+  // Find product by code to get integer id for combo
+  if (code) {
+    var found = _prodComboAll.find(function(p) { return p.code === code || String(p.id) === code; });
+    if (found) _prodDetailCurId = found.id;
+  }
   initSearchCombo({
     comboId: 'prod-combo',
     inputId: 'prod-combo-input',
     dropdownId: 'prod-combo-dropdown',
     dataSource: _prodComboAll,
     selectedIdFn: function() { return _prodDetailCurId; },
-    onSelect: function(p) { _prodDetailCurId = p.id; loadProductDetail(p.id); history.replaceState({ view: 'product-detail', params: [String(p.id), 'info'] }, '', buildHash('product-detail', String(p.id), 'info')); }
+    onSelect: function(p) { _prodDetailCurId = p.id; _prodDetailCurCode = p.code || String(p.id); loadProductDetail(_prodDetailCurCode); history.replaceState({ view: 'product-detail', params: [_prodDetailCurCode, 'info'] }, '', buildHash('product-detail', _prodDetailCurCode, 'info')); }
   });
   if (_prodDetailCurId) {
-    loadProductDetail(_prodDetailCurId);
+    loadProductDetail(_prodDetailCurCode);
   }
 }
 
@@ -314,21 +321,22 @@ function switchProdTab(id, el) {
   if (id === 'maintenance' && _prodDetail) renderProdMaintenance(_prodDetail);
   if (id === 'activities') loadProdActivities();
   // Update hash to reflect current tab
-  if (_prodDetailCurId && typeof buildHash === 'function') {
-    history.replaceState({ view: 'product-detail', params: [String(_prodDetailCurId), id] }, '', buildHash('product-detail', String(_prodDetailCurId), id));
+  if (_prodDetailCurCode && typeof buildHash === 'function') {
+    history.replaceState({ view: 'product-detail', params: [_prodDetailCurCode, id] }, '', buildHash('product-detail', _prodDetailCurCode, id));
   }
 }
 
-async function loadProductDetail(id) {
-  _prodDetailCurId = id;
+async function loadProductDetail(code) {
   // Reset to 基本信息 tab on entry (unless a target tab is specified)
   var targetTab = _prodDetailTargetTab || 'info';
   _prodDetailTargetTab = null;
   var tabEl = document.querySelector('#view-product-detail .dtab[onclick*="switchProdTab(\'' + targetTab + '\'"]');
   if (tabEl) switchProdTab(targetTab, tabEl);
 
-  var selected = _prodComboAll.find(function(p) { return p.id === parseInt(id); });
+  var selected = _prodComboAll.find(function(p) { return p.code === code || String(p.id) === code; });
   if (selected) {
+    _prodDetailCurId = selected.id;
+    _prodDetailCurCode = selected.code || String(selected.id);
     document.getElementById('prod-combo-input').value = selected.name;
   }
 
@@ -340,11 +348,11 @@ async function loadProductDetail(id) {
   if (actContainer) actContainer.innerHTML = '<div class="loading-spinner">加载活动记录...</div>';
 
   try {
-    var detail = await API.get('/products/' + id);
+    var detail = await API.get('/products/' + code);
     _prodDetail = detail;
     // Load docs first so header can show per-stage completion rings
     var docs = [];
-    try { docs = await API.get('/products/' + id + '/documents') || []; } catch(e) {}
+    try { docs = await API.get('/products/' + code + '/documents') || []; } catch(e) {}
     renderProdDetailHeader(detail, docs);
     renderProdInfo(detail);
     renderProdDocs(detail, docs);  // pass pre-loaded docs to avoid duplicate fetch
@@ -352,8 +360,8 @@ async function loadProductDetail(id) {
     document.getElementById('prod-detail-header').innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '</div>';
   }
   // Update hash to reflect current product + tab
-  if (_prodDetailCurId && typeof buildHash === 'function') {
-    history.replaceState({ view: 'product-detail', params: [String(_prodDetailCurId), targetTab] }, '', buildHash('product-detail', String(_prodDetailCurId), targetTab));
+  if (_prodDetailCurCode && typeof buildHash === 'function') {
+    history.replaceState({ view: 'product-detail', params: [_prodDetailCurCode, targetTab] }, '', buildHash('product-detail', _prodDetailCurCode, targetTab));
   }
 }
 
@@ -511,7 +519,7 @@ function renderProdInfo(p) {
   document.getElementById('prodsec-info').innerHTML = html;
 
   // Load 设计框图 document and render inline
-  API.get('/products/' + p.id + '/documents').then(function(docs) {
+  API.get('/products/' + p.code + '/documents').then(function(docs) {
     var blockDoc = null;
     (docs || []).forEach(function(d) {
       if (!blockDoc && d.doc_name && d.doc_name.indexOf('设计框图') >= 0 && d.location) blockDoc = d;
@@ -532,7 +540,7 @@ function renderProdInfo(p) {
   });
 
   // Load notes
-  API.get('/products/' + p.id + '/notes').then(function(notes) {
+  API.get('/products/' + p.code + '/notes').then(function(notes) {
     renderProductNotes(notes || []);
   }).catch(function() {
     renderProductNotes([]);
@@ -550,16 +558,16 @@ function renderProdDocs(p, preDocs) {
     '<div id="prod-docs-inline"><div class="loading-spinner" style="padding:20px">加载中...</div></div>';
 
   // Use pre-loaded docs if available, otherwise fetch
-  var loadDocs = preDocs ? Promise.resolve(preDocs) : API.get('/products/' + p.id + '/documents');
+  var loadDocs = preDocs ? Promise.resolve(preDocs) : API.get('/products/' + p.code + '/documents');
   loadDocs.then(function(docs) {
     _renderProdDocsInline(docs || []);
     // Always re-scan on tab open: check file existence + refresh SVN metadata (rev changes etc.)
     _prodDocScanning = true;
     _renderProdDocsInline(docs || []);  // re-render to show "验证中"
-    API.post('/products/' + p.id + '/docs/check', {}).then(function(result) {
+    API.post('/products/' + p.code + '/docs/check', {}).then(function(result) {
       _prodDocScanning = false;
       if (result && (result.auto_submitted > 0 || result.scanned > 0)) {
-        API.get('/products/' + p.id + '/documents').then(function(fresh) {
+        API.get('/products/' + p.code + '/documents').then(function(fresh) {
           _renderProdDocsInline(fresh || []);
         });
       }
@@ -604,10 +612,10 @@ async function addProductNote() {
   if (!content) { showToast('请输入笔记内容', 'error'); return; }
   closeSharedDialog();
   try {
-    await API.post('/products/' + _prodDetail.id + '/notes', {content: content});
+    await API.post('/products/' + _prodDetailCurCode + '/notes', {content: content});
     showToast('已添加', 'ok');
     // Reload notes
-    var notes = await API.get('/products/' + _prodDetail.id + '/notes');
+    var notes = await API.get('/products/' + _prodDetailCurCode + '/notes');
     renderProductNotes(notes || []);
   } catch(e) {
     showToast('添加失败: ' + (e.message || ''), 'error');
@@ -617,9 +625,9 @@ async function addProductNote() {
 async function deleteProductNote(noteId, el) {
   if (!confirm('确认删除此笔记？')) return;
   try {
-    await API.del('/products/' + _prodDetail.id + '/notes/' + noteId);
+    await API.del('/products/' + _prodDetailCurCode + '/notes/' + noteId);
     showToast('已删除', 'ok');
-    var notes = await API.get('/products/' + _prodDetail.id + '/notes');
+    var notes = await API.get('/products/' + _prodDetailCurCode + '/notes');
     renderProductNotes(notes || []);
   } catch(e) {
     showToast('删除失败: ' + (e.message || ''), 'error');
@@ -653,7 +661,7 @@ async function uploadBlockDiagram(input) {
 
   var token = localStorage.getItem('pma_token');
   try {
-    var res = await fetch('/api/products/' + _prodDetail.id + '/block-diagrams', {
+    var res = await fetch('/api/products/' + _prodDetailCurCode + '/block-diagrams', {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + token },
       body: formData,
@@ -673,7 +681,7 @@ async function uploadBlockDiagram(input) {
 
 async function loadBlockDiagrams() {
   try {
-    var diagrams = await API.get('/products/' + _prodDetail.id + '/block-diagrams');
+    var diagrams = await API.get('/products/' + _prodDetailCurCode + '/block-diagrams');
     renderBlockDiagrams(diagrams || []);
   } catch (e) {
     renderBlockDiagrams([]);
@@ -750,7 +758,7 @@ async function confirmDeleteBlockDiagram(bdId) {
   document.querySelector('.shared-dialog-overlay') && closeSharedDialog();
   // Proceed with deletion
   try {
-    await API.del('/products/' + _prodDetail.id + '/block-diagrams/' + bdId);
+    await API.del('/products/' + _prodDetailCurCode + '/block-diagrams/' + bdId);
     showToast('已删除', 'ok');
     loadBlockDiagrams();
   } catch (e) {
@@ -942,7 +950,7 @@ function renderProdMaintenance(p) {
     projects.forEach(function(proj) {
       var projCode = extractProjectCode(proj.name);
       var coreName = extractCoreName(proj.name);
-      html += '<tr onclick="openProject(\'' + proj.id + '\')" style="cursor:pointer">' +
+      html += '<tr onclick="openProject(\'' + escHtml(proj.code || String(proj.id)).replace(/'/g, "\\'") + '\')" style="cursor:pointer">' +
         '<td>' + renderProjIcon(proj.project_type, projCode) + '</td>' +
         '<td><div class="proj-name">' + escHtml(coreName) + '</div></td>' +
         '<td>' + (proj.customer_name ? renderCustomerBadge(proj.customer_name) : '—') + '</td>' +
@@ -1055,9 +1063,9 @@ async function saveProdEdit() {
 
   closeSharedDialog();
   try {
-    await API.put('/products/' + _prodDetailCurId, { name: name, code: code, status: status, tags: tags.join(',') });
+    await API.put('/products/' + _prodDetailCurCode, { name: name, code: code, status: status, tags: tags.join(',') });
     showToast('产品已更新', 'success');
-    loadProductDetail(_prodDetailCurId);
+    loadProductDetail(_prodDetailCurCode);
   } catch(e) {
     showToast('更新失败: ' + (e.message || ''), 'error');
   }
@@ -1070,9 +1078,9 @@ function showProdLinkProjectsDialog() {
       renderItem: function(proj) { return escHtml(proj.name) + ' <span style="font-size:10px;color:var(--muted)">' + escHtml(proj.code || '') + '</span>'; },
       placeholder: '搜索项目...'
     }, function(ids) {
-      API.put('/product-management/products/' + _prodDetailCurId + '/projects', { project_ids: ids }).then(function() {
+      API.put('/product-management/products/' + _prodDetailCurCode + '/projects', { project_ids: ids }).then(function() {
         showToast('关联项目已更新', 'success');
-        loadProductDetail(_prodDetailCurId);
+        loadProductDetail(_prodDetailCurCode);
       }).catch(function(e) { showToast('更新失败: ' + (e.message || ''), 'error'); });
     });
   });
@@ -1085,9 +1093,9 @@ function showProdCustomersDialog() {
       idKey: 'name', labelKey: 'name', placeholder: '搜索客户...'
     }, function(names) {
       var nameStr = names.join('、');
-      API.put('/products/' + _prodDetailCurId, { pma_customer: nameStr }).then(function() {
+      API.put('/products/' + _prodDetailCurCode, { pma_customer: nameStr }).then(function() {
         showToast('关联客户已更新', 'success');
-        loadProductDetail(_prodDetailCurId);
+        loadProductDetail(_prodDetailCurCode);
       }).catch(function(e) { showToast('更新失败: ' + (e.message || ''), 'error'); });
     });
   }).catch(function() { showToast('获取客户列表失败', 'error'); });
@@ -1098,7 +1106,7 @@ async function deleteCurrentProduct() {
   var ok = await verifyPassword('删除产品: ' + (_prodDetail.name || ''), 'pw_verify_product_node_del');
   if (!ok) return;
   try {
-    await API.del('/product-management/products/' + _prodDetailCurId);
+    await API.del('/product-management/products/' + _prodDetailCurCode);
     showToast('产品已删除', 'success');
     gotoView('product-list');
   } catch(e) {
@@ -1130,9 +1138,9 @@ async function saveProdTags() {
   document.querySelectorAll('.prod-tag-cb:checked').forEach(function(cb) { tags.push(cb.value); });
   closeSharedDialog();
   try {
-    await API.put('/products/' + _prodDetailCurId, { tags: tags.join(',') });
+    await API.put('/products/' + _prodDetailCurCode, { tags: tags.join(',') });
     showToast('标签已更新', 'success');
-    loadProductDetail(_prodDetailCurId);
+    loadProductDetail(_prodDetailCurCode);
   } catch(e) {
     showToast('更新失败: ' + (e.message || ''), 'error');
   }
@@ -1146,7 +1154,7 @@ var _prodActivityFilterAction = '';
 var _prodActivityOptions = null;
 
 async function loadProdActivities() {
-  if (!_prodDetailCurId) return;
+  if (!_prodDetailCurCode) return;
   var container = document.getElementById('prod-activities-content');
   if (!container) return;
   container.innerHTML = '<div class="loading-spinner">加载活动记录...</div>';
@@ -1154,7 +1162,7 @@ async function loadProdActivities() {
     var params = 'sort=' + _prodActivitySort + '&limit=200';
     if (_prodActivityFilterUser) params += '&username=' + encodeURIComponent(_prodActivityFilterUser);
     if (_prodActivityFilterAction) params += '&action=' + encodeURIComponent(_prodActivityFilterAction);
-    var resp = await API.get('/products/' + _prodDetailCurId + '/activities?' + params);
+    var resp = await API.get('/products/' + _prodDetailCurCode + '/activities?' + params);
     var items = resp && resp.items ? resp.items : (Array.isArray(resp) ? resp : []);
     var opts = resp && resp.options ? resp.options : null;
     buildProdActivities(items, opts);

@@ -12,6 +12,7 @@ from backend.middleware.auth import get_current_user, has_perm, require_admin, r
 from backend.models.local import ProductNote, ProductBlockDiagram
 from backend.services import product_service
 from backend.services.product_service import log_product_activity
+from backend.services.entity_resolver import resolve_product
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 
@@ -30,8 +31,8 @@ class ProductUpdate(BaseModel):
 
 
 class ProductProjectLinkRequest(BaseModel):
-    product_id: int
     project_id: int
+    product_id: int
 
 
 class NoteCreate(BaseModel):
@@ -70,23 +71,24 @@ def list_categories(db: Session = Depends(get_db), _=Depends(get_current_user)):
     return {"code": 0, "data": sorted(list(cats)), "message": "ok"}
 
 
-@router.get("/{product_id}", response_model=dict)
-def get_product(product_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
-    detail = product_service.get_product(db, product_id)
+@router.get("/{identifier}", response_model=dict)
+def get_product(identifier: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    product = resolve_product(db, identifier)
+    detail = product_service.get_product(db, product.id)
     if not detail:
         raise HTTPException(status_code=404, detail="Product not found")
     return {"code": 0, "data": detail, "message": "ok"}
 
 
-@router.put("/{product_id}", response_model=dict)
+@router.put("/{identifier}", response_model=dict)
 def update_product(
-    product_id: int,
+    identifier: str,
     body: ProductUpdate,
     db: Session = Depends(get_db),
     user=Depends(require_admin),
 ):
     from backend.models.zentao import PmaProduct as _CP
-    old_prod = db.query(_CP).filter(_CP.id == product_id).first()
+    old_prod = db.query(_CP).filter(_CP.id == product.id).first()
     if not old_prod:
         raise HTTPException(status_code=404, detail="Product not found")
     data = {k: v for k, v in body.model_dump().items() if v is not None}
@@ -97,16 +99,17 @@ def update_product(
         old_val = getattr(old_prod, k, None)
         if str(old_val) != str(v):
             changes.append(f"{k}:'{old_val}'->'{v}'")
-    result = product_service.update_product(db, product_id, data)
+    result = product_service.update_product(db, product.id, data)
     if not result:
         raise HTTPException(status_code=404, detail="Product not found")
-    log_product_activity(db, product_id, user.username, "编辑产品", "; ".join(changes) if changes else "无变更")
+    log_product_activity(db, product.id, user.username, "编辑产品", "; ".join(changes) if changes else "无变更")
     return {"code": 0, "data": result, "message": "ok"}
 
 
-@router.get("/{product_id}/projects", response_model=dict)
-def get_product_projects(product_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
-    projects = product_service.get_product_projects(db, product_id)
+@router.get("/{identifier}/projects", response_model=dict)
+def get_product_projects(identifier: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    product = resolve_product(db, identifier)
+    projects = product_service.get_product_projects(db, product.id)
     return {"code": 0, "data": projects, "message": "ok"}
 
 
@@ -128,18 +131,19 @@ def unlink_product_project(
     db: Session = Depends(get_db),
     user=Depends(require_admin),
 ):
-    result = product_service.remove_product_project_link(db, product_id, project_id)
-    log_product_activity(db, product_id, user.username, "取消关联项目", f"project_id:{project_id}")
+    result = product_service.remove_product_project_link(db, product.id, project_id)
+    log_product_activity(db, product.id, user.username, "取消关联项目", f"project_id:{project_id}")
     return {"code": 0, "data": result, "message": "ok"}
 
 
 # ── Product Notes ──
 
-@router.get("/{product_id}/notes", response_model=dict)
-def get_product_notes(product_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
+@router.get("/{identifier}/notes", response_model=dict)
+def get_product_notes(identifier: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    product = resolve_product(db, identifier)
     notes = (
         db.query(ProductNote)
-        .filter(ProductNote.product_id == product_id)
+        .filter(ProductNote.product_id == product.id)
         .order_by(ProductNote.created_at.desc())
         .limit(50)
         .all()
@@ -159,22 +163,23 @@ def get_product_notes(product_id: int, db: Session = Depends(get_db), _=Depends(
     }
 
 
-@router.post("/{product_id}/notes", response_model=dict)
+@router.post("/{identifier}/notes", response_model=dict)
 def add_product_note(
-    product_id: int,
+    identifier: str,
     payload: NoteCreate,
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
+    product = resolve_product(db, identifier)
     note = ProductNote(
-        product_id=product_id,
+        product_id=product.id,
         content=payload.content,
         recorded_by=user.username,
     )
     db.add(note)
     db.commit()
     db.refresh(note)
-    log_product_activity(db, product_id, user.username, "添加笔记", f"content:{payload.content[:100]}")
+    log_product_activity(db, product.id, user.username, "添加笔记", f"content:{payload.content[:100]}")
     return {
         "code": 0,
         "data": {
@@ -187,32 +192,34 @@ def add_product_note(
     }
 
 
-@router.delete("/{product_id}/notes/{note_id}", response_model=dict)
+@router.delete("/{identifier}/notes/{note_id}", response_model=dict)
 def delete_product_note(
-    product_id: int,
+    identifier: str,
     note_id: int,
     db: Session = Depends(get_db),
     user=Depends(require_admin),
 ):
+    product = resolve_product(db, identifier)
     note = db.query(ProductNote).filter(
         ProductNote.id == note_id,
-        ProductNote.product_id == product_id,
+        ProductNote.product_id == product.id,
     ).first()
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
     db.delete(note)
     db.commit()
-    log_product_activity(db, product_id, user.username, "删除笔记", f"note_id:{note_id}")
+    log_product_activity(db, product.id, user.username, "删除笔记", f"note_id:{note_id}")
     return {"code": 0, "message": "已删除"}
 
 
 # ── Product Documents (based on doc templates) ──
 
-@router.get("/{product_id}/documents", response_model=dict)
-def get_product_documents(product_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
+@router.get("/{identifier}/documents", response_model=dict)
+def get_product_documents(identifier: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    product = resolve_product(db, identifier)
     """Return product document instances (synced from templates) with status and actual paths."""
     from backend.services.document_service import get_or_init_product_documents
-    docs = get_or_init_product_documents(db, product_id)
+    docs = get_or_init_product_documents(db, product.id)
     return {"code": 0, "data": docs, "message": "ok"}
 
 
@@ -224,15 +231,16 @@ class DocUpdate(BaseModel):
     uploaded_at: Optional[str] = None
 
 
-@router.put("/{product_id}/documents/{doc_id}", response_model=dict)
+@router.put("/{identifier}/documents/{doc_id}", response_model=dict)
 def update_product_document(
-    product_id: int,
+    identifier: str,
     doc_id: int,
     body: DocUpdate,
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
     """Update a product document's status/location. Requires product_link permission for status changes."""
+    product = resolve_product(db, identifier)
     from backend.models.document import ProductDocument
     from datetime import datetime as _dt
 
@@ -242,7 +250,7 @@ def update_product_document(
 
     doc = db.query(ProductDocument).filter(
         ProductDocument.id == doc_id,
-        ProductDocument.product_id == product_id,
+        ProductDocument.product_id == product.id,
     ).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -287,21 +295,22 @@ def update_product_document(
     doc.updated_by = user.username
     db.commit()
     detail = "; ".join(doc_changes) if doc_changes else "无变更"
-    log_product_activity(db, product_id, user.username, "更新文档", f"doc_name:'{doc.doc_name}'; {detail}")
+    log_product_activity(db, product.id, user.username, "更新文档", f"doc_name:'{doc.doc_name}'; {detail}")
     return {"code": 0, "data": {"id": doc.id, "status": doc.status}, "message": "ok"}
 
 
-@router.post("/{product_id}/docs/check", response_model=dict)
-def check_product_documents(product_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
+@router.post("/{identifier}/docs/check", response_model=dict)
+def check_product_documents(identifier: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    product = resolve_product(db, identifier)
     """Auto-scan product document paths and mark as submitted if files exist."""
     from backend.services.doc_scanner import check_product_docs
     import traceback, logging
     logger = logging.getLogger(__name__)
     try:
-        result = check_product_docs(db, product_id)
+        result = check_product_docs(db, product.id)
         return {"code": 0, "data": result, "message": "ok"}
     except Exception as e:
-        logger.error(f"Doc scan failed for product {product_id}: {e}\n{traceback.format_exc()}")
+        logger.error(f"Doc scan failed for product {product.id}: {e}\n{traceback.format_exc()}")
         return {"code": 0, "data": {"scanned": 0, "auto_submitted": 0, "results": [], "error": str(e)}, "message": "ok"}
 
 
@@ -314,12 +323,13 @@ def _ensure_upload_dir():
     _os.makedirs(_UPLOAD_DIR, exist_ok=True)
 
 
-@router.get("/{product_id}/block-diagrams", response_model=dict)
-def list_block_diagrams(product_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
+@router.get("/{identifier}/block-diagrams", response_model=dict)
+def list_block_diagrams(identifier: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    product = resolve_product(db, identifier)
     """List all block diagram images for a product."""
     items = (
         db.query(ProductBlockDiagram)
-        .filter(ProductBlockDiagram.product_id == product_id)
+        .filter(ProductBlockDiagram.product_id == product.id)
         .order_by(ProductBlockDiagram.created_at.desc())
         .all()
     )
@@ -328,7 +338,7 @@ def list_block_diagrams(product_id: int, db: Session = Depends(get_db), _=Depend
         "data": [
             {
                 "id": bd.id,
-                "product_id": bd.product_id,
+                "product_id": bd.product.id,
                 "filename": bd.filename,
                 "uploaded_by": bd.uploaded_by,
                 "created_at": to_local_str(bd.created_at),
@@ -339,14 +349,15 @@ def list_block_diagrams(product_id: int, db: Session = Depends(get_db), _=Depend
     }
 
 
-@router.post("/{product_id}/block-diagrams", response_model=dict)
+@router.post("/{identifier}/block-diagrams", response_model=dict)
 def upload_block_diagram(
-    product_id: int,
+    identifier: str,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     user=Depends(require_perm("product_link")),
 ):
     """Upload a block diagram image for a product."""
+    product = resolve_product(db, identifier)
     _ensure_upload_dir()
 
     # Validate file type
@@ -371,8 +382,9 @@ def upload_block_diagram(
         f.write(content)
 
     # Create DB record
+    product = resolve_product(db, identifier)
     bd = ProductBlockDiagram(
-        product_id=product_id,
+        product_id=product.id,
         filename=file.filename or unique_name,
         file_path=unique_name,
         uploaded_by=user.username,
@@ -380,13 +392,13 @@ def upload_block_diagram(
     db.add(bd)
     db.commit()
     db.refresh(bd)
-    log_product_activity(db, product_id, user.username, "上传框图", f"filename:{bd.filename}")
+    log_product_activity(db, product.id, user.username, "上传框图", f"filename:{bd.filename}")
 
     return {
         "code": 0,
         "data": {
             "id": bd.id,
-            "product_id": bd.product_id,
+            "product_id": bd.product.id,
             "filename": bd.filename,
             "uploaded_by": bd.uploaded_by,
             "created_at": to_local_str(bd.created_at),
@@ -395,17 +407,18 @@ def upload_block_diagram(
     }
 
 
-@router.delete("/{product_id}/block-diagrams/{bd_id}", response_model=dict)
+@router.delete("/{identifier}/block-diagrams/{bd_id}", response_model=dict)
 def delete_block_diagram(
-    product_id: int,
+    identifier: str,
     bd_id: int,
     db: Session = Depends(get_db),
     user=Depends(require_perm("product_link")),
 ):
     """Delete a block diagram image."""
+    product = resolve_product(db, identifier)
     bd = db.query(ProductBlockDiagram).filter(
         ProductBlockDiagram.id == bd_id,
-        ProductBlockDiagram.product_id == product_id,
+        ProductBlockDiagram.product_id == product.id,
     ).first()
     if not bd:
         raise HTTPException(status_code=404, detail="Block diagram not found")
@@ -417,7 +430,7 @@ def delete_block_diagram(
 
     db.delete(bd)
     db.commit()
-    log_product_activity(db, product_id, user.username, "删除框图", f"filename:{bd.filename}")
+    log_product_activity(db, product.id, user.username, "删除框图", f"filename:{bd.filename}")
     return {"code": 0, "message": "已删除"}
 
 
@@ -450,9 +463,9 @@ def serve_block_diagram_image(bd_id: int, db: Session = Depends(get_db)):
 
 # ── Product Activities ──
 
-@router.get("/{product_id}/activities", response_model=dict)
+@router.get("/{identifier}/activities", response_model=dict)
 def get_product_activities(
-    product_id: int,
+    identifier: str,
     sort: str = Query("desc"),
     limit: int = Query(200, ge=1, le=500),
     username: str = Query("", description="Filter by username"),
@@ -461,12 +474,13 @@ def get_product_activities(
     _=Depends(get_current_user),
 ):
     """Return activity log for a product (non-deletable audit trail)."""
+    product = resolve_product(db, identifier)
     from backend.models.local import ProductActivity
 
     order = ProductActivity.id.desc() if sort == "desc" else ProductActivity.id.asc()
     q = (
         db.query(ProductActivity)
-        .filter(ProductActivity.product_id == product_id)
+        .filter(ProductActivity.product_id == product.id)
     )
     if username:
         q = q.filter(ProductActivity.username == username)
@@ -477,12 +491,12 @@ def get_product_activities(
     # Distinct filter options
     usernames = sorted(set(
         r[0] for r in db.query(ProductActivity.username).filter(
-            ProductActivity.product_id == product_id
+            ProductActivity.product_id == product.id
         ).distinct().all() if r[0]
     ))
     actions = sorted(set(
         r[0] for r in db.query(ProductActivity.action).filter(
-            ProductActivity.product_id == product_id
+            ProductActivity.product_id == product.id
         ).distinct().all() if r[0]
     ))
 

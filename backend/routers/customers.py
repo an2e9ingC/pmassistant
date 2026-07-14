@@ -11,6 +11,7 @@ from backend.middleware.auth import get_current_user, require_perm
 from backend.audit_categories import AUDIT_CAT_CUSTOMER
 from backend.routers.logs import log_audit
 from backend.models.zentao import PmaCustomer, CachedProject, PmaProduct, CustomerProjectLink, CustomerProductLink, ProductProjectLink
+from backend.services.entity_resolver import resolve_customer
 
 router = APIRouter(prefix="/api/customers", tags=["customers"])
 
@@ -80,40 +81,34 @@ def create_customer(payload: CustomerCreate, db: Session = Depends(get_db), user
     return {"code": 0, "data": {"id": c.id, "name": c.name}, "message": "客户已创建"}
 
 
-@router.put("/{customer_id}", response_model=dict)
-def update_customer(customer_id: int, payload: CustomerUpdate, db: Session = Depends(get_db), user=Depends(require_perm("customer_link"))):
-    c = db.query(PmaCustomer).filter(PmaCustomer.id == customer_id).first()
-    if not c:
-        raise HTTPException(status_code=404, detail="客户不存在")
+@router.put("/{identifier}", response_model=dict)
+def update_customer(identifier: str, payload: CustomerUpdate, db: Session = Depends(get_db), user=Depends(require_perm("customer_link"))):
+    customer = resolve_customer(db, identifier)
     if payload.name is not None:
-        c.name = payload.name
+        customer.name = payload.name
     if payload.full_name is not None:
-        c.full_name = payload.full_name
+        customer.full_name = payload.full_name
     db.commit()
     return {"code": 0, "message": "客户已更新"}
 
 
-@router.delete("/{customer_id}", response_model=dict)
-def delete_customer(customer_id: int, db: Session = Depends(get_db), _=Depends(require_perm("customer_link")), cu = Depends(get_current_user)):
-    c = db.query(PmaCustomer).filter(PmaCustomer.id == customer_id).first()
-    if not c:
-        raise HTTPException(status_code=404, detail="客户不存在")
-    cname = c.name
-    db.query(CustomerProjectLink).filter(CustomerProjectLink.customer_id == customer_id).delete()
-    db.query(CustomerProductLink).filter(CustomerProductLink.customer_id == customer_id).delete()
-    db.delete(c)
+@router.delete("/{identifier}", response_model=dict)
+def delete_customer(identifier: str, db: Session = Depends(get_db), _=Depends(require_perm("customer_link")), cu = Depends(get_current_user)):
+    customer = resolve_customer(db, identifier)
+    cname = customer.name
+    db.query(CustomerProjectLink).filter(CustomerProjectLink.customer_id == customer.id).delete()
+    db.query(CustomerProductLink).filter(CustomerProductLink.customer_id == customer.id).delete()
+    db.delete(customer)
     db.commit()
     log_audit(db, cu, "delete_customer", f"name={cname!r}", AUDIT_CAT_CUSTOMER, "high")
     return {"code": 0, "message": "客户已删除"}
 
 
-@router.get("/{customer_id}", response_model=dict)
-def get_customer_detail(customer_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
-    c = db.query(PmaCustomer).filter(PmaCustomer.id == customer_id).first()
-    if not c:
-        raise HTTPException(status_code=404, detail="客户不存在")
+@router.get("/{identifier}", response_model=dict)
+def get_customer_detail(identifier: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    customer = resolve_customer(db, identifier)
     # Associated projects (direct)
-    proj_links = db.query(CustomerProjectLink).filter(CustomerProjectLink.customer_id == customer_id).all()
+    proj_links = db.query(CustomerProjectLink).filter(CustomerProjectLink.customer_id == customer.id).all()
     project_ids = [l.project_id for l in proj_links]
     projects = db.query(CachedProject).filter(CachedProject.id.in_(project_ids)).all() if project_ids else []
     # Product info for each project (from ProductProjectLink)
@@ -128,7 +123,7 @@ def get_customer_detail(customer_id: int, db: Session = Depends(get_db), _=Depen
                  "name": all_prods[l.product_id].name if l.product_id in all_prods else ""})
 
     # Associated products: direct links + indirect via projects (product → project → customer)
-    direct_prod_links = db.query(CustomerProductLink).filter(CustomerProductLink.customer_id == customer_id).all()
+    direct_prod_links = db.query(CustomerProductLink).filter(CustomerProductLink.customer_id == customer.id).all()
     direct_product_ids = set(l.product_id for l in direct_prod_links)
     indirect_product_ids = set()
     if project_ids:
@@ -150,7 +145,7 @@ def get_customer_detail(customer_id: int, db: Session = Depends(get_db), _=Depen
     return {
         "code": 0,
         "data": {
-            "id": c.id, "name": c.name, "full_name": c.full_name or "",
+            "id": customer.id, "name": customer.name, "full_name": customer.full_name or "",
             "projects": [{"id": p.id, "name": p.name, "code": p.code, "status": p.status,
                           "products": proj_product_map.get(p.id, [])} for p in projects],
             "products": [{"id": p.id, "name": p.name, "code": p.code, "status": p.status,

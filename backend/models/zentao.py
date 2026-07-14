@@ -13,7 +13,7 @@ class CachedProject(Base):
     __tablename__ = "zenta_projects"
 
     id = Column(Integer, primary_key=True)
-    code = Column(String(128), index=True)
+    code = Column(String(128), unique=True, index=True)
     name = Column(String(256), nullable=False)
     model = Column(String(32))
     status = Column(String(32), index=True)
@@ -113,7 +113,7 @@ class PmaProduct(Base):
     __tablename__ = "pma_products"
 
     id = Column(Integer, primary_key=True)
-    code = Column(String(128), index=True)
+    code = Column(String(128), unique=True, index=True)
     name = Column(String(256), nullable=False)
     type = Column(String(32))
     status = Column(String(32))
