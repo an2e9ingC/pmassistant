@@ -331,13 +331,6 @@
   gap: 6px;
 }
 
-/* ── Project type tab: editable label ── */
-
-.ptype-label:hover {
-  text-decoration: underline;
-  text-decoration-style: dotted;
-}
-
 /* ── Danger button for delete confirmations ── */
 
 .btn-danger {

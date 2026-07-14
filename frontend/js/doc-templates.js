@@ -238,7 +238,7 @@ function renderTemplatesPage() {
     var isActive = pt.id === _currentProjectType;
     var labelEsc = escHtml(pt.label).replace(/'/g, "\\'");
     ptypeTabs += '<div class="map-tab' + (isActive ? ' active' : '') + '" onclick="selectProjectTypeTab(\'' + escHtml(pt.id) + '\')">' +
-      '<span class="ptype-label" onclick="event.stopPropagation();showRenameProjectTypeDialog(\'' + escHtml(pt.id) + '\',\'' + labelEsc + '\')" title="点击编辑名称" style="cursor:text">' + escHtml(pt.label) + '</span>' +
+      '<span class="ptype-label">' + escHtml(pt.label) + '</span>' +
       (pt.builtin ? '' : ' <span style="font-size:9px;opacity:0.7">自定义</span>') +
       (canEdit ? '<span style="margin-left:4px;opacity:0.4;cursor:pointer;font-size:11px" onclick="event.stopPropagation();showRenameProjectTypeDialog(\'' + escHtml(pt.id) + '\',\'' + labelEsc + '\')" title="重命名">✎</span>' : '') +
       (canEdit && !pt.builtin ? '<span style="margin-left:2px;opacity:0.4;cursor:pointer;color:var(--danger);font-size:12px" onclick="event.stopPropagation();deleteProjectType(\'' + escHtml(pt.id) + '\',\'' + labelEsc + '\')" title="删除项目类型">✕</span>' : '') +
@@ -353,7 +353,7 @@ function _renderDocTemplateSection(stageName, canEdit) {
         '<td data-drag-index="' + i + '" draggable="true"' +
         ' ondragstart="_trDragStart.call(this,event)" ondragend="_trDragEnd.call(this,event)"' +
         ' ondragover="_trDragOver.call(this,event)" ondragleave="_trDragLeave.call(this,event)"' +
-        ' ondrop="_trDrop.call(this,event,_templatesGrouped[stageName] || [],renderTemplatesAfterReorder)"' +
+        ' ondrop="_trDrop.call(this,event,_templatesGrouped[_selectedStage] || [],renderTemplatesAfterReorder)"' +
         ' style="font-family:var(--mono);color:var(--muted);text-align:center;cursor:grab" title="拖动排序">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
         '<td style="font-weight:500">' + escHtml(d.doc_name) + '</td>' +
         '<td style="font-size:12px;white-space:nowrap;width:80px">' + escHtml(d.responsible_role || '—') + '</td>' +
@@ -420,7 +420,7 @@ function _renderTaskTemplateSection(stageName, canEdit) {
         '<td data-drag-index="' + i + '" draggable="true"' +
         ' ondragstart="_trDragStart.call(this,event)" ondragend="_trDragEnd.call(this,event)"' +
         ' ondragover="_trDragOver.call(this,event)" ondragleave="_trDragLeave.call(this,event)"' +
-        ' ondrop="_trDrop.call(this,event,_taskTemplatesGrouped[stageName] || [],renderTaskTemplatesAfterReorder)"' +
+        ' ondrop="_trDrop.call(this,event,_taskTemplatesGrouped[_selectedStage] || [],renderTaskTemplatesAfterReorder)"' +
         ' style="font-family:var(--mono);color:var(--muted);text-align:center;cursor:grab" title="拖动排序">' + (t.sort_order != null ? t.sort_order : '—') + '</td>' +
         '<td style="font-weight:500">' + escHtml(t.task_name) + '</td>' +
         '<td style="font-size:12px;white-space:nowrap">' + escHtml(t.responsible_role || '—') + '</td>' +
