@@ -662,65 +662,35 @@ function buildGantt(data) {
 
   var rows = stages.map(function(s, i) {
     var alt = i % 2 === 1 ? ' stage-alt' : '';
-    var ms = s.match_status || 'matched';
-    var mk = s.match_kind || '';
-    var isMissing = ms === 'missing';
-    var isUnmatched = ms === 'unmatched';
-    var isFuzzy = mk === 'fuzzy';
-
-    var lp = isMissing ? 0 : ganttPx(s.start, range, totalWidth);
-    var ep = isMissing ? 0 : ganttPx(s.end, range, totalWidth);
-    var wp = Math.max(4, ep - lp);
-    var whoShort = (s.who || '').split('（')[0].split('、')[0] || '—';
-    var isUnassigned = !s.who || s.who === '未指派';
-    if (isUnassigned || isMissing) whoShort = isMissing ? '—' : '未指派';
     var prog = parseFloat(s.progress) || 0;
     var tasksDone = s.tasks_done || 0;
     var tasksTotal = s.tasks_total || 0;
 
     // Stage name
-    var nameEl = isMissing
-      ? '<span style="color:var(--muted);font-weight:500;font-size:12px">' + escHtml(s.name) + '</span>'
-      : '<button class="gs-btn" title="跳转到阶段详情" onclick="gotoStageDetail(' + i + ');event.stopPropagation()">' + escHtml(s.name) + '</button>';
+    var nameEl = '<button class="gs-btn" title="跳转到阶段详情" onclick="gotoStageDetail(' + i + ');event.stopPropagation()">' + escHtml(s.name) + '</button>';
 
-    // Risk tag
-    var riskHtml = '';
-    if (isMissing) {
-      riskHtml = '<span class="risk-tag" style="--risk-color:var(--warn);font-size:10px">⚠ 阶段缺失</span>';
-    } else if (isUnmatched || isFuzzy) {
-      var suggested = isFuzzy ? (s.standard_stage || '') : '';
-      riskHtml = '<span class="risk-tag" style="--risk-color:var(--warn);font-size:10px;cursor:pointer" ' +
-        'onclick="showStageMismatchDialog(' + (s.id || 0) + ',\'' + escHtml(s.name || '') + '\',\'' + escHtml(suggested) + '\',event)" ' +
-        'title="' + (isFuzzy ? '请修改为: ' + escHtml(s.standard_stage || '') : '请修改禅道阶段名为标准名字') + '">⚠ 请修改禅道阶段名</span>';
-    } else {
-      var risk = getStageRisk(s);
-      riskHtml = '<span class="risk-tag" style="--risk-color:' + risk.color + '" title="' + escHtml(risk.tip) + '">' + escHtml(risk.label) + '</span>';
-    }
+    // Risk tag — PMA stages are all standard, no missing/unmatched/fuzzy
+    var risk = getStageRisk(s);
+    var riskHtml = '<span class="risk-tag" style="--risk-color:' + risk.color + '" title="' + escHtml(risk.tip) + '">' + escHtml(risk.label) + '</span>';
 
-    // Row style
-    var rowStyle = '';
-    if (isMissing) rowStyle = 'opacity:0.4;';
-    else if (isUnmatched) rowStyle = 'background:var(--warn-lt);';
+    // Bar — use dates if available, otherwise full-width progress
+    var hasDates = s.start && s.end;
+    var lp = hasDates ? ganttPx(s.start, range, totalWidth) : 0;
+    var ep = hasDates ? ganttPx(s.end, range, totalWidth) : totalWidth;
+    var wp = Math.max(4, ep - lp);
+    var barCls = 'gantt-bar ' + (s.status || 'active') + (isStageOverdue(s) ? ' gantt-overdue' : '');
+    var barHtml = '<div class="' + barCls + '" style="left:' + lp + 'px;width:' + wp + 'px" data-tip="' +
+      (hasDates ? compactDate(s.start) + '→' + compactDate(s.end) + '　' : '') +
+      '任务:' + tasksDone + '/' + tasksTotal + '">' +
+      '<div class="gantt-bar-fill" style="width:' + prog + '%"></div>' +
+    '</div>';
 
-    // Bar — add red bottom border for overdue stages (all non-missing)
-    var ganttOverdue = !isMissing && isStageOverdue(s);
-    var noTasks = tasksTotal === 0 && !isMissing;
-    var barCls = 'gantt-bar ' + s.status + (ganttOverdue ? ' gantt-overdue' : '') + (noTasks ? ' gantt-no-tasks' : '');
-    var barHtml = '';
-    if (isMissing) {
-      barHtml = '';
-    } else {
-      barHtml = '<div class="' + barCls + '" style="left:' + lp + 'px;width:' + wp + 'px" data-tip="' + compactDate(s.start) + '→' + compactDate(s.end) + '　任务:' + tasksDone + '/' + tasksTotal + '">' +
-        '<div class="gantt-bar-fill" style="width:' + prog + '%"></div>' +
-      '</div>';
-    }
-
-    return '<div class="gantt-row' + alt + '" id="gantt-row-' + i + '" style="' + rowStyle + '">' +
+    return '<div class="gantt-row' + alt + '" id="gantt-row-' + i + '">' +
       '<div class="gantt-stage-cell">' +
         nameEl +
         '<div class="gs-risk">' + riskHtml + '</div>' +
-        '<div class="gs-prog">' + (isMissing ? '<span style="color:var(--muted);font-size:10px">—</span>' : renderProgressRing(prog)) + '</div>' +
-        '<div class="gs-who' + (isUnassigned ? ' gs-who-una' : '') + '" title="' + escHtml(s.who || '') + '">' + escHtml(whoShort) + '</div>' +
+        '<div class="gs-prog">' + renderProgressRing(prog) + '</div>' +
+        '<div class="gs-who">' + escHtml((s.who || '—').split('（')[0].split('、')[0]) + '</div>' +
       '</div>' +
       '<div class="gantt-bar-cell" style="min-width:' + displayWidth + 'px;width:' + displayWidth + 'px">' +
         '<div class="gantt-grid">' + gCols + '</div>' +
@@ -841,20 +811,7 @@ function getStageRisk(s) {
 }
 
 function buildStages(stages) {
-  // Support both old array format and new {stages, standard_stages} format
-  var _standardStages = (stages && stages.standard_stages) ? stages.standard_stages : [];
   var stageList = (stages && stages.stages) ? stages.stages : stages;
-
-  // Extract Zentao web base URL from first execution_url for dialog links
-  if (!window._zentaoWebBase && stageList.length) {
-    for (var si = 0; si < stageList.length; si++) {
-      var u = stageList[si].execution_url;
-      if (u) {
-        var m = u.match(/^(.+)\/index\.php/);
-        if (m) { window._zentaoWebBase = m[1]; break; }
-      }
-    }
-  }
 
   if (!stageList || !stageList.length) {
     document.getElementById('stages-tbody').innerHTML = '<tr><td colspan="8"><div class="empty-state">暂无阶段数据</div></td></tr>';
@@ -863,69 +820,22 @@ function buildStages(stages) {
 
   document.getElementById('stages-tbody').innerHTML = stageList.map(function(s, i) {
     var dels = s.deliverables || [];
-    var matchStatus = s.match_status || 'matched';
-    var matchKind = s.match_kind || '';
-
-    // --- Row styling ---
-    var rowStyle = '';
-    var isMissing = matchStatus === 'missing';
-    var isUnmatched = matchStatus === 'unmatched';
-
-    if (isMissing) {
-      rowStyle = 'opacity:0.5;background:var(--warn-lt)';
-    } else if (isUnmatched) {
-      rowStyle = 'background:var(--warn-lt)';
-    }
-
-    // --- Name column (clean, warnings only in risk column) ---
-    var nameHtml = '';
-    if (isMissing) {
-      nameHtml = '<span style="color:var(--muted);font-weight:500">' + escHtml(s.name) + '</span>';
-    } else {
-      nameHtml = s.execution_url
-        ? '<a href="' + escHtml(s.execution_url) + '" target="_blank" class="gs-btn" onclick="event.stopPropagation()" style="text-decoration:none">' + escHtml(s.name) + '</a>'
-        : '<strong>' + escHtml(s.name) + '</strong>';
-    }
-
-    // --- Risk column ---
-    var riskHtml = '';
-    if (isMissing) {
-      riskHtml = '<span class="risk-tag" style="--risk-color:var(--warn)">⚠ 阶段缺失</span>';
-    } else if (isUnmatched || matchKind === 'fuzzy') {
-      var suggested = (matchKind === 'fuzzy') ? (s.standard_stage || '') : '';
-      riskHtml = '<span class="risk-tag" style="--risk-color:var(--warn);cursor:pointer" ' +
-        'onclick="showStageMismatchDialog(' + (s.id || 0) + ',\'' + escHtml(s.name || '') + '\',\'' + escHtml(suggested) + '\',event)" ' +
-        'title="' + (suggested ? '请修改为: ' + escHtml(suggested) : '请修改禅道阶段名为标准名字') + '">⚠ 请修改禅道阶段名</span>';
-    } else {
-      var risk = getStageRisk(s);
-      riskHtml = '<span class="risk-tag" style="--risk-color:' + risk.color + '" title="' + escHtml(risk.tip) + '">' + escHtml(risk.label) + '</span>';
-    }
-
-    // --- Progress, Who, Dates, Status, Blocker ---
+    var taskCount = s.task_count || 0;
+    var risk = getStageRisk(s);
     var prog = parseFloat(s.progress) || 0;
-    var progHtml = isMissing ? '<span style="color:var(--muted)">—</span>' : renderProgressRing(prog);
-    var whoHtml = isMissing ? '<span style="color:var(--muted)">—</span>' :
-      '<span style="font-size:12px;white-space:nowrap;' + (!s.who || s.who === '未指派' ? 'color:var(--danger);font-weight:540' : '') + '">' + escHtml(s.who || '未指派') + '</span>';
-    var dateHtml = isMissing ? '<span style="color:var(--muted)">—</span>' :
-      '<span style="font-size:11.5px;color:var(--muted);white-space:nowrap;line-height:1.8">' + formatDate(s.start) + '<br>' + formatDate(s.end) + '</span>';
-    var overdue = !isMissing && isStageOverdue(s);
-    var statusHtml = isMissing ? '<span class="pill" style="background:var(--warn-lt);color:var(--warn)">阶段缺失</span>' :
-      renderPill(s.status) +
-      (overdue ? '<div style="font-size:10.5px;color:var(--danger);margin-top:4px;font-family:var(--mono);font-weight:600">⚠ 超期</div>' : '') +
-      (s.completed_date ? '<div style="font-size:10.5px;color:var(--success);margin-top:4px;font-family:var(--mono)">&#10003; ' + s.completed_date + '</div>' : '');
-    var blockerHtml = isMissing ? '<span style="color:var(--muted)">—</span>' :
-      '<span style="font-size:12px;color:' + (s.blocker ? 'var(--danger)' : 'var(--muted)') + ';max-width:200px">' + escHtml(s.blocker || '—') + '</span>';
-    var delsHtml = isMissing ? '<span style="font-size:11px;color:var(--muted);font-style:italic">暂无</span>' : renderDeliverablesList(dels);
+    var progHtml = prog !== null && prog !== undefined ? renderProgressRing(prog) : '<span style="color:var(--muted)">—</span>';
 
-    return '<tr style="' + rowStyle + '" id="stage-row-' + i + '">' +
-      '<td>' + nameHtml + '</td>' +
-      '<td>' + riskHtml + '</td>' +
+    return '<tr id="stage-row-' + i + '">' +
+      '<td><strong>' + escHtml(s.name) + '</strong>' +
+        (taskCount ? ' <span style="font-size:10px;color:var(--muted)">' + taskCount + '个任务</span>' : '') +
+      '</td>' +
+      '<td><span class="risk-tag" style="--risk-color:' + risk.color + '" title="' + escHtml(risk.tip) + '">' + escHtml(risk.label) + '</span></td>' +
       '<td>' + progHtml + '</td>' +
-      '<td>' + whoHtml + '</td>' +
-      '<td>' + dateHtml + '</td>' +
-      '<td>' + statusHtml + '</td>' +
-      '<td>' + blockerHtml + '</td>' +
-      '<td>' + delsHtml + '</td>' +
+      '<td><span style="font-size:12px;color:var(--muted)">—</span></td>' +
+      '<td><span style="font-size:11.5px;color:var(--muted);white-space:nowrap;line-height:1.8">—</span></td>' +
+      '<td><span class="pill" style="background:var(--accent-lt);color:var(--accent)">标准阶段</span></td>' +
+      '<td><span style="font-size:12px;color:var(--muted)">—</span></td>' +
+      '<td>' + renderDeliverablesList(dels) + '</td>' +
     '</tr>';
   }).join('');
 }

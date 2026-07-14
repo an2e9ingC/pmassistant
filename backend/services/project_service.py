@@ -12,7 +12,7 @@ from backend.models.zentao import (
 )
 from backend.models.document import ProjectDocument
 from backend.models.local import ProjectActivity
-from backend.services.document_service import _match_stage_type, get_stage_types_for_project
+from backend.services.document_service import get_stage_types_for_project_type
 
 
 def log_project_activity(db: Session, project_id: int, username: str, action: str, detail: str = ""):
@@ -70,7 +70,7 @@ def _get_stage_anomaly_counts(db: Session, project_ids: list[int]) -> dict:
     if not project_ids:
         return {}
     from datetime import date
-    from backend.services.document_service import _match_stage_type, get_stage_types_for_project
+    from backend.services.document_service import get_stage_types_for_project_type
 
     anomalous: set[int] = set()
     today = date.today()
@@ -78,7 +78,7 @@ def _get_stage_anomaly_counts(db: Session, project_ids: list[int]) -> dict:
     # Check each project's executions for non-exact matches and overdue
     projects = db.query(CachedProject).filter(CachedProject.id.in_(project_ids)).all()
     for p in projects:
-        standard_stages = get_stage_types_for_project(p.project_type or "RD", db)
+        standard_stages = get_stage_types_for_project_type(db, p.project_type or "RD")
         executions = db.query(CachedExecution).filter(
             CachedExecution.project_id == p.id
         ).all()
@@ -86,8 +86,9 @@ def _get_stage_anomaly_counts(db: Session, project_ids: list[int]) -> dict:
             # Check 1: non-exact stage name match
             name = (e.name or "").strip()
             if name:
-                result = _match_stage_type(name, standard_stages)
-                if result is None or result[1] != "exact":
+                # stage matching always exact now — no fuzzy check needed
+                result = None  # all stages are standard now
+                if False:  # all stages are standard, no anomalies from fuzzy matching
                     anomalous.add(p.id)
                     break  # one anomaly is enough for this project
 
@@ -138,116 +139,44 @@ def get_project_detail(db: Session, project_id: int) -> Optional[dict]:
 
 
 def get_project_stages(db: Session, project_id: int) -> dict:
-    """Return all standard stages as a template, with matched execution data.
-
-    Each standard stage is rendered as a row. If a matching Zentao execution
-    exists (fuzzy match), its data is filled in. Otherwise a placeholder with
-    "阶段缺失" is shown.  Unmatched Zentao executions are appended at the end
-    with a warning marker.
-    """
+    """Return standard stages with PMA task progress. No longer depends on Zentao executions."""
     project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
-    # Sync project documents with latest templates (add/remove/update)
-    from backend.services.document_service import _sync_from_templates
-    _sync_from_templates(db, project_id, project.project_type or "RD")
-    standard_stages = get_stage_types_for_project(project.project_type or "RD", db)
+    project_type = project.project_type or "RD"
+    standard_stages = get_stage_types_for_project_type(db, project_type)
 
-    executions = (
-        db.query(CachedExecution)
-        .filter(CachedExecution.project_id == project_id)
-        .order_by(CachedExecution.id)
-        .all()
-    )
+    # Get PMA task progress grouped by stage_name
+    from backend.models.task import Task
+    tasks = db.query(Task).filter(Task.project_id == project_id).all()
+    stage_task_progress: dict[str, list[int]] = {}
+    stage_task_count: dict[str, int] = {}
+    for t in tasks:
+        sn = t.stage_name or ""
+        if sn not in stage_task_progress:
+            stage_task_progress[sn] = []
+            stage_task_count[sn] = 0
+        stage_task_progress[sn].append(t.progress or 0)
+        stage_task_count[sn] += 1
 
-    # Phase 1: map each execution to a standard stage (fuzzy match)
-    # An execution can match at most one standard stage (best match).
-    matched_execs: dict[str, list] = {}  # standard_stage -> [executions]
-    unmatched_execs = []
-
-    for e in executions:
-        actual_name = (e.name or "").strip()
-        result = _match_stage_type(actual_name, standard_stages) if actual_name else None
-        if result:
-            st = result[0]
-            matched_execs.setdefault(st, []).append((e, result[1]))
-        else:
-            unmatched_execs.append(e)
-
-    from backend.config import get_zentao_web_base
-    web_base = get_zentao_web_base()
     stages = []
-
-    # Phase 2: render standard stages in order
     for st in standard_stages:
-        group = matched_execs.get(st, [])
-        if group:
-            for e, match_kind in group:
-                tasks = (
-                    db.query(CachedTask)
-                    .filter(CachedTask.execution_id == e.id)
-                    .order_by(CachedTask.id)
-                    .all()
-                )
-                deliverables = _build_deliverables(db, e)
-                who = _get_who(tasks, e, project) or "未指派"
-                stages.append({
-                    "id": e.id,
-                    "name": e.name,
-                    "execution_url": f"{web_base}/index.php?m=execution&f=task&executionID={e.id}&status=all&param=0&orderBy=status,id_desc&recTotal=10&recPerPage=100",
-                    "status": _map_status(e.status),
-                    "who": who,
-                    "start": str(e.begin) if e.begin else None,
-                    "end": str(e.end) if e.end else None,
-                    "completed_date": str(e.end) if e.status in ("done", "closed") else None,
-                    "progress": e.progress,
-                    "blocker": _find_blocker(tasks),
-                    "match_status": "matched",
-                    "match_kind": match_kind,  # "exact" or "fuzzy"
-                    "standard_stage": st,
-                    "deliverables": deliverables,
-                })
-        else:
-            # Standard stage with no matching execution
-            stages.append({
-                "id": None,
-                "name": st,
-                "execution_url": None,
-                "status": "missing",
-                "who": None,
-                "start": None,
-                "end": None,
-                "completed_date": None,
-                "progress": None,
-                "blocker": None,
-                "match_status": "missing",
-                "match_kind": None,
-                "standard_stage": st,
-                "deliverables": [],
-            })
-
-    # Phase 3: append unmatched Zentao executions at the end
-    for e in unmatched_execs:
-        tasks = (
-            db.query(CachedTask)
-            .filter(CachedTask.execution_id == e.id)
-            .order_by(CachedTask.id)
-            .all()
-        )
-        who = _get_who(tasks, e, project) or "未指派"
+        progs = stage_task_progress.get(st, [])
+        avg_progress = round(sum(progs) / len(progs)) if progs else None
         stages.append({
-            "id": e.id,
-            "name": e.name,
-            "execution_url": f"{web_base}/index.php?m=execution&f=task&executionID={e.id}&status=all&param=0&orderBy=status,id_desc&recTotal=10&recPerPage=100",
-            "status": _map_status(e.status),
-            "who": who,
-            "start": str(e.begin) if e.begin else None,
-            "end": str(e.end) if e.end else None,
-            "completed_date": str(e.end) if e.status in ("done", "closed") else None,
-            "progress": e.progress,
-            "blocker": _find_blocker(tasks),
-            "match_status": "unmatched",
+            "id": None,
+            "name": st,
+            "execution_url": None,
+            "status": "active",
+            "who": None,
+            "start": None,
+            "end": None,
+            "completed_date": None,
+            "progress": avg_progress,
+            "blocker": None,
+            "match_status": "standard",
             "match_kind": None,
-            "standard_stage": None,
+            "standard_stage": st,
             "deliverables": [],
+            "task_count": stage_task_count.get(st, 0),
         })
 
     return {"stages": stages, "standard_stages": standard_stages}
@@ -289,7 +218,7 @@ def get_project_documents(db: Session, project_id: int) -> dict:
 
     project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
     project_type = project.project_type if project else "RD"
-    standard_stages = get_stage_types_for_project(project_type, db)
+    standard_stages = get_stage_types_for_project_type(db, project_type)
 
     # Init documents for matched stages (incremental)
     docs_list = get_or_init_project_documents(db, project_id, project_type)
@@ -311,7 +240,7 @@ def get_project_documents(db: Session, project_id: int) -> dict:
     exec_match: dict[str, dict] = {}
     for e in executions:
         actual_name = (e.name or "").strip()
-        result2 = _match_stage_type(actual_name, standard_stages) if actual_name else None
+        result2 = None  # no more fuzzy matching
         if result2:
             st2 = result2[0]
             if st2 not in exec_match:
@@ -340,98 +269,42 @@ def get_project_documents(db: Session, project_id: int) -> dict:
 
 
 def get_project_gantt(db: Session, project_id: int) -> dict:
-    """Return gantt data with standard stages as the template.
-
-    Matched executions fill in real data; missing stages show placeholders.
-    """
+    """Return gantt data based on standard stages with PMA task progress."""
     project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
-    standard_stages = get_stage_types_for_project(project.project_type or "RD", db)
+    project_type = project.project_type or "RD"
+    standard_stages = get_stage_types_for_project_type(db, project_type)
 
-    executions = (
-        db.query(CachedExecution)
-        .filter(CachedExecution.project_id == project_id)
-        .order_by(CachedExecution.id)
-        .all()
-    )
-
-    # Map executions to standard stages (fuzzy match)
-    matched_execs: dict[str, list] = {}
-    unmatched_execs = []
-    for e in executions:
-        actual_name = (e.name or "").strip()
-        result = _match_stage_type(actual_name, standard_stages) if actual_name else None
-        if result:
-            matched_execs.setdefault(result[0], []).append((e, result[1]))
-        else:
-            unmatched_execs.append(e)
+    # Get PMA task progress grouped by stage_name
+    from backend.models.task import Task
+    tasks = db.query(Task).filter(Task.project_id == project_id).all()
+    stage_progress: dict[str, list[int]] = {}
+    stage_task_total: dict[str, int] = {}
+    for t in tasks:
+        sn = t.stage_name or ""
+        if sn not in stage_progress:
+            stage_progress[sn] = []
+            stage_task_total[sn] = 0
+        stage_progress[sn].append(t.progress or 0)
+        stage_task_total[sn] += 1
 
     gantt_stages = []
-    # Standard stages in order
-    for st in standard_stages:
-        group = matched_execs.get(st, [])
-        if group:
-            for e, match_kind in group:
-                tasks = (
-                    db.query(CachedTask)
-                    .filter(CachedTask.execution_id == e.id)
-                    .all()
-                )
-                who = _get_who(tasks, e, project) or "未指派"
-                tasks_done = sum(1 for t in tasks if t.status in ("done", "closed"))
-                gantt_stages.append({
-                    "name": e.name,
-                    "standard_stage": st,
-                    "who": who,
-                    "start": str(e.begin) if e.begin else None,
-                    "end": str(e.end) if e.end else None,
-                    "status": _map_status(e.status),
-                    "progress": e.progress,
-                    "completed_date": str(e.end) if e.status in ("done", "closed") else None,
-                    "blocker": _find_blocker(tasks),
-                    "tasks_done": tasks_done,
-                    "tasks_total": len(tasks),
-                    "match_status": "matched",
-                    "match_kind": match_kind,
-                })
-        else:
-            gantt_stages.append({
-                "name": st,
-                "standard_stage": st,
-                "who": None,
-                "start": None,
-                "end": None,
-                "status": "missing",
-                "progress": "0",
-                "completed_date": None,
-                "blocker": None,
-                "tasks_done": 0,
-                "tasks_total": 0,
-                "match_status": "missing",
-                "match_kind": None,
-            })
-
-    # Append unmatched executions
-    for e in unmatched_execs:
-        tasks = (
-            db.query(CachedTask)
-            .filter(CachedTask.execution_id == e.id)
-            .all()
-        )
-        who = _get_who(tasks, e, project) or "未指派"
-        tasks_done = sum(1 for t in tasks if t.status in ("done", "closed"))
+    for i, st in enumerate(standard_stages):
+        progs = stage_progress.get(st, [])
+        pct = round(sum(progs) / len(progs)) if progs else 0
+        tasks_done = sum(1 for p in progs if p >= 100)
         gantt_stages.append({
-            "name": e.name,
-            "standard_stage": None,
-            "who": who,
-            "start": str(e.begin) if e.begin else None,
-            "end": str(e.end) if e.end else None,
-            "status": _map_status(e.status),
-            "progress": e.progress,
-            "completed_date": str(e.end) if e.status in ("done", "closed") else None,
-            "blocker": _find_blocker(tasks),
+            "name": st,
+            "standard_stage": st,
+            "who": None,
+            "start": None,
+            "end": None,
+            "status": "active",
+            "progress": str(pct),
+            "completed_date": None,
+            "blocker": None,
             "tasks_done": tasks_done,
-            "tasks_total": len(tasks),
-            "match_status": "unmatched",
+            "tasks_total": len(progs),
+            "match_status": "standard",
             "match_kind": None,
         })
 

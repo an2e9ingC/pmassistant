@@ -69,8 +69,10 @@ function renderTasksPage() {
       '</div>' : '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid var(--border)">' +
         '<span style="font-weight:600;font-size:13px">任务列表</span>' +
         '<div style="display:flex;gap:8px">' +
-          '<button class="btn" onclick="openBatchCreateDialog()" style="font-size:12px;padding:5px 14px">+ 批量</button>' +
-          '<button class="btn btn-primary" onclick="openTaskDialog()" style="font-size:12px;padding:5px 14px">+ 新建</button>' +
+          '<button class="btn" onclick="importTasksFromTemplates()" style="font-size:12px;padding:5px 14px;color:var(--accent);border-color:var(--accent)" title="按项目模板为所有阶段创建任务">📋 导入模板任务</button>' +
+          '<button class="btn" onclick="clearAllTasks()" style="font-size:12px;padding:5px 14px;color:var(--danger);border-color:var(--danger)" title="删除本项目所有PMA任务">🗑 清空所有任务</button>' +
+          '<button class="btn" onclick="openBatchCreateDialog()" style="font-size:12px;padding:5px 14px;color:var(--success);border-color:var(--success)" title="批量创建任务">📝 批量创建</button>' +
+          '<button class="btn btn-primary" onclick="openTaskDialog()" style="font-size:12px;padding:5px 14px">＋ 新建任务</button>' +
         '</div>' +
       '</div>') +
       '<div id="task-content" style="flex:1;overflow:auto;padding:16px">加载中...</div>' +
@@ -198,11 +200,18 @@ function renderTaskTable(tasks, execs) {
   if (!content) return;
 
   if (!tasks || !tasks.length) {
-    content.innerHTML = '<div class="empty-state" style="text-align:center;padding:40px">暂无任务，点击右上角 "新建任务" 开始</div>';
+    var emptyMsg = _taskProjectId ? '暂无任务，点击 "导入模板任务" 从模板创建，或者单独、批量创建其他任务' : '暂无任务，点击右上角 "新建任务" 开始';
+    content.innerHTML = '<div class="empty-state" style="text-align:center;padding:40px">' + emptyMsg + '</div>';
     return;
   }
 
-  // Build stage lookup
+  // Embedded view (project detail): stage-grouped compact table
+  if (_taskProjectId) {
+    renderTaskTableCompact(tasks);
+    return;
+  }
+
+  // Standalone view: full table with project info
   var stageMap = {};
   if (execs) {
     execs.forEach(function(s) {
@@ -225,11 +234,94 @@ function renderTaskTable(tasks, execs) {
     '<th>操作</th>' +
     '</tr></thead><tbody>';
 
-  // Flat list — stage grouping moved to board pie chart
   tasks.forEach(function(t) { html += _renderTaskRow(t, stageMap); });
+  html += '</tbody></table>';
+  content.innerHTML = html;
+}
+
+function renderTaskTableCompact(tasks) {
+  var content = document.getElementById('task-content');
+  var STAGE_ORDER = ['售前', '项目立项', '需求分解', '硬件开发', '结构设计', 'BSP开发', '软件开发', '测试', '产品发货', '项目总结'];
+
+  // Group by stage_name
+  var grouped = {};
+  tasks.forEach(function(t) {
+    var sn = t.stage_name || '未分类';
+    if (!grouped[sn]) grouped[sn] = [];
+    grouped[sn].push(t);
+  });
+  var stageKeys = Object.keys(grouped).sort(function(a, b) {
+    var ai = STAGE_ORDER.indexOf(a), bi = STAGE_ORDER.indexOf(b);
+    if (ai < 0) ai = 999; if (bi < 0) bi = 999;
+    return ai - bi;
+  });
+
+  var html = '<table class="proj-table"><thead><tr>' +
+    '<th style="width:10%;text-align:left">阶段</th>' +
+    '<th style="width:20%;text-align:left">标题</th>' +
+    '<th style="width:6%">状态</th>' +
+    '<th style="width:5%">优先级</th>' +
+    '<th style="width:7%">负责人</th>' +
+    '<th style="width:5%">预估</th>' +
+    '<th style="width:5%">实际</th>' +
+    '<th style="width:7%">进度</th>' +
+    '<th style="width:7%">截止日期</th>' +
+    '<th>操作</th>' +
+    '</tr></thead><tbody>';
+
+  stageKeys.forEach(function(stageName) {
+    var stageTasks = grouped[stageName];
+    for (var i = 0; i < stageTasks.length; i++) {
+      var t = stageTasks[i];
+      html += '<tr>';
+      if (i === 0) {
+        html += '<td rowspan="' + stageTasks.length + '" style="font-weight:600;vertical-align:middle;background:var(--bg);border-right:2px solid var(--border)">' + escHtml(stageName) + ' (' + stageTasks.length + ')</td>';
+      }
+      html += _renderTaskRowCompact(t);
+      html += '</tr>';
+    }
+  });
 
   html += '</tbody></table>';
   content.innerHTML = html;
+}
+
+function _renderTaskRowCompact(t) {
+  var progressHtml = typeof renderProgressCircle === 'function'
+    ? renderProgressCircle(t.progress || 0, 32, { label: '', color: (t.progress >= 100 ? 'var(--success)' : (t.progress > 0 ? 'var(--accent)' : 'var(--muted)')) })
+    : '<span>' + (t.progress || 0) + '%</span>';
+  return '<td style="text-align:left">' + escHtml(t.title) + '</td>' +
+    '<td>' + renderPill(t.status || 'todo') + '</td>' +
+    '<td>' + escHtml(t.priority || 'medium') + '</td>' +
+    '<td style="font-size:12px">' + escHtml((t.assignee && t.assignee.display_name) || (t.assignee && t.assignee.username) || '—') + '</td>' +
+    '<td style="font-size:12px">' + (t.estimate_hours ? t.estimate_hours + 'h' : '—') + '</td>' +
+    '<td style="font-size:12px">' + (t.consumed_hours ? t.consumed_hours + 'h' : '—') + '</td>' +
+    '<td style="text-align:center">' + progressHtml + '</td>' +
+    '<td style="font-size:12px">' + (t.due_date ? t.due_date : '—') + '</td>' +
+    '<td style="white-space:nowrap">' + iconEdit('openTaskDialog(' + t.id + ')') + iconDelete('deleteTask(' + t.id + ')') + '</td>';
+}
+
+/* ── Import / Clear Tasks ── */
+
+function importTasksFromTemplates() {
+  if (!_taskProjectId) { showToast('请先选择项目', 'error'); return; }
+  if (!confirm('将按项目模板为所有阶段创建任务，已有任务不会重复。确定继续？')) return;
+  API.post('/tasks/import-from-templates?project_id=' + encodeURIComponent(_taskProjectId), {}).then(function(data) {
+    showToast(data.message || '导入完成', 'success');
+    loadTaskData();
+  }).catch(function(e) { showToast('导入失败: ' + (e.message || ''), 'error'); });
+}
+
+async function clearAllTasks() {
+  if (!_taskProjectId) { showToast('请先选择项目', 'error'); return; }
+  if (!confirm('将删除本项目所有 PMA 任务，此操作不可撤销。确定继续？')) return;
+  var ok = await verifyPassword('清空项目任务: ' + (_taskProjectName || _taskProjectId), 'pw_verify_clear_tasks');
+  if (!ok) return;
+  try {
+    var data = await API.del('/tasks?project_id=' + encodeURIComponent(_taskProjectId));
+    showToast(data.message || '已清空', 'success');
+    loadTaskData();
+  } catch(e) { showToast('清空失败: ' + (e.message || ''), 'error'); }
 }
 
 function _renderTaskRow(t, stageMap) {
@@ -589,10 +681,10 @@ function _loadTfExecutions(projectId, selectedId) {
   }).catch(function() {});
 }
 
-  // Async: load executions for project with task's current stage pre-selected
-  var projId = t.project_id || _taskProjectId;
+  // Async: load stages for project with task's current stage pre-selected
+  var projId = _taskProjectId || t.project_id;
   if (projId) {
-    var curExecVal = t.execution_id ? String(t.execution_id) : (t.stage_name ? '_' + t.stage_name : '');
+    var curExecVal = t.stage_name ? '_' + t.stage_name : '';
     _loadTfExecutions(projId, curExecVal);
   }
 

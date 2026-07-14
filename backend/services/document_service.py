@@ -15,61 +15,36 @@ from backend.models.task import Task
 # match one of these exactly (or have stage_name set to one of these).
 #
 # R&D project stages (10 stages):
-RD_STAGE_TYPES = [
-    "售前",
-    "项目立项",
-    "需求分解",
-    "硬件开发",
-    "结构设计",
-    "BSP开发",
-    "软件开发",
-    "测试",
-    "产品发货",
-    "项目总结",
+# Default stage types — used only as seed data when initializing a project type's custom stages.
+# After initialization, all stage types are read from PmaSetting (custom_stage_types_{type}).
+_DEFAULT_RD_STAGES = [
+    "售前", "项目立项", "需求分解", "硬件开发", "结构设计",
+    "BSP开发", "软件开发", "测试", "产品发货", "项目总结",
+]
+_DEFAULT_SC_STAGES = [
+    "售前", "项目立项", "需求分解", "硬件开发", "结构设计",
+    "测试", "产品发货", "项目总结",
 ]
 
-# Production project stages (8 stages) — no BSP开发 or 软件开发:
-SC_STAGE_TYPES = [
-    "售前",
-    "项目立项",
-    "需求分解",
-    "硬件开发",
-    "结构设计",
-    "测试",
-    "产品发货",
-    "项目总结",
-]
+# Legacy alias for template config page
+STAGE_TYPES = _DEFAULT_RD_STAGES
 
-# Legacy — kept for template config page (ordered list of all unique stage types)
-STAGE_TYPES = [
-    "售前",
-    "项目立项",
-    "需求分解",
-    "硬件开发",
-    "结构设计",
-    "BSP开发",
-    "软件开发",
-    "测试",
-    "产品发货",
-    "项目总结",
-]
+
+def _ensure_stage_types_seeded(db: Session, project_type: str):
+    """Seed default stage types for a project type if none exist yet in PmaSetting."""
+    saved = _get_custom_stage_types(db, project_type)
+    if saved:
+        return
+    defaults = _DEFAULT_SC_STAGES if project_type == "SC" else _DEFAULT_RD_STAGES
+    _save_custom_stage_types(db, project_type, defaults)
 
 
 def get_stage_types_for_project(project_type: str, db=None) -> list[str]:
-    """Return the standard stage list for a given project type.
-
-    Checks custom stage types from pma_settings when db is available.
-    Falls back to hardcoded RD/SC lists for built-in types or when db is None.
-    """
-    if not project_type or project_type in ("RD", "SC"):
-        return SC_STAGE_TYPES if project_type == "SC" else RD_STAGE_TYPES
-    # Custom project type: check for saved custom stages
+    """Return the stage list for a project type from PmaSetting. Falls back to defaults if no db."""
     if db:
-        custom = _get_custom_stage_types(db, project_type)
-        if custom:
-            return custom
-    # Fallback: use RD stages as superset for unknown/custom types
-    return RD_STAGE_TYPES
+        _ensure_stage_types_seeded(db, project_type)
+        return get_stage_types_for_project_type(db, project_type)
+    return _DEFAULT_SC_STAGES if project_type == "SC" else _DEFAULT_RD_STAGES
 
 # Seed data: default document templates per stage type.
 # These are inserted on first startup if the document_templates table is empty.
@@ -140,10 +115,10 @@ def seed_document_templates(db: Session) -> int:
     return count
 
 
-# Project type definitions (display name + stage types)
+# Project type definitions (display name only — stages come from PmaSetting)
 PROJECT_TYPE_DEFS: dict[str, dict] = {
-    "RD": {"label": "研发项目", "stages": RD_STAGE_TYPES},
-    "SC": {"label": "生产项目", "stages": SC_STAGE_TYPES},
+    "RD": {"label": "研发项目"},
+    "SC": {"label": "生产项目"},
 }
 
 
@@ -197,12 +172,15 @@ def get_project_types(db: Session) -> list[dict]:
     result = []
     for ptype, info in PROJECT_TYPE_DEFS.items():
         label = label_overrides.get(ptype, info["label"])
-        result.append({"id": ptype, "label": label, "stages": info["stages"], "builtin": True})
+        _ensure_stage_types_seeded(db, ptype)
+        stages = get_stage_types_for_project_type(db, ptype)
+        result.append({"id": ptype, "label": label, "stages": stages, "builtin": True})
     # Include persisted custom project types
     customs = _get_custom_project_types(db)
     for ptype, label in customs.items():
         label = label_overrides.get(ptype, label)
-        result.append({"id": ptype, "label": label, "stages": [], "builtin": False})
+        stages = _get_custom_stage_types(db, ptype)
+        result.append({"id": ptype, "label": label, "stages": stages, "builtin": False})
     return result
 
 
@@ -232,29 +210,19 @@ def delete_project_type_and_cleanup(db: Session, project_type: str) -> dict:
 
 
 def get_stage_types_for_project_type(db: Session, project_type: str) -> list[str]:
-    """Return stage types for a given project_type, respecting user's saved order.
-    Excluded predefined stages are filtered out."""
+    """Return stage types for a project_type from PmaSetting (user's custom order).
+    Excluded stages are filtered out. Template-discovered stages are appended."""
     excluded = _get_excluded_stages(db, project_type)
-    # Check if user has saved a custom order (now includes all stages)
     saved = _get_custom_stage_types(db, project_type)
-    if saved:
-        stages = [s for s in saved if s not in excluded]
-    elif project_type in PROJECT_TYPE_DEFS:
-        stages = [s for s in PROJECT_TYPE_DEFS[project_type]["stages"] if s not in excluded]
-    else:
-        stages = []
-    # Append predefined stages not yet in saved order (e.g. newly added predefined stages)
-    if project_type in PROJECT_TYPE_DEFS:
-        for s in PROJECT_TYPE_DEFS[project_type]["stages"]:
-            if s not in stages and s not in excluded:
-                stages.append(s)
-    # For custom types, also derive from existing templates in the DB
-    from sqlalchemy import distinct
-    for (st,) in db.query(distinct(DocumentTemplate.stage_type)).filter(
-        DocumentTemplate.project_type == project_type
-    ).all():
-        if st and st not in stages:
-            stages.append(st)
+    stages = [s for s in saved if s not in excluded] if saved else []
+    # For types with no saved stages, also derive from existing templates in the DB
+    if not stages:
+        from sqlalchemy import distinct
+        for (st,) in db.query(distinct(DocumentTemplate.stage_type)).filter(
+            DocumentTemplate.project_type == project_type
+        ).all():
+            if st and st not in excluded:
+                stages.append(st)
     return stages
 
 
@@ -317,13 +285,11 @@ def _save_excluded_stages(db: Session, project_type: str, stage_types: list[str]
 
 
 def get_stage_types(db: Session) -> list[str]:
-    """Return all known stage types: predefined lifecycle stages + persisted custom ones.
-    Stage types are the authoritative definition of project phases — they exist
-    independently of whether any document templates are configured for them."""
-    all_stages = list(dict.fromkeys(RD_STAGE_TYPES + SC_STAGE_TYPES))  # dedup preserving order
+    """Return all known stage types: default stages + persisted custom ones from all project types."""
+    all_stages = list(dict.fromkeys(_DEFAULT_RD_STAGES + _DEFAULT_SC_STAGES))  # dedup preserving order
 
     # Include persisted custom stage types (all project types)
-    for pt in PROJECT_TYPE_DEFS:
+    for pt in list(PROJECT_TYPE_DEFS.keys()) + list(_get_custom_project_types(db).keys()):
         for st in _get_custom_stage_types(db, pt):
             if st not in all_stages:
                 all_stages.append(st)
@@ -413,161 +379,40 @@ def _template_dict(t: DocumentTemplate) -> dict:
 def get_or_init_project_documents(db: Session, project_id: int, project_type: str = "RD") -> list[dict]:
     """Get project documents, initializing from templates on first access.
 
-    Uses strict exact matching against standard stage names (per project type).
-    Executions that don't match any standard stage are left without documents
-    — they will be flagged as "阶段信息缺失" in the dashboard.
-
-    Initialization is incremental: each execution is checked individually,
-    so fixing a stage_name for a previously unmatched execution will
-    immediately generate documents for it.
-
-    Also syncs task templates: auto-creates tasks from task templates in
-    the corresponding project stages.
+    Document templates are auto-synced so template changes propagate immediately.
+    Task templates are NOT auto-synced — use the "导入模板任务" button instead.
     """
     _sync_from_templates(db, project_id, project_type)
-    _sync_tasks_from_templates(db, project_id, project_type)
     return _query_project_documents(db, project_id)
 
 
 def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD") -> None:
-    """Sync project documents with current templates: add new, remove obsolete.
+    """Sync project documents from templates for all standard stages.
 
-    Two-phase sync:
-    1. Matched executions: create/update/remove docs per template
-    2. Unmatched standard stages: create docs with execution_id=0 so they
-       appear in the doc-completeness tab even without a matching execution.
-
-    Called on every document query so template changes propagate immediately.
-    Preserves user-set status for documents that still exist in the template.
+    Directly iterates standard stages — no longer depends on Zentao executions.
+    All documents use execution_id=0 since we no longer track Zentao executions.
     """
     standard_stages = get_stage_types_for_project_type(db, project_type)
-
-    executions = (
-        db.query(CachedExecution)
-        .filter(CachedExecution.project_id == project_id)
-        .order_by(CachedExecution.id)
-        .all()
-    )
-
     changed = False
-    matched_stages = set()
-    matched_exec_ids = set()
 
-    # Phase 1: sync per execution (matched stages only)
-    for e in executions:
-        stage_name = (e.name or "").strip()
-        if not stage_name:
-            continue
-        result = _match_stage_type(stage_name, standard_stages)
-        if not result:
-            continue
-        matched_type = result[0]
-        matched_stages.add(matched_type)
-        matched_exec_ids.add(e.id)
-
-        templates = (
-            db.query(DocumentTemplate)
-            .filter(DocumentTemplate.stage_type == matched_type)
-            .order_by(DocumentTemplate.sort_order)
-            .all()
-        )
-        template_names = {t.doc_name: t for t in templates}
-
-        existing_docs = (
-            db.query(ProjectDocument)
-            .filter(ProjectDocument.execution_id == e.id)
-            .all()
-        )
-
-        # Deduplicate: keep only the first row per doc_name, delete extras
-        seen = {}
-        duplicates = []
-        for pd in existing_docs:
-            if pd.doc_name in seen:
-                duplicates.append(pd)
-            else:
-                seen[pd.doc_name] = pd
-        for pd in duplicates:
-            db.delete(pd)
-            changed = True
-        existing_names = seen
-
-        for doc_name, tpl in template_names.items():
-            if doc_name not in existing_names:
-                pd = ProjectDocument(
-                    project_id=project_id, execution_id=e.id,
-                    stage_type=matched_type, doc_name=tpl.doc_name,
-                    sort_order=tpl.sort_order, status="pending",
-                    responsible_role=tpl.responsible_role, description=tpl.description,
-                )
-                db.add(pd)
-                changed = True
-
-        for doc_name, pd in existing_names.items():
-            if doc_name not in template_names:
-                db.delete(pd)
-                changed = True
-
-        for doc_name, pd in existing_names.items():
-            tpl = template_names.get(doc_name)
-            if tpl and (pd.sort_order != tpl.sort_order or
-                        pd.responsible_role != tpl.responsible_role or
-                        pd.description != tpl.description or
-                        pd.stage_type != matched_type):
-                pd.sort_order = tpl.sort_order
-                pd.responsible_role = tpl.responsible_role
-                pd.description = tpl.description
-                pd.stage_type = matched_type
-                changed = True
-
-    # Phase 1 cleanup: remove orphaned docs from unmatched executions
-    # (executions that previously matched a stage but no longer do)
-    for e in executions:
-        if e.id not in matched_exec_ids:
-            orphaned = (
-                db.query(ProjectDocument)
-                .filter(ProjectDocument.execution_id == e.id)
-                .all()
-            )
-            for pd in orphaned:
-                db.delete(pd)
-                changed = True
-
-    # Phase 2: unmatched standard stages — init docs with execution_id=0
     for st in standard_stages:
-        if st in matched_stages:
-            # Stage is now matched — remove any leftover execution_id=0 placeholder
-            # docs from a previous sync when this stage was unmatched.
-            stale = (
-                db.query(ProjectDocument)
-                .filter(ProjectDocument.project_id == project_id,
-                        ProjectDocument.stage_type == st,
-                        ProjectDocument.execution_id == 0)
-                .all()
-            )
-            for pd in stale:
-                db.delete(pd)
-                changed = True
-            continue
         templates = (
             db.query(DocumentTemplate)
-            .filter(DocumentTemplate.stage_type == st)
+            .filter(DocumentTemplate.stage_type == st,
+                    DocumentTemplate.project_type == project_type)
             .order_by(DocumentTemplate.sort_order)
             .all()
         )
-        if not templates:
-            continue
         template_names = {t.doc_name: t for t in templates}
 
         existing_docs = (
             db.query(ProjectDocument)
             .filter(ProjectDocument.project_id == project_id,
-                    ProjectDocument.stage_type == st,
-                    ProjectDocument.execution_id == 0)
+                    ProjectDocument.stage_type == st)
             .all()
         )
 
-        # Deduplicate: keep only the first row per doc_name, delete extras
+        # Deduplicate
         seen = {}
         duplicates = []
         for pd in existing_docs:
@@ -580,6 +425,7 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
             changed = True
         existing_names = seen
 
+        # Add new docs from template
         for doc_name, tpl in template_names.items():
             if doc_name not in existing_names:
                 pd = ProjectDocument(
@@ -587,15 +433,18 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
                     stage_type=st, doc_name=tpl.doc_name,
                     sort_order=tpl.sort_order, status="pending",
                     responsible_role=tpl.responsible_role, description=tpl.description,
+                    doc_type=tpl.doc_type, doc_path=tpl.doc_path,
                 )
                 db.add(pd)
                 changed = True
 
+        # Remove docs no longer in template
         for doc_name, pd in existing_names.items():
             if doc_name not in template_names:
                 db.delete(pd)
                 changed = True
 
+        # Update existing docs
         for doc_name, pd in existing_names.items():
             tpl = template_names.get(doc_name)
             if tpl and (pd.sort_order != tpl.sort_order or
@@ -610,59 +459,7 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
         db.commit()
 
 
-# Keyword-based fallback mapping for common Zentao names that don't
-# substring-match standard stage names directly.
-_STAGE_KEYWORD_MAP = {
-    "需求": "需求分解",
-    "立项": "项目立项",
-    "硬件": "硬件开发",
-    "结构": "结构设计",
-    "bsp": "BSP开发",
-    "软件": "软件开发",
-    "业务": "软件开发",
-    "测试": "测试",
-    "发货": "产品发货",
-    "总结": "项目总结",
-    "归档": "项目总结",
-    "交付": "测试",  # last resort — will match "测试" if no other match
-    "售前": "售前",
-}
-
-
-def _match_stage_type(stage_name: str, standard_stages: list[str]) -> Optional[tuple[str, str]]:
-    """Match an execution stage_name against standard stages.
-
-    Returns (matched_stage_type, match_kind) where match_kind is:
-      - "exact": exact match
-      - "fuzzy": substring or keyword match
-    Returns None if no match at all.
-    """
-    if not stage_name:
-        return None
-    name = stage_name.strip()
-
-    # 1. Exact match
-    for st in standard_stages:
-        if name == st:
-            return (st, "exact")
-
-    # 2. Substring match: standard stage contained in execution name
-    for st in standard_stages:
-        if st in name:
-            return (st, "fuzzy")
-
-    # 3. Substring match: execution name contained in standard stage
-    for st in standard_stages:
-        if name in st:
-            return (st, "fuzzy")
-
-    # 4. Keyword-based fallback
-    name_lower = name.lower()
-    for kw, st in _STAGE_KEYWORD_MAP.items():
-        if kw in name_lower and st in standard_stages:
-            return (st, "fuzzy")
-
-    return None
+# ── Removed: _STAGE_KEYWORD_MAP and _match_stage_type (Zentao fuzzy matching) ──
 
 
 def _query_project_documents(db: Session, project_id: int) -> list[dict]:
@@ -884,105 +681,19 @@ def delete_task_template(db: Session, template_id: int) -> bool:
 
 
 def _sync_tasks_from_templates(db: Session, project_id: int, project_type: str = "RD") -> int:
-    """Sync project tasks with current task templates: add new tasks from templates.
+    """Sync project tasks from task templates for all standard stages.
 
-    Only creates tasks that don't already exist (matched by template_id + project_id + execution_id/stage_name).
-    Does NOT delete tasks if templates are removed — tasks may have progress/worklogs.
+    No longer depends on Zentao executions. All tasks use execution_id=0.
+    Deduplication key: (template_id, project_id, stage_name).
 
     Returns count of newly created tasks.
     """
     from backend.services.project_service import _resolve_user_for_role
 
     standard_stages = get_stage_types_for_project_type(db, project_type)
-
-    executions = (
-        db.query(CachedExecution)
-        .filter(CachedExecution.project_id == project_id)
-        .order_by(CachedExecution.id)
-        .all()
-    )
-
     created_count = 0
 
-    for e in executions:
-        stage_name = (e.name or "").strip()
-        if not stage_name:
-            continue
-        result = _match_stage_type(stage_name, standard_stages)
-        if not result:
-            continue
-        matched_type = result[0]
-
-        templates = (
-            db.query(TaskTemplate)
-            .filter(TaskTemplate.stage_type == matched_type,
-                    TaskTemplate.project_type == project_type)
-            .order_by(TaskTemplate.sort_order)
-            .all()
-        )
-
-        for tpl in templates:
-            # Check if a task from this template already exists for this project+execution
-            existing = db.query(Task).filter(
-                Task.template_id == tpl.id,
-                Task.project_id == project_id,
-                Task.execution_id == e.id,
-            ).first()
-            if existing:
-                # Update title/responsible role if template changed
-                changed = False
-                if existing.title != tpl.task_name:
-                    existing.title = tpl.task_name
-                    changed = True
-                if existing.description != (tpl.description or None):
-                    existing.description = tpl.description or None
-                    changed = True
-                if existing.stage_name != matched_type:
-                    existing.stage_name = matched_type
-                    changed = True
-                if tpl.responsible_role:
-                    user_id = _resolve_user_for_role(db, tpl.responsible_role)
-                    if user_id and existing.assignee_id != user_id:
-                        existing.assignee_id = user_id
-                        changed = True
-                if changed:
-                    created_count += 1  # count updates as changes
-                continue
-
-            # Resolve responsible_role to a user
-            assignee_id = None
-            if tpl.responsible_role:
-                assignee_id = _resolve_user_for_role(db, tpl.responsible_role)
-
-            task = Task(
-                project_id=project_id,
-                execution_id=e.id,
-                stage_name=matched_type,
-                title=tpl.task_name,
-                description=tpl.description or None,
-                status="todo",
-                priority="medium",
-                type="development",
-                assignee_id=assignee_id,
-                reporter_id=1,  # admin as reporter for auto-created tasks
-                template_id=tpl.id,
-                sort_order=tpl.sort_order,
-            )
-            db.add(task)
-            created_count += 1
-
-    # Phase 2: unmatched stages — create tasks with execution_id=0
-    matched_stages = set()
-    for e in executions:
-        stage_name = (e.name or "").strip()
-        if stage_name:
-            result = _match_stage_type(stage_name, standard_stages)
-            if result:
-                matched_stages.add(result[0])
-
     for st in standard_stages:
-        if st in matched_stages:
-            continue
         templates = (
             db.query(TaskTemplate)
             .filter(TaskTemplate.stage_type == st,
@@ -990,15 +701,32 @@ def _sync_tasks_from_templates(db: Session, project_id: int, project_type: str =
             .order_by(TaskTemplate.sort_order)
             .all()
         )
+
         for tpl in templates:
-            # Check for existing placeholder task
             existing = db.query(Task).filter(
                 Task.template_id == tpl.id,
                 Task.project_id == project_id,
                 Task.stage_name == st,
-                Task.execution_id == 0,
             ).first()
             if existing:
+                # Update title/responsible_role if template changed
+                changed = False
+                if existing.title != tpl.task_name:
+                    existing.title = tpl.task_name
+                    changed = True
+                if existing.description != (tpl.description or None):
+                    existing.description = tpl.description or None
+                    changed = True
+                if existing.stage_name != st:
+                    existing.stage_name = st
+                    changed = True
+                if tpl.responsible_role:
+                    user_id = _resolve_user_for_role(db, tpl.responsible_role)
+                    if user_id and existing.assignee_id != user_id:
+                        existing.assignee_id = user_id
+                        changed = True
+                if changed:
+                    created_count += 1
                 continue
 
             assignee_id = None

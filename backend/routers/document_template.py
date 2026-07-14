@@ -47,7 +47,7 @@ def create_project_type(
     db: Session = Depends(get_db),
     user=Depends(require_perm("doc_template")),
 ):
-    from backend.services.document_service import PROJECT_TYPE_DEFS, _get_custom_project_types, _save_custom_project_types
+    from backend.services.document_service import _DEFAULT_RD_STAGES, _DEFAULT_SC_STAGES, PROJECT_TYPE_DEFS, _get_custom_project_types, _save_custom_project_types
     if project_type in PROJECT_TYPE_DEFS:
         raise HTTPException(status_code=400, detail=f"项目类型 '{project_type}' 已存在")
     customs = _get_custom_project_types(db)
@@ -68,7 +68,8 @@ def update_project_type(
 ):
     """Update a project type's display label."""
     from backend.services.document_service import (
-        PROJECT_TYPE_DEFS, _get_custom_project_types, _save_custom_project_types,
+        _DEFAULT_RD_STAGES, _DEFAULT_SC_STAGES, PROJECT_TYPE_DEFS,
+        _get_custom_project_types, _save_custom_project_types,
         _get_project_type_labels, _save_project_type_labels,
     )
     old_label = None
@@ -100,11 +101,7 @@ def delete_project_type(
     user=Depends(require_perm("doc_template")),
 ):
     """Delete a custom project type and all its associated templates."""
-    from backend.services.document_service import (
-        PROJECT_TYPE_DEFS, _get_custom_project_types, _save_custom_project_types,
-        _get_project_type_labels, _save_project_type_labels,
-        delete_project_type_and_cleanup,
-    )
+    from backend.services.document_service import _DEFAULT_RD_STAGES, _DEFAULT_SC_STAGES, PROJECT_TYPE_DEFS, _get_custom_project_types, _save_custom_project_types, _get_project_type_labels, _save_project_type_labels, delete_project_type_and_cleanup
 
     # Builtin types cannot be deleted
     if project_type in PROJECT_TYPE_DEFS:
@@ -214,10 +211,7 @@ def rename_stage_type(
 ):
     count = document_service.rename_stage_type(db, body.old_name, body.new_name)
     # Also update custom stage types if the old name is a custom stage
-    from backend.services.document_service import (
-        _get_custom_stage_types, _save_custom_stage_types,
-        _get_custom_project_types, PROJECT_TYPE_DEFS,
-    )
+    from backend.services.document_service import _DEFAULT_RD_STAGES, _DEFAULT_SC_STAGES, _get_custom_stage_types, _save_custom_stage_types, _get_custom_project_types, PROJECT_TYPE_DEFS
     all_types = list(PROJECT_TYPE_DEFS.keys()) + list(_get_custom_project_types(db).keys())
     for pt in all_types:
         customs = _get_custom_stage_types(db, pt)
@@ -250,13 +244,10 @@ def delete_stage_type(
     db: Session = Depends(get_db),
     user=Depends(require_perm("doc_template")),
 ):
-    from backend.services.document_service import (
-        _get_custom_stage_types, _save_custom_stage_types,
-        _get_excluded_stages, _save_excluded_stages, PROJECT_TYPE_DEFS,
-    )
+    from backend.services.document_service import _DEFAULT_RD_STAGES, _DEFAULT_SC_STAGES, _get_custom_stage_types, _save_custom_stage_types, _get_excluded_stages, _save_excluded_stages, PROJECT_TYPE_DEFS
     count = document_service.delete_stage_type(db, stage_type, project_type)
     # If this is a predefined stage, add to excluded list; otherwise remove from custom
-    if project_type in PROJECT_TYPE_DEFS and stage_type in PROJECT_TYPE_DEFS[project_type]["stages"]:
+    if project_type in PROJECT_TYPE_DEFS and stage_type in (_DEFAULT_SC_STAGES if project_type == "SC" else _DEFAULT_RD_STAGES):
         excluded = _get_excluded_stages(db, project_type)
         if stage_type not in excluded:
             excluded.append(stage_type)
@@ -281,13 +272,10 @@ def add_stage_type(
     If the stage_type is a previously deleted predefined stage, it will be restored."""
     import logging
     logger = logging.getLogger(__name__)
-    from backend.services.document_service import (
-        _get_custom_stage_types, _save_custom_stage_types,
-        _get_excluded_stages, _save_excluded_stages, PROJECT_TYPE_DEFS,
-    )
+    from backend.services.document_service import _DEFAULT_RD_STAGES, _DEFAULT_SC_STAGES, _get_custom_stage_types, _save_custom_stage_types, _get_excluded_stages, _save_excluded_stages, PROJECT_TYPE_DEFS
     # If this is a previously deleted predefined stage, restore it (remove from excluded)
     if project_type in PROJECT_TYPE_DEFS:
-        predefined = set(PROJECT_TYPE_DEFS[project_type]["stages"])
+        predefined = set((_DEFAULT_SC_STAGES if project_type == "SC" else _DEFAULT_RD_STAGES))
         if stage_type in predefined:
             excluded = _get_excluded_stages(db, project_type)
             if stage_type in excluded:
@@ -327,7 +315,7 @@ def reorder_stage_types(
     user=Depends(require_perm("doc_template")),
 ):
     """Persist the new order of stage types for a project type."""
-    from backend.services.document_service import _save_custom_stage_types, PROJECT_TYPE_DEFS
+    from backend.services.document_service import _DEFAULT_RD_STAGES, _DEFAULT_SC_STAGES, _save_custom_stage_types, PROJECT_TYPE_DEFS
     import logging
     logger = logging.getLogger(__name__)
     # Save ALL stages' order (not just custom), so predefined stages can be reordered too

@@ -192,3 +192,37 @@ def delete_task(
     if not ok:
         raise HTTPException(status_code=404, detail="Task not found")
     return {"code": 0, "data": None, "message": "ok"}
+
+
+@router.post("/import-from-templates", response_model=dict)
+def import_tasks_from_template(
+    project_id: str = Query(...),
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Import tasks from task templates for all stages of a project.
+    Existing tasks (matched by template_id + project_id + stage_name) are not duplicated."""
+    from backend.services.document_service import _sync_tasks_from_templates
+    from backend.services.project_service import log_project_activity
+    project = resolve_project(db, project_id)
+    count = _sync_tasks_from_templates(db, project.id, project.project_type or "RD")
+    log_audit(db, user, "task_import_templates", f"project={project.code} created={count}", AUDIT_CAT_TASK, "medium")
+    log_project_activity(db, project.id, user.username, "导入模板任务", f"从模板创建了 {count} 个任务")
+    return {"code": 0, "data": {"created": count}, "message": f"已创建 {count} 个任务"}
+
+
+@router.delete("", response_model=dict)
+def delete_all_tasks(
+    project_id: str = Query(...),
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("task_edit")),
+):
+    """Delete all PMA tasks for a project."""
+    from backend.models.task import Task
+    from backend.services.project_service import log_project_activity
+    project = resolve_project(db, project_id)
+    count = db.query(Task).filter(Task.project_id == project.id).delete()
+    db.commit()
+    log_audit(db, user, "task_delete_all", f"project={project.code} deleted={count}", AUDIT_CAT_TASK, "high")
+    log_project_activity(db, project.id, user.username, "清空所有任务", f"删除了 {count} 个任务")
+    return {"code": 0, "data": {"deleted": count}, "message": f"已删除 {count} 个任务"}
