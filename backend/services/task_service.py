@@ -315,6 +315,40 @@ def _task_dict(t: Task, db=None) -> dict:
                 prod_id = prod.id
                 prod_name = prod.name
 
+    # Latest activity: most recent worklog description or comment content
+    latest_activity = None
+    if db:
+        latest_wl = db.query(WorkLog).filter(WorkLog.task_id == t.id).order_by(WorkLog.created_at.desc()).first()
+        latest_cmt = db.query(TaskComment).filter(TaskComment.task_id == t.id).order_by(TaskComment.created_at.desc()).first()
+        wl_time = latest_wl.created_at if latest_wl else None
+        cmt_time = latest_cmt.created_at if latest_cmt else None
+        if wl_time or cmt_time:
+            if wl_time and (not cmt_time or wl_time >= cmt_time):
+                # Resolve worklog username
+                wl_user = None
+                if latest_wl.user_id:
+                    u = db.query(LocalUser).filter(LocalUser.id == latest_wl.user_id).first()
+                    if u:
+                        wl_user = u.display_name or u.username
+                latest_activity = {
+                    "type": "worklog",
+                    "content": latest_wl.description or "",
+                    "username": wl_user or "?",
+                    "created_at": to_local_str(wl_time) if wl_time else None,
+                }
+            else:
+                cmt_user = None
+                if latest_cmt.user_id:
+                    u = db.query(LocalUser).filter(LocalUser.id == latest_cmt.user_id).first()
+                    if u:
+                        cmt_user = u.display_name or u.username
+                latest_activity = {
+                    "type": "comment",
+                    "content": latest_cmt.content or "",
+                    "username": cmt_user or "?",
+                    "created_at": to_local_str(cmt_time) if cmt_time else None,
+                }
+
     return {
         "id": t.id,
         "project_id": t.project_id,
@@ -347,6 +381,7 @@ def _task_dict(t: Task, db=None) -> dict:
         "sort_order": t.sort_order or 0,
         "created_at": to_local_str(t.created_at) if t.created_at else None,
         "updated_at": to_local_str(t.updated_at) if t.updated_at else None,
+        "latest_activity": latest_activity,
     }
 
 

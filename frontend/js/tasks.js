@@ -274,12 +274,11 @@ function renderTaskTableCompact(tasks, execs) {
     '<th style="width:6%">状态</th>' +
     '<th style="width:5%">优先级</th>' +
     '<th style="width:7%">负责人</th>' +
-    '<th style="width:5%">预估</th>' +
-    '<th style="width:5%">实际</th>' +
     '<th style="width:7%">进度</th>' +
     '<th style="width:7%">截止日期</th>' +
     '<th style="width:7%">完成日期</th>' +
-    '<th>操作</th>' +
+    '<th style="width:14%">最新动态</th>' +
+    '<th style="width:1%;white-space:nowrap">操作</th>' +
     '</tr></thead><tbody>';
 
   stageKeys.forEach(function(stageName) {
@@ -302,7 +301,6 @@ function renderTaskTableCompact(tasks, execs) {
           '<td style="color:var(--muted);font-size:12px">—</td>' +
           '<td style="color:var(--muted);font-size:12px">—</td>' +
           '<td style="color:var(--muted);font-size:12px">—</td>' +
-          '<td style="color:var(--muted);font-size:12px">—</td>' +
           '<td style="color:var(--muted);font-size:12px">—</td>';
       }
       html += '</tr>';
@@ -311,6 +309,21 @@ function renderTaskTableCompact(tasks, execs) {
 
   html += '</tbody></table></div>';
   content.innerHTML = html;
+}
+
+function _renderLatestActivity(t) {
+  var act = t.latest_activity;
+  if (!act || !act.content) return '<td style="font-size:11px;color:var(--muted)">—</td>';
+  var icon = act.type === 'worklog'
+    ? '<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l2.5 2.5"/></svg>'
+    : '<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 2h12v8H4l-2 3V2z"/></svg>';
+  var text = act.content.length > 40 ? act.content.substring(0, 40) + '...' : act.content;
+  var time = act.created_at ? act.created_at.substring(5, 16) : '';
+  return '<td style="font-size:11px;max-width:160px" title="' + escHtml((act.username || '?') + ' ' + time + '\n' + act.content) + '">' +
+    '<span style="color:var(--muted);margin-right:2px">' + icon + '</span>' +
+    '<span style="color:var(--fg)">' + escHtml(text) + '</span>' +
+    '<div style="font-size:9px;color:var(--muted)">' + escHtml(time) + '</div>' +
+    '</td>';
 }
 
 function _renderTaskRowCompact(t) {
@@ -322,11 +335,10 @@ function _renderTaskRowCompact(t) {
     '<td style="text-align:center">' + renderPill(t.status || 'todo') + '</td>' +
     '<td style="text-align:center">' + (typeof renderPriority === 'function' ? renderPriority(t.priority) : escHtml(t.priority || 'medium')) + '</td>' +
     '<td style="font-size:12px;cursor:pointer;color:var(--accent)" onclick="openTaskViewDialog(' + t.id + ')" title="查看负责人">' + escHtml(assigneeName) + '</td>' +
-    '<td style="font-size:12px">' + (t.estimate_hours ? t.estimate_hours + 'h' : '—') + '</td>' +
-    '<td style="font-size:12px">' + (t.consumed_hours ? t.consumed_hours + 'h' : '—') + '</td>' +
     '<td style="text-align:center">' + progressHtml + '</td>' +
     '<td style="font-size:12px">' + (t.due_date ? t.due_date : '—') + '</td>' +
     '<td style="font-size:12px">' + (t.completed_at ? t.completed_at.substring(0,10) : '—') + '</td>' +
+    _renderLatestActivity(t) +
     '<td style="white-space:nowrap" onclick="event.stopPropagation()">' + iconEdit('openTaskDialog(' + t.id + ')') + iconDelete('deleteTask(' + t.id + ')') + '</td>';
 }
 
