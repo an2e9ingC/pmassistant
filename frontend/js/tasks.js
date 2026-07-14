@@ -278,6 +278,7 @@ function renderTaskTableCompact(tasks, execs) {
     '<th style="width:5%">实际</th>' +
     '<th style="width:7%">进度</th>' +
     '<th style="width:7%">截止日期</th>' +
+    '<th style="width:7%">完成日期</th>' +
     '<th>操作</th>' +
     '</tr></thead><tbody>';
 
@@ -294,6 +295,7 @@ function renderTaskTableCompact(tasks, execs) {
         html += _renderTaskRowCompact(t);
       } else {
         html += '<td style="color:var(--muted);font-size:12px">—</td>' +
+          '<td style="color:var(--muted);font-size:12px">—</td>' +
           '<td style="color:var(--muted);font-size:12px">—</td>' +
           '<td style="color:var(--muted);font-size:12px">—</td>' +
           '<td style="color:var(--muted);font-size:12px">—</td>' +
@@ -324,6 +326,7 @@ function _renderTaskRowCompact(t) {
     '<td style="font-size:12px">' + (t.consumed_hours ? t.consumed_hours + 'h' : '—') + '</td>' +
     '<td style="text-align:center">' + progressHtml + '</td>' +
     '<td style="font-size:12px">' + (t.due_date ? t.due_date : '—') + '</td>' +
+    '<td style="font-size:12px">' + (t.completed_at ? t.completed_at.substring(0,10) : '—') + '</td>' +
     '<td style="white-space:nowrap" onclick="event.stopPropagation()">' + iconEdit('openTaskDialog(' + t.id + ')') + iconDelete('deleteTask(' + t.id + ')') + '</td>';
 }
 

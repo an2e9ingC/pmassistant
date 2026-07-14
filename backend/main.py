@@ -146,14 +146,10 @@ async def _add_no_cache_headers(request: Request, call_next):
     """Prevent browser caching: API data + HTML pages must always be fresh."""
     response: Response = await call_next(request)
     path = request.url.path
-    # Static assets (css/js/logo) have versioned URLs (?v=...) so short cache is safe
-    if path.startswith("/css/") or path.startswith("/js/") or path.startswith("/logo/"):
-        response.headers["Cache-Control"] = "max-age=3600"
-    else:
-        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
-        # Clear ETag so browsers don't return 304 (Not Modified) and use stale cache
-        if "etag" in response.headers:
-            del response.headers["etag"]
+    # Disable all browser caching — always fetch fresh content
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    if "etag" in response.headers:
+        del response.headers["etag"]
     return response
 
 
