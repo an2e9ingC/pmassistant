@@ -315,15 +315,16 @@ function _renderTaskRowCompact(t) {
   var progressHtml = typeof renderProgressRing === 'function'
     ? renderProgressRing(t.progress || 0)
     : '<span>' + (t.progress || 0) + '%</span>';
-  return '<td style="text-align:left">' + escHtml(t.title) + '</td>' +
+  var assigneeName = t.assignee_name || t.assignee_username || '—';
+  return '<td style="text-align:left;cursor:pointer" onclick="openTaskViewDialog(' + t.id + ')" title="查看任务详情">' + escHtml(t.title) + '</td>' +
     '<td style="text-align:center">' + renderPill(t.status || 'todo') + '</td>' +
     '<td style="text-align:center">' + (typeof renderPriority === 'function' ? renderPriority(t.priority) : escHtml(t.priority || 'medium')) + '</td>' +
-    '<td style="font-size:12px">' + escHtml((t.assignee && t.assignee.display_name) || (t.assignee && t.assignee.username) || '—') + '</td>' +
+    '<td style="font-size:12px;cursor:pointer;color:var(--accent)" onclick="openTaskViewDialog(' + t.id + ')" title="查看负责人">' + escHtml(assigneeName) + '</td>' +
     '<td style="font-size:12px">' + (t.estimate_hours ? t.estimate_hours + 'h' : '—') + '</td>' +
     '<td style="font-size:12px">' + (t.consumed_hours ? t.consumed_hours + 'h' : '—') + '</td>' +
     '<td style="text-align:center">' + progressHtml + '</td>' +
     '<td style="font-size:12px">' + (t.due_date ? t.due_date : '—') + '</td>' +
-    '<td style="white-space:nowrap">' + iconEdit('openTaskDialog(' + t.id + ')') + iconDelete('deleteTask(' + t.id + ')') + '</td>';
+    '<td style="white-space:nowrap" onclick="event.stopPropagation()">' + iconEdit('openTaskDialog(' + t.id + ')') + iconDelete('deleteTask(' + t.id + ')') + '</td>';
 }
 
 /* ── Import / Clear Tasks ── */
