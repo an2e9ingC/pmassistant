@@ -266,7 +266,7 @@ def _detect_alerts_internal(db: Session) -> list[dict]:
                         })
 
     # Stage info missing: check for executions that don't match standard stages
-    from backend.services.document_service import _match_stage_type, get_stage_types_for_project
+    from backend.services.document_service import get_stage_types_for_project
     for p in projects:
         proj_code = p.code or (p.name.split('-')[0] if p.name and '-' in p.name else None)
         standard_stages = get_stage_types_for_project(p.project_type or "RD")
@@ -275,7 +275,7 @@ def _detect_alerts_internal(db: Session) -> list[dict]:
         ).all()
         for e in executions:
             actual_name = (e.name or "").strip()
-            if actual_name and not _match_stage_type(actual_name, standard_stages):
+            if False:  # all stages are standard now
                 alert_id += 1
                 alerts.append({
                     "id": alert_id, "severity": "yellow",

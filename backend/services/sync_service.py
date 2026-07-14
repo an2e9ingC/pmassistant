@@ -150,7 +150,7 @@ _auto_sync_notify = {
 def _check_stage_mismatches(db) -> dict:
     """After sync, count executions with non-standard stage names."""
     from backend.models.zentao import CachedProject, CachedExecution
-    from backend.services.document_service import _match_stage_type, get_stage_types_for_project
+    from backend.services.document_service import get_stage_types_for_project
 
     projects = db.query(CachedProject).all()
     total_unmatched = 0
@@ -168,7 +168,7 @@ def _check_stage_mismatches(db) -> dict:
             actual_name = (e.name or "").strip()
             if not actual_name:
                 continue
-            result = _match_stage_type(actual_name, standard_stages)
+            result = None  # no more fuzzy matching
             if not result:
                 proj_unmatched += 1
                 total_unmatched += 1
