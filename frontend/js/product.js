@@ -267,10 +267,10 @@ setTimeout(function() {
   }
 }, 500);
 
-function openProductDetail(id) {
+function openProductDetail(id, tabId) {
   _prodDetailCurId = id;
   sessionStorage.setItem('pm_last_prod_id', id);
-  gotoView('product-detail');
+  gotoView('product-detail', {params: [String(id), tabId || 'info']});
 }
 
 /* ---- Product Detail ---- */
@@ -280,7 +280,11 @@ var _prodDocScanning = false;
 var _prodDetailTargetTab = null;  // set before navigation to jump to a specific tab
 var _prodComboAll = [];
 
-async function initProductDetail() {
+async function initProductDetail(productId, tabId) {
+  if (productId) {
+    _prodDetailCurId = parseInt(productId);
+    if (tabId) _prodDetailTargetTab = tabId;
+  }
   try {
     var data = await API.get('/products?limit=200');
     _prodComboAll = data.items || [];
@@ -291,7 +295,7 @@ async function initProductDetail() {
     dropdownId: 'prod-combo-dropdown',
     dataSource: _prodComboAll,
     selectedIdFn: function() { return _prodDetailCurId; },
-    onSelect: function(p) { _prodDetailCurId = p.id; loadProductDetail(p.id); }
+    onSelect: function(p) { _prodDetailCurId = p.id; loadProductDetail(p.id); history.replaceState({ view: 'product-detail', params: [String(p.id), 'info'] }, '', buildHash('product-detail', String(p.id), 'info')); }
   });
   if (_prodDetailCurId) {
     loadProductDetail(_prodDetailCurId);
@@ -309,6 +313,10 @@ function switchProdTab(id, el) {
   if (el) el.classList.add('active');
   if (id === 'maintenance' && _prodDetail) renderProdMaintenance(_prodDetail);
   if (id === 'activities') loadProdActivities();
+  // Update hash to reflect current tab
+  if (_prodDetailCurId && typeof buildHash === 'function') {
+    history.replaceState({ view: 'product-detail', params: [String(_prodDetailCurId), id] }, '', buildHash('product-detail', String(_prodDetailCurId), id));
+  }
 }
 
 async function loadProductDetail(id) {
@@ -342,6 +350,10 @@ async function loadProductDetail(id) {
     renderProdDocs(detail, docs);  // pass pre-loaded docs to avoid duplicate fetch
   } catch(e) {
     document.getElementById('prod-detail-header').innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '</div>';
+  }
+  // Update hash to reflect current product + tab
+  if (_prodDetailCurId && typeof buildHash === 'function') {
+    history.replaceState({ view: 'product-detail', params: [String(_prodDetailCurId), targetTab] }, '', buildHash('product-detail', String(_prodDetailCurId), targetTab));
   }
 }
 
@@ -531,7 +543,7 @@ function renderProdDocs(p, preDocs) {
   var nodeIds = (p.linked_node_ids && p.linked_node_ids.length) ? p.linked_node_ids : [];
   var templateLink = '';
   if (nodeIds.length) {
-    templateLink = '<a id="prod-docs-template-link" href="javascript:void(0)" onclick="_selectedNodeId=' + nodeIds[0] + ';gotoView(\'doc-templates\');setTimeout(function(){switchDocTemplateTab(\'product\')},50)" style="font-size:11px;color:var(--accent);text-decoration:none;margin-left:8px">查看文档模板详情 →</a>';
+    templateLink = '<a id="prod-docs-template-link" href="javascript:void(0)" onclick="gotoView(\'doc-templates\',{params:[\'product\',String(' + nodeIds[0] + ')]})" style="font-size:11px;color:var(--accent);text-decoration:none;margin-left:8px">查看文档模板详情 →</a>';
   }
   document.getElementById('prodsec-docs').innerHTML =
     '<div class="section-hd"><div class="section-title">产品文档</div>' + templateLink + '</div>' +

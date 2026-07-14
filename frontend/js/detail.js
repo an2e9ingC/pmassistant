@@ -9,6 +9,9 @@ var _projDetail = null;
 var _projectProducts = [];
 var _userNames = [];
 var _customerNames = [];
+var _detailTargetTab = null;
+
+function setDetailTargetTab(tabId) { _detailTargetTab = tabId; }
 
 initProjectCombo({
   comboId: 'proj-combo',
@@ -18,6 +21,7 @@ initProjectCombo({
   onSelect: function(p) {
     _comboCurId = p.id;
     loadProjectDetail(p.id);
+    history.replaceState({ view: 'detail', params: [String(p.id), 'info'] }, '', buildHash('detail', String(p.id), 'info'));
   }
 });
 
@@ -77,8 +81,12 @@ async function loadProjectDetail(id) {
     buildResources(resources, detail);
     buildMaintenance();
 
-    // Default to info tab when entering project detail
-    switchDTab('info');
+    // Default to info tab when entering project detail, unless target tab is set
+    var targetTab = _detailTargetTab || 'info';
+    _detailTargetTab = null;
+    switchDTab(targetTab);
+    // Update hash to reflect current tab
+    history.replaceState({ view: 'detail', params: [String(id), targetTab] }, '', buildHash('detail', String(id), targetTab));
   } catch(e) {
     document.getElementById('detail-header').innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '</div>';
   }
@@ -1500,6 +1508,10 @@ function switchDTab(id, el) {
     } else if (typeof loadViewScript === 'function') {
       loadViewScript('/js/tasks.js?v=250630', function() { initProjectTasks(_comboCurId, projName); });
     }
+  }
+  // Update hash to reflect current tab (replace: don't add history entry per tab switch)
+  if (_comboCurId && typeof buildHash === 'function') {
+    history.replaceState({ view: 'detail', params: [String(_comboCurId), id] }, '', buildHash('detail', String(_comboCurId), id));
   }
 }
 

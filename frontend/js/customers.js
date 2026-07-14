@@ -104,11 +104,11 @@ async function deleteCust(id, name) {
 
 function openCustomerDetail(id) {
   localStorage.setItem('pm_cust_id', id);
-  gotoView('customer-detail');
+  gotoView('customer-detail', {params: [String(id)]});
 }
 
-async function initCustomerDetail() {
-  var id = localStorage.getItem('pm_cust_id');
+async function initCustomerDetail(customerId) {
+  var id = customerId || localStorage.getItem('pm_cust_id');
   if (!id) { gotoView('customers'); return; }
   document.getElementById('cust-det-proj-tbody').innerHTML = '<tr><td colspan="5"><div class="loading-spinner">加载中...</div></td></tr>';
   document.getElementById('cust-det-prod-tbody').innerHTML = '<tr><td colspan="5"><div class="loading-spinner">加载中...</div></td></tr>';

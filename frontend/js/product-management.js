@@ -17,7 +17,8 @@ var PM_TREE_ICONS = ['', '📁', '📂', '📄'];
 
 /* ── Init ── */
 
-async function initProductManagement() {
+async function initProductManagement(nodeId) {
+  if (nodeId) _pmSelectedNodeId = parseInt(nodeId);
   var user = getCurrentUser();
   var perms = (user && user.permissions) ? user.permissions.split(',') : [];
   _pmIsAdmin = user && (user.role === 'admin' || perms.indexOf('admin') >= 0 || perms.indexOf('product_link') >= 0);
@@ -217,7 +218,7 @@ function renderProductManagementPage() {
       });
       rightHtml += '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">文档模板：' +
         templateParts.join('、') + '　' +
-        '<a href="javascript:void(0)" onclick="gotoView(\'doc-templates\');_selectedNodeId=' + _pmSelectedNodeId + ';setTimeout(function(){switchDocTemplateTab(\'product\',document.querySelector(\'#view-doc-templates .map-tab:nth-child(2)\'))},100)" style="color:var(--accent);font-size:11px;text-decoration:none">查看详情 →</a>' +
+        '<a href="javascript:void(0)" onclick="gotoView(\'doc-templates\',{params:[\'product\',String(' + _pmSelectedNodeId + ')]})" style="color:var(--accent);font-size:11px;text-decoration:none">查看详情 →</a>' +
       '</div>';
     }
 
@@ -405,6 +406,10 @@ async function _pmSelectNode(nodeId) {
   _pmSelectedNodeId = nodeId;
   await _pmLoadContent();
   renderProductManagementPage();
+  // Update hash with current tree node (replace: tree navigation doesn't add history entries)
+  if (typeof buildHash === 'function') {
+    history.replaceState({ view: 'product-management', params: [String(nodeId)] }, '', buildHash('product-management', String(nodeId)));
+  }
 }
 
 /* ── Add Child Node (L2 under L1, or L3 under L2) ── */

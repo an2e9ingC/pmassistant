@@ -31,9 +31,16 @@ function initDashboard() {
   }
 }
 
-function initDetailView() {
+function initDetailView(projectId, tabId) {
   loadAllProjects().then(function() {
-    if (window._pendingProjectId) {
+    if (projectId) {
+      document.getElementById('combo-input').value = '';
+      projComboSelect(projectId);
+      // Tab will be handled after loadProjectDetail completes
+      if (tabId && typeof setDetailTargetTab === 'function') {
+        setDetailTargetTab(tabId);
+      }
+    } else if (window._pendingProjectId) {
       document.getElementById('combo-input').value = '';
       projComboSelect(window._pendingProjectId);
       window._pendingProjectId = null;
@@ -138,7 +145,24 @@ function isPageDirty() { return _pageDirty; }
 
 var _navigatingBack = false;
 
-function gotoView(view, pushState) {
+// ── Hash URL helpers ──
+
+function parseHash() {
+  var parts = window.location.hash.replace('#/', '').split('/');
+  return { view: parts[0] || '', params: parts.slice(1) };
+}
+
+function buildHash(view) {
+  var url = '#/' + view;
+  for (var i = 1; i < arguments.length; i++) {
+    if (arguments[i] != null && arguments[i] !== '') {
+      url += '/' + arguments[i];
+    }
+  }
+  return url;
+}
+
+function gotoView(view, opts) {
   // Auth guard
   if (!isLoggedIn()) {
     window.location.href = '/login';
@@ -192,15 +216,25 @@ function gotoView(view, pushState) {
   document.getElementById('topbar-title').innerHTML = title;
 
   // Init — lazy-load JS if needed, then init
+  var params = (opts && opts.params) ? opts.params : [];
+  var doPush = opts !== false && (!opts || opts.pushState !== false);
+  var doReplace = opts && opts.replace;
+
   var doInit = function() {
     var initFn = entry.init;
     if (!initFn && entry.initName) initFn = window[entry.initName];
-    if (initFn) initFn();
+    if (initFn) {
+      // Pass params to init function (backward-compatible: old init fns ignore extra args)
+      initFn.apply(null, params);
+    }
     localStorage.setItem('pm_view', view);
-    if (pushState !== false && !_navigatingBack) {
-      var url = '#/' + view;
-      if (window.location.hash !== url) {
-        history.pushState({ view: view }, '', url);
+    if (doReplace) {
+      var url2 = buildHash.apply(null, [view].concat(params));
+      history.replaceState({ view: view, params: params }, '', url2);
+    } else if (doPush && !_navigatingBack) {
+      var url2 = buildHash.apply(null, [view].concat(params));
+      if (window.location.hash !== url2) {
+        history.pushState({ view: view, params: params }, '', url2);
       }
     }
   };
@@ -216,7 +250,7 @@ function gotoView(view, pushState) {
 window.addEventListener('popstate', function(e) {
   if (e.state && e.state.view) {
     _navigatingBack = true;
-    gotoView(e.state.view, false);
+    gotoView(e.state.view, {params: e.state.params || [], pushState: false});
     _navigatingBack = false;
   }
 });
@@ -1274,11 +1308,13 @@ async function init() {
   }, 3000);
 
   // Navigate to saved view or dashboard (respect URL hash first)
-  var hashView = window.location.hash.replace('#/', '');
+  var parsed = parseHash();
+  var hashView = parsed.view;
+  var hashParams = parsed.params;
   var lastView = hashView || localStorage.getItem('pm_view') || 'user-center';
-  gotoView(lastView, false);  // don't push state on initial load
+  gotoView(lastView, {params: hashView ? hashParams : [], pushState: false});
   if (!hashView && window.location.hash !== '#/' + lastView) {
-    history.replaceState({ view: lastView }, '', '#/' + lastView);
+    history.replaceState({ view: lastView, params: [] }, '', '#/' + lastView);
   }
 
   // Global ESC handler: first ESC blurs input, second closes dialog / clears search

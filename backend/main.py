@@ -151,6 +151,9 @@ async def _add_no_cache_headers(request: Request, call_next):
         response.headers["Cache-Control"] = "max-age=3600"
     else:
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        # Clear ETag so browsers don't return 304 (Not Modified) and use stale cache
+        if "etag" in response.headers:
+            del response.headers["etag"]
     return response
 
 

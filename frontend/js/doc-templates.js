@@ -61,6 +61,7 @@ function switchDocTemplateTab(tab, el) {
   else if (tab === 'tags') initTags();
   else if (tab === 'naming') initNamingOptions();
   else if (tab === 'bugtpl') initBugTemplates();
+  _updateDocTemplatesHash();
 }
 function _openDocDialog(title, bodyHtml, buttons, opts, defaultDocType) {
   openDialog(title, bodyHtml, buttons, opts);
@@ -146,7 +147,44 @@ function _trDropStage(e) {
   renderTemplatesPage();
 }
 
-async function initDocTemplates() {
+// ── Doc-templates hash helper ──
+
+function _updateDocTemplatesHash() {
+  if (typeof buildHash !== 'function') return;
+  var params = [];
+  if (_currentTab === 'project') {
+    params = ['project', _currentProjectType];
+    if (_selectedStage) params.push(_selectedStage);
+  } else if (_currentTab === 'product') {
+    params = ['product'];
+    if (_selectedNodeId) params.push(String(_selectedNodeId));
+    if (_productStage) params.push(_productStage);
+  } else {
+    params = [_currentTab];
+  }
+  // Don't push for doc-templates internal nav — use replace
+  history.replaceState({ view: 'doc-templates', params: params }, '', buildHash('doc-templates', params[0], params[1], params[2]));
+}
+
+async function initDocTemplates(tab, sub1, sub2) {
+  // Parse params: tab, sub1 (projectType | nodeId), sub2 (stage)
+  if (tab && tab !== 'project') {
+    _currentTab = tab;
+    if (tab === 'product') {
+      if (sub1) _selectedNodeId = parseInt(sub1);
+      if (sub2) _productStage = sub2;
+    }
+    // Activate the right tab in the top-level tab bar
+    setTimeout(function() {
+      var tabEl = document.getElementById('dttab-' + _currentTab);
+      if (tabEl) switchDocTemplateTab(_currentTab, tabEl);
+    }, 50);
+  } else if (tab === 'project') {
+    _currentTab = 'project';
+    if (sub1) _currentProjectType = sub1;
+    if (sub2) _selectedStage = sub2;
+  }
+
   var container = document.getElementById('dtsec-project');
   container.innerHTML = '<div class="loading-spinner">加载模板配置...</div>';
   try {
@@ -190,6 +228,7 @@ function selectProjectTypeTab(ptype) {
     var types = _sortStageTypes(Object.keys(_templatesGrouped));
     if (types.length && !_selectedStage) _selectedStage = types[0];
     renderTemplatesPage();
+    _updateDocTemplatesHash();
   });
 }
 
@@ -306,6 +345,7 @@ function renderTemplatesPage() {
 function selectDocTemplateStage(stageType) {
   _selectedStage = stageType;
   renderTemplatesPage();
+  _updateDocTemplatesHash();
 }
 
 /* ── Section Renderers for Doc & Task Templates ── */
@@ -1470,11 +1510,13 @@ async function selectProductNode(nodeId) {
   _productStage = PRODUCT_STAGE_TYPES[0];
   await _loadTemplatesForNode(nodeId);
   renderProductTreePage();
+  _updateDocTemplatesHash();
 }
 
 function _selectProductStage(stage) {
   _productStage = stage;
   renderProductTreePage();
+  _updateDocTemplatesHash();
 }
 
 /* ── Product Template CRUD (direct API, no pending queue) ── */
