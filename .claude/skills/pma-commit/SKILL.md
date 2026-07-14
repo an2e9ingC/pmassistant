@@ -17,6 +17,7 @@ allowed-tools: Read, Write, Edit, Bash
 
 Closes #X          （修复 issue 时必须）
 Co-Authored-By: <model-name> / <tool-name>
+（model-name 使用当前运行模型的精确 ID，如 deepseek-v4-pro；tool-name 使用当前工具名，如 Claude Code）
 ```
 
 ## type（必填）
