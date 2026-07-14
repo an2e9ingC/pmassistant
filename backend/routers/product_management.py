@@ -193,9 +193,10 @@ def update_local_product(
 ):
     """Update a PMA-local product."""
     try:
-        old = pm_service.get_local_product(db, product.id)
+        prod = resolve_product(db, identifier)
+        old = pm_service.get_local_product(db, prod.id)
         product = pm_service.update_local_product(
-            db, product.id, body.model_dump(exclude_none=True)
+            db, prod.id, body.model_dump(exclude_none=True)
         )
         changes = []
         if body.name and old and old.get("name") != body.name:
@@ -208,7 +209,7 @@ def update_local_product(
             changes.append(f"description:'{old.get('description','')}'->'{body.description}'")
         detail = "; ".join(changes) if changes else "无变更"
         log_audit(db, user, "local_product_update", detail, AUDIT_CAT_PRODUCT, "medium")
-        log_product_activity(db, product.id, user.username, "编辑产品", detail)
+        log_product_activity(db, prod.id, user.username, "编辑产品", detail)
         return {"code": 0, "data": product, "message": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -222,11 +223,12 @@ def delete_local_product(
 ):
     """Delete a PMA-local product and its related links."""
     try:
-        result = pm_service.delete_local_product(db, product.id)
+        prod = resolve_product(db, identifier)
+        result = pm_service.delete_local_product(db, prod.id)
         log_audit(db, user, "local_product_delete",
-                  f"删除产品「{result.get('name', '?')}」（ID: {product.id}）",
+                  f"删除产品「{result.get('name', '?')}」（ID: {prod.id}）",
                   AUDIT_CAT_PRODUCT, "high")
-        log_product_activity(db, product.id, user.username, "删除产品", result.get('name', '?'))
+        log_product_activity(db, prod.id, user.username, "删除产品", result.get('name', '?'))
         return {"code": 0, "data": result, "message": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

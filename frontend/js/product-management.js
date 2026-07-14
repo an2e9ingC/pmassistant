@@ -242,9 +242,9 @@ function renderProductManagementPage() {
           '<td style="text-align:center">' + (p.project_count || 0) + '</td>' +
           '<td>' + (p.is_local ? '<span class="pm-src-badge local">PMA本地</span>' : (p.synced_at ? '<span class="pm-src-badge synced" title="同步于 ' + escHtml(p.synced_at) + '">禅道同步</span>' : '<span class="pm-src-badge unknown">未知</span>')) + '</td>' +
           (_pmIsAdmin ? '<td style="white-space:nowrap;text-align:center">' +
-            iconLink('_pmShowManageProductProjects(' + p.id + ',\'' + escHtml(p.name).replace(/'/g, "\\'") + '\')', '关联项目') +
-            iconEdit('_pmShowEditProductDialog(' + p.id + ',\'' + escHtml(p.name).replace(/'/g, "\\'") + '\',\'' + escHtml(p.code || '').replace(/'/g, "\\'") + '\')', '编辑产品') +
-            iconDelete('_pmDeleteProduct(' + p.id + ',\'' + escHtml(p.name).replace(/'/g, "\\'") + '\')', '删除产品') +
+            iconLink('_pmShowManageProductProjects(\'' + escHtml(p.code || '').replace(/'/g, "\\'") + '\',\'' + escHtml(p.name).replace(/'/g, "\\'") + '\')', '关联项目') +
+            iconEdit('_pmShowEditProductDialog(\'' + escHtml(p.code || '').replace(/'/g, "\\'") + '\',\'' + escHtml(p.name).replace(/'/g, "\\'") + '\',\'' + escHtml(p.code || '').replace(/'/g, "\\'") + '\')', '编辑产品') +
+            iconDelete('_pmDeleteProduct(\'' + escHtml(p.code || '').replace(/'/g, "\\'") + '\',\'' + escHtml(p.name).replace(/'/g, "\\'") + '\')', '删除产品') +
           '</td>' : '') +
         '</tr>';
       });
