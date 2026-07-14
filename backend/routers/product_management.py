@@ -54,7 +54,7 @@ class LocalProjectUpdate(BaseModel):
 
 
 class ProductNodeLinkRequest(BaseModel):
-    identifier: str
+    product_id: int
     node_id: int
 
 
@@ -81,7 +81,7 @@ def get_product_node(identifier: str, db: Session = Depends(get_db), _=Depends(g
     product = resolve_product(db, identifier)
     """Return the tree node ID that this product is linked to."""
     from backend.models.zentao import ProductNodeLink
-    link = db.query(ProductNodeLink).filter(ProductNodeLink.product.id == product.id).first()
+    link = db.query(ProductNodeLink).filter(ProductNodeLink.product_id == product.id).first()
     return {"code": 0, "data": {"node_id": link.product_node_id if link else None}, "message": "ok"}
 
 
@@ -117,15 +117,15 @@ def link_product_to_node(
 ):
     """Link a product to a tree node."""
     try:
-        result = pm_service.link_product_to_node(db, body.product.id, body.node_id)
+        result = pm_service.link_product_to_node(db, body.product_id, body.node_id)
         from backend.models.document import ProductLine
         from backend.models.zentao import PmaProduct
-        prod = db.query(PmaProduct).filter(PmaProduct.id == body.product.id).first()
+        prod = db.query(PmaProduct).filter(PmaProduct.id == body.product_id).first()
         node = db.query(ProductLine).filter(ProductLine.id == body.node_id).first()
         log_audit(db, user, "product_node_link",
-                  f"关联产品「{prod.name if prod else body.product.id}」到节点「{node.name if node else body.node_id}」",
+                  f"关联产品「{prod.name if prod else body.product_id}」到节点「{node.name if node else body.node_id}」",
                   AUDIT_CAT_PRODUCT, "medium")
-        log_product_activity(db, body.product.id, user.username, "关联节点", f"node:{node.name if node else body.node_id}")
+        log_product_activity(db, body.product_id, user.username, "关联节点", f"node:{node.name if node else body.node_id}")
         return {"code": 0, "data": result, "message": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -133,7 +133,7 @@ def link_product_to_node(
 
 @router.delete("/link-product-node", response_model=dict)
 def unlink_product_from_node(
-    identifier: str = Query(...),
+    product_id: int = Query(...),
     node_id: int = Query(...),
     db: Session = Depends(get_db),
     user=Depends(require_perm("product_link")),
@@ -360,8 +360,8 @@ def update_product_projects(
         prod = db.query(PmaProduct).filter(PmaProduct.id == product.id).first()
         # Get old linked project IDs for change tracking
         from backend.models.zentao import ProductProjectLink as _PPL
-        old_links = db.query(_PPL).filter(_PPL.product.id == product.id).all()
-        old_ids = sorted([l.project.id for l in old_links])
+        old_links = db.query(_PPL).filter(_PPL.product_id == product.id).all()
+        old_ids = sorted([l.project_id for l in old_links])
         result = pm_service.update_product_projects(db, product.id, body.project_ids)
         new_ids = sorted(body.project_ids)
         old_str = str(old_ids) if old_ids else "无"

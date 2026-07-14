@@ -131,8 +131,8 @@ def unlink_product_project(
     db: Session = Depends(get_db),
     user=Depends(require_admin),
 ):
-    result = product_service.remove_product_project_link(db, product.id, project_id)
-    log_product_activity(db, product.id, user.username, "取消关联项目", f"project_id:{project_id}")
+    result = product_service.remove_product_project_link(db, product_id, project_id)
+    log_product_activity(db, product_id, user.username, "取消关联项目", f"project_id:{project_id}")
     return {"code": 0, "data": result, "message": "ok"}
 
 
@@ -338,7 +338,7 @@ def list_block_diagrams(identifier: str, db: Session = Depends(get_db), _=Depend
         "data": [
             {
                 "id": bd.id,
-                "product_id": bd.product.id,
+                "product_id": bd.product_id,
                 "filename": bd.filename,
                 "uploaded_by": bd.uploaded_by,
                 "created_at": to_local_str(bd.created_at),
@@ -398,7 +398,7 @@ def upload_block_diagram(
         "code": 0,
         "data": {
             "id": bd.id,
-            "product_id": bd.product.id,
+            "product_id": bd.product_id,
             "filename": bd.filename,
             "uploaded_by": bd.uploaded_by,
             "created_at": to_local_str(bd.created_at),

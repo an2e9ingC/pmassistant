@@ -10,7 +10,7 @@ from backend.models.document import ProductLine, ProductDocTemplate
 from backend.audit_categories import AUDIT_CAT_TEMPLATE
 from backend.routers.logs import log_audit
 from backend.services import document_service
-from backend.services.entity_resolver import resolve_product
+
 
 router = APIRouter(prefix="/api/product-doc-templates", tags=["product-doc-templates"])
 
@@ -157,7 +157,7 @@ def create_template(
     user=Depends(require_perm("doc_template")),
 ):
     tpl = document_service.create_product_template(db, body.model_dump())
-    product_name = db.query(ProductLine).filter(ProductLine.id == body.product.id).first()
+    product_name = db.query(ProductLine).filter(ProductLine.id == body.product_id).first()
     detail = f"新增模板: {body.doc_name}"
     if product_name:
         detail += f" → {product_name.name}"
@@ -165,13 +165,13 @@ def create_template(
     return {"code": 0, "data": tpl, "message": "ok"}
 
 
-@router.get("/templates/{identifier}", response_model=dict)
+@router.get("/templates/{node_id}", response_model=dict)
 def list_templates(
-    identifier: str,
+    node_id: int,
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
-    templates = document_service.get_templates_for_product(db, product.id)
+    templates = document_service.get_templates_for_product(db, node_id)
     return {"code": 0, "data": templates, "message": "ok"}
 
 
@@ -248,7 +248,7 @@ def import_templates(
 
     # Get source templates
     src_templates = db.query(ProductDocTemplate).filter(
-        ProductDocTemplate.product.id == body.source_node_id
+        ProductDocTemplate.product_id == body.source_node_id
     ).order_by(ProductDocTemplate.sort_order).all()
 
     if not src_templates:
@@ -256,7 +256,7 @@ def import_templates(
 
     # Delete all existing templates on target
     removed = db.query(ProductDocTemplate).filter(
-        ProductDocTemplate.product.id == target_node_id
+        ProductDocTemplate.product_id == target_node_id
     ).delete()
 
     # Import all source templates to target

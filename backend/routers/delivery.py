@@ -86,7 +86,7 @@ def update_record(
     record = delivery_service.update_delivery_record(db, record_id, data)
     if not record:
         raise HTTPException(status_code=404, detail="Record not found")
-    log_project_activity(db, record.project.id, user.username, "交付记录编辑",
+    log_project_activity(db, record.project_id, user.username, "交付记录编辑",
         "; ".join(del_changes) if del_changes else "无变更")
     return {"code": 0, "data": delivery_service.record_dict(record), "message": "ok"}
 
@@ -104,6 +104,6 @@ def delete_record(
     detail = f"{r.product_name} x{r.quantity} ({r.delivery_date})"
     db.delete(r)
     db.commit()
-    log_project_activity(db, r.project.id, user.username, "交付记录删除",
+    log_project_activity(db, r.project_id, user.username, "交付记录删除",
         f"删除: {detail}")
     return {"code": 0, "data": {"deleted": True}, "message": "ok"}
