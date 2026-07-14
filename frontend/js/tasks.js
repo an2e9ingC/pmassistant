@@ -288,7 +288,7 @@ function renderTaskTableCompact(tasks, execs) {
       var t = stageTasks[i];
       html += '<tr class="task-stage-row" data-stage="' + escHtml(stageName) + '"' + (t ? ' data-task-id="' + t.id + '"' : '') + ' id="' + (i === 0 ? 'task-stage-' + escHtml(stageName) : '') + '">';
       if (i === 0) {
-        html += '<td rowspan="' + rowCount + '" style="font-weight:600;vertical-align:middle;background:var(--bg);border-right:2px solid var(--border)">' + escHtml(stageName) + ' <sup style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:8px">' + stageTasks.length + '</sup></td>';
+        html += '<td rowspan="' + rowCount + '" data-stage-cell="' + escHtml(stageName) + '" style="font-weight:600;vertical-align:middle;background:var(--bg);border-right:2px solid var(--border)">' + escHtml(stageName) + ' <sup style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:8px">' + stageTasks.length + '</sup></td>';
       }
       if (t) {
         html += _renderTaskRowCompact(t);
@@ -309,6 +309,48 @@ function renderTaskTableCompact(tasks, execs) {
 
   html += '</tbody></table></div>';
   content.innerHTML = html;
+
+  // Group hover: hovering the stage-name cell highlights all rows of that stage
+  var tbody = content.querySelector('.stage-table tbody');
+  if (tbody) {
+    // Hover on the stage-name cell (rowspan td) → highlight all sibling rows
+    tbody.addEventListener('mouseenter', function(e) {
+      var cell = e.target.closest('td[data-stage-cell]');
+      if (!cell) return;
+      var stage = cell.getAttribute('data-stage-cell');
+      if (!stage) return;
+      var allRows = tbody.querySelectorAll('.task-stage-row[data-stage="' + CSS.escape(stage) + '"]');
+      allRows.forEach(function(r) { r.classList.add('stage-hover'); });
+    }, true);
+    tbody.addEventListener('mouseleave', function(e) {
+      var cell = e.target.closest('td[data-stage-cell]');
+      if (!cell) return;
+      var stage = cell.getAttribute('data-stage-cell');
+      if (!stage) return;
+      var allRows = tbody.querySelectorAll('.task-stage-row[data-stage="' + CSS.escape(stage) + '"]');
+      allRows.forEach(function(r) { r.classList.remove('stage-hover'); });
+    }, true);
+    // Individual row hover (already covered by CSS tr:hover, but remove group highlight on non-stage cells)
+    tbody.addEventListener('mouseenter', function(e) {
+      var row = e.target.closest('.task-stage-row');
+      if (!row) return;
+      // If not entering via the stage cell, ensure only this row shows hover via CSS
+      var cell = e.target.closest('td[data-stage-cell]');
+      if (!cell) {
+        // Clear any stale group highlights
+        tbody.querySelectorAll('.task-stage-row.stage-hover').forEach(function(r) { r.classList.remove('stage-hover'); });
+        row.classList.add('row-hover');
+      }
+    }, true);
+    tbody.addEventListener('mouseleave', function(e) {
+      var row = e.target.closest('.task-stage-row');
+      if (!row) return;
+      var cell = e.target.closest('td[data-stage-cell]');
+      if (!cell) {
+        row.classList.remove('row-hover');
+      }
+    }, true);
+  }
 }
 
 function _renderLatestActivity(t) {

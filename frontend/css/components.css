@@ -763,6 +763,11 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .task-table tbody tr:hover { background: var(--surface2); }
 .task-table tbody tr:last-child td { border-bottom: 0; }
 
+/* ── Stage-grouped task table hover ── */
+.stage-table tbody tr.task-stage-row.stage-hover td { background: var(--surface2); }
+/* Individual row hover (non-stage-cell hover) */
+.stage-table tbody tr.task-stage-row.row-hover td { background: var(--surface2); }
+
 /* Status pill for user center */
 .status-pill {
   display: inline-flex; align-items: center; gap: 5px;
