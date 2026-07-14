@@ -211,7 +211,7 @@ function renderTaskTable(tasks, execs) {
 
   // Embedded view (project detail): stage-grouped compact table
   if (_taskProjectId) {
-    renderTaskTableCompact(tasks);
+    renderTaskTableCompact(tasks, execs);
     return;
   }
 
@@ -243,24 +243,30 @@ function renderTaskTable(tasks, execs) {
   content.innerHTML = html;
 }
 
-function renderTaskTableCompact(tasks) {
+function renderTaskTableCompact(tasks, execs) {
   var content = _taskContainer();
   if (!content) return;
   content = content.querySelector('#task-content') || content.querySelector('#pma-tasks-content') || content;
-  var STAGE_ORDER = ['售前', '项目立项', '需求分解', '硬件开发', '结构设计', 'BSP开发', '软件开发', '测试', '产品发货', '项目总结'];
 
-  // Group by stage_name
+  // Build ordered stage list from gantt data (ensures all template stages appear)
+  var allStages = [];
+  if (execs && execs.length) {
+    execs.forEach(function(s) { allStages.push(s.standard_stage || s.name); });
+  }
+  // Fallback: derive from tasks
+  if (!allStages.length) {
+    tasks.forEach(function(t) { var sn = t.stage_name; if (sn && allStages.indexOf(sn) < 0) allStages.push(sn); });
+  }
+
+  // Group tasks by stage_name
   var grouped = {};
+  allStages.forEach(function(sn) { grouped[sn] = []; });
   tasks.forEach(function(t) {
     var sn = t.stage_name || '未分类';
     if (!grouped[sn]) grouped[sn] = [];
     grouped[sn].push(t);
   });
-  var stageKeys = Object.keys(grouped).sort(function(a, b) {
-    var ai = STAGE_ORDER.indexOf(a), bi = STAGE_ORDER.indexOf(b);
-    if (ai < 0) ai = 999; if (bi < 0) bi = 999;
-    return ai - bi;
-  });
+  var stageKeys = allStages.filter(function(sn) { return grouped[sn] !== undefined; });
 
   var html = '<div class="table-scroll" style="max-height:calc(100vh - 340px)"><table class="stage-table"><thead><tr>' +
     '<th style="width:10%">阶段</th>' +
@@ -276,14 +282,19 @@ function renderTaskTableCompact(tasks) {
     '</tr></thead><tbody>';
 
   stageKeys.forEach(function(stageName) {
-    var stageTasks = grouped[stageName];
-    for (var i = 0; i < stageTasks.length; i++) {
+    var stageTasks = grouped[stageName] || [];
+    var rowCount = stageTasks.length || 1;
+    for (var i = 0; i < rowCount; i++) {
       var t = stageTasks[i];
       html += '<tr class="task-stage-row" data-stage="' + escHtml(stageName) + '" id="' + (i === 0 ? 'task-stage-' + escHtml(stageName) : '') + '">';
       if (i === 0) {
-        html += '<td rowspan="' + stageTasks.length + '" style="font-weight:600;vertical-align:middle;background:var(--bg);border-right:2px solid var(--border)">' + escHtml(stageName) + ' <sup style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:8px">' + stageTasks.length + '</sup></td>';
+        html += '<td rowspan="' + rowCount + '" style="font-weight:600;vertical-align:middle;background:var(--bg);border-right:2px solid var(--border)">' + escHtml(stageName) + ' <sup style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:8px">' + stageTasks.length + '</sup></td>';
       }
-      html += _renderTaskRowCompact(t);
+      if (t) {
+        html += _renderTaskRowCompact(t);
+      } else {
+        html += '<td colspan="9" style="color:var(--muted);text-align:center;font-size:12px">—</td>';
+      }
       html += '</tr>';
     }
   });
