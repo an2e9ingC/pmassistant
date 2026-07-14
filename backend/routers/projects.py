@@ -108,6 +108,7 @@ def update_stage_name(
     db: Session = Depends(get_db),
     user=Depends(require_perm("stage_mapping")),
 ):
+    project = resolve_project(db, identifier)
     e = db.query(CachedExecution).filter(
         CachedExecution.id == execution_id,
         CachedExecution.project_id == project.id,
@@ -133,6 +134,7 @@ async def sync_stage_name_to_zentao(
     updates via PUT). The user should manually update the execution name
     in Zentao's web interface. Once synced, the exact match will apply.
     """
+    project = resolve_project(db, identifier)
     e = db.query(CachedExecution).filter(
         CachedExecution.id == execution_id,
         CachedExecution.project_id == project.id,
@@ -180,6 +182,7 @@ def update_document(
     user=Depends(require_perm("project_edit")),
 ):
     from backend.services import document_service
+    project = resolve_project(db, identifier)
     result = document_service.update_project_document(
         db, doc_id, body.model_dump(exclude_none=True), user.username
     )
@@ -288,6 +291,7 @@ def add_note(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
+    project = resolve_project(db, identifier)
     note = ProjectNote(
         project_id=project.id,
         content=payload.content,
@@ -394,7 +398,6 @@ class LinkedProjectsUpdate(BaseModel):
 def get_linked_projects(identifier: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
     project = resolve_project(db, identifier)
     """Get linked/sibling projects for a project."""
-    project = resolve_project(db, identifier)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     ids_str = project.linked_project_ids or ""

@@ -140,15 +140,15 @@ def unlink_product_from_node(
 ):
     """Remove a product-node link."""
     try:
-        result = pm_service.unlink_product_from_node(db, product.id, node_id)
+        result = pm_service.unlink_product_from_node(db, product_id, node_id)
         from backend.models.document import ProductLine
         from backend.models.zentao import PmaProduct
-        prod = db.query(PmaProduct).filter(PmaProduct.id == product.id).first()
+        prod = db.query(PmaProduct).filter(PmaProduct.id == product_id).first()
         node = db.query(ProductLine).filter(ProductLine.id == node_id).first()
         log_audit(db, user, "product_node_unlink",
-                  f"取消关联「{prod.name if prod else product.id}」从节点「{node.name if node else node_id}」",
+                  f"取消关联「{prod.name if prod else product_id}」从节点「{node.name if node else node_id}」",
                   AUDIT_CAT_PRODUCT, "medium")
-        log_product_activity(db, product.id, user.username, "取消关联节点", f"node:{node.name if node else node_id}")
+        log_product_activity(db, product_id, user.username, "取消关联节点", f"node:{node.name if node else node_id}")
         return {"code": 0, "data": result, "message": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -312,13 +312,14 @@ def update_local_project(
 ):
     """Update a PMA-local project."""
     try:
-        project = pm_service.update_local_project(
+        project = resolve_project(db, identifier)
+        result = pm_service.update_local_project(
             db, project.id, body.model_dump(exclude_none=True)
         )
         log_audit(db, user, "local_project_update",
                   f"project.id={project.id}",
                   AUDIT_CAT_PROJECT, "medium")
-        return {"code": 0, "data": project, "message": "ok"}
+        return {"code": 0, "data": result, "message": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -345,6 +346,7 @@ def get_product_projects(
     _=Depends(get_current_user),
 ):
     """Get all projects linked to a product."""
+    product = resolve_product(db, identifier)
     projects = pm_service.get_product_project_links(db, product.id)
     return {"code": 0, "data": projects, "message": "ok"}
 
@@ -358,6 +360,7 @@ def update_product_projects(
 ):
     """Replace all project associations for a product."""
     try:
+        product = resolve_product(db, identifier)
         from backend.models.zentao import PmaProduct, CachedProject
         prod = db.query(PmaProduct).filter(PmaProduct.id == product.id).first()
         # Get old linked project IDs for change tracking

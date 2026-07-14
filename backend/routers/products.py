@@ -87,6 +87,7 @@ def update_product(
     db: Session = Depends(get_db),
     user=Depends(require_admin),
 ):
+    product = resolve_product(db, identifier)
     from backend.models.zentao import PmaProduct as _CP
     old_prod = db.query(_CP).filter(_CP.id == product.id).first()
     if not old_prod:
@@ -382,7 +383,6 @@ def upload_block_diagram(
         f.write(content)
 
     # Create DB record
-    product = resolve_product(db, identifier)
     bd = ProductBlockDiagram(
         product_id=product.id,
         filename=file.filename or unique_name,

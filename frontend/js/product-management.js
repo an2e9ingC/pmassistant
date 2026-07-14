@@ -236,8 +236,8 @@ function renderProductManagementPage() {
         '</tr></thead><tbody>';
       _pmNodeProducts.forEach(function (p) {
         rightHtml += '<tr>' +
-          '<td><span class="pm-src-badge synced" style="cursor:pointer;font-family:var(--mono);font-size:11px" onclick="event.stopPropagation();openProductDetail(\'' + p.id + '\')" title="查看产品详情">' + escHtml(p.code || '#' + p.id) + '</span></td>' +
-          '<td style="font-weight:500;cursor:pointer" onclick="openProductDetail(\'' + p.id + '\')">' + escHtml(p.name) + '</td>' +
+          '<td><span class="pm-src-badge synced" style="cursor:pointer;font-family:var(--mono);font-size:11px" onclick="event.stopPropagation();openProductDetail(\'' + escHtml(p.code || '') + '\')" title="查看产品详情">' + escHtml(p.code || '#' + p.id) + '</span></td>' +
+          '<td style="font-weight:500;cursor:pointer" onclick="openProductDetail(\'' + escHtml(p.code || '') + '\')">' + escHtml(p.name) + '</td>' +
           '<td>' + renderPill(p.status) + '</td>' +
           '<td style="text-align:center">' + (p.project_count || 0) + '</td>' +
           '<td>' + (p.is_local ? '<span class="pm-src-badge local">PMA本地</span>' : (p.synced_at ? '<span class="pm-src-badge synced" title="同步于 ' + escHtml(p.synced_at) + '">禅道同步</span>' : '<span class="pm-src-badge unknown">未知</span>')) + '</td>' +
@@ -637,7 +637,7 @@ function _pmShowEditProductDialog(productId, productName, productCode) {
           '<input class="search-inp" placeholder="搜索标签..." oninput="_filterSearchableItems(this)" style="margin-bottom:4px">' +
           '<div style="max-height:120px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;background:var(--surface)" class="searchable-list">' + tagCheckboxes + '</div></div>',
         [{text: '取消', onclick: 'closeSharedDialog()'},
-         {text: '保存', cls: 'btn-primary', onclick: '_pmSaveEditProduct(' + productId + ')'}],
+         {text: '保存', cls: 'btn-primary', onclick: '_pmSaveEditProduct(\'' + productId + '\')'}],
         {hideClose: true});
     });
   }).catch(function(e) {
@@ -967,7 +967,7 @@ function _pmShowManageProductProjects(productId, productName) {
         '<div style="font-size:10.5px;color:var(--muted);margin-top:4px">勾选即关联，取消勾选即解除关联。保存时会替换所有关联。</div>' +
       '</div>',
       [{text: '取消', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
-       {text: '保存', cls: 'btn-primary', onclick: '_pmSaveProductProjects(' + productId + ')'}],
+       {text: '保存', cls: 'btn-primary', onclick: '_pmSaveProductProjects(\'' + productId + '\')'}],
       {hideClose: true});
   }).catch(function(e) {
     showToast('加载项目列表失败: ' + (e.message || ''), 'error');
