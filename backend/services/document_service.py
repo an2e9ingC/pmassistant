@@ -340,6 +340,8 @@ def create_template(db: Session, data: dict) -> dict:
         sort_order=data.get("sort_order", 0),
         description=data.get("description"),
         responsible_role=data.get("responsible_role"),
+        doc_path=data.get("doc_path"),
+        doc_type=data.get("doc_type"),
     )
     db.add(tpl)
     db.commit()
@@ -352,7 +354,7 @@ def update_template(db: Session, template_id: int, data: dict) -> Optional[dict]
     tpl = db.query(DocumentTemplate).filter(DocumentTemplate.id == template_id).first()
     if not tpl:
         return None
-    for field in ("stage_type", "doc_name", "sort_order", "description", "responsible_role"):
+    for field in ("stage_type", "doc_name", "sort_order", "description", "responsible_role", "doc_path", "doc_type"):
         if field in data:
             setattr(tpl, field, data[field])
     db.commit()

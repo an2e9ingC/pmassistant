@@ -65,10 +65,8 @@ function switchDocTemplateTab(tab, el) {
 function _openDocDialog(title, bodyHtml, buttons, opts, defaultDocType) {
   openDialog(title, bodyHtml, buttons, opts);
   if (defaultDocType) {
-    setTimeout(function() {
-      var dialog = document.querySelector('.note-dialog');
-      if (dialog) _applyDocTypePlaceholder(dialog, defaultDocType);
-    }, 60);
+    var dialog = document.querySelector('.shared-dialog-overlay .note-dialog');
+    if (dialog) _applyDocTypePlaceholder(dialog, defaultDocType);
   }
 }
 
