@@ -4,10 +4,10 @@ import time
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
 from backend.config import settings, SERVER_START_TIME
@@ -139,6 +139,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def _add_no_cache_headers(request: Request, call_next):
+    """Prevent browser caching: API data + HTML pages must always be fresh."""
+    response: Response = await call_next(request)
+    path = request.url.path
+    # Static assets (css/js/logo) have versioned URLs (?v=...) so short cache is safe
+    if path.startswith("/css/") or path.startswith("/js/") or path.startswith("/logo/"):
+        response.headers["Cache-Control"] = "max-age=3600"
+    else:
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    return response
+
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
