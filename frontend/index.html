@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="app-version" content="v2026.07.14-beta10">
+<meta name="app-version" content="v2026.07.14-beta11">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>PM Assistant · 集成禅道 & GitLab</title>
 <script>
@@ -430,13 +430,12 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
       <div class="detail-tabs">
         <div class="dtab active" onclick="switchDTab('info',this)">基本信息</div>
         <div class="dtab" onclick="switchDTab('gantt',this)">甘特图</div>
-        <div class="dtab" onclick="switchDTab('stages',this)">阶段详情</div>
+        <div class="dtab" id="dt-pma-tasks" onclick="switchDTab('pma-tasks',this)">任务详情</div>
         <div class="dtab" onclick="switchDTab('docs',this)">项目文档</div>
         <div class="dtab" onclick="switchDTab('resources',this)">产品文档</div>
         <div class="dtab" onclick="switchDTab('delivery',this)">交付状态</div>
         <div class="dtab" onclick="switchDTab('activities',this)">项目进度明细</div>
         <div class="dtab" id="dt-maintenance" onclick="switchDTab('maintenance',this)">项目维护</div>
-        <div class="dtab" id="dt-pma-tasks" onclick="switchDTab('pma-tasks',this)">PMA任务</div>
       </div>
 
       <div class="dsec active" id="dsec-info">
@@ -462,26 +461,8 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
           <div class="gantt-legend-item"><div style="width:2px;height:14px;background:repeating-linear-gradient(to bottom,var(--danger) 0,var(--danger) 4px,transparent 4px,transparent 7px);border-radius:1px"></div>项目结束</div>
         </div>
       </div>
-      <div class="dsec" id="dsec-stages">
-        <div class="card" style="overflow:hidden">
-          <table class="stage-table">
-            <thead>
-              <tr>
-                <th width="12%">阶段</th>
-                <th width="7%">风险</th>
-                <th width="7%">进度</th>
-                <th width="7%">责任人</th>
-                <th width="12%">计划周期</th>
-                <th width="8%">状态</th>
-                <th>卡点说明</th>
-                <th>输出件</th>
-              </tr>
-            </thead>
-            <tbody id="stages-tbody">
-              <tr><td colspan="8"><div class="empty-state" style="padding:20px">请选择项目</div></td></tr>
-            </tbody>
-          </table>
-        </div>
+      <div class="dsec" id="dsec-pma-tasks">
+        <div id="pma-tasks-content"><div class="empty-state" style="padding:20px">请选择项目</div></div>
       </div>
       <div class="dsec" id="dsec-docs">
         <div class="card table-scroll" style="max-height:calc(100vh - 280px)">
@@ -514,11 +495,6 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
       </div>
       <div class="dsec" id="dsec-activities">
         <div id="activities-content">
-          <div class="empty-state" style="padding:20px">请选择项目</div>
-        </div>
-      </div>
-      <div class="dsec" id="dsec-pma-tasks">
-        <div id="pma-tasks-content">
           <div class="empty-state" style="padding:20px">请选择项目</div>
         </div>
       </div>

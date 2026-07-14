@@ -8,6 +8,7 @@ var _taskProjectName = '';
 var _taskFilterStatus = '';
 var _taskFilterExecution = '';
 var _taskFilterAssignee = '';
+var _taskFilterStage = '';    // stage_name filter (set from Gantt click)
 
 /* ── Entry Point ── */
 
@@ -27,6 +28,7 @@ function initProjectTasks(projectId, projectName) {
   _taskFilterStatus = '';
   _taskFilterExecution = '';
   _taskFilterAssignee = '';
+  window._ganttStageFilter = '';  // consume once
   renderTasksPage();
 }
 
@@ -139,8 +141,9 @@ function switchTaskView(mode) {
 /* ── Data Loading ── */
 
 async function loadTaskData() {
-  var content = document.getElementById('task-content');
-  if (!content) return;
+  var container = _taskContainer();
+  if (!container) return;
+  var content = container.querySelector('#task-content') || container.querySelector('#pma-tasks-content') || container;
   content.innerHTML = '<div class="loading-spinner">加载中...</div>';
 
   try {
@@ -196,8 +199,9 @@ function populateTaskFilters(tasks, execs) {
 /* ── Table View ── */
 
 function renderTaskTable(tasks, execs) {
-  var content = document.getElementById('task-content');
+  var content = _taskContainer();
   if (!content) return;
+  content = content.querySelector('#task-content') || content.querySelector('#pma-tasks-content') || content;
 
   if (!tasks || !tasks.length) {
     var emptyMsg = _taskProjectId ? '暂无任务，点击 "导入模板任务" 从模板创建，或者单独、批量创建其他任务' : '暂无任务，点击右上角 "新建任务" 开始';
@@ -240,7 +244,9 @@ function renderTaskTable(tasks, execs) {
 }
 
 function renderTaskTableCompact(tasks) {
-  var content = document.getElementById('task-content');
+  var content = _taskContainer();
+  if (!content) return;
+  content = content.querySelector('#task-content') || content.querySelector('#pma-tasks-content') || content;
   var STAGE_ORDER = ['售前', '项目立项', '需求分解', '硬件开发', '结构设计', 'BSP开发', '软件开发', '测试', '产品发货', '项目总结'];
 
   // Group by stage_name
@@ -256,9 +262,9 @@ function renderTaskTableCompact(tasks) {
     return ai - bi;
   });
 
-  var html = '<table class="proj-table"><thead><tr>' +
-    '<th style="width:10%;text-align:left">阶段</th>' +
-    '<th style="width:20%;text-align:left">标题</th>' +
+  var html = '<div class="table-scroll" style="max-height:calc(100vh - 340px)"><table class="stage-table"><thead><tr>' +
+    '<th style="width:10%">阶段</th>' +
+    '<th style="width:20%">任务标题</th>' +
     '<th style="width:6%">状态</th>' +
     '<th style="width:5%">优先级</th>' +
     '<th style="width:7%">负责人</th>' +
@@ -273,26 +279,26 @@ function renderTaskTableCompact(tasks) {
     var stageTasks = grouped[stageName];
     for (var i = 0; i < stageTasks.length; i++) {
       var t = stageTasks[i];
-      html += '<tr>';
+      html += '<tr class="task-stage-row" data-stage="' + escHtml(stageName) + '" id="' + (i === 0 ? 'task-stage-' + escHtml(stageName) : '') + '">';
       if (i === 0) {
-        html += '<td rowspan="' + stageTasks.length + '" style="font-weight:600;vertical-align:middle;background:var(--bg);border-right:2px solid var(--border)">' + escHtml(stageName) + ' (' + stageTasks.length + ')</td>';
+        html += '<td rowspan="' + stageTasks.length + '" style="font-weight:600;vertical-align:middle;background:var(--bg);border-right:2px solid var(--border)">' + escHtml(stageName) + ' <sup style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:8px">' + stageTasks.length + '</sup></td>';
       }
       html += _renderTaskRowCompact(t);
       html += '</tr>';
     }
   });
 
-  html += '</tbody></table>';
+  html += '</tbody></table></div>';
   content.innerHTML = html;
 }
 
 function _renderTaskRowCompact(t) {
-  var progressHtml = typeof renderProgressCircle === 'function'
-    ? renderProgressCircle(t.progress || 0, 32, { label: '', color: (t.progress >= 100 ? 'var(--success)' : (t.progress > 0 ? 'var(--accent)' : 'var(--muted)')) })
+  var progressHtml = typeof renderProgressRing === 'function'
+    ? renderProgressRing(t.progress || 0)
     : '<span>' + (t.progress || 0) + '%</span>';
   return '<td style="text-align:left">' + escHtml(t.title) + '</td>' +
-    '<td>' + renderPill(t.status || 'todo') + '</td>' +
-    '<td>' + escHtml(t.priority || 'medium') + '</td>' +
+    '<td style="text-align:center">' + renderPill(t.status || 'todo') + '</td>' +
+    '<td style="text-align:center">' + (typeof renderPriority === 'function' ? renderPriority(t.priority) : escHtml(t.priority || 'medium')) + '</td>' +
     '<td style="font-size:12px">' + escHtml((t.assignee && t.assignee.display_name) || (t.assignee && t.assignee.username) || '—') + '</td>' +
     '<td style="font-size:12px">' + (t.estimate_hours ? t.estimate_hours + 'h' : '—') + '</td>' +
     '<td style="font-size:12px">' + (t.consumed_hours ? t.consumed_hours + 'h' : '—') + '</td>' +

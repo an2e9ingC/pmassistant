@@ -37,7 +37,8 @@ async function loadProjectDetail(code) {
   document.getElementById('detail-header').innerHTML = '<div class="loading-spinner">加载项目详情...</div>';
   document.getElementById('info-content').innerHTML = '<div class="loading-spinner">加载基本信息...</div>';
   document.getElementById('gantt-root').innerHTML = '<div class="loading-spinner">加载甘特图...</div>';
-  document.getElementById('stages-tbody').innerHTML = '<tr><td colspan="8"><div class="loading-spinner">加载阶段数据...</div></td></tr>';
+  var stagesTbody = document.getElementById('stages-tbody');
+  if (stagesTbody) stagesTbody.innerHTML = '<tr><td colspan="8"><div class="loading-spinner">加载阶段数据...</div></td></tr>';
   document.getElementById('docs-tbody').innerHTML = '<tr><td colspan="6"><div class="loading-spinner">加载文档数据...</div></td></tr>';
   document.getElementById('delivery-content').innerHTML = '<div class="loading-spinner">加载交付数据...</div>';
   document.getElementById('resources-content').innerHTML = '<div class="loading-spinner">加载产品文档...</div>';
@@ -82,6 +83,13 @@ async function loadProjectDetail(code) {
     buildDocs(docs);
     buildResources(resources, detail);
     buildMaintenance();
+
+    // Pre-load task data so task detail tab is ready when user navigates to it
+    if (typeof _taskProjectId === 'undefined' || _taskProjectId !== code) {
+      _taskProjectId = code;
+      _taskProjectName = detail.name || '';
+      if (typeof loadTaskData === 'function') loadTaskData();
+    }
 
     // Default to info tab when entering project detail, unless target tab is set
     var targetTab = _detailTargetTab || 'info';
@@ -573,6 +581,7 @@ function renderProgressRing(pct) {
 
 function buildGantt(data) {
   var stages = (data && data.stages) ? data.stages : (Array.isArray(data) ? data : []);
+  _lastGanttStages = stages;  // store for gotoStageDetail
   var projBegin = data && data.project_begin ? data.project_begin : null;
   var projEnd   = data && data.project_end   ? data.project_end   : null;
   var range = ganttRange(stages);
@@ -667,7 +676,7 @@ function buildGantt(data) {
     var tasksTotal = s.tasks_total || 0;
 
     // Stage name
-    var nameEl = '<button class="gs-btn" title="跳转到阶段详情" onclick="gotoStageDetail(' + i + ');event.stopPropagation()">' + escHtml(s.name) + '</button>';
+    var nameEl = '<button class="gs-btn" title="跳转到任务详情" onclick="gotoStageDetail(' + i + ');event.stopPropagation()">' + escHtml(s.name) + '</button>';
 
     // Risk tag — PMA stages are all standard, no missing/unmatched/fuzzy
     var risk = getStageRisk(s);
@@ -812,13 +821,15 @@ function getStageRisk(s) {
 
 function buildStages(stages) {
   var stageList = (stages && stages.stages) ? stages.stages : stages;
+  var tbody = document.getElementById('stages-tbody');
+  if (!tbody) return;  // stages section removed — data now shown in task detail tab
 
   if (!stageList || !stageList.length) {
-    document.getElementById('stages-tbody').innerHTML = '<tr><td colspan="8"><div class="empty-state">暂无阶段数据</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state">暂无阶段数据</div></td></tr>';
     return;
   }
 
-  document.getElementById('stages-tbody').innerHTML = stageList.map(function(s, i) {
+  tbody.innerHTML = stageList.map(function(s, i) {
     var dels = s.deliverables || [];
     var taskCount = s.task_count || 0;
     var risk = getStageRisk(s);
@@ -1428,18 +1439,29 @@ function switchDTab(id, el) {
 }
 
 function gotoStageDetail(idx) {
-  // Switch to stages tab
-  switchDTab('stages');
-  // Scroll to and highlight the matching stage row
-  setTimeout(function() {
-    var row = document.getElementById('stage-row-' + idx);
-    if (!row) return;
-    // Remove any existing highlights
-    document.querySelectorAll('.stage-row-flash').forEach(function(r) { r.classList.remove('stage-row-flash'); });
-    row.classList.add('stage-row-flash');
-    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    setTimeout(function() { row.classList.remove('stage-row-flash'); }, 2000);
-  }, 100);
+  var stages = _lastGanttStages;
+  if (!stages || !stages[idx]) return;
+  var stageName = stages[idx].standard_stage || stages[idx].name;
+  if (!stageName) return;
+  switchDTab('pma-tasks');
+  var tries = 0;
+  var doScroll = function() {
+    var rows = document.querySelectorAll('.task-stage-row[data-stage="' + stageName + '"]');
+    if (rows.length) {
+      document.querySelectorAll('.stage-row-flash').forEach(function(r) { r.classList.remove('stage-row-flash'); });
+      // Flash 3 times (on-off-on-off-on-off)
+      var flashCount = 0;
+      var maxFlashes = 6;  // 3 on + 3 off = 6 toggles
+      var flashInterval = setInterval(function() {
+        rows.forEach(function(r) { r.classList.toggle('stage-row-flash'); });
+        if (++flashCount >= maxFlashes) clearInterval(flashInterval);
+      }, 500);
+      rows[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else if (++tries < 30) {
+      setTimeout(doScroll, 200);
+    }
+  };
+  setTimeout(doScroll, 200);
 }
 
 /* ⚠ showStageMismatchDialog / showStageNameEdit are now in components.js */
