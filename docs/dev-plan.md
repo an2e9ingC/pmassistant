@@ -231,6 +231,7 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-07-15 | v2026.07.15-beta56 | feat: 初始化阶段/导入模板任务/清空任务按钮仅project_edit权限可见 |
 | 2026-07-15 | v2026.07.15-beta55 | style: 产品选择框统一code+name+拓扑搜索项目编号修复+个人中心改用createProductCombo |
 | 2026-07-15 | v2026.07.15-beta54 | fix: 个人中心任务+Bug统计根据过滤条件动态更新 |
 | 2026-07-15 | v2026.07.15-beta53 | style: projCodeTag新增projectName tooltip+产品关联项目改为编号标签 |

@@ -3,6 +3,13 @@
    ═══════════════════════════════════════════════════ */
 
 var _taskViewMode = 'table';  // 'table' | 'board' | 'calendar'
+
+function _hasProjectEditPerm() {
+  if (typeof getCurrentUser !== 'function') return false;
+  var user = getCurrentUser();
+  var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+  return perms.indexOf('project_edit') !== -1 || perms.indexOf('admin') >= 0;
+}
 var _taskProjectId = null;   // null = show project selector
 var _taskProjectName = '';
 var _taskFilterStatus = '';
@@ -74,9 +81,10 @@ function renderTasksPage() {
     '</div>' + filterRow : '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid var(--border)">' +
       '<span style="font-weight:600;font-size:13px">任务列表</span>' +
       '<div style="display:flex;gap:8px">' +
+        (_hasProjectEditPerm() ?
         '<button class="btn" onclick="initProjectStages()" style="font-size:12px;padding:5px 14px;color:var(--success);border-color:var(--success)" title="为项目初始化阶段数据（已有阶段则跳过）">⚙ 初始化阶段</button>' +
         '<button class="btn" onclick="importTasksFromTemplates()" style="font-size:12px;padding:5px 14px;color:var(--accent);border-color:var(--accent)" title="按项目模板为所有阶段创建任务">📋 导入模板任务</button>' +
-        '<button class="btn" onclick="clearAllTasks()" style="font-size:12px;padding:5px 14px;color:var(--danger);border-color:var(--danger)" title="删除本项目所有PMA任务">🗑 清空所有任务</button>' +
+        '<button class="btn" onclick="clearAllTasks()" style="font-size:12px;padding:5px 14px;color:var(--danger);border-color:var(--danger)" title="删除本项目所有PMA任务">🗑 清空所有任务</button>' : '') +
         '<button class="btn" onclick="openBatchCreateDialog()" style="font-size:12px;padding:5px 14px;color:var(--success);border-color:var(--success)" title="批量创建任务">📝 批量创建</button>' +
         '<button class="btn btn-primary" onclick="openTaskDialog()" style="font-size:12px;padding:5px 14px">＋ 新建任务</button>' +
       '</div>' +
