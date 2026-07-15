@@ -1343,8 +1343,9 @@ async function openNoteDialog() {
   // Fetch stages for the selector
   var stagesHtml = '<option value="">项目整体</option>';
   try {
-    var stages = await API.get('/projects/' + _comboCurCode + '/stages');
-    if (stages && stages.length) {
+    var result = await API.get('/projects/' + _comboCurCode + '/stages');
+    var stages = (result && result.stages) ? result.stages : [];
+    if (stages.length) {
       stages.forEach(function(s) {
         stagesHtml += '<option value="' + escHtml(s.name) + '">' + escHtml(s.name) + '</option>';
       });
