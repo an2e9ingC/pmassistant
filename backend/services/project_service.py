@@ -139,63 +139,82 @@ def get_project_detail(db: Session, project_id: int) -> Optional[dict]:
 
 
 def get_project_stages(db: Session, project_id: int) -> dict:
-    """Return standard stages with PMA task progress. No longer depends on Zentao executions."""
-    project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
-    project_type = project.project_type or "RD"
-    standard_stages = get_stage_types_for_project_type(db, project_type)
-
-    # Get PMA task progress grouped by stage_name
+    """Return project stages with PMA task progress. Reads from ProjectStage table."""
+    from backend.models.project_stage import ProjectStage
     from backend.models.task import Task
-    tasks = db.query(Task).filter(Task.project_id == project_id).all()
-    stage_task_progress: dict[str, list[int]] = {}
-    stage_task_count: dict[str, int] = {}
-    for t in tasks:
-        sn = t.stage_name or ""
-        if sn not in stage_task_progress:
-            stage_task_progress[sn] = []
-            stage_task_count[sn] = 0
-        stage_task_progress[sn].append(t.progress or 0)
-        stage_task_count[sn] += 1
+    from backend.models.local import LocalUser
 
-    # Estimate stage dates from project begin/end, evenly divided
-    proj_begin = project.begin if project else None
-    proj_end = project.end if project else None
-    stage_count = len(standard_stages)
-    from datetime import timedelta
+    stages_rows = db.query(ProjectStage).filter(
+        ProjectStage.project_id == project_id
+    ).order_by(ProjectStage.sort_order).all()
+
+    # Fallback: if no ProjectStage rows exist, use template stage list directly
+    if not stages_rows:
+        project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
+        project_type = project.project_type or "RD" if project else "RD"
+        standard_stages = get_stage_types_for_project_type(db, project_type)
+        stages = []
+        for st in standard_stages:
+            tasks = db.query(Task).filter(
+                Task.project_id == project_id,
+                Task.stage_name == st,
+            ).all()
+            progs = [t.progress or 0 for t in tasks]
+            avg_progress = round(sum(progs) / len(progs)) if progs else None
+            stages.append({
+                "id": None, "name": st, "execution_url": None,
+                "status": "active", "who": None,
+                "start": None, "end": None, "completed_date": None,
+                "progress": avg_progress, "blocker": None,
+                "match_status": "standard", "match_kind": None,
+                "standard_stage": st, "deliverables": [],
+                "task_count": len(tasks),
+                "tasks_done": sum(1 for p in progs if p >= 100),
+                "owner_id": None, "owner_name": None,
+                "description": None, "sort_order": 0,
+            })
+        return {"stages": stages, "standard_stages": standard_stages}
 
     stages = []
-    for i, st in enumerate(standard_stages):
-        progs = stage_task_progress.get(st, [])
+    for s in stages_rows:
+        # Tasks by stage_id first, fallback to stage_name match
+        tasks = db.query(Task).filter(Task.stage_id == s.id).all()
+        if not tasks:
+            tasks = db.query(Task).filter(
+                Task.project_id == project_id,
+                Task.stage_name == s.name,
+            ).all()
+        progs = [t.progress or 0 for t in tasks]
         avg_progress = round(sum(progs) / len(progs)) if progs else None
-        est_start = None
-        est_end = None
-        if proj_begin and proj_end and stage_count > 0:
-            total_days = (proj_end - proj_begin).days
-            if total_days > 0:
-                seg_days = total_days / stage_count
-                est_start = (proj_begin + timedelta(days=round(i * seg_days))).strftime("%Y-%m-%d")
-                est_end = (proj_begin + timedelta(days=round((i + 1) * seg_days) - 1)).strftime("%Y-%m-%d")
-                if i == stage_count - 1:
-                    est_end = proj_end.strftime("%Y-%m-%d")
+        owner_name = None
+        if s.owner_id:
+            owner = db.query(LocalUser).filter(LocalUser.id == s.owner_id).first()
+            if owner:
+                owner_name = owner.display_name or owner.username
         stages.append({
-            "id": None,
-            "name": st,
+            "id": s.id,
+            "name": s.name,
             "execution_url": None,
-            "status": "active",
-            "who": None,
-            "start": est_start,
-            "end": est_end,
-            "completed_date": None,
+            "status": s.status,
+            "who": owner_name,
+            "start": str(s.start_date) if s.start_date else None,
+            "end": str(s.end_date) if s.end_date else None,
+            "completed_date": str(s.completed_date) if s.completed_date else None,
             "progress": avg_progress,
             "blocker": None,
             "match_status": "standard",
             "match_kind": None,
-            "standard_stage": st,
+            "standard_stage": s.name,
             "deliverables": [],
-            "task_count": stage_task_count.get(st, 0),
+            "task_count": len(tasks),
+            "tasks_done": sum(1 for p in progs if p >= 100),
+            "owner_id": s.owner_id,
+            "owner_name": owner_name,
+            "description": s.description,
+            "sort_order": s.sort_order,
         })
 
-    return {"stages": stages, "standard_stages": standard_stages}
+    return {"stages": stages, "standard_stages": [s.name for s in stages_rows]}
 
 
 def _build_deliverables(db: Session, e: CachedExecution) -> list[dict]:
@@ -285,61 +304,81 @@ def get_project_documents(db: Session, project_id: int) -> dict:
 
 
 def get_project_gantt(db: Session, project_id: int) -> dict:
-    """Return gantt data based on standard stages with PMA task progress."""
+    """Return gantt data from ProjectStage rows with PMA task progress."""
     project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
-    project_type = project.project_type or "RD"
-    standard_stages = get_stage_types_for_project_type(db, project_type)
-
-    # Get PMA task progress grouped by stage_name
+    from backend.models.project_stage import ProjectStage
     from backend.models.task import Task
-    tasks = db.query(Task).filter(Task.project_id == project_id).all()
-    stage_progress: dict[str, list[int]] = {}
-    stage_task_total: dict[str, int] = {}
-    for t in tasks:
-        sn = t.stage_name or ""
-        if sn not in stage_progress:
-            stage_progress[sn] = []
-            stage_task_total[sn] = 0
-        stage_progress[sn].append(t.progress or 0)
-        stage_task_total[sn] += 1
+    from backend.models.local import LocalUser
 
-    gantt_stages = []
-    stage_count = len(standard_stages)
-    # Estimate stage dates from project begin/end and number of stages
-    proj_begin = project.begin if project else None
-    proj_end = project.end if project else None
-    from datetime import timedelta
+    stages_rows = db.query(ProjectStage).filter(
+        ProjectStage.project_id == project_id
+    ).order_by(ProjectStage.sort_order).all()
 
-    for i, st in enumerate(standard_stages):
-        progs = stage_progress.get(st, [])
-        pct = round(sum(progs) / len(progs)) if progs else 0
-        tasks_done = sum(1 for p in progs if p >= 100)
-        # Estimate stage start/end: evenly divide project timeline
-        est_start = None
-        est_end = None
-        if proj_begin and proj_end and stage_count > 0:
-            total_days = (proj_end - proj_begin).days
-            if total_days > 0:
-                seg_days = total_days / stage_count
-                est_start = (proj_begin + timedelta(days=round(i * seg_days))).strftime("%Y-%m-%d")
-                est_end = (proj_begin + timedelta(days=round((i + 1) * seg_days) - 1)).strftime("%Y-%m-%d")
-                if i == stage_count - 1:
-                    est_end = proj_end.strftime("%Y-%m-%d")
-        gantt_stages.append({
-            "name": st,
-            "standard_stage": st,
-            "who": None,
-            "start": est_start,
-            "end": est_end,
-            "status": "active",
-            "progress": str(pct),
-            "completed_date": None,
-            "blocker": None,
-            "tasks_done": tasks_done,
-            "tasks_total": len(progs),
-            "match_status": "standard",
-            "match_kind": None,
-        })
+    # Fallback: use template stage list if no ProjectStage rows
+    if not stages_rows:
+        project_type = project.project_type or "RD" if project else "RD"
+        standard_stages = get_stage_types_for_project_type(db, project_type)
+        stages_rows = []
+        for i, st in enumerate(standard_stages):
+            tasks = db.query(Task).filter(
+                Task.project_id == project_id,
+                Task.stage_name == st,
+            ).all()
+            progs = [t.progress or 0 for t in tasks]
+            pct = round(sum(progs) / len(progs)) if progs else 0
+            stages_rows.append({
+                "name": st, "start_date": None, "end_date": None,
+                "status": "active", "progress_cache": pct,
+                "tasks_done": sum(1 for p in progs if p >= 100),
+                "tasks_total": len(progs),
+            })
+        gantt_stages = [
+            {
+                "id": None, "name": s["name"], "standard_stage": s["name"],
+                "who": None, "start": None, "end": None,
+                "status": "active",
+                "progress": str(s["progress_cache"]),
+                "completed_date": None, "blocker": None,
+                "tasks_done": s["tasks_done"],
+                "tasks_total": s["tasks_total"],
+                "match_status": "standard", "match_kind": None,
+            }
+            for s in stages_rows
+        ]
+    else:
+        gantt_stages = []
+        for s in stages_rows:
+            tasks = db.query(Task).filter(Task.stage_id == s.id).all()
+            if not tasks:
+                tasks = db.query(Task).filter(
+                    Task.project_id == project_id,
+                    Task.stage_name == s.name,
+                ).all()
+            progs = [t.progress or 0 for t in tasks]
+            pct = round(sum(progs) / len(progs)) if progs else 0
+            who = None
+            # Resolve first task assignee for who column
+            for t in tasks:
+                if t.assignee_id:
+                    u = db.query(LocalUser).filter(LocalUser.id == t.assignee_id).first()
+                    if u:
+                        who = (u.display_name or u.username).split("（")[0].split("、")[0]
+                        break
+            gantt_stages.append({
+                "id": s.id, "name": s.name,
+                "standard_stage": s.name,
+                "who": who,
+                "start": str(s.start_date) if s.start_date else None,
+                "end": str(s.end_date) if s.end_date else None,
+                "status": s.status,
+                "progress": str(pct),
+                "completed_date": str(s.completed_date) if s.completed_date else None,
+                "blocker": None,
+                "tasks_done": sum(1 for p in progs if p >= 100),
+                "tasks_total": len(progs),
+                "match_status": "standard",
+                "match_kind": None,
+            })
 
     return {
         "project_begin": str(project.begin) if project and project.begin else None,

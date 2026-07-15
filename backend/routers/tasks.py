@@ -226,3 +226,36 @@ def delete_all_tasks(
     log_audit(db, user, "task_delete_all", f"project={project.code} deleted={count}", AUDIT_CAT_TASK, "high")
     log_project_activity(db, project.id, user.username, "清空所有任务", f"删除了 {count} 个任务")
     return {"code": 0, "data": {"deleted": count}, "message": f"已删除 {count} 个任务"}
+
+
+@router.post("/init-stages", response_model=dict)
+def init_project_stages(
+    project_id: str = Query(...),
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Create ProjectStage rows for an existing project from template stage list.
+    Idempotent: skips if stages already exist."""
+    project = resolve_project(db, project_id)
+    from backend.models.project_stage import ProjectStage
+    existing = db.query(ProjectStage).filter(ProjectStage.project_id == project.id).count()
+    if existing:
+        return {"code": 0, "data": {"existed": existing}, "message": f"已有 {existing} 个阶段，无需初始化"}
+    from backend.services.product_management_service import _init_project_stages
+    count = _init_project_stages(db, project.id, project.project_type or "RD")
+    # Auto-link existing tasks to new stages by matching stage_name
+    linked = 0
+    from backend.models.project_stage import ProjectStage
+    from backend.models.task import Task
+    stages = db.query(ProjectStage).filter(ProjectStage.project_id == project.id).all()
+    for s in stages:
+        updated = db.query(Task).filter(
+            Task.project_id == project.id,
+            Task.stage_name == s.name,
+            Task.stage_id.is_(None),
+        ).update({Task.stage_id: s.id}, synchronize_session=False)
+        linked += updated
+    if linked:
+        db.commit()
+    log_audit(db, user, "stage_init", f"project={project.code} created={count} linked_tasks={linked}", AUDIT_CAT_TASK, "medium")
+    return {"code": 0, "data": {"created": count, "linked_tasks": linked}, "message": f"已创建 {count} 个阶段，关联 {linked} 个任务"}

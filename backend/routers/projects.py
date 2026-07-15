@@ -96,6 +96,88 @@ def get_stages(identifier: str, db: Session = Depends(get_db), _=Depends(get_cur
     return {"code": 0, "data": result, "message": "ok"}
 
 
+class StageInfoUpdate(BaseModel):
+    name: Optional[str] = None
+    sort_order: Optional[int] = None
+    status: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    owner_id: Optional[int] = None
+    description: Optional[str] = None
+
+
+@router.put("/{identifier}/stages/{stage_id}", response_model=dict)
+def update_stage(
+    identifier: str,
+    stage_id: int,
+    body: StageInfoUpdate,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("stage_mapping")),
+):
+    """Update a project stage's metadata (dates, owner, status, etc.)."""
+    project = resolve_project(db, identifier)
+    from backend.models.project_stage import ProjectStage
+    s = db.query(ProjectStage).filter(
+        ProjectStage.id == stage_id,
+        ProjectStage.project_id == project.id,
+    ).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="Stage not found")
+    data = body.model_dump(exclude_none=True)
+    changes = []
+    date_fields = {"start_date", "end_date"}
+    # Resolve user names for owner_id changes
+    from backend.models.local import LocalUser
+    def _user_name(uid):
+        if not uid: return "无"
+        u = db.query(LocalUser).filter(LocalUser.id == uid).first()
+        return (u.display_name or u.username) if u else str(uid)
+    for k, v in data.items():
+        old = getattr(s, k, None)
+        if k in date_fields and v is not None:
+            from datetime import date as dt_date
+            try:
+                v = dt_date.fromisoformat(v)
+            except (ValueError, TypeError):
+                pass
+        old_str = _user_name(old) if k == "owner_id" else str(old)
+        new_str = _user_name(v) if k == "owner_id" else str(v)
+        if old_str != new_str:
+            changes.append(f"{k}:{old_str}->{new_str}")
+        setattr(s, k, v)
+    db.commit()
+    log_project_activity(db, project.id, user.username, "编辑阶段",
+        f"stage:{s.name}; {'; '.join(changes) if changes else '无变更'}")
+    return {"code": 0, "data": {"id": s.id, "name": s.name}, "message": "ok"}
+
+
+@router.delete("/{identifier}/stages/{stage_id}", response_model=dict)
+def delete_stage(
+    identifier: str,
+    stage_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("stage_mapping")),
+):
+    """Delete a project stage. Tasks in this stage are NOT deleted (stage_id is set to NULL)."""
+    project = resolve_project(db, identifier)
+    from backend.models.project_stage import ProjectStage
+    from backend.models.task import Task
+    s = db.query(ProjectStage).filter(
+        ProjectStage.id == stage_id,
+        ProjectStage.project_id == project.id,
+    ).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="Stage not found")
+    name = s.name
+    # Unlink tasks from this stage (don't delete them)
+    db.query(Task).filter(Task.stage_id == stage_id).update({Task.stage_id: None}, synchronize_session=False)
+    db.delete(s)
+    db.commit()
+    log_project_activity(db, project.id, user.username, "删除阶段",
+        f"stage:{name} (id={stage_id})")
+    return {"code": 0, "data": {"id": stage_id, "name": name}, "message": f"阶段「{name}」已删除"}
+
+
 class StageNameUpdate(BaseModel):
     stage_name: str
 

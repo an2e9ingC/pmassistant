@@ -351,6 +351,12 @@ def create_local_project(
 
     db.commit()
 
+    # Initialize project stages from template
+    try:
+        _init_project_stages(db, project.id, project_type)
+    except Exception:
+        pass  # non-critical
+
     # Initialize documents and tasks from templates
     try:
         from backend.services.document_service import _sync_from_templates, _sync_tasks_from_templates
@@ -496,3 +502,47 @@ def _project_item(p: CachedProject, db: Session) -> dict:
         "product_names": product_names,
         "synced_at": to_local_str(p.synced_at) if p.synced_at else None,
     }
+
+
+def _init_project_stages(db: Session, project_id: int, project_type: str):
+    """Create ProjectStage rows for a project based on template stage list.
+    Skips if the project already has stages (idempotent)."""
+    from backend.models.project_stage import ProjectStage
+    from backend.models.zentao import CachedProject
+    from datetime import timedelta
+
+    existing = db.query(ProjectStage).filter(ProjectStage.project_id == project_id).count()
+    if existing:
+        return existing
+
+    from backend.services.document_service import get_stage_types_for_project_type
+    standard_stages = get_stage_types_for_project_type(db, project_type)
+    if not standard_stages:
+        return 0
+
+    project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
+    proj_begin = project.begin if project else None
+    proj_end = project.end if project else None
+    stage_count = len(standard_stages)
+
+    for i, name in enumerate(standard_stages):
+        est_start = None
+        est_end = None
+        if proj_begin and proj_end and stage_count > 0:
+            total_days = (proj_end - proj_begin).days
+            if total_days > 0:
+                seg_days = total_days / stage_count
+                est_start = (proj_begin + timedelta(days=round(i * seg_days)))
+                est_end = (proj_begin + timedelta(days=round((i + 1) * seg_days) - 1))
+                if i == stage_count - 1:
+                    est_end = proj_end
+        db.add(ProjectStage(
+            project_id=project_id,
+            name=name,
+            sort_order=i,
+            status="active",
+            start_date=est_start,
+            end_date=est_end,
+        ))
+    db.commit()
+    return stage_count

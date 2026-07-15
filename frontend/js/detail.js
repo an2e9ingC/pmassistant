@@ -1443,15 +1443,25 @@ function gotoStageDetail(idx) {
   if (!stages || !stages[idx]) return;
   var stageName = stages[idx].standard_stage || stages[idx].name;
   if (!stageName) return;
+  _scrollToStageTasks(stageName);
+}
+
+/* Jump to stage tasks from maintenance page (or any page) — reuse scroll+flash logic */
+function gotoStageTasksFromMaint(stageName) {
+  if (!stageName) return;
+  switchDTab('pma-tasks');
+  _scrollToStageTasks(stageName);
+}
+
+function _scrollToStageTasks(stageName) {
   switchDTab('pma-tasks');
   var tries = 0;
   var doScroll = function() {
     var rows = document.querySelectorAll('.task-stage-row[data-stage="' + stageName + '"]');
     if (rows.length) {
       document.querySelectorAll('.stage-row-flash').forEach(function(r) { r.classList.remove('stage-row-flash'); });
-      // Flash 3 times (on-off-on-off-on-off)
       var flashCount = 0;
-      var maxFlashes = 6;  // 3 on + 3 off = 6 toggles
+      var maxFlashes = 6;
       var flashInterval = setInterval(function() {
         rows.forEach(function(r) { r.classList.toggle('stage-row-flash'); });
         if (++flashCount >= maxFlashes) clearInterval(flashInterval);
@@ -1518,6 +1528,7 @@ function buildMaintenance() {
   loadMaintProjectProducts();
   loadMaintProjectCustomers();
   loadMaintProjectTags();
+  loadMaintProjectStages();
 }
 
 // ── Project Edit Dialog ──
@@ -1954,6 +1965,172 @@ function _renderMaintTagDialogContent() {
 function maintRemove_tag(name) {
   var tags = _maintLinkedTags.filter(function(t) { return t !== name; });
   API.put('/maintenance/projects/' + _comboCurCode + '/tags', { tags: tags }).then(function() { loadMaintProjectTags(); });
+}
+
+/* ── Stage Edit Dialog (shared between maintenance tab and task tab) ── */
+
+function openStageDialog(stageId) {
+  var projectCode = _comboCurCode;
+  if (!projectCode) { showToast('项目信息缺失', 'error'); return; }
+  API.get('/projects/' + projectCode + '/stages').then(function(result) {
+    var stages = (result && result.stages) ? result.stages : [];
+    var stage = null;
+    for (var i = 0; i < stages.length; i++) {
+      if (stages[i].id === stageId) { stage = stages[i]; break; }
+    }
+    if (!stage) { showToast('阶段不存在', 'error'); return; }
+    _showStageDialog(stage, projectCode);
+  }).catch(function(e) {
+    showToast('加载阶段失败: ' + (e.message || ''), 'error');
+  });
+}
+
+var _stgOwnerId = null;
+
+function _showStageDialog(stage, projectCode) {
+  var inp = 'width:100%;box-sizing:border-box;margin-top:1px';
+  var lbl = 'font-size:11px;color:var(--muted);display:block;margin-bottom:2px';
+  var row2 = 'display:grid;grid-template-columns:1fr 1fr;gap:10px';
+
+  _stgOwnerId = stage.owner_id || null;
+
+  var bodyHtml = '<div style="max-height:65vh;overflow-y:auto;padding-right:4px">' +
+    '<div style="margin-bottom:10px"><label style="' + lbl + '">阶段名称</label>' +
+      '<input class="search-inp" id="stg-name" value="' + escHtml(stage.name || '') + '" style="' + inp + '"></div>' +
+    '<div style="' + row2 + '">' +
+      '<div><label style="' + lbl + '">计划开始</label><input class="search-inp" id="stg-start" type="date" value="' + (stage.start || '') + '" style="' + inp + '"></div>' +
+      '<div><label style="' + lbl + '">计划结束</label><input class="search-inp" id="stg-end" type="date" value="' + (stage.end || '') + '" style="' + inp + '"></div>' +
+    '</div>' +
+    '<div style="' + row2 + '">' +
+      '<div><label style="' + lbl + '">状态</label>' +
+        '<select class="search-inp" id="stg-status" style="' + inp + '">' +
+          '<option value="active"' + (stage.status === 'active' ? ' selected' : '') + '>进行中</option>' +
+          '<option value="completed"' + (stage.status === 'completed' ? ' selected' : '') + '>已完成</option>' +
+          '<option value="blocked"' + (stage.status === 'blocked' ? ' selected' : '') + '>已阻塞</option>' +
+        '</select></div>' +
+      '<div><label style="' + lbl + '">责任人</label><div style="margin-top:2px">' +
+        createUserCombo({
+          comboId: 'stg-owner-combo', inputId: 'stg-owner-input', dropdownId: 'stg-owner-dropdown',
+          selectedIdFn: function() { return _stgOwnerId; },
+          onSelect: function(u) { _stgOwnerId = u.id; }
+        }) + '</div></div>' +
+    '</div>' +
+    '<div style="margin-bottom:10px"><label style="' + lbl + '">备注</label>' +
+      '<textarea class="search-inp" id="stg-desc" rows="2" style="width:100%;box-sizing:border-box;resize:vertical">' + escHtml(stage.description || '') + '</textarea></div>' +
+    '<div style="font-size:11px;color:var(--muted);margin-top:8px">' +
+      '任务数量: ' + (stage.task_count || 0) + ' | 进度: ' + (stage.progress || 0) + '% | 完成: ' + (stage.tasks_done || 0) +
+    '</div>' +
+  '</div>';
+
+  openDialog('编辑阶段 — ' + escHtml(stage.name), bodyHtml,
+    [{text: '取消', onclick: 'closeSharedDialog()'},
+     {text: '保存', cls: 'btn-primary', onclick: 'saveStageData(' + stage.id + ',\'' + escHtml(projectCode).replace(/'/g, "\\'") + '\')'}],
+    {maxWidth: '520px', hideClose: true});
+}
+
+async function saveStageData(stageId, projectCode) {
+  var data = {
+    name: document.getElementById('stg-name').value.trim(),
+    start_date: document.getElementById('stg-start').value || null,
+    end_date: document.getElementById('stg-end').value || null,
+    status: document.getElementById('stg-status').value,
+    owner_id: _stgOwnerId || null,
+    description: document.getElementById('stg-desc').value.trim() || null,
+  };
+  if (!data.name) { showToast('请输入阶段名称', 'error'); return; }
+  closeSharedDialog();
+  try {
+    await API.put('/projects/' + projectCode + '/stages/' + stageId, data);
+    showToast('阶段已更新', 'success');
+    // Refresh Gantt chart
+    try {
+      var ganttData = await API.get('/projects/' + projectCode + '/gantt');
+      if (typeof buildGantt === 'function') buildGantt(ganttData);
+    } catch(e) { /* non-critical */ }
+    // Refresh maintenance stage list
+    loadMaintProjectStages();
+    // Refresh task table if loaded
+    if (typeof loadTaskData === 'function') loadTaskData();
+  } catch(e) { showToast('保存失败: ' + (e.message || ''), 'error'); }
+}
+
+/* ── Maintenance: Project Stages ── */
+
+var _maintAllStages = [];  // all stages for current project
+
+async function deleteMaintStage(stageId, stageName) {
+  if (!_comboCurCode) return;
+  var ok = await verifyPassword('删除阶段: ' + stageName, 'pw_verify_stage_delete');
+  if (!ok) return;
+  try {
+    await API.del('/projects/' + _comboCurCode + '/stages/' + stageId);
+    showToast('阶段「' + stageName + '」已删除', 'success');
+    loadMaintProjectStages();
+  } catch(e) { showToast('删除失败: ' + (e.message || ''), 'error'); }
+}
+
+function loadMaintProjectStages() {
+  var container = document.getElementById('maint-proj-stages');
+  if (!_comboCurCode) { if (container) container.innerHTML = '<div class="empty-state" style="padding:12px">请选择项目</div>'; return; }
+
+  container.innerHTML = '<div class="loading-spinner">加载中...</div>';
+  API.get('/projects/' + _comboCurCode + '/stages').then(function(result) {
+    var stages = (result && result.stages) ? result.stages : [];
+    _maintAllStages = stages;
+    _renderMaintStages(stages, container);
+  }).catch(function(e) {
+    container.innerHTML = '<div class="empty-state" style="padding:12px;color:var(--danger)">加载失败: ' + (e.message || '') + '</div>';
+  });
+}
+
+function _renderMaintStages(stages, container) {
+  if (!stages.length) {
+    container.innerHTML = '<div class="empty-state" style="padding:12px">暂无阶段数据 — 请在任务详情页点击"初始化阶段"按钮</div>';
+    return;
+  }
+
+  var riskLabels = { active: '进行中', completed: '已完成', blocked: '已阻塞' };
+  var html = '<table class="proj-table" style="width:100%"><thead><tr>' +
+    '<th style="width:5%">#</th>' +
+    '<th style="width:16%">阶段名称</th>' +
+    '<th style="width:10%">状态</th>' +
+    '<th style="width:10%">责任人</th>' +
+    '<th style="width:12%">计划开始</th>' +
+    '<th style="width:12%">计划结束</th>' +
+    '<th style="width:7%">任务数</th>' +
+    '<th style="width:7%">进度</th>' +
+    '<th style="width:8%">完成日期</th>' +
+    '<th>操作</th>' +
+    '</tr></thead><tbody>';
+
+  stages.forEach(function(s, i) {
+    var riskLabel = riskLabels[s.status] || s.status || '进行中';
+    var riskColor = s.status === 'blocked' ? 'var(--danger)' : (s.status === 'completed' ? 'var(--success)' : 'var(--accent)');
+    var ownerName = s.owner_name || s.who || '—';
+    var startStr = s.start || '—';
+    var endStr = s.end || '—';
+    var taskCount = s.task_count || 0;
+    var progress = s.progress || 0;
+    var completedDate = s.completed_date || '—';
+
+    html += '<tr>' +
+      '<td style="text-align:center;color:var(--muted)">' + (i + 1) + '</td>' +
+      '<td style="font-weight:500">' + escHtml(s.name) + '</td>' +
+      '<td><span style="font-size:11px;padding:2px 8px;border-radius:10px;background:' + riskColor + '15;color:' + riskColor + ';font-weight:500">' + escHtml(riskLabel) + '</span></td>' +
+      '<td style="font-size:12px">' + escHtml(ownerName) + '</td>' +
+      '<td style="font-size:12px">' + escHtml(startStr) + '</td>' +
+      '<td style="font-size:12px">' + escHtml(endStr) + '</td>' +
+      '<td style="text-align:center;cursor:pointer;color:var(--accent);font-weight:500" onclick="gotoStageTasksFromMaint(\'' + escHtml(s.name).replace(/'/g, "\\'") + '\')" title="跳转到任务详情">' + taskCount + '</td>' +
+      '<td style="text-align:center;cursor:pointer" onclick="gotoStageTasksFromMaint(\'' + escHtml(s.name).replace(/'/g, "\\'") + '\')" title="跳转到任务详情">' + (typeof renderProgressRing === 'function' ? '<div style="display:inline-block">' + renderProgressRing(progress) + '</div>' : progress + '%') + '</td>' +
+      '<td style="font-size:12px">' + escHtml(completedDate) + '</td>' +
+      '<td style="white-space:nowrap">' +
+        (s.id ? iconEdit('openStageDialog(' + s.id + ')', '编辑阶段') + iconDelete('deleteMaintStage(' + s.id + ',\'' + escHtml(s.name).replace(/'/g, "\\'") + '\')', '删除阶段') : '') +
+      '</td>' +
+    '</tr>';
+  });
+
+  html += '</tbody></table>';
+  container.innerHTML = html;
 }
 
 /* ── Project Activities (进度明细) ── */

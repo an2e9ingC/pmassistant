@@ -71,6 +71,7 @@ function renderTasksPage() {
       '</div>' : '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid var(--border)">' +
         '<span style="font-weight:600;font-size:13px">任务列表</span>' +
         '<div style="display:flex;gap:8px">' +
+          '<button class="btn" onclick="initProjectStages()" style="font-size:12px;padding:5px 14px;color:var(--success);border-color:var(--success)" title="为项目初始化阶段数据（已有阶段则跳过）">⚙ 初始化阶段</button>' +
           '<button class="btn" onclick="importTasksFromTemplates()" style="font-size:12px;padding:5px 14px;color:var(--accent);border-color:var(--accent)" title="按项目模板为所有阶段创建任务">📋 导入模板任务</button>' +
           '<button class="btn" onclick="clearAllTasks()" style="font-size:12px;padding:5px 14px;color:var(--danger);border-color:var(--danger)" title="删除本项目所有PMA任务">🗑 清空所有任务</button>' +
           '<button class="btn" onclick="openBatchCreateDialog()" style="font-size:12px;padding:5px 14px;color:var(--success);border-color:var(--success)" title="批量创建任务">📝 批量创建</button>' +
@@ -267,10 +268,13 @@ function renderTaskTableCompact(tasks, execs) {
     if (!grouped[sn]) grouped[sn] = [];
     grouped[sn].push(t);
   });
+  // Build stage name → stage id map for clickable stage cells
+  var stageIdMap = {};
   if (execs && execs.length) {
     execs.forEach(function(s) {
       var sn = s.standard_stage || s.name;
       if (s.start) stageStartMap[sn] = s.start;
+      if (s.id) stageIdMap[sn] = s.id;
     });
   }
   var stageKeys = allStages.filter(function(sn) { return grouped[sn] !== undefined; });
@@ -296,7 +300,11 @@ function renderTaskTableCompact(tasks, execs) {
       var t = stageTasks[i];
       html += '<tr class="task-stage-row" data-stage="' + escHtml(stageName) + '"' + (t ? ' data-task-id="' + t.id + '"' : '') + ' id="' + (i === 0 ? 'task-stage-' + escHtml(stageName) : '') + '">';
       if (i === 0) {
-        html += '<td rowspan="' + rowCount + '" data-stage-cell="' + escHtml(stageName) + '" style="font-weight:600;vertical-align:middle;background:var(--bg);border-right:2px solid var(--border)">' + escHtml(stageName) + ' <sup style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:8px">' + stageTasks.length + '</sup></td>';
+        var stageId = stageIdMap[stageName] || null;
+        var stageCellContent = stageId
+          ? '<button class="gs-btn" onclick="openStageDialog(' + stageId + ');event.stopPropagation()" title="查看/编辑阶段信息">' + escHtml(stageName) + '</button>'
+          : escHtml(stageName);
+        html += '<td rowspan="' + rowCount + '" data-stage-cell="' + escHtml(stageName) + '" style="vertical-align:middle;background:var(--bg);border-right:2px solid var(--border)">' + stageCellContent + ' <sup style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:8px">' + stageTasks.length + '</sup></td>';
       }
       if (t) {
         html += _renderTaskRowCompact(t, stageStartMap[stageName] || null);
@@ -379,7 +387,7 @@ function _renderLatestActivity(t) {
 
 function _renderTaskRowCompact(t, stageStart) {
   var progressHtml = typeof renderProgressRing === 'function'
-    ? renderProgressRing(t.progress || 0)
+    ? '<div style="display:inline-block;vertical-align:middle">' + renderProgressRing(t.progress || 0) + '</div>'
     : '<span>' + (t.progress || 0) + '%</span>';
   var assigneeName = t.assignee_name || t.assignee_username || '—';
   var effectiveStart = t.start_date || stageStart || null;
@@ -433,6 +441,21 @@ async function doClearAllTasks() {
     showToast(data.message || '已清空', 'success');
     loadTaskData();
   } catch(e) { showToast('清空失败: ' + (e.message || ''), 'error'); }
+}
+
+/* ── Stage Management ── */
+
+async function initProjectStages() {
+  if (!_taskProjectId) { showToast('请先选择项目', 'error'); return; }
+  try {
+    var data = await API.post('/tasks/init-stages?project_id=' + encodeURIComponent(_taskProjectId), {});
+    if (data.existed) {
+      showToast('已有 ' + data.existed + ' 个阶段，无需初始化', 'info');
+    } else {
+      showToast('已创建 ' + data.created + ' 个阶段', 'success');
+    }
+    loadTaskData();
+  } catch(e) { showToast('初始化失败: ' + (e.message || ''), 'error'); }
 }
 
 function _renderTaskRow(t, stageMap) {

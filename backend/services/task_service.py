@@ -124,6 +124,7 @@ def create_task(db: Session, data: dict, user) -> dict:
     db.add(t)
     db.commit()
     db.refresh(t)
+    _link_task_to_stage(db, t)
     _log_audit(db, t.project_id, uname, "task_create", f"创建任务 #{t.id}: {t.title}")
     return _task_dict(t, db)
 
@@ -227,6 +228,11 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
     db.commit()
     db.refresh(t)
 
+    # Auto-link to project stage by name, then recalc stage progress
+    stage_id = _link_task_to_stage(db, t)
+    if stage_id:
+        _recalc_stage_progress(db, stage_id)
+
     if changes:
         _log_audit(db, t.project_id, uname, "task_update", f"更新任务 #{t.id}: " + "; ".join(changes[:3]))
 
@@ -257,10 +263,13 @@ def delete_task(db: Session, task_id: int, user=None) -> bool:
     db.query(WorkLog).filter(WorkLog.task_id == task_id).delete()
     db.query(TaskComment).filter(TaskComment.task_id == task_id).delete()
     project_id = t.project_id
+    stage_id = t.stage_id
     title = t.title
     db.delete(t)
     db.commit()
 
+    if stage_id:
+        _recalc_stage_progress(db, stage_id)
     _log_audit(db, project_id, uname, "task_delete", f"删除任务 #{task_id}: {title}")
     return True
 
@@ -382,6 +391,7 @@ def _task_dict(t: Task, db=None) -> dict:
         "created_at": to_local_str(t.created_at) if t.created_at else None,
         "updated_at": to_local_str(t.updated_at) if t.updated_at else None,
         "latest_activity": latest_activity,
+        "stage_id": t.stage_id,
     }
 
 
@@ -428,3 +438,40 @@ def _log_audit(db: Session, project_id: int, username: Optional[str], action: st
         db.commit()
     except Exception:
         pass  # audit log should never block task operations
+
+
+def _link_task_to_stage(db: Session, t: Task) -> Optional[int]:
+    """Auto-set t.stage_id by matching t.stage_name to a ProjectStage row in the same project.
+    Returns the stage_id if linked, or None."""
+    if t.stage_id or not t.stage_name or not t.project_id:
+        return t.stage_id
+    from backend.models.project_stage import ProjectStage
+    stage = db.query(ProjectStage).filter(
+        ProjectStage.project_id == t.project_id,
+        ProjectStage.name == t.stage_name,
+    ).first()
+    if stage:
+        t.stage_id = stage.id
+        db.commit()
+        return stage.id
+    return None
+
+
+def _recalc_stage_progress(db: Session, stage_id: int):
+    """Recalculate and cache stage.progress from all linked tasks."""
+    from backend.models.project_stage import ProjectStage
+    stage = db.query(ProjectStage).filter(ProjectStage.id == stage_id).first()
+    if not stage:
+        return
+    tasks = db.query(Task).filter(Task.stage_id == stage_id).all()
+    if not tasks:
+        # Fallback: match by stage_name
+        tasks = db.query(Task).filter(
+            Task.project_id == stage.project_id,
+            Task.stage_name == stage.name,
+        ).all()
+    progs = [t.progress or 0 for t in tasks]
+    pct = round(sum(progs) / len(progs)) if progs else 0
+    if stage.progress != pct:
+        stage.progress = pct
+        db.commit()
