@@ -165,12 +165,11 @@ def get_project_stages(db: Session, project_id: int) -> dict:
             progs = [t.progress or 0 for t in tasks]
             avg_progress = round(sum(progs) / len(progs)) if progs else None
             stages.append({
-                "id": None, "name": st, "execution_url": None,
+                "id": None, "name": st,
                 "status": "active", "who": None,
                 "start": None, "end": None, "completed_date": None,
-                "progress": avg_progress, "blocker": None,
-                "match_status": "standard", "match_kind": None,
-                "standard_stage": st, "deliverables": [],
+                "progress": avg_progress,
+                "standard_stage": st,
                 "task_count": len(tasks),
                 "tasks_done": sum(1 for p in progs if p >= 100),
                 "owner_id": None, "owner_name": None,
@@ -201,18 +200,13 @@ def get_project_stages(db: Session, project_id: int) -> dict:
         stages.append({
             "id": s.id,
             "name": s.name,
-            "execution_url": None,
             "status": s.status,
             "who": owner_name,
             "start": str(s.start_date) if s.start_date else None,
             "end": str(s.end_date) if s.end_date else None,
             "completed_date": str(s.completed_date) if s.completed_date else None,
             "progress": avg_progress,
-            "blocker": None,
-            "match_status": "standard",
-            "match_kind": None,
             "standard_stage": s.name,
-            "deliverables": [],
             "task_count": len(tasks),
             "tasks_done": sum(1 for p in progs if p >= 100),
             "owner_id": s.owner_id,
@@ -272,38 +266,14 @@ def get_project_documents(db: Session, project_id: int) -> dict:
         grouped.setdefault(st, []).append(d)
 
     # Build result: one entry per standard stage (in order)
-    from backend.config import get_zentao_web_base
-    web_base = get_zentao_web_base()
-
-    # Also collect match status from executions (for display consistency with stages tab)
-    executions = db.query(CachedExecution).filter(
-        CachedExecution.project_id == project_id
-    ).all()
-    exec_match: dict[str, dict] = {}
-    for e in executions:
-        actual_name = (e.name or "").strip()
-        result2 = None  # no more fuzzy matching
-        if result2:
-            st2 = result2[0]
-            if st2 not in exec_match:
-                exec_match[st2] = {"match_kind": result2[1], "exec_id": e.id}
-
     result = []
     for st in standard_stages:
         items = grouped.get(st, [])
-        em = exec_match.get(st, {})
-        exec_id = items[0].get("execution_id") if items else em.get("exec_id")
         scd = items[0].get("stage_completed_date") if items else None
-        exec_url = f"{web_base}/index.php?m=execution&f=task&executionID={exec_id}&status=all&param=0&orderBy=status,id_desc&recTotal=10&recPerPage=100" if exec_id else None
-        has_exec = st in exec_match
         result.append({
             "stage_name": st,
             "stage_completed_date": scd,
             "has_documents": len(items) > 0,
-            "has_execution": has_exec,
-            "match_kind": em.get("match_kind") if has_exec else None,  # "exact" | "fuzzy" | None
-            "execution_id": exec_id,
-            "execution_url": exec_url,
             "documents": items,
         })
 
@@ -345,10 +315,8 @@ def get_project_gantt(db: Session, project_id: int) -> dict:
                 "who": None, "start": None, "end": None,
                 "status": "active",
                 "progress": str(s["progress_cache"]),
-                "completed_date": None, "blocker": None,
                 "tasks_done": s["tasks_done"],
                 "tasks_total": s["tasks_total"],
-                "match_status": "standard", "match_kind": None,
             }
             for s in stages_rows
         ]
@@ -383,12 +351,8 @@ def get_project_gantt(db: Session, project_id: int) -> dict:
                 "end": str(s.end_date) if s.end_date else None,
                 "status": s.status,
                 "progress": str(pct),
-                "completed_date": str(s.completed_date) if s.completed_date else None,
-                "blocker": None,
                 "tasks_done": sum(1 for p in progs if p >= 100),
                 "tasks_total": len(progs),
-                "match_status": "standard",
-                "match_kind": None,
             })
 
     return {

@@ -874,35 +874,14 @@ function buildDocs(data) {
     var bg = stageIdx % 2 === 0 ? 'var(--surface)' : 'var(--bg)';
     var completedDate = stage.stage_completed_date || null;
 
-    // Stage name with gs-btn style + match status indicator (matching stages tab)
-    var hasExec = stage.has_execution;
-    var mk = stage.match_kind;
-    var stageNameHtml;
-    if (hasDocs && stage.execution_url) {
-      stageNameHtml = '<a href="' + escHtml(stage.execution_url) + '" target="_blank" class="gs-btn" title="在禅道中查看此阶段" onclick="event.stopPropagation()" style="text-decoration:none;font-size:12px">' + escHtml(stageName) + '</a>';
-    } else if (hasExec) {
-      stageNameHtml = '<span style="font-weight:540;font-size:12px">' + escHtml(stageName) + '</span>';
-    } else {
-      stageNameHtml = '<span style="font-weight:500;color:var(--muted);font-size:12px">' + escHtml(stageName) + '</span>';
-    }
-    // Match status indicators (same as stages tab)
-    if (!hasExec) {
-      stageNameHtml += ' <span class="pill" style="background:var(--warn-lt);color:var(--warn);font-size:10px">阶段缺失</span>';
-    } else if (mk === 'fuzzy') {
-      stageNameHtml += ' <span class="pill" style="background:var(--info-lt,var(--accent-lt));color:var(--accent);font-size:10px">~模糊匹配</span>';
-    }
+    // Stage name display — no Zentao execution dependency
+    var stageNameHtml = '<span style="font-weight:540;font-size:12px">' + escHtml(stageName) + '</span>';
 
-    if (!hasDocs && !hasExec) {
-      // Standard stage with no execution and no documents
+    if (!hasDocs) {
+      // No documents for this stage yet
       rows += '<tr style="background:' + bg + ';opacity:0.5">' +
         '<td style="vertical-align:middle;font-weight:540;border-right:1px solid var(--border)">' + stageNameHtml + '</td>' +
-        '<td colspan="6" style="color:var(--muted);font-style:italic;font-size:12px">暂无文档（阶段未匹配到禅道数据或文档模板）</td>' +
-      '</tr>';
-    } else if (!hasDocs && hasExec) {
-      // Has execution but no documents initialized yet
-      rows += '<tr style="background:' + bg + ';opacity:0.5">' +
-        '<td style="vertical-align:middle;font-weight:540;border-right:1px solid var(--border)">' + stageNameHtml + '</td>' +
-        '<td colspan="6" style="color:var(--muted);font-style:italic;font-size:12px">暂无文档（文档尚未初始化，请先配置文档模板）</td>' +
+        '<td colspan="6" style="color:var(--muted);font-style:italic;font-size:12px">暂无文档</td>' +
       '</tr>';
     } else {
       items.forEach(function(d, i) {
