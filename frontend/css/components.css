@@ -109,10 +109,14 @@
   padding: 16px 18px 14px;
   box-shadow: var(--sh);
   cursor: pointer;
-  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s, background 0.15s;
   user-select: none;
 }
-.kpi-card:hover { box-shadow: var(--sh-md); }
+.kpi-card:hover {
+  box-shadow: var(--sh-md);
+  transform: translateY(-1px);
+  border-color: var(--accent);
+}
 
 /* Product line KPI cards — dynamic border color */
 #prod-kpi-grid .kpi-card[data-prod-cat] {
@@ -737,6 +741,12 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .expand-card {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--r-lg); padding: 16px; display: flex; flex-direction: column; gap: 10px;
+  transition: box-shadow 0.15s, transform 0.15s, border-color 0.15s;
+}
+.expand-card:hover {
+  box-shadow: var(--sh-md);
+  transform: translateY(-1px);
+  border-color: var(--accent);
 }
 .expand-card h3 { font-size: 13px; font-weight: 620; margin: 0; }
 .integration-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: var(--bg); border-radius: var(--r); }

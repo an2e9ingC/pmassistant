@@ -223,9 +223,13 @@
 .map-card {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--r-lg); padding: 16px 18px;
-  transition: border-color 0.12s;
+  transition: box-shadow 0.15s, transform 0.15s, border-color 0.15s;
 }
-.map-card:hover { border-color: var(--accent); }
+.map-card:hover {
+  box-shadow: var(--sh-md);
+  transform: translateY(-1px);
+  border-color: var(--accent);
+}
 .map-card-hd {
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px; margin-bottom: 10px; flex-wrap: wrap;
