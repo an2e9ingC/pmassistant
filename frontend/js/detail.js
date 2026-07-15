@@ -2069,6 +2069,55 @@ function maintRemove_tag(name) {
   API.put('/maintenance/projects/' + _comboCurCode + '/tags', { tags: tags }).then(function() { loadMaintProjectTags(); });
 }
 
+/* ── Add Stage Dialog ── */
+
+function openAddStageDialog() {
+  if (!_comboCurCode) { showToast('请先选择项目', 'error'); return; }
+  var inp = 'width:100%;box-sizing:border-box;margin-top:1px';
+  var lbl = 'font-size:11px;color:var(--muted);display:block;margin-bottom:2px';
+  var row2 = 'display:grid;grid-template-columns:1fr 1fr;gap:10px';
+  _stgOwnerId = null;
+
+  openDialog('添加阶段',
+    '<div style="max-height:60vh;overflow-y:auto;padding-right:4px">' +
+      '<div style="margin-bottom:10px"><label style="' + lbl + '">阶段名称 *</label>' +
+        '<input class="search-inp" id="add-stg-name" style="' + inp + '" placeholder="输入阶段名称..."></div>' +
+      '<div style="' + row2 + '">' +
+        '<div><label style="' + lbl + '">计划开始</label><input class="search-inp" id="add-stg-start" type="date" style="' + inp + '"></div>' +
+        '<div><label style="' + lbl + '">计划结束</label><input class="search-inp" id="add-stg-end" type="date" style="' + inp + '"></div>' +
+      '</div>' +
+      '<div style="margin-bottom:10px"><label style="' + lbl + '">责任人</label><div style="margin-top:2px">' +
+        createUserCombo({
+          comboId: 'add-stg-owner-combo', inputId: 'add-stg-owner-input', dropdownId: 'add-stg-owner-dropdown',
+          selectedIdFn: function() { return _stgOwnerId; },
+          onSelect: function(u) { _stgOwnerId = u.id; }
+        }) + '</div></div>' +
+      '<div style="margin-bottom:4px"><label style="' + lbl + '">备注</label>' +
+        '<textarea class="search-inp" id="add-stg-desc" rows="2" style="width:100%;box-sizing:border-box;resize:vertical"></textarea></div>' +
+    '</div>',
+    [{text: '取消', onclick: 'closeSharedDialog()'},
+     {text: '添加', cls: 'btn-primary', onclick: 'submitAddStage()'}],
+    {maxWidth: '520px', hideClose: true});
+}
+
+async function submitAddStage() {
+  var name = document.getElementById('add-stg-name').value.trim();
+  if (!name) { showToast('请输入阶段名称', 'error'); return; }
+  var data = {
+    name: name,
+    start_date: document.getElementById('add-stg-start').value || null,
+    end_date: document.getElementById('add-stg-end').value || null,
+    owner_id: _stgOwnerId || null,
+    description: document.getElementById('add-stg-desc').value.trim() || null,
+  };
+  closeSharedDialog();
+  try {
+    await API.post('/projects/' + _comboCurCode + '/stages', data);
+    showToast('阶段已添加', 'success');
+    loadMaintProjectStages();
+  } catch(e) { showToast('添加失败: ' + (e.message || ''), 'error'); }
+}
+
 /* ── Stage Edit Dialog (shared between maintenance tab and task tab) ── */
 
 function openStageDialog(stageId) {
@@ -2174,6 +2223,10 @@ async function deleteMaintStage(stageId, stageName) {
 function loadMaintProjectStages() {
   var container = document.getElementById('maint-proj-stages');
   if (!_comboCurCode) { if (container) container.innerHTML = '<div class="empty-state" style="padding:12px">请选择项目</div>'; return; }
+
+  // Update section header with add button
+  var hd = document.getElementById('maint-hd-stages');
+  if (hd) hd.outerHTML = sectionHeader('阶段信息', null, '添加阶段', 'openAddStageDialog()', 'maint-hd-stages');
 
   container.innerHTML = '<div class="loading-spinner">加载中...</div>';
   API.get('/projects/' + _comboCurCode + '/stages').then(function(result) {

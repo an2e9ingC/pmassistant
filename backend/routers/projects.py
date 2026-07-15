@@ -151,6 +151,57 @@ def update_stage(
     return {"code": 0, "data": {"id": s.id, "name": s.name}, "message": "ok"}
 
 
+class StageCreate(BaseModel):
+    name: str
+    sort_order: Optional[int] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    owner_id: Optional[int] = None
+    description: Optional[str] = None
+
+
+@router.post("/{identifier}/stages", response_model=dict)
+def create_stage(
+    identifier: str,
+    body: StageCreate,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("stage_mapping")),
+):
+    """Add a custom stage to a project."""
+    project = resolve_project(db, identifier)
+    from backend.models.project_stage import ProjectStage
+    from datetime import date as dt_date
+    # Determine sort_order: place after the last existing stage
+    max_order = db.query(ProjectStage).filter(
+        ProjectStage.project_id == project.id
+    ).order_by(ProjectStage.sort_order.desc()).first()
+    sort_order = body.sort_order if body.sort_order is not None else ((max_order.sort_order + 1) if max_order else 0)
+    start_date = None
+    end_date = None
+    if body.start_date:
+        try: start_date = dt_date.fromisoformat(body.start_date)
+        except (ValueError, TypeError): pass
+    if body.end_date:
+        try: end_date = dt_date.fromisoformat(body.end_date)
+        except (ValueError, TypeError): pass
+    s = ProjectStage(
+        project_id=project.id,
+        name=body.name,
+        sort_order=sort_order,
+        status="active",
+        start_date=start_date,
+        end_date=end_date,
+        owner_id=body.owner_id,
+        description=body.description or "",
+    )
+    db.add(s)
+    db.commit()
+    db.refresh(s)
+    log_project_activity(db, project.id, user.username, "添加阶段",
+        f"stage:{s.name} sort_order={sort_order}")
+    return {"code": 0, "data": {"id": s.id, "name": s.name}, "message": "ok"}
+
+
 @router.delete("/{identifier}/stages/{stage_id}", response_model=dict)
 def delete_stage(
     identifier: str,
