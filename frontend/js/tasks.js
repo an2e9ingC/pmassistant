@@ -50,40 +50,73 @@ function renderTasksPage() {
   var isEmbedded = !!_taskProjectId;
   var showToolbar = !isEmbedded; // full toolbar only in standalone view
 
-  var html = '<div style="display:flex;height:100%">' +
-    // Left sidebar (only in standalone mode)
-    (!isEmbedded ? '<div id="task-leftbar" style="width:240px;border-right:1px solid var(--border);padding:16px 12px;overflow-y:auto;flex-shrink:0">' +
-      _renderTaskFilters() + '</div>' : '') +
-    // Right content
-    '<div style="flex:1;display:flex;flex-direction:column;min-width:0">' +
-      (showToolbar ? '<div class="section-hd" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border)">' +
-        '<div style="display:flex;align-items:center;gap:12px">' +
-          '<span style="font-weight:600;font-size:15px">任务管理</span>' +
-          '<span style="display:flex;gap:4px">' +
-            '<button class="btn-sm" id="task-view-table" onclick="switchTaskView(\'table\')" style="background:var(--accent);color:#fff">列表</button>' +
-          '</span>' +
-        '</div>' +
-        '<div style="display:flex;gap:8px">' +
-          '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openBatchCreateDialog()" title="批量创建">+批量</button>' +
-          '<button class="btn-sm" onclick="openImportTasksDialog()" title="从其他项目导入">导入</button>' +
-          '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openTaskDialog()">+ 新建任务</button>' +
-        '</div>' +
-      '</div>' : '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid var(--border)">' +
-        '<span style="font-weight:600;font-size:13px">任务列表</span>' +
-        '<div style="display:flex;gap:8px">' +
-          '<button class="btn" onclick="initProjectStages()" style="font-size:12px;padding:5px 14px;color:var(--success);border-color:var(--success)" title="为项目初始化阶段数据（已有阶段则跳过）">⚙ 初始化阶段</button>' +
-          '<button class="btn" onclick="importTasksFromTemplates()" style="font-size:12px;padding:5px 14px;color:var(--accent);border-color:var(--accent)" title="按项目模板为所有阶段创建任务">📋 导入模板任务</button>' +
-          '<button class="btn" onclick="clearAllTasks()" style="font-size:12px;padding:5px 14px;color:var(--danger);border-color:var(--danger)" title="删除本项目所有PMA任务">🗑 清空所有任务</button>' +
-          '<button class="btn" onclick="openBatchCreateDialog()" style="font-size:12px;padding:5px 14px;color:var(--success);border-color:var(--success)" title="批量创建任务">📝 批量创建</button>' +
-          '<button class="btn btn-primary" onclick="openTaskDialog()" style="font-size:12px;padding:5px 14px">＋ 新建任务</button>' +
-        '</div>' +
-      '</div>') +
-      '<div id="task-content" style="flex:1;overflow:auto;padding:16px">加载中...</div>' +
-    '</div>' +
+  // Standalone filter toolbar row
+  var filterRow = '';
+  if (showToolbar) {
+    filterRow = '<div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap">' +
+      _renderTaskFiltersInline() +
+    '</div>';
+  }
+
+  var html = '<div style="display:flex;flex-direction:column;height:100%">' +
+    (showToolbar ? '<div class="section-hd" style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--border)">' +
+      '<div style="display:flex;align-items:center;gap:12px">' +
+        '<span style="font-weight:600;font-size:15px">任务管理</span>' +
+        '<span style="display:flex;gap:4px">' +
+          '<button class="btn-sm" id="task-view-table" onclick="switchTaskView(\'table\')" style="background:var(--accent);color:#fff">列表</button>' +
+        '</span>' +
+      '</div>' +
+      '<div style="display:flex;gap:8px">' +
+        '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openBatchCreateDialog()" title="批量创建">+批量</button>' +
+        '<button class="btn-sm" onclick="openImportTasksDialog()" title="从其他项目导入">导入</button>' +
+        '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openTaskDialog()">+ 新建任务</button>' +
+      '</div>' +
+    '</div>' + filterRow : '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid var(--border)">' +
+      '<span style="font-weight:600;font-size:13px">任务列表</span>' +
+      '<div style="display:flex;gap:8px">' +
+        '<button class="btn" onclick="initProjectStages()" style="font-size:12px;padding:5px 14px;color:var(--success);border-color:var(--success)" title="为项目初始化阶段数据（已有阶段则跳过）">⚙ 初始化阶段</button>' +
+        '<button class="btn" onclick="importTasksFromTemplates()" style="font-size:12px;padding:5px 14px;color:var(--accent);border-color:var(--accent)" title="按项目模板为所有阶段创建任务">📋 导入模板任务</button>' +
+        '<button class="btn" onclick="clearAllTasks()" style="font-size:12px;padding:5px 14px;color:var(--danger);border-color:var(--danger)" title="删除本项目所有PMA任务">🗑 清空所有任务</button>' +
+        '<button class="btn" onclick="openBatchCreateDialog()" style="font-size:12px;padding:5px 14px;color:var(--success);border-color:var(--success)" title="批量创建任务">📝 批量创建</button>' +
+        '<button class="btn btn-primary" onclick="openTaskDialog()" style="font-size:12px;padding:5px 14px">＋ 新建任务</button>' +
+      '</div>' +
+    '</div>') +
+    '<div id="task-content" style="flex:1;overflow:auto;padding:16px">加载中...</div>' +
   '</div>';
 
   container.innerHTML = html;
   switchTaskView(_taskViewMode);
+}
+
+function _renderTaskFiltersInline() {
+  var html = '';
+  // Project selector
+  html += '<span style="font-size:11px;color:var(--muted);white-space:nowrap">项目</span>' +
+    createProjectCombo({
+      comboId: 'task-proj-combo',
+      inputId: 'task-proj-input',
+      dropdownId: 'task-proj-dropdown',
+      onSelect: function(p) { _taskProjectId = p.id; _taskProjectName = p.name; loadTaskData(); }
+    }) + '<style>#task-proj-combo{min-width:0!important;width:160px}</style>';
+  // Stage filter
+  html += '<span style="font-size:11px;color:var(--muted);white-space:nowrap;margin-left:4px">阶段</span>' +
+    '<select class="search-inp" id="task-exec-filter" onchange="_taskFilterExecution=this.value;loadTaskData()" style="width:120px">' +
+      '<option value="">全部阶段</option></select>';
+  // Status filter
+  html += '<span style="font-size:11px;color:var(--muted);white-space:nowrap;margin-left:4px">状态</span>' +
+    '<select class="search-inp" id="task-status-filter" onchange="_taskFilterStatus=this.value;loadTaskData()" style="width:100px">' +
+      '<option value="">全部状态</option>' +
+      '<option value="todo">待办</option>' +
+      '<option value="in_progress">进行中</option>' +
+      '<option value="review">评审中</option>' +
+      '<option value="done">已完成</option>' +
+      '<option value="closed">已关闭</option></select>';
+  // Assignee filter
+  html += '<span style="font-size:11px;color:var(--muted);white-space:nowrap;margin-left:4px">负责人</span>' +
+    '<select class="search-inp" id="task-assignee-filter" onchange="_taskFilterAssignee=this.value;loadTaskData()" style="width:100px">' +
+      '<option value="">全部</option>' +
+      '<option value="me"' + (_taskFilterAssignee==='me'?' selected':'') + '>我负责的</option></select>';
+  return html;
 }
 
 function _renderTaskFilters() {
@@ -225,15 +258,13 @@ function renderTaskTable(tasks, execs) {
   }
 
   var html = '<table class="proj-table"><thead><tr>' +
-    '<th style="width:7%">编号</th>' +
+    '<th style="width:7%">任务编号</th>' +
+    '<th style="width:8%">项目编号</th>' +
     '<th style="width:10%;text-align:left">项目名称</th>' +
     '<th style="width:18%;text-align:left">标题</th>' +
     '<th style="width:9%">阶段</th>' +
     '<th style="width:6%">状态</th>' +
     '<th style="width:5%">优先级</th>' +
-    '<th style="width:6%">负责人</th>' +
-    '<th style="width:6%">预估工时</th>' +
-    '<th style="width:6%">实际工时</th>' +
     '<th style="width:6%">进度</th>' +
     '<th style="width:6%">截止日期</th>' +
     '<th>操作</th>' +
@@ -468,29 +499,18 @@ async function initProjectStages() {
 }
 
 function _renderTaskRow(t, stageMap) {
-  var stageName = t.stage_name || '';
-  if (!stageName && t.execution_id && stageMap[String(t.execution_id)]) {
-    stageName = stageMap[String(t.execution_id)];
-  }
-  if (!stageName && t.execution_name) {
-    stageName = t.execution_name;
-  }
+  var stageName = t.stage_name || t.execution_name || '';
   var progressPct = t.progress || 0;
   var overdue = t.due_date && t.status !== 'done' && t.status !== 'closed' && t.due_date < fmtLocalDate();
-  var assigneeName = t.assignee_name || t.assignee_username || (t.assignee_id || '-');
   var projCode = t.project_code || '';
   return '<tr class="clickable">' +
-    '<td>' + (projCode ? projCodeTag(projCode, t.project_id) : '-') + '</td>' +
+    '<td style="font-size:11px;font-family:var(--mono);color:var(--muted)">#' + t.id + '</td>' +
+    '<td>' + (projCode ? projCodeTag(projCode, 'openProject(\'' + escHtml(projCode).replace(/'/g, "\\'") + '\')') : '-') + '</td>' +
     '<td style="text-align:left;font-size:12px">' + escHtml(t.project_name || '-') + '</td>' +
     '<td style="text-align:left"><a href="javascript:void(0)" onclick="openTaskViewDialog(' + t.id + ')" style="color:var(--accent)">' + escHtml(t.title) + '</a></td>' +
     '<td>' + (stageName ? '<span style="font-size:11px;color:var(--muted)">' + escHtml(stageName) + '</span>' : '-') + '</td>' +
     '<td>' + renderPill(t.status || 'todo') + '</td>' +
     '<td>' + _renderPriority(t.priority) + '</td>' +
-    '<td style="font-size:12px">' + escHtml(assigneeName) + '</td>' +
-    '<td>' + (t.estimate_hours || 0).toFixed(1) + 'h</td>' +
-    '<td style="font-size:12px">' + (t.consumed_hours || 0).toFixed(1) + 'h' +
-      (function() { var orig = t.original_estimate_hours || t.estimate_hours || 0; var ot = (t.consumed_hours || 0) - orig; return ot > 0 ? ' <span style="color:var(--warn);font-size:9px">+'+ot.toFixed(1)+'</span>' : ''; })() +
-    '</td>' +
     '<td>' + renderProgressCircle(progressPct, 26, {label:''}) + '</td>' +
     '<td style="color:' + (overdue ? 'var(--danger)' : '') + '">' + (t.due_date || '-') + '</td>' +
     '<td>' +
