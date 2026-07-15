@@ -326,6 +326,14 @@ function switchProdTab(id, el) {
   if (el) el.classList.add('active');
   if (id === 'maintenance' && _prodDetail) renderProdMaintenance(_prodDetail);
   if (id === 'activities') loadProdActivities();
+  if (id === 'bugs' && _prodDetailCurCode) {
+    // Ensure bugs.js is loaded for openBugDetail
+    if (typeof openBugDetail !== 'function' && typeof loadViewScript === 'function') {
+      loadViewScript('/js/bugs.js?v=' + APP_VERSION, function() { loadProductBugs(); });
+    } else {
+      loadProductBugs();
+    }
+  }
   // Update hash to reflect current tab
   if (_prodDetailCurCode && typeof buildHash === 'function') {
     history.replaceState({ view: 'product-detail', params: [_prodDetailCurCode, id] }, '', buildHash('product-detail', _prodDetailCurCode, id));
@@ -347,7 +355,7 @@ async function loadProductDetail(code) {
   }
 
   document.getElementById('prod-detail-header').innerHTML = '<div class="loading-spinner">加载中...</div>';
-  ['prodsec-info', 'prodsec-docs', 'prodsec-maintenance'].forEach(function(s) {
+  ['prodsec-info', 'prodsec-docs', 'prodsec-activities', 'prodsec-maintenance', 'prodsec-bugs'].forEach(function(s) {
     document.getElementById(s).innerHTML = '<div class="card" style="padding:20px"><div class="loading-spinner">加载中...</div></div>';
   });
   var actContainer = document.getElementById('prod-activities-content');
@@ -1424,4 +1432,63 @@ function clearProdActivityFilters() {
   _prodActivityFilterUser = '';
   _prodActivityFilterAction = '';
   loadProdActivities();
+}
+
+/* ── Product Bugs Tab ── */
+
+var _prodBugs = [];
+
+function loadProductBugs() {
+  var container = document.getElementById('prodsec-bugs');
+  if (!container || !_prodDetailCurCode) return;
+  container.innerHTML = '<div class="loading-spinner">加载Bug...</div>';
+  API.get('/bugs?product_id=' + _prodDetailCurId + '&limit=200').then(function(bugs) {
+    bugs = bugs || [];
+    _prodBugs = bugs;
+    _renderProdBugs(bugs, container);
+  }).catch(function(e) {
+    container.innerHTML = '<div class="empty-state" style="color:var(--danger);padding:20px">加载失败: ' + escHtml(e.message || '') + '</div>';
+  });
+}
+
+function _renderProdBugs(bugs, container) {
+  if (!bugs.length) {
+    container.innerHTML = '<div class="card" style="padding:20px"><div class="empty-state">暂无Bug</div></div>';
+    return;
+  }
+  var html = '<div class="table-scroll" style="max-height:calc(100vh - 280px)"><table class="proj-table"><thead><tr>' +
+    '<th style="width:6%">#</th>' +
+    '<th style="width:24%;text-align:left">标题</th>' +
+    '<th style="width:6%">状态</th>' +
+    '<th style="width:5%">严重程度</th>' +
+    '<th style="width:5%">优先级</th>' +
+    '<th style="width:8%">负责人</th>' +
+    '<th style="width:8%">项目编号</th>' +
+    '<th style="width:10%">创建时间</th>' +
+    '<th style="width:1%;white-space:nowrap">操作</th>' +
+    '</tr></thead><tbody>';
+
+  var sevLabels = {1:'致命',2:'严重',3:'一般',4:'建议'};
+  var sevColors = {1:'var(--danger)',2:'var(--warn)',3:'var(--accent)',4:'var(--muted)'};
+  bugs.forEach(function(b) {
+    var sev = sevLabels[b.severity] || b.severity;
+    var sevColor = sevColors[b.severity] || 'var(--muted)';
+    var projCode = b.project_code || '';
+    var projCell = projCode
+      ? '<span class="proj-code-btn" onclick="event.stopPropagation();openProject(\'' + escHtml(projCode) + '\')" title="' + escHtml(b.project_name || '') + '">' + escHtml(projCode) + '</span>'
+      : '<span style="font-size:12px;color:var(--muted)">—</span>';
+    html += '<tr style="cursor:pointer">' +
+      '<td style="font-size:11px;font-family:var(--mono)" onclick="openBugDetail(' + b.id + ')">#' + b.id + '</td>' +
+      '<td style="text-align:left;font-weight:530;cursor:pointer" onclick="openBugDetail(' + b.id + ')" title="查看Bug详情">' + escHtml(b.title) + '</td>' +
+      '<td onclick="openBugDetail(' + b.id + ')">' + renderPill(b.status || 'open') + '</td>' +
+      '<td style="color:' + sevColor + ';font-weight:500;font-size:12px" onclick="openBugDetail(' + b.id + ')">' + sev + '</td>' +
+      '<td onclick="openBugDetail(' + b.id + ')"><span class="prio-tag '+(b.priority||'medium')+'">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[b.priority]||b.priority)+'</span></td>' +
+      '<td style="font-size:12px" onclick="openBugDetail(' + b.id + ')">' + escHtml(b.assignee_name || '—') + '</td>' +
+      '<td>' + projCell + '</td>' +
+      '<td style="font-size:11px;color:var(--muted)" onclick="openBugDetail(' + b.id + ')">' + (b.created_at||'').substring(0,10) + '</td>' +
+      '<td style="white-space:nowrap" onclick="event.stopPropagation()">' + iconEdit('openBugDialog(' + b.id + ')', '编辑Bug') + '</td>' +
+    '</tr>';
+  });
+  html += '</tbody></table></div>';
+  container.innerHTML = html;
 }

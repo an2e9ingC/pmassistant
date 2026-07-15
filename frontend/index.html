@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="app-version" content="v2026.07.15-beta48">
+<meta name="app-version" content="v2026.07.15-beta49">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>PM Assistant · 集成禅道 & GitLab</title>
 <script>
@@ -876,6 +876,7 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
         <div class="dtab" onclick="switchProdTab('docs',this)">产品文档</div>
         <div class="dtab" onclick="switchProdTab('activities',this)">产品进度明细</div>
         <div class="dtab" onclick="switchProdTab('maintenance',this)">产品维护</div>
+        <div class="dtab" onclick="switchProdTab('bugs',this)">Bug</div>
       </div>
 
       <div class="dsec active" id="prodsec-info">
@@ -890,6 +891,9 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
         </div>
       </div>
       <div class="dsec" id="prodsec-maintenance">
+        <div class="card" style="padding:20px"><div class="empty-state">请选择产品</div></div>
+      </div>
+      <div class="dsec" id="prodsec-bugs">
         <div class="card" style="padding:20px"><div class="empty-state">请选择产品</div></div>
       </div>
     </div>
