@@ -126,6 +126,8 @@ def create_task(db: Session, data: dict, user) -> dict:
     db.refresh(t)
     _link_task_to_stage(db, t)
     _log_audit(db, t.project_id, uname, "task_create", f"创建任务 #{t.id}: {t.title}")
+    if t.stage_id:
+        _recalc_stage_progress(db, t.stage_id)
     return _task_dict(t, db)
 
 
@@ -475,3 +477,13 @@ def _recalc_stage_progress(db: Session, stage_id: int):
     if stage.progress != pct:
         stage.progress = pct
         db.commit()
+    # Sync project overall progress
+    from backend.models.zentao import CachedProject
+    project = db.query(CachedProject).filter(CachedProject.id == stage.project_id).first()
+    if project:
+        all_tasks = db.query(Task).filter(Task.project_id == stage.project_id).all()
+        all_progs = [t.progress or 0 for t in all_tasks]
+        proj_pct = round(sum(all_progs) / len(all_progs)) if all_progs else 0
+        if project.progress != proj_pct:
+            project.progress = proj_pct
+            db.commit()

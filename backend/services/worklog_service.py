@@ -78,9 +78,13 @@ def create_worklog(db: Session, data: dict, user_id: int) -> dict:
     db.commit()
     db.refresh(w)
 
-    from backend.services.task_service import recalc_consumed_hours
+    from backend.services.task_service import recalc_consumed_hours, _recalc_stage_progress
     recalc_consumed_hours(db, w.task_id)
     _auto_update_task_status(db, w.task_id)
+    if w.task_id:
+        task = db.query(Task).filter(Task.id == w.task_id).first()
+        if task and task.stage_id:
+            _recalc_stage_progress(db, task.stage_id)
 
     task = db.query(Task).filter(Task.id == w.task_id).first()
     return _worklog_dict(w, task, db)
@@ -102,9 +106,13 @@ def update_worklog(db: Session, worklog_id: int, data: dict) -> Optional[dict]:
     db.commit()
     db.refresh(w)
 
-    from backend.services.task_service import recalc_consumed_hours
+    from backend.services.task_service import recalc_consumed_hours, _recalc_stage_progress
     recalc_consumed_hours(db, w.task_id)
     _auto_update_task_status(db, w.task_id)
+    if w.task_id:
+        task = db.query(Task).filter(Task.id == w.task_id).first()
+        if task and task.stage_id:
+            _recalc_stage_progress(db, task.stage_id)
 
     task = db.query(Task).filter(Task.id == w.task_id).first()
     return _worklog_dict(w, task, db)
@@ -119,9 +127,12 @@ def delete_worklog(db: Session, worklog_id: int) -> bool:
     db.delete(w)
     db.commit()
 
-    from backend.services.task_service import recalc_consumed_hours
+    from backend.services.task_service import recalc_consumed_hours, _recalc_stage_progress
     recalc_consumed_hours(db, task_id)
     _auto_update_task_status(db, task_id)
+    t = db.query(Task).filter(Task.id == task_id).first()
+    if t and t.stage_id:
+        _recalc_stage_progress(db, t.stage_id)
     return True
 
 

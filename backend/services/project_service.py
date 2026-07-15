@@ -110,12 +110,15 @@ def get_projects(db: Session) -> list[dict]:
     stage_anomaly_map = _get_stage_anomaly_counts(db, pids)
     # Batch-load linked customers
     cust_map = _batch_cust_map(db, pids)
+    # Calculate project progress from stage averages
+    stage_prog_map = _batch_stage_avg_progress(db, pids)
     return [
         _project_brief(p,
             pending_map.get(p.id, False),
             incomplete_task_map.get(p.id, False),
             stage_anomaly_map.get(p.id, False),
-            cust_map.get(p.id, []))
+            cust_map.get(p.id, []),
+            stage_prog_map.get(p.id))
         for p in projects
     ]
 
@@ -186,6 +189,10 @@ def get_project_stages(db: Session, project_id: int) -> dict:
             ).all()
         progs = [t.progress or 0 for t in tasks]
         avg_progress = round(sum(progs) / len(progs)) if progs else None
+        # Sync calculated progress back to DB
+        if avg_progress is not None and avg_progress != (s.progress or 0):
+            s.progress = avg_progress
+            db.commit()
         owner_name = None
         if s.owner_id:
             owner = db.query(LocalUser).filter(LocalUser.id == s.owner_id).first()
@@ -356,6 +363,10 @@ def get_project_gantt(db: Session, project_id: int) -> dict:
                 ).all()
             progs = [t.progress or 0 for t in tasks]
             pct = round(sum(progs) / len(progs)) if progs else 0
+            # Sync calculated progress back to DB
+            if pct != (s.progress or 0):
+                s.progress = pct
+                db.commit()
             who = None
             # Resolve first task assignee for who column
             for t in tasks:
@@ -459,7 +470,7 @@ def get_project_products(db: Session, project_id: int) -> list[dict]:
 
 # --- helpers ---
 
-def _project_brief(p: CachedProject, has_pending_docs: bool = False, has_incomplete_tasks: bool = False, has_stage_anomalies: bool = False, linked_customers: list = None) -> dict:
+def _project_brief(p: CachedProject, has_pending_docs: bool = False, has_incomplete_tasks: bool = False, has_stage_anomalies: bool = False, linked_customers: list = None, stage_progress: Optional[int] = None) -> dict:
     return {
         "id": p.id,
         "code": p.code,
@@ -467,7 +478,7 @@ def _project_brief(p: CachedProject, has_pending_docs: bool = False, has_incompl
         "project_type": p.project_type,
         "customer_name": _resolve_customer(p, linked_customers or []),
         "status": _map_status(p.status, has_pending_docs, has_incomplete_tasks, has_stage_anomalies),
-        "progress": p.progress,
+        "progress": stage_progress if stage_progress is not None else p.progress,
         "begin": str(p.begin) if p.begin else None,
         "end": str(p.end) if p.end else None,
         "risk_level": _calc_risk_level(p, has_pending_docs, has_incomplete_tasks, has_stage_anomalies),
@@ -533,6 +544,45 @@ def _resolve_user_for_role(db: Session, responsible_role: str):
     return None
 
 
+def _calc_stage_avg_progress(db: Session, project_id: int) -> int:
+    """Calculate project overall progress from task progress values, and sync to DB."""
+    from backend.models.task import Task
+    tasks = db.query(Task).filter(Task.project_id == project_id).all()
+    if not tasks:
+        return 0
+    progs = [t.progress or 0 for t in tasks]
+    pct = round(sum(progs) / len(progs))
+    # Sync to CachedProject.progress
+    project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
+    if project and project.progress != pct:
+        project.progress = pct
+        db.commit()
+    return pct
+
+
+def _batch_stage_avg_progress(db: Session, project_ids: list[int]) -> dict:
+    """Batch-calculate progress from tasks for multiple projects, and sync to DB."""
+    from backend.models.task import Task
+    from sqlalchemy import func as sa_func
+    result = {}
+    if not project_ids:
+        return result
+    rows = db.query(
+        Task.project_id,
+        sa_func.avg(Task.progress)
+    ).filter(Task.project_id.in_(project_ids)).group_by(Task.project_id).all()
+    projects = {p.id: p for p in db.query(CachedProject).filter(CachedProject.id.in_(project_ids)).all()}
+    for pid, avg in rows:
+        pct = round(avg) if avg else 0
+        result[pid] = pct
+        # Sync to CachedProject.progress if changed
+        p = projects.get(pid)
+        if p and p.progress != pct:
+            p.progress = pct
+    db.commit()
+    return result
+
+
 def _batch_cust_map(db: Session, project_ids: list[int]) -> dict:
     """Batch-load linked customer names for multiple projects.
     Returns {project_id: [customer_name, ...]}."""
@@ -582,7 +632,7 @@ def _project_detail(p: CachedProject, db: Session, has_pending_docs: bool = Fals
         "end": str(p.end) if p.end else None,
         "real_began": str(p.real_began) if p.real_began else None,
         "real_end": str(p.real_end) if p.real_end else None,
-        "progress": p.progress,
+        "progress": _calc_stage_avg_progress(db, p.id),
         "estimate": p.estimate,
         "consumed": p.consumed,
         "pm_name": p.pm_name,
