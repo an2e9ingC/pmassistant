@@ -51,7 +51,7 @@ async function doFuzzySearch() {
       var productList = item.products || [];
       var productsHtml = productList.length
         ? productList.map(function(pr) {
-            return '<button class="gs-btn gs-prod" onclick="event.stopPropagation();openProductDetail(\'' + escHtml(pr.code || pr.id) + '\')" style="margin:1px 2px;font-size:11px">' + escHtml(pr.name) + '</button>';
+            return '<button class="gs-btn gs-prod" onclick="event.stopPropagation();openProductDetail(\'' + escHtml(pr.code || pr.id) + '\')" style="margin:1px 2px;font-size:11px" title="' + escHtml(pr.name || '') + '">' + escHtml(pr.code || pr.name) + '</button>';
           }).join('')
         : '<span style="font-size:12px;color:var(--muted)">—</span>';
       return '<tr onclick="openProject(\'' + escHtml(item.project_code || '') + '\')">' +
@@ -103,7 +103,7 @@ async function doTopoSearch() {
       var productList = item.products || [];
       var productsHtml = productList.length
         ? productList.map(function(pr) {
-            return '<button class="gs-btn gs-prod" onclick="event.stopPropagation();openProductDetail(\'' + escHtml(pr.code || pr.id) + '\')" style="margin:1px 2px;font-size:11px">' + escHtml(pr.name) + '</button>';
+            return '<button class="gs-btn gs-prod" onclick="event.stopPropagation();openProductDetail(\'' + escHtml(pr.code || pr.id) + '\')" style="margin:1px 2px;font-size:11px" title="' + escHtml(pr.name || '') + '">' + escHtml(pr.code || pr.name) + '</button>';
           }).join('')
         : '<span style="font-size:12px;color:var(--muted)">—</span>';
       return '<tr onclick="openProject(\'' + escHtml(item.project_code || '') + '\')">' +

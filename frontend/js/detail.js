@@ -201,7 +201,7 @@ function buildInfo(p, notes, delivery) {
       '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">关联产品（' + products.length + '）</div>';
   if (products.length) {
     html += '<div style="display:flex;flex-wrap:wrap;gap:4px">' +
-      products.map(function(prod) { return linkChip(prod.name, 'openProductDetail(' + (prod.code || String(prod.id)) + ')', prod.code || ''); }).join('') +
+      products.map(function(prod) { return linkChip(prod.code || prod.name, 'openProductDetail(\'' + escHtml(prod.code || String(prod.id)).replace(/'/g, "\\'") + '\')', prod.name || ''); }).join('') +
     '</div>';
   } else {
     html += '<div style="font-size:12px;color:var(--muted);font-style:italic">暂无</div>';
@@ -1729,10 +1729,12 @@ function _renderMaintSection(containerId, hdId, linked, idKey, labelKey, type, l
 
   var chipClass = type === 'prod' ? 'prod-link-chip' : (type === 'cust' ? 'cust-badge' : 'proj-code-btn');
   var clickFn = type === 'prod' ? 'openProductDetail' : (type === 'cust' ? 'openCustomerByName' : '');
-  var clickArg = type === 'cust' ? labelKey : idKey;
+  var clickArg = type === 'prod' ? 'code' : (type === 'cust' ? labelKey : idKey);
   var badgesHtml = linked.length ? linked.map(function(x) {
     var onClick = clickFn ? ' onclick="event.stopPropagation();' + clickFn + '(\''+escHtml(x[clickArg]).replace(/'/g,"\\'")+'\')"' : '';
-    return '<span class="'+chipClass+'"' + onClick + ' title="查看详情">' + escHtml(x[labelKey]) + '</span>' +
+    var displayLabel = (type === 'prod' && x.code) ? escHtml(x.code) : escHtml(x[labelKey]);
+    var tooltip = (type === 'prod' && x.code) ? escHtml(x[labelKey]) : '查看详情';
+    return '<span class="'+chipClass+'"' + onClick + ' title="' + tooltip + '">' + displayLabel + '</span>' +
       ' <span onclick="maintRemove_' + type + '(' + x[idKey] + ')" style="cursor:pointer;opacity:0.5;font-size:14px" title="移除">&times;</span>';
   }).join('') : '<span style="font-size:12px;color:var(--muted)">暂无' + labelName + '</span>';
 
@@ -1757,7 +1759,7 @@ async function loadMaintProjectProducts() {
     var linked = await API.get('/maintenance/projects/' + _comboCurCode + '/products');
     _maintLinkedProds = linked || [];
     var all = await API.get('/products?limit=200');
-    _maintAllProds = (all.items || []).map(function(p) { return {id: p.id, name: p.name}; });
+    _maintAllProds = (all.items || []).map(function(p) { return {id: p.id, name: p.name, code: p.code}; });
     _renderMaintSection('maint-proj-products', 'maint-hd-products', _maintLinkedProds, 'id', 'name', 'prod', '关联产品');
   } catch(e) {
     document.getElementById('maint-proj-products').innerHTML = '<div class="error-state">加载失败</div>';
@@ -1767,7 +1769,11 @@ async function loadMaintProjectProducts() {
 function maintOpenDialog_prod() {
   var linkedIds = (_maintLinkedProds || []).map(function(p) { return p.id; });
   multiSelectDialog('编辑关联产品', _maintAllProds, linkedIds, {
-    placeholder: '搜索产品...', maxWidth: 500
+    placeholder: '搜索产品...', maxWidth: 550,
+    renderItem: function(item, selected) {
+      return (item.code ? '<span style="font-size:11px;padding:1px 6px;border-radius:4px;background:var(--accent-lt);color:var(--accent);font-family:var(--mono);margin-right:6px;white-space:nowrap">' + escHtml(item.code) + '</span>' : '') +
+        '<span>' + escHtml(item.name) + '</span>';
+    }
   }, function(ids) {
     API.put('/maintenance/projects/' + _comboCurCode + '/products', { ids: ids }).then(function() { loadMaintProjectProducts(); });
   });
