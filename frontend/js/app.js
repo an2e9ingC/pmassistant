@@ -1471,8 +1471,8 @@ function _renderUcFilterBar() {
   var projs = Object.keys(projSet).sort();
   var prods = Object.keys(prodSet).sort();
   var tabs = [{k:'all',l:'全部',c:_ucTasks.length},{k:'todo',l:'待办',c:counts.todo||0},{k:'in_progress',l:'进行中',c:counts.in_progress||0},{k:'review',l:'评审中',c:counts.review||0},{k:'done',l:'已完成',c:counts.done||0}];
-  var prodSel = prods.length ? '<select class="proj-select" onchange="_ucFilterProd=this.value;_renderUcTaskTable()"><option value="">全部产品</option>' + prods.map(function(p) { return '<option value="'+escHtml(p)+'"'+(_ucFilterProd===p?' selected':'')+'>'+escHtml(p)+'</option>'; }).join('') + '</select>' : '';
-  var projSel = projs.length ? '<select class="proj-select" onchange="_ucFilterProj=this.value;_renderUcTaskTable()"><option value="">全部项目</option>' + projs.map(function(p) { return '<option value="'+escHtml(p)+'"'+(_ucFilterProj===p?' selected':'')+'>'+escHtml(p)+'</option>'; }).join('') + '</select>' : '';
+  var prodSel = prods.length ? '<select class="proj-select" onchange="_ucFilterProd=this.value;_renderUcTaskTable();_ucRefreshTaskStats()"><option value="">全部产品</option>' + prods.map(function(p) { return '<option value="'+escHtml(p)+'"'+(_ucFilterProd===p?' selected':'')+'>'+escHtml(p)+'</option>'; }).join('') + '</select>' : '';
+  var projSel = projs.length ? '<select class="proj-select" onchange="_ucFilterProj=this.value;_renderUcTaskTable();_ucRefreshTaskStats()"><option value="">全部项目</option>' + projs.map(function(p) { return '<option value="'+escHtml(p)+'"'+(_ucFilterProj===p?' selected':'')+'>'+escHtml(p)+'</option>'; }).join('') + '</select>' : '';
   document.getElementById('uc-tasks-filter-bar').innerHTML =
     '<div class="task-tabs">' + tabs.map(function(t) { return '<button class="task-tab' + (_ucFilterStatus===t.k?' active':'') + '" onclick="_ucSetFilter(\''+t.k+'\')">'+t.l+'<span class="task-tab-count">'+t.c+'</span></button>'; }).join('') + '</div>' +
     prodSel + projSel;
@@ -1636,6 +1636,10 @@ function _ucLoadBugStats() {
     var filtered = _ucBugTab === 'assignee'
       ? (bugs||[]).filter(function(b) { return b.assignee_id === uid; })
       : (bugs||[]).filter(function(b) { return b.reporter_id === uid; });
+    // Apply product/project/status filters from dropdowns
+    if (_ucBugFilterStatus) filtered = filtered.filter(function(b) { return (b.status || 'open') === _ucBugFilterStatus; });
+    if (_ucBugFilterProd) filtered = filtered.filter(function(b) { return b.product_name === _ucBugFilterProd; });
+    if (_ucBugFilterProj) filtered = filtered.filter(function(b) { return b.project_name === _ucBugFilterProj; });
     // Exclude resolved/closed
     var activeBugs = filtered.filter(function(b) { return b.status !== 'resolved' && b.status !== 'closed'; });
     var title = (_ucBugTab === 'assignee' ? '待我处理' : '我创建的') + ' · 产品分布（活跃）';
@@ -1670,9 +1674,15 @@ function _ucBuildTaskStats() {
     {key:'done',label:'已完成',color:'var(--success)'},
   ];
   var tasks = _ucTasks || [];
-  // Apply status filter
+  // Apply filters
   if (_ucFilterStatus && _ucFilterStatus !== 'all') {
     tasks = tasks.filter(function(t) { return (t.status || 'todo') === _ucFilterStatus; });
+  }
+  if (_ucFilterProd) {
+    tasks = tasks.filter(function(t) { return t.product_name === _ucFilterProd; });
+  }
+  if (_ucFilterProj) {
+    tasks = tasks.filter(function(t) { return t.project_name === _ucFilterProj; });
   }
   var totalTasks = tasks.length;
   if (typeof _buildPieChart !== 'function') return '';

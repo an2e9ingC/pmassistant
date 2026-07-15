@@ -231,6 +231,7 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-07-15 | v2026.07.15-beta54 | fix: 个人中心任务+Bug统计根据过滤条件动态更新 |
 | 2026-07-15 | v2026.07.15-beta53 | style: projCodeTag新增projectName tooltip+产品关联项目改为编号标签 |
 | 2026-07-15 | v2026.07.15-beta52 | style: 个人中心任务+Bug列表列对齐+标准控件+pill去点+sticky表头 |
 | 2026-07-15 | v2026.07.15-beta51 | fix: Bug详情页面优化+resolve_product支持ID fallback |
