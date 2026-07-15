@@ -4,7 +4,7 @@ import time
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 
-from fastapi import FastAPI, Depends, HTTPException, Request
+from fastapi import FastAPI, Depends, HTTPException, Request, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response
@@ -202,6 +202,29 @@ def serve_attachment(attachment_id: int, db: Session = Depends(_gdb)):
     path, mime, fname = result
     return StreamingResponse(open(path, "rb"), media_type=mime,
                              headers={"Content-Disposition": f"inline; filename={fname}"})
+
+# ── Note image upload ──
+import uuid as _uuid
+_NOTE_IMG_DIR = _os.path.join("data", "uploads", "note_images")
+_os.makedirs(_NOTE_IMG_DIR, exist_ok=True)
+
+@app.post("/api/note-images")
+async def upload_note_image(file: UploadFile = File(...), user=Depends(_gcu)):
+    import imghdr
+    data = await file.read()
+    # Validate it's an image
+    fmt = imghdr.what(None, h=data)
+    if fmt not in ("png", "jpeg", "gif", "webp", "bmp"):
+        raise HTTPException(status_code=400, detail="仅支持 PNG/JPEG/GIF/WebP/BMP 图片")
+    if len(data) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="图片不能超过 5MB")
+    ext = {"jpeg": "jpg"}.get(fmt, fmt)
+    fname = f"{_uuid.uuid4().hex}.{ext}"
+    with open(_os.path.join(_NOTE_IMG_DIR, fname), "wb") as f:
+        f.write(data)
+    return {"code": 0, "data": {"url": f"/api/note-images/{fname}"}, "message": "ok"}
+
+app.mount("/api/note-images", StaticFiles(directory=_NOTE_IMG_DIR), name="note-images")
 
 # Static files (frontend)
 app.mount("/css", StaticFiles(directory="frontend/css"), name="css")

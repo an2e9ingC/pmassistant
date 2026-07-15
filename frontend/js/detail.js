@@ -1304,7 +1304,10 @@ function buildNotes(notes) {
     notes.forEach(function(n) {
       var isMine = n.recorded_by === currentUser;
       var isReply = !!n.parent_id;
+      var hasImage = /!\[.*\]\(.*\)/.test(n.content);
+      var plainText = stripHtml(renderMarkdown ? renderMarkdown(n.content) : n.content).substring(0, 80);
       var actions = '';
+      actions += '<span style="cursor:pointer;font-size:12px;color:var(--accent);margin-right:4px" onclick="openViewNoteDialog(' + n.id + ')" title="查看">👁</span>';
       if (isMine) {
         actions += iconEdit('openEditNoteDialog(' + n.id + ')', '编辑') +
                    iconDelete('deleteProjectNote(' + n.id + ')', '删除');
@@ -1313,12 +1316,13 @@ function buildNotes(notes) {
       }
       var indentStyle = isReply ? 'padding-left:28px;border-left:3px solid var(--accent-lt)' : '';
       var replyMark = isReply ? '<span style="font-size:10px;color:var(--accent);margin-right:4px">↳ 回复</span>' : '';
+      var imgBadge = hasImage ? ' <span style="font-size:10px">📷</span>' : '';
       var timeCell = (n.created_at || '') + (n.updated_at ? '<div style="font-size:9px;color:var(--warn)">编辑过</div>' : '');
       tableHtml += '<tr style="' + indentStyle + '">' +
         '<td style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">' + timeCell + '</td>' +
         '<td style="font-size:12px">' + escHtml(n.stage_name || '项目整体') + '</td>' +
         '<td style="font-size:12.5px;font-weight:540">' + escHtml(n.recorded_by || '') + '</td>' +
-        '<td style="font-size:13px;line-height:1.5;white-space:pre-wrap;text-align:left">' + replyMark + escHtml(n.content) + '</td>' +
+        '<td style="font-size:13px;line-height:1.5;text-align:left">' + replyMark + escHtml(plainText) + (n.content.length > 80 ? '...' : '') + imgBadge + '</td>' +
         '<td style="white-space:nowrap">' + actions + '</td>' +
       '</tr>';
     });
@@ -1334,6 +1338,7 @@ async function openNoteDialog() {
   if (!_comboCurCode) return;
 
   // Fetch stages for the selector
+  _clearNoteImagePreviews('note-dialog-input-img-preview');
   var stagesHtml = '<option value="">请选择阶段...</option>';
   try {
     var result = await API.get('/projects/' + _comboCurCode + '/stages');
@@ -1347,7 +1352,7 @@ async function openNoteDialog() {
 
   var overlay = document.createElement('div');
   overlay.className = 'note-dialog-overlay';
-  overlay.innerHTML = '<div class="note-dialog">' +
+  overlay.innerHTML = '<div class="note-dialog" style="width:80vw;max-width:80vw;max-height:90vh;overflow-y:auto">' +
     '<div class="note-dialog-head">' +
       '<span class="note-dialog-title">添加项目笔记</span>' +
       '<button class="note-dialog-close" onclick="closeNoteDialog()">&times;</button>' +
@@ -1356,7 +1361,9 @@ async function openNoteDialog() {
       '<label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">涉及阶段</label>' +
       '<select id="note-dialog-stage" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;box-sizing:border-box">' + stagesHtml + '</select>' +
     '</div>' +
-    '<textarea id="note-dialog-input" style="width:100%;min-height:100px;box-sizing:border-box;padding:10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;resize:vertical;font-family:var(--font)" placeholder="记录项目关键信息：会议纪要、采购问题、交付调整等..."></textarea>' +
+    '<textarea id="note-dialog-input" style="width:100%;min-height:60px;height:auto;max-height:30vh;box-sizing:border-box;padding:10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;resize:vertical;font-family:var(--font)" placeholder="记录项目关键信息：会议纪要、采购问题、交付调整等..."></textarea>' +
+    '<div style="font-size:10px;color:var(--muted);margin-top:2px">支持粘贴图片 (Ctrl+V)和大小调整</div>' +
+    '<div id="note-dialog-input-img-preview" style="margin-top:4px;min-height:0;max-height:50vh;overflow-y:auto"></div>' +
     '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:12px">' +
       '<span id="note-dialog-msg" style="font-size:11px"></span>' +
       '<button class="btn" onclick="closeNoteDialog()" style="font-size:12px">取消</button>' +
@@ -1366,7 +1373,8 @@ async function openNoteDialog() {
   document.body.appendChild(overlay);
   setTimeout(function() {
     var inp = document.getElementById('note-dialog-input');
-    if (inp) inp.focus();
+    if (inp) { inp.focus(); }
+    initNoteImagePaste('note-dialog-input');
   }, 100);
 }
 
@@ -1375,14 +1383,49 @@ function closeNoteDialog() {
   if (overlay) overlay.remove();
 }
 
-/* Edit / Reply / Delete notes */
+/* ── View Note Dialog ── */
 
-function openEditNoteDialog(noteId) {
+function openViewNoteDialog(noteId) {
   if (!_comboCurCode) return;
   API.get('/projects/' + _comboCurCode + '/notes').then(function(result) {
     var notes = (result && result.length) ? result : [];
     var note = notes.find(function(n) { return n.id === noteId; });
     if (!note) { showToast('笔记不存在', 'error'); return; }
+    // Pre-process custom image size syntax: ![](url =Wx) → <img>
+    var content = note.content.replace(/!\[\]\((\/api\/note-images\/[^) ]+)\s*=(\d+)x\)/g, '<img src="$1" style="width:$2px;max-width:100%">');
+    var contentHtml = (typeof renderMarkdown === 'function') ? renderMarkdown(content) : '<pre>' + escHtml(content) + '</pre>';
+    var dialog = document.createElement('div');
+    dialog.className = 'note-dialog-overlay';
+    dialog.innerHTML = '<div class="note-dialog" style="max-width:75vw;width:75vw">' +
+      '<div class="note-dialog-head">' +
+        '<span class="note-dialog-title">查看笔记</span>' +
+        '<button class="note-dialog-close" onclick="this.closest(\'.note-dialog-overlay\').remove()">&times;</button>' +
+      '</div>' +
+      '<div style="margin-bottom:8px;display:flex;gap:16px;font-size:11px;color:var(--muted)">' +
+        '<span>阶段: ' + escHtml(note.stage_name || '项目整体') + '</span>' +
+        '<span>作者: ' + escHtml(note.recorded_by || '') + '</span>' +
+        '<span>时间: ' + escHtml(note.created_at || '') + (note.updated_at ? ' (编辑过)' : '') + '</span>' +
+      '</div>' +
+      '<div style="max-height:70vh;overflow-y:auto;padding:12px;background:var(--bg);border-radius:8px;font-size:13px;line-height:1.7" class="markdown-body">' + contentHtml + '</div>' +
+      '<div style="display:flex;justify-content:flex-end;margin-top:12px">' +
+        '<button class="btn" onclick="this.closest(\'.note-dialog-overlay\').remove()">关闭</button>' +
+      '</div>' +
+    '</div>';
+    document.body.appendChild(dialog);
+  });
+}
+
+/* Edit / Reply / Delete notes */
+
+function openEditNoteDialog(noteId) {
+  if (!_comboCurCode) return;
+  _clearNoteImagePreviews('edit-note-content-img-preview');
+  API.get('/projects/' + _comboCurCode + '/notes').then(function(result) {
+    var notes = (result && result.length) ? result : [];
+    var note = notes.find(function(n) { return n.id === noteId; });
+    if (!note) { showToast('笔记不存在', 'error'); return; }
+    // Load existing images into preview
+    setTimeout(function() { _loadExistingNoteImages(note.content, 'edit-note-content-img-preview'); }, 150);
     var stagesHtml = '<option value="">请选择阶段...</option>';
     // Re-fetch stages for the dropdown
     API.get('/projects/' + _comboCurCode + '/stages').then(function(r) {
@@ -1396,10 +1439,13 @@ function openEditNoteDialog(noteId) {
           '<label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">涉及阶段</label>' +
           '<select id="edit-note-stage" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;box-sizing:border-box">' + stagesHtml + '</select>' +
         '</div>' +
-        '<textarea id="edit-note-content" style="width:100%;min-height:100px;box-sizing:border-box;padding:10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;resize:vertical;font-family:var(--font)">' + escHtml(note.content) + '</textarea>',
+        '<textarea id="edit-note-content" style="width:100%;min-height:60px;height:auto;max-height:30vh;box-sizing:border-box;padding:10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;resize:vertical;font-family:var(--font)">' + escHtml(note.content) + '</textarea>' +
+        '<div style="font-size:10px;color:var(--muted);margin-top:2px">支持粘贴图片 (Ctrl+V)和大小调整</div>' +
+        '<div id="edit-note-content-img-preview" style="margin-top:4px;min-height:0;max-height:50vh;overflow-y:auto"></div>',
         [{text: '取消', onclick: 'closeSharedDialog()'},
          {text: '保存', cls: 'btn-primary', onclick: 'saveEditNote(' + noteId + ')'}],
-        {hideClose: true});
+        {maxWidth: '80vw', maxHeight: '90vh', hideClose: true});
+    setTimeout(function() { initNoteImagePaste('edit-note-content'); }, 100);
     });
   });
 }
@@ -1408,6 +1454,7 @@ async function saveEditNote(noteId) {
   var content = document.getElementById('edit-note-content').value.trim();
   var stage = document.getElementById('edit-note-stage').value;
   if (!content) { showToast('请输入内容', 'error'); return; }
+  content = await _uploadNoteImages(content);
   closeSharedDialog();
   try {
     await API.put('/projects/' + _comboCurCode + '/notes/' + noteId, {content: content, stage_name: stage});
@@ -1419,6 +1466,7 @@ async function saveEditNote(noteId) {
 
 function openReplyNoteDialog(parentId) {
   if (!_comboCurCode) return;
+  _clearNoteImagePreviews('reply-note-content-img-preview');
   // Fetch parent note for context
   API.get('/projects/' + _comboCurCode + '/notes').then(function(result) {
     var notes = (result && result.length) ? result : [];
@@ -1430,16 +1478,20 @@ function openReplyNoteDialog(parentId) {
         '回复 <b>' + escHtml(parent.recorded_by) + '</b> 的笔记（' + escHtml(stageLabel) + '）<br>' +
         '<span style="color:var(--fg)">' + escHtml(parent.content.substring(0, 80)) + (parent.content.length > 80 ? '...' : '') + '</span>' +
       '</div>' +
-      '<textarea id="reply-note-content" style="width:100%;min-height:80px;box-sizing:border-box;padding:10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;resize:vertical;font-family:var(--font)" placeholder="输入回复..."></textarea>',
+      '<textarea id="reply-note-content" style="width:100%;min-height:60px;height:auto;max-height:30vh;box-sizing:border-box;padding:10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;resize:vertical;font-family:var(--font)" placeholder="输入回复..."></textarea>' +
+      '<div style="font-size:10px;color:var(--muted);margin-top:2px">支持粘贴图片 (Ctrl+V)和大小调整</div>' +
+      '<div id="reply-note-content-img-preview" style="margin-top:4px;min-height:0;max-height:50vh;overflow-y:auto"></div>',
       [{text: '取消', onclick: 'closeSharedDialog()'},
        {text: '回复', cls: 'btn-primary', onclick: 'submitReplyNote(' + parentId + ',\'' + escHtml(stageLabel).replace(/'/g, "\\'") + '\')'}],
-      {hideClose: true});
+      {maxWidth: '80vw', maxHeight: '90vh', hideClose: true});
+    setTimeout(function() { initNoteImagePaste('reply-note-content'); }, 100);
   });
 }
 
 async function submitReplyNote(parentId, stageName) {
   var content = document.getElementById('reply-note-content').value.trim();
   if (!content) { showToast('请输入回复内容', 'error'); return; }
+  content = await _uploadNoteImages(content);
   closeSharedDialog();
   try {
     await API.post('/projects/' + _comboCurCode + '/notes', {content: content, stage_name: stageName, parent_id: parentId});
@@ -1469,6 +1521,7 @@ async function submitNote() {
   if (!stage) { msg.innerHTML = '<span style="color:var(--danger)">请选择涉及阶段</span>'; return; }
   if (!_comboCurCode) return;
 
+  content = await _uploadNoteImages(content);
   try {
     msg.innerHTML = '<span style="color:var(--muted)">保存中...</span>';
     await API.post('/projects/' + _comboCurCode + '/notes', { content: content, stage_name: stage });

@@ -281,6 +281,8 @@ def delete_product_note(
     has_replies = db.query(ProductNote).filter(ProductNote.parent_id == note_id).first()
     if has_replies:
         raise HTTPException(status_code=400, detail="该笔记有回复，不能删除")
+    from backend.routers.projects import _delete_note_images
+    _delete_note_images(note.content)
     db.delete(note)
     db.commit()
     log_product_activity(db, product.id, user.username, "删除笔记", f"note_id:{note_id}")

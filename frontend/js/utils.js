@@ -317,3 +317,172 @@ function renderProjectIdBlock(name, customerName) {
   }
   return html;
 }
+
+/* ── Note Image Paste + Upload ── */
+
+function initNoteImagePaste(textareaId) {
+  var ta = document.getElementById(textareaId);
+  if (!ta) return;
+  // Auto-resize textarea on input (grow with content, capped at max-height)
+  ta.style.overflowY = 'hidden';
+  ta.addEventListener('input', function() {
+    ta.style.height = 'auto';
+    ta.style.height = ta.scrollHeight + 'px';
+  });
+  var previewId = textareaId + '-img-preview';
+  ta.addEventListener('paste', function(e) {
+    var items = (e.clipboardData || e.originalEvent.clipboardData).items;
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') === 0) {
+        e.preventDefault();
+        var blob = items[i].getAsFile();
+        var reader = new FileReader();
+        reader.onload = function(ev) {
+          var dataUrl = ev.target.result;
+          var idx = _noteImgCounter++;
+          // Store image data
+          window._noteImages = window._noteImages || {};
+          window._noteImages[idx] = { dataUrl: dataUrl, width: null };
+          // Insert placeholder in textarea
+          var start = ta.selectionStart;
+          var end = ta.selectionEnd;
+          var text = ta.value;
+          var placeholder = '[img-' + idx + ']';
+          ta.value = text.substring(0, start) + placeholder + text.substring(end);
+          ta.selectionStart = ta.selectionEnd = start + placeholder.length;
+          // Add resizable image to preview
+          _addNoteImagePreview(previewId, idx, dataUrl);
+          ta.dispatchEvent(new Event('input'));
+        };
+        reader.readAsDataURL(blob);
+        return;
+      }
+    }
+  });
+}
+var _noteImgCounter = 0;
+
+function _addNoteImagePreview(previewId, idx, dataUrl) {
+  var container = document.getElementById(previewId);
+  if (!container) return;
+  var wrap = document.createElement('div');
+  wrap.style.cssText = 'position:relative;display:inline-block;margin:4px;vertical-align:top';
+  wrap.id = 'img-wrap-' + idx;
+  var img = document.createElement('img');
+  img.src = dataUrl;
+  img.style.cssText = 'max-width:100%;height:auto;border:1px solid var(--border);border-radius:4px;cursor:default';
+  img.style.width = '200px';  // default size
+  window._noteImages[idx].width = 200;
+  // Resize handle
+  var handle = document.createElement('div');
+  handle.style.cssText = 'position:absolute;right:0;bottom:0;width:10px;height:10px;background:var(--accent);cursor:se-resize;border-radius:0 0 4px 0';
+  handle.title = '拖拽调整大小';
+  // Drag resize logic
+  var startX, startY, startW;
+  handle.addEventListener('mousedown', function(ev) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    startX = ev.clientX;
+    startY = ev.clientY;
+    startW = img.offsetWidth;
+    function onMove(me) {
+      var newW = Math.max(40, startW + (me.clientX - startX));
+      img.style.width = newW + 'px';
+      window._noteImages[idx].width = newW;
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+  // Remove button
+  var delBtn = document.createElement('button');
+  delBtn.textContent = '×';
+  delBtn.style.cssText = 'position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;border:1px solid var(--danger);background:var(--surface);color:var(--danger);font-size:11px;line-height:1;cursor:pointer';
+  delBtn.title = '移除图片';
+  delBtn.onclick = function() {
+    var imgData = (window._noteImages || {})[idx];
+    wrap.remove();
+    delete (window._noteImages || {})[idx];
+    var ta = document.getElementById(textareaId);
+    if (!ta) return;
+    if (imgData && imgData.uploaded) {
+      // Remove existing markdown image syntax
+      var escaped = imgData.dataUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      var re = new RegExp('!\\[\\]\\(' + escaped + '\\s*=\\d+x\\)', 'g');
+      ta.value = ta.value.replace(re, '');
+    } else {
+      ta.value = ta.value.replace('[img-' + idx + ']', '');
+    }
+  };
+  wrap.appendChild(img);
+  wrap.appendChild(handle);
+  wrap.appendChild(delBtn);
+  container.appendChild(wrap);
+}
+
+// Parse existing images in content and add them to preview
+function _loadExistingNoteImages(content, previewId) {
+  var regex = /!\[\]\((\/api\/note-images\/[^) ]+)\s*=(\d+)x\)/g;
+  var match;
+  while ((match = regex.exec(content)) !== null) {
+    var url = match[1];
+    var width = parseInt(match[2]) || 200;
+    var idx = _noteImgCounter++;
+    window._noteImages = window._noteImages || {};
+    window._noteImages[idx] = { dataUrl: url, width: width, uploaded: true };
+    _addNoteImagePreview(previewId, idx, url);
+  }
+}
+
+function _clearNoteImagePreviews(previewId) {
+  var container = document.getElementById(previewId);
+  if (container) container.innerHTML = '';
+  window._noteImages = {};
+  _noteImgCounter = 0;
+}
+
+// Upload new images, update size for existing images
+async function _uploadNoteImages(content) {
+  var imgs = window._noteImages || {};
+  // Process new images (base64 data URLs)
+  var newRegex = /\[img-(\d+)\]/g;
+  var match;
+  while ((match = newRegex.exec(content)) !== null) {
+    var idx = parseInt(match[1]);
+    var imgData = imgs[idx];
+    if (!imgData || imgData.uploaded) continue;
+    try {
+      var resp = await fetch(imgData.dataUrl);
+      var blob = await resp.blob();
+      var formData = new FormData();
+      formData.append('file', blob, 'image.' + (blob.type.split('/')[1] || 'png'));
+      var uploadResp = await fetch('/api/note-images', { method: 'POST', body: formData, headers: { 'Authorization': 'Bearer ' + (API.token || localStorage.getItem('pma_token')) } });
+      var uploadJson = await uploadResp.json();
+      if (uploadJson.code === 0 && uploadJson.data && uploadJson.data.url) {
+        var md = imgData.width ? '![](' + uploadJson.data.url + ' =' + imgData.width + 'x)' : '![](' + uploadJson.data.url + ')';
+        content = content.replace('[img-' + idx + ']', md);
+        imgData.dataUrl = uploadJson.data.url;
+        imgData.uploaded = true;
+      }
+    } catch(e) { /* keep placeholder if upload fails */ }
+  }
+  // Update width for existing images: find all ![](url =Wx) and update W from _noteImages
+  var existingRegex = /!\[\]\((\/api\/note-images\/[^) ]+)\s*=(\d+)x\)/g;
+  var existingMatch;
+  while ((existingMatch = existingRegex.exec(content)) !== null) {
+    var url = existingMatch[1];
+    for (var key in imgs) {
+      if (imgs[key].dataUrl === url) {
+        var w = imgs[key].width;
+        if (w && parseInt(existingMatch[2]) !== w) {
+          content = content.replace(existingMatch[0], '![](' + url + ' =' + w + 'x)');
+        }
+        break;
+      }
+    }
+  }
+  return content;
+}

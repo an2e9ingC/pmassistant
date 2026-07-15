@@ -597,7 +597,10 @@ function renderProductNotes(notes) {
   notes.forEach(function(n) {
     var isMine = n.recorded_by === currentUser;
     var isReply = !!n.parent_id;
+    var hasImage = /!\[.*\]\(.*\)/.test(n.content);
+    var plainText = stripHtml(renderMarkdown ? renderMarkdown(n.content) : n.content).substring(0, 80);
     var actions = '';
+    actions += '<span style="cursor:pointer;font-size:12px;color:var(--accent);margin-right:4px" onclick="openViewProdNoteDialog(' + n.id + ')" title="查看">👁</span>';
     if (isMine) {
       actions += iconEdit('openEditProdNoteDialog(' + n.id + ')', '编辑') +
                  iconDelete('deleteProductNote(' + n.id + ')', '删除');
@@ -606,12 +609,13 @@ function renderProductNotes(notes) {
     }
     var indentStyle = isReply ? 'padding-left:28px;border-left:3px solid var(--accent-lt)' : '';
     var replyMark = isReply ? '<span style="font-size:10px;color:var(--accent);margin-right:4px">↳ 回复</span>' : '';
+    var imgBadge = hasImage ? ' <span style="font-size:10px">📷</span>' : '';
     var timeCell = (n.created_at || '') + (n.updated_at ? '<div style="font-size:9px;color:var(--warn)">编辑过</div>' : '');
     html += '<tr style="' + indentStyle + '">' +
       '<td style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">' + timeCell + '</td>' +
       '<td style="font-size:12px">' + escHtml(n.category || '不涉及') + '</td>' +
       '<td style="font-size:12.5px;font-weight:540">' + escHtml(n.recorded_by || '') + '</td>' +
-      '<td style="font-size:13px;line-height:1.5;white-space:pre-wrap;text-align:left">' + replyMark + escHtml(n.content) + '</td>' +
+      '<td style="font-size:13px;line-height:1.5;text-align:left">' + replyMark + escHtml(plainText) + (n.content.length > 80 ? '...' : '') + imgBadge + '</td>' +
       '<td style="white-space:nowrap">' + actions + '</td>' +
     '</tr>';
   });
@@ -619,7 +623,34 @@ function renderProductNotes(notes) {
   el.innerHTML = html;
 }
 
+function openViewProdNoteDialog(noteId) {
+  if (!_prodDetailCurCode) return;
+  API.get('/products/' + _prodDetailCurCode + '/notes').then(function(result) {
+    var notes = (result && result.length) ? result : [];
+    var note = notes.find(function(n) { return n.id === noteId; });
+    if (!note) { showToast('笔记不存在', 'error'); return; }
+    var content = note.content.replace(/!\[\]\((\/api\/note-images\/[^) ]+)\s*=(\d+)x\)/g, '<img src="$1" style="width:$2px;max-width:100%">');
+    var contentHtml = (typeof renderMarkdown === 'function') ? renderMarkdown(content) : '<pre>' + escHtml(content) + '</pre>';
+    var dialog = document.createElement('div');
+    dialog.className = 'note-dialog-overlay';
+    dialog.innerHTML = '<div class="note-dialog" style="max-width:75vw;width:75vw">' +
+      '<div class="note-dialog-head"><span class="note-dialog-title">查看笔记</span>' +
+        '<button class="note-dialog-close" onclick="this.closest(\'.note-dialog-overlay\').remove()">&times;</button></div>' +
+      '<div style="margin-bottom:8px;display:flex;gap:16px;font-size:11px;color:var(--muted)">' +
+        '<span>领域: ' + escHtml(note.category || '不涉及') + '</span>' +
+        '<span>作者: ' + escHtml(note.recorded_by || '') + '</span>' +
+        '<span>时间: ' + escHtml(note.created_at || '') + '</span>' +
+      '</div>' +
+      '<div style="max-height:70vh;overflow-y:auto;padding:12px;background:var(--bg);border-radius:8px;font-size:13px;line-height:1.7" class="markdown-body">' + contentHtml + '</div>' +
+      '<div style="display:flex;justify-content:flex-end;margin-top:12px">' +
+        '<button class="btn" onclick="this.closest(\'.note-dialog-overlay\').remove()">关闭</button>' +
+      '</div></div>';
+    document.body.appendChild(dialog);
+  });
+}
+
 async function showAddProductNoteDialog() {
+  _clearNoteImagePreviews('prod-note-content-img-preview');
   // Fetch note categories from product doc template stage_types
   var categoriesHtml = '<option value="">请选择领域...</option>';
   try {
@@ -636,14 +667,17 @@ async function showAddProductNoteDialog() {
       '<label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">涉及领域</label>' +
       '<select id="prod-note-category" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;box-sizing:border-box">' + categoriesHtml + '</select>' +
     '</div>' +
-    '<textarea id="prod-note-content" style="width:100%;min-height:100px;box-sizing:border-box;padding:10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;resize:vertical;font-family:var(--font)" placeholder="记录产品关键信息..."></textarea>' +
+    '<textarea id="prod-note-content" style="width:100%;min-height:60px;height:auto;max-height:30vh;box-sizing:border-box;padding:10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;resize:vertical;font-family:var(--font)" placeholder="记录产品关键信息..."></textarea>' +
+    '<div style="font-size:10px;color:var(--muted);margin-top:2px">支持粘贴图片 (Ctrl+V)和大小调整</div>' +
+    '<div id="prod-note-content-img-preview" style="margin-top:4px;min-height:0;max-height:50vh;overflow-y:auto"></div>' +
     '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:12px">' +
       '<span id="prod-note-msg" style="font-size:11px"></span>' +
       '<button class="btn" onclick="document.querySelector(\'.shared-dialog-overlay\').remove()" style="font-size:12px">取消</button>' +
       '<button class="btn btn-primary" onclick="addProductNote()" style="font-size:12px">保存</button>' +
     '</div>',
     null,
-    {hideClose: true});
+    {maxWidth: '80vw', maxHeight: '90vh', hideClose: true});
+  setTimeout(function() { initNoteImagePaste('prod-note-content'); }, 100);
 }
 
 async function addProductNote() {
@@ -651,6 +685,7 @@ async function addProductNote() {
   var category = document.getElementById('prod-note-category').value;
   if (!content) { showToast('请输入笔记内容', 'error'); return; }
   if (!category) { showToast('请选择涉及领域', 'error'); return; }
+  content = await _uploadNoteImages(content);
   closeSharedDialog();
   try {
     await API.post('/products/' + _prodDetailCurCode + '/notes', {content: content, category: category});
@@ -677,10 +712,12 @@ async function deleteProductNote(noteId) {
 
 function openEditProdNoteDialog(noteId) {
   if (!_prodDetailCurCode) return;
+  _clearNoteImagePreviews('edit-prod-note-content-img-preview');
   API.get('/products/' + _prodDetailCurCode + '/notes').then(function(result) {
     var notes = (result && result.length) ? result : [];
     var note = notes.find(function(n) { return n.id === noteId; });
     if (!note) { showToast('笔记不存在', 'error'); return; }
+    setTimeout(function() { _loadExistingNoteImages(note.content, 'edit-prod-note-content-img-preview'); }, 150);
     // Fetch categories
     var catsHtml = '<option value="">请选择领域...</option>';
     API.get('/products/' + _prodDetailCurCode + '/note-categories').then(function(cats) {
@@ -695,12 +732,13 @@ function openEditProdNoteDialog(noteId) {
           '<label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">涉及领域</label>' +
           '<select id="edit-prod-note-cat" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;box-sizing:border-box">' + catsHtml + '</select>' +
         '</div>' +
-        '<textarea id="edit-prod-note-content" style="width:100%;min-height:100px;box-sizing:border-box;padding:10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;resize:vertical;font-family:var(--font)">' + escHtml(note.content) + '</textarea>' +
-        '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:12px">' +
-          '<button class="btn" onclick="closeSharedDialog()" style="font-size:12px">取消</button>' +
-          '<button class="btn btn-primary" onclick="saveEditProdNote(' + noteId + ')" style="font-size:12px">保存</button>' +
-        '</div>',
-        null, {hideClose: true});
+        '<textarea id="edit-prod-note-content" style="width:100%;min-height:60px;height:auto;max-height:30vh;box-sizing:border-box;padding:10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;resize:vertical;font-family:var(--font)">' + escHtml(note.content) + '</textarea>' +
+        '<div style="font-size:10px;color:var(--muted);margin-top:2px">支持粘贴图片 (Ctrl+V)和大小调整</div>' +
+        '<div id="edit-prod-note-content-img-preview" style="margin-top:4px;min-height:0;max-height:50vh;overflow-y:auto"></div>',
+        [{text: '取消', onclick: 'closeSharedDialog()'},
+         {text: '保存', cls: 'btn-primary', onclick: 'saveEditProdNote(' + noteId + ')'}],
+        {maxWidth: '80vw', maxHeight: '90vh', hideClose: true});
+    setTimeout(function() { initNoteImagePaste('edit-prod-note-content'); }, 100);
     });
   });
 }
@@ -709,6 +747,7 @@ async function saveEditProdNote(noteId) {
   var content = document.getElementById('edit-prod-note-content').value.trim();
   var category = document.getElementById('edit-prod-note-cat').value;
   if (!content) { showToast('请输入内容', 'error'); return; }
+  content = await _uploadNoteImages(content);
   closeSharedDialog();
   try {
     await API.put('/products/' + _prodDetailCurCode + '/notes/' + noteId, {content: content, category: category});
@@ -720,6 +759,7 @@ async function saveEditProdNote(noteId) {
 
 function openReplyProdNoteDialog(parentId) {
   if (!_prodDetailCurCode) return;
+  _clearNoteImagePreviews('reply-prod-note-content-img-preview');
   API.get('/products/' + _prodDetailCurCode + '/notes').then(function(result) {
     var notes = (result && result.length) ? result : [];
     var parent = notes.find(function(n) { return n.id === parentId; });
@@ -730,18 +770,20 @@ function openReplyProdNoteDialog(parentId) {
         '回复 <b>' + escHtml(parent.recorded_by) + '</b> 的笔记（' + escHtml(catLabel) + '）<br>' +
         '<span style="color:var(--fg)">' + escHtml(parent.content.substring(0, 80)) + (parent.content.length > 80 ? '...' : '') + '</span>' +
       '</div>' +
-      '<textarea id="reply-prod-note-content" style="width:100%;min-height:80px;box-sizing:border-box;padding:10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;resize:vertical;font-family:var(--font)" placeholder="输入回复..."></textarea>' +
-      '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:12px">' +
-        '<button class="btn" onclick="closeSharedDialog()" style="font-size:12px">取消</button>' +
-        '<button class="btn btn-primary" onclick="submitReplyProdNote(' + parentId + ',\'' + escHtml(catLabel).replace(/'/g, "\\'") + '\')" style="font-size:12px">回复</button>' +
-      '</div>',
-      null, {hideClose: true});
+      '<textarea id="reply-prod-note-content" style="width:100%;min-height:60px;height:auto;max-height:30vh;box-sizing:border-box;padding:10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;resize:vertical;font-family:var(--font)" placeholder="输入回复..."></textarea>' +
+      '<div style="font-size:10px;color:var(--muted);margin-top:2px">支持粘贴图片 (Ctrl+V)和大小调整</div>' +
+      '<div id="reply-prod-note-content-img-preview" style="margin-top:4px;min-height:0;max-height:50vh;overflow-y:auto"></div>',
+      [{text: '取消', onclick: 'closeSharedDialog()'},
+       {text: '回复', cls: 'btn-primary', onclick: 'submitReplyProdNote(' + parentId + ',\'' + escHtml(catLabel).replace(/'/g, "\\'") + '\')'}],
+      {maxWidth: '80vw', maxHeight: '90vh', hideClose: true});
+    setTimeout(function() { initNoteImagePaste('reply-prod-note-content'); }, 100);
   });
 }
 
 async function submitReplyProdNote(parentId, category) {
   var content = document.getElementById('reply-prod-note-content').value.trim();
   if (!content) { showToast('请输入回复内容', 'error'); return; }
+  content = await _uploadNoteImages(content);
   closeSharedDialog();
   try {
     await API.post('/products/' + _prodDetailCurCode + '/notes', {content: content, category: category, parent_id: parentId});

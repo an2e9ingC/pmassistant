@@ -11,7 +11,23 @@ from backend.models.local import ProjectNote, ProjectActivity
 from backend.models.zentao import CachedProject, CachedExecution
 from backend.services.entity_resolver import resolve_project
 from backend.services.project_service import log_project_activity
+from backend.routers.logs import log_audit
+from backend.audit_categories import AUDIT_CAT_PROJECT
 from backend.services import project_service
+import re as _re, os as _os
+
+
+def _delete_note_images(content: str):
+    """Delete image files referenced in note content from disk."""
+    if not content:
+        return
+    for m in _re.finditer(r'/api/note-images/([a-f0-9]+\.\w+)', content or ""):
+        fpath = _os.path.join("data", "uploads", "note_images", m.group(1))
+        if _os.path.exists(fpath):
+            try:
+                _os.remove(fpath)
+            except OSError:
+                pass
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -532,6 +548,7 @@ def delete_note(
     has_replies = db.query(ProjectNote).filter(ProjectNote.parent_id == note_id).first()
     if has_replies:
         raise HTTPException(status_code=400, detail="该笔记有回复，不能删除")
+    _delete_note_images(note.content)
     db.delete(note)
     db.commit()
     log_project_activity(db, project.id, user.username, "删除笔记",
