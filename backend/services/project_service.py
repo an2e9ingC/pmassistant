@@ -157,18 +157,34 @@ def get_project_stages(db: Session, project_id: int) -> dict:
         stage_task_progress[sn].append(t.progress or 0)
         stage_task_count[sn] += 1
 
+    # Estimate stage dates from project begin/end, evenly divided
+    proj_begin = project.begin if project else None
+    proj_end = project.end if project else None
+    stage_count = len(standard_stages)
+    from datetime import timedelta
+
     stages = []
-    for st in standard_stages:
+    for i, st in enumerate(standard_stages):
         progs = stage_task_progress.get(st, [])
         avg_progress = round(sum(progs) / len(progs)) if progs else None
+        est_start = None
+        est_end = None
+        if proj_begin and proj_end and stage_count > 0:
+            total_days = (proj_end - proj_begin).days
+            if total_days > 0:
+                seg_days = total_days / stage_count
+                est_start = (proj_begin + timedelta(days=round(i * seg_days))).strftime("%Y-%m-%d")
+                est_end = (proj_begin + timedelta(days=round((i + 1) * seg_days) - 1)).strftime("%Y-%m-%d")
+                if i == stage_count - 1:
+                    est_end = proj_end.strftime("%Y-%m-%d")
         stages.append({
             "id": None,
             "name": st,
             "execution_url": None,
             "status": "active",
             "who": None,
-            "start": None,
-            "end": None,
+            "start": est_start,
+            "end": est_end,
             "completed_date": None,
             "progress": avg_progress,
             "blocker": None,
@@ -288,16 +304,33 @@ def get_project_gantt(db: Session, project_id: int) -> dict:
         stage_task_total[sn] += 1
 
     gantt_stages = []
+    stage_count = len(standard_stages)
+    # Estimate stage dates from project begin/end and number of stages
+    proj_begin = project.begin if project else None
+    proj_end = project.end if project else None
+    from datetime import timedelta
+
     for i, st in enumerate(standard_stages):
         progs = stage_progress.get(st, [])
         pct = round(sum(progs) / len(progs)) if progs else 0
         tasks_done = sum(1 for p in progs if p >= 100)
+        # Estimate stage start/end: evenly divide project timeline
+        est_start = None
+        est_end = None
+        if proj_begin and proj_end and stage_count > 0:
+            total_days = (proj_end - proj_begin).days
+            if total_days > 0:
+                seg_days = total_days / stage_count
+                est_start = (proj_begin + timedelta(days=round(i * seg_days))).strftime("%Y-%m-%d")
+                est_end = (proj_begin + timedelta(days=round((i + 1) * seg_days) - 1)).strftime("%Y-%m-%d")
+                if i == stage_count - 1:
+                    est_end = proj_end.strftime("%Y-%m-%d")
         gantt_stages.append({
             "name": st,
             "standard_stage": st,
             "who": None,
-            "start": None,
-            "end": None,
+            "start": est_start,
+            "end": est_end,
             "status": "active",
             "progress": str(pct),
             "completed_date": None,

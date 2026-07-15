@@ -258,26 +258,34 @@ function renderTaskTableCompact(tasks, execs) {
     tasks.forEach(function(t) { var sn = t.stage_name; if (sn && allStages.indexOf(sn) < 0) allStages.push(sn); });
   }
 
-  // Group tasks by stage_name
+  // Group tasks by stage_name and build stage→start map
   var grouped = {};
+  var stageStartMap = {};  // stage_name → estimated start date
   allStages.forEach(function(sn) { grouped[sn] = []; });
   tasks.forEach(function(t) {
     var sn = t.stage_name || '未分类';
     if (!grouped[sn]) grouped[sn] = [];
     grouped[sn].push(t);
   });
+  if (execs && execs.length) {
+    execs.forEach(function(s) {
+      var sn = s.standard_stage || s.name;
+      if (s.start) stageStartMap[sn] = s.start;
+    });
+  }
   var stageKeys = allStages.filter(function(sn) { return grouped[sn] !== undefined; });
 
   var html = '<div class="table-scroll" style="max-height:calc(100vh - 340px)"><table class="stage-table"><thead><tr>' +
     '<th style="width:10%">阶段</th>' +
-    '<th style="width:20%">任务标题</th>' +
+    '<th style="width:17%">任务标题</th>' +
     '<th style="width:6%">状态</th>' +
     '<th style="width:5%">优先级</th>' +
     '<th style="width:7%">负责人</th>' +
     '<th style="width:7%">进度</th>' +
+    '<th style="width:7%">计划开始</th>' +
     '<th style="width:7%">截止日期</th>' +
     '<th style="width:7%">完成日期</th>' +
-    '<th style="width:14%">最新动态</th>' +
+    '<th style="width:12%">最新动态</th>' +
     '<th style="width:1%;white-space:nowrap">操作</th>' +
     '</tr></thead><tbody>';
 
@@ -291,9 +299,10 @@ function renderTaskTableCompact(tasks, execs) {
         html += '<td rowspan="' + rowCount + '" data-stage-cell="' + escHtml(stageName) + '" style="font-weight:600;vertical-align:middle;background:var(--bg);border-right:2px solid var(--border)">' + escHtml(stageName) + ' <sup style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:8px">' + stageTasks.length + '</sup></td>';
       }
       if (t) {
-        html += _renderTaskRowCompact(t);
+        html += _renderTaskRowCompact(t, stageStartMap[stageName] || null);
       } else {
         html += '<td style="color:var(--muted);font-size:12px">—</td>' +
+          '<td style="color:var(--muted);font-size:12px">—</td>' +
           '<td style="color:var(--muted);font-size:12px">—</td>' +
           '<td style="color:var(--muted);font-size:12px">—</td>' +
           '<td style="color:var(--muted);font-size:12px">—</td>' +
@@ -368,16 +377,20 @@ function _renderLatestActivity(t) {
     '</td>';
 }
 
-function _renderTaskRowCompact(t) {
+function _renderTaskRowCompact(t, stageStart) {
   var progressHtml = typeof renderProgressRing === 'function'
     ? renderProgressRing(t.progress || 0)
     : '<span>' + (t.progress || 0) + '%</span>';
   var assigneeName = t.assignee_name || t.assignee_username || '—';
+  var effectiveStart = t.start_date || stageStart || null;
+  var startDateStr = effectiveStart || '—';
+  var startTitle = effectiveStart ? escHtml(effectiveStart) : (stageStart ? '默认取阶段开始时间' : '未设置');
   return '<td style="text-align:left;cursor:pointer" onclick="openTaskViewDialog(' + t.id + ')" title="查看任务详情">' + escHtml(t.title) + '</td>' +
     '<td style="text-align:center">' + renderPill(t.status || 'todo') + '</td>' +
     '<td style="text-align:center">' + (typeof renderPriority === 'function' ? renderPriority(t.priority) : escHtml(t.priority || 'medium')) + '</td>' +
     '<td style="font-size:12px;cursor:pointer;color:var(--accent)" onclick="openTaskViewDialog(' + t.id + ')" title="查看负责人">' + escHtml(assigneeName) + '</td>' +
     '<td style="text-align:center">' + progressHtml + '</td>' +
+    '<td style="font-size:12px;color:' + (t.start_date ? 'var(--fg)' : 'var(--muted)') + '" title="' + startTitle + '">' + escHtml(startDateStr) + '</td>' +
     '<td style="font-size:12px">' + (t.due_date ? t.due_date : '—') + '</td>' +
     '<td style="font-size:12px">' + (t.completed_at ? t.completed_at.substring(0,10) : '—') + '</td>' +
     _renderLatestActivity(t) +
@@ -678,6 +691,7 @@ function _showTaskForm(title, task) {
     '<div style="' + _card + '">' +
       '<div style="' + _cardHd + '">状态与进度</div>' +
       '<div style="' + _grid2 + '">' +
+        '<div><label style="' + _lbl + '">计划开始</label><input class="search-inp" id="tf-start-date" type="date" value="' + (t.start_date || '') + '" style="' + inp + '"></div>' +
         '<div><label style="' + _lbl + '">截止日期</label><input class="search-inp" id="tf-due" type="date" value="' + (t.due_date || '') + '" style="' + inp + '"></div>' +
         '<div><label style="' + _lbl + '">状态</label><select class="search-inp" id="tf-status" style="' + inp + '">' +
           '<option value="todo"' + (t.status==='todo'?' selected':'') + '>待办</option>' +
@@ -833,6 +847,7 @@ async function submitTask(taskId) {
     assignee_id: _tfAssigneeId,
     progress: parseInt(document.getElementById('tf-progress').value) || 0,
     estimate_hours: parseFloat(document.getElementById('tf-estimate').value) || 0,
+    start_date: document.getElementById('tf-start-date').value || null,
     due_date: document.getElementById('tf-due').value || null,
     execution_id: parseInt(document.getElementById('tf-execution').value) || null,
     stage_name: _tfStageName(),
