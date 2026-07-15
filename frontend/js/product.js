@@ -73,6 +73,9 @@ function renderProdOverview() {
 function _povSelectL1(l1Id) {
   _prodActiveL1 = l1Id;
   _prodActiveL2 = null;
+  _prodSearchVal = '';
+  var inp = document.getElementById('prod-search');
+  if (inp) inp.value = '';
   renderProdOverview();
 }
 
@@ -81,6 +84,9 @@ function _povSelectL2(l2Id) {
   document.querySelectorAll('.pov-l2-chip').forEach(function(c) {
     c.classList.toggle('active', c.getAttribute('data-l2-id') === String(l2Id));
   });
+  _prodSearchVal = '';
+  var inp = document.getElementById('prod-search');
+  if (inp) inp.value = '';
   _povRenderProducts();
 }
 

@@ -90,6 +90,7 @@ function filterByProgram(pid, el) {
   _curProgramId = pid;
   document.querySelectorAll('#program-filter .tab').forEach(function(t) { t.classList.remove('active'); });
   if (el) el.classList.add('active');
+  _clearProjSearch();
   loadProjectTable(curTypeFilter);
 }
 
@@ -106,12 +107,18 @@ function filterByCategory(category, el) {
   // Update KPI card highlights
   document.querySelectorAll('.kpi-card').forEach(function(c) { c.classList.remove('active'); });
   if (el) el.classList.add('active');
+  _clearProjSearch();
   loadProjectTable('all');
 }
 
 /* Project Table */
 
 var _searchTimer = null;
+function _clearProjSearch() {
+  curSearchVal = '';
+  var inp = document.getElementById('proj-search');
+  if (inp) inp.value = '';
+}
 function onProjSearch(v) {
   curSearchVal = v;
   clearTimeout(_searchTimer);
@@ -129,6 +136,7 @@ function filterTable(f, el) {
   // Reset category filter when switching type filter
   _curCategory = '';
   document.querySelectorAll('#kpi-grid .kpi-card').forEach(function(c){c.classList.remove('active');});
+  _clearProjSearch();
   loadProjectTable(f);
 }
 
