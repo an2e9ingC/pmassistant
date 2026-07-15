@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════
    CONSTANTS & HELPERS
 ═══════════════════════════════════════════════════ */
-const STATUS_TXT = {completed:'已完成',incomplete:'待完善',active:'进行中',blocked:'已阻塞',pending:'未开始',planning:'规划中',canceled:'已取消',normal:'正常',closed:'已关闭',wait:'未开始',doing:'进行中',done:'已完成',suspended:'已暂停',resolved:'已解决',todo:'待办',in_progress:'进行中',review:'评审中'};
+const STATUS_TXT = {completed:'已完成',incomplete:'待完善',active:'进行中',blocked:'已阻塞',pending:'未开始',planning:'规划中',canceled:'已取消',normal:'正常',closed:'已关闭',wait:'未开始',doing:'进行中',done:'已完成',suspended:'已暂停',resolved:'已解决',todo:'待办',in_progress:'进行中',review:'评审中',open:'待确认',confirmed:'已确认',gitlab_submitted:'GitLab已提交'};
 var TYPE_TXT = {RD:'研发',SC:'生产'};  // updated by initProjectTypeLabels() from API
 function getProjectTypeLabel(type) {
   return TYPE_TXT[type] || type || '研发';

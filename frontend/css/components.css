@@ -50,37 +50,23 @@
 .badge-blocked { background: var(--danger-lt); color: var(--danger); }
 
 .pill {
-  display: inline-flex; align-items: center; gap: 5px;
+  display: inline-flex; align-items: center;
   padding: 3px 10px; border-radius: 20px;
   font-size: 11.5px; font-weight: 510;
-}
-.pill::before {
-  content: ''; width: 6px; height: 6px;
-  border-radius: 50%; flex-shrink: 0;
+  white-space: nowrap;
 }
 .pill.completed { background: var(--success-lt); color: var(--success); }
-.pill.completed::before { background: var(--success); }
 .pill.incomplete { background: var(--warn-lt); color: var(--warn); }
-.pill.incomplete::before { background: var(--warn); }
 .pill.active { background: var(--accent-lt); color: var(--accent); }
-.pill.active::before { background: var(--accent); }
 .pill.blocked { background: var(--danger-lt); color: var(--danger); }
-.pill.blocked::before { background: var(--danger); }
 .pill.pending { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
-.pill.pending::before { background: var(--muted); }
 .pill.planning { background: var(--warn-lt); color: var(--warn); }
-.pill.planning::before { background: var(--warn); }
 .pill.canceled { background: var(--bg); color: var(--muted); border: 1px solid var(--border); text-decoration: line-through; }
-.pill.canceled::before { background: var(--muted); }
 /* PMA task statuses */
 .pill.todo { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
-.pill.todo::before { background: var(--muted); }
 .pill.in_progress { background: var(--accent-lt); color: var(--accent); }
-.pill.in_progress::before { background: var(--accent); }
 .pill.review { background: var(--warn-lt); color: var(--warn); }
-.pill.review::before { background: var(--warn); }
 .pill.done { background: var(--success-lt); color: var(--success); }
-.pill.done::before { background: var(--success); }
 
 /* ── Priority tag ── */
 .prio-tag { font-size: 11px; font-weight: 600; white-space: nowrap; }
@@ -780,6 +766,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
   text-align: center; padding: 10px 12px; font-size: 10.5px; font-weight: 600;
   color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase;
   background: var(--surface2); border-bottom: 1px solid var(--border); white-space: nowrap;
+  position: sticky; top: 0; z-index: 5;
 }
 .task-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; text-align: center; }
 .task-table tbody tr { transition: background 0.1s; cursor: pointer; }

@@ -1495,7 +1495,7 @@ function _ucOpenTask(taskId) {
 }
 
 function _renderUcTableHead() {
-  document.getElementById('uc-tasks-table-head').innerHTML = '<tr><th>任务编号</th><th>项目编号</th><th>项目名称</th><th>产品</th><th>任务</th><th>阶段</th><th>状态</th><th>优先级</th><th>进度</th><th>截止</th><th>操作</th></tr>';
+  document.getElementById('uc-tasks-table-head').innerHTML = '<tr><th style="width:6%">任务编号</th><th style="width:8%">项目编号</th><th style="width:100px">产品编号</th><th>任务标题</th><th style="width:70px">状态</th><th style="width:6%">优先级</th><th style="width:6%">进度</th><th style="width:7%">截止</th><th style="width:1%;white-space:nowrap">操作</th></tr>';
 }
 
 function _renderUcTaskTable() {
@@ -1506,24 +1506,21 @@ function _renderUcTaskTable() {
     return true;
   });
   var tbody = document.getElementById('uc-tasks-table-tbody');
-  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state">暂无匹配任务</div></td></tr>'; return; }
+  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state">暂无匹配任务</div></td></tr>'; return; }
   tbody.innerHTML = filtered.map(function(t) {
-    var stageName = t.stage_name || t.execution_name || '-';
     var pct = t.progress || 0;
     var overdue = t.due_date && t.status !== 'done' && t.status !== 'closed' && t.due_date < fmtLocalDate();
-    var assignee = t.assignee_name || t.assignee_username || (t.assignee_id||'-');
+    var prodTag = t.product_code ? '<span class="proj-code-btn" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="event.stopPropagation();openProductDetail(\'' + escHtml(t.product_code) + '\')" title="' + escHtml(t.product_code) + ' ' + escHtml(t.product_name || '') + '">' + escHtml(t.product_code) + '</span>' : '<span style="font-size:12px;color:var(--muted)">—</span>';
     return '<tr style="cursor:pointer" onclick="_ucOpenTask('+t.id+')">' +
-      '<td style="font-size:11px;font-family:var(--mono);color:var(--muted)">#' + t.id + '</td>' +
-      '<td>' + (t.project_code ? projCodeTag(t.project_code, 'openProject(\'' + escHtml(t.project_code).replace(/'/g, "\\'") + '\')') : '-') + '</td>' +
-      '<td style="text-align:left;font-size:12px">' + escHtml(t.project_name || '-') + '</td>' +
-      '<td style="font-size:12px">' + escHtml(t.product_name || '-') + '</td>' +
+      '<td style="text-align:center;font-size:11px;font-family:var(--mono);color:var(--muted)">#' + t.id + '</td>' +
+      '<td style="text-align:center">' + (t.project_code ? projCodeTag(t.project_code, 'event.stopPropagation();openProject(\'' + escHtml(t.project_code).replace(/'/g, "\\'") + '\')') : '-') + '</td>' +
+      '<td style="text-align:center;font-size:12px">' + prodTag + '</td>' +
       '<td style="text-align:left;font-weight:530">' + escHtml(t.title) + '</td>' +
-      '<td style="font-size:11px;color:var(--muted)">' + escHtml(stageName) + '</td>' +
-      '<td>' + renderPill(t.status||'todo') + '</td>' +
-      '<td><span class="prio-tag '+(t.priority||'medium')+'">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[t.priority]||t.priority)+'</span></td>' +
-      '<td>'+renderProgressCircle(pct,40,{label:''})+'</td>' +
-      '<td style="font-size:12px;color:'+(overdue?'var(--danger)':'')+'">'+(t.due_date||'-')+'</td>' +
-      '<td onclick="event.stopPropagation()">' +
+      '<td style="text-align:center">' + renderPill(t.status||'todo') + '</td>' +
+      '<td style="text-align:center"><span class="prio-tag '+(t.priority||'medium')+'">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[t.priority]||t.priority)+'</span></td>' +
+      '<td style="text-align:center">'+renderProgressCircle(pct,36,{label:''})+'</td>' +
+      '<td style="text-align:center;font-size:12px;color:'+(overdue?'var(--danger)':'')+'">'+(t.due_date||'-')+'</td>' +
+      '<td style="text-align:center;white-space:nowrap" onclick="event.stopPropagation()">' +
         iconEdit('_ucOpenTask('+t.id+')', '查看/编辑') +
         iconDelete('_ucDeleteTask('+t.id+')', '删除') +
       '</td>' +
@@ -1579,7 +1576,7 @@ function _ucRenderBugFilter(bugs, uid) {
 }
 
 async function _ucLoadBugs() {
-  document.getElementById('uc-bugs-table-head').innerHTML = '<tr><th>编号</th><th>标题</th><th>产品</th><th>项目</th><th>组件</th><th>严重</th><th>优先级</th><th>状态</th><th>负责人</th><th>创建人</th><th>操作</th></tr>';
+  document.getElementById('uc-bugs-table-head').innerHTML = '<tr><th style="width:6%">Bug编号</th><th style="width:8%">项目编号</th><th style="width:100px">产品编号</th><th>Bug标题</th><th style="width:70px">状态</th><th style="width:6%">优先级</th><th style="width:6%">进度</th><th style="width:7%">截止</th><th style="width:1%;white-space:nowrap">操作</th></tr>';
   try {
     var user = getCurrentUser();
     var uid = user ? user.id : null;
@@ -1588,29 +1585,26 @@ async function _ucLoadBugs() {
     var tbody = document.getElementById('uc-bugs-table-tbody');
     if (!filtered.length) {
       var label = _ucBugTab === 'assignee' ? '暂无待处理的Bug' : '暂无创建的Bug';
-      tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state">' + label + '</div></td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state">' + label + '</div></td></tr>';
       return;
     }
-    var sevLabels = {1:'致命',2:'严重',3:'一般',4:'建议'};
-    var sevColors = {1:'var(--danger)',2:'var(--warn)',3:'var(--muted)',4:'var(--success)'};
-    var prioLabels = {low:'低',medium:'中',high:'高',critical:'紧急'};
-    var prioColors = {low:'var(--muted)',medium:'var(--fg)',high:'var(--warn)',critical:'var(--danger)'};
     tbody.innerHTML = filtered.map(function(b) {
+      var prodTag = b.product_code ? '<span class="proj-code-btn" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="event.stopPropagation();openProductDetail(\'' + escHtml(b.product_code) + '\')" title="' + escHtml(b.product_code) + ' ' + escHtml(b.product_name || '') + '">' + escHtml(b.product_code) + '</span>' : '<span style="font-size:12px;color:var(--muted)">—</span>';
+      var projTag = b.project_code ? projCodeTag(b.project_code, 'event.stopPropagation();openProject(\'' + escHtml(b.project_code) + '\')') : escHtml(b.project_name || '-');
+      var progressPct = b.progress || 0;
       return '<tr style="cursor:pointer" onclick="' + _ucEnsureBugsJs('openBugDetail('+b.id+')') + '">' +
-        '<td style="font-family:var(--mono);font-size:11px">#' + b.id + '</td>' +
+        '<td style="text-align:center;font-family:var(--mono);font-size:11px">#' + b.id + '</td>' +
+        '<td style="text-align:center;font-size:12px">' + projTag + '</td>' +
+        '<td style="text-align:center;font-size:12px">' + prodTag + '</td>' +
         '<td style="text-align:left;font-weight:530;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(b.title) + '</td>' +
-        '<td style="font-size:12px">' + escHtml(b.product_name||'-') + '</td>' +
-        '<td style="font-size:12px">' + escHtml(b.project_name||'-') + '</td>' +
-        '<td style="font-size:11px">' + escHtml(b.component_name||'-') + '</td>' +
-        '<td><span style="font-size:11px;color:' + (sevColors[b.severity]||sevColors[3]) + ';font-weight:600">' + (sevLabels[b.severity]||'一般') + '</span></td>' +
-        '<td><span style="font-size:11px;color:' + (prioColors[b.priority]||prioColors.medium) + '">' + (prioLabels[b.priority]||b.priority||'中') + '</span></td>' +
-        '<td>' + renderPill(b.status||'open') + '</td>' +
-        '<td style="font-size:12px">' + escHtml(b.assignee_name||'-') + '</td>' +
-        '<td style="font-size:12px">' + escHtml(b.reporter_name||'-') + '</td>' +
-        '<td onclick="event.stopPropagation()">' + iconEdit(_ucEnsureBugsJs('openBugDialog('+b.id+')'),'编辑') + iconDelete(_ucEnsureBugsJs('deleteBugById('+b.id+')'),'删除') + '</td>' +
+        '<td style="text-align:center">' + renderPill(b.status||'open') + '</td>' +
+        '<td style="text-align:center"><span class="prio-tag '+(b.priority||'medium')+'">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[b.priority]||b.priority)+'</span></td>' +
+        '<td style="text-align:center">' + (typeof renderProgressCircle === 'function' ? renderProgressCircle(progressPct, 36, {label:''}) : progressPct+'%') + '</td>' +
+        '<td style="text-align:center;font-size:12px">' + (b.due_date||'—') + '</td>' +
+        '<td style="text-align:center;white-space:nowrap" onclick="event.stopPropagation()">' + iconEdit(_ucEnsureBugsJs('openBugDialog('+b.id+')'),'编辑') + iconDelete(_ucEnsureBugsJs('deleteBugById('+b.id+')'),'删除') + '</td>' +
       '</tr>';
     }).join('');
-  } catch(e) { document.getElementById('uc-bugs-table-tbody').innerHTML = '<tr><td colspan="11"><div class="error-state">加载失败</div></td></tr>'; }
+  } catch(e) { document.getElementById('uc-bugs-table-tbody').innerHTML = '<tr><td colspan="9"><div class="error-state">加载失败</div></td></tr>'; }
   _ucLoadBugStats(); // refresh bug stats pie to match current tab
 }
 
