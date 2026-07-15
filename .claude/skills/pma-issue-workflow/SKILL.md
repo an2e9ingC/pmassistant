@@ -24,7 +24,7 @@ python3 << 'PYEOF'
 import urllib.request, json
 
 # 1. 登录获取 token
-login_data = json.dumps({"username": "admin", "password": "123456"}).encode()
+login_data = json.dumps({"username": "admin", "password": "admin123"}).encode()
 req = urllib.request.Request("http://localhost:8000/api/auth/login", data=login_data,
     headers={"Content-Type": "application/json"})
 resp = urllib.request.urlopen(req)
@@ -50,7 +50,7 @@ PYEOF
 python3 << 'PYEOF'
 import urllib.request, json
 
-login_data = json.dumps({"username": "admin", "password": "123456"}).encode()
+login_data = json.dumps({"username": "admin", "password": "admin123"}).encode()
 req = urllib.request.Request("http://localhost:8000/api/auth/login", data=login_data,
     headers={"Content-Type": "application/json"})
 resp = urllib.request.urlopen(req)

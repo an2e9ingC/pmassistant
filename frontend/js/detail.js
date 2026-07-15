@@ -687,7 +687,7 @@ function buildGantt(data) {
     var lp = hasDates ? ganttPx(s.start, range, totalWidth) : 0;
     var ep = hasDates ? ganttPx(s.end, range, totalWidth) : totalWidth;
     var wp = Math.max(4, ep - lp);
-    var barCls = 'gantt-bar ' + (s.status || 'active') + (isStageOverdue(s) ? ' gantt-overdue' : '');
+    var barCls = 'gantt-bar ' + (s.status || 'active') + (isStageOverdue(s) ? ' gantt-overdue' : '') + (tasksTotal === 0 ? ' gantt-empty' : '');
     var barHtml = '<div class="' + barCls + '" style="left:' + lp + 'px;width:' + wp + 'px" data-tip="' +
       (hasDates ? compactDate(s.start) + '→' + compactDate(s.end) + '　' : '') +
       '任务:' + tasksDone + '/' + tasksTotal + '">' +
