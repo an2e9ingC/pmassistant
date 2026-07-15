@@ -659,6 +659,19 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .pov-prod-card:hover { box-shadow: 0 4px 16px rgba(16,24,48,0.12); border-color: var(--accent); transform: translateY(-2px); background: var(--accent-lt); }
 .pov-prod-header { display: flex; justify-content: space-between; align-items: flex-start; }
 
+/* Product doc cards in project detail resources tab */
+.prod-doc-card {
+  display: inline-flex; flex-direction: column;
+  padding: 12px 14px; margin: 0 6px 8px 0;
+  cursor: pointer; min-width: 140px;
+  transition: box-shadow 0.15s, transform 0.15s, border-color 0.15s;
+}
+.prod-doc-card:hover {
+  box-shadow: var(--sh-md);
+  transform: translateY(-1px);
+  border-color: var(--accent);
+}
+
 /* Search bar */
 .pov-search-bar {
   display: flex; align-items: center; gap: 10px; padding: 10px 16px;

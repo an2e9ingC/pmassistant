@@ -1298,14 +1298,9 @@ function buildResources(resources, detail) {
 
   if (products.length) {
     products.forEach(function(prod) {
-      var prodUrl = '#view-product-detail';
-      var prodDocsLabel = '查看产品文档 →';
-      html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;margin-bottom:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px">' +
-        '<div style="flex:1;min-width:0">' +
-          '<div style="font-weight:560;font-size:13px;margin-bottom:2px">' + escHtml(prod.name) + '</div>' +
-          '<div style="font-size:11px;color:var(--muted);font-family:var(--mono)">' + escHtml(prod.code || '#' + prod.id) + '</div>' +
-        '</div>' +
-        '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px; style="flex-shrink:0;margin-left:12px""flex-shrink:0;margin-left:12px' + prodDocsLabel + '</button>' +
+      html += '<div class="card prod-doc-card" onclick="openProductDetail(\'' + escHtml(prod.code || String(prod.id)).replace(/'/g, "\\'") + '\', \'docs\')" title="' + escHtml(prod.name || '') + '">' +
+        '<span style="font-size:12px;font-weight:600;font-family:var(--mono);color:var(--accent);margin-bottom:2px">' + escHtml(prod.code || '#' + prod.id) + '</span>' +
+        '<span style="font-size:11px;color:var(--muted);line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(prod.name) + '</span>' +
       '</div>';
     });
   } else {
