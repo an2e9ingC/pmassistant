@@ -505,7 +505,7 @@ function _renderTaskRow(t, stageMap) {
   var projCode = t.project_code || '';
   return '<tr class="clickable">' +
     '<td style="font-size:11px;font-family:var(--mono);color:var(--muted)">#' + t.id + '</td>' +
-    '<td>' + (projCode ? projCodeTag(projCode, 'openProject(\'' + escHtml(projCode).replace(/'/g, "\\'") + '\')') : '-') + '</td>' +
+    '<td>' + (projCode ? projCodeTag(projCode, 'openProject(\'' + escHtml(projCode).replace(/'/g, "\\'") + '\')', t.project_name) : '-') + '</td>' +
     '<td style="text-align:left;font-size:12px">' + escHtml(t.project_name || '-') + '</td>' +
     '<td style="text-align:left"><a href="javascript:void(0)" onclick="openTaskViewDialog(' + t.id + ')" style="color:var(--accent)">' + escHtml(t.title) + '</a></td>' +
     '<td>' + (stageName ? '<span style="font-size:11px;color:var(--muted)">' + escHtml(stageName) + '</span>' : '-') + '</td>' +
@@ -578,7 +578,7 @@ function _showTaskView(t) {
   var labels = {todo:'待办', in_progress:'进行中', review:'评审中', done:'已完成', closed:'已关闭'};
   var overdue = t.due_date && t.status !== 'done' && t.status !== 'closed' && t.due_date < fmtLocalDate();
   var daysInfo = _daysLeft(t.due_date);
-  var projHtml = t.project_code ? projCodeTag(t.project_code, t.project_id) + ' ' + escHtml(t.project_name || '') : escHtml(t.project_name || '-');
+  var projHtml = t.project_code ? projCodeTag(t.project_code, t.project_id, t.project_name) + ' ' + escHtml(t.project_name || '') : escHtml(t.project_name || '-');
 
   var row2 = 'display:grid;grid-template-columns:1fr 1fr;gap:10px';
   var html = '';

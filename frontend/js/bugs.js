@@ -152,7 +152,7 @@ async function openBugDetail(bugId) {
   var b = data || {};
   var sevs = {1:'致命',2:'严重',3:'一般',4:'建议'};
   var sevColors = {1:'var(--danger)',2:'var(--warn)',3:'var(--accent)',4:'var(--muted)'};
-  var projHtml = b.project_code ? projCodeTag(b.project_code, b.project_id) + ' ' + escHtml(b.project_name || '') : escHtml(b.project_name || '-');
+  var projHtml = b.project_code ? projCodeTag(b.project_code, b.project_id, b.project_name) + ' ' + escHtml(b.project_name || '') : escHtml(b.project_name || '-');
 
   var html = '<div style="max-height:78vh;overflow-y:auto;padding-right:4px">' +
     '<div style="font-size:14px;font-weight:600;margin-bottom:10px">' + escHtml(b.title) + '</div>' +

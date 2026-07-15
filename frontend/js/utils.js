@@ -297,21 +297,23 @@ function gotoCustomerProjects(custName) {
 }
 
 // Render project code tag — clickable to project detail by default
-function projCodeTag(code, clickHandlerOrProjectId) {
+// Usage: projCodeTag(code, handler) or projCodeTag(code, handler, projectName)
+function projCodeTag(code, clickHandlerOrProjectId, projectName) {
   var handler = clickHandlerOrProjectId;
   if (typeof handler === 'number' || (typeof handler === 'string' && /^\d+$/.test(handler))) {
     handler = 'openProject(' + handler + ')';
   }
+  var title = projectName || code || '查看项目详情';
   if (handler) {
-    return '<span class="proj-code-btn" onclick="event.stopPropagation();' + handler + '" title="查看项目详情">' + escHtml(code) + '</span>';
+    return '<span class="proj-code-btn" onclick="event.stopPropagation();' + handler + '" title="' + escHtml(title) + '">' + escHtml(code) + '</span>';
   }
-  return '<span class="proj-code-btn" style="cursor:default">' + escHtml(code) + '</span>';
+  return '<span class="proj-code-btn" style="cursor:default" title="' + escHtml(title) + '">' + escHtml(code) + '</span>';
 }
 
 function renderProjectIdBlock(name, customerName) {
   var code = extractProjectCode(name);
   var core = extractCoreName(name);
-  var html = projCodeTag(code) + ' ' + escHtml(core);
+  var html = projCodeTag(code, null, core) + ' ' + escHtml(core);
   if (customerName) {
     html += ' ' + renderCustomerBadge(customerName);
   }

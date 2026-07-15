@@ -1112,14 +1112,14 @@ function renderProdMaintenance(p) {
   }
   if (projects.length) {
     html += '<div class="table-scroll" style="max-height:400px"><table class="stage-table"><thead><tr>' +
-      '<th>编号</th><th>项目名</th><th>客户</th><th>类型</th><th>状态</th><th>进度</th><th>计划完成</th>' +
+      '<th>项目编号</th><th>项目名</th><th>客户</th><th>类型</th><th>状态</th><th>进度</th><th>计划完成</th>' +
       '</tr></thead><tbody>';
     projects.forEach(function(proj) {
-      var projCode = extractProjectCode(proj.name);
+      var projCode = proj.code || '';
       var coreName = extractCoreName(proj.name);
-      html += '<tr onclick="openProject(\'' + escHtml(proj.code || String(proj.id)).replace(/'/g, "\\'") + '\')" style="cursor:pointer">' +
-        '<td>' + renderProjIcon(proj.project_type, projCode) + '</td>' +
-        '<td><div class="proj-name">' + escHtml(coreName) + '</div></td>' +
+      html += '<tr style="cursor:pointer">' +
+        '<td style="cursor:pointer" onclick="openProject(\'' + escHtml(proj.code || String(proj.id)).replace(/'/g, "\\'") + '\')">' + (projCode ? projCodeTag(projCode, 'event.stopPropagation();openProject(\'' + escHtml(projCode).replace(/'/g, "\\'") + '\')', proj.name) : '—') + '</td>' +
+        '<td onclick="openProject(\'' + escHtml(proj.code || String(proj.id)).replace(/'/g, "\\'") + '\')"><div class="proj-name">' + escHtml(coreName) + '</div></td>' +
         '<td>' + (proj.customer_name ? renderCustomerBadge(proj.customer_name) : '—') + '</td>' +
         '<td>' + renderTypeBadge(proj.project_type) + '</td>' +
         '<td>' + renderPill(proj.status) + '</td>' +

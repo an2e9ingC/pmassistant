@@ -190,7 +190,7 @@ async function loadProjectTable(filter) {
         tagsHtml = '<span style="font-size:11.5px;color:var(--muted)">无</span>';
       }
       var rowClick = 'onclick="filterAlertsByProject(\'' + p.id + '\', \'' + escHtml(projCode + ' ' + coreName).replace(/'/g, "\\'") + '\')"';
-      var projIconHtml = projCode ? projCodeTag(projCode, 'event.stopPropagation();openProject(\'' + escHtml(p.code || String(p.id)).replace(/'/g, "\\'") + '\')') : projCodeTag('RD');
+      var projIconHtml = projCode ? projCodeTag(projCode, 'event.stopPropagation();openProject(\'' + escHtml(p.code || String(p.id)).replace(/'/g, "\\'") + '\')', p.name) : projCodeTag('RD');
       var riskLevel = p.risk_level || 'normal';
       var riskLabel = { normal: '正常', low: '较低', medium: '中等', high: '高', overdue: '已超期', incomplete: '资料不全' }[riskLevel] || '正常';
       var riskColor = { normal: 'var(--success)', low: 'var(--muted)', medium: 'var(--warn)', high: 'var(--danger)', overdue: 'var(--danger)', incomplete: 'var(--warn)' }[riskLevel] || 'var(--muted)';
@@ -274,7 +274,7 @@ async function loadAlertList(projectId) {
       var dot = a.severity === 'red' ? 'r' : 'y';
       return '<div class="alert-row">' +
         '<div class="alert-dot ' + dot + '"></div>' +
-        (a.project_code ? projCodeTag(a.project_code, 'event.stopPropagation();openProject(\'' + escHtml(a.project_code || String(a.project_id)).replace(/'/g, "\\'") + '\')') + ' ' + escHtml(a.project_name || '') : '') +
+        (a.project_code ? projCodeTag(a.project_code, 'event.stopPropagation();openProject(\'' + escHtml(a.project_code || String(a.project_id)).replace(/'/g, "\\'") + '\')', a.project_name) + ' ' + escHtml(a.project_name || '') : '') +
         '<div class="alert-body">' +
           '<div class="alert-msg">' + escHtml(a.message) + '</div>' +
           (a.sub_message ? '<div class="alert-sub">' + escHtml(a.sub_message) + '</div>' : '') +

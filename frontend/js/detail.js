@@ -123,7 +123,7 @@ function buildDetailHeader(p) {
     '<div class="detail-meta">' +
       '<div class="detail-title">' +
         '<span style="vertical-align:middle;margin-right:4px">' + favStar('project', p.id, {size:'22px'}) + '</span>' +
-        projCodeTag(projCode, p.id) + ' ' +
+        projCodeTag(projCode, p.id, p.name) + ' ' +
         escHtml(coreName) +
       '</div>' +
       '<div class="detail-sub">' +

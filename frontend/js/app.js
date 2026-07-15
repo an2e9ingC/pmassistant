@@ -1513,7 +1513,7 @@ function _renderUcTaskTable() {
     var prodTag = t.product_code ? '<span class="proj-code-btn" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="event.stopPropagation();openProductDetail(\'' + escHtml(t.product_code) + '\')" title="' + escHtml(t.product_code) + ' ' + escHtml(t.product_name || '') + '">' + escHtml(t.product_code) + '</span>' : '<span style="font-size:12px;color:var(--muted)">—</span>';
     return '<tr style="cursor:pointer" onclick="_ucOpenTask('+t.id+')">' +
       '<td style="text-align:center;font-size:11px;font-family:var(--mono);color:var(--muted)">#' + t.id + '</td>' +
-      '<td style="text-align:center">' + (t.project_code ? projCodeTag(t.project_code, 'event.stopPropagation();openProject(\'' + escHtml(t.project_code).replace(/'/g, "\\'") + '\')') : '-') + '</td>' +
+      '<td style="text-align:center">' + (t.project_code ? projCodeTag(t.project_code, 'event.stopPropagation();openProject(\'' + escHtml(t.project_code).replace(/'/g, "\\'") + '\')', t.project_name) : '-') + '</td>' +
       '<td style="text-align:center;font-size:12px">' + prodTag + '</td>' +
       '<td style="text-align:left;font-weight:530">' + escHtml(t.title) + '</td>' +
       '<td style="text-align:center">' + renderPill(t.status||'todo') + '</td>' +
@@ -1590,7 +1590,7 @@ async function _ucLoadBugs() {
     }
     tbody.innerHTML = filtered.map(function(b) {
       var prodTag = b.product_code ? '<span class="proj-code-btn" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="event.stopPropagation();openProductDetail(\'' + escHtml(b.product_code) + '\')" title="' + escHtml(b.product_code) + ' ' + escHtml(b.product_name || '') + '">' + escHtml(b.product_code) + '</span>' : '<span style="font-size:12px;color:var(--muted)">—</span>';
-      var projTag = b.project_code ? projCodeTag(b.project_code, 'event.stopPropagation();openProject(\'' + escHtml(b.project_code) + '\')') : escHtml(b.project_name || '-');
+      var projTag = b.project_code ? projCodeTag(b.project_code, 'event.stopPropagation();openProject(\'' + escHtml(b.project_code) + '\')', b.project_name) : escHtml(b.project_name || '-');
       var progressPct = b.progress || 0;
       return '<tr style="cursor:pointer" onclick="' + _ucEnsureBugsJs('openBugDetail('+b.id+')') + '">' +
         '<td style="text-align:center;font-family:var(--mono);font-size:11px">#' + b.id + '</td>' +
