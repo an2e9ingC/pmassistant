@@ -658,7 +658,7 @@ function createSearchCombo(opts) {
     var items = window['_combo_'+comboId] || [];
     var p = items.find(function(x) { return x.id == id; });
     if (p) {
-      document.getElementById(inputId).value = p.name || p.username || '';
+      document.getElementById(inputId).value = (p.code || p.name || p.username || '');
       if (opts.onSelect) opts.onSelect(p);
     }
   };
@@ -757,8 +757,8 @@ function _renderSearchDropdown(dropdownId, items, selectedId, q, selectFnName) {
   dd.innerHTML = list.map(function(p) {
     var cls = p.id == selectedId ? 'combo-opt selected' : 'combo-opt';
     return '<div class="' + cls + '" onmousedown="event.preventDefault()" onclick="' + selectFnName + '(' + p.id + ')">' +
-      '<div class="combo-opt-name">' + escHtml(p.name) + '</div>' +
-      '<div class="combo-opt-meta">' + escHtml(p.code || '') + '</div>' +
+      '<div class="combo-opt-name">' + escHtml(p.code || p.name) + '</div>' +
+      (p.code ? '<div class="combo-opt-meta">' + escHtml(p.name) + '</div>' : '') +
     '</div>';
   }).join('');
 }
@@ -774,8 +774,8 @@ function _renderComboDropdown(dropdownId, selectedId, q, selectFnName) {
   dd.innerHTML = list.map(function(p) {
     var cls = p.id == selectedId ? 'combo-opt selected' : 'combo-opt';
     return '<div class="' + cls + '" onmousedown="event.preventDefault()" onclick="' + selectFnName + '(' + p.id + ')">' +
-      '<div class="combo-opt-name">' + escHtml(p.name) + '</div>' +
-      '<div class="combo-opt-meta">' + escHtml(p.code || '') + '</div>' +
+      '<div class="combo-opt-name">' + escHtml(p.code || p.name) + '</div>' +
+      (p.code ? '<div class="combo-opt-meta">' + escHtml(p.name) + '</div>' : '') +
     '</div>';
   }).join('');
 }

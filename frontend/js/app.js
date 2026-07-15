@@ -1469,13 +1469,17 @@ function _renderUcFilterBar() {
     if(t.product_name) prodSet[t.product_name]=1;
   });
   var projs = Object.keys(projSet).sort();
-  var prods = Object.keys(prodSet).sort();
+  var projs = Object.keys(projSet).sort();
   var tabs = [{k:'all',l:'全部',c:_ucTasks.length},{k:'todo',l:'待办',c:counts.todo||0},{k:'in_progress',l:'进行中',c:counts.in_progress||0},{k:'review',l:'评审中',c:counts.review||0},{k:'done',l:'已完成',c:counts.done||0}];
-  var prodSel = prods.length ? '<select class="proj-select" onchange="_ucFilterProd=this.value;_renderUcTaskTable();_ucRefreshTaskStats()"><option value="">全部产品</option>' + prods.map(function(p) { return '<option value="'+escHtml(p)+'"'+(_ucFilterProd===p?' selected':'')+'>'+escHtml(p)+'</option>'; }).join('') + '</select>' : '';
+  var prodSelHtml = createProductCombo({
+    comboId: 'uc-task-prod-filter', inputId: 'uc-task-prod-filter-input', dropdownId: 'uc-task-prod-filter-dropdown',
+    placeholder: '全部产品',
+    onSelect: function(p) { _ucFilterProd = p.name; _renderUcTaskTable(); _ucRefreshTaskStats(); }
+  });
   var projSel = projs.length ? '<select class="proj-select" onchange="_ucFilterProj=this.value;_renderUcTaskTable();_ucRefreshTaskStats()"><option value="">全部项目</option>' + projs.map(function(p) { return '<option value="'+escHtml(p)+'"'+(_ucFilterProj===p?' selected':'')+'>'+escHtml(p)+'</option>'; }).join('') + '</select>' : '';
   document.getElementById('uc-tasks-filter-bar').innerHTML =
     '<div class="task-tabs">' + tabs.map(function(t) { return '<button class="task-tab' + (_ucFilterStatus===t.k?' active':'') + '" onclick="_ucSetFilter(\''+t.k+'\')">'+t.l+'<span class="task-tab-count">'+t.c+'</span></button>'; }).join('') + '</div>' +
-    prodSel + projSel;
+    '<span style="display:inline-block;vertical-align:middle">' + prodSelHtml + '</span>' + projSel;
 }
 
 function _ucSetFilter(s) { _ucFilterStatus = s; _ucFilterProd = ''; _ucFilterProj = ''; _renderUcFilterBar(); _renderUcTaskTable(); _ucRefreshTaskStats(); }
@@ -1556,17 +1560,20 @@ function _ucRenderBugFilter(bugs, uid) {
     if (b.product_name) prodSet[b.product_name] = 1;
     if (b.project_name) projSet[b.project_name] = 1;
   });
-  var prods = Object.keys(prodSet).sort();
   var projs = Object.keys(projSet).sort();
   var statuses = [{v:'',l:'全部状态'},{v:'open',l:'待确认'},{v:'confirmed',l:'已确认'},{v:'in_progress',l:'处理中'},{v:'resolved',l:'已解决'},{v:'closed',l:'已关闭'}];
   var statusSel = '<select class="proj-select" onchange="_ucBugFilterStatus=this.value;_ucLoadBugs()">' + statuses.map(function(s) { return '<option value="'+s.v+'"'+(_ucBugFilterStatus===s.v?' selected':'')+'>'+s.l+'</option>'; }).join('') + '</select>';
-  var prodSel = prods.length ? '<select class="proj-select" onchange="_ucBugFilterProd=this.value;_ucLoadBugs()"><option value="">全部产品</option>' + prods.map(function(p) { return '<option value="'+escHtml(p)+'"'+(_ucBugFilterProd===p?' selected':'')+'>'+escHtml(p)+'</option>'; }).join('') + '</select>' : '';
+  var prodSelHtml = createProductCombo({
+    comboId: 'uc-bug-prod-filter', inputId: 'uc-bug-prod-filter-input', dropdownId: 'uc-bug-prod-filter-dropdown',
+    placeholder: '全部产品',
+    onSelect: function(p) { _ucBugFilterProd = p.name; _ucLoadBugs(); }
+  });
   var projSel = projs.length ? '<select class="proj-select" onchange="_ucBugFilterProj=this.value;_ucLoadBugs()"><option value="">全部项目</option>' + projs.map(function(p) { return '<option value="'+escHtml(p)+'"'+(_ucBugFilterProj===p?' selected':'')+'>'+escHtml(p)+'</option>'; }).join('') + '</select>' : '';
   document.getElementById('uc-bugs-filter-bar').innerHTML =
     '<div class="task-tabs">' +
       '<button class="task-tab' + (_ucBugTab==='assignee'?' active':'') + '" onclick="_ucBugTab=\'assignee\';_ucLoadBugs()">待我处理<span class="task-tab-count">' + assigned.length + '</span></button>' +
       '<button class="task-tab' + (_ucBugTab==='reporter'?' active':'') + '" onclick="_ucBugTab=\'reporter\';_ucLoadBugs()">我创建的<span class="task-tab-count">' + reported.length + '</span></button>' +
-    '</div>' + statusSel + prodSel + projSel;
+    '</div>' + statusSel + '<span style="display:inline-block;vertical-align:middle">' + prodSelHtml + '</span>' + projSel;
   var result = _ucBugTab === 'assignee' ? assigned : reported;
   // Apply product/project/status filters
   if (_ucBugFilterStatus) result = result.filter(function(b) { return (b.status || 'open') === _ucBugFilterStatus; });

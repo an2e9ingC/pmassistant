@@ -46,7 +46,7 @@ async function doFuzzySearch() {
       return;
     }
     tbody.innerHTML = items.map(function(item) {
-      var code = extractProjectCode(item.project_name);
+      var projCode = item.project_code || '';
       var coreName = extractCoreName(item.project_name);
       var productList = item.products || [];
       var productsHtml = productList.length
@@ -55,7 +55,7 @@ async function doFuzzySearch() {
           }).join('')
         : '<span style="font-size:12px;color:var(--muted)">—</span>';
       return '<tr onclick="openProject(\'' + escHtml(item.project_code || '') + '\')">' +
-        '<td>' + renderProjIcon(item.project_type, code) + '</td>' +
+        '<td>' + (projCode ? projCodeTag(projCode, null, item.project_name) : '—') + '</td>' +
         '<td><div class="proj-name">' + escHtml(coreName) + '</div></td>' +
         '<td><span onclick="event.stopPropagation();openCustomerByName(\'' + escHtml(item.customer_name || '') + '\')" style="cursor:pointer">' + renderCustomerBadge(item.customer_name) + '</span></td>' +
         '<td>' + productsHtml + '</td>' +
@@ -98,7 +98,7 @@ async function doTopoSearch() {
       return;
     }
     tbody.innerHTML = items.map(function(item) {
-      var code = extractProjectCode(item.project_name);
+      var projCode = item.project_code || '';
       var coreName = extractCoreName(item.project_name);
       var productList = item.products || [];
       var productsHtml = productList.length
@@ -107,7 +107,7 @@ async function doTopoSearch() {
           }).join('')
         : '<span style="font-size:12px;color:var(--muted)">—</span>';
       return '<tr onclick="openProject(\'' + escHtml(item.project_code || '') + '\')">' +
-        '<td>' + renderProjIcon(item.project_type, code) + '</td>' +
+        '<td>' + (projCode ? projCodeTag(projCode, null, item.project_name) : '—') + '</td>' +
         '<td><div class="proj-name">' + escHtml(coreName) + '</div></td>' +
         '<td><span onclick="event.stopPropagation();openCustomerByName(\'' + escHtml(item.customer_name || '') + '\')" style="cursor:pointer">' + renderCustomerBadge(item.customer_name) + '</span></td>' +
         '<td>' + productsHtml + '</td>' +

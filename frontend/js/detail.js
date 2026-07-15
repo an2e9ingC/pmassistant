@@ -1094,11 +1094,13 @@ function showDeliveryForm(record) {
   var products = (typeof _projectProducts !== 'undefined' && _projectProducts) ? _projectProducts : [];
   var prodOptions = products.map(function(p) {
     var sel = (r.product_name === p.name) ? ' selected' : '';
-    return '<option value="' + escHtml(p.name) + '"' + sel + '>' + escHtml(p.name) + '</option>';
+    var label = (p.code ? p.code + ' ' : '') + p.name;
+    return '<option value="' + escHtml(p.name) + '"' + sel + '>' + escHtml(label) + '</option>';
   }).join('');
   if (!prodOptions) prodOptions = '<option value="">— 无关联产品 —</option>';
   if (r.product_name && products.length === 0) {
-    prodOptions = '<option value="' + escHtml(r.product_name) + '" selected>' + escHtml(r.product_name) + '</option>';
+    var rLabel = (p && p.code ? p.code + ' ' : '') + r.product_name;
+    prodOptions = '<option value="' + escHtml(r.product_name) + '" selected>' + escHtml(rLabel) + '</option>';
   }
 
   // Build user/customer dropdown
