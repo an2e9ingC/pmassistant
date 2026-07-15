@@ -590,35 +590,70 @@ function renderProductNotes(notes) {
     el.innerHTML = '<div class="empty-state" style="padding:20px">暂无笔记</div>';
     return;
   }
-  el.innerHTML = notes.map(function(n) {
-    return '<div style="padding:12px 16px;border-bottom:1px solid var(--border)">' +
-      '<div style="font-size:12.5px;line-height:1.6;white-space:pre-wrap">' + escHtml(n.content) + '</div>' +
-      '<div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10.5px;color:var(--muted)">' +
-        '<span>' + escHtml(n.recorded_by) + '</span>' +
-        '<span>' + escHtml(n.created_at) + '</span>' +
-        '<span style="cursor:pointer;color:var(--danger)" onclick="deleteProductNote(' + n.id + ',this)">删除</span>' +
-      '</div>' +
-    '</div>';
-  }).join('');
+  var currentUser = (getCurrentUser() || {}).username || '';
+  var html = '<div class="table-scroll"><table class="stage-table"><thead><tr>' +
+    '<th style="width:140px">记录时间</th><th style="width:90px">涉及领域</th><th style="width:70px">记录人</th><th>内容</th><th style="width:90px">操作</th>' +
+    '</tr></thead><tbody>';
+  notes.forEach(function(n) {
+    var isMine = n.recorded_by === currentUser;
+    var isReply = !!n.parent_id;
+    var actions = '';
+    if (isMine) {
+      actions += iconEdit('openEditProdNoteDialog(' + n.id + ')', '编辑') +
+                 iconDelete('deleteProductNote(' + n.id + ')', '删除');
+    } else {
+      actions += '<span style="cursor:pointer;font-size:12px;color:var(--accent)" onclick="openReplyProdNoteDialog(' + n.id + ')" title="回复">💬</span>';
+    }
+    var indentStyle = isReply ? 'padding-left:28px;border-left:3px solid var(--accent-lt)' : '';
+    var replyMark = isReply ? '<span style="font-size:10px;color:var(--accent);margin-right:4px">↳ 回复</span>' : '';
+    var timeCell = (n.created_at || '') + (n.updated_at ? '<div style="font-size:9px;color:var(--warn)">编辑过</div>' : '');
+    html += '<tr style="' + indentStyle + '">' +
+      '<td style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">' + timeCell + '</td>' +
+      '<td style="font-size:12px">' + escHtml(n.category || '不涉及') + '</td>' +
+      '<td style="font-size:12.5px;font-weight:540">' + escHtml(n.recorded_by || '') + '</td>' +
+      '<td style="font-size:13px;line-height:1.5;white-space:pre-wrap;text-align:left">' + replyMark + escHtml(n.content) + '</td>' +
+      '<td style="white-space:nowrap">' + actions + '</td>' +
+    '</tr>';
+  });
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
 }
 
-function showAddProductNoteDialog() {
+async function showAddProductNoteDialog() {
+  // Fetch note categories from product doc template stage_types
+  var categoriesHtml = '<option value="">请选择领域...</option>';
+  try {
+    var cats = await API.get('/products/' + _prodDetailCurCode + '/note-categories');
+    if (cats && cats.length) {
+      cats.forEach(function(c) {
+        categoriesHtml += '<option value="' + escHtml(c) + '">' + escHtml(c) + '</option>';
+      });
+    }
+  } catch(e) { /* ignore */ }
+
   openDialog('添加产品笔记 — ' + escHtml((_prodDetail || {}).name || ''),
-    '<div style="margin-bottom:12px">' +
-      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">笔记内容</label>' +
-      '<textarea class="search-inp" id="prod-note-content" rows="4" placeholder="输入笔记..." style="width:100%;box-sizing:border-box;resize:vertical"></textarea>' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">涉及领域</label>' +
+      '<select id="prod-note-category" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;box-sizing:border-box">' + categoriesHtml + '</select>' +
+    '</div>' +
+    '<textarea id="prod-note-content" style="width:100%;min-height:100px;box-sizing:border-box;padding:10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;resize:vertical;font-family:var(--font)" placeholder="记录产品关键信息..."></textarea>' +
+    '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:12px">' +
+      '<span id="prod-note-msg" style="font-size:11px"></span>' +
+      '<button class="btn" onclick="document.querySelector(\'.shared-dialog-overlay\').remove()" style="font-size:12px">取消</button>' +
+      '<button class="btn btn-primary" onclick="addProductNote()" style="font-size:12px">保存</button>' +
     '</div>',
-    [{text: '取消', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
-     {text: '添加', cls: 'btn-primary', onclick: 'addProductNote()'}],
+    null,
     {hideClose: true});
 }
 
 async function addProductNote() {
   var content = document.getElementById('prod-note-content').value.trim();
+  var category = document.getElementById('prod-note-category').value;
   if (!content) { showToast('请输入笔记内容', 'error'); return; }
+  if (!category) { showToast('请选择涉及领域', 'error'); return; }
   closeSharedDialog();
   try {
-    await API.post('/products/' + _prodDetailCurCode + '/notes', {content: content});
+    await API.post('/products/' + _prodDetailCurCode + '/notes', {content: content, category: category});
     showToast('已添加', 'ok');
     // Reload notes
     var notes = await API.get('/products/' + _prodDetailCurCode + '/notes');
@@ -628,8 +663,8 @@ async function addProductNote() {
   }
 }
 
-async function deleteProductNote(noteId, el) {
-  if (!confirm('确认删除此笔记？')) return;
+async function deleteProductNote(noteId) {
+  if (!confirm('确认删除此笔记？（有回复的笔记不能删除）')) return;
   try {
     await API.del('/products/' + _prodDetailCurCode + '/notes/' + noteId);
     showToast('已删除', 'ok');
@@ -638,6 +673,82 @@ async function deleteProductNote(noteId, el) {
   } catch(e) {
     showToast('删除失败: ' + (e.message || ''), 'error');
   }
+}
+
+function openEditProdNoteDialog(noteId) {
+  if (!_prodDetailCurCode) return;
+  API.get('/products/' + _prodDetailCurCode + '/notes').then(function(result) {
+    var notes = (result && result.length) ? result : [];
+    var note = notes.find(function(n) { return n.id === noteId; });
+    if (!note) { showToast('笔记不存在', 'error'); return; }
+    // Fetch categories
+    var catsHtml = '<option value="">请选择领域...</option>';
+    API.get('/products/' + _prodDetailCurCode + '/note-categories').then(function(cats) {
+      if (cats && cats.length) {
+        cats.forEach(function(c) {
+          var sel = c === note.category ? ' selected' : '';
+          catsHtml += '<option value="' + escHtml(c) + '"' + sel + '>' + escHtml(c) + '</option>';
+        });
+      }
+      openDialog('编辑产品笔记',
+        '<div style="margin-bottom:10px">' +
+          '<label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">涉及领域</label>' +
+          '<select id="edit-prod-note-cat" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;box-sizing:border-box">' + catsHtml + '</select>' +
+        '</div>' +
+        '<textarea id="edit-prod-note-content" style="width:100%;min-height:100px;box-sizing:border-box;padding:10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;resize:vertical;font-family:var(--font)">' + escHtml(note.content) + '</textarea>' +
+        '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:12px">' +
+          '<button class="btn" onclick="closeSharedDialog()" style="font-size:12px">取消</button>' +
+          '<button class="btn btn-primary" onclick="saveEditProdNote(' + noteId + ')" style="font-size:12px">保存</button>' +
+        '</div>',
+        null, {hideClose: true});
+    });
+  });
+}
+
+async function saveEditProdNote(noteId) {
+  var content = document.getElementById('edit-prod-note-content').value.trim();
+  var category = document.getElementById('edit-prod-note-cat').value;
+  if (!content) { showToast('请输入内容', 'error'); return; }
+  closeSharedDialog();
+  try {
+    await API.put('/products/' + _prodDetailCurCode + '/notes/' + noteId, {content: content, category: category});
+    showToast('已更新', 'success');
+    var notes = await API.get('/products/' + _prodDetailCurCode + '/notes');
+    renderProductNotes(notes || []);
+  } catch(e) { showToast('编辑失败: ' + (e.message || ''), 'error'); }
+}
+
+function openReplyProdNoteDialog(parentId) {
+  if (!_prodDetailCurCode) return;
+  API.get('/products/' + _prodDetailCurCode + '/notes').then(function(result) {
+    var notes = (result && result.length) ? result : [];
+    var parent = notes.find(function(n) { return n.id === parentId; });
+    if (!parent) { showToast('笔记不存在', 'error'); return; }
+    var catLabel = parent.category || '不涉及';
+    openDialog('回复笔记',
+      '<div style="margin-bottom:8px;padding:8px 12px;background:var(--bg);border-radius:6px;font-size:11px;color:var(--muted)">' +
+        '回复 <b>' + escHtml(parent.recorded_by) + '</b> 的笔记（' + escHtml(catLabel) + '）<br>' +
+        '<span style="color:var(--fg)">' + escHtml(parent.content.substring(0, 80)) + (parent.content.length > 80 ? '...' : '') + '</span>' +
+      '</div>' +
+      '<textarea id="reply-prod-note-content" style="width:100%;min-height:80px;box-sizing:border-box;padding:10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;resize:vertical;font-family:var(--font)" placeholder="输入回复..."></textarea>' +
+      '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:12px">' +
+        '<button class="btn" onclick="closeSharedDialog()" style="font-size:12px">取消</button>' +
+        '<button class="btn btn-primary" onclick="submitReplyProdNote(' + parentId + ',\'' + escHtml(catLabel).replace(/'/g, "\\'") + '\')" style="font-size:12px">回复</button>' +
+      '</div>',
+      null, {hideClose: true});
+  });
+}
+
+async function submitReplyProdNote(parentId, category) {
+  var content = document.getElementById('reply-prod-note-content').value.trim();
+  if (!content) { showToast('请输入回复内容', 'error'); return; }
+  closeSharedDialog();
+  try {
+    await API.post('/products/' + _prodDetailCurCode + '/notes', {content: content, category: category, parent_id: parentId});
+    showToast('已回复', 'success');
+    var notes = await API.get('/products/' + _prodDetailCurCode + '/notes');
+    renderProductNotes(notes || []);
+  } catch(e) { showToast('回复失败: ' + (e.message || ''), 'error'); }
 }
 
 // ── Product Block Diagrams ──

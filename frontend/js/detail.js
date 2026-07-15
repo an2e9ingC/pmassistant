@@ -1317,16 +1317,30 @@ function buildResources(resources, detail) {
 function buildNotes(notes) {
   var container = document.getElementById('notes-content');
   var tableHtml;
+  var currentUser = (getCurrentUser() || {}).username || '';
   if (notes && notes.length) {
     tableHtml = '<div class="table-scroll"><table class="stage-table"><thead><tr>' +
-      '<th style="width:140px">记录时间</th><th style="width:90px">涉及阶段</th><th style="width:70px">记录人</th><th>内容</th>' +
+      '<th style="width:140px">记录时间</th><th style="width:90px">涉及阶段</th><th style="width:70px">记录人</th><th>内容</th><th style="width:90px">操作</th>' +
     '</tr></thead><tbody>';
     notes.forEach(function(n) {
-      tableHtml += '<tr>' +
-        '<td style="font-size:12px;font-family:var(--mono);color:var(--muted);white-space:nowrap">' + escHtml(n.created_at || '') + '</td>' +
+      var isMine = n.recorded_by === currentUser;
+      var isReply = !!n.parent_id;
+      var actions = '';
+      if (isMine) {
+        actions += iconEdit('openEditNoteDialog(' + n.id + ')', '编辑') +
+                   iconDelete('deleteProjectNote(' + n.id + ')', '删除');
+      } else {
+        actions += '<span style="cursor:pointer;font-size:12px;color:var(--accent)" onclick="openReplyNoteDialog(' + n.id + ')" title="回复">💬</span>';
+      }
+      var indentStyle = isReply ? 'padding-left:28px;border-left:3px solid var(--accent-lt)' : '';
+      var replyMark = isReply ? '<span style="font-size:10px;color:var(--accent);margin-right:4px">↳ 回复</span>' : '';
+      var timeCell = (n.created_at || '') + (n.updated_at ? '<div style="font-size:9px;color:var(--warn)">编辑过</div>' : '');
+      tableHtml += '<tr style="' + indentStyle + '">' +
+        '<td style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">' + timeCell + '</td>' +
         '<td style="font-size:12px">' + escHtml(n.stage_name || '项目整体') + '</td>' +
         '<td style="font-size:12.5px;font-weight:540">' + escHtml(n.recorded_by || '') + '</td>' +
-        '<td style="font-size:13px;line-height:1.5;white-space:pre-wrap;text-align:left">' + escHtml(n.content) + '</td>' +
+        '<td style="font-size:13px;line-height:1.5;white-space:pre-wrap;text-align:left">' + replyMark + escHtml(n.content) + '</td>' +
+        '<td style="white-space:nowrap">' + actions + '</td>' +
       '</tr>';
     });
     tableHtml += '</tbody></table></div>';
@@ -1341,7 +1355,7 @@ async function openNoteDialog() {
   if (!_comboCurCode) return;
 
   // Fetch stages for the selector
-  var stagesHtml = '<option value="">项目整体</option>';
+  var stagesHtml = '<option value="">请选择阶段...</option>';
   try {
     var result = await API.get('/projects/' + _comboCurCode + '/stages');
     var stages = (result && result.stages) ? result.stages : [];
@@ -1382,17 +1396,103 @@ function closeNoteDialog() {
   if (overlay) overlay.remove();
 }
 
+/* Edit / Reply / Delete notes */
+
+function openEditNoteDialog(noteId) {
+  if (!_comboCurCode) return;
+  API.get('/projects/' + _comboCurCode + '/notes').then(function(result) {
+    var notes = (result && result.length) ? result : [];
+    var note = notes.find(function(n) { return n.id === noteId; });
+    if (!note) { showToast('笔记不存在', 'error'); return; }
+    var stagesHtml = '<option value="">请选择阶段...</option>';
+    // Re-fetch stages for the dropdown
+    API.get('/projects/' + _comboCurCode + '/stages').then(function(r) {
+      var stages = (r && r.stages) ? r.stages : [];
+      stages.forEach(function(s) {
+        var sel = s.name === note.stage_name ? ' selected' : '';
+        stagesHtml += '<option value="' + escHtml(s.name) + '"' + sel + '>' + escHtml(s.name) + '</option>';
+      });
+      openDialog('编辑项目笔记',
+        '<div style="margin-bottom:10px">' +
+          '<label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">涉及阶段</label>' +
+          '<select id="edit-note-stage" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;box-sizing:border-box">' + stagesHtml + '</select>' +
+        '</div>' +
+        '<textarea id="edit-note-content" style="width:100%;min-height:100px;box-sizing:border-box;padding:10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;resize:vertical;font-family:var(--font)">' + escHtml(note.content) + '</textarea>',
+        [{text: '取消', onclick: 'closeSharedDialog()'},
+         {text: '保存', cls: 'btn-primary', onclick: 'saveEditNote(' + noteId + ')'}],
+        {hideClose: true});
+    });
+  });
+}
+
+async function saveEditNote(noteId) {
+  var content = document.getElementById('edit-note-content').value.trim();
+  var stage = document.getElementById('edit-note-stage').value;
+  if (!content) { showToast('请输入内容', 'error'); return; }
+  closeSharedDialog();
+  try {
+    await API.put('/projects/' + _comboCurCode + '/notes/' + noteId, {content: content, stage_name: stage});
+    showToast('已更新', 'success');
+    var notes = await API.get('/projects/' + _comboCurCode + '/notes');
+    buildNotes(notes || []);
+  } catch(e) { showToast('编辑失败: ' + (e.message || ''), 'error'); }
+}
+
+function openReplyNoteDialog(parentId) {
+  if (!_comboCurCode) return;
+  // Fetch parent note for context
+  API.get('/projects/' + _comboCurCode + '/notes').then(function(result) {
+    var notes = (result && result.length) ? result : [];
+    var parent = notes.find(function(n) { return n.id === parentId; });
+    if (!parent) { showToast('笔记不存在', 'error'); return; }
+    var stageLabel = parent.stage_name || '项目整体';
+    openDialog('回复笔记',
+      '<div style="margin-bottom:8px;padding:8px 12px;background:var(--bg);border-radius:6px;font-size:11px;color:var(--muted)">' +
+        '回复 <b>' + escHtml(parent.recorded_by) + '</b> 的笔记（' + escHtml(stageLabel) + '）<br>' +
+        '<span style="color:var(--fg)">' + escHtml(parent.content.substring(0, 80)) + (parent.content.length > 80 ? '...' : '') + '</span>' +
+      '</div>' +
+      '<textarea id="reply-note-content" style="width:100%;min-height:80px;box-sizing:border-box;padding:10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;resize:vertical;font-family:var(--font)" placeholder="输入回复..."></textarea>',
+      [{text: '取消', onclick: 'closeSharedDialog()'},
+       {text: '回复', cls: 'btn-primary', onclick: 'submitReplyNote(' + parentId + ',\'' + escHtml(stageLabel).replace(/'/g, "\\'") + '\')'}],
+      {hideClose: true});
+  });
+}
+
+async function submitReplyNote(parentId, stageName) {
+  var content = document.getElementById('reply-note-content').value.trim();
+  if (!content) { showToast('请输入回复内容', 'error'); return; }
+  closeSharedDialog();
+  try {
+    await API.post('/projects/' + _comboCurCode + '/notes', {content: content, stage_name: stageName, parent_id: parentId});
+    showToast('已回复', 'success');
+    var notes = await API.get('/projects/' + _comboCurCode + '/notes');
+    buildNotes(notes || []);
+  } catch(e) { showToast('回复失败: ' + (e.message || ''), 'error'); }
+}
+
+async function deleteProjectNote(noteId) {
+  if (!confirm('确认删除此笔记？（有回复的笔记不能删除）')) return;
+  try {
+    await API.del('/projects/' + _comboCurCode + '/notes/' + noteId);
+    showToast('已删除', 'success');
+    var notes = await API.get('/projects/' + _comboCurCode + '/notes');
+    buildNotes(notes || []);
+  } catch(e) { showToast('删除失败: ' + (e.message || ''), 'error'); }
+}
+
 async function submitNote() {
   var inp = document.getElementById('note-dialog-input');
   var sel = document.getElementById('note-dialog-stage');
   var msg = document.getElementById('note-dialog-msg');
   var content = inp.value.trim();
   if (!content) return;
+  var stage = sel ? sel.value : '';
+  if (!stage) { msg.innerHTML = '<span style="color:var(--danger)">请选择涉及阶段</span>'; return; }
   if (!_comboCurCode) return;
 
   try {
     msg.innerHTML = '<span style="color:var(--muted)">保存中...</span>';
-    await API.post('/projects/' + _comboCurCode + '/notes', { content: content, stage_name: sel ? sel.value : '' });
+    await API.post('/projects/' + _comboCurCode + '/notes', { content: content, stage_name: stage });
     closeNoteDialog();
     var notes = await API.get('/projects/' + _comboCurCode + '/notes');
     buildNotes(notes);

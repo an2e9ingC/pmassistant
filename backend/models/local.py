@@ -62,8 +62,11 @@ class ProductNote(Base):
     id = Column(Integer, primary_key=True, index=True)
     product_id = Column(Integer, nullable=False, index=True)
     content = Column(Text, nullable=False)
+    category = Column(String(64), nullable=True, default="")  # 涉及领域
+    parent_id = Column(Integer, nullable=True)  # 回复的父笔记ID
     recorded_by = Column(String(64), nullable=False, default="")
     created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, nullable=True)  # 编辑时间
 
 
 class ProductBlockDiagram(Base):
@@ -86,8 +89,10 @@ class ProjectNote(Base):
     project_id = Column(Integer, nullable=False, index=True)
     stage_name = Column(String(256), nullable=True, default="")
     content = Column(Text, nullable=False)
+    parent_id = Column(Integer, nullable=True)  # 回复的父笔记ID
     recorded_by = Column(String(64), nullable=False, default="")
     created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, nullable=True)  # 编辑时间
 
 
 class PmaSetting(Base):

@@ -338,6 +338,12 @@ def get_resources(identifier: str, db: Session = Depends(get_db), _=Depends(get_
 class NoteCreate(BaseModel):
     content: str
     stage_name: str = ""
+    parent_id: Optional[int] = None
+
+
+class NoteUpdate(BaseModel):
+    content: Optional[str] = None
+    stage_name: Optional[str] = None
 
 
 @router.get("/{identifier}/notes", response_model=dict)
@@ -347,9 +353,21 @@ def get_notes(identifier: str, db: Session = Depends(get_db), _=Depends(get_curr
         db.query(ProjectNote)
         .filter(ProjectNote.project_id == project.id)
         .order_by(ProjectNote.created_at.desc())
-        .limit(50)
+        .limit(100)
         .all()
     )
+    # Build parent -> children mapping
+    children = {}
+    for n in notes:
+        if n.parent_id:
+            children.setdefault(n.parent_id, []).append(n)
+    # Sort: top-level notes first, each followed by its children
+    result = []
+    for n in notes:
+        if not n.parent_id:
+            result.append(n)
+            for child in children.get(n.id, []):
+                result.append(child)
     return {
         "code": 0,
         "data": [
@@ -357,10 +375,12 @@ def get_notes(identifier: str, db: Session = Depends(get_db), _=Depends(get_curr
                 "id": n.id,
                 "content": n.content,
                 "stage_name": n.stage_name or "",
+                "parent_id": n.parent_id,
                 "recorded_by": n.recorded_by,
                 "created_at": to_local_str(n.created_at),
+                "updated_at": to_local_str(n.updated_at) if n.updated_at else None,
             }
-            for n in notes
+            for n in result
         ],
         "message": "ok",
     }
@@ -374,10 +394,18 @@ def add_note(
     user=Depends(get_current_user),
 ):
     project = resolve_project(db, identifier)
+    # Comment on someone else's note: check parent ownership
+    if payload.parent_id:
+        parent = db.query(ProjectNote).filter(ProjectNote.id == payload.parent_id).first()
+        if not parent:
+            raise HTTPException(status_code=404, detail="父笔记不存在")
+        if parent.recorded_by == user.username:
+            raise HTTPException(status_code=400, detail="不能评论自己的笔记，请直接编辑")
     note = ProjectNote(
         project_id=project.id,
         content=payload.content,
         stage_name=payload.stage_name,
+        parent_id=payload.parent_id,
         recorded_by=user.username,
     )
     db.add(note)
@@ -385,17 +413,81 @@ def add_note(
     db.refresh(note)
     log_project_activity(db, project.id, user.username, "项目笔记",
         f"{payload.stage_name or '项目整体'}: {payload.content[:80]}")
+    log_audit(db, user, "project_note_add",
+        f"project={project.code} stage={payload.stage_name or '项目整体'} content={payload.content[:60]}",
+        AUDIT_CAT_PROJECT, "low")
     return {
         "code": 0,
         "data": {
             "id": note.id,
             "content": note.content,
             "stage_name": note.stage_name or "",
+            "parent_id": note.parent_id,
             "recorded_by": note.recorded_by,
             "created_at": to_local_str(note.created_at),
         },
         "message": "ok",
     }
+
+
+@router.put("/{identifier}/notes/{note_id}", response_model=dict)
+def update_note(
+    identifier: str,
+    note_id: int,
+    body: NoteUpdate,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    project = resolve_project(db, identifier)
+    note = db.query(ProjectNote).filter(
+        ProjectNote.id == note_id,
+        ProjectNote.project_id == project.id,
+    ).first()
+    if not note:
+        raise HTTPException(status_code=404, detail="笔记不存在")
+    if note.recorded_by != user.username:
+        raise HTTPException(status_code=403, detail="只能编辑自己的笔记")
+    from datetime import datetime as _dt
+    if body.content is not None:
+        note.content = body.content
+    if body.stage_name is not None:
+        note.stage_name = body.stage_name
+    note.updated_at = _dt.utcnow()
+    db.commit()
+    log_project_activity(db, project.id, user.username, "编辑笔记",
+        f"note_id={note_id} stage={note.stage_name or '项目整体'}: {note.content[:60]}")
+    log_audit(db, user, "project_note_edit",
+        f"project={project.code} note_id={note_id}", AUDIT_CAT_PROJECT, "low")
+    return {"code": 0, "data": {"id": note.id, "content": note.content, "stage_name": note.stage_name or ""}, "message": "ok"}
+
+
+@router.delete("/{identifier}/notes/{note_id}", response_model=dict)
+def delete_note(
+    identifier: str,
+    note_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    project = resolve_project(db, identifier)
+    note = db.query(ProjectNote).filter(
+        ProjectNote.id == note_id,
+        ProjectNote.project_id == project.id,
+    ).first()
+    if not note:
+        raise HTTPException(status_code=404, detail="笔记不存在")
+    if note.recorded_by != user.username:
+        raise HTTPException(status_code=403, detail="只能删除自己的笔记")
+    # Prevent deletion if note has replies
+    has_replies = db.query(ProjectNote).filter(ProjectNote.parent_id == note_id).first()
+    if has_replies:
+        raise HTTPException(status_code=400, detail="该笔记有回复，不能删除")
+    db.delete(note)
+    db.commit()
+    log_project_activity(db, project.id, user.username, "删除笔记",
+        f"note_id={note_id} stage={note.stage_name or '项目整体'}: {(note.content or '')[:60]}")
+    log_audit(db, user, "project_note_delete",
+        f"project={project.code} note_id={note_id}", AUDIT_CAT_PROJECT, "medium")
+    return {"code": 0, "message": "已删除"}
 
 
 @router.get("/{identifier}/activities", response_model=dict)

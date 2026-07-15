@@ -13,6 +13,8 @@ from backend.models.local import ProductNote, ProductBlockDiagram
 from backend.services import product_service
 from backend.services.product_service import log_product_activity
 from backend.services.entity_resolver import resolve_product
+from backend.routers.logs import log_audit
+from backend.audit_categories import AUDIT_CAT_PRODUCT
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 
@@ -37,6 +39,7 @@ class ProductProjectLinkRequest(BaseModel):
 
 class NoteCreate(BaseModel):
     content: str
+    category: Optional[str] = None
 
 
 @router.get("", response_model=dict)
@@ -139,6 +142,15 @@ def unlink_product_project(
 
 # ── Product Notes ──
 
+class ProductNoteCreate(BaseModel):
+    content: str
+    category: Optional[str] = None
+    parent_id: Optional[int] = None
+
+class ProductNoteUpdate(BaseModel):
+    content: Optional[str] = None
+    category: Optional[str] = None
+
 @router.get("/{identifier}/notes", response_model=dict)
 def get_product_notes(identifier: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
     product = resolve_product(db, identifier)
@@ -146,19 +158,32 @@ def get_product_notes(identifier: str, db: Session = Depends(get_db), _=Depends(
         db.query(ProductNote)
         .filter(ProductNote.product_id == product.id)
         .order_by(ProductNote.created_at.desc())
-        .limit(50)
+        .limit(100)
         .all()
     )
+    children = {}
+    for n in notes:
+        if n.parent_id:
+            children.setdefault(n.parent_id, []).append(n)
+    result = []
+    for n in notes:
+        if not n.parent_id:
+            result.append(n)
+            for child in children.get(n.id, []):
+                result.append(child)
     return {
         "code": 0,
         "data": [
             {
                 "id": n.id,
                 "content": n.content,
+                "category": n.category or "",
+                "parent_id": n.parent_id,
                 "recorded_by": n.recorded_by,
                 "created_at": to_local_str(n.created_at),
+                "updated_at": to_local_str(n.updated_at) if n.updated_at else None,
             }
-            for n in notes
+            for n in result
         ],
         "message": "ok",
     }
@@ -167,25 +192,38 @@ def get_product_notes(identifier: str, db: Session = Depends(get_db), _=Depends(
 @router.post("/{identifier}/notes", response_model=dict)
 def add_product_note(
     identifier: str,
-    payload: NoteCreate,
+    payload: ProductNoteCreate,
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
     product = resolve_product(db, identifier)
+    if payload.parent_id:
+        parent = db.query(ProductNote).filter(ProductNote.id == payload.parent_id).first()
+        if not parent:
+            raise HTTPException(status_code=404, detail="父笔记不存在")
+        if parent.recorded_by == user.username:
+            raise HTTPException(status_code=400, detail="不能评论自己的笔记，请直接编辑")
     note = ProductNote(
         product_id=product.id,
         content=payload.content,
+        category=payload.category or "",
+        parent_id=payload.parent_id,
         recorded_by=user.username,
     )
     db.add(note)
     db.commit()
     db.refresh(note)
     log_product_activity(db, product.id, user.username, "添加笔记", f"content:{payload.content[:100]}")
+    log_audit(db, user, "product_note_add",
+        f"product={product.code} category={payload.category or ''} content={payload.content[:60]}",
+        AUDIT_CAT_PRODUCT, "low")
     return {
         "code": 0,
         "data": {
             "id": note.id,
             "content": note.content,
+            "category": note.category or "",
+            "parent_id": note.parent_id,
             "recorded_by": note.recorded_by,
             "created_at": to_local_str(note.created_at),
         },
@@ -193,12 +231,43 @@ def add_product_note(
     }
 
 
+@router.put("/{identifier}/notes/{note_id}", response_model=dict)
+def update_product_note(
+    identifier: str,
+    note_id: int,
+    body: ProductNoteUpdate,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    product = resolve_product(db, identifier)
+    note = db.query(ProductNote).filter(
+        ProductNote.id == note_id,
+        ProductNote.product_id == product.id,
+    ).first()
+    if not note:
+        raise HTTPException(status_code=404, detail="笔记不存在")
+    if note.recorded_by != user.username:
+        raise HTTPException(status_code=403, detail="只能编辑自己的笔记")
+    from datetime import datetime as _dt
+    if body.content is not None:
+        note.content = body.content
+    if body.category is not None:
+        note.category = body.category
+    note.updated_at = _dt.utcnow()
+    db.commit()
+    log_product_activity(db, product.id, user.username, "编辑笔记",
+        f"note_id={note_id} category={note.category or ''}: {(note.content or '')[:60]}")
+    log_audit(db, user, "product_note_edit",
+        f"product={product.code} note_id={note_id}", AUDIT_CAT_PRODUCT, "low")
+    return {"code": 0, "data": {"id": note.id, "content": note.content}, "message": "ok"}
+
+
 @router.delete("/{identifier}/notes/{note_id}", response_model=dict)
 def delete_product_note(
     identifier: str,
     note_id: int,
     db: Session = Depends(get_db),
-    user=Depends(require_admin),
+    user=Depends(get_current_user),
 ):
     product = resolve_product(db, identifier)
     note = db.query(ProductNote).filter(
@@ -207,10 +276,38 @@ def delete_product_note(
     ).first()
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
+    if note.recorded_by != user.username:
+        raise HTTPException(status_code=403, detail="只能删除自己的笔记")
+    has_replies = db.query(ProductNote).filter(ProductNote.parent_id == note_id).first()
+    if has_replies:
+        raise HTTPException(status_code=400, detail="该笔记有回复，不能删除")
     db.delete(note)
     db.commit()
     log_product_activity(db, product.id, user.username, "删除笔记", f"note_id:{note_id}")
+    log_audit(db, user, "product_note_delete",
+        f"product={product.code} note_id={note_id}", AUDIT_CAT_PRODUCT, "medium")
     return {"code": 0, "message": "已删除"}
+
+
+@router.get("/{identifier}/note-categories", response_model=dict)
+def get_note_categories(identifier: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    """Return available categories for product notes (from product doc template stage_types)."""
+    product = resolve_product(db, identifier)
+    from backend.models.zentao import ProductNodeLink
+    from backend.models.document import ProductDocTemplate
+    # Find the product's node
+    link = db.query(ProductNodeLink).filter(ProductNodeLink.product_id == product.id).first()
+    node_id = link.product_node_id if link else None
+    categories = set()
+    if node_id:
+        rows = db.query(ProductDocTemplate.stage_type).filter(
+            ProductDocTemplate.product_id == node_id
+        ).distinct().all()
+        for r in rows:
+            if r[0]:
+                categories.add(r[0])
+    cats = sorted(categories) + ["其他"]
+    return {"code": 0, "data": cats, "message": "ok"}
 
 
 # ── Product Documents (based on doc templates) ──
