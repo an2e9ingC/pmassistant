@@ -767,7 +767,9 @@ function _showTaskForm(title, task) {
   // ── Section 3: 描述 ──
   bodyHtml += '<div style="' + _card + '">' +
     '<div style="' + _cardHd + '">描述</div>' +
-    '<textarea class="search-inp" id="tf-desc" rows="3" style="width:100%;box-sizing:border-box;resize:vertical">' + escHtml(t.description || '') + '</textarea>' +
+    '<textarea class="search-inp" id="tf-desc" rows="3" style="width:100%;min-height:60px;height:auto;max-height:30vh;box-sizing:border-box;resize:vertical">' + escHtml(t.description || '') + '</textarea>' +
+    '<div style="font-size:10px;color:var(--muted);margin-top:2px">支持粘贴图片 (Ctrl+V)</div>' +
+    '<div id="tf-desc-img-preview" style="margin-top:4px;min-height:0;max-height:50vh;overflow-y:auto"></div>' +
   '</div>';
 
   // ── Section 4: 产出物 ──
@@ -805,7 +807,12 @@ function _showTaskForm(title, task) {
   ];
 
   bodyHtml = '<div style="max-height:75vh;overflow-y:auto;padding-right:4px">' + bodyHtml + '</div>';
-  openDialog(title, bodyHtml, buttons, {maxWidth: '60%'});
+  openDialog(title, bodyHtml, buttons, {maxWidth: '80vw', maxHeight: '90vh'});
+  _clearNoteImagePreviews('tf-desc-img-preview');
+  setTimeout(function() {
+    initNoteImagePaste('tf-desc');
+    if (t.description) { _loadExistingNoteImages(t.description, 'tf-desc-img-preview'); }
+  }, 150);
 
   // Pre-fill project, assignee, and stage from task data (edit mode)
   _tfProjectId = t.project_id || _taskProjectId;
@@ -891,9 +898,11 @@ function addOutputRow() {
 /* ── Submit Task ── */
 
 async function submitTask(taskId) {
+  var desc = document.getElementById('tf-desc').value.trim();
+  desc = await _uploadNoteImages(desc);
   var data = {
     title: document.getElementById('tf-title').value.trim(),
-    description: document.getElementById('tf-desc').value.trim(),
+    description: desc,
     status: document.getElementById('tf-status').value,
     priority: document.getElementById('tf-priority').value,
     assignee_id: _tfAssigneeId,

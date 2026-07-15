@@ -291,9 +291,13 @@ function _showBugForm(b) {
         '<label class="btn btn-sm" style="cursor:pointer;font-size:10px;padding:2px 8px">📎 附件<input type="file" id="bf-file-input" style="display:none" onchange="_bugUploadAttach()" multiple></label>' +
         '<span style="font-size:10px;color:var(--muted)">支持粘贴图片 (Ctrl+V)</span>' +
       '</div>' +
+      '<div id="bf-desc-img-preview" style="margin-top:4px;min-height:0;max-height:50vh;overflow-y:auto"></div>' +
     '</div>' +
   '</div>';
   var title = isEdit ? '编辑Bug #'+t.id : '新建Bug';
+  _clearNoteImagePreviews('bf-desc-img-preview');
+  setTimeout(function() { initNoteImagePaste('bf-desc'); }, 100);
+  setTimeout(function() { _loadExistingNoteImages(t.description||'', 'bf-desc-img-preview'); }, 200);
   openDialog(title, html, [
     {text:'取消',onclick:'closeSharedDialog()'},
     {text:isEdit?'保存':'创建',cls:'btn-primary',onclick:'_submitBug('+(t.id||'null')+')'}], {maxWidth:'calc(80vh * 1.618)'});
@@ -389,9 +393,11 @@ async function _submitBug(bugId) {
   if (!title) { showToast('请输入标题','error'); return; }
   var pid = _bfProdId || 0;
   if (!pid) { showToast('请选择产品','error'); return; }
+  var desc = document.getElementById('bf-desc').value.trim();
+  desc = await _uploadNoteImages(desc);
   var payload = {
     title:title, product_id:pid,
-    description:document.getElementById('bf-desc').value.trim(),
+    description:desc,
     project_id:_bfProjId||null,
     component_id:parseInt(document.getElementById('bf-component').value)||null,
     severity:parseInt(document.getElementById('bf-severity').value)||3,
