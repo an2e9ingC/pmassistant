@@ -19,8 +19,10 @@ def resolve_project(db: Session, code: str) -> CachedProject:
 
 
 def resolve_product(db: Session, code: str) -> PmaProduct:
-    """Look up a PmaProduct by its code field."""
+    """Look up a PmaProduct by its code field. Falls back to integer ID lookup."""
     p = db.query(PmaProduct).filter(PmaProduct.code == code).first()
+    if not p and code.isdigit():
+        p = db.query(PmaProduct).filter(PmaProduct.id == int(code)).first()
     if not p:
         raise HTTPException(status_code=404, detail=f"产品不存在: {code}")
     return p

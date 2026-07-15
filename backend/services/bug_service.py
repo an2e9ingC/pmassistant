@@ -241,11 +241,11 @@ def transfer_bug(db, bug_id, to_project_id, transfer_type, user_id):
 # ═══════════════════════════════════════════ Helpers
 
 def _bug_dict(b, db=None):
-    pn = pj_n = pj_c = cn = rn = an = None
+    pc = pn = pj_n = pj_c = cn = rn = an = None
     if db:
         if b.product_id:
             p = db.query(__import__('backend.models.zentao', fromlist=['PmaProduct']).PmaProduct).filter_by(id=b.product_id).first()
-            if p: pn = p.name
+            if p: pn, pc = p.name, p.code
         if b.project_id:
             pj = db.query(__import__('backend.models.zentao', fromlist=['CachedProject']).CachedProject).filter_by(id=b.project_id).first()
             if pj: pj_n, pj_c = pj.name, pj.code
@@ -260,7 +260,7 @@ def _bug_dict(b, db=None):
             if b.assignee_id:
                 u = db.query(LU).filter_by(id=b.assignee_id).first()
                 if u: an = u.display_name or u.username
-    return {"id":b.id,"title":b.title,"description":b.description or "","product_id":b.product_id,"product_name":pn,
+    return {"id":b.id,"title":b.title,"description":b.description or "","product_id":b.product_id,"product_name":pn,"product_code":pc,
             "project_id":b.project_id,"project_name":pj_n,"project_code":pj_c,
             "component_id":b.component_id,"component_name":cn,
             "status":b.status or "open","resolution":b.resolution,"severity":b.severity or 3,"priority":b.priority or "medium","type":b.type or "codeerror",

@@ -141,65 +141,76 @@ function _renderKanban(container, bugs) {
 
 /* ── Bug Detail ── */
 
+var _bCard = 'background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px';
+var _bCardHd = 'font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.03em';
+var _bGrid2 = 'display:grid;grid-template-columns:1fr 1fr;gap:6px 20px';
+var _bLbl = 'font-size:11px;color:var(--muted)';
+var _bVal = 'font-size:13px;margin-top:1px';
+
 async function openBugDetail(bugId) {
   var data = await API.get('/bugs/' + bugId);
   var b = data || {};
-  var labels = {open:'待确认',confirmed:'已确认',in_progress:'处理中',gitlab_submitted:'GitLab已提交',resolved:'已解决',closed:'已关闭'};
   var sevs = {1:'致命',2:'严重',3:'一般',4:'建议'};
+  var sevColors = {1:'var(--danger)',2:'var(--warn)',3:'var(--accent)',4:'var(--muted)'};
+  var projHtml = b.project_code ? projCodeTag(b.project_code, b.project_id) + ' ' + escHtml(b.project_name || '') : escHtml(b.project_name || '-');
 
-  var html = '';
-  html += '<div style="display:flex;flex-direction:column;max-height:78vh">' +
-    '<div style="flex-shrink:0">' +
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">' +
-    '<div class="card" style="padding:14px"><div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px">基本信息</div>' +
-      '<div style="font-size:13px;font-weight:600;margin-bottom:6px">' + escHtml(b.title) + '</div>' +
-      '<div style="font-size:12px;line-height:1.8">' +
-        '<div><span style="color:var(--muted)">产品:</span> ' + escHtml(b.product_name||'-') + '</div>' +
-        '<div><span style="color:var(--muted)">项目:</span> ' + escHtml(b.project_name||'-') + '</div>' +
-        '<div><span style="color:var(--muted)">组件:</span> ' + escHtml(b.component_name||'-') + '</div>' +
-        '<div><span style="color:var(--muted)">类型:</span> ' + escHtml(b.type||'') + '</div>' +
-      '</div></div>' +
-    '<div class="card" style="padding:14px"><div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px">状态与进度</div>' +
-      '<div style="font-size:12px;line-height:1.8">' +
-        '<div><span style="color:var(--muted)">状态:</span> ' + renderPill(b.status||'open') + '</div>' +
-        '<div><span style="color:var(--muted)">解决:</span> ' + escHtml(b.resolution||'-') + '</div>' +
-        '<div><span style="color:var(--muted)">严重:</span> ' + sevs[b.severity] + '</div>' +
-        '<div><span style="color:var(--muted)">优先级:</span> ' + (b.priority||'medium') + '</div>' +
-        '<div><span style="color:var(--muted)">负责人:</span> ' + escHtml(b.assignee_name||'未分配') + '</div>' +
-        '<div><span style="color:var(--muted)">创建人:</span> ' + escHtml(b.reporter_name||'') + '</div>' +
-        '<div>预估 '+(b.estimate_hours||0)+'h / 实际 '+(b.consumed_hours||0)+'h</div>' +
-      '</div></div></div>'; // close second-card, info-grid, flex-shrink:0
+  var html = '<div style="max-height:78vh;overflow-y:auto;padding-right:4px">' +
+    '<div style="font-size:14px;font-weight:600;margin-bottom:10px">' + escHtml(b.title) + '</div>' +
+    // Row 1: 基本信息 + 状态与进度
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+      '<div style="' + _bCard + '">' +
+        '<div style="' + _bCardHd + '">基本信息</div>' +
+        '<div style="' + _bGrid2 + '">' +
+          '<div><span style="' + _bLbl + '">产品</span><div style="' + _bVal + '">' + (b.product_code ? '<span class="proj-code-btn" onclick="openProductDetail(\'' + escHtml(b.product_code) + '\')" title="' + escHtml(b.product_name || '') + '">' + escHtml(b.product_code) + '</span> ' + escHtml(b.product_name || '') : escHtml(b.product_name || '-')) + '</div></div>' +
+          '<div><span style="' + _bLbl + '">项目</span><div style="' + _bVal + '">' + projHtml + '</div></div>' +
+          '<div><span style="' + _bLbl + '">组件</span><div style="' + _bVal + '">' + escHtml(b.component_name || '-') + '</div></div>' +
+          '<div><span style="' + _bLbl + '">类型</span><div style="' + _bVal + '">' + escHtml(b.type || '-') + '</div></div>' +
+          '<div><span style="' + _bLbl + '">负责人</span><div style="' + _bVal + '">' + escHtml(b.assignee_name || '未分配') + '</div></div>' +
+          '<div><span style="' + _bLbl + '">创建人</span><div style="' + _bVal + '">' + escHtml(b.reporter_name || '-') + '</div></div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="' + _bCard + '">' +
+        '<div style="' + _bCardHd + '">状态与进度</div>' +
+        '<div style="' + _bGrid2 + '">' +
+          '<div><span style="' + _bLbl + '">状态</span><div style="margin-top:3px">' + renderPill(b.status || 'open') + '</div></div>' +
+          '<div><span style="' + _bLbl + '">解决</span><div style="' + _bVal + '">' + escHtml(b.resolution || '-') + '</div></div>' +
+          '<div><span style="' + _bLbl + '">严重程度</span><div style="' + _bVal + ';color:' + (sevColors[b.severity] || 'var(--muted)') + ';font-weight:500">' + (sevs[b.severity] || b.severity) + '</div></div>' +
+          '<div><span style="' + _bLbl + '">优先级</span><div style="margin-top:3px"><span class="prio-tag '+(b.priority||'medium')+'">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[b.priority]||b.priority)+'</span></div></div>' +
+          '<div><span style="' + _bLbl + '">工时</span><div style="font-size:12px;margin-top:1px">预估 '+(b.estimate_hours||0).toFixed(1)+'h / 实际 '+(b.consumed_hours||0).toFixed(1)+'h</div></div>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
 
-  // Description (left) + Worklog+Analysis (right, stacked vertically)
-  html += '<div style="display:flex;gap:10px;flex:1;min-height:0">' +
-    // Left: Description (50% width)
-    '<div style="flex:1;min-width:0">' +
-    '<div class="card" style="padding:14px;display:flex;flex-direction:column;height:100%">' +
-      '<div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px">描述</div>' +
-      '<div class="markdown-body" style="font-size:13px;line-height:1.6;flex:1;overflow-y:auto">' + (b.description ? renderMarkdown(b.description) : '<span style="color:var(--muted)">暂无描述</span>') + '</div>' +
+    // Row 2: 描述 (left 50%) + 工时/分析 (right 50%, stacked)
+    '<div style="display:flex;gap:10px">' +
+      '<div style="flex:1;min-width:0">' +
+        '<div style="' + _bCard + '">' +
+          '<div style="' + _bCardHd + '">描述</div>' +
+          '<div class="markdown-body" style="font-size:13px;line-height:1.6;max-height:40vh;overflow-y:auto">' + (b.description ? renderMarkdown(b.description) : '<span style="color:var(--muted)">暂无描述</span>') + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="flex:1;display:flex;flex-direction:column;gap:10px;min-width:0">' +
+        '<div style="' + _bCard + '">' +
+          '<div style="display:flex;justify-content:space-between;margin-bottom:6px">' +
+            '<span style="' + _bCardHd + ';margin-bottom:0">工时日志 ('+(b.consumed_hours||0).toFixed(1)+'h)</span>' +
+            '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openBugWorklogDialog('+bugId+')">+ 记录</button></div>' +
+          '<div id="bv-worklogs" style="font-size:12px;max-height:200px;overflow-y:auto">加载中...</div>' +
+        '</div>' +
+        '<div style="' + _bCard + '">' +
+          '<div style="display:flex;justify-content:space-between;margin-bottom:6px">' +
+            '<span style="' + _bCardHd + ';margin-bottom:0">分析记录</span>' +
+            '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openBugAnalysisDialog('+bugId+')">+ 添加</button></div>' +
+          '<div id="bv-analyses" style="max-height:200px;overflow-y:auto">加载中...</div>' +
+        '</div>' +
+      '</div>' +
     '</div>' +
-    '</div>' +
-    // Right: Worklog (top) + Analysis (bottom), stacked, 50% width
-    '<div style="flex:1;display:flex;flex-direction:column;gap:10px;min-width:0">' +
-      '<div class="card" style="padding:14px;flex:1;display:flex;flex-direction:column;min-height:0">' +
-        '<div style="display:flex;justify-content:space-between;margin-bottom:6px">' +
-          '<span style="font-size:11px;font-weight:600;color:var(--muted)">工时日志 ('+(b.consumed_hours||0).toFixed(1)+'h)</span>' +
-          '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openBugWorklogDialog('+bugId+')">+ 记录工时</button></div>' +
-        '<div id="bv-worklogs" style="flex:1;overflow-y:auto;overflow-x:hidden;font-size:12px;min-height:140px">加载中...</div></div>' +
-      '<div class="card" style="padding:14px;flex:1;display:flex;flex-direction:column;min-height:0">' +
-        '<div style="display:flex;justify-content:space-between;margin-bottom:6px">' +
-          '<span style="font-size:11px;font-weight:600;color:var(--muted)">分析记录</span>' +
-          '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openBugAnalysisDialog('+bugId+')">+ 添加</button></div>' +
-        '<div id="bv-analyses" style="flex:1;overflow-y:auto;overflow-x:hidden;min-height:160px">加载中...</div></div>' +
-    '</div>' +
-  '</div>' + // close 6:4 horizontal flex
-  '</div>'; // close max-height wrapper
+  '</div>';
 
   var btns = [
-    {text:'提交到GitLab',cls:'btn',onclick:'_bugSubmitGitlab('+bugId+')',enabled:!!(b.component_id && !b.gitlab_url)},
+    {text:'提交到GitLab',cls:'btn',onclick:'_bugSubmitGitlab('+bugId+')'},
     {text:'编辑',cls:'btn-primary',onclick:'openBugDialog('+bugId+');closeSharedDialog()'},
     {text:'关闭',onclick:'closeSharedDialog()'}];
-  openDialog('Bug #' + bugId, html, btns, {maxWidth:'90%'});
+  openDialog('Bug #' + bugId, html, btns, {maxWidth: '80vw', maxHeight: '90vh'});
 
   // Load worklogs + analyses
   API.get('/bugs/'+bugId+'/worklogs').then(function(logs) {
