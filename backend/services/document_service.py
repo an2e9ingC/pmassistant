@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 
 from backend.database import to_local_str
 from backend.models.document import DocumentTemplate, ProjectDocument, ProductDocTemplate, ProductLine, PmaTag, TaskTemplate
@@ -406,7 +407,7 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
             db.query(DocumentTemplate)
             .filter(DocumentTemplate.stage_type == st,
                     DocumentTemplate.project_type == project_type,
-                    DocumentTemplate.is_unnecessary == 0)
+                    or_(DocumentTemplate.is_unnecessary == 0, DocumentTemplate.is_unnecessary == None))
             .order_by(DocumentTemplate.sort_order)
             .all()
         )
@@ -713,7 +714,7 @@ def _sync_tasks_from_templates(db: Session, project_id: int, project_type: str =
             db.query(TaskTemplate)
             .filter(TaskTemplate.stage_type == st,
                     TaskTemplate.project_type == project_type,
-                    TaskTemplate.is_unnecessary == 0)
+                    or_(TaskTemplate.is_unnecessary == 0, TaskTemplate.is_unnecessary == None))
             .order_by(TaskTemplate.sort_order)
             .all()
         )
@@ -990,7 +991,6 @@ def _product_template_dict(t: ProductDocTemplate) -> dict:
         "base_path": t.base_path or "",
         "file_pattern": t.file_pattern or "",
         "doc_type": t.doc_type or "",
-        "is_unnecessary": bool(t.is_unnecessary),
     }
 
 
