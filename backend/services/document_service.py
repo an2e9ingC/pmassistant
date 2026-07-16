@@ -402,6 +402,10 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
     standard_stages = get_stage_types_for_project_type(db, project_type)
     changed = False
 
+    # Resolve project code for {code} placeholder substitution
+    project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
+    project_code = (project.code or "") if project else ""
+
     for st in standard_stages:
         templates = (
             db.query(DocumentTemplate)
@@ -436,12 +440,24 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
         # Add new docs from template
         for doc_name, tpl in template_names.items():
             if doc_name not in existing_names:
+                # Build doc_path from base_path + file_pattern with {code} substitution
+                if tpl.base_path and tpl.file_pattern:
+                    base = tpl.base_path.replace("{code}", project_code) if project_code else tpl.base_path
+                    pattern = tpl.file_pattern.replace("{code}", project_code) if project_code else tpl.file_pattern
+                    doc_path = base.rstrip("/") + "/" + pattern.lstrip("/")
+                else:
+                    doc_path = tpl.doc_path.replace("{code}", project_code) if (tpl.doc_path and project_code) else (tpl.doc_path or "")
+                # Normalize common URL typo: http:/ → http:// (but not http:// → http:///)
+                if doc_path:
+                    import re
+                    doc_path = re.sub(r'^(https?:)/(?!/)', r'\1//', doc_path)
                 pd = ProjectDocument(
                     project_id=project_id, execution_id=0,
                     stage_type=st, doc_name=tpl.doc_name,
                     sort_order=tpl.sort_order, status="pending",
                     responsible_role=tpl.responsible_role, description=tpl.description,
-                    doc_type=tpl.doc_type, doc_path=tpl.doc_path,
+                    doc_type=tpl.doc_type, doc_path=doc_path,
+                    base_path=tpl.base_path, file_pattern=tpl.file_pattern,
                 )
                 db.add(pd)
                 changed = True
@@ -455,12 +471,33 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
         # Update existing docs
         for doc_name, pd in existing_names.items():
             tpl = template_names.get(doc_name)
-            if tpl and (pd.sort_order != tpl.sort_order or
-                        pd.responsible_role != tpl.responsible_role or
-                        pd.description != tpl.description):
+            if not tpl:
+                continue
+            # Compute expected doc_path from template
+            if tpl.base_path and tpl.file_pattern:
+                base = tpl.base_path.replace("{code}", project_code) if project_code else tpl.base_path
+                pattern = tpl.file_pattern.replace("{code}", project_code) if project_code else tpl.file_pattern
+                expected_path = base.rstrip("/") + "/" + pattern.lstrip("/")
+            else:
+                expected_path = tpl.doc_path.replace("{code}", project_code) if (tpl.doc_path and project_code) else (tpl.doc_path or "")
+            # Normalize common URL typo: http:/ → http:// (but not http:// → http:///)
+            if expected_path:
+                import re as _re
+                expected_path = _re.sub(r'^(https?:)/(?!/)', r'\1//', expected_path)
+            if (pd.sort_order != tpl.sort_order or
+                    pd.responsible_role != tpl.responsible_role or
+                    pd.description != tpl.description or
+                    pd.doc_path != expected_path or
+                    pd.base_path != tpl.base_path or
+                    pd.file_pattern != tpl.file_pattern or
+                    pd.doc_type != tpl.doc_type):
                 pd.sort_order = tpl.sort_order
                 pd.responsible_role = tpl.responsible_role
                 pd.description = tpl.description
+                pd.doc_path = expected_path
+                pd.base_path = tpl.base_path
+                pd.file_pattern = tpl.file_pattern
+                pd.doc_type = tpl.doc_type
                 changed = True
 
     if changed:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Optional
+import logging
 
 from sqlalchemy.orm import Session
 
@@ -13,6 +14,8 @@ from backend.models.zentao import (
 from backend.models.document import ProjectDocument
 from backend.models.local import ProjectActivity
 from backend.services.document_service import get_stage_types_for_project_type
+
+logger = logging.getLogger(__name__)
 
 
 def log_project_activity(db: Session, project_id: int, username: str, action: str, detail: str = ""):
@@ -258,6 +261,11 @@ def get_project_documents(db: Session, project_id: int) -> dict:
 
     # Init documents for matched stages (incremental)
     docs_list = get_or_init_project_documents(db, project_id, project_type)
+
+    # Auto-scan SVN docs — check if files exist at template paths
+    from backend.services.doc_scanner import check_project_docs
+    scan_result = check_project_docs(db, project_id)
+    logger.info(f"[project-docs] project_id={project_id} scanned={scan_result.get('scanned',0)} matched={scan_result.get('total_matched',0)} submitted={scan_result.get('auto_submitted',0)}")
 
     # Group existing docs by stage_type (standard stage name)
     grouped: dict[str, list[dict]] = {}

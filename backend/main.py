@@ -37,7 +37,7 @@ logging.basicConfig(
 )
 # Suppress noisy third-party / internal loggers
 logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("backend.services.doc_scanner").setLevel(logging.ERROR)
+logging.getLogger("backend.services.doc_scanner").setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
 

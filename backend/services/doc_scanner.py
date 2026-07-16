@@ -6,7 +6,7 @@ and auto-marks documents as submitted when matching files are found (size > 0).
 import re
 import logging
 from datetime import datetime as _dt, timezone as _tz, timedelta as _td
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, unquote
 import urllib.request
 import urllib.error
 
@@ -80,6 +80,9 @@ def _parse_doc_path(doc_path: str) -> tuple:
     if not doc_path:
         return None, None
 
+    # Normalize common URL typos: http:/ → http:// (but not http:// → http:///)
+    doc_path = re.sub(r'^(https?:)/(?!/)', r'\1//', doc_path)
+
     # Find the position of the first wildcard in the URL path
     parsed = urlparse(doc_path)
     path = parsed.path
@@ -109,6 +112,7 @@ def _parse_doc_path(doc_path: str) -> tuple:
     relative_pattern = path[last_slash + 1:] if last_slash >= 0 else path
     file_regex = _glob_to_regex(relative_pattern)
 
+    logger.debug(f"[_parse_doc_path] doc_path={doc_path[:120]} -> base_url={base_url} file_regex={file_regex}")
     return base_url, file_regex
 
 
@@ -131,17 +135,19 @@ def _list_directory_svn(base_url: str) -> list:
     <getcontentlength/>
   </prop>
 </propfind>"""
-    # Depth: 2 to list files one level below wildcard directory
-    # (templates like */*-pattern.rar match files inside product subdirectories)
+    # Depth: 3 to cover two levels below wildcard directory
+    # (e.g. PE0454*/售前部/*_技术协议.* where files are 3 levels deep from base)
     req = urllib.request.Request(base_url, data=data.encode(), method="PROPFIND",
-                                  headers={"Depth": "2", "Content-Type": "application/xml"})
+                                  headers={"Depth": "3", "Content-Type": "application/xml"})
     _add_svn_auth(req)
     try:
         resp = urllib.request.urlopen(req, timeout=HTTP_TIMEOUT)
         body = resp.read().decode("utf-8", errors="replace")
         # Parse href from XML response (simple regex approach)
         hrefs = re.findall(r"<D:href>(.*?)</D:href>", body, re.DOTALL)
-        return [h.strip() for h in hrefs]
+        entries = [h.strip() for h in hrefs]
+        logger.debug(f"[svn-list] base_url={base_url} entries_count={len(entries)}")
+        return entries
     except Exception:
         return []
 
@@ -237,26 +243,53 @@ def get_svn_metadata(url: str) -> tuple:
         return None, None, None
 
 
-def scan_doc_path(doc_path: str) -> bool:
-    """Scan a single doc_path and return True if a matching file exists.
+def _resolve_wildcard_dir(base_url: str, dir_glob: str) -> list:
+    """Resolve a single wildcard directory segment to concrete directory names.
+    e.g. dir_glob='PE0454*', base_url='http://.../04_项目文档/' → ['PE0454-LSJ0530-研发-双K7中频板采集板', ...]
+    """
+    entries = _list_directory_svn(base_url)
+    if not entries:
+        entries = _list_directory_html(base_url)
+    if not entries:
+        return []
 
-    Handles wildcards (* and ?) in the path by:
-    1. Extracting the base directory URL
-    2. Listing the directory contents
-    3. Matching file paths against the glob pattern
-    4. Checking file size > 0
+    dir_regex = _glob_to_regex(dir_glob)  # PE0454.*$
+    compiled = re.compile(dir_regex, re.IGNORECASE)
+    matches = []
+    for entry in entries:
+        rel = unquote(entry.rstrip("/").lstrip("/"))
+        # Only match directory names (not full paths with /)
+        name = rel.split("/")[0] if "/" in rel else rel
+        if compiled.match(name):
+            if name not in matches:
+                matches.append(name)
+    return matches
+
+
+def scan_doc_path(doc_path: str):
+    """Scan a single doc_path and return the matched file URL if found, or None.
+
+    Handles wildcards (* and ?) by:
+    1. Parsing the path into base_url and relative pattern
+    2. For the first wildcard directory segment (e.g. PE0454*/),
+       resolving it to concrete directory names from SVN
+    3. Recursively scanning the resolved path
+    4. When no more multi-level wildcards remain, matching files directly
     """
     if not doc_path:
-        return False
+        return None
 
     base_url, file_regex = _parse_doc_path(doc_path)
 
     if base_url is None:
-        return False
+        logger.warning(f"[scan_doc_path] base_url=None for doc_path={doc_path[:100]}")
+        return None
 
     if file_regex is None:
         # No wildcards — direct URL check
-        return check_file_exists(doc_path)
+        if check_file_exists(doc_path):
+            return doc_path
+        return None
 
     # Try to list directory
     entries = _list_directory_svn(base_url)
@@ -264,20 +297,57 @@ def scan_doc_path(doc_path: str) -> bool:
         entries = _list_directory_html(base_url)
 
     if not entries:
-        # Can't list — try the base URL directly (some servers auto-index)
-        return False
+        return None
 
-    # Match entries against pattern (match against full entry path; .* is greedy)
+    # Check if the relative pattern has a wildcard directory: e.g. PE0454.*/rest
+    # Split at the first '/' to get the wildcard dir segment
+    first_slash = file_regex.find('/')
+    if first_slash > 0:
+        # Multi-level pattern: first segment is a wildcard directory
+        # Extract the original glob pattern from doc_path for the first segment
+        parsed = urlparse(doc_path)
+        path = parsed.path
+        wildcard_pos = -1
+        for i, c in enumerate(path):
+            if c in ('*', '?'):
+                wildcard_pos = i
+                break
+        last_slash = path.rfind('/', 0, wildcard_pos)
+        relative_pattern = path[last_slash + 1:] if last_slash >= 0 else path
+        first_sep = relative_pattern.find('/')
+        if first_sep > 0:
+            dir_glob = relative_pattern[:first_sep]      # e.g. PE0454*
+            rest_glob = relative_pattern[first_sep + 1:]  # e.g. 售前部/*_技术协议.*
+
+            # Resolve wildcard directory to concrete names
+            resolved_dirs = _resolve_wildcard_dir(base_url, dir_glob)
+            logger.warning(f"[scan_doc_path] resolving dir_glob={dir_glob} -> {len(resolved_dirs)} matches: {resolved_dirs[:5]}")
+
+            for dir_name in resolved_dirs:
+                # Build new doc_path with wildcard directory resolved
+                new_doc_path = base_url.rstrip("/") + "/" + dir_name + "/" + rest_glob
+                logger.warning(f"[scan_doc_path] resolved dir: {new_doc_path[:120]}")
+                # Recursively scan the resolved path
+                matched_url = scan_doc_path(new_doc_path)
+                if matched_url:
+                    return matched_url
+            return None
+
+    # Single-level pattern or no / in file_regex: match entries directly
+    # SVN PROPFIND returns percent-encoded hrefs — decode before matching
     compiled = re.compile(file_regex, re.IGNORECASE)
     for entry in entries:
         rel_path = entry.rstrip("/").lstrip("/")
-        if compiled.match(rel_path):
-            # Found a match — check if file is non-empty
+        decoded = unquote(rel_path)
+        if compiled.match(decoded) or compiled.match(rel_path):
             file_url = urljoin(base_url, entry) if not entry.startswith("http") else entry
             if check_file_exists(file_url):
-                return True
+                return file_url
+    if len(entries) > 0:
+        sample = [unquote(e.rstrip('/').lstrip('/'))[:100] for e in entries[:5]]
+        logger.debug(f"[scan_doc_path] no regex match! regex={file_regex} sample={sample}")
 
-    return False
+    return None
 
 
 def check_product_docs(db, product_id: int) -> dict:
@@ -321,9 +391,12 @@ def check_product_docs(db, product_id: int) -> dict:
         else:
             # No user location — use template path directly
             try:
-                exists = scan_doc_path(check_path)
+                matched_url = scan_doc_path(check_path)
             except Exception as e:
+                matched_url = None
                 logger.warning(f"Scan failed for doc {doc.id} ({doc.doc_name}): {e}")
+
+        exists = matched_url is not None
 
         if mismatch:
             logger.warning(f"[doc-scanner] doc#{doc.id} '{doc.doc_name}': {mismatch}")
@@ -339,7 +412,7 @@ def check_product_docs(db, product_id: int) -> dict:
         results.append({
             "doc_id": doc.id,
             "doc_name": doc.doc_name,
-            "path": check_path,
+            "path": matched_url or check_path,
             "template_path": template_path,
             "found": exists,
             "mismatch": mismatch,
@@ -348,26 +421,31 @@ def check_product_docs(db, product_id: int) -> dict:
         })
 
         now = _dt.utcnow()
-        if exists:
+        if exists and matched_url:
             total_matched += 1
-            # Auto-fill location with the verified path (only if no wildcards — direct URL)
-            if check_path and '*' not in check_path and '?' not in check_path:
-                if not doc.location:
-                    doc.location = check_path
-                    doc.updated_by = "auto-scanner"
-                    doc.updated_at = now
-                    location_filled += 1
+            # Auto-fill location with the resolved URL (decoded for readability)
+            loc_url = unquote(matched_url)
+            if not doc.location or doc.location != loc_url:
+                doc.location = loc_url
+                location_filled += 1
             if doc.status != "submitted":
                 doc.status = "submitted"
                 doc.completed_at = now
                 doc.uploaded_by = doc.uploaded_by or "auto-scanner"
                 doc.uploaded_at = doc.uploaded_at or now
-                doc.updated_by = "auto-scanner"
-                doc.updated_at = now
                 auto_submitted += 1
+            # Update modifier to SVN author if available
+            if doc_type == "svn":
+                svn_author, _, _ = get_svn_metadata(matched_url)
+                if svn_author:
+                    doc.updated_by = svn_author
+                else:
+                    doc.updated_by = "auto-scanner"
+            else:
+                doc.updated_by = "auto-scanner"
+            doc.updated_at = now
 
         # Fetch SVN metadata (author + last-modified + rev) for SVN-type docs
-        # Do this regardless of HEAD/scan result — PROPFIND itself confirms accessibility
         if doc_type == "svn" and check_path:
             prev_rev = doc.svn_rev
             logger.debug(f"[doc-scanner] Fetching SVN metadata for doc#{doc.id} '{doc.doc_name}': {check_path}")
@@ -410,6 +488,123 @@ def check_product_docs(db, product_id: int) -> dict:
                            f"reverted to pending: file not found")
 
     if auto_submitted > 0 or reverted > 0 or location_filled > 0 or svn_meta_updated > 0:
+        db.commit()
+
+    return {
+        "scanned": scanned,
+        "total_matched": total_matched,
+        "auto_submitted": auto_submitted,
+        "reverted": reverted,
+        "location_filled": location_filled,
+        "results": results,
+    }
+
+
+def check_project_docs(db, project_id: int) -> dict:
+    """Scan all docs for a project and auto-update statuses.
+
+    Returns:
+        dict with scanned_count, auto_submitted_count, and per-doc results.
+    """
+    from backend.models.document import ProjectDocument
+
+    docs = db.query(ProjectDocument).filter(
+        ProjectDocument.project_id == project_id
+    ).all()
+
+    scanned = 0
+    auto_submitted = 0
+    reverted = 0
+    location_filled = 0
+    total_matched = 0
+    results = []
+
+    from datetime import datetime as _dt
+
+    for doc in docs:
+        template_path = doc.doc_path or ""
+        check_path = doc.location or template_path
+        if not check_path:
+            continue
+
+        scanned += 1
+        exists = False
+        mismatch = ""
+        matched_url = None
+
+        logger.warning(f"[project-doc-scan] #{doc.id} '{doc.doc_name}' path={check_path[:120]}")
+
+        # If user set a location, validate it matches the template
+        if doc.location and template_path:
+            if template_path != doc.location:
+                mismatch = f"路径与模板不匹配（期望: {template_path}）"
+                logger.warning(f"[project-doc-scan] #{doc.id} '{doc.doc_name}' mismatch: {mismatch}")
+            else:
+                exists = check_file_exists(doc.location)
+                matched_url = doc.location if exists else None
+                logger.warning(f"[project-doc-scan] #{doc.id} '{doc.doc_name}' check_file_exists(location) = {exists}")
+        else:
+            # No user location — use template path directly
+            try:
+                matched_url = scan_doc_path(check_path)
+                exists = matched_url is not None
+                logger.warning(f"[project-doc-scan] #{doc.id} '{doc.doc_name}' scan_doc_path = {exists} url={matched_url}")
+            except Exception as e:
+                logger.warning(f"[project-doc-scan] #{doc.id} '{doc.doc_name}' scan failed: {e}")
+
+        if mismatch:
+            logger.warning(f"[doc-scanner] project doc#{doc.id} '{doc.doc_name}': {mismatch}")
+
+        # Determine doc_type from template (prefer doc.doc_type, fallback to template)
+        doc_type = doc.doc_type or ""
+        if not doc_type and template_path:
+            if "svn" in template_path.lower():
+                doc_type = "svn"
+            elif "gitlab" in template_path.lower() or "git" in template_path:
+                doc_type = "gitlab"
+
+        results.append({
+            "doc_id": doc.id,
+            "doc_name": doc.doc_name,
+            "path": matched_url or check_path,
+            "template_path": template_path,
+            "found": exists,
+            "mismatch": mismatch,
+            "prev_status": doc.status,
+            "doc_type": doc_type,
+        })
+
+        now = _dt.utcnow()
+        if exists and matched_url:
+            total_matched += 1
+            # Auto-fill location with the resolved URL (decoded for readability)
+            loc_url = unquote(matched_url)
+            if not doc.location or doc.location != loc_url:
+                doc.location = loc_url
+                location_filled += 1
+            if doc.status != "submitted":
+                doc.status = "submitted"
+                doc.completed_at = now
+                auto_submitted += 1
+            # Use SVN author as updated_by
+            if doc_type == "svn":
+                svn_author, _, _ = get_svn_metadata(matched_url)
+                doc.updated_by = svn_author or "auto-scanner"
+            else:
+                doc.updated_by = "auto-scanner"
+            doc.updated_at = now
+
+        if not exists and doc.status == "submitted":
+            # File no longer accessible — revert to pending
+            doc.status = "pending"
+            doc.completed_at = None
+            doc.updated_by = "auto-scanner"
+            doc.updated_at = now
+            reverted += 1
+            logger.warning(f"[doc-scanner] project doc#{doc.id} '{doc.doc_name}' "
+                           f"reverted to pending: file not found")
+
+    if auto_submitted > 0 or reverted > 0 or location_filled > 0:
         db.commit()
 
     return {

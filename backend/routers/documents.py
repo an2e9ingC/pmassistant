@@ -8,8 +8,10 @@ from urllib.parse import unquote, urlparse
 logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from sqlalchemy.orm import Session
 from backend.config import settings
-from backend.database import SessionLocal
+from backend.database import SessionLocal, get_db
+from backend.middleware.auth import get_current_user
 from backend.models.local import LocalUser
 from jose import jwt
 
@@ -259,3 +261,18 @@ async def fetch_document(
                 raise HTTPException(status_code=502, detail=f"无法获取文件 (HTTP {resp.status_code})")
     except httpx.RequestError:
         raise HTTPException(status_code=502, detail="无法连接文件服务器")
+
+
+@router.post("/projects/{project_id}/docs/check")
+def check_project_docs_endpoint(
+    project_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Manually trigger project document scan for one project."""
+    from backend.services.doc_scanner import check_project_docs
+    result = check_project_docs(db, project_id)
+    from backend.routers.logs import log_audit
+    from backend.audit_categories import AUDIT_CAT_PROJECT
+    log_audit(db, user, "project_doc_scan", f"project_id={project_id} matched={result.get('total_matched',0)}", AUDIT_CAT_PROJECT, "low")
+    return {"code": 0, "data": result, "message": f"已扫描 {result.get('scanned', 0)} 个文档，匹配 {result.get('total_matched', 0)} 个"}
