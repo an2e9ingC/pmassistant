@@ -1044,11 +1044,11 @@ function _renderProdDocsInline(docs) {
       }
 
       html += '<td style="font-family:var(--mono);color:var(--muted);text-align:center;' + cellStyle + '">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
-        '<td style="font-weight:500;' + cellStyle + '">' + escHtml(d.doc_name) + '</td>' +
+        '<td style="font-weight:500;width:150px;word-break:break-all;' + cellStyle + '">' + escHtml(d.doc_name) + '</td>' +
         '<td style="font-size:12px;white-space:nowrap;' + cellStyle + '">' + escHtml(d.responsible_role || '—') + '</td>' +
         '<td style="white-space:nowrap;' + cellStyle + '">' + statusHtml + '</td>' +
         '<td style="font-size:11px;' + cellStyle + '">' + escHtml(typeLabels[d.doc_type] || '—') + '</td>' +
-        '<td style="font-size:12px;text-align:left;' + cellStyle + '">' + (d.mismatch
+        '<td style="font-size:12px;text-align:left;word-break:break-all;' + cellStyle + '">' + (d.mismatch
           ? '<span style="color:var(--danger)">' + escHtml((d.location||'').replace(/^请提交到：/,'')) + '</span><br><span style="font-size:10px;color:var(--danger)">' + escHtml(d.mismatch) + '</span>'
           : (d.location
             ? (hasError

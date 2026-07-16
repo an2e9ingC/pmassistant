@@ -904,11 +904,11 @@ function buildDocs(data) {
         if (d.location === '无需文档' || d.location === '已删除') {
           locHtml = '<span style="font-size:11px;color:var(--muted);font-style:italic">' + escHtml(d.location) + '</span>';
         } else if (d.done && d.location) {
-          locHtml = '<a href="' + escHtml(d.location) + '" target="_blank" style="color:var(--accent);text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">' + escHtml(d.location) + '</a>';
+          locHtml = '<a href="' + escHtml(d.location) + '" target="_blank" style="color:var(--accent);text-decoration:none;word-break:break-all" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">' + escHtml(d.location) + '</a>';
         } else if (d.done) {
           locHtml = '<span style="font-size:12px;color:var(--muted)">已提交</span>';
         } else if (d.doc_path) {
-          locHtml = '<span style="color:var(--muted);font-style:italic">请提交到：' + escHtml(d.doc_path) + '</span>';
+          locHtml = '<span style="color:var(--muted);font-style:italic">请提交到：<span style="word-break:break-all">' + escHtml(d.doc_path) + '</span></span>';
         } else {
           locHtml = '<span style="font-size:11.5px;color:var(--muted);font-style:italic">待提交</span>';
         }
@@ -921,11 +921,11 @@ function buildDocs(data) {
         rows += '<tr class="' + rowCls + '" style="background:' + bg + '" id="doc-row-' + d.id + '">' +
           (i === 0 ? '<td rowspan="' + items.length + '" style="vertical-align:middle;font-weight:540;border-right:1px solid var(--border);font-size:12px">' + stageNameHtml + '</td>' : '') +
           '<td style="text-align:center;font-size:11px;color:var(--muted)">' + (d.sort_order || i + 1) + '</td>' +
-          '<td style="font-weight:500" title="' + escHtml(d.description || '') + '">' + escHtml(d.doc_name) + '</td>' +
+          '<td style="font-weight:500;width:150px;word-break:break-all" title="' + escHtml(d.description || '') + '">' + escHtml(d.doc_name) + '</td>' +
           '<td style="font-size:12px;color:' + (d.responsible_role ? 'var(--fg)' : 'var(--muted)') + '">' + escHtml(d.responsible_role || '—') + '</td>' +
           '<td>' + statusCell + '</td>' +
           '<td style="font-size:11px">' + escHtml(docTypeLabel) + '</td>' +
-          '<td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="doc-loc-cell-' + d.id + '">' + locHtml + '</td>' +
+          '<td style="font-size:12px;word-break:break-all" id="doc-loc-cell-' + d.id + '">' + locHtml + '</td>' +
           '<td style="font-size:11px;color:var(--muted);white-space:nowrap">' + escHtml(updatedAt) + '</td>' +
           '<td style="font-size:11px;color:var(--muted)">' + escHtml(updatedBy) + '</td>' +
           '<td style="white-space:nowrap;text-align:center">' +
