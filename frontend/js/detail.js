@@ -1674,30 +1674,53 @@ function buildMaintenance() {
 
 // ── Project Edit Dialog ──
 
-function showProjectEditDialog() {
-  var p = _projDetail;
-  if (!p) return;
+// ── Unified Project Form Dialog (Create + Edit) ──
+
+var _projFormSelectedPids = [];   // selected product IDs
+var _projFormLinkedCodes = [];    // selected linked project codes
+var _projFormSelectedTags = [];   // selected tag names
+var _projFormAllTagsFull = [];    // all tags (for dialog)
+
+function showProjectFormDialog(isEdit) {
+  var p = isEdit ? _projDetail : null;
+  var title = isEdit ? ('编辑项目 — ' + escHtml(p ? p.name : '')) : '新建项目';
 
   // Load all dropdown options in parallel
   Promise.all([
-    API.get('/users/pm-names').catch(function() { return []; }),
     API.get('/users/customers/names').catch(function() { return []; }),
-    API.get('/users/program-names').catch(function() { return []; }),
     API.get('/tags').catch(function() { return []; }),
     API.get('/users/project-options').catch(function() { return []; }),
+    API.get('/doc-templates/project-types').catch(function() { return []; }),
   ]).then(function(results) {
-    var pmNames = results[0] || [];
-    var custNames = results[1] || [];
-    var progNames = results[2] || [];
-    var allTags = results[3] || [];
-    var projectOpts = results[4] || [];
+    var custNames = results[0] || [];
+    var allTags = results[1] || [];
+    var projectOpts = results[2] || [];
+    var projectTypes = results[3] || [];
+    if (!projectTypes.length) projectTypes = [{id: 'RD', label: '研发项目'}, {id: 'SC', label: '生产项目'}];
+
+    _projFormSelectedPids = [];
+    _projFormLinkedCodes = [];
+    _projFormSelectedTags = [];
+    // Pre-fill for edit mode
+    if (isEdit && p) {
+      if (p.linked_products) {
+        _projFormSelectedPids = p.linked_products.map(function(lp) { return lp.product_id; });
+      }
+      if (p.linked_project_ids) {
+        _projFormLinkedCodes = p.linked_project_ids.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+      }
+      if (p.tags) {
+        _projFormSelectedTags = p.tags.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+      }
+    }
 
     var tagNames = allTags.filter(function(t) { return t.category === 'project' || !t.category || t.category === ''; }).map(function(t) { return t.name; });
 
-    function dl(id, options, selected) {
+    function dl(id, options, selected, placeholder) {
       var sel = selected || '';
+      var ph = placeholder || '输入搜索或选择...';
       return '<div style="position:relative">' +
-        '<input class="search-inp" id="' + id + '" list="' + id + '-list" value="' + escHtml(sel) + '" style="width:100%;box-sizing:border-box;padding-right:28px" autocomplete="off" placeholder="输入搜索或选择...">' +
+        '<input class="search-inp" id="' + id + '" list="' + id + '-list" value="' + escHtml(sel) + '" style="width:100%;box-sizing:border-box;padding-right:28px" autocomplete="off" placeholder="' + ph + '">' +
         '<span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--muted);font-size:10px">▼</span>' +
         '<datalist id="' + id + '-list">' + options.map(function(o) {
           var val = typeof o === 'string' ? o : o.name;
@@ -1705,136 +1728,387 @@ function showProjectEditDialog() {
         }).join('') + '</datalist></div>';
     }
 
-    function dlIdName(id, options, selectedId) {
-      // For linked projects: show "name (id)" as option value, store id separately
-      var sel = selectedId || '';
-      return '<input class="search-inp" id="' + id + '" list="' + id + '-list" value="' + escHtml(sel) + '" style="width:100%;box-sizing:border-box" autocomplete="off">' +
-        '<datalist id="' + id + '-list">' + options.map(function(o) {
-          return '<option value="' + escHtml(o.name + ' (' + o.id + ')') + '">';
-        }).join('') + '</datalist>';
+    // Product selection: search combo with multi-select (like linked projects)
+    var prodSelectedText = '';
+    if (isEdit && p && p.linked_products) {
+      prodSelectedText = p.linked_products.map(function(lp) {
+        return lp.product_code || lp.product_name || '';
+      }).join(', ');
     }
 
-    // Build project options for linked projects datalist
-    var linkedProjOpts = projectOpts.map(function(o) {
-      return o.name + ' (' + o.id + ')';
-    });
-    var rawStatus = p.raw_status || p.status || '';
+    // Linked projects: use search combo component
+    var linkedProjSelected = p ? (p.linked_project_ids || '') : '';
+
+    // Code field: readonly by default, admin can unlock via edit icon
+    var codeReadonly = ' readonly';
+    var codeBg = 'background:var(--border);cursor:not-allowed';
+    var codeEditIcon = '<span id="proj-form-code-edit" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:15px;opacity:0.4;display:none" title="编辑编号" onclick="_unlockProjCode()">&#9998;</span>';
 
     var bodyHtml =
-      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">项目名称</label>' +
-      '<input class="search-inp" id="proj-edit-name" value="' + escHtml(p.name || '') + '" style="width:100%;box-sizing:border-box"></div>' +
-      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">项目编号</label>' +
-      '<input class="search-inp" id="proj-edit-code" value="' + escHtml(p.code || '') + '" readonly style="width:100%;box-sizing:border-box;background:var(--border);cursor:not-allowed"></div>' +
-      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">项目经理</label>' +
-      dl('proj-edit-pm-name', pmNames, p.pm_name) + '</div>' +
-      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">客户名称</label>' +
-      dl('proj-edit-customer', custNames, p.customer_name) + '</div>' +
+      // Row 1: 项目编号 with admin edit icon on the right
+      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">项目编号' + (!isEdit ? ' <span style="color:var(--muted)">（自动生成）</span>' : '') + '</label>' +
+      '<div style="position:relative">' +
+      '<input class="search-inp" id="proj-form-code" value="' + escHtml((p && p.code) || '') + '"' + codeReadonly + ' style="width:100%;box-sizing:border-box;' + codeBg + '" placeholder="自动生成">' +
+      codeEditIcon +
+      '</div></div>' +
+      // Row 2: 项目名称
+      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">项目名称 *</label>' +
+      '<input class="search-inp" id="proj-form-name" value="' + escHtml((p && p.name) || '') + '" style="width:100%;box-sizing:border-box" placeholder="项目名称（不能包含空格）"></div>' +
+      // Row 3: 项目类型 | 客户名称
       '<div style="display:flex;gap:10px;margin-bottom:10px">' +
         '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">项目类型</label>' +
-          '<select class="search-inp" id="proj-edit-type" style="width:100%;box-sizing:border-box">' +
-            Object.keys(TYPE_TXT).map(function(k) {
-              return '<option value="' + k + '"' + (p.project_type === k ? ' selected' : '') + '>' + TYPE_TXT[k] + '</option>';
+          '<select class="search-inp" id="proj-form-type" style="width:100%;box-sizing:border-box" onchange="_autoGenProjCode()">' +
+            projectTypes.map(function(pt) {
+              var sel = (p && p.project_type === pt.id) || (!isEdit && pt.id === 'RD');
+              return '<option value="' + escHtml(pt.id) + '"' + (sel ? ' selected' : '') + '>' + escHtml(pt.label) + '</option>';
             }).join('') +
           '</select></div>' +
-        '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">状态</label>' +
-          '<select class="search-inp" id="proj-edit-status" style="width:100%;box-sizing:border-box">' +
-            '<option value="">不修改</option>' +
-            '<option value="wait"' + (rawStatus === 'wait' ? ' selected' : '') + '>待启动</option>' +
-            '<option value="doing"' + (rawStatus === 'doing' ? ' selected' : '') + '>进行中</option>' +
-            '<option value="done"' + (rawStatus === 'done' ? ' selected' : '') + '>已完成</option>' +
-            '<option value="closed"' + (rawStatus === 'closed' ? ' selected' : '') + '>已关闭</option>' +
-            '<option value="suspended"' + (rawStatus === 'suspended' ? ' selected' : '') + '>已挂起</option>' +
-          '</select></div>' +
+        '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">客户名称</label>' +
+        '<div class="proj-combo" id="proj-form-customer-combo">' +
+        '<input class="proj-combo-input" id="proj-form-customer" value="' + escHtml(p ? p.customer_name || '' : '') + '" autocomplete="off" placeholder="搜索选择已有客户..." onfocus="projFormCustomerComboOpen()" oninput="projFormCustomerComboFilter(this.value)" onclick="projFormCustomerComboOpen()">' +
+        '<svg class="proj-combo-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2,5 7,10 12,5"/></svg>' +
+        '<div class="proj-combo-dropdown" id="proj-form-customer-dd"></div>' +
+        '</div></div>' +
       '</div>' +
+      // Row 4: 关联产品（搜索下拉多选）
+      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">关联产品</label>' +
+      '<div class="proj-combo" id="proj-form-prod-combo">' +
+      '<input class="proj-combo-input" id="proj-form-prod-input" value="' + escHtml(prodSelectedText) + '" autocomplete="off" placeholder="搜索选择产品（可多选）..." onfocus="projFormProdComboOpen()" oninput="projFormProdComboFilter(this.value)" onclick="projFormProdComboOpen()">' +
+      '<svg class="proj-combo-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2,5 7,10 12,5"/></svg>' +
+      '<div class="proj-combo-dropdown" id="proj-form-prod-dd"></div>' +
+      '</div></div>' +
+      // Row 5: 计划开始 | 计划结束
       '<div style="display:flex;gap:10px;margin-bottom:10px">' +
         '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">计划开始</label>' +
-          '<input class="search-inp" id="proj-edit-begin" type="date" value="' + (p.begin || '') + '" style="width:100%;box-sizing:border-box"></div>' +
+          '<input class="search-inp" id="proj-form-begin" type="date" value="' + ((p && p.begin) || '') + '" style="width:100%;box-sizing:border-box"></div>' +
         '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">计划结束</label>' +
-          '<input class="search-inp" id="proj-edit-end" type="date" value="' + (p.end || '') + '" style="width:100%;box-sizing:border-box"></div>' +
+          '<input class="search-inp" id="proj-form-end" type="date" value="' + ((p && p.end) || '') + '" style="width:100%;box-sizing:border-box"></div>' +
       '</div>' +
+      // Row 6: 实际开始 | 实际结束
       '<div style="display:flex;gap:10px;margin-bottom:10px">' +
         '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">实际开始</label>' +
-          '<input class="search-inp" id="proj-edit-real-began" type="date" value="' + (p.real_began || '') + '" style="width:100%;box-sizing:border-box"></div>' +
+          '<input class="search-inp" id="proj-form-real-began" type="date" value="' + ((p && p.real_began) || '') + '" style="width:100%;box-sizing:border-box"></div>' +
         '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">实际结束</label>' +
-          '<input class="search-inp" id="proj-edit-real-end" type="date" value="' + (p.real_end || '') + '" style="width:100%;box-sizing:border-box"></div>' +
+          '<input class="search-inp" id="proj-form-real-end" type="date" value="' + ((p && p.real_end) || '') + '" style="width:100%;box-sizing:border-box"></div>' +
       '</div>' +
-      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">项目集</label>' +
-      dl('proj-edit-program', progNames, p.program_name) + '</div>' +
+      // Row 7: 预估总工时 | 实际总工时
       '<div style="display:flex;gap:10px;margin-bottom:10px">' +
-        '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">进度 (%)</label>' +
-          '<input class="search-inp" id="proj-edit-progress" value="' + escHtml(p.progress || '') + '" style="width:100%;box-sizing:border-box"></div>' +
-        '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">预估工时</label>' +
-          '<input class="search-inp" id="proj-edit-estimate" type="number" value="' + (p.estimate != null ? p.estimate : '') + '" style="width:100%;box-sizing:border-box"></div>' +
+        '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">预估总工时</label>' +
+          '<input class="search-inp" id="proj-form-estimate" type="number" value="' + ((p && p.estimate != null) ? p.estimate : '') + '" style="width:100%;box-sizing:border-box"></div>' +
+        '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">实际总工时</label>' +
+          '<input class="search-inp" id="proj-form-consumed" type="number" value="' + ((p && p.consumed != null) ? p.consumed : '') + '" style="width:100%;box-sizing:border-box"></div>' +
       '</div>' +
+      // Row 8: 交付数量 | 标签
       '<div style="display:flex;gap:10px;margin-bottom:10px">' +
-        '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">已耗工时</label>' +
-          '<input class="search-inp" id="proj-edit-consumed" type="number" value="' + (p.consumed != null ? p.consumed : '') + '" style="width:100%;box-sizing:border-box"></div>' +
-        '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">计划交付数</label>' +
-          '<input class="search-inp" id="proj-edit-delivery-qty" type="number" value="' + (p.planned_delivery_qty != null ? p.planned_delivery_qty : '') + '" style="width:100%;box-sizing:border-box"></div>' +
+        '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">交付数量</label>' +
+          '<input class="search-inp" id="proj-form-delivery-qty" type="number" value="' + ((p && p.planned_delivery_qty != null) ? p.planned_delivery_qty : '') + '" style="width:100%;box-sizing:border-box"></div>' +
+        '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">标签</label>' +
+        '<div id="proj-form-tags-section" style="min-height:36px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:4px 0">' +
+        '<span style="font-size:12px;color:var(--muted)">加载中...</span>' +
+        '</div></div>' +
       '</div>' +
-      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">交付备注</label>' +
-      '<input class="search-inp" id="proj-edit-delivery-note" value="' + escHtml(p.delivery_note || '') + '" style="width:100%;box-sizing:border-box"></div>' +
-      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">项目背景</label>' +
-      '<textarea class="search-inp" id="proj-edit-background" rows="3" style="width:100%;box-sizing:border-box;resize:vertical">' + escHtml(p.background || '') + '</textarea></div>' +
-      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">标签（逗号分隔）</label>' +
-      dl('proj-edit-tags', tagNames, p.tags) + '</div>' +
-      '<div style="margin-bottom:4px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">关联项目（搜索选择，逗号分隔ID）</label>' +
-      dl('proj-edit-linked', linkedProjOpts, p.linked_project_ids) + '</div>';
+      // Row 9: 关联项目
+      '<div style="margin-bottom:4px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">关联项目</label>' +
+      '<div class="proj-combo" id="proj-form-linked-combo">' +
+      '<input class="proj-combo-input" id="proj-form-linked-input" value="' + escHtml(linkedProjSelected) + '" autocomplete="off" placeholder="搜索选择项目..." onfocus="projFormLinkedComboOpen()" oninput="projFormLinkedComboFilter(this.value)" onclick="projFormLinkedComboOpen()">' +
+      '<svg class="proj-combo-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2,5 7,10 12,5"/></svg>' +
+      '<div class="proj-combo-dropdown" id="proj-form-linked-dd"></div>' +
+      '</div></div>';
 
-    openDialog('编辑项目 — ' + escHtml(p.name || ''),
-      '<div style="max-height:65vh;overflow-y:auto;padding-right:4px">' + bodyHtml + '</div>',
-      [
-        { text: '取消', onclick: 'closeSharedDialog()' },
-        { text: '保存', cls: 'btn-primary', onclick: 'saveProjectEdit()' }
-      ],
-      { hideClose: true }
+    var buttons = [
+      { text: '取消', onclick: 'closeSharedDialog()' },
+      { text: isEdit ? '保存' : '创建', cls: 'btn-primary', onclick: isEdit ? 'saveProjectForm(true)' : 'saveProjectForm(false)' }
+    ];
+
+    openDialog(title,
+      '<div style="max-height:70vh;overflow-y:auto;padding-right:4px">' + bodyHtml + '</div>',
+      buttons, { hideClose: true, maxWidth: 560 }
     );
+
+    // Auto-generate code for create mode
+    if (!isEdit) setTimeout(function() { _autoGenProjCode(); }, 100);
+
+    // Admin can edit code: show pencil icon on the right
+    setTimeout(function() {
+      var user = getCurrentUser();
+      var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+      var isAdmin = user && (user.role === 'admin' || perms.indexOf('admin') >= 0);
+      if (isAdmin) {
+        var icon = document.getElementById('proj-form-code-edit');
+        if (icon) icon.style.display = '';
+      }
+    }, 150);
+
+    // Init customer search combo
+    setTimeout(function() {
+      if (typeof initSearchCombo === 'function') {
+        initSearchCombo({
+          comboId: 'proj-form-customer-combo',
+          inputId: 'proj-form-customer',
+          dropdownId: 'proj-form-customer-dd',
+          dataSource: function() {
+            return API.get('/users/customers/names').then(function(names) {
+              return (names || []).map(function(n) { return {name: n}; });
+            }).catch(function() { return []; });
+          },
+          onSelect: function(p) { document.getElementById('proj-form-customer').value = p.name; }
+        });
+      }
+    }, 150);
+
+    // Init product search combo (multi-select)
+    setTimeout(function() {
+      if (typeof initSearchCombo === 'function') {
+        initSearchCombo({
+          comboId: 'proj-form-prod-combo',
+          inputId: 'proj-form-prod-input',
+          dropdownId: 'proj-form-prod-dd',
+          dataSource: function() {
+            return API.get('/product-management/all-products').then(function(products) {
+              var items = [{id: '__future__', name: '🆕 未来新产品', code: ''}];
+              (products || []).forEach(function(p) {
+                items.push({id: p.id, name: p.name, code: p.code || ''});
+              });
+              return items;
+            }).catch(function() { return [{id: '__future__', name: '🆕 未来新产品', code: ''}]; });
+          },
+          onSelect: function(p) {
+            var el = document.getElementById('proj-form-prod-input');
+            if (!el) return;
+            // selectFn already overwrote input to p.name — rebuild full list from tracked IDs first
+            var pid = parseInt(p.id);
+            if (p.id !== '__future__' && _projFormSelectedPids.indexOf(pid) < 0) {
+              _projFormSelectedPids.push(pid);
+            }
+            // Fetch all products to rebuild display text from selected IDs
+            API.get('/product-management/all-products').then(function(products) {
+              var names = [];
+              _projFormSelectedPids.forEach(function(spid) {
+                var prod = (products || []).find(function(x) { return x.id === spid; });
+                if (prod) names.push(prod.code || prod.name || '');
+              });
+              el.value = names.join(', ');
+            }).catch(function() {});
+          }
+        });
+      }
+    }, 250);
+
+    // Init linked-projects search combo
+    setTimeout(function() {
+      if (typeof initSearchCombo === 'function') {
+        initSearchCombo({
+          comboId: 'proj-form-linked-combo',
+          inputId: 'proj-form-linked-input',
+          dropdownId: 'proj-form-linked-dd',
+          dataSource: function() { return API.get('/users/project-options').catch(function() { return []; }); },
+          onSelect: function(p) {
+            var code = p.code || p.name;
+            if (_projFormLinkedCodes.indexOf(code) < 0) _projFormLinkedCodes.push(code);
+            var el = document.getElementById('proj-form-linked-input');
+            if (el) el.value = _projFormLinkedCodes.join(', ');
+          }
+        });
+      }
+    }, 200);
+
+    // Init tags: show badges with edit button (maintenance-style)
+    _projFormAllTagsFull = allTags || [];
+    _renderProjFormTags();
   });
 }
 
-async function saveProjectEdit() {
+
+function _unlockProjCode() {
+  var codeEl = document.getElementById('proj-form-code');
+  var icon = document.getElementById('proj-form-code-edit');
+  if (!codeEl) return;
+  codeEl.removeAttribute('readonly');
+  codeEl.style.background = '';
+  codeEl.style.cursor = '';
+  codeEl.placeholder = '输入新编号（不可重复）';
+  codeEl.focus();
+  if (icon) icon.style.display = 'none';
+}
+
+function _renderProjFormTags() {
+  var container = document.getElementById('proj-form-tags-section');
+  if (!container) return;
+  var names = _projFormSelectedTags.slice();
+  var badgesHtml = names.length ? names.map(function(name) {
+    var cls = 'tag-' + (name.length % 5);
+    return '<span class="tag-badge ' + cls + '" style="font-size:11px;padding:2px 8px;display:inline-flex;align-items:center;gap:3px">' +
+      '#' + escHtml(name) +
+      ' <span data-tag-name="' + escHtml(name) + '" onclick="event.stopPropagation();_projFormRemoveTag(this.getAttribute(\'data-tag-name\'))" style="cursor:pointer;opacity:0.5;font-size:13px;line-height:1" title="移除">&times;</span></span>';
+  }).join('') : '<span style="font-size:11px;color:var(--muted)">未选择</span>';
+  container.innerHTML = badgesHtml +
+    ' <button class="btn btn-xs" onclick="event.stopPropagation();_projFormOpenTagDialog()" style="font-size:11px;padding:1px 8px;margin-left:2px">选择标签</button>';
+}
+
+function _projFormRemoveTag(name) {
+  var idx = _projFormSelectedTags.indexOf(name);
+  if (idx >= 0) _projFormSelectedTags.splice(idx, 1);
+  _renderProjFormTags();
+}
+
+function _projFormOpenTagDialog() {
+  // Work on a temp copy; commit on Confirm, discard on Cancel
+  window._projFormTmpTags = _projFormSelectedTags.slice();
+  _projFormRenderTagDialog();
+}
+
+function _projFormRenderTagDialog() {
+  var linkedNames = window._projFormTmpTags || [];
+  var allTags = _projFormAllTagsFull;
+  var projectTags = allTags.filter(function(t) { return t.category === 'project'; });
+  var productTags = allTags.filter(function(t) { return t.category === 'product'; });
+  var generalTags = allTags.filter(function(t) { return !t.category || t.category === ''; });
+
+  var sections = [
+    { title: '项目标签', color: 'var(--accent)', bg: 'var(--accent-lt)', tags: projectTags },
+    { title: '产品标签', color: 'var(--success)', bg: 'var(--success-lt)', tags: productTags },
+    { title: '通用标签', color: 'var(--muted)', bg: 'var(--bg)', tags: generalTags },
+  ];
+
+  var bodyHtml = '';
+  sections.forEach(function(sec) {
+    bodyHtml += '<div class="card" style="margin-bottom:10px;padding:12px 14px">' +
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:' + (sec.tags.length ? '8px' : '2px') + '">' +
+        '<span style="width:8px;height:8px;border-radius:50%;background:' + sec.color + '"></span>' +
+        '<span style="font-weight:540;font-size:13px">' + sec.title + '</span>' +
+        '<span style="font-size:11px;color:var(--muted)">' + sec.tags.length + '</span>' +
+      '</div>';
+    if (sec.tags.length) {
+      bodyHtml += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+      sec.tags.forEach(function(t) {
+        var isLinked = linkedNames.indexOf(t.name) >= 0;
+        bodyHtml += '<span class="tag-badge tag-' + (t.name.length % 5) + '" ' +
+          'data-tag-name="' + escHtml(t.name) + '" onclick="_projFormToggleTmpTag(this.getAttribute(\'data-tag-name\'))" ' +
+          'style="font-size:12px;padding:3px 12px;cursor:pointer;' +
+          (isLinked ? '' : 'opacity:0.35') + '" ' +
+          'title="' + (isLinked ? '点击移除' : '点击添加') + '">#' + escHtml(t.name) + '</span>';
+      });
+      bodyHtml += '</div>';
+    } else {
+      bodyHtml += '<div style="font-size:11px;color:var(--muted);font-style:italic">暂无</div>';
+    }
+    bodyHtml += '</div>';
+  });
+
+  openDialog('选择标签', bodyHtml,
+    [{text: '取消', onclick: 'document.querySelector(\".proj-form-tag-overlay\")?.remove()'},
+     {text: '确定', cls: 'btn-primary', onclick: '_projFormConfirmTags()'}],
+    {maxWidth: 520, hideClose: true, overlayClass: 'proj-form-tag-overlay'});
+}
+
+function _projFormToggleTmpTag(name) {
+  var tmp = window._projFormTmpTags || [];
+  var idx = tmp.indexOf(name);
+  if (idx >= 0) { tmp.splice(idx, 1); } else { tmp.push(name); }
+  window._projFormTmpTags = tmp;
+  _projFormRefreshTagDialogContent();
+}
+
+function _projFormRefreshTagDialogContent() {
+  var linkedNames = window._projFormTmpTags || [];
+  var allBadges = document.querySelectorAll('.proj-form-tag-overlay .tag-badge[data-tag-name]');
+  allBadges.forEach(function(badge) {
+    var name = badge.getAttribute('data-tag-name');
+    if (linkedNames.indexOf(name) >= 0) {
+      badge.style.opacity = '1';
+      badge.title = '点击移除';
+    } else {
+      badge.style.opacity = '0.35';
+      badge.title = '点击添加';
+    }
+  });
+}
+
+function _projFormConfirmTags() {
+  _projFormSelectedTags = (window._projFormTmpTags || []).slice();
+  delete window._projFormTmpTags;
+  var ov = document.querySelector('.proj-form-tag-overlay');
+  if (ov) ov.remove();
+  _renderProjFormTags();
+}
+
+function _autoGenProjCode() {
+  var typeEl = document.getElementById('proj-form-type');
+  var codeEl = document.getElementById('proj-form-code');
+  if (!typeEl || !codeEl) return;
+  if (codeEl.value && codeEl.value.trim()) return; // don't overwrite existing code
+  var type = typeEl.value || 'RD';
+  API.get('/product-management/next-project-code?project_type=' + encodeURIComponent(type)).then(function(data) {
+    if (data && data.code) codeEl.value = data.code;
+  }).catch(function() {});
+}
+
+// Keep backward-compatible wrappers
+function showProjectEditDialog() { showProjectFormDialog(true); }
+
+async function saveProjectForm(isEdit) {
   var payload = {};
   var g = function(id) { return document.getElementById(id); };
 
-  payload.project_type = g('proj-edit-type').value;
-  var statusVal = g('proj-edit-status').value;
-  if (statusVal) payload.status = statusVal;
+  // Validate
+  var nameEl = g('proj-form-name');
+  var name = (nameEl && nameEl.value || '').trim();
+  if (!name) { showToast('请输入项目名称', 'error'); return; }
+  if (/\s/.test(name)) { showToast('项目名称不能包含空格', 'error'); return; }
+  payload.name = name;
 
-  var textFields = ['proj-edit-name','proj-edit-code','proj-edit-pm-name',
-    'proj-edit-customer','proj-edit-program','proj-edit-progress','proj-edit-delivery-note',
-    'proj-edit-background','proj-edit-tags','proj-edit-linked'];
-  var keyMap = {
-    'proj-edit-name': 'name', 'proj-edit-code': 'code',
-    'proj-edit-pm-name': 'pm_name',
-    'proj-edit-customer': 'customer_name', 'proj-edit-program': 'program_name',
-    'proj-edit-progress': 'progress', 'proj-edit-delivery-note': 'delivery_note',
-    'proj-edit-background': 'background', 'proj-edit-tags': 'tags',
-    'proj-edit-linked': 'linked_project_ids'
-  };
-  textFields.forEach(function(fid) {
-    var el = g(fid);
-    if (el) payload[keyMap[fid]] = el.value;
+  var codeEl = g('proj-form-code');
+  var code = (codeEl && codeEl.value || '').trim();
+  if (!isEdit && !code) { showToast('项目编号不能为空', 'error'); return; }
+  payload.code = code;
+
+  payload.project_type = g('proj-form-type').value;
+
+  var custEl = g('proj-form-customer');
+  if (custEl && custEl.value.trim()) payload.customer_name = custEl.value.trim();
+
+  // Dates
+  ['begin','end','real_began','real_end'].forEach(function(k) {
+    var el = g('proj-form-' + k);
+    if (el && el.value) payload[k] = el.value;
   });
 
-  var numFields = ['proj-edit-estimate','proj-edit-consumed','proj-edit-delivery-qty'];
-  var numKeys = { 'proj-edit-estimate': 'estimate', 'proj-edit-consumed': 'consumed', 'proj-edit-delivery-qty': 'planned_delivery_qty' };
-  numFields.forEach(function(fid) {
-    var el = g(fid);
-    if (el && el.value !== '') payload[numKeys[fid]] = parseFloat(el.value);
+  // Numbers
+  var numMap = {'estimate':'estimate','consumed':'consumed','delivery-qty':'planned_delivery_qty'};
+  Object.keys(numMap).forEach(function(fid) {
+    var el = g('proj-form-' + fid);
+    if (el && el.value !== '') payload[numMap[fid]] = parseFloat(el.value);
   });
 
-  var dateFields = ['proj-edit-begin','proj-edit-end','proj-edit-real-began','proj-edit-real-end'];
-  var dateKeys = { 'proj-edit-begin': 'begin', 'proj-edit-end': 'end', 'proj-edit-real-began': 'real_began', 'proj-edit-real-end': 'real_end' };
-  dateFields.forEach(function(fid) {
-    var el = g(fid);
-    if (el && el.value) payload[dateKeys[fid]] = el.value;
-  });
+  // Tags
+  if (_projFormSelectedTags.length) payload.tags = _projFormSelectedTags.join(',');
+
+  // Linked projects
+  var linkedEl = g('proj-form-linked-input');
+  if (linkedEl && linkedEl.value.trim()) payload.linked_project_ids = linkedEl.value.trim();
+
+  // Linked products (create mode only; edit mode uses maintenance page)
+  if (!isEdit) {
+    payload.product_ids = _projFormSelectedPids;
+    payload.status = 'wait';
+  }
 
   try {
-    var result = await API.put('/projects/' + _comboCurCode, payload);
+    var result;
+    if (isEdit) {
+      result = await API.put('/projects/' + _comboCurCode, payload);
+    } else {
+      result = await API.post('/product-management/projects', payload);
+    }
     closeSharedDialog();
-    showToast(result.message || '项目已更新', 'success');
-    loadProjectDetail(_comboCurCode);
+    showToast(result.message || (isEdit ? '项目已更新' : '项目已创建'), 'success');
+    if (isEdit) {
+      loadProjectDetail(_comboCurCode);
+    } else {
+      // Refresh dashboard
+      if (typeof loadKpiCards === 'function') loadKpiCards();
+      if (typeof loadProjectTable === 'function') loadProjectTable();
+    }
   } catch(e) {
     showToast('保存失败: ' + (e.message || '未知错误'), 'error');
   }
