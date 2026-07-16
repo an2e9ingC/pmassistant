@@ -261,6 +261,14 @@ window.addEventListener('popstate', function(e) {
   }
 });
 
+// Handle manual hash changes (user edits address bar hash and hits Enter)
+window.addEventListener('hashchange', function() {
+  var parsed = parseHash();
+  if (parsed.view) {
+    gotoView(parsed.view, {params: parsed.params, replace: true});
+  }
+});
+
 /* Theme */
 
 /* Feedback Dialog — create GitLab issue (bug/feature) */

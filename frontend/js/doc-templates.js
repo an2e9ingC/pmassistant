@@ -162,8 +162,18 @@ function _updateDocTemplatesHash() {
   } else {
     params = [_currentTab];
   }
+  // Encode non-ASCII params so decodeURIComponent in initDocTemplates works reliably
+  var encodedParams = params.map(function(p) { return encodeURIComponent(p); });
   // Don't push for doc-templates internal nav — use replace
-  history.replaceState({ view: 'doc-templates', params: params }, '', buildHash('doc-templates', params[0], params[1], params[2]));
+  history.replaceState({ view: 'doc-templates', params: params }, '', buildHash('doc-templates', encodedParams[0], encodedParams[1], encodedParams[2]));
+}
+
+// Safe decodeURIComponent — falls back to raw string when already decoded (browser-dependent)
+function _safeDecode(s) {
+  if (!s) return s;
+  // Only attempt decode if the string contains percent-encoded sequences
+  if (s.indexOf('%') < 0) return s;
+  try { return decodeURIComponent(s); } catch(e) { return s; }
 }
 
 async function initDocTemplates(tab, sub1, sub2) {
@@ -172,7 +182,7 @@ async function initDocTemplates(tab, sub1, sub2) {
     _currentTab = tab;
     if (tab === 'product') {
       if (sub1) _selectedNodeId = parseInt(sub1);
-      if (sub2) _productStage = decodeURIComponent(sub2);
+      if (sub2) _productStage = _safeDecode(sub2);
     }
     // Activate the right tab in the top-level tab bar
     setTimeout(function() {
@@ -181,8 +191,8 @@ async function initDocTemplates(tab, sub1, sub2) {
     }, 50);
   } else if (tab === 'project') {
     _currentTab = 'project';
-    if (sub1) _currentProjectType = decodeURIComponent(sub1);
-    if (sub2) _selectedStage = decodeURIComponent(sub2);
+    if (sub1) _currentProjectType = _safeDecode(sub1);
+    if (sub2) _selectedStage = _safeDecode(sub2);
   }
 
   var container = document.getElementById('dtsec-project');
@@ -202,7 +212,9 @@ async function initDocTemplates(tab, sub1, sub2) {
     } catch(e) { _stageUnnecDocs = []; _stageUnnecTasks = []; }
 
     // Load templates for current project type
+    var _savedStage = _selectedStage;
     await loadTemplatesForType(_currentProjectType);
+    if (_savedStage) _selectedStage = _savedStage;
     renderTemplatesPage();
   } catch(e) {
     container.innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '<br><button class="btn" onclick="initDocTemplates()">重试</button></div>';
