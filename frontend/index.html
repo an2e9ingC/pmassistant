@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="app-version" content="v2026.07.15-beta55">
+<meta name="app-version" content="v2026.07.16-beta58">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>PM Assistant · 集成禅道 & GitLab</title>
 <script>
@@ -465,22 +465,29 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
         <div id="pma-tasks-content"><div class="empty-state" style="padding:20px">请选择项目</div></div>
       </div>
       <div class="dsec" id="dsec-docs">
-        <div class="card table-scroll" style="max-height:calc(100vh - 280px)">
+        <div class="section-hd"><div class="section-title">项目文档</div><a id="proj-docs-template-link" href="javascript:void(0)" style="font-size:11px;color:var(--accent);text-decoration:none;margin-left:8px">查看文档模板详情 →</a></div>
+        <div class="card" style="padding:0;overflow:hidden">
+        <div class="table-scroll" style="max-height:calc(100vh - 320px)">
           <table class="stage-table">
             <thead>
               <tr>
-                <th>阶段</th>
-                <th>文件名称</th>
-                <th>责任人</th>
-                <th>状态 / 完成时间</th>
-                <th>位置 / 链接</th>
-                <th style="width:36px"></th>
+                <th style="width:80px">阶段</th>
+                <th style="width:50px">序号</th>
+                <th>文档名称</th>
+                <th style="width:80px">责任人</th>
+                <th style="width:80px">状态</th>
+                <th style="width:50px">类型</th>
+                <th>路径</th>
+                <th style="width:100px">最后修改时间</th>
+                <th style="width:80px">修改人</th>
+                <th style="width:100px">操作</th>
               </tr>
             </thead>
             <tbody id="docs-tbody">
-              <tr><td colspan="5"><div class="empty-state" style="padding:20px">请选择项目</div></td></tr>
+              <tr><td colspan="10"><div class="empty-state" style="padding:20px">请选择项目</div></td></tr>
             </tbody>
           </table>
+        </div>
         </div>
       </div>
       <div class="dsec" id="dsec-delivery">

@@ -534,15 +534,24 @@ function showEditTemplateForm(id) {
       '</div>' +
     '</div>' +
     '<div style="margin-bottom:10px">' +
-      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">路径 <span style="color:var(--danger)">*必填</span></label>' +
-      '<input class="search-inp" id="dt-path" value="' + escHtml(d.doc_path || '') + '" placeholder="选择类型后自动提示" style="width:100%;box-sizing:border-box">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">路径 <span style="color:var(--danger)">*必填</span> &nbsp;<span style="font-weight:400;font-size:10px">{code} = 项目代号占位符</span></label>' +
+      '<input class="search-inp" id="dt-base-path" value="' + escHtml(d.base_path || '') + '" placeholder="http://.../项目/{code}/" style="width:100%;box-sizing:border-box;margin-bottom:6px" oninput="_updateProjPathPreview()">' +
+    '</div>' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名 <span style="color:var(--danger)">*必填</span> &nbsp;<span style="font-weight:400;font-size:10px">{code} = 项目代号占位符</span></label>' +
+      '<input class="search-inp" id="dt-file-pattern" value="' + escHtml(d.file_pattern || '') + '" placeholder="01_{code}_SCH-FINAL.rar" style="width:100%;box-sizing:border-box" oninput="_updateProjPathPreview()">' +
+    '</div>' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">最终路径预览 &nbsp;<span style="font-weight:400;font-size:10px">* 替换为项目代号</span></label>' +
+      '<input class="search-inp" id="dt-path-preview" value="" style="width:100%;box-sizing:border-box;color:var(--accent);font-size:11px;font-family:var(--mono)" disabled>' +
     '</div>' +
     '<div style="margin-bottom:4px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">说明（可选）</label>' +
       '<input class="search-inp" id="dt-desc" value="' + escHtml(d.description || '') + '" style="width:100%;box-sizing:border-box">' +
     '</div>',
     [{text: '取消', cls: '', onclick: 'closeSharedDialog()'},
-     {text: '确定', cls: 'btn-primary', onclick: 'saveTemplate(' + id + ')'}], {hideClose: true}, d.doc_type || 'gitlab');
+     {text: '确定', cls: 'btn-primary', onclick: 'saveTemplate(' + id + ')'}], {hideClose: true, maxWidth: 780}, d.doc_type || 'gitlab');
+  setTimeout(_updateProjPathPreview, 80);
 }
 
 function saveTemplate(id) {
@@ -550,7 +559,8 @@ function saveTemplate(id) {
   var sortEl = document.getElementById('dt-sort');
   var roleEl = document.getElementById('dt-role');
   var descEl = document.getElementById('dt-desc');
-  var pathEl = document.getElementById('dt-path');
+  var basePathEl = document.getElementById('dt-base-path');
+  var patternEl = document.getElementById('dt-file-pattern');
   if (!nameEl || !sortEl) { showToast('表单数据异常，请重新打开', 'error'); return; }
 
   var name = nameEl.value.trim();
@@ -558,11 +568,13 @@ function saveTemplate(id) {
   var sort = sortVal !== '' ? parseInt(sortVal) : 0;
   var role = roleEl ? roleEl.value.trim() : '';
   var desc = descEl ? descEl.value.trim() : '';
-  var path = pathEl ? pathEl.value.trim() : '';
+  var basePath = basePathEl ? basePathEl.value.trim() : '';
+  var filePattern = patternEl ? patternEl.value.trim() : '';
+  var path = (basePath + '/' + filePattern).replace(/\/{2,}/g, '/');
   var typeEl = document.getElementById('dt-doctype');
   var docType = typeEl ? typeEl.value : '';
   if (!name) { showToast('请输入文档名称', 'error'); return; }
-  if (!path) { showToast('请输入路径', 'error'); return; }
+  if (!basePath && !filePattern) { showToast('请输入路径或文档名', 'error'); return; }
   if (!docType) { showToast('请选择文档类型', 'error'); return; }
   if (!role) { showToast('请选择责任人', 'error'); return; }
   if (isNaN(sort) || sort < 0) sort = 0;
@@ -580,9 +592,11 @@ function saveTemplate(id) {
     existing.responsible_role = role || '';
     existing.description = desc;
     existing.doc_path = path;
+    existing.base_path = basePath;
+    existing.file_pattern = filePattern;
     existing.doc_type = docType;
     _pendingOps.push({ type: 'edit', id: id, stage_type: stageType,
-      doc_name: name, sort_order: sort, responsible_role: role || '', description: desc, doc_path: path, doc_type: docType });
+      doc_name: name, sort_order: sort, responsible_role: role || '', description: desc, doc_path: path, base_path: basePath, file_pattern: filePattern, doc_type: docType });
   } else if (id && id < 0) {
     // Edit locally-added (not yet saved) template — update pending add op
     var arr = _templatesGrouped[stageType] || [];
@@ -593,6 +607,8 @@ function saveTemplate(id) {
       existing.responsible_role = role || '';
       existing.description = desc;
       existing.doc_path = path;
+      existing.base_path = basePath;
+      existing.file_pattern = filePattern;
     }
     // Update the pending add op too
     for (var pi = 0; pi < _pendingOps.length; pi++) {
@@ -602,6 +618,8 @@ function saveTemplate(id) {
         _pendingOps[pi].responsible_role = role || '';
         _pendingOps[pi].description = desc;
         _pendingOps[pi].doc_path = path;
+        _pendingOps[pi].base_path = basePath;
+        _pendingOps[pi].file_pattern = filePattern;
         break;
       }
     }
@@ -609,9 +627,9 @@ function saveTemplate(id) {
     // New template — add locally with temp ID
     var tempId = _nextTempId--;
     var newDoc = { id: tempId, stage_type: stageType, doc_name: name,
-      sort_order: sort, responsible_role: role || '', description: desc, doc_path: path, doc_type: docType };
+      sort_order: sort, responsible_role: role || '', description: desc, doc_path: path, base_path: basePath, file_pattern: filePattern, doc_type: docType };
     _pendingOps.push({ type: 'add', tempId: tempId, stage_type: stageType,
-      doc_name: name, sort_order: sort, responsible_role: role || '', description: desc, doc_path: path, doc_type: docType });
+      doc_name: name, sort_order: sort, responsible_role: role || '', description: desc, doc_path: path, base_path: basePath, file_pattern: filePattern, doc_type: docType });
     var arr2 = _templatesGrouped[stageType];
     if (!arr2) { _templatesGrouped[stageType] = []; arr2 = _templatesGrouped[stageType]; }
     arr2.push(newDoc);
@@ -1532,6 +1550,17 @@ function _selectProductStage(stage) {
 }
 
 /* ── Product Template CRUD (direct API, no pending queue) ── */
+
+function _updateProjPathPreview() {
+  var baseEl = document.getElementById('dt-base-path');
+  var patEl = document.getElementById('dt-file-pattern');
+  var previewEl = document.getElementById('dt-path-preview');
+  if (!previewEl) return;
+  var base = baseEl ? baseEl.value.trim() : '';
+  var pat = patEl ? patEl.value.trim() : '';
+  if (!base && !pat) { previewEl.value = ''; return; }
+  previewEl.value = (base + '/' + pat).replace(/\/{2,}/g, '/');
+}
 
 function _updatePathPreview() {
   var baseEl = document.getElementById('ptf-base-path');

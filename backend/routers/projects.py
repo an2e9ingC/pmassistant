@@ -331,14 +331,25 @@ def update_document(
     user=Depends(require_perm("project_edit")),
 ):
     from backend.services import document_service
+    from backend.models.document import ProjectDocument
     project = resolve_project(db, identifier)
+    # Get old values before update
+    old = db.query(ProjectDocument).filter(ProjectDocument.id == doc_id).first()
+    old_status = old.status if old else '?'
+    old_location = old.location if old else '?'
     result = document_service.update_project_document(
         db, doc_id, body.model_dump(exclude_none=True), user.username
     )
     if not result:
         raise HTTPException(status_code=404, detail="Document not found")
-    log_project_activity(db, project.id, user.username, "文档状态",
-        f"status:'{result.get('doc_name','')}'->'{result.get('status','')}'")
+    new_status = result.get('status', '?')
+    new_location = result.get('location', '?')
+    detail = f"doc={result.get('doc_name','')} status:{old_status}->{new_status}"
+    if old_location != new_location:
+        detail += f" location:{old_location}->{new_location}"
+    log_project_activity(db, project.id, user.username, "文档状态", detail)
+    log_audit(db, user, "project_doc_update",
+        f"project={project.code} {detail}", AUDIT_CAT_PROJECT, "low")
     return {"code": 0, "data": result, "message": "ok"}
 
 

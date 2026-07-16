@@ -858,10 +858,18 @@ function buildDocs(data) {
   var perms = (user && user.permissions) ? user.permissions.split(',') : [];
   var canEdit = perms.indexOf('doc_template') >= 0 || perms.indexOf('admin') >= 0 || perms.indexOf('project_edit') >= 0;
 
+  // Update template link to navigate to the correct project type
+  var projType = (_projDetail && _projDetail.project_type) ? _projDetail.project_type : 'RD';
+  var linkEl = document.getElementById('proj-docs-template-link');
+  if (linkEl) {
+    linkEl.onclick = function() { gotoView('doc-templates', {params: ['project', projType]}); };
+    linkEl.textContent = '查看文档模板详情 →';
+  }
+
   // New format: { documents: [...], standard_stages: [...] }
   var stageList = (data && data.documents) ? data.documents : data;
   if (!stageList || !stageList.length) {
-    document.getElementById('docs-tbody').innerHTML = '<tr><td colspan="6"><div style="text-align:center;padding:30px;font-style:italic;color:var(--muted)">暂无文档清单<br><span style="font-size:11px">项目阶段尚未匹配到文档模板，请先配置文档模板</span></div></td></tr>';
+    document.getElementById('docs-tbody').innerHTML = '<tr><td colspan="10"><div style="text-align:center;padding:30px;font-style:italic;color:var(--muted)">暂无文档清单<br><span style="font-size:11px">项目阶段尚未匹配到文档模板，请先配置文档模板</span></div></td></tr>';
     return;
   }
 
@@ -874,47 +882,60 @@ function buildDocs(data) {
     var bg = stageIdx % 2 === 0 ? 'var(--surface)' : 'var(--bg)';
     var completedDate = stage.stage_completed_date || null;
 
-    // Stage name display — no Zentao execution dependency
+    // Stage name display
     var stageNameHtml = '<span style="font-weight:540;font-size:12px">' + escHtml(stageName) + '</span>';
 
     if (!hasDocs) {
-      // No documents for this stage yet
       rows += '<tr style="background:' + bg + ';opacity:0.5">' +
         '<td style="vertical-align:middle;font-weight:540;border-right:1px solid var(--border)">' + stageNameHtml + '</td>' +
-        '<td colspan="6" style="color:var(--muted);font-style:italic;font-size:12px">暂无文档</td>' +
+        '<td colspan="9" style="color:var(--muted);font-style:italic;font-size:12px">暂无文档</td>' +
       '</tr>';
     } else {
+      items.sort(function(a, b) { return (a.sort_order || 0) - (b.sort_order || 0); });
       items.forEach(function(d, i) {
-        var rowCls = d.warn ? 'doc-row-warn' : (d.done ? 'doc-row-submitted' : '');
+        var isUnnecessary = d.location === '无需文档';
+        var rowCls = d.done ? 'doc-row-submitted' : '';
         var cls = d.done ? 'completed' : (d.warn ? 'blocked' : 'pending');
-        var lbl = d.done ? '已提交' : (d.warn ? '⚠ 告警缺失' : '未开始');
-        var statusCell = '<span class="pill ' + cls + '" style="font-size:11px;cursor:' + (canEdit ? 'pointer' : 'default') + '"' +
-          (canEdit ? ' onclick="toggleDocEdit(' + d.id + ')" title="点击切换状态"' : '') + '>' + lbl + '</span>' +
-          (d.completed_at ? '<div style="font-size:10.5px;color:var(--success);margin-top:3px;font-family:var(--mono)">' + d.completed_at + '</div>' : '');
+        var lbl = isUnnecessary ? '无需文档' : (d.done ? '已提交' : (d.warn ? '⚠ 告警缺失' : '未开始'));
+        if (isUnnecessary) cls = 'completed';
+        var statusCell = '<span class="pill ' + cls + '" style="font-size:11px">' + lbl + '</span>';
 
         var locHtml = '';
-        if (d.done && d.location) {
-          locHtml = '<a class="doc-link" href="' + escHtml(d.location) + '" target="_blank">↗ ' + escHtml(d.location) + '</a>';
+        if (d.location === '无需文档' || d.location === '已删除') {
+          locHtml = '<span style="font-size:11px;color:var(--muted);font-style:italic">' + escHtml(d.location) + '</span>';
+        } else if (d.done && d.location) {
+          locHtml = '<a href="' + escHtml(d.location) + '" target="_blank" style="color:var(--accent);text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">' + escHtml(d.location) + '</a>';
         } else if (d.done) {
           locHtml = '<span style="font-size:12px;color:var(--muted)">已提交</span>';
-        } else if (d.warn) {
-          locHtml = '<span style="font-size:11.5px;color:var(--warn);font-style:italic">缺失文档，请及时提交</span>';
+        } else if (d.doc_path) {
+          locHtml = '<span style="color:var(--muted);font-style:italic">请提交到：' + escHtml(d.doc_path) + '</span>';
         } else {
           locHtml = '<span style="font-size:11.5px;color:var(--muted);font-style:italic">待提交</span>';
         }
 
-        // Deliverable icon (same as stages tab output件)
-        var delIcon = renderDelIcon(d);
+        var typeLabels = { gitlab: 'GitLab', svn: 'SVN', nas: 'NAS', solidworks: '结构设计', pma: 'PMA' };
+        var docTypeLabel = typeLabels[d.doc_type] || d.doc_type || '—';
+        var updatedAt = (d.updated_at || '').substring(0, 16) || (d.completed_at || '').substring(0, 10);
+        var updatedBy = d.updated_by || '';
 
         rows += '<tr class="' + rowCls + '" style="background:' + bg + '" id="doc-row-' + d.id + '">' +
-          (i === 0 ? '<td rowspan="' + items.length + '" style="vertical-align:middle;border-right:1px solid var(--border)">' + stageNameHtml + (completedDate ? '<br><span style="font-size:10.5px;color:var(--success);font-weight:400">&#10003; ' + completedDate + '</span>' : '') + '</td>' : '') +
-          '<td><span style="display:flex;align-items:center;gap:6px" title="' + escHtml(d.description || '') + '">' + delIcon + escHtml(d.doc_name) + '</span></td>' +
+          (i === 0 ? '<td rowspan="' + items.length + '" style="vertical-align:middle;font-weight:540;border-right:1px solid var(--border);font-size:12px">' + stageNameHtml + '</td>' : '') +
+          '<td style="text-align:center;font-size:11px;color:var(--muted)">' + (d.sort_order || i + 1) + '</td>' +
+          '<td style="font-weight:500" title="' + escHtml(d.description || '') + '">' + escHtml(d.doc_name) + '</td>' +
           '<td style="font-size:12px;color:' + (d.responsible_role ? 'var(--fg)' : 'var(--muted)') + '">' + escHtml(d.responsible_role || '—') + '</td>' +
-          '<td>' + statusCell + '</td><td id="doc-loc-cell-' + d.id + '">' + locHtml + '</td>' +
+          '<td>' + statusCell + '</td>' +
+          '<td style="font-size:11px">' + escHtml(docTypeLabel) + '</td>' +
+          '<td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="doc-loc-cell-' + d.id + '">' + locHtml + '</td>' +
+          '<td style="font-size:11px;color:var(--muted);white-space:nowrap">' + escHtml(updatedAt) + '</td>' +
+          '<td style="font-size:11px;color:var(--muted)">' + escHtml(updatedBy) + '</td>' +
           '<td style="white-space:nowrap;text-align:center">' +
-            (d.location && isPreviewableUrl(d.location)
-              ? iconEye('previewDocument(\'' + encodeURIComponent(d.location) + '\',\'' + escJs(d.doc_name || '') + '\')')
-              : '') +
+            (d.location && !d.location.startsWith('@') && isPreviewableUrl(d.location)
+              ? iconEye('previewDocument(\'' + encodeURIComponent(d.location) + '\',\'' + escJs(d.doc_name || '') + '\')', '预览')
+              : (d.location && d.location !== '无需文档' && d.location !== '已删除'
+              ? '<a href="' + escHtml(d.location) + '" target="_blank" title="打开链接" style="text-decoration:none;font-size:15px">&#x1F517;</a>'
+              : '')) +
+            (canEdit ? iconEdit('openDocEditDialog(' + d.id + ')', '编辑') : '') +
+            (canEdit ? iconDelete('deleteDocStatus(' + d.id + ')', '删除') : '') +
           '</td>' +
         '</tr>';
       });
@@ -924,61 +945,51 @@ function buildDocs(data) {
   document.getElementById('docs-tbody').innerHTML = rows;
 }
 
-/* ── Document Status Toggle (inline edit) ── */
+/* ── Document Status Edit Dialog ── */
 
-var _editingDocId = null;
-
-function toggleDocEdit(docId) {
-  // If already editing, cancel
-  if (_editingDocId === docId) {
-    cancelDocEdit();
-    return;
-  }
-  // Close any existing edit
-  cancelDocEdit();
-
-  // Find the row and insert an edit row after it
-  var row = document.getElementById('doc-row-' + docId);
-  if (!row) return;
-
-  _editingDocId = docId;
-
-  var editRow = document.createElement('tr');
-  editRow.id = 'doc-edit-row-' + docId;
-  editRow.className = 'doc-edit-row';
-  // Determine colspan: if first row in stage group, stage cell occupies 1 col
-  var hasStageCell = row.querySelector('td[rowspan]') !== null;
-  var colspan = hasStageCell ? 4 : 5;
-  editRow.innerHTML =
-    '<td colspan="' + colspan + '" style="padding:8px 12px">' +
-      '<div class="doc-edit-inline">' +
-        '<input id="doc-edit-loc" placeholder="输入文档链接/路径" style="font-size:12px">' +
-        '<button class="doc-status-btn done" onclick="saveDocStatus(' + docId + ',\'submitted\')">标记已提交</button>' +
-        (hasStageCell ? '' : '') +
-        '<button class="doc-status-btn" onclick="cancelDocEdit()">取消</button>' +
-      '</div>' +
-    '</td>';
-
-  // Insert after the current row
-  row.parentNode.insertBefore(editRow, row.nextSibling);
-  document.getElementById('doc-edit-loc').focus();
+function openDocEditDialog(docId) {
+  var inp = 'width:100%;box-sizing:border-box;margin-top:1px';
+  openDialog('编辑文档状态',
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档链接/路径（标记已提交时需要）</label>' +
+      '<input class="search-inp" id="doc-edit-loc" placeholder="输入文档链接/路径" style="' + inp + '">' +
+    '</div>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+      '<button class="btn btn-primary" onclick="submitDocStatus(' + docId + ')">标记已提交</button>' +
+      '<button class="btn" onclick="markDocUnnecessary(' + docId + ')" style="color:var(--warn);border-color:var(--warn)">标记为无需文档</button>' +
+    '</div>',
+    [{text: '取消', onclick: 'closeSharedDialog()'}],
+    {hideClose: true});
 }
 
-function cancelDocEdit() {
-  var editRow = document.getElementById('doc-edit-row-' + _editingDocId);
-  if (editRow) editRow.remove();
-  _editingDocId = null;
+function submitDocStatus(docId) { saveDocStatus(docId, 'submitted'); }
+function markDocUnnecessary(docId) { saveDocStatus(docId, 'unnecessary'); }
+function deleteDocStatus(docId) {
+  if (!confirm('确认删除此文档记录？')) return;
+  saveDocStatus(docId, 'deleted');
 }
 
 async function saveDocStatus(docId, status) {
-  var loc = document.getElementById('doc-edit-loc').value.trim();
+  var user = getCurrentUser();
+  var username = user ? (user.display_name || user.username) : '?';
+  var now = new Date().toISOString().substring(0, 10);
+  var locEl = document.getElementById('doc-edit-loc');
+  var loc = locEl ? locEl.value.trim() : '';
   var body = { status: status };
-  if (loc) body.location = loc;
+  if (status === 'unnecessary') {
+    body.status = 'submitted';
+    body.location = '无需文档';
+  } else if (status === 'deleted') {
+    body.status = 'deleted';
+    body.location = '已删除';
+  } else if (loc) {
+    body.location = loc;
+  }
+  closeSharedDialog();
   try {
     await API.put('/projects/' + _comboCurCode + '/documents/' + docId, body);
-    showToast(status === 'submitted' ? '已标记为提交' : '状态已更新', 'success');
-    cancelDocEdit();
-    // Refresh documents tab
+    var msgs = {submitted:'已标记为提交', unnecessary:'已标记为无需文档', deleted:'已删除'};
+    showToast(msgs[status] || '状态已更新', 'success');
     var docs = await API.get('/projects/' + _comboCurCode + '/documents');
     buildDocs(docs);
   } catch(e) {

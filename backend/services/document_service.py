@@ -307,6 +307,8 @@ def create_template(db: Session, data: dict) -> dict:
         description=data.get("description"),
         responsible_role=data.get("responsible_role"),
         doc_path=data.get("doc_path"),
+        base_path=data.get("base_path"),
+        file_pattern=data.get("file_pattern"),
         doc_type=data.get("doc_type"),
     )
     db.add(tpl)
@@ -320,7 +322,7 @@ def update_template(db: Session, template_id: int, data: dict) -> Optional[dict]
     tpl = db.query(DocumentTemplate).filter(DocumentTemplate.id == template_id).first()
     if not tpl:
         return None
-    for field in ("stage_type", "doc_name", "sort_order", "description", "responsible_role", "doc_path", "doc_type"):
+    for field in ("stage_type", "doc_name", "sort_order", "description", "responsible_role", "doc_path", "base_path", "file_pattern", "doc_type"):
         if field in data:
             setattr(tpl, field, data[field])
     db.commit()
@@ -368,6 +370,8 @@ def _template_dict(t: DocumentTemplate) -> dict:
         "description": t.description,
         "responsible_role": t.responsible_role,
         "doc_path": t.doc_path or "",
+        "base_path": t.base_path or "",
+        "file_pattern": t.file_pattern or "",
         "doc_type": t.doc_type or "",
     }
 
@@ -530,6 +534,10 @@ def _query_project_documents(db: Session, project_id: int) -> list[dict]:
             "description": pd_doc.description,
             "completed_at": str(pd_doc.completed_at)[:10] if pd_doc.completed_at else None,
             "location": pd_doc.location,
+            "doc_path": pd_doc.doc_path or "",
+            "doc_type": pd_doc.doc_type or "",
+            "updated_by": pd_doc.updated_by,
+            "updated_at": str(pd_doc.updated_at)[:19] if pd_doc.updated_at else None,
         })
     return docs
 
@@ -575,7 +583,10 @@ def _doc_dict(pd: ProjectDocument) -> dict:
         "description": pd.description,
         "completed_at": str(pd.completed_at)[:10] if pd.completed_at else None,
         "location": pd.location,
+        "doc_path": pd.doc_path or "",
+        "doc_type": pd.doc_type or "",
         "updated_by": pd.updated_by,
+        "updated_at": str(pd.updated_at)[:19] if pd.updated_at else None,
     }
 
 

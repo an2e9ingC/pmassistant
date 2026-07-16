@@ -1015,7 +1015,7 @@ function _renderProdDocsInline(docs) {
   var typeLabels = { gitlab: 'GitLab', svn: 'SVN', nas: 'NAS', solidworks: '结构设计', pma: 'PMA' };
   var html = '<div class="card" style="padding:0;overflow:hidden">';
   html += '<div class="table-scroll" style="max-height:600px"><table class="stage-table"><thead><tr>' +
-    '<th style="width:80px">分类</th><th style="width:50px">序号</th><th>文档名称</th><th>责任人</th><th style="width:90px">状态</th><th>类型</th><th>路径</th><th>最后修改时间</th><th>修改人</th><th>操作</th>' +
+    '<th style="width:80px">分类</th><th style="width:50px">序号</th><th>文档名称</th><th style="width:80px">责任人</th><th style="width:80px">状态</th><th style="width:50px">类型</th><th>路径</th><th style="width:100px">最后修改时间</th><th style="width:80px">修改人</th><th style="width:100px">操作</th>' +
     '</tr></thead><tbody>';
   stageOrder.forEach(function(st) {
     var items = grouped[st];

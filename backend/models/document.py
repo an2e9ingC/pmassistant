@@ -19,7 +19,9 @@ class DocumentTemplate(Base):
     sort_order = Column(Integer, default=0)
     description = Column(String(512), nullable=True)
     responsible_role = Column(String(128), nullable=True)  # 责任人/岗位
-    doc_path = Column(String(512), nullable=True)  # 文档路径/NAS路径
+    doc_path = Column(String(512), nullable=True)  # 文档路径/NAS路径（旧，合并了base+file）
+    base_path = Column(String(512), nullable=True)  # 基础路径（如 http://.../信号板/{code}/）
+    file_pattern = Column(String(256), nullable=True)  # 文件名模板（如 01_{code}_SCH-FINAL.rar）
     doc_type = Column(String(32), nullable=True)  # 文档类型: gitlab/svn/nas
 
 
@@ -38,6 +40,10 @@ class ProjectDocument(Base):
     description = Column(String(512), nullable=True)  # 说明（从模板复制）
     completed_at = Column(DateTime, nullable=True)
     location = Column(Text, nullable=True)
+    doc_path = Column(String(512), nullable=True)  # 完整文档路径
+    doc_type = Column(String(32), nullable=True)  # 文档类型: gitlab/svn/nas
+    base_path = Column(String(512), nullable=True)  # 基础路径
+    file_pattern = Column(String(256), nullable=True)  # 文件名模板
     updated_by = Column(String(64), nullable=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
