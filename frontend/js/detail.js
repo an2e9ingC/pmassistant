@@ -1724,7 +1724,7 @@ function showProjectEditDialog() {
       '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">项目名称</label>' +
       '<input class="search-inp" id="proj-edit-name" value="' + escHtml(p.name || '') + '" style="width:100%;box-sizing:border-box"></div>' +
       '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">项目编号</label>' +
-      '<input class="search-inp" id="proj-edit-code" value="' + escHtml(p.code || '') + '" style="width:100%;box-sizing:border-box"></div>' +
+      '<input class="search-inp" id="proj-edit-code" value="' + escHtml(p.code || '') + '" readonly style="width:100%;box-sizing:border-box;background:var(--border);cursor:not-allowed"></div>' +
       '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">项目经理</label>' +
       dl('proj-edit-pm-name', pmNames, p.pm_name) + '</div>' +
       '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">客户名称</label>' +
