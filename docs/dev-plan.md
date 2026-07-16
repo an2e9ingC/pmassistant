@@ -231,6 +231,7 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-07-16 | v2026.07.16-beta64 | fix: location已解析路径误判mismatch导致回退pending+百分号编码location兼容 |
 | 2026-07-16 | v2026.07.16-beta63 | feat: 项目文档SVN扫描—分步递归解析通配符+location写实际URL+updated_by用SVN作者 |
 | 2026-07-16 | v2026.07.16-beta62 | fix: is_unnecessary=NULL模板导入只导入1条+ProductDocTemplate缺列500 |
 | 2026-07-16 | v2026.07.16-beta61 | fix: hash路由手动输入不跳转+project tab无法定位具体stage |

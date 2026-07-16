@@ -382,12 +382,20 @@ def check_product_docs(db, product_id: int) -> dict:
         exists = False
         mismatch = ""
 
-        # If user set a location, validate it matches the template
+        # If a location was previously resolved, just check if it still exists
         if doc.location and template_path:
-            if template_path != doc.location:
-                mismatch = f"路径与模板不匹配（期望: {template_path}）"
-            else:
-                exists = check_file_exists(doc.location)
+            loc_decoded = unquote(doc.location)
+            exists = check_file_exists(loc_decoded)
+            matched_url = loc_decoded if exists else None
+            if not exists:
+                try:
+                    matched_url = scan_doc_path(check_path)
+                    exists = matched_url is not None
+                except Exception as e:
+                    matched_url = None
+                    logger.warning(f"Scan failed for doc {doc.id} ({doc.doc_name}): {e}")
+            if exists and doc.location != loc_decoded:
+                doc.location = loc_decoded
         else:
             # No user location — use template path directly
             try:
@@ -534,15 +542,23 @@ def check_project_docs(db, project_id: int) -> dict:
 
         logger.warning(f"[project-doc-scan] #{doc.id} '{doc.doc_name}' path={check_path[:120]}")
 
-        # If user set a location, validate it matches the template
+        # If a location was previously resolved, just check if it still exists
         if doc.location and template_path:
-            if template_path != doc.location:
-                mismatch = f"路径与模板不匹配（期望: {template_path}）"
-                logger.warning(f"[project-doc-scan] #{doc.id} '{doc.doc_name}' mismatch: {mismatch}")
-            else:
-                exists = check_file_exists(doc.location)
-                matched_url = doc.location if exists else None
-                logger.warning(f"[project-doc-scan] #{doc.id} '{doc.doc_name}' check_file_exists(location) = {exists}")
+            # Decode percent-encoded location if needed (for backward compat)
+            loc_decoded = unquote(doc.location)
+            exists = check_file_exists(loc_decoded)
+            matched_url = loc_decoded if exists else None
+            if not exists:
+                # Location file gone — try scanning template path again
+                try:
+                    matched_url = scan_doc_path(check_path)
+                    exists = matched_url is not None
+                except Exception as e:
+                    logger.warning(f"[project-doc-scan] #{doc.id} '{doc.doc_name}' scan failed: {e}")
+            # Update stored location to decoded form
+            if exists and doc.location != loc_decoded:
+                doc.location = loc_decoded
+            logger.warning(f"[project-doc-scan] #{doc.id} '{doc.doc_name}' check_location = {exists}")
         else:
             # No user location — use template path directly
             try:
