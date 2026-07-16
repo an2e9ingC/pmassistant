@@ -23,6 +23,7 @@ class DocumentTemplate(Base):
     base_path = Column(String(512), nullable=True)  # 基础路径（如 http://.../信号板/{code}/）
     file_pattern = Column(String(256), nullable=True)  # 文件名模板（如 01_{code}_SCH-FINAL.rar）
     doc_type = Column(String(32), nullable=True)  # 文档类型: gitlab/svn/nas
+    is_unnecessary = Column(Integer, default=0)  # 0=正常 1=无需文档
 
 
 class ProjectDocument(Base):
@@ -105,6 +106,7 @@ class TaskTemplate(Base):
     sort_order = Column(Integer, default=0)
     description = Column(String(512), nullable=True)
     responsible_role = Column(String(128), nullable=True)  # 责任人/岗位
+    is_unnecessary = Column(Integer, default=0)  # 0=正常 1=无需任务
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 

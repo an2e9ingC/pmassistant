@@ -347,6 +347,73 @@ def reset_project_documents(
     return {"code": 0, "data": {"deleted": count}, "message": f"已清除 {count} 条，涉及阶段: {', '.join(stage_types)}"}
 
 
+# ── Stage-level unnecessary flags ──
+
+@router.get("/stage-unnecessary", response_model=dict)
+def get_stage_unnecessary(
+    project_type: str = Query(...),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    """Get stage-level unnecessary flags for a project type."""
+    from backend.models.local import PmaSetting
+    docs_key = f"stage_docs_unnecessary_{project_type}"
+    tasks_key = f"stage_tasks_unnecessary_{project_type}"
+    docs_val = PmaSetting.get(db, docs_key, "")
+    tasks_val = PmaSetting.get(db, tasks_key, "")
+    docs_list = [s for s in docs_val.split(",") if s]
+    tasks_list = [s for s in tasks_val.split(",") if s]
+    return {"code": 0, "data": {"docs": docs_list, "tasks": tasks_list}, "message": "ok"}
+
+
+class StageUnnecessaryBody(BaseModel):
+    stage_name: str
+    unnecessary: bool  # True = mark unnecessary, False = restore
+
+@router.put("/stage-unnecessary/docs", response_model=dict)
+def set_stage_docs_unnecessary(
+    project_type: str = Query(...),
+    body: StageUnnecessaryBody = None,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("doc_template")),
+):
+    from backend.models.local import PmaSetting
+    key = f"stage_docs_unnecessary_{project_type}"
+    current = PmaSetting.get(db, key, "")
+    stages = [s for s in current.split(",") if s]
+    if body.unnecessary and body.stage_name not in stages:
+        stages.append(body.stage_name)
+    elif not body.unnecessary and body.stage_name in stages:
+        stages.remove(body.stage_name)
+    PmaSetting.set(db, key, ",".join(stages))
+    log_audit(db, user, "stage_unnecessary_docs",
+        f"project_type={project_type} stage={body.stage_name} unnecessary={body.unnecessary}",
+        AUDIT_CAT_TEMPLATE, "low")
+    return {"code": 0, "data": stages, "message": "ok"}
+
+
+@router.put("/stage-unnecessary/tasks", response_model=dict)
+def set_stage_tasks_unnecessary(
+    project_type: str = Query(...),
+    body: StageUnnecessaryBody = None,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("doc_template")),
+):
+    from backend.models.local import PmaSetting
+    key = f"stage_tasks_unnecessary_{project_type}"
+    current = PmaSetting.get(db, key, "")
+    stages = [s for s in current.split(",") if s]
+    if body.unnecessary and body.stage_name not in stages:
+        stages.append(body.stage_name)
+    elif not body.unnecessary and body.stage_name in stages:
+        stages.remove(body.stage_name)
+    PmaSetting.set(db, key, ",".join(stages))
+    log_audit(db, user, "stage_unnecessary_tasks",
+        f"project_type={project_type} stage={body.stage_name} unnecessary={body.unnecessary}",
+        AUDIT_CAT_TEMPLATE, "low")
+    return {"code": 0, "data": stages, "message": "ok"}
+
+
 # ═══════════════════════════════════════════════════════════
 # Task Template Routes
 # ═══════════════════════════════════════════════════════════

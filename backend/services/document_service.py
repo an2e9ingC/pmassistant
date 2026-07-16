@@ -310,6 +310,7 @@ def create_template(db: Session, data: dict) -> dict:
         base_path=data.get("base_path"),
         file_pattern=data.get("file_pattern"),
         doc_type=data.get("doc_type"),
+        is_unnecessary=1 if data.get("is_unnecessary") else 0,
     )
     db.add(tpl)
     db.commit()
@@ -322,7 +323,7 @@ def update_template(db: Session, template_id: int, data: dict) -> Optional[dict]
     tpl = db.query(DocumentTemplate).filter(DocumentTemplate.id == template_id).first()
     if not tpl:
         return None
-    for field in ("stage_type", "doc_name", "sort_order", "description", "responsible_role", "doc_path", "base_path", "file_pattern", "doc_type"):
+    for field in ("stage_type", "doc_name", "sort_order", "description", "responsible_role", "doc_path", "base_path", "file_pattern", "doc_type", "is_unnecessary"):
         if field in data:
             setattr(tpl, field, data[field])
     db.commit()
@@ -373,6 +374,7 @@ def _template_dict(t: DocumentTemplate) -> dict:
         "base_path": t.base_path or "",
         "file_pattern": t.file_pattern or "",
         "doc_type": t.doc_type or "",
+        "is_unnecessary": bool(t.is_unnecessary),
     }
 
 
@@ -403,7 +405,8 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
         templates = (
             db.query(DocumentTemplate)
             .filter(DocumentTemplate.stage_type == st,
-                    DocumentTemplate.project_type == project_type)
+                    DocumentTemplate.project_type == project_type,
+                    DocumentTemplate.is_unnecessary == 0)
             .order_by(DocumentTemplate.sort_order)
             .all()
         )
@@ -661,6 +664,7 @@ def create_task_template(db: Session, data: dict) -> dict:
         sort_order=data.get("sort_order", 0),
         description=data.get("description"),
         responsible_role=data.get("responsible_role"),
+        is_unnecessary=1 if data.get("is_unnecessary") else 0,
     )
     db.add(tpl)
     db.commit()
@@ -673,7 +677,7 @@ def update_task_template(db: Session, template_id: int, data: dict) -> Optional[
     tpl = db.query(TaskTemplate).filter(TaskTemplate.id == template_id).first()
     if not tpl:
         return None
-    for field in ("stage_type", "task_name", "sort_order", "description", "responsible_role"):
+    for field in ("stage_type", "task_name", "sort_order", "description", "responsible_role", "is_unnecessary"):
         if field in data:
             setattr(tpl, field, data[field])
     db.commit()
@@ -708,7 +712,8 @@ def _sync_tasks_from_templates(db: Session, project_id: int, project_type: str =
         templates = (
             db.query(TaskTemplate)
             .filter(TaskTemplate.stage_type == st,
-                    TaskTemplate.project_type == project_type)
+                    TaskTemplate.project_type == project_type,
+                    TaskTemplate.is_unnecessary == 0)
             .order_by(TaskTemplate.sort_order)
             .all()
         )
@@ -985,6 +990,7 @@ def _product_template_dict(t: ProductDocTemplate) -> dict:
         "base_path": t.base_path or "",
         "file_pattern": t.file_pattern or "",
         "doc_type": t.doc_type or "",
+        "is_unnecessary": bool(t.is_unnecessary),
     }
 
 

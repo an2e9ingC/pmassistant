@@ -172,7 +172,7 @@ async function initDocTemplates(tab, sub1, sub2) {
     _currentTab = tab;
     if (tab === 'product') {
       if (sub1) _selectedNodeId = parseInt(sub1);
-      if (sub2) _productStage = sub2;
+      if (sub2) _productStage = decodeURIComponent(sub2);
     }
     // Activate the right tab in the top-level tab bar
     setTimeout(function() {
@@ -181,8 +181,8 @@ async function initDocTemplates(tab, sub1, sub2) {
     }, 50);
   } else if (tab === 'project') {
     _currentTab = 'project';
-    if (sub1) _currentProjectType = sub1;
-    if (sub2) _selectedStage = sub2;
+    if (sub1) _currentProjectType = decodeURIComponent(sub1);
+    if (sub2) _selectedStage = decodeURIComponent(sub2);
   }
 
   var container = document.getElementById('dtsec-project');
@@ -194,6 +194,13 @@ async function initDocTemplates(tab, sub1, sub2) {
     if (!_projectTypes.length) {
       _projectTypes = [{id: 'RD', label: '研发项目', stages: [], builtin: true}];
     }
+    // Load stage unnecessary flags
+    try {
+      var unnecRes = await API.get('/doc-templates/stage-unnecessary?project_type=' + encodeURIComponent(_currentProjectType));
+      _stageUnnecDocs = unnecRes.docs || [];
+      _stageUnnecTasks = unnecRes.tasks || [];
+    } catch(e) { _stageUnnecDocs = []; _stageUnnecTasks = []; }
+
     // Load templates for current project type
     await loadTemplatesForType(_currentProjectType);
     renderTemplatesPage();
@@ -370,9 +377,25 @@ function _renderDocTemplateSection(stageName, canEdit) {
   }
   html += '</div>';
   if (canEdit) {
-    html += '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="showAddTemplateForm()">+ 添加文档</button>';
+    var allUnnec = (docs.length > 0 && docs.every(function(d) { return d.is_unnecessary; }))
+      || (docs.length === 0 && (_stageUnnecDocs || []).indexOf(stageName) >= 0);
+    html += '<div style="display:flex;align-items:center;gap:8px">' +
+      '<span style="display:inline-flex;align-items:center;gap:4px">' +
+        '<span style="font-size:11px;color:var(--muted)">无需文档</span>' +
+        toggleSwitch(allUnnec, "toggleStageDocsUnnecessary('" + escHtml(stageName).replace(/'/g, "\\'") + "'," + (allUnnec ? '1' : '0') + ")", {id: 'doc-unnec-' + escHtml(stageName).replace(/[^a-zA-Z0-9]/g, '_')}) +
+      '</span>';
+    var addTitle = allUnnec ? '已配置为无需文档，请先关闭无需开关' : '添加文档';
+    html += '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="' + (allUnnec ? 'showToast(\'已配置为无需文档，请先关闭无需开关\',\'warn\')' : 'showAddTemplateForm()') + '" title="' + escHtml(addTitle) + '">+ 添加文档</button>' +
+    '</div>';
   }
   html += '</div>';
+
+  // If no docs and toggle ON, show text instead of empty table
+  if (allUnnec && docs.length === 0) {
+    html += '<div style="padding:20px;text-align:center;color:var(--muted);font-style:italic">已配置为无需文档</div>';
+    html += '</div>';
+    return html;
+  }
 
   // Table or empty state
   if (docs.length) {
@@ -403,6 +426,7 @@ function _renderDocTemplateSection(stageName, canEdit) {
         '<td style="font-size:12px;color:var(--muted)">' + escHtml(d.description || '') + '</td>' +
         (canEdit
           ? '<td style="white-space:nowrap;text-align:center" ondragover="event.stopPropagation()" ondrop="event.stopPropagation()">' +
+              (d.is_unnecessary ? '<span style="font-size:10px;color:var(--warn);margin-right:4px" title="已标记为无需文档">无需</span>' : '') +
               iconCopy('copyTemplate(' + d.id + ')') +
               iconEdit('showEditTemplateForm(' + d.id + ')') +
               iconDelete('deleteTemplate(' + d.id + ')') +
@@ -437,9 +461,24 @@ function _renderTaskTemplateSection(stageName, canEdit) {
   }
   html += '</div>';
   if (canEdit) {
-    html += '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="showAddTaskTemplateForm()">+ 添加任务</button>';
+    var allUnnecTask = (tasks.length > 0 && tasks.every(function(t) { return t.is_unnecessary; }))
+      || (tasks.length === 0 && (_stageUnnecTasks || []).indexOf(stageName) >= 0);
+    html += '<div style="display:flex;align-items:center;gap:8px">' +
+      '<span style="display:inline-flex;align-items:center;gap:4px">' +
+        '<span style="font-size:11px;color:var(--muted)">无需任务</span>' +
+        toggleSwitch(allUnnecTask, "toggleStageTasksUnnecessary('" + escHtml(stageName).replace(/'/g, "\\'") + "'," + (allUnnecTask ? '1' : '0') + ")", {id: 'task-unnec-' + escHtml(stageName).replace(/[^a-zA-Z0-9]/g, '_')}) +
+      '</span>';
+    var addTitle = allUnnecTask ? '已配置为无需任务，请先关闭无需开关' : '添加任务';
+    html += '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="' + (allUnnecTask ? 'showToast(\'已配置为无需任务，请先关闭无需开关\',\'warn\')' : 'showAddTaskTemplateForm()') + '" title="' + escHtml(addTitle) + '">+ 添加任务</button>' +
+    '</div>';
   }
   html += '</div>';
+
+  if (allUnnecTask && tasks.length === 0) {
+    html += '<div style="padding:20px;text-align:center;color:var(--muted);font-style:italic">已配置为无需任务</div>';
+    html += '</div>';
+    return html;
+  }
 
   // Table or empty state
   if (tasks.length) {
@@ -462,6 +501,7 @@ function _renderTaskTemplateSection(stageName, canEdit) {
         '<td style="font-size:12px;color:var(--muted)">' + escHtml(t.description || '') + '</td>' +
         (canEdit
           ? '<td style="white-space:nowrap;text-align:center" ondragover="event.stopPropagation()" ondrop="event.stopPropagation()">' +
+              (t.is_unnecessary ? '<span style="font-size:10px;color:var(--warn);margin-right:4px" title="已标记为无需任务">无需</span>' : '') +
               iconCopy('copyTaskTemplate(' + t.id + ')') +
               iconEdit('showEditTaskTemplateForm(' + t.id + ')') +
               iconDelete('deleteTaskTemplate(' + t.id + ')') +
@@ -678,6 +718,101 @@ function copyTemplate(id) {
     description: newDoc.description, doc_path: newDoc.doc_path, doc_type: newDoc.doc_type });
   showToast('已复制，请修改后保存', 'info');
   renderTemplatesPage();
+}
+
+function toggleStageDocsUnnecessary(stageName, current) {
+  var stageDocs = _templatesGrouped[stageName] || [];
+  var newVal = current ? 0 : 1;
+  if (stageDocs.length > 0) {
+    // If turning ON with active templates, warn
+    if (newVal === 1 && !stageDocs.every(function(d) { return d.is_unnecessary; })) {
+      showToast('该阶段有文档模板，请先删除后再标记为无需文档', 'warn');
+      loadTemplatesForType(_currentProjectType);
+      return;
+    }
+    stageDocs.forEach(function(d) {
+      if (d.is_unnecessary != newVal) {
+        d.is_unnecessary = newVal;
+        var found = false;
+        for (var i = 0; i < _pendingOps.length; i++) {
+          if (_pendingOps[i].type === 'edit' && _pendingOps[i].id === d.id) {
+            _pendingOps[i].is_unnecessary = newVal;
+            found = true; break;
+          }
+        }
+        if (!found) {
+          _pendingOps.push({ type: 'edit', id: d.id, stage_type: stageName,
+            doc_name: d.doc_name, sort_order: d.sort_order, responsible_role: d.responsible_role || '',
+            description: d.description || '', doc_path: d.doc_path || '', base_path: d.base_path || '',
+            file_pattern: d.file_pattern || '', doc_type: d.doc_type || '', is_unnecessary: newVal });
+        }
+      }
+    });
+    renderTemplatesPage();
+  } else {
+    // Empty stage: save directly via API
+    API.put('/doc-templates/stage-unnecessary/docs?project_type=' + encodeURIComponent(_currentProjectType),
+      { stage_name: stageName, unnecessary: !current }).then(function() {
+      // Update local cache immediately for visual feedback
+      _stageUnnecDocs = _stageUnnecDocs || [];
+      var idx = _stageUnnecDocs.indexOf(stageName);
+      if (newVal && idx < 0) _stageUnnecDocs.push(stageName);
+      if (!newVal && idx >= 0) _stageUnnecDocs.splice(idx, 1);
+      renderTemplatesPage();
+    }).catch(function(e) { showToast('操作失败: ' + (e.message || ''), 'error'); });
+  }
+}
+function toggleStageTasksUnnecessary(stageName, current) {
+  var stageTasks = (_taskTemplatesGrouped || {})[stageName] || [];
+  var newVal = current ? 0 : 1;
+  if (stageTasks.length > 0) {
+    if (newVal === 1 && !stageTasks.every(function(t) { return t.is_unnecessary; })) {
+      showToast('该阶段有任务模板，请先删除后再标记为无需任务', 'warn');
+      loadTemplatesForType(_currentProjectType);
+      return;
+    }
+    stageTasks.forEach(function(t) {
+      if (t.is_unnecessary != newVal) {
+        t.is_unnecessary = newVal;
+        var found = false;
+        for (var i = 0; i < _taskPendingOps.length; i++) {
+          if (_taskPendingOps[i].type === 'edit' && _taskPendingOps[i].id === t.id) {
+            _taskPendingOps[i].is_unnecessary = newVal;
+            found = true; break;
+          }
+        }
+        if (!found) {
+          _taskPendingOps.push({ type: 'edit', id: t.id, stage_type: stageName,
+            task_name: t.task_name, sort_order: t.sort_order, responsible_role: t.responsible_role || '',
+            description: t.description || '', is_unnecessary: newVal });
+        }
+      }
+    });
+    renderTemplatesPage();
+  } else {
+    API.put('/doc-templates/stage-unnecessary/tasks?project_type=' + encodeURIComponent(_currentProjectType),
+      { stage_name: stageName, unnecessary: !current }).then(function() {
+      _stageUnnecTasks = _stageUnnecTasks || [];
+      var idx = _stageUnnecTasks.indexOf(stageName);
+      if (newVal && idx < 0) _stageUnnecTasks.push(stageName);
+      if (!newVal && idx >= 0) _stageUnnecTasks.splice(idx, 1);
+      renderTemplatesPage();
+    }).catch(function(e) { showToast('操作失败: ' + (e.message || ''), 'error'); });
+  }
+}
+function toggleTemplateUnnecessary(id, current) {
+  var newVal = current ? 0 : 1;
+  API.put('/doc-templates/' + id, { is_unnecessary: newVal }).then(function() {
+    showToast(newVal ? '已标记为无需文档' : '已取消标记', 'success');
+    _refreshAllTabsData();
+  }).catch(function(e) { showToast('操作失败: ' + (e.message || ''), 'error'); });
+}
+function toggleTaskUnnecessary(id, current) {
+  var newVal = current ? 0 : 1;
+  API.put('/doc-templates/tasks/' + id, { is_unnecessary: newVal }).then(function() {
+    showToast(newVal ? '已标记为无需任务' : '已取消标记', 'success');
+    _refreshAllTabsData();
+  }).catch(function(e) { showToast('操作失败: ' + (e.message || ''), 'error'); });
 }
 
 function deleteTemplate(id) {
