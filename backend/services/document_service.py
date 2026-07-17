@@ -406,7 +406,24 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
     project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
     project_code = (project.code or "") if project else ""
 
+    # Load stage-level unnecessary flags (stages where all docs are optional)
+    from backend.models.local import PmaSetting
+    unnec_key = f"stage_docs_unnecessary_{project_type}"
+    unnec_val = PmaSetting.get(db, unnec_key, "")
+    unnec_stages = set(s.strip() for s in unnec_val.split(",") if s.strip())
+
     for st in standard_stages:
+        # Skip stages marked as "无需文档" at the stage level
+        if st in unnec_stages:
+            # Also remove any existing docs for this stage (cleanup after marking unnecessary)
+            existing_in_stage = db.query(ProjectDocument).filter(
+                ProjectDocument.project_id == project_id,
+                ProjectDocument.stage_type == st
+            ).all()
+            for pd in existing_in_stage:
+                db.delete(pd)
+                changed = True
+            continue
         templates = (
             db.query(DocumentTemplate)
             .filter(DocumentTemplate.stage_type == st,

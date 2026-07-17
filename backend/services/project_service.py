@@ -273,9 +273,17 @@ def get_project_documents(db: Session, project_id: int) -> dict:
         st = d.get("stage_type") or "未分类"
         grouped.setdefault(st, []).append(d)
 
-    # Build result: one entry per standard stage (in order)
+    # Load stage-level unnecessary flags to hide stages with no required docs
+    from backend.models.local import PmaSetting
+    unnec_key = f"stage_docs_unnecessary_{project_type}"
+    unnec_val = PmaSetting.get(db, unnec_key, "")
+    unnec_stages = set(s.strip() for s in unnec_val.split(",") if s.strip())
+
+    # Build result: one entry per standard stage (in order), skip unnecessary stages
     result = []
     for st in standard_stages:
+        if st in unnec_stages:
+            continue
         items = grouped.get(st, [])
         scd = items[0].get("stage_completed_date") if items else None
         result.append({

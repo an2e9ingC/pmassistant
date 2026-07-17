@@ -231,6 +231,7 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-07-17 | v2026.07.17-beta3 | fix: _sync_from_templates+get_project_documents读取stage_docs_unnecessary过滤无需文档阶段 |
 | 2026-07-17 | v2026.07.17-beta2 | fix: location已解析路径误判mismatch回退pending+百分号编码location兼容 |
 | 2026-07-17 | v2026.07.17-beta1 | feat: 统一新建/编辑项目对话框，搜索下拉组件+标签维护同款设计 |
 | 2026-07-16 | v2026.07.16-beta66 | fix: 编辑项目/产品时项目编号/产品编号改为只读不可修改 |
