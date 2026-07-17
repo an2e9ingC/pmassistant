@@ -1,4 +1,5 @@
 """Task CRUD API routes."""
+import logging
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -9,6 +10,25 @@ from backend.database import get_db
 from backend.middleware.auth import get_current_user, require_perm
 from backend.services import task_service
 from backend.services.entity_resolver import resolve_project
+
+logger = logging.getLogger(__name__)
+
+
+def _resolve_project_id(db: Session, pid: str) -> int:
+    """Resolve a project identifier (code like PE0454 or numeric ID) to an integer ID."""
+    from backend.models.zentao import CachedProject
+    # Try as integer first
+    try:
+        int_id = int(pid)
+        if db.query(CachedProject).filter(CachedProject.id == int_id).first():
+            return int_id
+    except (ValueError, TypeError):
+        pass
+    # Try as code
+    p = db.query(CachedProject).filter(CachedProject.code == pid).first()
+    if p:
+        return p.id
+    return 0
 from backend.audit_categories import AUDIT_CAT_TASK
 from backend.routers.logs import log_audit
 
@@ -36,7 +56,7 @@ class TaskCreate(BaseModel):
 
 class TaskBatchCreate(BaseModel):
     tasks: List[dict]
-    project_id: int
+    project_id: Optional[str] = None  # accepts code (PE0454) or numeric ID
 
 
 class TaskImport(BaseModel):
@@ -132,9 +152,30 @@ def create_tasks_batch(
     db: Session = Depends(get_db),
     user=Depends(require_perm("task_edit")),
 ):
-    for d in payload.tasks:
-        d["project_id"] = payload.project_id
-    tasks = task_service.create_tasks_batch(db, payload.tasks, user)
+    if not payload.project_id:
+        raise HTTPException(status_code=400, detail="project_id is required")
+    # Resolve project_id: accepts code (PE0454) or numeric ID as string
+    project_id = _resolve_project_id(db, payload.project_id)
+    if not project_id:
+        raise HTTPException(status_code=400, detail=f"project not found: {payload.project_id}")
+    logger.info(f"[task-batch] user={user.username} project_id={project_id} task_count={len(payload.tasks)}")
+    valid_tasks = []
+    for i, d in enumerate(payload.tasks):
+        d["project_id"] = project_id
+        if not d.get("title", "").strip():
+            logger.warning(f"[task-batch] skipping task #{i}: empty title")
+            continue
+        # Ensure numeric fields are valid
+        if d.get("execution_id") is not None:
+            try: d["execution_id"] = int(d["execution_id"])
+            except (ValueError, TypeError): d["execution_id"] = None
+        if d.get("assignee_id") is not None:
+            try: d["assignee_id"] = int(d["assignee_id"])
+            except (ValueError, TypeError): d["assignee_id"] = None
+        valid_tasks.append(d)
+    if not valid_tasks:
+        raise HTTPException(status_code=400, detail="没有有效的任务数据")
+    tasks = task_service.create_tasks_batch(db, valid_tasks, user)
     return {"code": 0, "data": tasks, "message": "ok"}
 
 

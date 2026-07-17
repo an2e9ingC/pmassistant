@@ -231,6 +231,7 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-07-17 | v2026.07.17-beta5 | fix: tasks/batch接受项目编号+execution_id类型安全+无标题过滤 |
 | 2026-07-17 | v2026.07.17-beta4 | style: 项目/产品文档列表UI优化—背景色循环+计数角标+列宽调整+移除红色系 |
 | 2026-07-17 | v2026.07.17-beta3 | fix: _sync_from_templates+get_project_documents读取stage_docs_unnecessary过滤无需文档阶段 |
 | 2026-07-17 | v2026.07.17-beta2 | fix: location已解析路径误判mismatch回退pending+百分号编码location兼容 |
