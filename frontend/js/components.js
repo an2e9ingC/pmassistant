@@ -211,7 +211,7 @@ function renderProjIcon(type, code) {
 
 function renderTypeBadge(type) {
   var t = (type || 'RD').toLowerCase();
-  return '<span class="badge badge-' + t + '">' + getProjectTypeLabel(type) + '项目</span>';
+  return '<span class="badge badge-' + t + '">' + getProjectTypeLabel(type) + '</span>';
 }
 
 function renderPill(status) {
