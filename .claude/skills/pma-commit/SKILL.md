@@ -43,15 +43,18 @@ Co-Authored-By: <model-name> / <tool-name>
 - **feat/fix 必须有 body**（bullet 变更点）
 - **一个 commit 只含相关改动**
 - **数据库文件不再纳入版本控制**（`data/pma-*.db` 已加入 `.gitignore`），`init_db()` 自动建表
+- **提交前必须先进行 code-review**（检查旧代码残留、遗漏引用、重复代码块等）：
+  1. `Skill("code-review")` 对本次修改进行 review，修复发现的问题
+  2. 确认无遗留问题后进入提交流程
 - **提交前必须先停止服务**（避免 git 操作干扰服务进程的文件描述符）：
   1. `./server.sh -p <PORT> stop`
   2. `git add ... && git commit -m "..."`
   3. `./server.sh -p <PORT> restart`
 - **数据层变更必须同步更新 `docs/db.md`**
-- **每次 commit 必须同步更新 `docs/dev-plan.md`**：页头版本号同步为 `#app-version` 当前值，并在变更记录表追加新条目
+- **每次 commit 必须同步更新 `docs/dev-plan.md`**：页头版本号同步为 `#app-version` 当前值，并在变更记录表**插入新条目到表头下方第一条**（最新版本在最前面，按日期+版本倒序排列）
 
   ```bash
-  # 追加条目到变更记录表（定位到 "## 变更记录" 后的第二个表头分隔行）
+  # 在变更记录表头分隔行之后插入新条目（确保最新记录在第一位）
   LINE=$(awk '/^## 变更记录/{found=1} found && /^\|------\|------\|------\|$/{print NR; exit}' docs/dev-plan.md)
   sed -i "${LINE}a | $(date +%Y-%m-%d) | v2026.0X.0X-betaN | type: 简短描述 |" docs/dev-plan.md
   ```

@@ -146,7 +146,7 @@ NAS 文件 ───────────┘
 | "merge" / "合并" | `Skill("pma-worktree")` → rebase+review → 回主session → merge --no-ff → 等 push |
 | `./server.sh status` | 查看所有运行实例概览 |
 | `./server.sh stop` | 停止所有实例 |
-| 后端 .py 修改 | `./server.sh -p <PORT> restart` |
+| 后端 .py 修改 | `Skill("code-review")` → 修复 → `./server.sh -p <PORT> restart` |
 
 ---
 
@@ -154,14 +154,18 @@ NAS 文件 ───────────┘
 
 ### 后端修改后自动重启
 
-修改 `backend/**/*.py` 后必须重启服务器：
+修改 `backend/**/*.py` 后，先进行 code-review，再重启服务器验证：
+
+1. `Skill("code-review")` — 检查旧代码残留、遗漏引用、重复代码块等
+2. 修复 review 发现的问题
+3. 重启服务器验证：
 
 ```bash
 ./server.sh -p <PORT> restart
 ```
 
 - 主 session 用 `-p 8000`，worktree session 用各自的端口
-- 纯前端修改无需重启（用户刷新即可）
+- 纯前端修改无需重启（用户刷新即可），但仍需 code-review
 - `server.sh` 命令：`{start|stop|restart|status|logs|tail}`
 - 不加 `-p` 时：`status` 查看所有实例、`stop` 停止所有实例
 
