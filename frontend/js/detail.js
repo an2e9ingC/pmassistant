@@ -22,6 +22,7 @@ initProjectCombo({
   onSelect: function(p) {
     _comboCurId = p.id;
     _comboCurCode = p.code || String(p.id);
+    document.getElementById('combo-input').value = _comboCurCode;
     loadProjectDetail(_comboCurCode);
     history.replaceState({ view: 'detail', params: [_comboCurCode, 'info'] }, '', buildHash('detail', _comboCurCode, 'info'));
   }

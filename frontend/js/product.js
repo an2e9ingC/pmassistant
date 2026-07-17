@@ -351,7 +351,7 @@ async function loadProductDetail(code) {
   if (selected) {
     _prodDetailCurId = selected.id;
     _prodDetailCurCode = selected.code || String(selected.id);
-    document.getElementById('prod-combo-input').value = selected.name;
+    document.getElementById('prod-combo-input').value = selected.code || selected.name;
   }
 
   document.getElementById('prod-detail-header').innerHTML = '<div class="loading-spinner">加载中...</div>';
@@ -418,13 +418,13 @@ function renderProdDetailHeader(p, docs) {
     '<div class="detail-meta">' +
       '<div class="detail-title">' +
         '<span style="vertical-align:middle;margin-right:4px">' + favStar('product', p.id, {size:'22px'}) + '</span>' +
+        (p.code ? '<span class="proj-code-tag" style="margin-right:8px;vertical-align:middle">' + escHtml(p.code) + '</span>' : '') +
         escHtml(p.name) +
         (p.is_local
           ? ' <span class="pm-src-badge local" style="vertical-align:middle;margin-left:6px">PMA本地</span>'
           : (p.synced_at ? ' <span class="pm-src-badge synced" style="vertical-align:middle;margin-left:6px" title="同步于 ' + escHtml(p.synced_at) + '">禅道同步</span>' : '')) +
         (!p.is_local && p.zentao_url ? '<a href="' + p.zentao_url + '" target="_blank" class="zentao-link" style="margin-left:10px;font-size:12px" title="在禅道中查看">&#x2197; 禅道</a>' : '') +
       '</div>' +
-      (p.code ? '<div class="detail-subtitle" style="font-family:var(--mono);font-size:12px;color:var(--muted)">' + escHtml(p.code) + '</div>' : '') +
     '</div>' +
     '<div style="flex-shrink:0;margin-left:auto;display:flex;gap:16px;align-items:flex-start">' + ringsHtml + '</div>';
 }
@@ -438,7 +438,6 @@ function renderProdInfo(p) {
 
   // Info row — 4 columns, consistent style
   html += '<div class="delivery-kpi" style="grid-template-columns:repeat(4, 1fr);margin-bottom:16px">' +
-    '<div class="dkpi"><div class="dkpi-lbl">产品编号</div><div class="dkpi-val" style="font-family:var(--mono);font-size:16px;font-weight:600;color:var(--fg)">' + escHtml(p.code || '#' + p.id) + '</div></div>' +
     '<div class="dkpi" style="cursor:pointer" onclick="' +
       (p.linked_node_ids && p.linked_node_ids.length ? '_pmSelectedNodeId=' + p.linked_node_ids[0] + ';gotoView(\'product-management\')' : '') +
       '" title="点击跳转到产品管理">' +
