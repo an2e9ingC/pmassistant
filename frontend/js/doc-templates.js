@@ -2259,7 +2259,7 @@ async function initNamingOptions() {
     var fields = ['series', 'fpga', 'cpu', 'adc', 'form'];
     var html = '<div style="max-width:900px">';
     fields.forEach(function(fk) {
-      var opts = data[fk] || [];
+      var opts = (data[fk] || []).sort(function(a, b) { return a.code < b.code ? -1 : a.code > b.code ? 1 : 0; });
       html += '<div class="card" style="padding:14px 18px;margin-bottom:12px">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
           '<span style="font-weight:600;font-size:13px">' + escHtml(_namingFieldLabels[fk] || fk) + '</span>' +
@@ -2294,7 +2294,7 @@ function _namingShowAdd(fk) {
     '<input class="search-inp" id="nm-desc" style="width:100%;box-sizing:border-box;margin-top:3px"></div>';
   openDialog('添加' + label + '选项', body, [
     {text: '取消', onclick: 'closeSharedDialog()'},
-    {text: '添加', cls: 'btn-primary', onclick: '_namingSave(0,\"' + fk + '\")'}
+    {text: '添加', cls: 'btn-primary', onclick: "_namingSave(0,'" + fk + "')"}
   ]);
 }
 
@@ -2308,7 +2308,7 @@ function _namingShowEdit(id, fk, code, desc) {
     '<input class="search-inp" id="nm-desc" value="' + escHtml(desc) + '" style="width:100%;box-sizing:border-box;margin-top:3px"></div>';
   openDialog('编辑' + label + '选项', body, [
     {text: '取消', onclick: 'closeSharedDialog()'},
-    {text: '保存', cls: 'btn-primary', onclick: '_namingSave(' + id + ',\"' + fk + '\")'}
+    {text: '保存', cls: 'btn-primary', onclick: "_namingSave(" + id + ",'" + fk + "')"}
   ]);
 }
 
