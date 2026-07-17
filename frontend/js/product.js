@@ -1015,7 +1015,7 @@ function _renderProdDocsInline(docs) {
   var typeLabels = { gitlab: 'GitLab', svn: 'SVN', nas: 'NAS', solidworks: '结构设计', pma: 'PMA' };
   var html = '<div class="card" style="padding:0;overflow:hidden">';
   html += '<div class="table-scroll" style="max-height:600px"><table class="stage-table"><thead><tr>' +
-    '<th style="width:80px">分类</th><th style="width:50px">序号</th><th>文档名称</th><th style="width:80px">责任人</th><th style="width:80px">状态</th><th style="width:50px">类型</th><th>路径</th><th style="width:100px">最后修改时间</th><th style="width:80px">修改人</th><th style="width:100px">操作</th>' +
+    '<th style="width:100px">分类</th><th style="width:50px">序号</th><th>文档名称</th><th style="width:80px">责任人</th><th style="width:80px">状态</th><th style="width:50px">类型</th><th>路径</th><th style="width:100px">最后修改时间</th><th style="width:80px">修改人</th><th style="width:100px">操作</th>' +
     '</tr></thead><tbody>';
   stageOrder.forEach(function(st) {
     var items = grouped[st];
@@ -1028,7 +1028,7 @@ function _renderProdDocsInline(docs) {
       var isLast = i === items.length - 1;
       html += '<tr>';
       if (i === 0) {
-        html += '<td rowspan="' + items.length + '" style="vertical-align:middle;text-align:center;font-weight:600;' + cellStyle + 'color:var(--accent);font-size:12px" id="doc-stage-' + escHtml(st) + '">' + escHtml(st) + '<br><span style="font-size:10px;color:var(--muted)">' + items.length + ' 项</span></td>';
+        html += '<td rowspan="' + items.length + '" style="vertical-align:middle;text-align:center;font-weight:600;white-space:nowrap;' + cellStyle + 'color:var(--accent);font-size:12px" id="doc-stage-' + escHtml(st) + '">' + escHtml(st) + ' <sup style="font-size:10px;color:var(--muted);font-weight:400">' + items.length + '</sup></td>';
       }
       // Status pill — system auto-detects
       var hasError = (!d.done && d.location) || d.mismatch;
@@ -1044,7 +1044,7 @@ function _renderProdDocsInline(docs) {
       }
 
       html += '<td style="font-family:var(--mono);color:var(--muted);text-align:center;' + cellStyle + '">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
-        '<td style="font-weight:500;width:150px;word-break:break-all;' + cellStyle + '">' + escHtml(d.doc_name) + '</td>' +
+        '<td style="font-weight:500;width:180px;word-break:break-all;' + cellStyle + '">' + escHtml(d.doc_name) + '</td>' +
         '<td style="font-size:12px;white-space:nowrap;' + cellStyle + '">' + escHtml(d.responsible_role || '—') + '</td>' +
         '<td style="white-space:nowrap;' + cellStyle + '">' + statusHtml + '</td>' +
         '<td style="font-size:11px;' + cellStyle + '">' + escHtml(typeLabels[d.doc_type] || '—') + '</td>' +

@@ -515,7 +515,7 @@ function previewDocument(url, filename) {
         '</span>' +
       '</div>' +
       '<div id="' + dlgId + '-body" style="flex:1;overflow:auto;min-height:400px;display:flex;align-items:center;justify-content:center">' +
-        ((ext === 'docx' || ext === 'vsdx') ? '<div style="text-align:center;color:var(--muted)"><div style="display:inline-block;width:48px;height:48px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite"></div><div style="margin-top:16px;font-size:13px">正在将 <b>"' + escHtml(title) + '"</b> 转换为 PDF...</div></div>' : '<div class="loading-spinner">加载中...</div>') +
+        ((ext === 'docx' || ext === 'vsdx') ? '<div style="text-align:center;color:var(--muted)"><div style="display:inline-block;width:48px;height:48px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite"></div><div style="margin-top:16px;font-size:13px">正在加载 <b>"' + escHtml(title) + '"</b> ...</div></div>' : '<div class="loading-spinner">加载中...</div>') +
       '</div>' +
     '</div></div>';
   document.body.insertAdjacentHTML('beforeend', html);

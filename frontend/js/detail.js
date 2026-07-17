@@ -744,7 +744,7 @@ function initBarTooltip() {
   if (!root) return;
   if (!_barTipEl) {
     _barTipEl = document.createElement('div');
-    _barTipEl.style.cssText = 'display:none;position:fixed;background:#333;color:#fff;font-size:11px;padding:5px 10px;border-radius:5px;z-index:9999;pointer-events:none;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.3);font-family:var(--mono)';
+    _barTipEl.style.cssText = 'display:none;position:fixed;background:#333;color:#fff;font-size:11px;padding:5px 10px;border-radius:5px;z-index:9999;pointer-events:none;white-space:nowrap;word-break:keep-all;box-shadow:0 2px 8px rgba(0,0,0,0.3);font-family:var(--mono)';
     document.body.appendChild(_barTipEl);
   }
   root.addEventListener('mousemove', function(e) {
@@ -843,7 +843,7 @@ function buildStages(stages) {
       '<td><span class="risk-tag" style="--risk-color:' + risk.color + '" title="' + escHtml(risk.tip) + '">' + escHtml(risk.label) + '</span></td>' +
       '<td>' + progHtml + '</td>' +
       '<td><span style="font-size:12px;color:var(--muted)">—</span></td>' +
-      '<td><span style="font-size:11.5px;color:var(--muted);white-space:nowrap;line-height:1.8">—</span></td>' +
+      '<td><span style="font-size:11.5px;color:var(--muted);white-space:nowrap;word-break:keep-all;line-height:1.8">—</span></td>' +
       '<td><span class="pill" style="background:var(--accent-lt);color:var(--accent)">标准阶段</span></td>' +
       '<td><span style="font-size:12px;color:var(--muted)">—</span></td>' +
       '<td>' + renderDeliverablesList(dels) + '</td>' +
@@ -873,62 +873,73 @@ function buildDocs(data) {
     return;
   }
 
-  var stageIdx = 0;
+  var typeLabels = { gitlab: 'GitLab', svn: 'SVN', nas: 'NAS', solidworks: '结构设计', pma: 'PMA' };
+  var stageColors = ['var(--accent-lt)', '#e8f5e9', '#fff3e0', '#e3f2fd', '#e0f2f1', '#f5f5f5', '#fff8e1', '#e8eaf6'];
+
   var rows = '';
-  stageList.forEach(function(stage) {
+  stageList.forEach(function(stage, stageIdx) {
     var stageName = stage.stage_name || '未分类';
     var items = stage.documents || [];
     var hasDocs = stage.has_documents;
-    var bg = stageIdx % 2 === 0 ? 'var(--surface)' : 'var(--bg)';
-    var completedDate = stage.stage_completed_date || null;
-
-    // Stage name display
-    var stageNameHtml = '<span style="font-weight:540;font-size:12px">' + escHtml(stageName) + '</span>';
+    var bg = stageColors[stageIdx % stageColors.length];
+    var cellStyle = 'background:' + bg + ';';
 
     if (!hasDocs) {
-      rows += '<tr style="background:' + bg + ';opacity:0.5">' +
-        '<td style="vertical-align:middle;font-weight:540;border-right:1px solid var(--border)">' + stageNameHtml + '</td>' +
-        '<td colspan="9" style="color:var(--muted);font-style:italic;font-size:12px">暂无文档</td>' +
+      rows += '<tr style="opacity:0.5">' +
+        '<td style="vertical-align:middle;text-align:center;font-weight:600;white-space:nowrap;word-break:keep-all;' + cellStyle + 'color:var(--accent);font-size:12px">' + escHtml(stageName) + ' <sup style="font-size:10px;color:var(--muted);font-weight:400">0</sup></td>' +
+        '<td style="text-align:center;color:var(--muted);' + cellStyle + '">-</td>' +
+        '<td style="color:var(--muted);' + cellStyle + '">-</td>' +
+        '<td style="color:var(--muted);' + cellStyle + '">-</td>' +
+        '<td style="color:var(--muted);' + cellStyle + '">-</td>' +
+        '<td style="color:var(--muted);' + cellStyle + '">-</td>' +
+        '<td style="font-size:12px;color:var(--muted);font-style:italic;text-align:left;' + cellStyle + '">暂无文档模板，请先配置文档模板 @CTO</td>' +
+        '<td style="color:var(--muted);' + cellStyle + '">-</td>' +
+        '<td style="color:var(--muted);' + cellStyle + '">-</td>' +
+        '<td style="color:var(--muted);' + cellStyle + '">-</td>' +
       '</tr>';
     } else {
       items.sort(function(a, b) { return (a.sort_order || 0) - (b.sort_order || 0); });
       items.forEach(function(d, i) {
-        var isUnnecessary = d.location === '无需文档';
-        var rowCls = d.done ? 'doc-row-submitted' : '';
-        var cls = d.done ? 'completed' : (d.warn ? 'blocked' : 'pending');
-        var lbl = isUnnecessary ? '无需文档' : (d.done ? '已提交' : (d.warn ? '⚠ 告警缺失' : '未开始'));
-        if (isUnnecessary) cls = 'completed';
-        var statusCell = '<span class="pill ' + cls + '" style="font-size:11px">' + lbl + '</span>';
+        var hasError = (!d.done && d.location) || d.mismatch;
+        var statusHtml;
+        if (d.done && !d.mismatch) {
+          statusHtml = '<span class="pill completed">已提交</span>';
+        } else if (hasError) {
+          statusHtml = '<span class="pill" style="background:var(--danger-lt);color:var(--danger)">×错误</span>';
+        } else {
+          statusHtml = '<span class="pill blocked">未提交</span>';
+        }
 
         var locHtml = '';
         if (d.location === '无需文档' || d.location === '已删除') {
           locHtml = '<span style="font-size:11px;color:var(--muted);font-style:italic">' + escHtml(d.location) + '</span>';
+        } else if (d.mismatch) {
+          locHtml = '<span style="color:var(--danger)">' + escHtml((d.location||'').replace(/^请提交到：/,'')) + '</span><br><span style="font-size:10px;color:var(--danger)">' + escHtml(d.mismatch) + '</span>';
         } else if (d.done && d.location) {
           locHtml = '<a href="' + escHtml(d.location) + '" target="_blank" style="color:var(--accent);text-decoration:none;word-break:break-all" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">' + escHtml(d.location) + '</a>';
-        } else if (d.done) {
-          locHtml = '<span style="font-size:12px;color:var(--muted)">已提交</span>';
+        } else if (hasError && d.location) {
+          locHtml = '<span style="color:var(--danger)">' + escHtml((d.location||'').replace(/^请提交到：/,'')) + '</span><br><span style="font-size:10px;color:var(--danger)">文件不存在或无法访问</span>';
         } else if (d.doc_path) {
           locHtml = '<span style="color:var(--muted);font-style:italic">请提交到：<span style="word-break:break-all">' + escHtml(d.doc_path) + '</span></span>';
         } else {
           locHtml = '<span style="font-size:11.5px;color:var(--muted);font-style:italic">待提交</span>';
         }
 
-        var typeLabels = { gitlab: 'GitLab', svn: 'SVN', nas: 'NAS', solidworks: '结构设计', pma: 'PMA' };
         var docTypeLabel = typeLabels[d.doc_type] || d.doc_type || '—';
         var updatedAt = (d.updated_at || '').substring(0, 16) || (d.completed_at || '').substring(0, 10);
         var updatedBy = d.updated_by || '';
 
-        rows += '<tr class="' + rowCls + '" style="background:' + bg + '" id="doc-row-' + d.id + '">' +
-          (i === 0 ? '<td rowspan="' + items.length + '" style="vertical-align:middle;font-weight:540;border-right:1px solid var(--border);font-size:12px">' + stageNameHtml + '</td>' : '') +
-          '<td style="text-align:center;font-size:11px;color:var(--muted)">' + (d.sort_order || i + 1) + '</td>' +
-          '<td style="font-weight:500;width:150px;word-break:break-all" title="' + escHtml(d.description || '') + '">' + escHtml(d.doc_name) + '</td>' +
-          '<td style="font-size:12px;color:' + (d.responsible_role ? 'var(--fg)' : 'var(--muted)') + '">' + escHtml(d.responsible_role || '—') + '</td>' +
-          '<td>' + statusCell + '</td>' +
-          '<td style="font-size:11px">' + escHtml(docTypeLabel) + '</td>' +
-          '<td style="font-size:12px;word-break:break-all" id="doc-loc-cell-' + d.id + '">' + locHtml + '</td>' +
-          '<td style="font-size:11px;color:var(--muted);white-space:nowrap">' + escHtml(updatedAt) + '</td>' +
-          '<td style="font-size:11px;color:var(--muted)">' + escHtml(updatedBy) + '</td>' +
-          '<td style="white-space:nowrap;text-align:center">' +
+        rows += '<tr id="doc-row-' + d.id + '">' +
+          (i === 0 ? '<td rowspan="' + items.length + '" style="vertical-align:middle;text-align:center;font-weight:600;' + cellStyle + 'color:var(--accent);font-size:12px">' + escHtml(stageName) + ' <sup style="font-size:10px;color:var(--muted);font-weight:400">' + items.length + '</sup></td>' : '') +
+          '<td style="font-family:var(--mono);color:var(--muted);text-align:center;' + cellStyle + '">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
+          '<td style="font-weight:500;width:180px;word-break:break-all;' + cellStyle + '" title="' + escHtml(d.description || '') + '">' + escHtml(d.doc_name) + '</td>' +
+          '<td style="font-size:12px;white-space:nowrap;word-break:keep-all;' + cellStyle + '">' + escHtml(d.responsible_role || '—') + '</td>' +
+          '<td style="white-space:nowrap;word-break:keep-all;' + cellStyle + '">' + statusHtml + '</td>' +
+          '<td style="font-size:11px;' + cellStyle + '">' + escHtml(docTypeLabel) + '</td>' +
+          '<td style="font-size:12px;word-break:break-all;text-align:left;' + cellStyle + '" id="doc-loc-cell-' + d.id + '">' + locHtml + '</td>' +
+          '<td style="font-size:11px;color:var(--muted);white-space:nowrap;word-break:keep-all;' + cellStyle + '">' + escHtml(updatedAt) + '</td>' +
+          '<td style="font-size:12px;color:var(--muted);' + cellStyle + '">' + escHtml(updatedBy) + '</td>' +
+          '<td style="white-space:nowrap;word-break:keep-all;text-align:center;' + cellStyle + '">' +
             (d.location && !d.location.startsWith('@') && isPreviewableUrl(d.location)
               ? iconEye('previewDocument(\'' + encodeURIComponent(d.location) + '\',\'' + escJs(d.doc_name || '') + '\')', '预览')
               : (d.location && d.location !== '无需文档' && d.location !== '已删除'
@@ -940,7 +951,6 @@ function buildDocs(data) {
         '</tr>';
       });
     }
-    stageIdx++;
   });
   document.getElementById('docs-tbody').innerHTML = rows;
 }
