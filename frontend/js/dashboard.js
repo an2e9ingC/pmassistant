@@ -50,7 +50,6 @@ async function loadKpiCards() {
     document.getElementById('tab-all').textContent = '全部 ' + data.total_projects;
     var typeFilterEl = document.getElementById('type-filter');
     if (typeFilterEl && data.type_all) {
-      // Remove old type tabs (keep only "全部")
       typeFilterEl.querySelectorAll('.tab[data-ptype]').forEach(function(t) { t.remove(); });
       Object.keys(data.type_all).sort().forEach(function(pt) {
         var tab = document.createElement('span');
@@ -60,6 +59,10 @@ async function loadKpiCards() {
         tab.textContent = getProjectTypeLabel(pt) + ' ' + data.type_all[pt];
         typeFilterEl.appendChild(tab);
       });
+      // Re-highlight correct tab based on current filter
+      document.querySelectorAll('#type-filter .tab').forEach(function(t) { t.classList.remove('active'); });
+      var activeTab = document.getElementById('tab-' + (curTypeFilter === 'fav' ? 'fav' : 'all'));
+      if (activeTab) activeTab.classList.add('active');
     }
     document.getElementById('kpi-completed-count').textContent = data.completed_count;
     document.getElementById('kpi-high-risk-count').textContent = data.high_risk_count;
@@ -129,15 +132,26 @@ function onProjSearch(v) {
 }
 
 function filterTable(f, el) {
-  if (el) {
-    document.querySelectorAll('#type-filter .tab').forEach(function(t) { t.classList.remove('active'); });
-    el.classList.add('active');
-  }
-  // Reset category filter when switching type filter
+  // Highlight type-filter tab
+  document.querySelectorAll('#type-filter .tab').forEach(function(t) { t.classList.remove('active'); });
+  if (el) el.classList.add('active');
+  // Clear KPI card highlights and category filter when switching type
   _curCategory = '';
-  document.querySelectorAll('#kpi-grid .kpi-card').forEach(function(c){c.classList.remove('active');});
+  document.querySelectorAll('.kpi-grid .kpi-card').forEach(function(c){c.classList.remove('active');});
   _clearProjSearch();
   loadProjectTable(f);
+}
+
+// 收藏卡片的交互（与 filterByCategory 一致的 KPI 高亮逻辑，但切换到 fav 类型筛选）
+function filterByFav(el) {
+  _curCategory = '';
+  document.querySelectorAll('#type-filter .tab').forEach(function(t) { t.classList.remove('active'); });
+  var favTab = document.getElementById('tab-fav');
+  if (favTab) favTab.classList.add('active');
+  document.querySelectorAll('.kpi-grid .kpi-card').forEach(function(c) { c.classList.remove('active'); });
+  if (el) el.classList.add('active');
+  _clearProjSearch();
+  loadProjectTable('fav');
 }
 
 async function loadProjectTable(filter) {
