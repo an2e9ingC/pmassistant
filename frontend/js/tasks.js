@@ -343,15 +343,8 @@ function renderTaskTableCompact(tasks, execs) {
         var stageCellContent = stageId
           ? '<button class="gs-btn" onclick="openStageDialog(' + stageId + ');event.stopPropagation()" title="查看/编辑阶段信息">' + escHtml(stageName) + '</button>'
           : escHtml(stageName);
-        // Stage progress: avg of all task progress in this stage
-        var stageProgs = stageTasks.filter(function(t) { return t; }).map(function(t) { return t.progress || 0; });
-        var stagePct = stageProgs.length ? Math.round(stageProgs.reduce(function(a,b){return a+b;},0) / stageProgs.length) : 0;
-        var stageProgressRing = typeof renderProgressRing === 'function'
-          ? '<div style="margin-top:4px;display:flex;justify-content:center">' + renderProgressRing(stagePct, 36) + '</div>'
-          : '';
         html += '<td rowspan="' + rowCount + '" data-stage-cell="' + escHtml(stageName) + '" style="vertical-align:middle;background:var(--bg);border-right:2px solid var(--border);text-align:center">' +
           '<div>' + stageCellContent + ' <sup style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:8px">' + stageTasks.length + '</sup></div>' +
-          stageProgressRing +
           '</td>';
       }
       if (t) {
