@@ -756,7 +756,7 @@ function _renderSearchDropdown(dropdownId, items, selectedId, q, selectFnName) {
   if (!list.length) { dd.innerHTML = '<div class="combo-no-match">未找到匹配项目</div>'; return; }
   dd.innerHTML = list.map(function(p) {
     var cls = p.id == selectedId ? 'combo-opt selected' : 'combo-opt';
-    return '<div class="' + cls + '" onmousedown="event.preventDefault()" onclick="' + selectFnName + '(' + p.id + ')">' +
+    return '<div class="' + cls + '" onmousedown="event.preventDefault()" onclick="' + selectFnName + '(\'' + p.id + '\')">' +
       '<div class="combo-opt-name">' + escHtml(p.code || p.name) + '</div>' +
       (p.code ? '<div class="combo-opt-meta">' + escHtml(p.name) + '</div>' : '') +
     '</div>';
@@ -773,7 +773,7 @@ function _renderComboDropdown(dropdownId, selectedId, q, selectFnName) {
   if (!list.length) { dd.innerHTML = '<div class="combo-no-match">未找到匹配项目</div>'; return; }
   dd.innerHTML = list.map(function(p) {
     var cls = p.id == selectedId ? 'combo-opt selected' : 'combo-opt';
-    return '<div class="' + cls + '" onmousedown="event.preventDefault()" onclick="' + selectFnName + '(' + p.id + ')">' +
+    return '<div class="' + cls + '" onmousedown="event.preventDefault()" onclick="' + selectFnName + '(\'' + p.id + '\')">' +
       '<div class="combo-opt-name">' + escHtml(p.code || p.name) + '</div>' +
       (p.code ? '<div class="combo-opt-meta">' + escHtml(p.name) + '</div>' : '') +
     '</div>';
@@ -851,7 +851,7 @@ function _renderUserDropdown(dropdownId, selectedId, q, selectFnName) {
   if (!list.length) { dd.innerHTML = '<div class="combo-no-match">未找到匹配用户</div>'; return; }
   dd.innerHTML = list.map(function(u) {
     var cls = u.id == selectedId ? 'combo-opt selected' : 'combo-opt';
-    return '<div class="'+cls+'" onmousedown="event.preventDefault()" onclick="'+selectFnName+'('+u.id+')">' +
+    return '<div class="'+cls+'" onmousedown="event.preventDefault()" onclick="' + selectFnName + '(\'' + u.id + '\')">' +
       '<div class="combo-opt-name">'+escHtml(u.name)+'</div>' +
       '<div class="combo-opt-meta">@'+escHtml(u.code||'')+'</div></div>';
   }).join('');

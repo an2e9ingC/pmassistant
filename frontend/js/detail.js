@@ -1886,9 +1886,15 @@ function showProjectFormDialog(isEdit) {
           onSelect: function(p) {
             var el = document.getElementById('proj-form-prod-input');
             if (!el) return;
-            // selectFn already overwrote input to p.name — rebuild full list from tracked IDs first
+            if (p.id === '__future__') {
+              // 未来新产品 — just append as text placeholder
+              var current = el.value.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+              if (current.indexOf('未来新产品') < 0) current.push('未来新产品');
+              el.value = current.join(', ');
+              return;
+            }
             var pid = parseInt(p.id);
-            if (p.id !== '__future__' && _projFormSelectedPids.indexOf(pid) < 0) {
+            if (_projFormSelectedPids.indexOf(pid) < 0) {
               _projFormSelectedPids.push(pid);
             }
             // Fetch all products to rebuild display text from selected IDs

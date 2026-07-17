@@ -316,9 +316,9 @@ def create_local_project(
     description: str = "",
     product_ids: Optional[list[int]] = None,
 ) -> dict:
-    """Create a PMA-local project. Must link to at least 1 product."""
-    if not product_ids or len(product_ids) == 0:
-        raise ValueError("项目必须关联至少1个产品")
+    """Create a PMA-local project. Product linkage is optional (未来新产品 placeholder)."""
+    if product_ids is None:
+        product_ids = []
 
     # Check code uniqueness
     existing = db.query(CachedProject).filter(CachedProject.code == code).first()
