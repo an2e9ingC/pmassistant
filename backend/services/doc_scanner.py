@@ -388,8 +388,9 @@ def check_product_docs(db, product_id: int) -> dict:
             exists = check_file_exists(loc_decoded)
             matched_url = loc_decoded if exists else None
             if not exists:
+                # Location file gone — re-scan using template path (with wildcards)
                 try:
-                    matched_url = scan_doc_path(check_path)
+                    matched_url = scan_doc_path(template_path)
                     exists = matched_url is not None
                 except Exception as e:
                     matched_url = None
@@ -549,16 +550,17 @@ def check_project_docs(db, project_id: int) -> dict:
             exists = check_file_exists(loc_decoded)
             matched_url = loc_decoded if exists else None
             if not exists:
-                # Location file gone — try scanning template path again
+                # Location file gone — re-scan using template path (with wildcards)
+                logger.warning(f"[project-doc-scan] #{doc.id} '{doc.doc_name}' location check failed, re-scanning with template: {template_path[:100]}")
                 try:
-                    matched_url = scan_doc_path(check_path)
+                    matched_url = scan_doc_path(template_path)
                     exists = matched_url is not None
                 except Exception as e:
                     logger.warning(f"[project-doc-scan] #{doc.id} '{doc.doc_name}' scan failed: {e}")
             # Update stored location to decoded form
             if exists and doc.location != loc_decoded:
                 doc.location = loc_decoded
-            logger.warning(f"[project-doc-scan] #{doc.id} '{doc.doc_name}' check_location = {exists}")
+            logger.warning(f"[project-doc-scan] #{doc.id} '{doc.doc_name}' check_location = {exists} url={matched_url}")
         else:
             # No user location — use template path directly
             try:
