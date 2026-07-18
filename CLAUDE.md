@@ -165,7 +165,7 @@ NAS 文件 ───────────┘
 ```
 
 - 主 session 用 `-p 8000`，worktree session 用各自的端口
-- 纯前端修改无需重启（用户刷新即可），但仍需 code-review
+- 纯前端修改无需重启，用户刷新即可
 - `server.sh` 命令：`{start|stop|restart|status|logs|tail}`
 - 不加 `-p` 时：`status` 查看所有实例、`stop` 停止所有实例
 
@@ -193,10 +193,12 @@ log_audit(db, user, "delete_user", f"username={uname!r}", AUDIT_CAT_USER, "high"
 
 ### 交付前自检
 
-**修改完成交付用户验证前**，主动调用 `Skill("code-review")` 对本次修改进行一次 review，重点检查：
-- 旧代码残留（旧实现未删除，新旧并存）
-- 遗漏的引用更新（改了一处未改关联处）
-- 重复代码块
+**后端 `.py` 修改**：交付用户验证前，调用 `Skill("pma-code-review")` 进行局部检查。
+
+**纯前端修改**：不触发 `code-review` skill，改为快速自检：
+- `node --check` 语法检查
+- `grep` 扫描已删除的 id/class 是否还有其他引用
+- 告知用户改了什么，由用户在浏览器中验证效果
 
 ### 日期时间规范（方案 A：存储 UTC，API 返回 ISO 8601，前端转换）
 

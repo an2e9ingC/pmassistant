@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-当前版本：v2026.07.18-beta7 | 最后更新：2026-07-18
+当前版本：v2026.07.18-beta8 | 最后更新：2026-07-18
 
 ---
 
@@ -231,6 +231,7 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-07-18 | v2026.07.18-beta8 | docs: 项目专用 pma-code-review skill |
 | 2026-07-18 | v2026.07.18-beta7 | refactor(api): 统一后端时间保存形式为ISO 8601 UTC+前端fmtISODateTime本地时间转换 |
 | 2026-07-18 | v2026.07.18-beta6 | refactor(api): 迁移—API返回ISO 8601 UTC+前端fmtISODateTime本地时间转换 |
 | 2026-07-18 | v2026.07.18-beta5 | fix(api): 项目文档列表最后修改时间显示UTC→北京时间—str()改为to_local_str() |
