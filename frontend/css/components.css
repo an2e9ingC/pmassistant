@@ -121,45 +121,54 @@
   box-shadow: var(--sh-md);
 }
 
-/* Category-specific colors */
+/* KPI card category colors (now using data-filter) */
+.kpi-card[data-filter="all"] { border-left-color: var(--muted); }
+.kpi-card[data-filter="all"] .kpi-value { color: var(--fg); }
+.kpi-card[data-filter="all"].active {
+  border-color: var(--fg); background: var(--surface2);
+  box-shadow: var(--sh-md); transform: scale(1.02);
+}
+
+.kpi-card[data-filter="active"] { border-left-color: var(--accent); }
+.kpi-card[data-filter="active"] .kpi-value { color: var(--accent); }
+.kpi-card[data-filter="active"].active {
+  border-color: var(--accent); background: var(--accent-lt);
+  box-shadow: var(--sh-md); transform: scale(1.02);
+}
+
+.kpi-card[data-filter="completed"] { border-left-color: var(--success); }
+.kpi-card[data-filter="completed"] .kpi-value { color: var(--success); }
+.kpi-card[data-filter="completed"].active {
+  border-color: var(--success); background: var(--success-lt);
+  box-shadow: var(--sh-md); transform: scale(1.02);
+}
+
+.kpi-card[data-filter="high_risk"] { border-left-color: var(--danger); }
+.kpi-card[data-filter="high_risk"] .kpi-value { color: var(--danger); }
+.kpi-card[data-filter="high_risk"].active {
+  border-color: var(--danger); background: var(--danger-lt);
+  box-shadow: var(--sh-md); transform: scale(1.02);
+}
+
+.kpi-card[data-filter="incomplete_docs"] { border-left-color: var(--warn); }
+.kpi-card[data-filter="incomplete_docs"] .kpi-value { color: var(--warn); }
+.kpi-card[data-filter="incomplete_docs"].active {
+  border-color: var(--warn); background: var(--warn-lt);
+  box-shadow: var(--sh-md); transform: scale(1.02);
+}
+
+.kpi-card[data-filter="fav"] { border-left-color: #eab308; }
+.kpi-card[data-filter="fav"] .kpi-value { color: var(--warn); }
+.kpi-card[data-filter="fav"].active {
+  border-color: #eab308; background: #fef9c3;
+  box-shadow: var(--sh-md); transform: scale(1.02);
+}
+
+/* Keep backward-compatible data-category selectors for product page */
 .kpi-card[data-category=""] { border-left-color: var(--muted); }
 .kpi-card[data-category=""] .kpi-value { color: var(--fg); }
 .kpi-card[data-category=""].active {
   border-color: var(--fg); background: var(--surface2);
-  box-shadow: var(--sh-md);
-}
-
-.kpi-card[data-category="active"] { border-left-color: var(--accent); }
-.kpi-card[data-category="active"] .kpi-value { color: var(--accent); }
-.kpi-card[data-category="active"].active {
-  border-color: var(--accent); background: var(--accent-lt);
-  box-shadow: var(--sh-md);
-}
-
-.kpi-card[data-category="completed"] { border-left-color: var(--success); }
-.kpi-card[data-category="completed"] .kpi-value { color: var(--success); }
-.kpi-card[data-category="completed"].active {
-  border-color: var(--success); background: var(--success-lt);
-  box-shadow: var(--sh-md);
-}
-
-.kpi-card[data-category="high_risk"] { border-left-color: var(--danger); }
-.kpi-card[data-category="high_risk"] .kpi-value { color: var(--danger); }
-.kpi-card[data-category="high_risk"].active {
-  border-color: var(--danger); background: var(--danger-lt);
-  box-shadow: var(--sh-md);
-}
-
-.kpi-card[data-category="incomplete_docs"] { border-left-color: var(--warn); }
-.kpi-card[data-category="incomplete_docs"] .kpi-value { color: var(--warn); }
-.kpi-card[data-category="incomplete_docs"].active {
-  border-color: var(--warn); background: var(--warn-lt);
-  box-shadow: var(--sh-md);
-}
-.kpi-card[data-category="fav"] { border-left-color: #eab308; }
-.kpi-card[data-category="fav"] .kpi-value { color: #eab308; }
-.kpi-card[data-category="fav"].active {
-  border-color: #eab308; background: #fef9c3;
   box-shadow: var(--sh-md);
 }
 .kpi-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }

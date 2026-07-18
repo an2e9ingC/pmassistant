@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="app-version" content="v2026.07.19-beta1">
+<meta name="app-version" content="v2026.07.19-beta2">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>PM Assistant · 集成禅道 & GitLab</title>
 <script>
@@ -310,63 +310,69 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
     <!-- ══════════════════════ VIEW 1 — DASHBOARD ══════════════════════ -->
     <div class="view active" id="view-dashboard">
 
-      <div class="kpi-grid" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:12px">
-        <div class="kpi-card active" data-category="fav" onclick="filterByFav(this)" title="用户收藏的项目">
-          <div class="kpi-label"><span style="display:inline-flex;vertical-align:middle;margin-right:4px"><svg width="14" height="14" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="#eab308"/></svg></span>收藏</div>
+      <!-- KPI 统计卡片：6列，收藏默认选中，单选模式 -->
+      <div class="kpi-grid" style="grid-template-columns:repeat(6,1fr);margin-bottom:14px">
+        <div class="kpi-card active" data-filter="fav" onclick="dashFilter.setCard('fav',this)" title="用户收藏的项目">
+          <div class="kpi-label"><svg width="13" height="13" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="#eab308"/></svg> 收藏</div>
           <div class="kpi-value" id="kpi-fav-count" style="color:var(--warn)">—</div>
           <div class="kpi-meta">个人收藏</div>
         </div>
-        <div class="kpi-card" data-category="" onclick="filterByCategory('', this)" style="border-left-color:var(--muted)" title="所有项目总数（含研发和生产）&#10;筛选条件：数据源配置中的项目编号前缀">
-          <div class="kpi-label">全部</div>
+        <div class="kpi-card" data-filter="all" onclick="dashFilter.setCard('all',this)" title="所有项目总数（含研发和生产）&#10;筛选条件：数据源配置中的项目编号前缀">
+          <div class="kpi-label">全部项目</div>
           <div class="kpi-value" id="kpi-all-count" style="color:var(--fg)">—</div>
-          <div class="kpi-meta" id="kpi-all-filter" style="font-size:10.5px;font-family:var(--mono);cursor:help" title="">加载中...</div>
+          <div class="kpi-meta" id="kpi-all-filter" style="font-size:10px;cursor:help" title="">加载中...</div>
         </div>
-        <div class="kpi-card" data-category="incomplete_docs" onclick="filterByCategory('incomplete_docs', this)" title="统计条件：存在黄色告警的项目&#10;告警类型：阶段名不匹配、已完成阶段文档未提交、任务无输出件、&#10;GitLab 链接无效/未填写、审核任务缺少审批等">
+        <div class="kpi-card" data-filter="active" onclick="dashFilter.setCard('active',this)" title="统计条件：禅道项目状态为「进行中」或「未开始」">
+          <div class="kpi-label">进行中</div>
+          <div class="kpi-value" id="kpi-active-count">—</div>
+          <div class="kpi-meta" id="kpi-meta-types">加载中...</div>
+        </div>
+        <div class="kpi-card" data-filter="completed" onclick="dashFilter.setCard('completed',this)" title="PMA 严格完成标准（四条件全满足）">
+          <div class="kpi-label">已完成</div>
+          <div class="kpi-value" id="kpi-completed-count">—</div>
+          <div class="kpi-meta">已关闭/已完成</div>
+        </div>
+        <div class="kpi-card" data-filter="high_risk" onclick="dashFilter.setCard('high_risk',this)" title="统计条件：存在红色告警的项目">
+          <div class="kpi-label">高风险</div>
+          <div class="kpi-value" id="kpi-high-risk-count">—</div>
+          <div class="kpi-meta">超期/阻塞</div>
+        </div>
+        <div class="kpi-card" data-filter="incomplete_docs" onclick="dashFilter.setCard('incomplete_docs',this)" title="统计条件：存在黄色告警的项目">
           <div class="kpi-label">资料不全</div>
           <div class="kpi-value" id="kpi-incomplete-docs-count">—</div>
           <div class="kpi-meta">输出件缺失</div>
         </div>
       </div>
-      <div class="kpi-grid" id="kpi-grid" style="grid-template-columns:1fr 1fr 1fr">
-        <div class="kpi-card" data-category="active" onclick="filterByCategory('active', this)" title="统计条件：禅道项目状态为「进行中」或「未开始」&#10;即 p.status IN (doing, wait)">
-          <div class="kpi-label">进行中</div>
-          <div class="kpi-value" id="kpi-active-count">—</div>
-          <div class="kpi-meta" id="kpi-meta-types">加载中...</div>
-        </div>
-        <div class="kpi-card" data-category="completed" onclick="filterByCategory('completed', this)" title="PMA 严格完成标准（四条件全满足）：&#10;① 禅道项目状态为 已完成/已关闭&#10;② 所有已完结阶段的输出件全部提交&#10;③ 所有任务进度 100% done/closed&#10;④ 所有阶段名精确匹配标准阶段名，且无超期阶段">
-          <div class="kpi-label">已完成</div>
-          <div class="kpi-value" id="kpi-completed-count">—</div>
-          <div class="kpi-meta">已关闭/已完成</div>
-        </div>
-        <div class="kpi-card" data-category="high_risk" onclick="filterByCategory('high_risk', this)" title="统计条件：存在红色告警的项目&#10;告警类型：阶段计划结束日期已过但状态未完成（超期）">
-          <div class="kpi-label">高风险</div>
-          <div class="kpi-value" id="kpi-high-risk-count">—</div>
-          <div class="kpi-meta">阶段超期/阻塞</div>
-        </div>
-      </div>
 
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-        <span style="font-size:11px;color:var(--muted);font-weight:600;white-space:nowrap">项目集:</span>
-        <span class="tabs" id="program-filter" style="display:inline-flex">
-          <span class="tab active" data-pid="" onclick="filterByProgram('',this)">全部</span>
+      <!-- 多维过滤栏 -->
+      <div class="filter-bar" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;margin-bottom:14px;padding:10px 16px;background:var(--surface);border:1px solid var(--border);border-radius:8px">
+        <span style="font-size:11px;color:var(--muted);font-weight:600;white-space:nowrap">类型</span>
+        <span class="tabs" id="dash-type-filter"><span class="tab">加载中...</span></span>
+        <span style="font-size:11px;color:var(--muted);font-weight:600;white-space:nowrap;margin-left:4px">状态</span>
+        <span class="tabs" id="dash-status-filter">
+          <span class="tab active" data-status="" onclick="dashFilter.setStatus('',this)">全部</span>
+          <span class="tab" data-status="doing" onclick="dashFilter.setStatus('doing',this)">进行中</span>
+          <span class="tab" data-status="wait" onclick="dashFilter.setStatus('wait',this)">未开始</span>
+          <span class="tab" data-status="done" onclick="dashFilter.setStatus('done',this)">已完成</span>
+          <span class="tab" data-status="closed" onclick="dashFilter.setStatus('closed',this)">已关闭</span>
+          <span class="tab" data-status="suspended" onclick="dashFilter.setStatus('suspended',this)">已挂起</span>
+        </span>
+        <span style="font-size:11px;color:var(--muted);font-weight:600;white-space:nowrap;margin-left:4px">项目集</span>
+        <span class="tabs" id="dash-program-filter" style="display:inline-flex">
+          <span class="tab active" data-pid="" onclick="dashFilter.setProgram('',this)">全部</span>
         </span>
       </div>
 
       <div class="section-hd">
-        <div class="section-title">项目列表
-          <span class="tabs" id="type-filter" style="margin-left:12px;display:inline-flex;vertical-align:middle">
-            <span class="tab active" id="tab-fav" onclick="filterTable('fav',this)">★ 收藏</span>
-            <span class="tab" id="tab-all" onclick="filterTable('all',this)">全部</span>
-          </span>
-        </div>
+        <div class="section-title">项目列表</div>
         <div class="section-acts">
           <button class="btn btn-primary" id="dash-new-proj-btn" onclick="showDashboardCreateProjectDialog()" style="font-size:12px;padding:5px 14px;margin-right:8px;display:none">+ 新建项目</button>
           <div class="search-wrap" style="max-width:240px">
             <svg class="search-ico" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
               <circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/>
             </svg>
-            <input class="search-inp" id="proj-search" placeholder="搜索代号、名称、客户…（Ctrl+K 聚焦）" oninput="onProjSearch(this.value)">
-            <button class="search-clear" onclick="clearSearch('proj-search',onProjSearch)" title="清除">&times;</button>
+            <input class="search-inp" id="proj-search" placeholder="搜索代号、名称、客户…（Ctrl+K 聚焦）" oninput="dashFilter.onSearch(this.value)">
+            <button class="search-clear" onclick="clearSearch('proj-search',dashFilter.onSearch)" title="清除">&times;</button>
           </div>
         </div>
       </div>
@@ -375,12 +381,12 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
           <thead>
             <tr>
               <th width="20px"></th>
-              <th width="6%" style="cursor:pointer;user-select:none" onclick="toggleSortCode()">项目编号 <span id="sort-code-ind" style="color:var(--muted)">⇅</span></th>
+              <th width="6%" style="cursor:pointer;user-select:none" onclick="dashFilter.toggleSortCode()">项目编号 <span id="sort-code-ind" style="color:var(--muted)">⇅</span></th>
               <th width="28%">项目名</th>
               <th width="5%">客户</th>
               <th width="5%">类型</th>
               <th width="12%">当前阶段</th>
-              <th width="10%" style="cursor:pointer;user-select:none" id="sort-end-hdr" onclick="toggleSortEnd()">计划完成 <span id="sort-end-ind" style="color:var(--muted)">⇅</span></th>
+              <th width="10%" style="cursor:pointer;user-select:none" onclick="dashFilter.toggleSortEnd()">计划完成 <span id="sort-end-ind" style="color:var(--muted)">⇅</span></th>
               <th width="5%">状态</th>
               <th width="10%">进度</th>
               <th width="5%">风险</th>
@@ -388,7 +394,7 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
             </tr>
           </thead>
           <tbody id="proj-tbody">
-            <tr><td colspan="10"><div class="loading-spinner">加载中...</div></td></tr>
+            <tr><td colspan="11"><div class="loading-spinner">加载中...</div></td></tr>
           </tbody>
         </table>
       </div>
@@ -400,6 +406,8 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
       <div class="card alert-list table-scroll" id="alert-list" style="display:none">
         <div class="loading-spinner">加载告警...</div>
       </div>
+    </div>
+
     </div>
 
     <!-- ══════════════════════ VIEW 2 — PROJECT DETAIL ══════════════════════ -->

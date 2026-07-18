@@ -1,16 +1,154 @@
 /* ═══════════════════════════════════════════════════
    DASHBOARD VIEW
 ═══════════════════════════════════════════════════ */
-var curTypeFilter = 'all';
 
-// Project favorites use shared favStar component (persisted to DB)
-var curSearchVal  = '';
-var _curCategory = 'active';
-var _curProgramId = '';  // '' = all
-var _sortEndOrder = 'asc';
-var _sortCodeOrder = '';  // '' = no sort, 'asc', 'desc'
+// ── Unified filter state (default: fav) ──
+
+var dashFilter = {
+  type: 'fav',       // 'fav' | 'all' | 'RD' | 'SC'
+  status: '',        // '' | 'doing' | 'wait' | 'done' | 'closed' | 'suspended'
+  category: '',      // '' | 'active' | 'completed' | 'high_risk' | 'incomplete_docs'
+  program: '',       // '' | program_id
+  search: '',
+  sortBy: 'end',
+  sortOrder: 'asc',
+  _searchTimer: null,
+
+  // ── KPI card click (single-select: clicking already-active card does nothing) ──
+
+  setCard: function(cat, el) {
+    if (cat === 'fav') {
+      // Fav card: switch to fav mode, clear category highlight
+      if (this.type === 'fav') return; // already on fav, no-op
+      this.type = 'fav';
+      this.category = '';
+      document.querySelectorAll('.kpi-grid .kpi-card').forEach(function(c) { c.classList.remove('active'); });
+      if (el) el.classList.add('active');
+      // Reset type tabs
+      document.querySelectorAll('#dash-type-filter .tab').forEach(function(t) { t.classList.remove('active'); });
+      var allTab = document.querySelector('#dash-type-filter .tab[data-type="all"]');
+      if (allTab) allTab.classList.add('active');
+    } else {
+      // Category card: single-select (clicking same card = no-op)
+      if (this.category === cat) return;
+      this.category = cat;
+      // Exit fav mode
+      if (this.type === 'fav') {
+        this.type = 'all';
+        document.querySelectorAll('#dash-type-filter .tab').forEach(function(t) { t.classList.remove('active'); });
+        var allTab = document.querySelector('#dash-type-filter .tab[data-type="all"]');
+        if (allTab) allTab.classList.add('active');
+      }
+      document.querySelectorAll('.kpi-grid .kpi-card').forEach(function(c) { c.classList.remove('active'); });
+      if (el) el.classList.add('active');
+    }
+    this.reload();
+  },
+
+  // ── Type filter ──
+
+  setType: function(type, el) {
+    if (this.type === type) return;
+    this.type = type;
+    this.category = ''; // reset category highlight when switching type
+    document.querySelectorAll('#dash-type-filter .tab').forEach(function(t) { t.classList.remove('active'); });
+    if (el) el.classList.add('active');
+    document.querySelectorAll('.kpi-grid .kpi-card').forEach(function(c) { c.classList.remove('active'); });
+    this.reload();
+  },
+
+  // ── Status filter ──
+
+  setStatus: function(status, el) {
+    if (this.status === status) return;
+    this.status = status;
+    document.querySelectorAll('#dash-status-filter .tab').forEach(function(t) { t.classList.remove('active'); });
+    if (el) el.classList.add('active');
+    this.reload();
+  },
+
+  // ── Program filter ──
+
+  setProgram: function(pid, el) {
+    if (this.program === pid) return;
+    this.program = pid;
+    document.querySelectorAll('#dash-program-filter .tab').forEach(function(t) { t.classList.remove('active'); });
+    if (el) el.classList.add('active');
+    this.reload();
+  },
+
+  // ── Sort toggles (table header click) ──
+
+  toggleSortEnd: function() {
+    this.sortBy = 'end';
+    this.sortOrder = this.sortOrder === 'asc' ? 'desc' : 'asc';
+    this._updateSortIndicators();
+    this.reload();
+  },
+
+  toggleSortCode: function() {
+    this.sortBy = 'code';
+    this.sortOrder = this.sortOrder === 'asc' ? 'desc' : 'asc';
+    this._updateSortIndicators();
+    this.reload();
+  },
+
+  _updateSortIndicators: function() {
+    var ei = document.getElementById('sort-end-ind');
+    var ci = document.getElementById('sort-code-ind');
+    if (ei) {
+      if (this.sortBy === 'end') {
+        ei.textContent = this.sortOrder === 'asc' ? '▲' : '▼';
+        ei.style.color = '';
+      } else {
+        ei.textContent = '⇅'; ei.style.color = 'var(--muted)';
+      }
+    }
+    if (ci) {
+      if (this.sortBy === 'code') {
+        ci.textContent = this.sortOrder === 'asc' ? '▲' : '▼';
+        ci.style.color = '';
+      } else {
+        ci.textContent = '⇅'; ci.style.color = 'var(--muted)';
+      }
+    }
+  },
+
+  // ── Search (300ms debounce) ──
+
+  onSearch: function(v) {
+    var self = this;
+    clearTimeout(this._searchTimer);
+    this._searchTimer = setTimeout(function() { self.search = v; self.reload(); }, 300);
+  },
+
+  // ── Build API params ──
+
+  buildParams: function() {
+    var p = { page: 1, limit: 50 };
+    if (this.search) p.search = this.search;
+    if (this.type && this.type !== 'all' && this.type !== 'fav') p.type = this.type;
+    if (this.status) p.status = this.status;
+    if (this.category) p.category = this.category;
+    if (this.program) p.program_id = this.program;
+    p.sort_by = this.sortBy;
+    p.sort_order = this.sortOrder;
+    return p;
+  },
+
+  // ── Reload ──
+
+  reload: function() {
+    loadKpiCards();
+    loadProjectTable();
+  }
+};
+
+
+// ── Render Dashboard (entry point) ──
 
 var _dashboardLoading = false;
+var _origRenderDashboard;
 
 async function renderDashboard() {
   if (_dashboardLoading) return;
@@ -23,18 +161,20 @@ async function renderDashboard() {
   try { await loadFavorites(); } catch(e) { console.error('loadFavorites failed:', e); }
   await Promise.all([
     loadKpiCards(),
-    loadProjectTable(curTypeFilter),
+    loadProjectTable(),
   ]);
-  document.getElementById('tab-fav').textContent = '★ 收藏 ' + _favProjects.length;
   document.getElementById('kpi-fav-count').textContent = _favProjects.length;
   _dashboardLoading = false;
 }
 
-/* KPI Cards — now category filter cards */
+
+// ── KPI Cards — only update numbers, no dynamic tab/chip creation ──
 
 async function loadKpiCards() {
   try {
     var data = await API.get('/dashboard/kpi');
+
+    // Update KPI card numbers
     document.getElementById('kpi-all-count').textContent = data.total_projects;
     var filterInfo = document.getElementById('kpi-all-filter');
     if (filterInfo) {
@@ -46,27 +186,10 @@ async function loadKpiCards() {
     document.getElementById('kpi-meta-types').innerHTML = Object.keys(data.type_active || {}).map(function(t) {
       return getProjectTypeLabel(t) + ' <b>' + data.type_active[t] + '</b>';
     }).join(' &nbsp;·&nbsp; ');
-    // Update filter tabs with counts, dynamic per project type
-    document.getElementById('tab-all').textContent = '全部 ' + data.total_projects;
-    var typeFilterEl = document.getElementById('type-filter');
-    if (typeFilterEl && data.type_all) {
-      typeFilterEl.querySelectorAll('.tab[data-ptype]').forEach(function(t) { t.remove(); });
-      Object.keys(data.type_all).sort().forEach(function(pt) {
-        var tab = document.createElement('span');
-        tab.className = 'tab' + (curTypeFilter === pt ? ' active' : '');
-        tab.setAttribute('data-ptype', pt);
-        tab.onclick = function() { filterTable(pt, this); };
-        tab.textContent = getProjectTypeLabel(pt) + ' ' + data.type_all[pt];
-        typeFilterEl.appendChild(tab);
-      });
-      // Re-highlight correct tab based on current filter
-      document.querySelectorAll('#type-filter .tab').forEach(function(t) { t.classList.remove('active'); });
-      var activeTab = document.getElementById('tab-' + (curTypeFilter === 'fav' ? 'fav' : 'all'));
-      if (activeTab) activeTab.classList.add('active');
-    }
     document.getElementById('kpi-completed-count').textContent = data.completed_count;
     document.getElementById('kpi-high-risk-count').textContent = data.high_risk_count;
     document.getElementById('kpi-incomplete-docs-count').textContent = data.incomplete_docs_count;
+
     var badge = document.getElementById('alert-badge');
     if (badge) {
       badge.textContent = data.pending_alerts;
@@ -76,99 +199,35 @@ async function loadKpiCards() {
       _srcStates.zentao = 'ok';
       renderSourceTags();
     }
-    // Render program chips
-    if (data.programs && data.programs.length) {
+
+    // Build type filter tabs (one-time, from type_all)
+    var typeFilterEl = document.getElementById('dash-type-filter');
+    if (typeFilterEl && data.type_all) {
+      var tabs = '<span class="tab' + (dashFilter.type === 'all' ? ' active' : '') + '" data-type="all" onclick="dashFilter.setType(\'all\',this)">全部 <b>' + data.total_projects + '</b></span>';
+      Object.keys(data.type_all).sort().forEach(function(pt) {
+        tabs += '<span class="tab' + (dashFilter.type === pt ? ' active' : '') + '" data-type="' + pt + '" onclick="dashFilter.setType(\'' + pt + '\',this)">' + getProjectTypeLabel(pt) + ' <b>' + data.type_all[pt] + '</b></span>';
+      });
+      typeFilterEl.innerHTML = tabs;
+    }
+
+    // Build program filter tabs
+    var programEl = document.getElementById('dash-program-filter');
+    if (programEl && data.programs && data.programs.length) {
       var chips = data.programs.map(function(pr) {
-        return '<span class="tab" data-pid="' + pr.id + '" onclick="filterByProgram(' + pr.id + ',this)">' + escHtml(pr.name) + '</span>';
+        return '<span class="tab' + (dashFilter.program === String(pr.id) ? ' active' : '') + '" data-pid="' + pr.id + '" onclick="dashFilter.setProgram(\'' + pr.id + '\',this)">' + escHtml(pr.name) + '</span>';
       }).join('');
-      document.getElementById('program-filter').innerHTML = '<span class="tab' + (_curProgramId ? '' : ' active') + '" data-pid="" onclick="filterByProgram(\'\',this)">全部</span>' + chips;
+      programEl.innerHTML = '<span class="tab' + (dashFilter.program === '' ? ' active' : '') + '" data-pid="" onclick="dashFilter.setProgram(\'\',this)">全部</span>' + chips;
     }
   } catch(e) {
     console.error('Failed to load KPI:', e);
   }
 }
 
-/* Program filter */
-function filterByProgram(pid, el) {
-  _curProgramId = pid;
-  document.querySelectorAll('#program-filter .tab').forEach(function(t) { t.classList.remove('active'); });
-  if (el) el.classList.add('active');
-  _clearProjSearch();
-  loadProjectTable(curTypeFilter);
-}
 
-/* Category card click — filters project list */
+// ── Project Table ──
 
-function filterByCategory(category, el) {
-  if (_curCategory === category && category !== '') { category = ''; }
-  _curCategory = category;
-  // Reset type filter tabs
-  curTypeFilter = 'all';
-  document.querySelectorAll('#type-filter .tab').forEach(function(t) { t.classList.remove('active'); });
-  var allTab = document.getElementById('tab-all');
-  if (allTab) allTab.classList.add('active');
-  // Update KPI card highlights
-  document.querySelectorAll('.kpi-card').forEach(function(c) { c.classList.remove('active'); });
-  if (el) el.classList.add('active');
-  _clearProjSearch();
-  loadProjectTable('all');
-}
-
-/* Project Table */
-
-var _searchTimer = null;
-function _clearProjSearch() {
-  curSearchVal = '';
-  var inp = document.getElementById('proj-search');
-  if (inp) inp.value = '';
-}
-function onProjSearch(v) {
-  curSearchVal = v;
-  clearTimeout(_searchTimer);
-  _searchTimer = setTimeout(function() {
-    // Search across ALL types, ignore active filter
-    loadProjectTable('all');
-  }, 300);
-}
-
-function filterTable(f, el) {
-  // Highlight type-filter tab
-  document.querySelectorAll('#type-filter .tab').forEach(function(t) { t.classList.remove('active'); });
-  if (el) el.classList.add('active');
-  // Clear KPI card highlights and category filter when switching type
-  _curCategory = '';
-  document.querySelectorAll('.kpi-grid .kpi-card').forEach(function(c){c.classList.remove('active');});
-  _clearProjSearch();
-  loadProjectTable(f);
-}
-
-// 收藏卡片的交互（与 filterByCategory 一致的 KPI 高亮逻辑，但切换到 fav 类型筛选）
-function filterByFav(el) {
-  _curCategory = '';
-  document.querySelectorAll('#type-filter .tab').forEach(function(t) { t.classList.remove('active'); });
-  var favTab = document.getElementById('tab-fav');
-  if (favTab) favTab.classList.add('active');
-  document.querySelectorAll('.kpi-grid .kpi-card').forEach(function(c) { c.classList.remove('active'); });
-  if (el) el.classList.add('active');
-  _clearProjSearch();
-  loadProjectTable('fav');
-}
-
-async function loadProjectTable(filter) {
-  curTypeFilter = filter;
-  var params = { page: 1, limit: 50 };
-  if (_curCategory) params.category = _curCategory;
-  if (_sortCodeOrder) {
-    params.sort_by = 'code'; params.sort_order = _sortCodeOrder;
-  } else if (_sortEndOrder) {
-    params.sort_by = 'end'; params.sort_order = _sortEndOrder;
-  } else {
-    params.sort_by = 'id'; params.sort_order = 'asc';
-  }
-  if (curSearchVal) params.search = curSearchVal;
-  if (filter && filter !== 'all' && filter !== 'fav') params.type = filter;
-  if (_curProgramId) params.program_id = _curProgramId;
-
+async function loadProjectTable() {
+  var params = dashFilter.buildParams();
   var tbody = document.getElementById('proj-tbody');
   tbody.innerHTML = '<tr><td colspan="11"><div class="loading-spinner">加载中...</div></td></tr>';
 
@@ -179,10 +238,9 @@ async function loadProjectTable(filter) {
     var data = await API.get('/dashboard/projects?' + query);
     var list = data.items || [];
 
-    // Filter by favorites
-    if (curTypeFilter === 'fav') {
+    // Filter by favorites (client-side)
+    if (dashFilter.type === 'fav') {
       list = list.filter(function(p) { return isFav('project', p.id); });
-      document.getElementById('tab-fav').textContent = '★ 收藏 ' + list.length;
     }
 
     if (!list.length) {
@@ -193,7 +251,7 @@ async function loadProjectTable(filter) {
     tbody.innerHTML = list.map(function(p) {
       var projCode = extractProjectCode(p.name, p.code);
       var coreName = extractCoreName(p.name);
-      // Tags: show max 3, or "无" if none
+      // Tags
       var tagsList = p.tags_list || [];
       var tagsHtml = '';
       if (tagsList.length > 0 && tagsList[0] !== '') {
@@ -225,19 +283,20 @@ async function loadProjectTable(filter) {
       '</tr>';
     }).join('');
   } catch(e) {
-    tbody.innerHTML = '<tr><td colspan="11"><div class="error-state">加载失败: ' + escHtml(e.message) + '<br><button onclick="loadProjectTable(\'' + filter + '\')">重试</button></div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11"><div class="error-state">加载失败: ' + escHtml(e.message) + '<br><button onclick="loadProjectTable()">重试</button></div></td></tr>';
   }
 }
 
-/* Alert List */
 
-var _alertProjectFilter = null; // { id, label } when filtered by project
+// ── Alert List ──
+
+var _alertProjectFilter = null;
 
 async function _resizeProjTable() {
   var wrap = document.getElementById('proj-table-wrap');
   if (!wrap) return;
   var top = wrap.getBoundingClientRect().top;
-  var avail = window.innerHeight - top - 32;  // 32px bottom margin
+  var avail = window.innerHeight - top - 32;
   wrap.style.maxHeight = Math.max(200, avail) + 'px';
 }
 
@@ -258,7 +317,7 @@ function toggleAlertSection() {
 
 window.addEventListener('resize', _resizeProjTable);
 // Call after table render
-var _origRenderDashboard = renderDashboard;
+_origRenderDashboard = renderDashboard;
 renderDashboard = function() {
   _origRenderDashboard();
   setTimeout(_resizeProjTable, 200);
@@ -310,50 +369,22 @@ function clearAlertFilter() {
   loadAlertList();
 }
 
-/* Navigation */
 
-function _updateSortIndicators() {
-  var ei = document.getElementById('sort-end-ind');
-  var ci = document.getElementById('sort-code-ind');
-  // End date indicator
-  if (_sortEndOrder === 'asc') { ei.textContent = '▲'; ei.style.color = ''; }
-  else if (_sortEndOrder === 'desc') { ei.textContent = '▼'; ei.style.color = ''; }
-  else { ei.textContent = '⇅'; ei.style.color = 'var(--muted)'; }
-  // Code indicator
-  if (_sortCodeOrder === 'asc') { ci.textContent = '▲'; ci.style.color = ''; }
-  else if (_sortCodeOrder === 'desc') { ci.textContent = '▼'; ci.style.color = ''; }
-  else { ci.textContent = '⇅'; ci.style.color = 'var(--muted)'; }
-}
-
-function toggleSortEnd() {
-  _sortCodeOrder = '';
-  _sortEndOrder = _sortEndOrder === 'asc' ? 'desc' : _sortEndOrder === 'desc' ? '' : 'asc';
-  if (_sortEndOrder) { _updateSortIndicators(); loadProjectTable(curTypeFilter); }
-  else _updateSortIndicators();
-}
-
-function toggleSortCode() {
-  _sortEndOrder = '';
-  _sortCodeOrder = _sortCodeOrder === 'asc' ? 'desc' : _sortCodeOrder === 'desc' ? '' : 'asc';
-  if (_sortCodeOrder) { _updateSortIndicators(); loadProjectTable(curTypeFilter); }
-  else _updateSortIndicators();
-}
+// ── Navigation ──
 
 function openProject(code) {
   sessionStorage.setItem('pm_last_proj_code', code);
-  window._pendingProjectCode = code;  // detail.js may not be loaded yet — initDetailView will pick this up
+  window._pendingProjectCode = code;
   gotoView('detail');
 }
 
-/* ── Dashboard: Create Local Project Dialog ── */
 
-// ── Create Project — delegates to unified form dialog in detail.js ──
+// ── Dashboard: Create Local Project Dialog ──
 
 function showDashboardCreateProjectDialog() {
   if (typeof showProjectFormDialog === 'function') {
     showProjectFormDialog(false);
   } else {
-    // Detail.js not loaded yet — load it first
     var callback = function() { showProjectFormDialog(false); };
     if (typeof loadViewScript === 'function') {
       loadViewScript('/js/detail.js?v=' + APP_VERSION, callback);
@@ -363,7 +394,9 @@ function showDashboardCreateProjectDialog() {
   }
 }
 
-// Ctrl+K shortcut: focus search on dashboard
+
+// ── Ctrl+K shortcut: focus search on dashboard ──
+
 document.addEventListener('keydown', function(e) {
   if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
     var activeView = document.querySelector('.view.active');
