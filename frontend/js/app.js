@@ -200,6 +200,10 @@ function gotoView(view, opts) {
   if (view !== 'user-center' && window._ucFloatingCard) {
     window._ucFloatingCard.el.style.display = 'none';
   }
+  // Hide right panel when leaving user-center
+  if (view !== 'user-center' && window._ucRightPanel) {
+    window._ucRightPanel.style.display = 'none';
+  }
 
   // Activate nav
   document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
@@ -1390,67 +1394,84 @@ function initUserCenter() {
   var perms = (user.permissions || '').split(',').filter(Boolean);
   var permLabels = {'admin':'系统管理','sync':'数据同步','project_edit':'项目维护','product_link':'产品维护','customer_link':'客户维护','doc_template':'文档模板配置','stage_mapping':'阶段映射','task_edit':'任务管理'};
   var permBadges = perms.map(function(p) { return '<span class="profile-role-tag">' + escHtml(permLabels[p]||p) + '</span>'; }).join('');
+  var showPermRoles = window._debugPermEnabled && permBadges;
 
   // Build profile-bar HTML as standalone string for floating card
+  // Left: avatar + info; Right: tab buttons with counts
   var profileBarHtml =
-    '<div class="profile-bar">' +
-      '<div class="profile-avatar">' + escHtml((user.display_name||user.username).charAt(0).toUpperCase()) + '</div>' +
-      '<div class="profile-info">' +
-        '<div class="profile-name">' + escHtml(user.display_name||user.username) + '</div>' +
-        '<div class="profile-row"><div class="profile-user">@' + escHtml(user.username) + '</div>' +
-          '<button class="profile-action-btn" id="btn-gitlab" onclick="_ucTogglePanel(\'gitlab\')"><svg width="16" height="16" viewBox="0 0 380 380" fill="currentColor"><path d="M282.83 170.73l-.27-.69-26.14-68.22a6.81 6.81 0 00-2.69-3.24 7 7 0 00-8 .43 7 7 0 00-2.32 3.52l-17.65 54H154.07l-17.65-54a6.86 6.86 0 00-2.32-3.53 7 7 0 00-8-.43 6.87 6.87 0 00-2.69 3.24L97.44 170l-.26.69a48.54 48.54 0 0016.1 56.1l.09.07.24.17 39.82 30.2 19.7 15.11 12 9.08a7.07 7.07 0 004.33 1.58 7.09 7.09 0 004.33-1.58l12-9.08 19.7-15.11 40.06-30.35.09-.07a48.63 48.63 0 0016.08-56.1z"/></svg> GitLab</button>' +
-          '<button class="profile-action-btn" id="btn-security" onclick="_ucTogglePanel(\'security\')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> 安全</button>' +
-          '<button class="profile-action-btn" id="btn-preferences" onclick="_ucTogglePanel(\'preferences\')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> 偏好</button>' +
-          '<button class="profile-action-btn" id="btn-switch-account" onclick="switchAccount()" style="color:var(--warn)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 3h5v5M21 3l-7 7M8 21H3v-5M3 21l7-7"/></svg> 切换账号</button>' +
+    '<div class="profile-bar" style="display:flex;align-items:center;justify-content:space-between">' +
+      '<div style="display:flex;align-items:center;gap:20px;min-width:0">' +
+        '<div class="profile-avatar">' + escHtml((user.display_name||user.username).charAt(0).toUpperCase()) + '</div>' +
+        '<div class="profile-info">' +
+          '<div class="profile-name">' + escHtml(user.display_name||user.username) + '</div>' +
+          '<div class="profile-row"><div class="profile-user">@' + escHtml(user.username) + '</div>' +
+            '<button class="profile-action-btn" id="btn-gitlab" onclick="_ucTogglePanel(\'gitlab\')"><svg width="16" height="16" viewBox="0 0 380 380" fill="currentColor"><path d="M282.83 170.73l-.27-.69-26.14-68.22a6.81 6.81 0 00-2.69-3.24 7 7 0 00-8 .43 7 7 0 00-2.32 3.52l-17.65 54H154.07l-17.65-54a6.86 6.86 0 00-2.32-3.53 7 7 0 00-8-.43 6.87 6.87 0 00-2.69 3.24L97.44 170l-.26.69a48.54 48.54 0 0016.1 56.1l.09.07.24.17 39.82 30.2 19.7 15.11 12 9.08a7.07 7.07 0 004.33 1.58 7.09 7.09 0 004.33-1.58l12-9.08 19.7-15.11 40.06-30.35.09-.07a48.63 48.63 0 0016.08-56.1z"/></svg> GitLab</button>' +
+            '<button class="profile-action-btn" id="btn-security" onclick="_ucTogglePanel(\'security\')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> 安全</button>' +
+            '<button class="profile-action-btn" id="btn-preferences" onclick="_ucTogglePanel(\'preferences\')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> 偏好</button>' +
+            '<button class="profile-action-btn" id="btn-switch-account" onclick="switchAccount()" style="color:var(--warn)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 3h5v5M21 3l-7 7M8 21H3v-5M3 21l7-7"/></svg> 切换账号</button>' +
+          '</div>' +
+          '<div class="profile-row" style="margin-top:4px">' +
+            
+            (showPermRoles ? '<div class="profile-roles" style="margin-top:0">' + permBadges + '</div>' : '') +
+          '</div>' +
         '</div>' +
-        '<div class="profile-roles">' + permBadges + '</div>' +
+      '</div>' +
+      // Right: tab buttons with counts
+      '<div class="profile-tabs">' +
+        '<button class="profile-tab-btn tab-tasks active" id="btn-my-tasks" onclick="_ucSwitchTab(\'tasks\')"><span>我的任务</span><span class="profile-tab-count" id="uc-tasks-count">...</span></button>' +
+        '<button class="profile-tab-btn tab-bugs" id="btn-my-bugs" onclick="_ucSwitchTab(\'bugs\')"><span>我的Bug</span><span class="profile-tab-count" id="uc-bugs-count">...</span></button>' +
       '</div>' +
     '</div>';
 
-  // Container: expand panel + tasks + calendar (profile-bar is now a floating card)
-  // Three-zone layout:
-  //   Zone 1 (top):    card area — reserved via spacer div
-  //   Zone 2 (left):   task + bug tables — each internally scrollable
-  //   Zone 3 (right):  stats + calendar  — fixed, no scroll
+  // Container: tab-switched content area below floating card
+  // Left: task OR bug table (switched via floating card buttons)
+  // Right: calendar (fixed, no scroll)
   container.innerHTML =
     '<div style="display:flex;flex-direction:column;height:calc(100vh - 54px - 48px);overflow:hidden">' +
     // Spacer: reserves space for the floating card (height set by JS)
     '<div id="uc-card-spacer"></div>' +
     // Expand panel
     '<div class="profile-expand" id="uc-expand"><div class="profile-expand-inner"><div id="uc-expand-content"></div></div></div>' +
-    // Bottom area: left (scrollable tables) + right (fixed stats)
-    '<div class="dash-grid-task" style="flex:1;min-height:0">' +
-      // ── Zone 2 Left: tasks + bugs (each with internal scroll) ──
-      '<div style="display:flex;flex-direction:column;min-width:0">' +
-        '<div style="flex:1;display:flex;flex-direction:column;min-height:0">' +
-          '<div class="sec-hd"><h2>我的任务</h2></div>' +
+    // Bottom area: left (tab-switched tables) + right (calendar)
+    '<div style="flex:1;min-height:0;display:flex;flex-direction:column">' +
+      // ── Left: tab-switched content (tasks or bugs), reserve space for right panel ──
+      '<div style="display:flex;flex-direction:column;min-width:0;flex:1;margin-right:358px">' +
+        // Tasks section (default visible)
+        '<div id="uc-tasks-section" style="flex:1;display:flex;flex-direction:column;min-height:0">' +
           '<div class="task-filter-bar" id="uc-tasks-filter-bar"></div>' +
-          '<div class="panel" style="flex:1;overflow:hidden"><div class="task-table-wrap" style="max-height:100%;overflow-y:auto"><table class="task-table"><thead id="uc-tasks-table-head"></thead><tbody id="uc-tasks-table-tbody"></tbody></table></div></div>' +
+          '<div class="table-scroll" id="uc-tasks-table-wrap"><table class="proj-table clickable"><thead id="uc-tasks-table-head"></thead><tbody id="uc-tasks-table-tbody"></tbody></table></div>' +
         '</div>' +
-        '<div style="flex:1;display:flex;flex-direction:column;min-height:0;margin-top:18px">' +
-          '<div class="sec-hd"><h2>我的Bug</h2></div>' +
+        // Bugs section (hidden by default)
+        '<div id="uc-bugs-section" style="flex:1;flex-direction:column;min-height:0;display:none">' +
           '<div class="task-filter-bar" id="uc-bugs-filter-bar"></div>' +
-          '<div class="panel" style="flex:1;overflow:hidden"><div class="task-table-wrap" style="max-height:100%;overflow-y:auto"><table class="task-table"><thead id="uc-bugs-table-head"></thead><tbody id="uc-bugs-table-tbody"></tbody></table></div></div>' +
+          '<div class="table-scroll" id="uc-bugs-table-wrap"><table class="proj-table clickable"><thead id="uc-bugs-table-head"></thead><tbody id="uc-bugs-table-tbody"></tbody></table></div>' +
         '</div>' +
-      '</div>' +
-      // ── Zone 3 Right: stats + calendar (fixed, no scroll) ──
-      '<div id="uc-right-col" style="overflow:hidden">' +
-        '<div class="profile-stats" id="uc-stats" style="display:flex;gap:16px;margin-bottom:18px">加载中...</div>' +
-        '<div id="uc-calendar"></div>' +
       '</div>' +
     '</div>' +
     '</div>';
+
+  // Create or show fixed right panel (calendar at top + stats below)
+  if (!window._ucRightPanel) {
+    var rp = document.createElement('div');
+    rp.id = 'uc-right-panel';
+    rp.innerHTML = '<div id="uc-calendar"></div><div id="uc-right-stats"></div>';
+    document.body.appendChild(rp);
+    window._ucRightPanel = rp;
+  } else {
+    window._ucRightPanel.style.display = '';
+  }
 
   // Create or show floating profile card
   if (window._ucFloatingCard) {
     // Re-show existing card (position preserved from last drag)
     window._ucFloatingCard.el.style.display = '';
   } else {
-    // First time: create card — top center, 61.8% of available content width
+    // First time: create card — centered over task list area, 61.8% of task list width
     var sidebarW = 228;
-    var availW = window.innerWidth - sidebarW;
-    var cardW = Math.round(availW * 0.618);
-    var cardX = sidebarW + Math.round((availW - cardW) / 2);
+    var rightPanelW = 358; // 340px panel + 18px gap
+    var taskListW = window.innerWidth - sidebarW - rightPanelW;
+    var cardW = Math.round(taskListW * 0.618);
+    var cardX = sidebarW + Math.round((taskListW - cardW) / 2);
     var cardY = 70; // below topbar (54px) + 16px gap
 
     window._ucFloatingCard = createFloatingCard({
@@ -1465,18 +1486,37 @@ function initUserCenter() {
   }
 
   // Reserve card height via spacer so content below doesn't overlap
-  setTimeout(function() {
+  window._ucUpdateLayout = function() {
     var spacer = document.getElementById('uc-card-spacer');
     var card = window._ucFloatingCard && window._ucFloatingCard.el;
+    var rightPanelW = 358;
+    var sidebarW = 228;
+    var taskListW = window.innerWidth - sidebarW - rightPanelW;
     if (spacer && card) {
       spacer.style.height = (card.offsetHeight + 12) + 'px';
     }
-  }, 80);
+    // Dynamically resize and reposition profile card: 61.8% of task list width, centered
+    if (card) {
+      var w = Math.round(taskListW * 0.618);
+      card.style.width = w + 'px';
+      card.style.left = (sidebarW + Math.round((taskListW - w) / 2)) + 'px';
+    }
+    // Dynamic table scroll heights (like dashboard's _resizeProjTable)
+    var tw = document.getElementById('uc-tasks-table-wrap');
+    if (tw) { var tr = tw.getBoundingClientRect(); tw.style.maxHeight = Math.max(200, window.innerHeight - tr.top - 16) + 'px'; }
+    var bw = document.getElementById('uc-bugs-table-wrap');
+    if (bw) { var br = bw.getBoundingClientRect(); bw.style.maxHeight = Math.max(200, window.innerHeight - br.top - 16) + 'px'; }
+  }
+  setTimeout(window._ucUpdateLayout, 80);
+  // Re-apply on window resize
+  window.addEventListener('resize', window._ucUpdateLayout);
 
   // Calendar navigation callback
   _calChangeCallback = function() { _ucLoadCalendar(user); };
-  // Load both tasks and bugs
+  // Load tasks by default (bugs load on tab switch)
+  _ucActiveTab = 'tasks';
   _ucLoadTasks(user);
+  // Preload bug count for the tab button, stats hidden (bugs section not active)
   _ucLoadBugs();
 }
 
@@ -1484,6 +1524,59 @@ var _ucTasks = [];
 var _ucFilterStatus = 'all';
 var _ucFilterProd = '';
 var _ucFilterProj = '';
+var _ucSortCol = '';
+var _ucSortDir = 'asc';
+var _ucActiveTab = 'tasks'; // 'tasks' | 'bugs'
+
+function _ucUpdateTaskCount() {
+  var el = document.getElementById('uc-tasks-count');
+  if (el) el.textContent = _ucTasks.length;
+}
+function _ucUpdateBugCount(n) {
+  var el = document.getElementById('uc-bugs-count');
+  if (el) el.textContent = (n != null ? n : '...');
+}
+function _ucRefreshRightStats() {
+  // Clear right stats area and show stats for active tab
+  var rs = document.getElementById('uc-right-stats');
+  if (!rs) return;
+  rs.innerHTML = '';
+  if (_ucActiveTab === 'tasks') {
+    _ucRenderTaskStats();
+  } else if (_ucActiveTab === 'bugs') {
+    _ucLoadBugStats();
+  }
+}
+function _ucRenderTaskStats() {
+  var rs = document.getElementById("uc-right-stats");
+  if (!rs) return;
+  var html = _ucBuildTaskStats();
+  rs.innerHTML = html || '<div class="panel panel-pad" style="margin-bottom:18px"><div class="sec-hd"><h2>任务统计</h2></div><div style="color:var(--muted);font-size:12px">暂无数据</div></div>';
+}
+
+function _ucSwitchTab(tab) {
+  if (_ucActiveTab === tab) return;
+  _ucActiveTab = tab;
+  // Update button active states in floating card
+  var tasksBtn = document.getElementById('btn-my-tasks');
+  var bugsBtn = document.getElementById('btn-my-bugs');
+  if (tasksBtn) tasksBtn.classList.toggle('active', tab === 'tasks');
+  if (bugsBtn) bugsBtn.classList.toggle('active', tab === 'bugs');
+  // Show/hide content sections
+  var tasksSec = document.getElementById('uc-tasks-section');
+  var bugsSec = document.getElementById('uc-bugs-section');
+  if (tasksSec) tasksSec.style.display = tab === 'tasks' ? 'flex' : 'none';
+  if (bugsSec) bugsSec.style.display = tab === 'bugs' ? 'flex' : 'none';
+  // Update right-side stats to match active tab
+  _ucRefreshRightStats();
+  // Load data for the active tab
+  if (tab === 'tasks') {
+    var user = getCurrentUser();
+    if (user) _ucLoadTasks(user);
+  } else if (tab === 'bugs') {
+    _ucLoadBugs();
+  }
+}
 
 function _ucNewBug() {
   // Auto-fill product/project context from current page
@@ -1500,6 +1593,8 @@ function _ucNewBug() {
 function _ucLoadTasks(user) {
   API.get('/tasks/my').then(function(tasks) {
     _ucTasks = tasks || [];
+    _ucUpdateTaskCount();
+    _ucRenderTaskStats();
     _renderUcFilterBar();
     _renderUcTableHead();
     _renderUcTaskTable();
@@ -1536,12 +1631,7 @@ function _renderUcFilterBar() {
 function _ucSetFilter(s) { _ucFilterStatus = s; _ucFilterProd = ''; _ucFilterProj = ''; _renderUcFilterBar(); _renderUcTaskTable(); _ucRefreshTaskStats(); }
 
 function _ucRefreshTaskStats() {
-  var cal = document.getElementById('uc-calendar');
-  if (!cal) return;
-  var old = document.getElementById('uc-task-stats');
-  if (old) old.remove();
-  var html = _ucBuildTaskStats();
-  if (html) cal.insertAdjacentHTML('afterbegin', html);
+  _ucRenderTaskStats();
 }
 
 function _ucOpenTask(taskId) {
@@ -1550,7 +1640,24 @@ function _ucOpenTask(taskId) {
 }
 
 function _renderUcTableHead() {
-  document.getElementById('uc-tasks-table-head').innerHTML = '<tr><th style="width:6%">任务编号</th><th style="width:8%">项目编号</th><th style="width:100px">产品编号</th><th>任务标题</th><th style="width:70px">状态</th><th style="width:6%">优先级</th><th style="width:6%">进度</th><th style="width:7%">截止</th><th style="width:1%;white-space:nowrap">操作</th></tr>';
+  var prioInd = _ucSortCol === 'priority'
+    ? (_ucSortDir === 'asc' ? '▲' : '▼')
+    : '<span style="color:var(--muted)">⇅</span>';
+  var dueInd = _ucSortCol === 'due_date'
+    ? (_ucSortDir === 'asc' ? '▲' : '▼')
+    : '<span style="color:var(--muted)">⇅</span>';
+  document.getElementById('uc-tasks-table-head').innerHTML = '<tr><th style="width:6%">任务编号</th><th style="width:8%">项目编号</th><th style="width:100px">产品编号</th><th>任务标题</th><th style="width:70px">状态</th><th style="width:6%;cursor:pointer;user-select:none" onclick="_ucSortBy(\'priority\')">优先级 ' + prioInd + '</th><th style="width:6%">进度</th><th style="width:7%;cursor:pointer;user-select:none" onclick="_ucSortBy(\'due_date\')">截止 ' + dueInd + '</th><th style="width:1%;white-space:nowrap">操作</th></tr>';
+}
+
+function _ucSortBy(col) {
+  if (_ucSortCol === col) {
+    _ucSortDir = _ucSortDir === 'asc' ? 'desc' : _ucSortDir === 'desc' ? '' : 'asc';
+  } else {
+    _ucSortCol = col; _ucSortDir = 'asc';
+  }
+  if (!_ucSortDir) { _ucSortCol = ''; _ucSortDir = 'asc'; }
+  _renderUcTableHead();
+  if (_ucSortCol) _renderUcTaskTable();
 }
 
 function _renderUcTaskTable() {
@@ -1560,6 +1667,20 @@ function _renderUcTaskTable() {
     if (_ucFilterProj && t.project_name !== _ucFilterProj) return false;
     return true;
   });
+  // Sort
+  if (_ucSortCol) {
+    var prioOrder = {critical:4, high:3, medium:2, low:1};
+    var dir = _ucSortDir === 'asc' ? 1 : -1;
+    filtered.sort(function(a, b) {
+      if (_ucSortCol === 'priority') {
+        return ((prioOrder[a.priority] || 0) - (prioOrder[b.priority] || 0)) * dir;
+      } else if (_ucSortCol === 'due_date') {
+        var da = a.due_date || '9999-99-99', db = b.due_date || '9999-99-99';
+        return da.localeCompare(db) * dir;
+      }
+      return 0;
+    });
+  }
   var tbody = document.getElementById('uc-tasks-table-tbody');
   if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state">暂无匹配任务</div></td></tr>'; return; }
   tbody.innerHTML = filtered.map(function(t) {
@@ -1581,15 +1702,11 @@ function _renderUcTaskTable() {
       '</td>' +
     '</tr>';
   }).join('');
+  setTimeout(function() { if (typeof window._ucUpdateLayout === 'function') window._ucUpdateLayout(); }, 50);
 }
 
 function _renderUcStats() {
-  var counts = {todo:0, in_progress:0, done:0};
-  _ucTasks.forEach(function(t) { if(t.status==='todo')counts.todo++; else if(t.status==='in_progress'||t.status==='review')counts.in_progress++; else if(t.status==='done'||t.status==='closed')counts.done++; });
-  document.getElementById('uc-stats').innerHTML =
-    '<div class="profile-stat todo"><div class="profile-stat-val">'+counts.todo+'</div><div class="profile-stat-lbl">待办</div></div>' +
-    '<div class="profile-stat doing"><div class="profile-stat-val">'+counts.in_progress+'</div><div class="profile-stat-lbl">进行中</div></div>' +
-    '<div class="profile-stat hours"><div class="profile-stat-val" id="uc-week-total">...</div><div class="profile-stat-lbl">本周工时</div></div>';
+  // Stats (待办/进行中/本周工时) moved to floating card; uc-stats div removed
 }
 
 function _ucEnsureBugsJs(fn) {
@@ -1639,11 +1756,13 @@ async function _ucLoadBugs() {
     var user = getCurrentUser();
     var uid = user ? user.id : null;
     var bugs = await API.get('/bugs/my');
+    _ucUpdateBugCount(bugs ? bugs.length : 0);
     var filtered = _ucRenderBugFilter(bugs, uid);
     var tbody = document.getElementById('uc-bugs-table-tbody');
     if (!filtered.length) {
       var label = _ucBugTab === 'assignee' ? '暂无待处理的Bug' : '暂无创建的Bug';
       tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state">' + label + '</div></td></tr>';
+      if (_ucActiveTab === 'bugs') _ucLoadBugStats();
       return;
     }
     tbody.innerHTML = filtered.map(function(b) {
@@ -1663,7 +1782,8 @@ async function _ucLoadBugs() {
       '</tr>';
     }).join('');
   } catch(e) { document.getElementById('uc-bugs-table-tbody').innerHTML = '<tr><td colspan="9"><div class="error-state">加载失败</div></td></tr>'; }
-  _ucLoadBugStats(); // refresh bug stats pie to match current tab
+  if (_ucActiveTab === 'bugs') _ucLoadBugStats();
+  setTimeout(function() { if (typeof window._ucUpdateLayout === "function") window._ucUpdateLayout(); }, 50);
 }
 
 function _ucNewTask() {
@@ -1683,8 +1803,8 @@ async function _ucDeleteTask(taskId) {
   } catch(e) { showToast('删除失败: ' + (e.message || ''), 'error'); }
 }
 function _ucLoadBugStats() {
-  var cal = document.getElementById('uc-calendar');
-  if (!cal) return;
+  var rs = document.getElementById('uc-right-stats');
+  if (!rs) return;
   API.get('/bugs/my').then(function(bugs) {
     var user = getCurrentUser();
     var uid = user ? user.id : null;
@@ -1699,9 +1819,6 @@ function _ucLoadBugStats() {
     // Exclude resolved/closed
     var activeBugs = filtered.filter(function(b) { return b.status !== 'resolved' && b.status !== 'closed'; });
     var title = (_ucBugTab === 'assignee' ? '待我处理' : '我创建的') + ' · 产品分布（活跃）';
-    // Remove old bug stats card
-    var old = document.getElementById('uc-bug-stats');
-    if (old) old.remove();
     if (typeof _buildPieChart !== 'function') return;
     var byProd = {}, prodList = [], prodColors = ['var(--accent)','var(--warn)','var(--success)','var(--danger)','var(--purple)'];
     if (activeBugs.length > 0) {
@@ -1718,7 +1835,7 @@ function _ucLoadBugStats() {
       '<div style="display:flex;gap:8px">' +
         _buildPieChart(activeBugs.length ? prodList : [{key:'—',label:'—',color:'var(--muted)'}], activeBugs.length ? byProd : {'—':0}, activeBugs.length, title) +
       '</div></div>';
-    cal.insertAdjacentHTML('beforeend', bugHtml);
+    rs.innerHTML = bugHtml;
   }).catch(function(){});
 }
 
@@ -1790,24 +1907,35 @@ function _ucLoadCalendar(user) {
     var dailyMap = {};
     if(data&&data.daily) data.daily.forEach(function(d){dailyMap[d.date]=d;});
     var total = data?(data.total||0):0;
-    document.getElementById('uc-week-total').textContent = total.toFixed(1)+'h';
+    // Weekly hours rendered as intensity bar in calendar header below
 
     var html = '';
 
-    // Task stats
-    html += _ucBuildTaskStats();
 
     // Calendar card
+    var weekH = total.toFixed(1);
+    var intensityCls = '';
+    if (total <= 0) intensityCls = 'uc-hbar-empty';
+    else if (total <= 2) intensityCls = 'uc-hbar-low';
+    else if (total <= 4) intensityCls = 'uc-hbar-mid';
+    else if (total <= 6) intensityCls = 'uc-hbar-high';
+    else intensityCls = 'uc-hbar-over';
     html += '<div class="panel panel-pad">' +
-      '<div class="sec-hd"><h2>工时</h2></div>';
+      '<div class="sec-hd" style="display:flex;justify-content:space-between;align-items:center">' +
+        '<h2 style="margin:0">工时</h2>' +
+        '<div style="display:flex;align-items:center;gap:8px">' +
+          '<span style="font-size:11px;color:var(--muted)">本周</span>' +
+          '<span class="uc-week-bar ' + intensityCls + '">' + weekH + 'h</span>' +
+        '</div>' +
+      '</div>';
     if (typeof _renderMonthCalendar === 'function') {
       html += _renderMonthCalendar(now, dailyMap, data);
     }
     html += '</div>';
     cal.innerHTML = html;
 
-    // Bug stats: load after calendar renders
-    _ucLoadBugStats();
+    // Bug stats: only refresh when bugs tab is active
+    if (_ucActiveTab === 'bugs') _ucLoadBugStats();
   }).catch(function(){});
 }
 

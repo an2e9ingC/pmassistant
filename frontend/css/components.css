@@ -724,6 +724,57 @@ input[type="checkbox"] { accent-color: var(--accent); }
   transition: background 0.12s, color 0.12s; user-select: none;
 }
 .profile-action-btn:hover { background: var(--surface2); color: var(--fg); }
+.profile-action-btn.active { background: var(--accent-lt); color: var(--accent); font-weight: 600; }
+.profile-week-hours {
+  font-size: 12px; color: var(--muted); white-space: nowrap;
+  padding: 4px 10px; border-radius: 7px; background: var(--bg);
+}
+.profile-week-hours strong { color: var(--success); font-family: var(--mono); }
+
+/* Weekly hours intensity bar — matches calendar daily cell design */
+.uc-week-bar {
+  display: inline-block; padding: 3px 10px; border-radius: 5px;
+  font-family: var(--mono); font-size: 14px; font-weight: 650;
+}
+.uc-week-bar.uc-hbar-empty { background: var(--bg); color: var(--muted); }
+.uc-week-bar.uc-hbar-low   { background: var(--success-lt); color: var(--success); }
+.uc-week-bar.uc-hbar-mid   { background: var(--accent-lt); color: var(--accent); }
+.uc-week-bar.uc-hbar-high  { background: var(--warn-lt); color: var(--warn); }
+.uc-week-bar.uc-hbar-over  { background: var(--danger); color: #fff; }
+
+/* Tab buttons on the right of profile card */
+.profile-tabs { display: flex; gap: 8px; flex-shrink: 0; }
+.profile-tab-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 10px 18px; border-radius: var(--r); background: var(--bg);
+  color: var(--muted); font-size: 12px; font-weight: 500; cursor: pointer;
+  transition: background 0.12s, color 0.12s, box-shadow 0.12s; user-select: none;
+  min-width: 80px; border: 1px solid transparent;
+}
+.profile-tab-btn:hover { background: var(--surface2); color: var(--fg); }
+/* 我的任务 — accent (matches 新建任务 button) */
+.profile-tab-btn.tab-tasks.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.profile-tab-btn.tab-tasks:not(.active):hover { border-color: var(--accent); }
+/* 我的Bug — danger (matches 新建Bug button) */
+.profile-tab-btn.tab-bugs.active { background: var(--danger); color: #fff; border-color: var(--danger); }
+.profile-tab-btn.tab-bugs:not(.active):hover { border-color: var(--danger); }
+.profile-tab-count {
+  font-family: var(--mono); font-size: 22px; font-weight: 700; line-height: 1;
+}
+.profile-tab-btn.active .profile-tab-count { color: inherit; }
+
+/* Fixed right panel: calendar at top + stats below, aligned with profile card row */
+#uc-right-panel {
+  position: fixed; top: 70px; right: 20px; width: 340px;
+  max-height: calc(100vh - 70px); overflow-y: auto; z-index: 10;
+  display: flex; flex-direction: column; gap: 0;
+}
+#uc-right-panel #uc-calendar {
+  flex-shrink: 0;
+}
+#uc-right-panel #uc-right-stats {
+  flex-shrink: 0; margin-top: 18px;
+}
 
 .profile-expand {
   display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.2s ease; margin-bottom: 20px;

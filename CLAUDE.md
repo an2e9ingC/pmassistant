@@ -152,20 +152,19 @@ NAS 文件 ───────────┘
 
 ## 4. 重要规则（每轮对话必须遵守）
 
-### 后端修改后自动重启
+### 修改后重启规则
 
-修改 `backend/**/*.py` 后，先进行 code-review，再重启服务器验证：
-
-1. `Skill("code-review")` — 检查旧代码残留、遗漏引用、重复代码块等
+**后端 `backend/**/*.py` 修改后**：
+1. `Skill("pma-code-review")` — 局部检查
 2. 修复 review 发现的问题
 3. 重启服务器验证：
-
 ```bash
 ./server.sh -p <PORT> restart
 ```
 
+**纯前端修改（`frontend/**`）**：
+- **不需要重启服务器**，用户刷新浏览器即可看到更新
 - 主 session 用 `-p 8000`，worktree session 用各自的端口
-- 纯前端修改无需重启，用户刷新即可
 - `server.sh` 命令：`{start|stop|restart|status|logs|tail}`
 - 不加 `-p` 时：`status` 查看所有实例、`stop` 停止所有实例
 
