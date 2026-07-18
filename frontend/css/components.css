@@ -740,16 +740,21 @@ input[type="checkbox"] { accent-color: var(--accent); }
 }
 .profile-week-hours strong { color: var(--success); font-family: var(--mono); }
 
-/* Weekly hours intensity bar — matches calendar daily cell design */
+/* Week/Month hours intensity bar — ratio vs standard working hours */
 .uc-week-bar {
   display: inline-block; padding: 3px 10px; border-radius: 5px;
   font-family: var(--mono); font-size: 14px; font-weight: 650;
 }
-.uc-week-bar.uc-hbar-empty { background: var(--bg); color: var(--muted); }
+/* within +-5% of standard = green (OK) */
+.uc-week-bar.uc-hbar-ok    { background: var(--success-lt); color: var(--success); }
+/* below standard by >5% = blue (under) */
+.uc-week-bar.uc-hbar-under { background: var(--accent-lt); color: var(--accent); }
+/* above standard: graded like daily intensity */
 .uc-week-bar.uc-hbar-low   { background: var(--success-lt); color: var(--success); }
 .uc-week-bar.uc-hbar-mid   { background: var(--accent-lt); color: var(--accent); }
 .uc-week-bar.uc-hbar-high  { background: var(--warn-lt); color: var(--warn); }
 .uc-week-bar.uc-hbar-over  { background: var(--danger); color: #fff; }
+.uc-week-bar.uc-hbar-empty { background: var(--bg); color: var(--muted); }
 
 /* Tab buttons on the right of profile card */
 .profile-tabs { display: flex; gap: 8px; flex-shrink: 0; }

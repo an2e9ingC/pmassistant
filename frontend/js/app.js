@@ -1756,7 +1756,7 @@ async function _ucLoadBugs() {
     var user = getCurrentUser();
     var uid = user ? user.id : null;
     var bugs = await API.get('/bugs/my');
-    _ucUpdateBugCount(bugs ? bugs.length : 0);
+    _ucUpdateBugCount((bugs || []).filter(function(b) { return b.assignee_id === uid; }).length);
     var filtered = _ucRenderBugFilter(bugs, uid);
     var tbody = document.getElementById('uc-bugs-table-tbody');
     if (!filtered.length) {
@@ -1907,25 +1907,55 @@ function _ucLoadCalendar(user) {
     var dailyMap = {};
     if(data&&data.daily) data.daily.forEach(function(d){dailyMap[d.date]=d;});
     var total = data?(data.total||0):0;
-    // Weekly hours rendered as intensity bar in calendar header below
+
+    // Calculate this week's total from dailyMap
+    var weekTotal = 0;
+    var today = new Date();
+    var curDow = today.getDay();
+    var monOff = curDow === 0 ? -6 : 1 - curDow;
+    for (var wi = 0; wi < 7; wi++) {
+      var wd = new Date(today);
+      wd.setDate(today.getDate() + monOff + wi);
+      var wds = fmtLocalDate(wd);
+      if (dailyMap[wds]) weekTotal += dailyMap[wds].total_hours || 0;
+    }
+    var monthTotal = total;
+
+    // Standard working hours
+    var weekStd = 40;
+    var workDays = 0;
+    for (var di = 1; di <= me.getDate(); di++) {
+      var dw = new Date(y, m-1, di).getDay();
+      if (dw !== 0 && dw !== 6) workDays++;
+    }
+    var monthStd = workDays * 8;
+
+    // Intensity bar: ratio vs standard working hours
+    // within +-5%: green | below: blue | above: graded like daily
+    function _ucBarCls(hours, std) {
+      if (std <= 0) return 'uc-hbar-empty';
+      var r = hours / std;
+      if (r >= 0.95 && r <= 1.05) return 'uc-hbar-ok';
+      if (r < 0.95) return 'uc-hbar-under';
+      if (r <= 1.25) return 'uc-hbar-low';
+      if (r <= 1.50) return 'uc-hbar-mid';
+      if (r <= 1.75) return 'uc-hbar-high';
+      return 'uc-hbar-over';
+    }
+    var weekCls = _ucBarCls(weekTotal, weekStd);
+    var monthCls = _ucBarCls(monthTotal, monthStd);
 
     var html = '';
 
-
     // Calendar card
-    var weekH = total.toFixed(1);
-    var intensityCls = '';
-    if (total <= 0) intensityCls = 'uc-hbar-empty';
-    else if (total <= 2) intensityCls = 'uc-hbar-low';
-    else if (total <= 4) intensityCls = 'uc-hbar-mid';
-    else if (total <= 6) intensityCls = 'uc-hbar-high';
-    else intensityCls = 'uc-hbar-over';
     html += '<div class="panel panel-pad">' +
       '<div class="sec-hd" style="display:flex;justify-content:space-between;align-items:center">' +
         '<h2 style="margin:0">工时</h2>' +
         '<div style="display:flex;align-items:center;gap:8px">' +
-          '<span style="font-size:11px;color:var(--muted)">本周</span>' +
-          '<span class="uc-week-bar ' + intensityCls + '">' + weekH + 'h</span>' +
+          '<span style="font-size:11px;color:var(--muted)">周</span>' +
+          '<span class="uc-week-bar ' + weekCls + '">' + weekTotal.toFixed(1) + 'h</span>' +
+          '<span style="font-size:11px;color:var(--muted)">月</span>' +
+          '<span class="uc-week-bar ' + monthCls + '">' + monthTotal.toFixed(1) + 'h</span>' +
         '</div>' +
       '</div>';
     if (typeof _renderMonthCalendar === 'function') {
