@@ -692,7 +692,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .profile-bar {
   display: flex; align-items: center; gap: 20px;
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--r-lg); padding: 20px 24px; margin-bottom: 20px;
+  border-radius: var(--r-lg); padding: 20px 24px;
 }
 .profile-avatar {
   width: 56px; height: 56px; border-radius: 50%; background: var(--accent);
@@ -747,6 +747,66 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .integration-row-val.ok { color: var(--success); }
 .integration-link { font-size: 12px; color: var(--accent); cursor: pointer; text-decoration: none; }
 .integration-link:hover { text-decoration: underline; }
+
+/* ═══════════════════════════════════════════════════
+   FLOATING CARD — draggable, closeable, fixed-position card
+   z-index: 250 (between topbar 100 and dropdowns 500)
+═══════════════════════════════════════════════════ */
+.floating-card {
+  position: fixed;
+  z-index: 250;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.14), 0 2px 8px rgba(0,0,0,0.08);
+  min-width: 280px;
+  max-width: 90vw;
+}
+[data-theme="dark"] .floating-card {
+  box-shadow: 0 8px 32px rgba(0,0,0,0.50), 0 2px 8px rgba(0,0,0,0.30);
+}
+.floating-card-header {
+  display: flex; align-items: center; justify-content: flex-end;
+  padding: 8px 12px 0 12px;
+  cursor: grab;
+  user-select: none;
+}
+.floating-card-header:active { cursor: grabbing; }
+.floating-card-close {
+  width: 26px; height: 26px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--surface);
+  font-size: 15px; cursor: pointer; color: var(--muted);
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  flex-shrink: 0;
+}
+.floating-card-close:hover {
+  background: var(--danger-lt); color: var(--danger);
+  border-color: var(--danger);
+}
+.floating-card-body {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+/* ── Restore chip ── */
+.floating-card-restore {
+  position: fixed;
+  z-index: 250;
+  bottom: 24px; right: 24px;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: var(--sh-md);
+  cursor: pointer; user-select: none;
+  font-size: 12px; font-weight: 530; color: var(--muted);
+  transition: background 0.12s, color 0.12s, box-shadow 0.15s;
+}
+.floating-card-restore:hover {
+  background: var(--accent-lt); color: var(--accent);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+}
 
 /* Task/Bug filter tabs */
 .task-filter-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }

@@ -196,6 +196,11 @@ function gotoView(view, opts) {
   var viewEl = document.getElementById('view-' + view);
   if (viewEl) viewEl.classList.add('active');
 
+  // Hide floating profile card when leaving user-center
+  if (view !== 'user-center' && window._ucFloatingCard) {
+    window._ucFloatingCard.el.style.display = 'none';
+  }
+
   // Activate nav
   document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
   var navEl = document.getElementById('nav-' + view);
@@ -1386,10 +1391,8 @@ function initUserCenter() {
   var permLabels = {'admin':'系统管理','sync':'数据同步','project_edit':'项目维护','product_link':'产品维护','customer_link':'客户维护','doc_template':'文档模板配置','stage_mapping':'阶段映射','task_edit':'任务管理'};
   var permBadges = perms.map(function(p) { return '<span class="profile-role-tag">' + escHtml(permLabels[p]||p) + '</span>'; }).join('');
 
-  container.innerHTML =
-    // Wrap in flex column to fill available viewport height
-    '<div style="display:flex;flex-direction:column;height:calc(100vh - 54px - 48px)">' +
-    // Profile bar
+  // Build profile-bar HTML as standalone string for floating card
+  var profileBarHtml =
     '<div class="profile-bar">' +
       '<div class="profile-avatar">' + escHtml((user.display_name||user.username).charAt(0).toUpperCase()) + '</div>' +
       '<div class="profile-info">' +
@@ -1402,33 +1405,73 @@ function initUserCenter() {
         '</div>' +
         '<div class="profile-roles">' + permBadges + '</div>' +
       '</div>' +
-      '<div class="profile-stats" id="uc-stats">加载中...</div>' +
-    '</div>' +
+    '</div>';
+
+  // Container: expand panel + tasks + calendar (profile-bar is now a floating card)
+  // Three-zone layout:
+  //   Zone 1 (top):    card area — reserved via spacer div
+  //   Zone 2 (left):   task + bug tables — each internally scrollable
+  //   Zone 3 (right):  stats + calendar  — fixed, no scroll
+  container.innerHTML =
+    '<div style="display:flex;flex-direction:column;height:calc(100vh - 54px - 48px);overflow:hidden">' +
+    // Spacer: reserves space for the floating card (height set by JS)
+    '<div id="uc-card-spacer"></div>' +
     // Expand panel
     '<div class="profile-expand" id="uc-expand"><div class="profile-expand-inner"><div id="uc-expand-content"></div></div></div>' +
-    // Task list + Calendar
+    // Bottom area: left (scrollable tables) + right (fixed stats)
     '<div class="dash-grid-task" style="flex:1;min-height:0">' +
-      '<div style="display:flex;flex-direction:column">' +
+      // ── Zone 2 Left: tasks + bugs (each with internal scroll) ──
+      '<div style="display:flex;flex-direction:column;min-width:0">' +
         '<div style="flex:1;display:flex;flex-direction:column;min-height:0">' +
-          '<div class="sec-hd"><h2>我的任务</h2>' +
-            '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="_ucNewTask()">+ 新建任务</button>' +
-          '</div>' +
+          '<div class="sec-hd"><h2>我的任务</h2></div>' +
           '<div class="task-filter-bar" id="uc-tasks-filter-bar"></div>' +
           '<div class="panel" style="flex:1;overflow:hidden"><div class="task-table-wrap" style="max-height:100%;overflow-y:auto"><table class="task-table"><thead id="uc-tasks-table-head"></thead><tbody id="uc-tasks-table-tbody"></tbody></table></div></div>' +
         '</div>' +
         '<div style="flex:1;display:flex;flex-direction:column;min-height:0;margin-top:18px">' +
-          '<div class="sec-hd"><h2>我的Bug</h2>' +
-            '<button class="btn btn-sm" style="font-size:11px;padding:3px 10px;background:var(--danger);color:#fff;border-color:var(--danger)" onclick="_ucNewBug()">+ 新建Bug</button>' +
-          '</div>' +
+          '<div class="sec-hd"><h2>我的Bug</h2></div>' +
           '<div class="task-filter-bar" id="uc-bugs-filter-bar"></div>' +
           '<div class="panel" style="flex:1;overflow:hidden"><div class="task-table-wrap" style="max-height:100%;overflow-y:auto"><table class="task-table"><thead id="uc-bugs-table-head"></thead><tbody id="uc-bugs-table-tbody"></tbody></table></div></div>' +
         '</div>' +
       '</div>' +
-      '<div>' +
+      // ── Zone 3 Right: stats + calendar (fixed, no scroll) ──
+      '<div id="uc-right-col" style="overflow:hidden">' +
+        '<div class="profile-stats" id="uc-stats" style="display:flex;gap:16px;margin-bottom:18px">加载中...</div>' +
         '<div id="uc-calendar"></div>' +
       '</div>' +
     '</div>' +
-    '</div>'; // close flex wrapper
+    '</div>';
+
+  // Create or show floating profile card
+  if (window._ucFloatingCard) {
+    // Re-show existing card (position preserved from last drag)
+    window._ucFloatingCard.el.style.display = '';
+  } else {
+    // First time: create card — top center, 61.8% of available content width
+    var sidebarW = 228;
+    var availW = window.innerWidth - sidebarW;
+    var cardW = Math.round(availW * 0.618);
+    var cardX = sidebarW + Math.round((availW - cardW) / 2);
+    var cardY = 70; // below topbar (54px) + 16px gap
+
+    window._ucFloatingCard = createFloatingCard({
+      id: 'user-profile',
+      content: profileBarHtml,
+      width: cardW,
+      initialX: cardX,
+      initialY: cardY,
+      closable: false,
+      savePosition: true
+    });
+  }
+
+  // Reserve card height via spacer so content below doesn't overlap
+  setTimeout(function() {
+    var spacer = document.getElementById('uc-card-spacer');
+    var card = window._ucFloatingCard && window._ucFloatingCard.el;
+    if (spacer && card) {
+      spacer.style.height = (card.offsetHeight + 12) + 'px';
+    }
+  }, 80);
 
   // Calendar navigation callback
   _calChangeCallback = function() { _ucLoadCalendar(user); };

@@ -431,6 +431,198 @@ function openDialog(title, bodyHtml, buttons, opts) {
 }
 
 /* ═══════════════════════════════════════════════════
+   FLOATING CARD — draggable, closeable, fixed-position card
+   z-index: 250 (between topbar 100 and dropdowns 500)
+   Usage:
+     var fc = createFloatingCard({
+       id: 'my-card',
+       content: '<div>card body</div>',
+       width: 520,
+       closable: true,
+       onClose: function() { ... },
+       restoreLabel: '个人信息',
+     });
+   Returns: { el, restoreBtn, close(), restore(), setPosition(x,y), destroy() }
+═══════════════════════════════════════════════════ */
+
+function createFloatingCard(opts) {
+  opts = opts || {};
+  var id = opts.id || 'fc-' + Date.now();
+  var width = opts.width || 520;
+  var closable = opts.closable !== false;  // default true
+  var savePos = opts.savePosition !== false; // default true
+  var restoreLabel = opts.restoreLabel || '卡片';
+  var initialX = opts.initialX;
+  var initialY = opts.initialY;
+  var content = opts.content || '';
+
+  // ── Position: load saved or use initial/default ──
+  var savedPos = null;
+  try {
+    var raw = localStorage.getItem('pma_fc_' + id + '_pos');
+    if (raw) savedPos = JSON.parse(raw);
+  } catch(e) {}
+  var x = (savedPos && savedPos.x != null) ? savedPos.x
+    : (initialX != null ? initialX : Math.max(20, (window.innerWidth - width) / 2));
+  var y = (savedPos && savedPos.y != null) ? savedPos.y
+    : (initialY != null ? initialY : 72);
+
+  // ── Closed state ──
+  var wasClosed = false;
+  try {
+    wasClosed = localStorage.getItem('pma_fc_' + id + '_closed') === '1';
+  } catch(e) {}
+
+  // ── Build DOM ──
+  var closeHtml = closable
+    ? '<button class="floating-card-close" title="关闭">&times;</button>'
+    : '';
+  var card = document.createElement('div');
+  card.className = 'floating-card';
+  card.id = 'fc-' + id;
+  card.style.width = width + 'px';
+  card.style.left = x + 'px';
+  card.style.top = y + 'px';
+  card.innerHTML =
+    '<div class="floating-card-header">' + closeHtml + '</div>' +
+    '<div class="floating-card-body">' + (typeof content === 'string' ? content : '') + '</div>';
+  if (typeof content !== 'string' && content.nodeType) {
+    card.querySelector('.floating-card-body').appendChild(content);
+  }
+  document.body.appendChild(card);
+
+  // ── Drag ──
+  var dragState = null;
+  var header = card.querySelector('.floating-card-header');
+  var closeBtn = card.querySelector('.floating-card-close');
+
+  header.addEventListener('mousedown', function(e) {
+    // Don't start drag on close button
+    if (closeBtn && closeBtn.contains(e.target)) return;
+    if (e.button !== 0) return; // left button only
+    e.preventDefault();
+    dragState = {
+      startX: e.clientX, startY: e.clientY,
+      origLeft: card.offsetLeft, origTop: card.offsetTop,
+      dragging: false
+    };
+  });
+
+  document.addEventListener('mousemove', function(e) {
+    if (!dragState) return;
+    var dx = e.clientX - dragState.startX;
+    var dy = e.clientY - dragState.startY;
+    if (!dragState.dragging && Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
+    if (!dragState.dragging) {
+      dragState.dragging = true;
+      card.style.transition = 'none';
+      document.body.style.userSelect = 'none';
+    }
+    var newLeft = dragState.origLeft + dx;
+    var newTop = dragState.origTop + dy;
+    // Clamp to viewport (10px margin)
+    newLeft = Math.max(10, Math.min(newLeft, window.innerWidth - card.offsetWidth - 10));
+    newTop = Math.max(0, Math.min(newTop, window.innerHeight - 40));
+    requestAnimationFrame(function() {
+      card.style.left = newLeft + 'px';
+      card.style.top = newTop + 'px';
+    });
+  });
+
+  document.addEventListener('mouseup', function() {
+    if (!dragState) return;
+    if (dragState.dragging) {
+      card.style.transition = '';
+      document.body.style.userSelect = '';
+      // Save position
+      if (savePos) {
+        try {
+          localStorage.setItem('pma_fc_' + id + '_pos',
+            JSON.stringify({ x: card.offsetLeft, y: card.offsetTop }));
+        } catch(e) {}
+      }
+    }
+    dragState = null;
+  });
+
+  // ── Viewport resize: clamp position ──
+  function clampToViewport() {
+    var l = Math.max(10, Math.min(card.offsetLeft, window.innerWidth - card.offsetWidth - 10));
+    var t = Math.max(0, Math.min(card.offsetTop, window.innerHeight - 40));
+    card.style.left = l + 'px';
+    card.style.top = t + 'px';
+  }
+  window.addEventListener('resize', clampToViewport);
+
+  // ── Restore button ──
+  var restoreBtn = null;
+  function showRestore() {
+    if (restoreBtn) return;
+    restoreBtn = document.createElement('div');
+    restoreBtn.className = 'floating-card-restore';
+    restoreBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><polyline points="8,4 8,8 11,10"/></svg>' + escHtml(restoreLabel);
+    restoreBtn.onclick = function() { api.restore(); };
+    document.body.appendChild(restoreBtn);
+  }
+  function hideRestore() {
+    if (restoreBtn) { restoreBtn.remove(); restoreBtn = null; }
+  }
+
+  // ── Close button handler ──
+  if (closeBtn) {
+    closeBtn.onclick = function(e) {
+      e.stopPropagation();
+      api.close();
+    };
+  }
+
+  // ── Public API ──
+  var api = {
+    el: card,
+    get restoreBtn() { return restoreBtn; },
+
+    close: function() {
+      card.style.display = 'none';
+      try { localStorage.setItem('pma_fc_' + id + '_closed', '1'); } catch(e) {}
+      showRestore();
+      if (opts.onClose) opts.onClose();
+    },
+
+    restore: function() {
+      card.style.display = '';
+      try { localStorage.setItem('pma_fc_' + id + '_closed', '0'); } catch(e) {}
+      hideRestore();
+      clampToViewport();
+      if (opts.onRestore) opts.onRestore();
+    },
+
+    setPosition: function(nx, ny) {
+      nx = Math.max(10, Math.min(nx, window.innerWidth - card.offsetWidth - 10));
+      ny = Math.max(0, Math.min(ny, window.innerHeight - 40));
+      card.style.left = nx + 'px';
+      card.style.top = ny + 'px';
+      if (savePos) {
+        try { localStorage.setItem('pma_fc_' + id + '_pos', JSON.stringify({x: nx, y: ny})); } catch(e) {}
+      }
+    },
+
+    destroy: function() {
+      window.removeEventListener('resize', clampToViewport);
+      hideRestore();
+      card.remove();
+    }
+  };
+
+  // ── Initialize ──
+  if (wasClosed) {
+    card.style.display = 'none';
+    showRestore();
+  }
+
+  return api;
+}
+
+/* ═══════════════════════════════════════════════════
    STAGE MISMATCH DIALOG (shared by stages + gantt)
 ═══════════════════════════════════════════════════ */
 
