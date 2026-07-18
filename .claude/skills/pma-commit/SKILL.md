@@ -37,28 +37,41 @@ Co-Authored-By: <model-name> / <tool-name>
 | `deploy` | 部署配置 | `Dockerfile`, `docker-compose.yml`, `config.py`, `.env`, `server.sh` |
 | `docs` | 文档 | `docs/*.md` |
 
+## 提交流程（严格按顺序执行）
+
+### 1. 更新版本信息（commit 前完成，确保一并提交）
+
+1. **更新 `frontend/index.html` + `frontend/login.html`** 的 `<meta name="app-version">`（如本轮尚未更新）
+2. **更新 `docs/dev-plan.md`**：
+   - 页头版本号同步为 `#app-version` 当前值
+   - 变更记录表**插入新条目到表头下方第一条**（最新在最前面，按日期+版本倒序）：
+
+   ```bash
+   # 更新页头版本号
+   sed -i 's/当前版本：v[^ ]*/当前版本：v新版本号/' docs/dev-plan.md
+   
+   # 在变更记录表头分隔行之后插入新条目（确保最新记录在第一位）
+   LINE=$(awk '/^## 变更记录/{found=1} found && /^\|------\|------\|------\|$/{print NR; exit}' docs/dev-plan.md)
+   sed -i "${LINE}a | $(date +%Y-%m-%d) | v新版本号 | type: 简短描述 |" docs/dev-plan.md
+   ```
+3. **数据层变更**同步更新 `docs/db.md`
+
+### 2. Code Review
+
+1. `Skill("code-review")` 对本次修改进行 review
+2. 修复发现的问题，确认无遗留后进入下一步
+
+### 3. 停服 → Commit → 重启
+
+1. `./server.sh -p <PORT> stop`
+2. `git add ...`（**只添加本次会话修改的文件**，不含会话前工作区已有改动；**必须包含步骤 1 中更新的版本信息文件**：`frontend/index.html`、`frontend/login.html`、`docs/dev-plan.md`；add 后 `git diff --cached --stat` 确认暂存范围无误）
+3. `git commit -m "..."`（AI 生成 commit 必须加 `Co-Authored-By:`）
+4. `./server.sh -p <PORT> restart`
+5. `index_repository(repo_path="/home/xuchuan/workspace/pma", mode="moderate")`
+
 ## 重要规则
 
 - **fix 类型 commit 必须在 body 首行简述根因**：`根因: <一句话描述bug根源>`
 - **feat/fix 必须有 body**（bullet 变更点）
-- **一个 commit 只含相关改动**
+- **一个 commit 只含本次会话的相关改动**（不包含会话前工作区已有的未暂存修改）
 - **数据库文件不再纳入版本控制**（`data/pma-*.db` 已加入 `.gitignore`），`init_db()` 自动建表
-- **提交前必须先进行 code-review**（检查旧代码残留、遗漏引用、重复代码块等）：
-  1. `Skill("code-review")` 对本次修改进行 review，修复发现的问题
-  2. 确认无遗留问题后进入提交流程
-- **提交前必须先停止服务**（避免 git 操作干扰服务进程的文件描述符）：
-  1. `./server.sh -p <PORT> stop`
-  2. `git add ... && git commit -m "..."`
-  3. `./server.sh -p <PORT> restart`
-- **数据层变更必须同步更新 `docs/db.md`**
-- **每次 commit 必须同步更新 `docs/dev-plan.md`**：页头版本号同步为 `#app-version` 当前值，并在变更记录表**插入新条目到表头下方第一条**（最新版本在最前面，按日期+版本倒序排列）
-
-  ```bash
-  # 在变更记录表头分隔行之后插入新条目（确保最新记录在第一位）
-  LINE=$(awk '/^## 变更记录/{found=1} found && /^\|------\|------\|------\|$/{print NR; exit}' docs/dev-plan.md)
-  sed -i "${LINE}a | $(date +%Y-%m-%d) | v2026.0X.0X-betaN | type: 简短描述 |" docs/dev-plan.md
-  ```
-- **AI 生成 commit 必须加 `Co-Authored-By:`**
-- **commit 重启后必须更新 codebase-memory 索引**：
-  1. `./server.sh -p <PORT> restart`（见上）
-  2. `index_repository(repo_path="/home/xuchuan/workspace/pma", mode="moderate")`
