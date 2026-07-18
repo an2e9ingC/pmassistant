@@ -91,7 +91,7 @@ settings = Settings()
 
 # ── Timezone — single source of truth for Beijing time (UTC+8) ──
 import time as _time
-from datetime import datetime as _datetime, timezone as _timezone, timedelta as _timedelta
+from datetime import date as _date, datetime as _datetime, timezone as _timezone, timedelta as _timedelta
 
 BEIJING_OFFSET = _timedelta(hours=8)
 BEIJING_TZ = _timezone(BEIJING_OFFSET)
@@ -101,7 +101,8 @@ def beijing_now() -> _datetime:
     return _datetime.now(_timezone.utc) + BEIJING_OFFSET
 
 def to_beijing_str(dt: _datetime) -> str:
-    """Convert a datetime to Beijing-time string (YYYY-MM-DD HH:MM:SS).
+    """@deprecated — use to_iso_str() instead.
+    Convert a datetime to Beijing-time string (YYYY-MM-DD HH:MM:SS).
     Handles both naive UTC datetimes (from SQLite func.now()) and timezone-aware datetimes.
     """
     if dt is None:
@@ -113,6 +114,31 @@ def to_beijing_str(dt: _datetime) -> str:
         return str((dt + BEIJING_OFFSET).replace(tzinfo=None))[:19]
     # Timezone-aware — convert to Beijing
     return str(dt.astimezone(BEIJING_TZ).replace(tzinfo=None))[:19]
+
+
+def to_iso_str(dt) -> str:
+    """Convert datetime to ISO 8601 UTC string (YYYY-MM-DDTHH:MM:SSZ).
+
+    Naive datetimes from SQLite func.now() are treated as UTC.
+    Handles date objects (Column(Date)) and pre-formatted strings gracefully.
+    Returns '' for None.
+    """
+    if dt is None:
+        return ""
+    if isinstance(dt, str):
+        # Pre-formatted string — if space-separated (e.g. from _format_svn_date), convert to ISO
+        if " " in dt and len(dt) >= 19:
+            return dt[:19].replace(" ", "T") + "Z"
+        return dt
+    if isinstance(dt, _date) and not isinstance(dt, _datetime):
+        # Pure date object from Column(Date) — no time component, no timezone
+        return dt.isoformat()  # "2026-07-18"
+    if dt.tzinfo is None:
+        # Naive datetime from SQLite func.now() — treat as UTC
+        return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    # Timezone-aware — convert to UTC
+    return dt.astimezone(_timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
 
 # ── Server start time (epoch) — used for restart detection ──
 SERVER_START_TIME = int(_time.time())

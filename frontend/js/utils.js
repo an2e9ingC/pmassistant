@@ -39,6 +39,23 @@ function clearSearch(inputId, callback) {
   else if (inp.oninput) inp.oninput();
 }
 
+function fmtISODateTime(isoStr) {
+  // Convert ISO 8601 UTC string (e.g. "2026-07-18T09:58:19Z") to local-time display "2026-07-18 17:58:59"
+  if (!isoStr) return '';
+  try {
+    var d = new Date(isoStr);
+    if (isNaN(d.getTime())) return String(isoStr).substring(0, 19); // fallback: return as-is up to 19 chars
+    return d.getFullYear() + '-' +
+      String(d.getMonth()+1).padStart(2,'0') + '-' +
+      String(d.getDate()).padStart(2,'0') + ' ' +
+      String(d.getHours()).padStart(2,'0') + ':' +
+      String(d.getMinutes()).padStart(2,'0') + ':' +
+      String(d.getSeconds()).padStart(2,'0');
+  } catch(e) {
+    return String(isoStr).substring(0, 19);
+  }
+}
+
 function formatDate(d) {
   if (!d) return '';
   const s = String(d);

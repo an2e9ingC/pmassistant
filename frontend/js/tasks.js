@@ -418,7 +418,7 @@ function _renderLatestActivity(t) {
     ? '<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l2.5 2.5"/></svg>'
     : '<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 2h12v8H4l-2 3V2z"/></svg>';
   var text = act.content.length > 40 ? act.content.substring(0, 40) + '...' : act.content;
-  var time = act.created_at ? act.created_at.substring(5, 16) : '';
+  var time = act.created_at ? fmtISODateTime(act.created_at) : '';
   return '<td style="font-size:11px;max-width:160px" title="' + escHtml((act.username || '?') + ' ' + time + '\n' + act.content) + '">' +
     '<span style="color:var(--muted);margin-right:2px">' + icon + '</span>' +
     '<span style="color:var(--fg)">' + escHtml(text) + '</span>' +
@@ -441,7 +441,7 @@ function _renderTaskRowCompact(t, stageStart) {
     '<td style="text-align:center">' + progressHtml + '</td>' +
     '<td style="font-size:12px;color:' + (t.start_date ? 'var(--fg)' : 'var(--muted)') + '" title="' + startTitle + '">' + escHtml(startDateStr) + '</td>' +
     '<td style="font-size:12px">' + (t.due_date ? t.due_date : '—') + '</td>' +
-    '<td style="font-size:12px">' + (t.completed_at ? t.completed_at.substring(0,10) : '—') + '</td>' +
+    '<td style="font-size:12px">' + (t.completed_at ? formatDate(t.completed_at) : '—') + '</td>' +
     _renderLatestActivity(t) +
     '<td style="white-space:nowrap" onclick="event.stopPropagation()">' + iconEdit('openTaskDialog(' + t.id + ')') + iconDelete('deleteTask(' + t.id + ')') + '</td>';
 }
@@ -674,7 +674,7 @@ function _loadViewComments(taskId) {
     if (!comments || !comments.length) { el.innerHTML = '<div style="color:var(--muted);font-size:12px">暂无评论</div>'; return; }
     el.innerHTML = comments.map(function(c) {
       return '<div style="padding:4px 0;border-bottom:1px solid var(--border)">' +
-        '<span style="font-size:10px;color:var(--muted)">' + escHtml(c.display_name || c.username) + ' · ' + (c.created_at || '') + '</span>' +
+        '<span style="font-size:10px;color:var(--muted)">' + escHtml(c.display_name || c.username) + ' · ' + (fmtISODateTime(c.created_at) || '') + '</span>' +
         '<div style="font-size:13px">' + escHtml(c.content) + '</div></div>';
     }).join('');
   }).catch(function() {});
@@ -1386,7 +1386,7 @@ async function _loadComments(taskId) {
     var html = '';
     comments.forEach(function(c) {
       html += '<div style="padding:6px 0;border-bottom:1px solid var(--border)">' +
-        '<div style="font-size:10px;color:var(--muted);margin-bottom:2px">' + escHtml(c.display_name || c.username) + ' · ' + (c.created_at || '') + '</div>' +
+        '<div style="font-size:10px;color:var(--muted);margin-bottom:2px">' + escHtml(c.display_name || c.username) + ' · ' + (fmtISODateTime(c.created_at) || '') + '</div>' +
         '<div style="font-size:13px">' + escHtml(c.content) + '</div>' +
       '</div>';
     });

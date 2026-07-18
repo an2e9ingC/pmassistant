@@ -548,7 +548,7 @@ def _query_project_documents(db: Session, project_id: int) -> list[dict]:
             if e:
                 exec_names[pd_doc.execution_id] = e.name or ""
                 exec_end_dates[pd_doc.execution_id] = (
-                    str(e.end) if e.end else None
+                    to_local_str(e.end) if e.end else None
                 )
                 exec_statuses[pd_doc.execution_id] = e.status or ""
                 # Check if any task in this execution is done with files
@@ -578,7 +578,7 @@ def _query_project_documents(db: Session, project_id: int) -> list[dict]:
             "stage_name": exec_names.get(pd_doc.execution_id, ""),
             "stage_status": exec_status,
             "stage_completed_date": (
-                str(exec_end_dates.get(pd_doc.execution_id) or pd_doc.completed_at)[:10]
+                to_local_str(exec_end_dates.get(pd_doc.execution_id) or pd_doc.completed_at)[:10]
                 if (pd_doc.completed_at or exec_end_dates.get(pd_doc.execution_id))
                 else None
             ) if pd_doc.status == "submitted" or is_done else None,
@@ -590,12 +590,12 @@ def _query_project_documents(db: Session, project_id: int) -> list[dict]:
             "warn": warn,
             "responsible_role": pd_doc.responsible_role,
             "description": pd_doc.description,
-            "completed_at": str(pd_doc.completed_at)[:10] if pd_doc.completed_at else None,
+            "completed_at": to_local_str(pd_doc.completed_at)[:10] if pd_doc.completed_at else None,
             "location": pd_doc.location,
             "doc_path": pd_doc.doc_path or "",
             "doc_type": pd_doc.doc_type or "",
             "updated_by": pd_doc.updated_by,
-            "updated_at": str(pd_doc.updated_at)[:19] if pd_doc.updated_at else None,
+            "updated_at": to_local_str(pd_doc.updated_at) if pd_doc.updated_at else None,
         })
     return docs
 
@@ -639,12 +639,12 @@ def _doc_dict(pd: ProjectDocument) -> dict:
         "done": pd.status == "submitted",
         "responsible_role": pd.responsible_role,
         "description": pd.description,
-        "completed_at": str(pd.completed_at)[:10] if pd.completed_at else None,
+        "completed_at": to_local_str(pd.completed_at)[:10] if pd.completed_at else None,
         "location": pd.location,
         "doc_path": pd.doc_path or "",
         "doc_type": pd.doc_type or "",
         "updated_by": pd.updated_by,
-        "updated_at": str(pd.updated_at)[:19] if pd.updated_at else None,
+        "updated_at": to_local_str(pd.updated_at) if pd.updated_at else None,
     }
 
 

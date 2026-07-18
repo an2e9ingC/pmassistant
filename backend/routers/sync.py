@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from backend.config import settings
-from backend.database import get_db
+from backend.database import get_db, to_local_str
 from backend.middleware.auth import get_current_user, require_admin, require_perm
 from backend.models.local import SyncLog
 from backend.services.sync_service import SyncService
@@ -102,8 +102,8 @@ def sync_status(db: Session = Depends(get_db), _=Depends(get_current_user)):
                 "items_fetched": log.items_fetched,
                 "items_created": log.items_created,
                 "items_updated": log.items_updated,
-                "started_at": log.started_at.isoformat() if log.started_at else None,
-                "finished_at": log.finished_at.isoformat() if log.finished_at else None,
+                "started_at": to_local_str(log.started_at) if log.started_at else None,
+                "finished_at": to_local_str(log.finished_at) if log.finished_at else None,
                 "duration_seconds": duration,
                 "error_message": log.error_message,
             })
@@ -132,8 +132,8 @@ def sync_history(
             "entity_type": log.entity_type,
             "status": log.status,
             "items_fetched": log.items_fetched,
-            "started_at": log.started_at.isoformat() if log.started_at else None,
-            "finished_at": log.finished_at.isoformat() if log.finished_at else None,
+            "started_at": to_local_str(log.started_at) if log.started_at else None,
+            "finished_at": to_local_str(log.finished_at) if log.finished_at else None,
             "duration_seconds": duration,
             "error_message": log.error_message,
         })
@@ -208,7 +208,7 @@ def sync_sources(db: Session = Depends(get_db), _=Depends(get_current_user)):
         "name": "禅道",
         "configured": True,
         "sync_status": zentao_status,
-        "last_sync": zentao_log.finished_at.isoformat() if (zentao_log and zentao_log.finished_at) else None,
+        "last_sync": to_local_str(zentao_log.finished_at) if (zentao_log and zentao_log.finished_at) else None,
         "description": "项目管理（项目/迭代/任务/Bug/发布版本）",
         "detail": zentao_detail,
     })
@@ -225,7 +225,7 @@ def sync_sources(db: Session = Depends(get_db), _=Depends(get_current_user)):
     gitlab_last_sync = None
     if release_log:
         gitlab_sync_status = release_log.status if release_log.status != "running" else "ok"
-        gitlab_last_sync = release_log.finished_at.isoformat() if release_log.finished_at else None
+        gitlab_last_sync = to_local_str(release_log.finished_at) if release_log.finished_at else None
 
     # Count invalid GitLab URLs for detail
     from backend.models.zentao import CachedRelease
@@ -295,7 +295,7 @@ def sync_sources(db: Session = Depends(get_db), _=Depends(get_current_user)):
         "name": "SVN",
         "configured": svn_configured,
         "sync_status": svn_sync_log.status if svn_sync_log else "pending",
-        "last_sync": svn_sync_log.finished_at.isoformat() if (svn_sync_log and svn_sync_log.finished_at) else None,
+        "last_sync": to_local_str(svn_sync_log.finished_at) if (svn_sync_log and svn_sync_log.finished_at) else None,
         "description": "版本管理（产品文档自动扫描）",
         "detail": svn_detail,
     })

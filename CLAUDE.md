@@ -198,16 +198,20 @@ log_audit(db, user, "delete_user", f"username={uname!r}", AUDIT_CAT_USER, "high"
 - 遗漏的引用更新（改了一处未改关联处）
 - 重复代码块
 
-### 日期时间规范（前后端统一）
+### 日期时间规范（方案 A：存储 UTC，API 返回 ISO 8601，前端转换）
 
-**所有展示给用户的时间必须为北京时间（UTC+8）。**
+**存储层**：所有 DateTime 列存储 naive UTC（`func.now()`）。
+**API 层**：返回 ISO 8601 UTC 字符串（`YYYY-MM-DDTHH:MM:SSZ`）。
+**展示层**：前端使用 `fmtISODateTime()` 转换为本地时间。
 
 | 端 | 规则 | 工具 |
 |----|------|------|
-| 后端 Python | 时间字段返回前端前必须转换 | `to_local_str()`（`backend/database.py`） |
-| 后端 Python | 禁止直接使用 `.strftime()` 或原始 UTC 时间 | — |
-| 前端 JS | 禁止 `new Date().toISOString().slice(0,10)` 取当天日期 | 使用 `fmtLocalDate(d)`（`utils.js`） |
-| 前端 JS | `toISOString()` 转 UTC，UTC+8 时区下会偏移一天 | — |
+| 后端 Python | DateTime 字段必须通过 `to_iso_str()` 序列化为 ISO 8601 UTC | `to_iso_str()`（`backend/database.py`，别名 `to_local_str`） |
+| 后端 Python | 禁止直接使用 `.strftime()` 或原始 UTC 时间 | 一律通过 `to_iso_str()` |
+| 前端 JS | DateTime 字段（含时间）展示用 `fmtISODateTime(isoStr)` 转为本地时间 | `fmtISODateTime()`（`utils.js`） |
+| 前端 JS | Date 字段（日期无时间）用 `formatDate()` 提取日期部分 | `formatDate()`（`utils.js`），兼容 ISO 和空格分隔格式 |
+| 前端 JS | 取当天日期用 `fmtLocalDate(d)` | `fmtLocalDate()`（`utils.js`） |
+| 前端 JS | 禁止 `new Date().toISOString().slice(0,10)` 取当天日期 | UTC 偏移会导致日期误差 |
 
 ### 服务器与环境
 

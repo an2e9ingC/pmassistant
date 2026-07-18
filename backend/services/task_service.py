@@ -225,7 +225,7 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
         t.output_items = json.dumps(data["output_items"], ensure_ascii=False) if data["output_items"] is not None else None
 
     if "status" in data and data["status"] in ("done", "closed") and old_status not in ("done", "closed"):
-        t.completed_at = datetime.utcnow()
+        t.completed_at = datetime.now(timezone.utc)
 
     db.commit()
     db.refresh(t)

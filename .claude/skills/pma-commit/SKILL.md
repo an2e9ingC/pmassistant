@@ -47,12 +47,13 @@ Co-Authored-By: <model-name> / <tool-name>
    - 变更记录表**插入新条目到表头下方第一条**（最新在最前面，按日期+版本倒序）：
 
    ```bash
-   # 更新页头版本号
+   # 更新页头版本号 + 最后更新日期（显式指定 TZ=Asia/Shanghai 确保北京时间）
    sed -i 's/当前版本：v[^ ]*/当前版本：v新版本号/' docs/dev-plan.md
-   
+   sed -i 's/最后更新：[0-9-]*/最后更新：'$(TZ=Asia/Shanghai date +%Y-%m-%d)'/' docs/dev-plan.md
+
    # 在变更记录表头分隔行之后插入新条目（确保最新记录在第一位）
    LINE=$(awk '/^## 变更记录/{found=1} found && /^\|------\|------\|------\|$/{print NR; exit}' docs/dev-plan.md)
-   sed -i "${LINE}a | $(date +%Y-%m-%d) | v新版本号 | type: 简短描述 |" docs/dev-plan.md
+   sed -i "${LINE}a | $(TZ=Asia/Shanghai date +%Y-%m-%d) | v新版本号 | type: 简短描述 |" docs/dev-plan.md
    ```
 3. **数据层变更**同步更新 `docs/db.md`
 

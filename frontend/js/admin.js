@@ -618,8 +618,8 @@ function renderUserTable() {
       '<td>' + (roleBadges || '<span style="font-size:11px;color:var(--muted)">未分配</span>') + '</td>' +
       '<td>' + statusHtml + '</td>' +
       '<td style="font-size:11px">' + loginHtml + '</td>' +
-      '<td style="font-size:12px;color:var(--muted)">' + escHtml(u.last_login_at || '—') + '</td>' +
-      '<td style="font-size:12px;color:var(--muted)">' + escHtml(u.created_at || '') + '</td>' +
+      '<td style="font-size:12px;color:var(--muted)">' + escHtml(fmtISODateTime(u.last_login_at) || '—') + '</td>' +
+      '<td style="font-size:12px;color:var(--muted)">' + escHtml(fmtISODateTime(u.created_at) || '') + '</td>' +
       '<td style="white-space:nowrap">' +
         iconEdit('openUserEditDialog(' + u.id + ')') +
         iconToggle('toggleUserActive(' + u.id + ',' + u.is_active + ')', toggleLabel) +

@@ -262,7 +262,7 @@ async function loadAuditLogs() {
       '</tr></thead><tbody>' +
       items.map(function(e) {
         return '<tr>' +
-          '<td style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">' + escHtml(e.created_at) + '</td>' +
+          '<td style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">' + escHtml(fmtISODateTime(e.created_at)) + '</td>' +
           '<td style="font-size:12px">' + escHtml(e.username) + '</td>' +
           '<td style="font-size:11px">' + escHtml(e.category || '—') + '</td>' +
           '<td style="font-size:11px">' + escHtml(e.action) + '</td>' +

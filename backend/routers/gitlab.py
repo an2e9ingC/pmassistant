@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from backend.database import get_db
+from backend.database import get_db, to_local_str
 from backend.middleware.auth import get_current_user, require_admin
 from backend.models.local import LocalUser
 from backend.models.zentao import CachedRelease, PmaProduct
@@ -100,8 +100,8 @@ def list_releases(
             "desc": r.desc,
             "gitlab_url": r.gitlab_url,
             "gitlab_url_valid": r.gitlab_url_valid,
-            "gitlab_url_checked_at": r.gitlab_url_checked_at.isoformat() if r.gitlab_url_checked_at else None,
-            "synced_at": r.synced_at.isoformat() if r.synced_at else None,
+            "gitlab_url_checked_at": to_local_str(r.gitlab_url_checked_at) if r.gitlab_url_checked_at else None,
+            "synced_at": to_local_str(r.synced_at) if r.synced_at else None,
         })
 
     return {"code": 0, "data": items, "message": "ok"}
@@ -156,7 +156,7 @@ def releases_stats(db: Session = Depends(get_db), _=Depends(get_current_user)):
             "desc": (r.desc or "")[:200],  # preview of Zentao release description
             "gitlab_url": r.gitlab_url,
             "gitlab_url_valid": r.gitlab_url_valid,
-            "gitlab_url_checked_at": r.gitlab_url_checked_at.isoformat() if r.gitlab_url_checked_at else None,
+            "gitlab_url_checked_at": to_local_str(r.gitlab_url_checked_at) if r.gitlab_url_checked_at else None,
         })
 
     return {

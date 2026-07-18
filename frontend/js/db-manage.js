@@ -142,7 +142,7 @@ function renderDbManage() {
           (isPermanent ? ' <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:var(--success-lt);color:var(--success);font-weight:540">永久</span>' : '') +
         '</td>' +
         '<td style="font-size:11px">' + escHtml(b.size_display) + '</td>' +
-        '<td style="font-size:11px">' + escHtml(b.created_at) + '</td>' +
+        '<td style="font-size:11px">' + escHtml(fmtISODateTime(b.created_at)) + '</td>' +
         '<td style="white-space:nowrap">' +
           iconRestore('restoreBackup(\'' + escHtml(b.name) + '\')', '恢复到此备份') +
           iconDelete('deleteBackup(\'' + escHtml(b.name) + '\')', '删除此备份') +

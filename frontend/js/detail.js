@@ -927,7 +927,7 @@ function buildDocs(data) {
         }
 
         var docTypeLabel = typeLabels[d.doc_type] || d.doc_type || '—';
-        var updatedAt = (d.updated_at || '').substring(0, 16) || (d.completed_at || '').substring(0, 10);
+        var updatedAt = fmtISODateTime(d.updated_at) || formatDate(d.completed_at);
         var updatedBy = d.updated_by || '';
 
         rows += '<tr id="doc-row-' + d.id + '">' +
@@ -1341,7 +1341,7 @@ function buildNotes(notes) {
       var indentStyle = isReply ? 'padding-left:28px;border-left:3px solid var(--accent-lt)' : '';
       var replyMark = isReply ? '<span style="font-size:10px;color:var(--accent);margin-right:4px">↳ 回复</span>' : '';
       var imgBadge = hasImage ? ' <span style="font-size:10px">📷</span>' : '';
-      var timeCell = (n.created_at || '') + (n.updated_at ? '<div style="font-size:9px;color:var(--warn)">编辑过</div>' : '');
+      var timeCell = (fmtISODateTime(n.created_at) || '—') + (n.updated_at ? '<div style="font-size:9px;color:var(--warn)">编辑过</div>' : '');
       tableHtml += '<tr style="' + indentStyle + '">' +
         '<td style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">' + timeCell + '</td>' +
         '<td style="font-size:12px">' + escHtml(n.stage_name || '项目整体') + '</td>' +
@@ -1428,7 +1428,7 @@ function openViewNoteDialog(noteId) {
       '<div style="margin-bottom:8px;display:flex;gap:16px;font-size:11px;color:var(--muted)">' +
         '<span>阶段: ' + escHtml(note.stage_name || '项目整体') + '</span>' +
         '<span>作者: ' + escHtml(note.recorded_by || '') + '</span>' +
-        '<span>时间: ' + escHtml(note.created_at || '') + (note.updated_at ? ' (编辑过)' : '') + '</span>' +
+        '<span>时间: ' + escHtml(fmtISODateTime(note.created_at) || '—') + (note.updated_at ? ' (编辑过)' : '') + '</span>' +
       '</div>' +
       '<div style="max-height:70vh;overflow-y:auto;padding:12px;background:var(--bg);border-radius:8px;font-size:13px;line-height:1.7" class="markdown-body">' + contentHtml + '</div>' +
       '<div style="display:flex;justify-content:flex-end;margin-top:12px">' +
@@ -2699,7 +2699,7 @@ function buildActivities(items, opts) {
     '</tr></thead><tbody>';
 
   items.forEach(function(a) {
-    var time = (a.created_at || '').replace('T', ' ');
+    var time = fmtISODateTime(a.created_at);
     html += '<tr>' +
       '<td class="act-td-time">' + escHtml(time) + '</td>' +
       '<td class="act-td-user">' + escHtml(a.username) + '</td>' +

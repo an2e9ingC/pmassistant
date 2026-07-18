@@ -940,7 +940,7 @@ async function loadNotifBar() {
       var closeBtn = closable
         ? '<button class="notif-close" onclick="dismissNotif(' + n.id + ')" title="关闭">&times;</button>'
         : '';
-      var timeStr = n.created_at ? n.created_at.substr(0, 16) : '';  // YYYY-MM-DD HH:mm
+      var timeStr = n.created_at ? fmtISODateTime(n.created_at) : '';  // YYYY-MM-DD HH:mm
       return '<div class="' + cls + '">' +
         '<span>' + escHtml(n.content) + ' <span class="notif-bar-author">[@' + escHtml(n.created_by) + ']</span>' +
         (timeStr ? ' <span class="notif-bar-author" style="opacity:0.7;font-size:11px">' + timeStr + '</span>' : '') + '</span>' +
@@ -1077,7 +1077,7 @@ function loadNotifManage() {
         '<td style="font-size:13px">' + escHtml(n.content) + '</td>' +
         '<td style="font-size:12px;font-family:var(--mono)">@' + escHtml(n.created_by) + '</td>' +
         '<td>' + toggleSwitch(n.is_active, 'toggleNotifStatus(' + n.id + ')', {id: 'notif-tgl-' + n.id}) + '</td>' +
-        '<td style="font-size:12px;color:var(--muted)">' + escHtml(n.created_at || '') + '</td>' +
+        '<td style="font-size:12px;color:var(--muted)">' + escHtml(fmtISODateTime(n.created_at) || '—') + '</td>' +
         '<td style="white-space:nowrap">' +
           iconEdit('editNotifDialog(' + n.id + ',\'' + escJs(n.content) + '\')') +
           iconDelete('deleteNotif(' + n.id + ')') +
@@ -1682,8 +1682,6 @@ async function _ucDeleteTask(taskId) {
     if (user) _ucLoadTasks(user);
   } catch(e) { showToast('删除失败: ' + (e.message || ''), 'error'); }
 }
-function _fmtLocalDate(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
-
 function _ucLoadBugStats() {
   var cal = document.getElementById('uc-calendar');
   if (!cal) return;
@@ -1783,7 +1781,7 @@ function _ucLoadCalendar(user) {
   var m = (typeof _calMonth !== 'undefined') ? _calMonth : (now.getMonth()+1);
   var ms = new Date(y, m-1, 1);
   var me = new Date(y, m, 0);
-  var df = _fmtLocalDate(ms), dt = _fmtLocalDate(me);
+  var df = fmtLocalDate(ms), dt = fmtLocalDate(me);
   var cal = document.getElementById('uc-calendar');
   if(!cal) return;
 

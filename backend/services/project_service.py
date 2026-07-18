@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 import re
 
 from backend.config import settings, zentao_project_url, zentao_product_url
+from backend.database import to_local_str
 from backend.models.zentao import (
     CachedProject, CachedExecution, CachedTask, PmaProduct, ProductProjectLink,
     CustomerProjectLink, PmaCustomer,
@@ -240,7 +241,7 @@ def _build_deliverables(db: Session, e: CachedExecution) -> list[dict]:
             "name": pd.doc_name,
             "done": pd.status == "submitted",
             "warn": is_done and is_pending,
-            "completed_at": str(pd.completed_at)[:10] if pd.completed_at else None,
+            "completed_at": to_local_str(pd.completed_at)[:10] if pd.completed_at else None,
             "location": pd.location,
             "responsible_role": pd.responsible_role,
         })

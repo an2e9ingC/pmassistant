@@ -6,12 +6,12 @@ from urllib.parse import quote as _urlquote
 from sqlalchemy import create_engine, event, func as _sql_func
 from sqlalchemy.orm import Session, sessionmaker, DeclarativeBase
 
-from backend.config import settings, BEIJING_OFFSET, BEIJING_TZ, beijing_now, to_beijing_str
+from backend.config import settings, BEIJING_OFFSET, BEIJING_TZ, beijing_now, to_iso_str
 
 logger = logging.getLogger(__name__)
 
-# Backward-compatible alias — prefer to_beijing_str() from config going forward
-to_local_str = to_beijing_str
+# Backward-compatible alias — all call sites use to_local_str, now backed by to_iso_str (ISO 8601 UTC)
+to_local_str = to_iso_str
 
 
 # ── SQLCipher detection ──

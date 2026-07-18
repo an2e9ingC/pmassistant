@@ -617,7 +617,7 @@ function renderProductNotes(notes) {
     var indentStyle = isReply ? 'padding-left:28px;border-left:3px solid var(--accent-lt)' : '';
     var replyMark = isReply ? '<span style="font-size:10px;color:var(--accent);margin-right:4px">↳ 回复</span>' : '';
     var imgBadge = hasImage ? ' <span style="font-size:10px">📷</span>' : '';
-    var timeCell = (n.created_at || '') + (n.updated_at ? '<div style="font-size:9px;color:var(--warn)">编辑过</div>' : '');
+    var timeCell = (fmtISODateTime(n.created_at) || '—') + (n.updated_at ? '<div style="font-size:9px;color:var(--warn)">编辑过</div>' : '');
     html += '<tr style="' + indentStyle + '">' +
       '<td style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">' + timeCell + '</td>' +
       '<td style="font-size:12px">' + escHtml(n.category || '不涉及') + '</td>' +
@@ -646,7 +646,7 @@ function openViewProdNoteDialog(noteId) {
       '<div style="margin-bottom:8px;display:flex;gap:16px;font-size:11px;color:var(--muted)">' +
         '<span>领域: ' + escHtml(note.category || '不涉及') + '</span>' +
         '<span>作者: ' + escHtml(note.recorded_by || '') + '</span>' +
-        '<span>时间: ' + escHtml(note.created_at || '') + '</span>' +
+        '<span>时间: ' + escHtml(fmtISODateTime(note.created_at) || '—') + '</span>' +
       '</div>' +
       '<div style="max-height:70vh;overflow-y:auto;padding:12px;background:var(--bg);border-radius:8px;font-size:13px;line-height:1.7" class="markdown-body">' + contentHtml + '</div>' +
       '<div style="display:flex;justify-content:flex-end;margin-top:12px">' +
@@ -1057,7 +1057,7 @@ function _renderProdDocsInline(docs) {
           // Show template path only when not yet submitted (helps user verify match)
           (d.doc_path && d.location && !d.done ? '<br><span style="font-size:10px;color:var(--muted)">模板: ' + escHtml(d.doc_path) + '</span>' : '') +
         '</td>' +
-        '<td style="font-size:11px;color:var(--muted);white-space:nowrap;' + cellStyle + '">' + escHtml(d.svn_last_modified || '—') + '</td>' +
+        '<td style="font-size:11px;color:var(--muted);white-space:nowrap;' + cellStyle + '">' + escHtml(fmtISODateTime(d.svn_last_modified) || '—') + '</td>' +
         '<td style="font-size:12px;color:var(--muted);' + cellStyle + '">' + escHtml(d.svn_author || '—') + '</td>' +
         '<td style="white-space:nowrap;text-align:center;' + cellStyle + '">' +
           (d.location
@@ -1389,7 +1389,7 @@ function buildProdActivities(items, opts) {
     '</tr></thead><tbody>';
 
   items.forEach(function(a) {
-    var time = (a.created_at || '').replace('T', ' ');
+    var time = fmtISODateTime(a.created_at);
     html += '<tr>' +
       '<td class="act-td-time">' + escHtml(time) + '</td>' +
       '<td class="act-td-user">' + escHtml(a.username) + '</td>' +
@@ -1484,7 +1484,7 @@ function _renderProdBugs(bugs, container) {
       '<td onclick="openBugDetail(' + b.id + ')"><span class="prio-tag '+(b.priority||'medium')+'">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[b.priority]||b.priority)+'</span></td>' +
       '<td style="font-size:12px" onclick="openBugDetail(' + b.id + ')">' + escHtml(b.assignee_name || '—') + '</td>' +
       '<td>' + projCell + '</td>' +
-      '<td style="font-size:11px;color:var(--muted)" onclick="openBugDetail(' + b.id + ')">' + (b.created_at||'').substring(0,10) + '</td>' +
+      '<td style="font-size:11px;color:var(--muted)" onclick="openBugDetail(' + b.id + ')">' + formatDate(b.created_at) + '</td>' +
       '<td style="white-space:nowrap" onclick="event.stopPropagation()">' + iconEdit('openBugDialog(' + b.id + ')', '编辑Bug') + '</td>' +
     '</tr>';
   });

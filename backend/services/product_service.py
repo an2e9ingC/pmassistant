@@ -325,5 +325,5 @@ def _get_product_releases(db: Session, product_id: int) -> list[dict]:
         "desc": r.desc,
         "gitlab_url": r.gitlab_url,
         "gitlab_url_valid": r.gitlab_url_valid,
-        "gitlab_url_checked_at": r.gitlab_url_checked_at.isoformat() if r.gitlab_url_checked_at else None,
+        "gitlab_url_checked_at": to_local_str(r.gitlab_url_checked_at) if r.gitlab_url_checked_at else None,
     } for r in releases]

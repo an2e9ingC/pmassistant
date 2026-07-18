@@ -564,7 +564,7 @@ function _loadBugAnalyses(bugId) {
     analyses.forEach(function(a) {
       var userHtml = a.username ? ' · ' + escHtml(a.username) : '';
       h += '<div style="border-left:2px solid var(--accent);padding:4px 0 8px 12px;margin-bottom:4px">' +
-        '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">'+(a.created_at||'?') + userHtml + '</div>' +
+        '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">'+(fmtISODateTime(a.created_at)||'?') + userHtml + '</div>' +
         '<div class="markdown-body" style="font-size:13px;line-height:1.6">'+renderMarkdown(a.content)+'</div></div>';
     });
     el.innerHTML = h;
