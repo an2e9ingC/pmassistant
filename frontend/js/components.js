@@ -1306,28 +1306,134 @@ function _calGoToday() {
   if (_calChangeCallback) _calChangeCallback();
 }
 
+var _dayDetailTasks = []; // closure for edit/copy operations
+
 function openDayDetail(dateStr, totalHours) {
   API.get('/worklogs/calendar?date_from='+dateStr+'&date_to='+dateStr).then(function(data) {
     var daily = (data&&data.daily) ? data.daily : [];
     var dayData = daily.length ? daily[0] : null;
-    var tasksHtml = '';
-    if (dayData && dayData.tasks) {
-      dayData.tasks.forEach(function(t) {
-        var pct = totalHours>0 ? Math.round(t.hours/totalHours*100) : 0;
-        tasksHtml += '<div style="padding:6px 0;border-bottom:1px solid var(--border)">' +
-          '<div style="font-weight:500">'+escHtml(t.title)+'</div>' +
-          (t.project_code ? '<div style="font-size:11px;color:var(--accent)">' + escHtml(t.project_code) + (t.project_name ? ' ' + escHtml(t.project_name) : '') + '</div>' : '') +
-          '<div style="font-size:11px;color:var(--muted)">'+t.hours.toFixed(1)+'h ('+pct+'%)'+(t.description?' — '+escHtml(t.description):'')+'</div></div>';
+    _dayDetailTasks = [];
+    var rowsHtml = '';
+    if (dayData && dayData.tasks && dayData.tasks.length) {
+      _dayDetailTasks = dayData.tasks;
+      dayData.tasks.forEach(function(t, i) {
+        var rowNum = i + 1;
+        var desc = (t.description || '').substring(0, 60) + ((t.description||'').length > 60 ? '...' : '');
+        rowsHtml += '<tr>' +
+          '<td style="text-align:center;color:var(--muted)">' + rowNum + '</td>' +
+          '<td style="font-family:var(--mono);font-size:11px">' + escHtml(t.project_code||'') + '</td>' +
+          '<td style="font-size:12px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escHtml(t.project_name||'')+'">' + escHtml(t.project_name||'') + '</td>' +
+          '<td style="font-size:12px">' + escHtml(t.stage_name||'') + '</td>' +
+          '<td style="font-size:12px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escHtml(t.title||'')+'">' + escHtml(t.title||'') + '</td>' +
+          '<td style="text-align:center">' + (t.progress||0) + '%</td>' +
+          '<td style="text-align:right;font-weight:500">' + t.hours.toFixed(1) + 'h</td>' +
+          '<td style="font-size:11px;color:var(--muted);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escHtml(t.description||'')+'">' + escHtml(desc) + '</td>' +
+          '<td style="white-space:nowrap">' +
+            iconEdit('editWorklogEntryById(' + t.id + ',\'' + dateStr + '\')', '编辑') +
+            iconDelete('deleteWorklogEntry(' + t.id + ',' + (t.source==='bug'?'true':'false') + ')', '删除') +
+            iconCopy('copyWorklogEntryById(' + t.id + ',\'' + dateStr + '\')', '复制') +
+          '</td>' +
+        '</tr>';
       });
     }
+    var tableHtml = rowsHtml ? '<div style="max-height:420px;overflow-y:auto;margin:-12px -16px 0 -16px"><table class="proj-table" style="font-size:11px;margin:0"><thead><tr>' +
+      '<th style="width:36px">#</th><th style="width:70px">项目编号</th><th>项目名</th><th>阶段</th><th>任务名</th><th style="width:52px">进度</th><th style="width:52px">工时</th><th>工作内容</th><th style="width:80px">操作</th>' +
+      '</tr></thead><tbody>' + rowsHtml + '</tbody></table></div>' : '<div style="color:var(--muted);text-align:center;padding:20px">当日无工时记录</div>';
     openDialog(dateStr+' 工时详情 ('+totalHours.toFixed(1)+'h)',
-      '<div style="max-height:400px;overflow-y:auto">'+(tasksHtml||'<div style="color:var(--muted)">当日无工时记录</div>')+'</div>',
+      tableHtml,
       [{text:'记录工时',cls:'btn-primary',onclick:'openWorklogFromCalendar(\''+dateStr+'\')'},
-       {text:'关闭',onclick:"document.querySelector('.note-dialog-overlay').remove()"}]);
+       {text:'关闭',onclick:"document.querySelector('.note-dialog-overlay').remove()"}],
+      {maxWidth: '80vw'});
   }).catch(function(e) {
     showToast('加载详情失败: '+(e.message||'未知错误'), 'error');
   });
 }
+
+function _findDayTask(id) { return _dayDetailTasks.find(function(t){return t.id===id;}); }
+
+function editWorklogEntryById(wlId, dateStr) {
+  var t = _findDayTask(wlId);
+  if (!t) { showToast('数据已过期，请刷新', 'error'); return; }
+  editWorklogEntry(t, dateStr);
+}
+
+function copyWorklogEntryById(wlId, dateStr) {
+  var t = _findDayTask(wlId);
+  if (!t) { showToast('数据已过期，请刷新', 'error'); return; }
+  copyWorklogEntry(t, dateStr);
+}
+
+function editWorklogEntry(t, dateStr) {
+  var html = '<div>' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">日期 *</label>' +
+      '<input class="search-inp" id="wl-edit-date" type="date" required value="'+dateStr+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工时(h) *</label>' +
+      '<input class="search-inp" id="wl-edit-hours" type="number" step="0.5" min="0.5" required value="'+t.hours+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工作描述</label>' +
+      '<textarea class="search-inp" id="wl-edit-desc" rows="2" style="width:100%;box-sizing:border-box;margin-top:2px;resize:vertical">'+escHtml(t.description||'')+'</textarea></div>' +
+    '</div>';
+  openDialog('编辑工时', html, [
+    {text:'取消',onclick:'closeSharedDialog()'},
+    {text:'保存',cls:'btn-primary',onclick:'saveWorklogEntry('+t.id+','+(t.source==='bug'?'true':'false')+')'}
+  ], {maxWidth:400});
+}
+
+async function saveWorklogEntry(wlId, isBug) {
+  var hours = parseFloat(document.getElementById('wl-edit-hours').value);
+  var desc = document.getElementById('wl-edit-desc').value.trim();
+  var date = document.getElementById('wl-edit-date').value;
+  if (!date || !hours || hours <= 0) { showToast('请填写日期和工时', 'error'); return; }
+  var url = (isBug ? '/bug-worklogs/' : '/worklogs/') + wlId;
+  try {
+    await API.put(url, {hours: hours, date: date, description: desc});
+    closeSharedDialog();
+    showToast('工时已更新', 'success');
+    if (typeof _ucLoadCalendar === 'function') { var u = getCurrentUser(); if (u) _ucLoadCalendar(u); }
+  } catch(e) { showToast('更新失败: '+(e.message||''), 'error'); }
+}
+
+async function deleteWorklogEntry(wlId, isBug) {
+  if (!confirm('确定删除此工时记录？')) return;
+  var url = (isBug ? '/bug-worklogs/' : '/worklogs/') + wlId;
+  try {
+    await API.del(url);
+    showToast('已删除', 'success');
+    if (typeof _ucLoadCalendar === 'function') { var u = getCurrentUser(); if (u) _ucLoadCalendar(u); }
+  } catch(e) { showToast('删除失败: '+(e.message||''), 'error'); }
+}
+
+function copyWorklogEntry(t, dateStr) {
+  var html = '<div>' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">日期 *</label>' +
+      '<input class="search-inp" id="wl-copy-date" type="date" required value="'+dateStr+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工时(h) *</label>' +
+      '<input class="search-inp" id="wl-copy-hours" type="number" step="0.5" min="0.5" required value="'+t.hours+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工作描述</label>' +
+      '<textarea class="search-inp" id="wl-copy-desc" rows="2" style="width:100%;box-sizing:border-box;margin-top:2px;resize:vertical">'+escHtml(t.description||'')+'</textarea></div>' +
+    '</div>';
+  openDialog('复制工时', html, [
+    {text:'取消',onclick:'closeSharedDialog()'},
+    {text:'提交',cls:'btn-primary',onclick:'submitCopyWorklog('+t.id+','+(t.source==='bug'?'true':'false')+')'}
+  ], {maxWidth:400});
+}
+
+async function submitCopyWorklog(wlId, isBug) {
+  var t = _findDayTask(wlId);
+  var hours = parseFloat(document.getElementById('wl-copy-hours').value);
+  var desc = document.getElementById('wl-copy-desc').value.trim();
+  var date = document.getElementById('wl-copy-date').value;
+  if (!date || !hours || hours <= 0) { showToast('请填写日期和工时', 'error'); return; }
+  try {
+    var payload = {hours: hours, date: date, description: desc};
+    if (isBug) payload.bug_id = t.task_id ? null : (t.project_id || null);
+    else payload.task_id = t.task_id;
+    await API.post(isBug ? '/bug-worklogs' : '/worklogs', payload);
+    closeSharedDialog();
+    showToast('工时已复制', 'success');
+    if (typeof _ucLoadCalendar === 'function') { var u = getCurrentUser(); if (u) _ucLoadCalendar(u); }
+  } catch(e) { showToast('复制失败: '+(e.message||''), 'error'); }
+}
+
 
 function _getIntensityStyle(hours) {
   if (hours <= 0) return {bg: '', text: 'var(--muted)'};

@@ -169,6 +169,22 @@ def get_calendar(
     bug_ids = {b.bug_id for b in bug_logs}
     bug_map = {b.id: b for b in db.query(PmaBug).filter(PmaBug.id.in_(bug_ids)).all()} if bug_ids else {}
 
+    # Batch-load project info (PmaProduct + CachedProject) and executions
+    proj_ids = {t.project_id for t in task_map.values() if t and t.project_id}
+    proj_map = {}
+    exec_map = {}
+    if proj_ids:
+        from backend.models.zentao import PmaProduct, CachedProject
+        projs = db.query(PmaProduct).filter(PmaProduct.id.in_(proj_ids)).all()
+        proj_map.update({p.id: p for p in projs})
+        zprojs = db.query(CachedProject).filter(CachedProject.id.in_(proj_ids)).all()
+        proj_map.update({p.id: p for p in zprojs})
+    exec_ids = {t.execution_id for t in task_map.values() if t and t.execution_id}
+    if exec_ids:
+        from backend.models.zentao import CachedExecution
+        execs = db.query(CachedExecution).filter(CachedExecution.id.in_(exec_ids)).all()
+        exec_map = {e.id: e for e in execs}
+
     # Group by date
     daily_map = {}
     for w in logs:
@@ -176,12 +192,19 @@ def get_calendar(
         if d not in daily_map:
             daily_map[d] = {"date": d, "total_hours": 0.0, "tasks": []}
         task = task_map.get(w.task_id)
+        proj = proj_map.get(task.project_id) if task else None
+        exe = exec_map.get(task.execution_id) if task else None
         daily_map[d]["total_hours"] += w.hours or 0.0
         daily_map[d]["tasks"].append({
+            "id": w.id,
             "task_id": w.task_id,
             "title": task.title if task else "(已删除)",
             "hours": w.hours,
+            "progress": task.progress if task else 0,
             "project_id": task.project_id if task else None,
+            "project_code": getattr(proj, 'code', '') or '',
+            "project_name": getattr(proj, 'name', '') or '',
+            "stage_name": exe.name if exe else '',
             "description": w.description,
             "source": "task",
         })
@@ -192,10 +215,15 @@ def get_calendar(
         bug = bug_map.get(bw.bug_id)
         daily_map[d]["total_hours"] += bw.hours or 0.0
         daily_map[d]["tasks"].append({
+            "id": bw.id,
             "task_id": None,
             "title": ("Bug #" + str(bw.bug_id) + " " + bug.title) if bug else ("Bug #" + str(bw.bug_id)),
             "hours": bw.hours,
+            "progress": 0,
             "project_id": None,
+            "project_code": '',
+            "project_name": '',
+            "stage_name": '',
             "description": bw.description,
             "source": "bug",
         })
