@@ -33,6 +33,8 @@ class Settings:
     GITLAB_APP_SECRET: str = ""         # GitLab OAuth Application Secret
     GITLAB_OAUTH_ENABLED: bool = False  # Enable GitLab OAuth login
     GITLAB_OAUTH_REDIRECT_URI: str = "" # OAuth callback URL
+    WECOM_CORP_ID: str = ""            # 企业微信 CorpID
+    WECOM_SECRET: str = ""             # 企业微信应用 Secret
     JWT_SECRET_KEY: str = "dev-secret-change-in-production"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 480

@@ -59,11 +59,19 @@ class SvnConfig(BaseModel):
     enabled: bool = True
 
 
+class WeComConfig(BaseModel):
+    corp_id: str = ""
+    secret: str = ""
+    sync_interval: str = "60"
+    enabled: bool = True
+
+
 class DataSourceConfig(BaseModel):
     zentao: ZentaoConfig = ZentaoConfig()
     gitlab: GitLabConfig = GitLabConfig()
     nas: NasConfig = NasConfig()
     svn: SvnConfig = SvnConfig()
+    wecom: WeComConfig = WeComConfig()
 
 
 # ── Persistence ──
@@ -101,6 +109,12 @@ def _load_config() -> dict:
             "username": os.environ.get("SVN_USERNAME", ""),
             "password": os.environ.get("SVN_PASSWORD", ""),
             "enabled": os.environ.get("SVN_ENABLED", "true").lower() in ("1", "true", "yes"),
+        },
+        "wecom": {
+            "corp_id": os.environ.get("WECOM_CORP_ID", ""),
+            "secret": os.environ.get("WECOM_SECRET", ""),
+            "sync_interval": os.environ.get("WECOM_SYNC_INTERVAL", "60"),
+            "enabled": os.environ.get("WECOM_ENABLED", "true").lower() in ("1", "true", "yes"),
         },
     }
     if CONFIG_FILE.exists():
@@ -146,6 +160,10 @@ def _save_config(cfg: dict) -> None:
         "svn.username": "SVN_USERNAME",
         "svn.password": "SVN_PASSWORD",
         "svn.enabled": "SVN_ENABLED",
+        "wecom.corp_id": "WECOM_CORP_ID",
+        "wecom.secret": "WECOM_SECRET",
+        "wecom.sync_interval": "WECOM_SYNC_INTERVAL",
+        "wecom.enabled": "WECOM_ENABLED",
     }
 
     if ENV_FILE.exists():
@@ -496,6 +514,20 @@ def test_connection(source: str, _=Depends(require_admin)):
                 req.add_header("Authorization", f"Basic {cred}")
             resp = urllib.request.urlopen(req, timeout=10)
             return {"code": 0, "data": {"ok": True, "detail": f"HTTP {resp.status} — SVN 连接成功"}, "message": "ok"}
+
+        elif source == "wecom":
+            corp_id = section.get("corp_id", "")
+            secret = section.get("secret", "")
+            if not corp_id or not secret:
+                return {"code": 0, "data": {"ok": False, "detail": "未配置 CorpID 或 Secret"}, "message": "ok"}
+            url = f"https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid={corp_id}&corpsecret={secret}"
+            req = urllib.request.Request(url, method="GET")
+            resp = urllib.request.urlopen(req, timeout=10)
+            body = json.loads(resp.read().decode())
+            if body.get("errcode") == 0:
+                return {"code": 0, "data": {"ok": True, "detail": "企业微信 Token 获取成功"}, "message": "ok"}
+            else:
+                return {"code": 0, "data": {"ok": False, "detail": f"企业微信错误: {body.get('errmsg', '未知')}"}, "message": "ok"}
 
         else:
             return {"code": 1, "message": f"不支持的数据源: {source}"}

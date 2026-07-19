@@ -47,6 +47,11 @@ var _configSections = [
     { key: 'username', label: '用户名', type: 'text', ph: '' },
     { key: 'password', label: '密码', type: 'password', ph: '' },
   ]},
+  { key: 'wecom', title: '企业微信 (WeCom)', summaryKey: 'corp_id', summaryPrefix: 'CorpID: ', fields: [
+    { key: 'corp_id', label: '企业ID (Corp ID)', type: 'text', ph: 'ww...' },
+    { key: 'secret', label: '应用 Secret', type: 'password', ph: '' },
+    { key: 'sync_interval', label: '同步间隔(分钟)', type: 'number', ph: '60（0=关闭自动同步）' },
+  ]},
 ];
 
 function _renderFieldHtml(f, sectionKey, cfgData) {
@@ -287,7 +292,7 @@ async function testSourceConnection(source) {
     _testResults[source] = result;
     var ok = result && result.ok;
     showToast(
-      (ok ? '✓ ' : '✗ ') + (source === 'zentao' ? '禅道' : source === 'gitlab' ? 'GitLab' : source === 'nas' ? 'NAS' : 'SVN') +
+      (ok ? '✓ ' : '✗ ') + (source === 'zentao' ? '禅道' : source === 'gitlab' ? 'GitLab' : source === 'nas' ? 'NAS' : source === 'wecom' ? '企业微信' : 'SVN') +
       ': ' + (result ? result.detail : '未知'),
       ok ? 'success' : 'error'
     );

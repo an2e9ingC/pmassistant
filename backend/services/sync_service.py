@@ -142,6 +142,8 @@ _auto_sync_notify = {
     "zentao": {"status": "pending", "notified": False},
     "gitlab": {"status": "pending", "notified": False},
     "nas": {"status": "pending", "notified": False},
+    "svn": {"status": "pending", "notified": False},
+    "wecom": {"status": "pending", "notified": False},
     # "notified" flag: set to True after frontend has consumed the notification.
     # Reset to False at the start of each new sync.
 }
@@ -386,14 +388,48 @@ class SyncService:
                 svn_summary = {"status": "skipped", "summary": "未配置SVN地址"}
                 _auto_sync_notify["svn"] = svn_summary
 
+            # ── Source 5: WeCom (企业微信打卡数据) ──
+            wecom_summary = {}
+            wecom_enabled = os.environ.get("WECOM_ENABLED", "true").lower() in ("1", "true", "yes")
+            if settings.WECOM_CORP_ID and settings.WECOM_SECRET and wecom_enabled:
+                try:
+                    _sync_progress["phase"] = "企业微信打卡数据"
+                    from backend.services import wecom_service as _wecom_svc
+                    t0 = time.time()
+                    wc_result = asyncio.run(_wecom_svc.sync_wecom_data(db))
+                    timings["wecom"] = round(time.time() - t0, 1)
+                    wecom_summary = {
+                        "status": "success",
+                        "summary": f"打卡{wc_result.get('fetched',0)}条 / 新增{wc_result.get('created',0)} / 更新{wc_result.get('updated',0)}",
+                    }
+                    logger.info(f"[企业微信] 同步完成: {wecom_summary['summary']}")
+                    wc_log = SyncLog(started_at=datetime.now(timezone.utc), finished_at=datetime.now(timezone.utc),
+                                     entity_type="wecom_checkins", status="success",
+                                     items_fetched=wc_result.get("fetched", 0),
+                                     items_created=wc_result.get("created", 0),
+                                     items_updated=wc_result.get("updated", 0))
+                    db.add(wc_log); db.commit()
+                    _auto_sync_notify["wecom"] = wecom_summary
+                except Exception as e:
+                    logger.error(f"[企业微信] 同步失败: {e}")
+                    wecom_summary = {"status": "failed", "summary": str(e)[:100]}
+                    wc_log = SyncLog(started_at=datetime.now(timezone.utc), finished_at=datetime.now(timezone.utc),
+                                     entity_type="wecom_checkins", status="failed", error_message=str(e)[:200])
+                    db.add(wc_log); db.commit()
+                    _auto_sync_notify["wecom"] = wecom_summary
+            else:
+                wecom_summary = {"status": "skipped", "summary": "未配置企业微信"}
+                _auto_sync_notify["wecom"] = wecom_summary
+
             timings["total"] = round(time.time() - t_start, 1)
 
-            logger.info(f"Sync completed in {timings['total']}s | 禅道:{zentao_summary.get('status','?')} GitLab:{gitlab_summary.get('status','?')} NAS:{nas_summary.get('status','?')} SVN:{svn_summary.get('status','?')}")
+            logger.info(f"Sync completed in {timings['total']}s | 禅道:{zentao_summary.get('status','?')} GitLab:{gitlab_summary.get('status','?')} NAS:{nas_summary.get('status','?')} SVN:{svn_summary.get('status','?')} WeCom:{wecom_summary.get('status','?')}")
             results["timings"] = timings
             results["zentao_summary"] = zentao_summary
             results["gitlab_summary"] = gitlab_summary
             results["nas_summary"] = nas_summary
             results["svn_summary"] = svn_summary
+            results["wecom_summary"] = wecom_summary
 
             # Post-sync: check stage name mismatches
             mismatch = _check_stage_mismatches(db)

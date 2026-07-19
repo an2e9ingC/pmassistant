@@ -786,6 +786,9 @@ input[type="checkbox"] { accent-color: var(--accent); }
 #uc-right-panel #uc-calendar {
   flex-shrink: 0;
 }
+#uc-right-panel #uc-wecom-calendar {
+  flex-shrink: 0; margin-top: 18px;
+}
 #uc-right-panel #uc-right-stats {
   flex-shrink: 0; margin-top: 18px;
 }
