@@ -60,16 +60,53 @@ async def trigger_single_sync(source: str, db: Session = Depends(get_db), _=Depe
         from backend.config import settings
         if not settings.GITLAB_TOKEN:
             return {"code": 0, "data": {"gitlab_summary": {"status": "skipped", "summary": "未配置Token"}}, "message": "ok"}
-        from backend.services.gitlab_service import validate_all_releases
+        from backend.services.doc_scanner import check_product_docs
+        from backend.models.zentao import PmaProduct
+        from backend.services.sync_service import _log_sync, _finish_log
+        import logging as _logging
+        _logger = _logging.getLogger(__name__)
         t0 = _time.time()
-        vresult = await validate_all_releases(db, concurrency=5)
-        elapsed = round(_time.time() - t0, 1)
-        return {"code": 0, "data": {
-            "gitlab_summary": {"status": "success",
-                                "summary": f"发布版本校验完成 / 有效{vresult.get('valid',0)} / 无效{vresult.get('invalid',0)}"},
-            "gitlab_validation": vresult,
-            "timings": {"total": elapsed},
-        }, "message": "ok"}
+        gitlab_sync_log = _log_sync(db, "gitlab")
+        try:
+            products = db.query(PmaProduct).all()
+            total_scanned, total_matched, total_submitted, total_reverted = 0, 0, 0, 0
+            prod_results = {}
+            for prod in products:
+                r = await check_product_docs(db, prod.id)
+                total_scanned += r.get("scanned", 0)
+                total_matched += r.get("total_matched", 0)
+                total_submitted += r.get("auto_submitted", 0)
+                total_reverted += r.get("reverted", 0)
+                prod_results[prod.id] = r
+            elapsed = round(_time.time() - t0, 1)
+            summary_parts = [f"扫描{total_scanned}个", f"匹配{total_matched}个"]
+            if total_submitted: summary_parts.append(f"新提交{total_submitted}个")
+            if total_reverted: summary_parts.append(f"回退{total_reverted}个")
+            summary = " / ".join(summary_parts)
+            _logger.info(f"[GitLab] 文档扫描完成: {summary}（{len(products)}个产品，耗时{elapsed}s）")
+            # Per-product detail
+            for prod in products:
+                r = prod_results.get(prod.id, {})
+                if not r.get("scanned"): continue
+                results_list = r.get("results", [])
+                gl_docs = [d for d in results_list if d.get("doc_type") == "gitlab"]
+                gl_found = [d for d in gl_docs if d.get("found")]
+                gl_miss = [d for d in gl_docs if not d.get("found")]
+                gl_total = len(gl_docs)
+                if gl_total:
+                    _logger.info(f"  [GitLab] 产品 {prod.name}(#{prod.id}): "
+                        f"GitLab文档{gl_total}个 | 匹配{len(gl_found)}个 | 未匹配{len(gl_miss)}个")
+            _finish_log(db, gitlab_sync_log, "success", total_scanned, total_matched, total_submitted)
+            return {"code": 0, "data": {
+                "gitlab_summary": {"status": "success", "summary": summary,
+                                   "scanned": total_scanned, "matched": total_matched,
+                                   "submitted": total_submitted, "reverted": total_reverted},
+                "timings": {"total": elapsed},
+            }, "message": "ok"}
+        except Exception as e:
+            _logger.error(f"[GitLab] 文档扫描失败: {e}")
+            _finish_log(db, gitlab_sync_log, "failed", 0, 0, 0)
+            raise
 
     if source in ("zentao", "nas"):
         return {"code": 0, "data": {
@@ -227,44 +264,36 @@ def sync_sources(db: Session = Depends(get_db), _=Depends(get_current_user)):
         "detail": zentao_detail,
     })
 
-    # GitLab — configured if token is set; check latest release sync + validation
+    # GitLab — configured if token is set; show product doc scan results
     gitlab_configured = bool(settings.GITLAB_TOKEN)
-    release_log = (
+    gitlab_log = (
         db.query(SyncLog)
-        .filter(SyncLog.entity_type == "releases")
+        .filter(SyncLog.entity_type == "gitlab")
         .order_by(SyncLog.started_at.desc())
         .first()
     )
     gitlab_sync_status = "pending"
     gitlab_last_sync = None
-    if release_log:
-        gitlab_sync_status = release_log.status if release_log.status != "running" else "ok"
-        gitlab_last_sync = to_local_str(release_log.finished_at) if release_log.finished_at else None
+    if gitlab_log:
+        gitlab_sync_status = gitlab_log.status if gitlab_log.status != "running" else "ok"
+        gitlab_last_sync = to_local_str(gitlab_log.finished_at) if gitlab_log.finished_at else None
 
-    # Count invalid GitLab URLs for detail
-    from backend.models.zentao import CachedRelease
-    total_releases = db.query(CachedRelease).count()
-    invalid_count = db.query(CachedRelease).filter(
-        CachedRelease.gitlab_url.isnot(None),
-        CachedRelease.gitlab_url != "",
-        CachedRelease.gitlab_url_valid == False,
-    ).count()
-    unchecked_count = db.query(CachedRelease).filter(
-        CachedRelease.gitlab_url.isnot(None),
-        CachedRelease.gitlab_url != "",
-        CachedRelease.gitlab_url_valid.is_(None),
-    ).count()
-
+    # Show product doc scan summary
     gitlab_detail = "未配置Token"
     if gitlab_configured:
-        parts = [f"发布版本{total_releases}个"]
-        if invalid_count > 0:
-            parts.append(f"链接无效{invalid_count}个")
-        if unchecked_count > 0:
-            parts.append(f"待校验{unchecked_count}个")
-        valid_count = total_releases - invalid_count - unchecked_count
-        parts.append(f"有效{max(0, valid_count)}个")
-        gitlab_detail = " / ".join(parts)
+        if gitlab_log and gitlab_log.items_fetched is not None:
+            parts = [f"扫描{gitlab_log.items_fetched}个"]
+            if gitlab_log.items_created:
+                parts.append(f"匹配{gitlab_log.items_created}个")
+            if gitlab_log.items_updated:
+                parts.append(f"新提交{gitlab_log.items_updated}个")
+            gitlab_detail = " / ".join(parts)
+        else:
+            from backend.models.document import ProductDocument
+            gitlab_doc_count = db.query(ProductDocument).filter(
+                ProductDocument.doc_type == "gitlab"
+            ).count()
+            gitlab_detail = f"已配置，{gitlab_doc_count}个GitLab文档待扫描"
 
     sources.append({
         "key": "gitlab",
@@ -272,7 +301,7 @@ def sync_sources(db: Session = Depends(get_db), _=Depends(get_current_user)):
         "configured": gitlab_configured,
         "sync_status": gitlab_sync_status,
         "last_sync": gitlab_last_sync,
-        "description": "代码仓库（发布版本校验）" if gitlab_configured else "代码仓库（未配置Token）",
+        "description": "代码仓库（产品文档GitLab扫描）" if gitlab_configured else "代码仓库（未配置Token）",
         "detail": gitlab_detail,
     })
 

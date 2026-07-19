@@ -664,6 +664,7 @@ async function triggerSingleSync(key) {
     } else {
       summary = '已触发（请使用完整同步）';
     }
+    _srcSyncMsg[key] = summary;
     showToast(name + ' 同步完成: ' + summary, 'success');
     updateLinkStatus();
   } catch(e) {

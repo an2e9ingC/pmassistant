@@ -269,37 +269,63 @@ class SyncService:
                     zentao_summary = {"status": "failed", "summary": str(e)[:100]}
                 _auto_sync_notify["zentao"] = zentao_summary
 
-            # ── Source 2: GitLab (releases sync + URL validation) ──
+            # ── Source 2: GitLab (product document scanning) ──
             gitlab_summary = {}
             if settings.GITLAB_TOKEN:
-                # Release sync from Zentao (data source for GitLab URL validation)
-                if os.environ.get("ZENTAO_SYNC_RELEASES", "true").lower() in ("1", "true", "yes"):
-                    t_rel = time.time()
-                    results["releases"] = await self._sync_releases(db)
-                    timings["releases"] = round(time.time() - t_rel, 1)
-                    logger.info(f"[禅道→发布版本] 同步完成: {results.get('releases', {})}")
-                else:
-                    results["releases"] = {"fetched": 0, "created": 0, "updated": 0, "deleted": 0}
-                    logger.info("[禅道→发布版本] 同步已关闭（数据源配置中禁用）")
                 try:
-                    _sync_progress["phase"] = "GitLab校验"
-                    from backend.services.gitlab_service import validate_all_releases
+                    _sync_progress["phase"] = "GitLab文档扫描"
                     t0 = time.time()
-                    vresult = await validate_all_releases(db, concurrency=5)
-                    results["gitlab_validation"] = vresult
-                    timings["gitlab_validation"] = round(time.time() - t0, 1)
-                    logger.info(f"[GitLab→URL校验] 完成: {vresult}")
-
-                    r = results["releases"]
+                    from backend.services.doc_scanner import check_product_docs
+                    from backend.models.zentao import PmaProduct
+                    products = db.query(PmaProduct).all()
+                    total_scanned, total_matched, total_submitted, total_reverted = 0, 0, 0, 0
+                    prod_results = {}
+                    for prod in products:
+                        try:
+                            r = await check_product_docs(db, prod.id)
+                            total_scanned += r.get("scanned", 0)
+                            total_matched += r.get("total_matched", 0)
+                            total_submitted += r.get("auto_submitted", 0)
+                            total_reverted += r.get("reverted", 0)
+                            prod_results[prod.id] = r
+                        except Exception as e:
+                            logger.warning(f"[GitLab] Product {prod.id} scan failed: {e}")
+                    timings["gitlab"] = round(time.time() - t0, 1)
+                    summary = f"扫描{total_scanned}个 / 匹配{total_matched}个"
+                    if total_submitted: summary += f" / 新提交{total_submitted}个"
+                    logger.info(f"[GitLab] 文档扫描完成: {summary}（{len(products)}个产品，耗时{timings['gitlab']}s）")
+                    # Per-product detail
+                    for prod in products:
+                        r = prod_results.get(prod.id, {})
+                        if not r.get("scanned"): continue
+                        results_list = r.get("results", [])
+                        gl_docs = [d for d in results_list if d.get("doc_type") == "gitlab"]
+                        gl_found = [d for d in gl_docs if d.get("found")]
+                        gl_miss = [d for d in gl_docs if not d.get("found")]
+                        gl_total = len(gl_docs)
+                        if gl_total:
+                            logger.info(f"  [GitLab] 产品 {prod.name}(#{prod.id}): "
+                                f"GitLab文档{gl_total}个 | 匹配{len(gl_found)}个 | 未匹配{len(gl_miss)}个")
                     gitlab_summary = {
                         "status": "success",
-                        "summary": f"发布版本{r.get('fetched',0)}个 / 有效{vresult.get('valid',0)} / 无效{vresult.get('invalid',0)}",
+                        "summary": summary,
+                        "scanned": total_scanned, "matched": total_matched,
+                        "submitted": total_submitted, "reverted": total_reverted,
                     }
                     _auto_sync_notify["gitlab"] = gitlab_summary
+                    # Write SyncLog
+                    gl_log = SyncLog(started_at=datetime.now(timezone.utc), finished_at=datetime.now(timezone.utc),
+                                     entity_type="gitlab", status="success",
+                                     items_fetched=total_scanned, items_created=total_matched,
+                                     items_updated=total_submitted)
+                    db.add(gl_log); db.commit()
                 except Exception as e:
-                    logger.error(f"[GitLab] 同步或校验失败: {e}")
+                    logger.error(f"[GitLab] 文档扫描失败: {e}")
                     gitlab_summary = {"status": "failed", "summary": str(e)[:100]}
                     _auto_sync_notify["gitlab"] = gitlab_summary
+                    gl_log = SyncLog(started_at=datetime.now(timezone.utc), finished_at=datetime.now(timezone.utc),
+                                     entity_type="gitlab", status="failed", error_message=str(e)[:200])
+                    db.add(gl_log); db.commit()
             else:
                 logger.warning("[GitLab] 未配置Token，跳过")
                 gitlab_summary = {"status": "skipped", "summary": "未配置Token"}
