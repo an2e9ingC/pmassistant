@@ -273,7 +273,7 @@ function sectionHeader(title, count, btnLabel, onclick, id) {
   var idAttr = id ? ' id="' + id + '"' : '';
   return '<div class="section-hd"' + idAttr + '>' +
     '<div class="section-title">' + title + (typeof count === 'number' ? ' (' + count + ')' : '') + '</div>' +
-    '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="' + onclick + '">' + btnLabel + '</button>' +
+    (btnLabel ? '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="' + onclick + '">' + btnLabel + '</button>' : '') +
   '</div>';
 }
 

@@ -544,7 +544,7 @@ function renderProdInfo(p) {
         var fetchUrl = '/api/documents/fetch?url=' + encodeURIComponent(blockDoc.location) + '&token=' + encodeURIComponent(token);
         el.innerHTML = '<iframe src="' + fetchUrl + '" style="width:100%;min-height:500px;border:none"></iframe>';
       } else {
-        el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">未找到设计框图，请先在文档模板中配置并提交</div>';
+        el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">未找到设计框图，请按要求提交</div>';
       }
     }
   }).catch(function() {
