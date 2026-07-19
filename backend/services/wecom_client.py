@@ -83,6 +83,23 @@ class WeComClient:
         data = await self._post("checkin/getcheckindata", body)
         return data.get("checkindata", [])
 
+    async def get_user_list(self, department_id: int = 1) -> list:
+        """Fetch all users in a department (recursive).
+
+        GET /cgi-bin/user/list?access_token=TOKEN&department_id=ID&fetch_child=1
+        Returns list of {userid, name, department, ...}.
+        """
+        token = await self._ensure_token()
+        client = await self._get_client()
+        url = f"{self.BASE_URL}/user/list"
+        params = {"access_token": token, "department_id": str(department_id), "fetch_child": "1"}
+        resp = await client.get(url, params=params)
+        resp.raise_for_status()
+        body = resp.json()
+        if body.get("errcode") != 0:
+            raise RuntimeError(f"WeCom user list error [{body.get('errcode')}]: {body.get('errmsg', 'unknown')}")
+        return body.get("userlist", [])
+
     async def get_approval_data(
         self, start_time: int, end_time: int
     ) -> list:

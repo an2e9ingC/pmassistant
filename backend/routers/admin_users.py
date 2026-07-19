@@ -30,6 +30,7 @@ class UserUpdate(BaseModel):
     password: str = None
     is_active: bool = None
     permissions: str = None
+    wecom_userid: str = None
 
 
 class PasswordReset(BaseModel):
@@ -260,6 +261,9 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
     if payload.permissions is not None:
         user.permissions = payload.permissions
         changes.append(f"permissions={payload.permissions}")
+    if payload.wecom_userid is not None:
+        user.wecom_userid = payload.wecom_userid if payload.wecom_userid != "" else None
+        changes.append(f"wecom_userid={payload.wecom_userid}")
     db.commit()
     if changes:
         log_audit(db, cu, "user_update", f"用户 {user.username}: {'; '.join(changes)}", AUDIT_CAT_USER, "medium")

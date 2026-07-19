@@ -835,6 +835,16 @@ function openUserEditDialog(id) {
         '<button class="note-dialog-close" onclick="closeUserDialog()">&times;</button></div>' +
       '<div class="user-form">' +
         '<div class="user-form-field"><label>角色组（可多选）</label><div id="ue-role-cbs">' + _roleCheckboxes(u.role_ids || []) + '</div></div>' +
+        '<div class="user-form-field"><label>企业微信账号</label>' +
+          (typeof createSearchCombo === 'function'
+            ? createSearchCombo({ comboId: 'ue-wecom-combo-' + id, inputId: 'ue-wecom-inp-' + id, dropdownId: 'ue-wecom-dd-' + id,
+                placeholder: '搜索企业微信用户...',
+                dataSource: function() { return API.get('/wecom/users').then(function(d) { return (d || []).map(function(u, i) { return { id: i, code: u.userid, name: u.name + ' (' + u.userid + ')' }; }); }); },
+                onSelect: function(p) { window.__ue_wecom_selected = p; },
+                selectedIdFn: function() { return window.__ue_wecom_selected ? window.__ue_wecom_selected.id : -1; }
+              })
+            : '<input class="config-input" id="ue-wecom-inp-' + id + '" value="' + escHtml(u.wecom_userid || '') + '" placeholder="留空则不关联企业微信">') +
+        '</div>' +
         passwordField +
       '</div>' +
       '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:14px">' +
@@ -844,6 +854,13 @@ function openUserEditDialog(id) {
     '</div></div>';
   document.body.insertAdjacentHTML('beforeend', html);
 }
+  if (u.wecom_userid) {
+    var wcInp = document.getElementById('ue-wecom-inp-' + id);
+    if (wcInp) { wcInp.value = u.wecom_userid; }
+    window.__ue_wecom_selected = { id: -1, code: u.wecom_userid, name: u.wecom_userid };
+  } else {
+    window.__ue_wecom_selected = null;
+  }
 
 async function submitUserEdit(id) {
   var roleIds = [];
@@ -854,6 +871,13 @@ async function submitUserEdit(id) {
   var msg = document.getElementById('ue-msg');
   var payload = { role: role ? role.key : 'viewer' };
   if (password) payload.password = password;
+  var wecomEl = document.getElementById('ue-wecom-inp-' + id);
+  if (wecomEl) {
+    var wv = wecomEl.value.trim();
+    var sel = window.__ue_wecom_selected;
+    payload.wecom_userid = (sel && sel.code) ? sel.code : (wv || '');
+    window.__ue_wecom_selected = null;
+  }
   try {
     msg.innerHTML = '<span style="color:var(--muted)">保存中...</span>';
     await API.put('/admin/users/' + id, payload);
