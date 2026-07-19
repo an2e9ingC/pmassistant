@@ -810,7 +810,7 @@ function _setupComboFunctions(opts) {
     if (wrap) wrap.classList.remove('open');
     var p = _allProjects.find(function(x) { return x.id == id; });
     if (p) {
-      document.getElementById(inputId).value = p.name;
+      document.getElementById(inputId).value = (p.code ? p.code + ' ' : '') + p.name;
       if (onSelect) onSelect(p);
     }
   };
@@ -875,6 +875,84 @@ function createProductCombo(opts) {
   opts.dataSource = function() { return API.get('/products?limit=200'); };
   opts.placeholder = opts.placeholder || '搜索产品...';
   return createSearchCombo(opts);
+}
+
+function createTaskCombo(opts) {
+  // opts.projectIdFn: function returning current project ID (or null)
+  // opts.onSelect: called with selected task object
+  var comboId = opts.comboId, inputId = opts.inputId, dropdownId = opts.dropdownId;
+  var pidFn = opts.projectIdFn || function() { return null; };
+  var onSelect = opts.onSelect;
+  var loadFn = _fnName(comboId, 'Load');
+  var openFn = _fnName(comboId, 'Open');
+  var filterFn = _fnName(comboId, 'Filter');
+  var selectFn = _fnName(comboId, 'Select');
+  var enterFn = _fnName(comboId, 'Enter');
+
+  window[loadFn] = async function() {
+    var pid = pidFn();
+    if (!pid) { window['_combo_'+comboId] = []; return []; }
+    try {
+      var data = await API.get('/tasks?project_id=' + pid + '&limit=100');
+      var items = (data && data.items) ? data.items : (data || []);
+      window['_combo_'+comboId] = items;
+      return items;
+    } catch(e) { window['_combo_'+comboId] = []; return []; }
+  };
+
+  window[openFn] = function() {
+    window[loadFn]().then(function(items) {
+      var wrap = document.getElementById(comboId); if (!wrap) return;
+      wrap.classList.add('open');
+      var inp = document.getElementById(inputId); if (inp) inp.select();
+      _renderTaskDropdown(dropdownId, items, '', selectFn);
+    });
+  };
+
+  window[filterFn] = function(q) {
+    var items = window['_combo_'+comboId] || [];
+    _renderTaskDropdown(dropdownId, items, q, selectFn);
+  };
+
+  window[selectFn] = function(id) {
+    var wrap = document.getElementById(comboId); if (wrap) wrap.classList.remove('open');
+    var items = window['_combo_'+comboId] || [];
+    var t = items.find(function(x) { return x.id == id; });
+    if (t) {
+      document.getElementById(inputId).value = t.name || t.title || '';
+      if (onSelect) onSelect(t);
+    }
+  };
+
+  window[enterFn] = function(e) {
+    if (e.key !== 'Enter') return;
+    var dd = document.getElementById(dropdownId);
+    if (!dd) return;
+    var first = dd.querySelector('.combo-opt');
+    if (first) first.click();
+  };
+
+  return '<div class="proj-combo" id="' + comboId + '" style="min-width:0!important">' +
+    '<input class="proj-combo-input" id="' + inputId + '" type="text" autocomplete="off" placeholder="' + escHtml(opts.placeholder || '先选择项目后搜索任务...') + '" ' +
+      'onclick="' + openFn + '()" oninput="' + filterFn + '(this.value)" onkeydown="' + enterFn + '(event)">' +
+    '<svg class="proj-combo-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2,5 7,10 12,5"/></svg>' +
+    '<div class="proj-combo-dropdown" id="' + dropdownId + '"></div>' +
+  '</div>';
+}
+
+function _renderTaskDropdown(dropdownId, items, q, selectFnName) {
+  var dd = document.getElementById(dropdownId);
+  if (!dd) return;
+  var v = (q || '').trim().toLowerCase();
+  var list = v ? items.filter(function(t) {
+    return (t.name || t.title || '').toLowerCase().indexOf(v) >= 0;
+  }) : items;
+  if (!list.length) { dd.innerHTML = '<div class="combo-no-match">未找到匹配任务</div>'; return; }
+  dd.innerHTML = list.map(function(t) {
+    return '<div class="combo-opt" onmousedown="event.preventDefault()" onclick="' + selectFnName + '(' + t.id + ')">' +
+      '<div class="combo-opt-name">' + escHtml(t.name || t.title || '?') + '</div>' +
+    '</div>';
+  }).join('');
 }
 
 function createProjectCombo(opts) {
@@ -1244,7 +1322,8 @@ function openDayDetail(dateStr, totalHours) {
     }
     openDialog(dateStr+' 工时详情 ('+totalHours.toFixed(1)+'h)',
       '<div style="max-height:400px;overflow-y:auto">'+(tasksHtml||'<div style="color:var(--muted)">当日无工时记录</div>')+'</div>',
-      [{text:'关闭',onclick:"document.querySelector('.note-dialog-overlay').remove()"}]);
+      [{text:'记录工时',cls:'btn-primary',onclick:'openWorklogFromCalendar(\''+dateStr+'\')'},
+       {text:'关闭',onclick:"document.querySelector('.note-dialog-overlay').remove()"}]);
   }).catch(function(e) {
     showToast('加载详情失败: '+(e.message||'未知错误'), 'error');
   });
@@ -1324,3 +1403,60 @@ function initImagePaste(textarea, bugId, onUrlInserted) {
   });
 }
 
+
+/* ── Generic Worklog Dialog (used by calendar + task views) ── */
+
+function openWorklogFromCalendar(dateStr) {
+  var html = '<div>' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">项目</label>' +
+      createProjectCombo({comboId: 'wl-proj', inputId: 'wl-proj-input', dropdownId: 'wl-proj-dd', placeholder: '搜索项目...',
+        onSelect: function(p) { document.getElementById('wl-project-id').value = p.id; document.getElementById('wl-project-code').value = p.code || ''; }}) + '</div>' +
+    '<input type="hidden" id="wl-project-id" value="">' +
+    '<input type="hidden" id="wl-project-code" value="">' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">任务</label>' +
+      createTaskCombo({comboId: 'wl-task', inputId: 'wl-task-input', dropdownId: 'wl-task-dd',
+        projectIdFn: function() { return document.getElementById('wl-project-code').value; },
+        onSelect: function(t) {
+          document.getElementById('wl-task-id').value = t.id;
+          document.getElementById('wl-progress').value = t.progress || 0;
+        }}) + '</div>' +
+    '<input type="hidden" id="wl-task-id" value="">' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">日期 *</label>' +
+      '<input class="search-inp" id="wl-date" type="date" required value="'+dateStr+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工时(h) *</label>' +
+      '<input class="search-inp" id="wl-hours" type="number" step="0.5" min="0.5" required value="1" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">进度(%) *</label>' +
+      '<input class="search-inp" id="wl-progress" type="number" min="0" max="100" step="5" required value="0" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工作描述 *</label>' +
+      '<textarea class="search-inp" id="wl-desc" rows="2" required style="width:100%;box-sizing:border-box;margin-top:2px;resize:vertical"></textarea></div>' +
+    '</div>';
+  openDialog('记录工时 — ' + dateStr, html, [
+    {text:'取消',onclick:'closeSharedDialog()'},
+    {text:'提交',cls:'btn-primary',onclick:'submitGenericWorklog()'}
+  ], {maxWidth:480});
+}
+
+async function submitGenericWorklog() {
+  var tid = parseInt(document.getElementById('wl-task-id').value) || 0;
+  var hours = parseFloat(document.getElementById('wl-hours').value);
+  var progress = parseInt(document.getElementById('wl-progress').value);
+  var desc = document.getElementById('wl-desc').value.trim();
+  var date = document.getElementById('wl-date').value;
+  if (!tid) { showToast('请选择任务', 'error'); return; }
+  if (!date) { showToast('请选择日期', 'error'); return; }
+  if (!hours || hours <= 0) { showToast('请输入有效的工时数', 'error'); return; }
+  if (isNaN(progress) || progress < 0 || progress > 100) { showToast('请输入有效的进度(0-100)', 'error'); return; }
+  if (!desc) { showToast('请填写工作描述', 'error'); return; }
+  try {
+    await API.post('/worklogs', {task_id:tid, hours:hours, date:date, description:desc});
+    await API.put('/tasks/'+tid, {progress:progress});
+    closeSharedDialog();
+    showToast('工时记录成功', 'success');
+    if (typeof _ucLoadCalendar === 'function') {
+      var user = getCurrentUser();
+      if (user) _ucLoadCalendar(user);
+    }
+  } catch(e) {
+    showToast('提交失败: ' + (e.message || ''), 'error');
+  }
+}

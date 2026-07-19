@@ -553,21 +553,40 @@ function showAddTemplateForm() {
       '</div>' +
     '</div>' +
     '<div style="margin-bottom:10px">' +
-      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">路径 <span style="color:var(--danger)">*必填</span></label>' +
-      '<input class="search-inp" id="dt-path" placeholder="选择类型后自动提示" style="width:100%;box-sizing:border-box">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">路径 <span style="color:var(--danger)">*必填</span> &nbsp;<span style="font-weight:400;font-size:10px">{code} = 项目代号占位符</span></label>' +
+      '<input class="search-inp" id="dt-base-path" placeholder="http://.../项目/{code}/" style="width:100%;box-sizing:border-box;margin-bottom:6px" oninput="_updateProjPathPreview()">' +
+    '</div>' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名 <span style="color:var(--danger)">*必填</span> &nbsp;<span style="font-weight:400;font-size:10px">{code} = 项目代号占位符</span></label>' +
+      '<input class="search-inp" id="dt-file-pattern" placeholder="01_{code}_SCH-FINAL.rar" style="width:100%;box-sizing:border-box" oninput="_updateProjPathPreview()">' +
+    '</div>' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">最终路径预览 &nbsp;<span style="font-weight:400;font-size:10px">* 替换为项目代号</span></label>' +
+      '<input class="search-inp" id="dt-path-preview" value="" style="width:100%;box-sizing:border-box;color:var(--accent);font-size:11px;font-family:var(--mono)" disabled>' +
     '</div>' +
     '<div style="margin-bottom:4px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">说明（可选）</label>' +
       '<input class="search-inp" id="dt-desc" style="width:100%;box-sizing:border-box">' +
     '</div>',
     [{text: '取消', cls: '', onclick: 'closeSharedDialog()'},
-     {text: '确定', cls: 'btn-primary', onclick: 'saveTemplate()'}], {hideClose: true}, 'gitlab');
+     {text: '确定', cls: 'btn-primary', onclick: 'saveTemplate()'}], {hideClose: true, maxWidth: 780}, 'gitlab');
+  setTimeout(_updateProjPathPreview, 80);
 }
 
 function showEditTemplateForm(id) {
   var docs = _templatesGrouped[_selectedStage] || [];
   var d = docs.find(function(x) { return x.id === id; });
   if (!d) { showToast('未找到该模板数据，请刷新页面', 'error'); return; }
+  // Fallback: if base_path/file_pattern empty but doc_path exists, parse doc_path
+  var bp = d.base_path || '';
+  var fp = d.file_pattern || '';
+  if (!bp && !fp && d.doc_path) {
+    var lastSlash = d.doc_path.lastIndexOf('/');
+    if (lastSlash > 0) {
+      bp = d.doc_path.substring(0, lastSlash + 1);
+      fp = d.doc_path.substring(lastSlash + 1);
+    }
+  }
   _openDocDialog('编辑文档模板',
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名称</label>' +
@@ -587,11 +606,11 @@ function showEditTemplateForm(id) {
     '</div>' +
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">路径 <span style="color:var(--danger)">*必填</span> &nbsp;<span style="font-weight:400;font-size:10px">{code} = 项目代号占位符</span></label>' +
-      '<input class="search-inp" id="dt-base-path" value="' + escHtml(d.base_path || '') + '" placeholder="http://.../项目/{code}/" style="width:100%;box-sizing:border-box;margin-bottom:6px" oninput="_updateProjPathPreview()">' +
+      '<input class="search-inp" id="dt-base-path" value="' + escHtml(bp) + '" placeholder="http://.../项目/{code}/" style="width:100%;box-sizing:border-box;margin-bottom:6px" oninput="_updateProjPathPreview()">' +
     '</div>' +
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名 <span style="color:var(--danger)">*必填</span> &nbsp;<span style="font-weight:400;font-size:10px">{code} = 项目代号占位符</span></label>' +
-      '<input class="search-inp" id="dt-file-pattern" value="' + escHtml(d.file_pattern || '') + '" placeholder="01_{code}_SCH-FINAL.rar" style="width:100%;box-sizing:border-box" oninput="_updateProjPathPreview()">' +
+      '<input class="search-inp" id="dt-file-pattern" value="' + escHtml(fp) + '" placeholder="01_{code}_SCH-FINAL.rar" style="width:100%;box-sizing:border-box" oninput="_updateProjPathPreview()">' +
     '</div>' +
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">最终路径预览 &nbsp;<span style="font-weight:400;font-size:10px">* 替换为项目代号</span></label>' +
