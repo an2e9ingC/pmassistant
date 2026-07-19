@@ -17,6 +17,7 @@ class UserInfo(BaseModel):
     gitlab_user_id: Optional[int] = None
     gitlab_token_valid: bool = False  # OAuth token present and usable
     seen_version: Optional[str] = None  # last seen changelog version
+    wecom_userid: Optional[str] = None   # 企业微信关联账号
 
     model_config = {"from_attributes": True}
 

@@ -739,6 +739,10 @@ input[type="checkbox"] { accent-color: var(--accent); }
   padding: 4px 10px; border-radius: 7px; background: var(--bg);
 }
 .profile-week-hours strong { color: var(--success); font-family: var(--mono); }
+.profile-wecom-tag {
+  font-size: 11px; color: var(--success); white-space: nowrap;
+  padding: 2px 8px; border-radius: 4px; background: var(--success-lt);
+}
 
 /* Week/Month hours intensity bar — ratio vs standard working hours */
 .uc-week-bar {

@@ -100,6 +100,30 @@ class WeComClient:
             raise RuntimeError(f"WeCom user list error [{body.get('errcode')}]: {body.get('errmsg', 'unknown')}")
         return body.get("userlist", [])
 
+    async def get_work_schedule(self, year: int, month: int) -> dict:
+        """Get company work schedule for a given year/month.
+
+        Uses checkin schedule API to determine working days and hours.
+        Returns {work_days: int, work_hours: float} or empty dict if unavailable.
+        """
+        try:
+            # WeCom checkin schedule API (admin-only, may fail for non-admin apps)
+            body = {
+                "datetime": int(_time.time()),
+            }
+            data = await self._post("checkin/getcheckinschedulelist", body)
+            schedules = data.get("schedule_list", [])
+            # Find schedule for this year/month
+            target_ym = f"{year}{month:02d}"
+            for s in schedules:
+                if str(s.get("schedule_id", "")).startswith(target_ym):
+                    work_days = int(s.get("work_days", 0)) if s.get("work_days") else 0
+                    work_hours_per_day = float(s.get("work_hours_per_day", 8.0))
+                    return {"work_days": work_days, "work_hours": work_days * work_hours_per_day}
+            return {}
+        except Exception:
+            return {}
+
     async def get_approval_data(
         self, start_time: int, end_time: int
     ) -> list:
