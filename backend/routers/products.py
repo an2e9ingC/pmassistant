@@ -400,14 +400,14 @@ def update_product_document(
 
 
 @router.post("/{identifier}/docs/check", response_model=dict)
-def check_product_documents(identifier: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
+async def check_product_documents(identifier: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
     product = resolve_product(db, identifier)
     """Auto-scan product document paths and mark as submitted if files exist."""
     from backend.services.doc_scanner import check_product_docs
     import traceback, logging
     logger = logging.getLogger(__name__)
     try:
-        result = check_product_docs(db, product.id)
+        result = await check_product_docs(db, product.id)
         return {"code": 0, "data": result, "message": "ok"}
     except Exception as e:
         logger.error(f"Doc scan failed for product {product.id}: {e}\n{traceback.format_exc()}")

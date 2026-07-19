@@ -54,6 +54,41 @@ def parse_gitlab_release_url(url: str) -> Optional[tuple[str, str, str]]:
     return (base_host, project_path, tag_name)
 
 
+def parse_gitlab_release_pattern(url: str) -> Optional[tuple[str, str, str]]:
+    """Parse a GitLab release URL pattern into (base_url, project_path, tag_pattern).
+
+    Unlike parse_gitlab_release_url which requires a concrete tag name,
+    this accepts glob/regex patterns in the tag portion.
+
+    Example: 'http://192.168.0.128/bsp_dev/mcu/apm32f407/-/releases/LNS677A-V010_V\\d{4}\\.\\d{2}\\.\\d{2}$'
+      -> ('http://192.168.0.128', 'bsp_dev/mcu/apm32f407', 'LNS677A-V010_V\\d{4}\\.\\d{2}\\.\\d{2}$')
+
+    Returns (base_url, project_path, tag_pattern) or None if parsing fails.
+    """
+    if not url:
+        return None
+
+    url = url.strip().rstrip("/")
+
+    # Match: <base>/-/releases/<tag_pattern>  or  <base>/-/tags/<tag_pattern>
+    # The tag_pattern may contain glob (*, ?), regex (\d, \w, etc.), or be literal text
+    pattern = r"^(https?://[^/]+)/(.+?)/-/(releases|tags)/(.+)$"
+    m = re.match(pattern, url)
+    if not m:
+        logger.debug(f"Failed to parse GitLab release pattern URL: {url!r}")
+        return None
+
+    base_url = m.group(1)       # e.g. http://192.168.0.128
+    project_path = m.group(2)   # e.g. bsp_dev/mcu/apm32f407
+    tag_pattern = m.group(4)    # e.g. LNS677A-V010_V\d{4}\.\d{2}\.\d{2}$
+
+    # Basic validation: tag_pattern should not be too long
+    if len(tag_pattern) > 512:
+        return None
+
+    return (base_url, project_path, tag_pattern)
+
+
 async def validate_release_url(url: str) -> dict:
     """Validate a single GitLab release URL.
 

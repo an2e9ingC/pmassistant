@@ -335,7 +335,7 @@ class SyncService:
                     prod_results = {}
                     for prod in products:
                         try:
-                            r = check_product_docs(db, prod.id)
+                            r = await check_product_docs(db, prod.id)
                             total_scanned += r.get("scanned", 0)
                             total_submitted += r.get("auto_submitted", 0)
                             total_reverted += r.get("reverted", 0)

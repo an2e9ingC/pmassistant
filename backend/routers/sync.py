@@ -39,7 +39,7 @@ async def trigger_single_sync(source: str, db: Session = Depends(get_db), _=Depe
         t0 = _time.time()
         total_scanned, total_submitted, total_reverted, total_location, total_matched = 0, 0, 0, 0, 0
         for prod in products:
-            r = check_product_docs(db, prod.id)
+            r = await check_product_docs(db, prod.id)
             total_scanned += r.get("scanned", 0)
             total_submitted += r.get("auto_submitted", 0)
             total_reverted += r.get("reverted", 0)

@@ -350,13 +350,143 @@ def scan_doc_path(doc_path: str):
     return None
 
 
-def check_product_docs(db, product_id: int) -> dict:
+async def _scan_gitlab_releases_batch(docs: list) -> dict:
+    """Scan a batch of GitLab release doc_path patterns against actual GitLab releases.
+
+    Args:
+        docs: list of (doc, template_path) tuples where doc is a ProductDocument
+
+    Returns:
+        dict[int, str | None]: doc_id -> matched release URL (or None if not found)
+    """
+    from backend.services.gitlab_service import parse_gitlab_release_pattern
+    from backend.services.gitlab_client import GitLabClient
+
+    if not docs:
+        return {}
+
+    logger.info(f"[gitlab-scan] Scanning {len(docs)} GitLab document(s) for releases")
+
+    # Check GitLab token
+    from backend.config import settings
+    if not settings.GITLAB_TOKEN:
+        logger.warning("[gitlab-scan] GitLab token not configured, skipping all GitLab scans")
+        return {}
+
+    # Group docs by (base_url, project_path)
+    groups = {}  # (base_url, project_path) -> list of (doc, tag_pattern)
+    for doc, template_path in docs:
+        parsed = parse_gitlab_release_pattern(template_path)
+        if not parsed:
+            logger.warning(f"[gitlab-scan] doc#{doc.id} '{doc.doc_name}': cannot parse doc_path={template_path[:120]!r}")
+            continue
+        base_url, project_path, tag_pattern = parsed
+        key = (base_url, project_path)
+        if key not in groups:
+            groups[key] = []
+        groups[key].append((doc, tag_pattern))
+
+    results = {}
+    client = GitLabClient()
+    try:
+        for (base_url, project_path), group in groups.items():
+            logger.info(f"[gitlab-scan] Project '{project_path}': fetching releases for {len(group)} doc(s)")
+            try:
+                releases = await client.get_releases(project_path)
+            except Exception as e:
+                logger.warning(f"[gitlab-scan] Project '{project_path}': failed to fetch releases: {e}")
+                for doc, _ in group:
+                    results[doc.id] = None
+                continue
+
+            if not releases:
+                logger.info(f"[gitlab-scan] Project '{project_path}': no releases found")
+                for doc, _ in group:
+                    results[doc.id] = None
+                continue
+
+            logger.info(f"[gitlab-scan] Project '{project_path}': found {len(releases)} release(s)")
+            # Pre-extract tag names
+            tag_names = [r.get("tag_name", "") for r in releases if r.get("tag_name")]
+
+            for doc, tag_pattern in group:
+                matched_tag = None
+                if not tag_pattern:
+                    # Empty pattern: match any (first) release
+                    if tag_names:
+                        matched_tag = tag_names[0]
+                        logger.info(f"[gitlab-scan] doc#{doc.id} '{doc.doc_name}': empty pattern, matched first tag '{matched_tag}'")
+                    else:
+                        logger.info(f"[gitlab-scan] doc#{doc.id} '{doc.doc_name}': empty pattern but no releases")
+                else:
+                    # Build regex from tag_pattern
+                    tag_regex = _build_tag_regex(tag_pattern)
+                    try:
+                        compiled = re.compile(tag_regex, re.IGNORECASE)
+                    except re.error as e:
+                        logger.warning(f"[gitlab-scan] doc#{doc.id} '{doc.doc_name}': invalid regex '{tag_regex}': {e}")
+                        results[doc.id] = None
+                        continue
+                    for tag_name in tag_names:
+                        if compiled.match(tag_name):
+                            matched_tag = tag_name
+                            logger.info(f"[gitlab-scan] doc#{doc.id} '{doc.doc_name}': matched tag '{tag_name}'")
+                            break
+
+                if matched_tag:
+                    results[doc.id] = f"{base_url}/{project_path}/-/releases/{matched_tag}"
+                else:
+                    results[doc.id] = None
+                    logger.info(f"[gitlab-scan] doc#{doc.id} '{doc.doc_name}': no matching release for pattern '{tag_pattern}'")
+    finally:
+        await client.close()
+
+    matched_count = sum(1 for v in results.values() if v is not None)
+    logger.info(f"[gitlab-scan] Done: {matched_count}/{len(docs)} matched")
+    return results
+
+
+def _build_tag_regex(tag_pattern: str) -> str:
+    """Convert a tag pattern to a regex for matching GitLab tag names.
+
+    - If pattern contains glob wildcards (*, ?), convert to regex via _glob_to_regex
+    - If pattern contains regex metacharacters (\\d, \\w, [, etc.), use as-is
+    - Otherwise, treat as literal text (exact match)
+    """
+    if not tag_pattern:
+        return ".*"  # match any
+    if "*" in tag_pattern or "?" in tag_pattern:
+        # Glob pattern: convert to regex
+        return _glob_to_regex(tag_pattern)
+    # Check for regex metacharacters (backslash sequences, brackets, etc.)
+    if re.search(r'[\\\.\[\]\{\}\(\)\+\^\$\|]', tag_pattern):
+        # Already regex-like, use as-is but ensure it matches full tag name
+        if not tag_pattern.endswith("$"):
+            tag_pattern = tag_pattern + "$"
+        return tag_pattern
+    # Literal text: exact match
+    return "^" + re.escape(tag_pattern) + "$"
+
+
+def _is_gitlab_doc(doc_type: str, template_path: str) -> bool:
+    """Determine if a document is a GitLab release URL."""
+    if doc_type and doc_type.lower() == "gitlab":
+        return True
+    if not doc_type and template_path and ("gitlab" in template_path.lower() or "/-/releases/" in template_path or "/-/tags/" in template_path):
+        return True
+    return False
+
+
+async def check_product_docs(db, product_id: int) -> dict:
     """Scan all docs for a product and auto-update statuses.
+
+    For GitLab-type docs: uses GitLab Release API to validate release URLs.
+    For SVN/NAS-type docs: uses HTTP scanning (SVN PROPFIND / directory listing).
 
     Returns:
         dict with scanned_count, auto_submitted_count, and per-doc results.
     """
-    from backend.models.document import ProductDocument, ProductDocTemplate
+    from backend.models.document import ProductDocument
 
     docs = db.query(ProductDocument).filter(
         ProductDocument.product_id == product_id
@@ -372,7 +502,96 @@ def check_product_docs(db, product_id: int) -> dict:
 
     from datetime import datetime as _dt
 
+    # Separate GitLab docs from SVN/NAS docs
+    gitlab_docs = []  # list of (doc, template_path)
+    svn_docs = []     # list of doc
+
     for doc in docs:
+        template_path = doc.doc_path or ""
+        check_path = doc.location or template_path
+        if not check_path:
+            continue
+
+        # Determine doc_type
+        doc_type = doc.doc_type or ""
+        if not doc_type and template_path:
+            if "svn" in template_path.lower():
+                doc_type = "svn"
+            elif "gitlab" in template_path.lower() or "git" in template_path:
+                doc_type = "gitlab"
+
+        if _is_gitlab_doc(doc_type, template_path):
+            gitlab_docs.append((doc, template_path))
+        else:
+            svn_docs.append(doc)
+
+    # ── GitLab batch scan ──
+    if gitlab_docs:
+        try:
+            gitlab_results = await _scan_gitlab_releases_batch(gitlab_docs)
+        except Exception as e:
+            logger.warning(f"[doc-scanner] GitLab batch scan failed: {e}")
+            gitlab_results = {}
+
+        for doc, template_path in gitlab_docs:
+            scanned += 1
+            matched_url = gitlab_results.get(doc.id)
+            exists = matched_url is not None
+
+            # If pattern didn't match but doc has a manually set location,
+            # validate the existing location before reverting
+            if not exists and doc.location and doc.status == "submitted":
+                try:
+                    from backend.services.gitlab_service import validate_release_url
+                    vr = await validate_release_url(doc.location)
+                    if vr.get("valid"):
+                        matched_url = doc.location
+                        exists = True
+                        logger.info(f"[doc-scanner] doc#{doc.id} '{doc.doc_name}': pattern not matched "
+                                    f"but existing location is valid")
+                except Exception:
+                    pass
+
+            doc_type = doc.doc_type or "gitlab"
+
+            results.append({
+                "doc_id": doc.id,
+                "doc_name": doc.doc_name,
+                "path": matched_url or template_path,
+                "template_path": template_path,
+                "found": exists,
+                "mismatch": "",
+                "prev_status": doc.status,
+                "doc_type": doc_type,
+            })
+
+            now = _dt.utcnow()
+            if exists and matched_url:
+                total_matched += 1
+                loc_url = unquote(matched_url)
+                if not doc.location or doc.location != loc_url:
+                    doc.location = loc_url
+                    location_filled += 1
+                if doc.status != "submitted":
+                    doc.status = "submitted"
+                    doc.completed_at = now
+                    doc.uploaded_by = doc.uploaded_by or "auto-scanner"
+                    doc.uploaded_at = doc.uploaded_at or now
+                    auto_submitted += 1
+                doc.updated_by = "auto-scanner"
+                doc.updated_at = now
+
+            if not exists and doc.status == "submitted":
+                doc.status = "pending"
+                doc.completed_at = None
+                doc.updated_by = "auto-scanner"
+                doc.updated_at = now
+                reverted += 1
+                logger.warning(f"[doc-scanner] doc#{doc.id} '{doc.doc_name}' "
+                               f"reverted to pending: GitLab release not found")
+
+    # ── SVN/NAS scan (existing logic) ──
+    for doc in svn_docs:
         template_path = doc.doc_path or ""
         check_path = doc.location or template_path
         if not check_path:
@@ -410,7 +629,7 @@ def check_product_docs(db, product_id: int) -> dict:
         if mismatch:
             logger.warning(f"[doc-scanner] doc#{doc.id} '{doc.doc_name}': {mismatch}")
 
-        # Determine doc_type from template (prefer doc.doc_type, fallback to template)
+        # Determine doc_type from template
         doc_type = doc.doc_type or ""
         if not doc_type and template_path:
             if "svn" in template_path.lower():
@@ -432,7 +651,6 @@ def check_product_docs(db, product_id: int) -> dict:
         now = _dt.utcnow()
         if exists and matched_url:
             total_matched += 1
-            # Auto-fill location with the resolved URL (decoded for readability)
             loc_url = unquote(matched_url)
             if not doc.location or doc.location != loc_url:
                 doc.location = loc_url
@@ -468,7 +686,6 @@ def check_product_docs(db, product_id: int) -> dict:
             if svn_rev:
                 doc.svn_rev = svn_rev
                 svn_meta_updated += 1
-                # Log product activity if revision changed (new or updated)
                 if prev_rev and prev_rev != svn_rev:
                     try:
                         from backend.services.product_service import log_product_activity
@@ -487,7 +704,6 @@ def check_product_docs(db, product_id: int) -> dict:
                         pass
 
         if not exists and doc.status == "submitted":
-            # File no longer accessible — revert to pending
             doc.status = "pending"
             doc.completed_at = None
             doc.updated_by = "auto-scanner"
