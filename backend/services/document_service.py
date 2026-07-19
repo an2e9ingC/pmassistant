@@ -915,10 +915,21 @@ def get_node_breadcrumb(db: Session, node_id: int) -> list[str]:
     return path
 
 
+def _sync_affected_product_docs(db: Session, node_id: int):
+    """After template changes, sync documents for all products linked to this node."""
+    from backend.models.zentao import ProductNodeLink
+    pids = db.query(ProductNodeLink.product_id).filter(
+        ProductNodeLink.product_node_id == node_id
+    ).all()
+    for (pid,) in pids:
+        get_or_init_product_documents(db, pid)
+
+
 def create_product_template(db: Session, data: dict) -> dict:
     tpl = ProductDocTemplate(**data)
     db.add(tpl)
     db.commit()
+    _sync_affected_product_docs(db, tpl.product_id)
     return _product_template_dict(tpl)
 
 
@@ -930,6 +941,7 @@ def update_product_template(db: Session, template_id: int, data: dict) -> Option
         if hasattr(tpl, k) and v is not None:
             setattr(tpl, k, v)
     db.commit()
+    _sync_affected_product_docs(db, tpl.product_id)
     return _product_template_dict(tpl)
 
 
@@ -937,8 +949,10 @@ def delete_product_template(db: Session, template_id: int) -> bool:
     tpl = db.query(ProductDocTemplate).filter(ProductDocTemplate.id == template_id).first()
     if not tpl:
         return False
+    node_id = tpl.product_id
     db.delete(tpl)
     db.commit()
+    _sync_affected_product_docs(db, node_id)
     return True
 
 
@@ -1099,6 +1113,7 @@ def get_or_init_product_documents(db: Session, product_id: int) -> list[dict]:
                     responsible_role=tpl.responsible_role,
                     description=tpl.description,
                     doc_path=actual_path,
+                    doc_type=tpl.doc_type or "",
                     status="pending",
                 )
                 db.add(existing)
@@ -1110,6 +1125,7 @@ def get_or_init_product_documents(db: Session, product_id: int) -> list[dict]:
                 existing.sort_order = tpl.sort_order
                 existing.responsible_role = tpl.responsible_role
                 existing.description = tpl.description
+                existing.doc_type = tpl.doc_type or existing.doc_type or ""
                 # Always sync doc_path from template (location is user-uploaded path, independent)
                 existing.doc_path = actual_path
 

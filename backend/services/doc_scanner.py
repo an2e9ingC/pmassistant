@@ -378,7 +378,7 @@ async def _scan_gitlab_releases_batch(docs: list) -> dict:
     for doc, template_path in docs:
         parsed = parse_gitlab_release_pattern(template_path)
         if not parsed:
-            logger.warning(f"[gitlab-scan] doc#{doc.id} '{doc.doc_name}': cannot parse doc_path={template_path[:120]!r}")
+            logger.info(f"[gitlab-scan] doc#{doc.id} '{doc.doc_name}': skip non-GitLab path={template_path[:120]!r}")
             continue
         base_url, project_path, tag_pattern = parsed
         key = (base_url, project_path)
@@ -487,6 +487,10 @@ async def check_product_docs(db, product_id: int) -> dict:
         dict with scanned_count, auto_submitted_count, and per-doc results.
     """
     from backend.models.document import ProductDocument
+
+    # Sync documents from templates first (cleanup orphans, update paths/doc_type)
+    from backend.services.document_service import get_or_init_product_documents
+    get_or_init_product_documents(db, product_id)
 
     docs = db.query(ProductDocument).filter(
         ProductDocument.product_id == product_id
