@@ -60,51 +60,28 @@ async def trigger_single_sync(source: str, db: Session = Depends(get_db), _=Depe
         from backend.config import settings
         if not settings.GITLAB_TOKEN:
             return {"code": 0, "data": {"gitlab_summary": {"status": "skipped", "summary": "未配置Token"}}, "message": "ok"}
-        from backend.services.doc_scanner import check_product_docs
-        from backend.models.zentao import PmaProduct
+        from backend.services.doc_scanner import check_all_product_docs
         from backend.services.sync_service import _log_sync, _finish_log
-        import logging as _logging
-        _logger = _logging.getLogger(__name__)
         t0 = _time.time()
         gitlab_sync_log = _log_sync(db, "gitlab")
         try:
-            products = db.query(PmaProduct).all()
-            total_scanned, total_matched, total_submitted, total_reverted = 0, 0, 0, 0
-            prod_results = {}
-            for prod in products:
-                r = await check_product_docs(db, prod.id)
-                total_scanned += r.get("scanned", 0)
-                total_matched += r.get("total_matched", 0)
-                total_submitted += r.get("auto_submitted", 0)
-                total_reverted += r.get("reverted", 0)
-                prod_results[prod.id] = r
-            elapsed = round(_time.time() - t0, 1)
-            summary_parts = [f"扫描{total_scanned}个", f"匹配{total_matched}个"]
-            if total_submitted: summary_parts.append(f"新提交{total_submitted}个")
-            if total_reverted: summary_parts.append(f"回退{total_reverted}个")
+            r = await check_all_product_docs(db)
+            elapsed = r.get("elapsed", round(_time.time() - t0, 1))
+            gl_checked = r.get("gl_checked", 0)
+            gl_matched = r.get("gl_matched", 0)
+            gl_valid = r.get("gl_valid", 0)
+            gl_new = r.get("gl_new", 0)
+            summary_parts = [f"检查{gl_checked}个", f"匹配{gl_matched}个", f"有效{gl_valid}个"]
+            if gl_new: summary_parts.append(f"新提交{gl_new}个")
             summary = " / ".join(summary_parts)
-            _logger.info(f"[GitLab] 文档扫描完成: {summary}（{len(products)}个产品，耗时{elapsed}s）")
-            # Per-product detail
-            for prod in products:
-                r = prod_results.get(prod.id, {})
-                if not r.get("scanned"): continue
-                results_list = r.get("results", [])
-                gl_docs = [d for d in results_list if d.get("doc_type") == "gitlab"]
-                gl_found = [d for d in gl_docs if d.get("found")]
-                gl_miss = [d for d in gl_docs if not d.get("found")]
-                gl_total = len(gl_docs)
-                if gl_total:
-                    _logger.info(f"  [GitLab] 产品 {prod.name}(#{prod.id}): "
-                        f"GitLab文档{gl_total}个 | 匹配{len(gl_found)}个 | 未匹配{len(gl_miss)}个")
-            _finish_log(db, gitlab_sync_log, "success", total_scanned, total_matched, total_submitted)
+            _finish_log(db, gitlab_sync_log, "success", gl_checked, gl_matched, gl_valid)
             return {"code": 0, "data": {
                 "gitlab_summary": {"status": "success", "summary": summary,
-                                   "scanned": total_scanned, "matched": total_matched,
-                                   "submitted": total_submitted, "reverted": total_reverted},
+                                   "gl_checked": gl_checked, "gl_matched": gl_matched,
+                                   "gl_valid": gl_valid, "gl_new": gl_new},
                 "timings": {"total": elapsed},
             }, "message": "ok"}
         except Exception as e:
-            _logger.error(f"[GitLab] 文档扫描失败: {e}")
             _finish_log(db, gitlab_sync_log, "failed", 0, 0, 0)
             raise
 
@@ -282,11 +259,11 @@ def sync_sources(db: Session = Depends(get_db), _=Depends(get_current_user)):
     gitlab_detail = "未配置Token"
     if gitlab_configured:
         if gitlab_log and gitlab_log.items_fetched is not None:
-            parts = [f"扫描{gitlab_log.items_fetched}个"]
+            parts = [f"检查{gitlab_log.items_fetched}个"]
             if gitlab_log.items_created:
                 parts.append(f"匹配{gitlab_log.items_created}个")
             if gitlab_log.items_updated:
-                parts.append(f"新提交{gitlab_log.items_updated}个")
+                parts.append(f"有效{gitlab_log.items_updated}个")
             gitlab_detail = " / ".join(parts)
         else:
             from backend.models.document import ProductDocument
