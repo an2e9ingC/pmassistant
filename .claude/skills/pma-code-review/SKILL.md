@@ -209,6 +209,8 @@ query_graph("MATCH (f:Function) WHERE f.cyclomatic > 15 ...")  # 高复杂度函
 search_code(pattern="删除的id或函数名")   # 全库搜索残留引用
 ```
 
+> **技巧**：结果过多时用 `path_filter` 缩小范围（如 `path_filter: "wecom"`），`mode: "compact"` 减少输出量。`search_graph` 的 `name_pattern` 只匹配标识符，搜字段/变量用 `query` 全文搜索。
+
 ---
 
 ## 与 CLAUDE.md 的关系

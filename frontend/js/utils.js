@@ -25,6 +25,7 @@ function d2pct(ds) {
 }
 
 function fmtLocalDate(d) { d=d||new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function fmtHours(h) { if (!h || h <= 0) return "0h"; var hrs = Math.floor(h); var mins = Math.round((h - hrs) * 60); if (mins === 60) { hrs++; mins = 0; } return hrs + "h" + (mins > 0 ? mins + "m" : ""); }
 
 function todayPct() {
   return d2pct(fmtLocalDate());

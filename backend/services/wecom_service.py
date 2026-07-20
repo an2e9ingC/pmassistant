@@ -90,33 +90,34 @@ async def sync_wecom_data(db: Session) -> dict:
             if checkins and created == 0 and updated == 0:
                 logger.info(f"WeCom checkin sample: {json.dumps(checkins[0], ensure_ascii=False)[:300]}")
 
-            # Group checkin records by (user_id, date), sum hours from checkin/checkout pairs
-            daily = {}  # (user_id, date_str) -> {"in": ts, "out": ts}
+            # Group checkin records by (user_id, date), pair consecutive records
+            daily = {}  # (user_id, date_str) -> [timestamps sorted]
             for record in checkins:
                 uid = record.get("userid", "")
                 ct = record.get("checkin_time", 0)
-                ctype = record.get("checkin_type", "")
                 if not uid or not ct:
                     continue
                 dt = datetime.fromtimestamp(ct, tz=timezone.utc)
                 ds = dt.strftime("%Y-%m-%d")
                 key = (uid, ds)
                 if key not in daily:
-                    daily[key] = {"in": None, "out": None, "raw": []}
-                if "上班" in ctype:
-                    if daily[key]["in"] is None or ct < daily[key]["in"]:
-                        daily[key]["in"] = ct
-                else:
-                    if daily[key]["out"] is None or ct > daily[key]["out"]:
-                        daily[key]["out"] = ct
+                    daily[key] = {"times": [], "raw": []}
+                daily[key]["times"].append(ct)
                 daily[key]["raw"].append(record)
 
             for (uid, ds), d in daily.items():
+                d["times"].sort()
                 hours = 0.0
-                if d["in"] and d["out"]:
-                    hours = max(0, (d["out"] - d["in"]) / 3600.0)
-                elif d["in"]:
-                    hours = 4.0  # half-day if only checkin
+                # Pair consecutive records: checkin → checkout
+                for i in range(0, len(d["times"]) - 1, 2):
+                    diff = d["times"][i+1] - d["times"][i]
+                    if diff > 0:
+                        hours += diff / 3600.0
+                # Single pair + full day (>5h raw) → subtract 1.5h lunch
+                # (multi-pair days already have lunch gap from pairing)
+                if len(d["times"]) == 2 and hours > 5:
+                    hours -= 1.5
+                hours = max(0, hours)
                 existing = db.query(WeComCheckin).filter(
                     WeComCheckin.user_id == uid,
                     WeComCheckin.date == date.fromisoformat(ds),
@@ -302,8 +303,20 @@ def get_checkin_calendar(
     for c in checkins:
         d = str(c.date)
         if d not in daily_map:
-            daily_map[d] = {"date": d, "total_hours": 0.0}
+            daily_map[d] = {"date": d, "total_hours": 0.0, "checkin_info": ""}
         daily_map[d]["total_hours"] += c.work_hours or 0.0
+        # Extract checkin time info from raw_data
+        try:
+            raw = json.loads(c.raw_data or "[]")
+            for r in raw:
+                ct = r.get("checkin_time", 0)
+                if ct:
+                    t = datetime.fromtimestamp(ct, tz=timezone.utc)
+                    ctype = r.get("checkin_type", "")
+                    tag = "↑" if "上班" in ctype else "↓"
+                    daily_map[d]["checkin_info"] += f"{tag}{t.strftime('%H:%M')} "
+        except Exception:
+            pass
 
     daily = sorted(daily_map.values(), key=lambda x: x["date"], reverse=True)
     total = sum(d["total_hours"] for d in daily)
@@ -312,7 +325,7 @@ def get_checkin_calendar(
     last = db.query(WeComCheckin.synced_at).filter(
         WeComCheckin.user_id == user.wecom_userid,
     ).order_by(WeComCheckin.synced_at.desc()).first()
-    last_sync_at = last[0].isoformat() if last and last[0] else None
+    last_sync_at = (last[0] + timedelta(hours=8)).strftime("%Y-%m-%dT%H:%M:%S") if last and last[0] else None
 
     # Schedule
     now = datetime.now(timezone.utc)

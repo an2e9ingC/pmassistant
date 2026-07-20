@@ -1,7 +1,7 @@
 """WeCom (企业微信) API endpoints — calendar + user search + user list."""
 import json
 import time as _time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -107,7 +107,7 @@ def wecom_user_list(
         "userid": u.userid,
         "name": u.name,
         "department": u.department or "",
-        "synced_at": u.synced_at.isoformat() if u.synced_at else None,
+        "synced_at": ((u.synced_at + timedelta(hours=8)).strftime("%Y-%m-%dT%H:%M:%S") if u.synced_at else None),
     } for u in users]
     # Count linked PMA users
     linked_map = {}

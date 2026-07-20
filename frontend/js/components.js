@@ -1276,7 +1276,8 @@ function _renderMonthCalendar(today, dailyMap, calData) {
     // Cell color fill: gradient bar proportional to hours (0-8h blue, >8h yellow→red)
     var cellBg = '', tipText = '';
     if (isCurrentMonth && h > 0) {
-      tipText = h.toFixed(1)+'h';
+      tipText = (typeof fmtHours === 'function' ? fmtHours(h) : h.toFixed(1)+'h');
+      if (dd && dd.checkin_info) tipText += ' | ' + dd.checkin_info.trim();
       if (h <= 8) {
         var pct = h/8*100;
         cellBg = 'background:linear-gradient(to top,#3B82F6 '+pct+'%,transparent '+pct+'%);';
@@ -1317,7 +1318,13 @@ function _calGoToday() {
 var _dayDetailTasks = []; // closure for edit/copy operations
 
 function openDayDetail(dateStr, totalHours) {
-  API.get('/worklogs/calendar?date_from='+dateStr+'&date_to='+dateStr).then(function(data) {
+  if (window.__wecomCalendar) {
+    showToast("打卡工时 " + dateStr + ": " + (typeof fmtHours === "function" ? fmtHours(totalHours) : totalHours.toFixed(1) + "h"), "info");
+    return;
+  }
+  var uid = '';
+  try { var u = JSON.parse(localStorage.getItem('pma_user') || '{}'); uid = u.id || ''; } catch(e) {}
+  API.get('/worklogs/calendar?user_id=' + uid + '&date_from='+dateStr+'&date_to='+dateStr).then(function(data) {
     var daily = (data&&data.daily) ? data.daily : [];
     var dayData = daily.length ? daily[0] : null;
     _dayDetailTasks = [];

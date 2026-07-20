@@ -1917,9 +1917,9 @@ function _ucLoadCalendar(user) {
         '<h2 style="margin:0">工时</h2>' +
         '<div style="display:flex;align-items:center;gap:8px">' +
           '<span style="font-size:11px;color:var(--muted)">周</span>' +
-          '<span class="uc-week-bar ' + weekCls + '">' + weekTotal.toFixed(1) + 'h</span>' +
+          '<span class="uc-week-bar ' + weekCls + '">' + (typeof fmtHours === 'function' ? fmtHours(weekTotal) : weekTotal.toFixed(1) + 'h') + '</span>' +
           '<span style="font-size:11px;color:var(--muted)">月</span>' +
-          '<span class="uc-week-bar ' + monthCls + '">' + monthTotal.toFixed(1) + 'h</span>' +
+          '<span class="uc-week-bar ' + monthCls + '">' + (typeof fmtHours === 'function' ? fmtHours(monthTotal) : monthTotal.toFixed(1) + 'h') + '</span>' +
         '</div>' +
       '</div>';
     if (typeof _renderMonthCalendar === 'function') {
@@ -2437,9 +2437,9 @@ function _ucLoadWecomCalendar(user) {
         '<div style="display:flex;align-items:center;gap:8px">' +
           '<span style="font-size:10px;color:var(--muted)">[' + scheduleSrc + ']</span>' +
           '<span style="font-size:11px;color:var(--muted)">周</span>' +
-          '<span class="uc-week-bar ' + weekCls + '">' + weekTotal.toFixed(1) + 'h</span>' +
+          '<span class="uc-week-bar ' + weekCls + '">' + (typeof fmtHours === 'function' ? fmtHours(weekTotal) : weekTotal.toFixed(1) + 'h') + '</span>' +
           '<span style="font-size:11px;color:var(--muted)">月</span>' +
-          '<span class="uc-week-bar ' + monthCls + '">' + monthTotal.toFixed(1) + 'h</span>' +
+          '<span class="uc-week-bar ' + monthCls + '">' + (typeof fmtHours === 'function' ? fmtHours(monthTotal) : monthTotal.toFixed(1) + 'h') + '</span>' +
         '</div>' +
       '</div>';
     if (typeof _renderMonthCalendar === 'function') {

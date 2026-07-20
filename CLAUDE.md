@@ -19,7 +19,7 @@
 | "看这个函数的完整源码" | `get_code_snippet(qualified_name)` | 精确源码，支持 `include_neighbors=true` 获取上下文 |
 | "项目怎么分层的 / 有哪些模块" | `get_architecture()` | 包结构、服务依赖、Leiden 社区检测（揭示实际架构边界） |
 | "有哪些 API 路由" | `search_graph(label="Route")` | 列出所有路由节点，含 HTTP 方法 + 路径 |
-| "搜索某个字符串出现在哪里" | `search_code(pattern="...")` | 图谱增强 grep：按函数去重、按重要性排序 |
+| "搜索某个字符串出现在哪里" | `search_code(pattern="...")` | 图谱增强 grep：按函数去重、按重要性排序。**优先用 `path_filter` 缩小范围**，避免结果过多被截断 |
 | "复杂关联查询" | `query_graph(query="MATCH ...")` | Cypher 图查询，适合聚合分析、热点路径检测 |
 | "跨服务调用链" | `trace_path(mode="cross_service")` | 通过 Route 节点追踪 HTTP/异步跨服务调用 |
 
@@ -50,6 +50,13 @@ query_graph("
 - `linear_scan_in_loop`：循环内线性扫描次数（隐藏的 O(n²)）
 - `alloc_in_loop`：循环内内存分配
 - `cyclomatic`：圈复杂度
+
+### MCP 搜索技巧
+
+- **`search_code` 结果过多时**：加 `path_filter` 缩小范围（如 `path_filter: "wecom"` 只看 wecom 相关文件），配合 `limit` 参数控制数量
+- **`search_graph` 查字段/变量时**：用 `query` 全文搜索而非 `name_pattern`（后者只匹配标识符）
+- **全文搜索优先 `compact` 模式**（签名+元数据），读具体代码时再用 `get_code_snippet`
+- **`trace_path` 加 `depth=2`** 控制调用链深度，避免输出过长
 
 ### 索引维护
 
