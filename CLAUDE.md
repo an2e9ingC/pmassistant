@@ -140,6 +140,7 @@ NAS 文件 ───────────┘
 | 用户说 "merge" / "合并" | `Skill("pma-worktree")` | rebase+review → 回主session → merge --no-ff |
 | 排查/分析 bug / 报错 / 异常 | `Skill("pma-bug-analysis")` | Bug 分析流程：查日志→定位→加日志→修复，扫描同类问题 |
 | 前端 UI/CSS/JS 修改 | `Skill("pma-frontend-rules")` + `Skill("pma-web-design")` | 开发流程 + 配色/间距/布局/组件/动画视觉决策 |
+| 自验证/检查前端/verify | `Skill("pma-frontend-verify")` | Chrome DevTools MCP 端到端验证 UI 改动，调试 JS 运行时行为 |
 
 ---
 
