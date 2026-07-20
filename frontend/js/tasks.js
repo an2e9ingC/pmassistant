@@ -11,6 +11,7 @@ function _hasProjectEditPerm() {
   return perms.indexOf('project_edit') !== -1 || perms.indexOf('admin') >= 0;
 }
 var _taskProjectId = null;   // null = show project selector
+var _taskProjectCode = null;  // project code (e.g. PE0450) for API calls
 var _taskProjectName = '';
 var _taskFilterStatus = '';
 var _taskFilterExecution = '';
@@ -104,7 +105,7 @@ function _renderTaskFiltersInline() {
       comboId: 'task-proj-combo',
       inputId: 'task-proj-input',
       dropdownId: 'task-proj-dropdown',
-      onSelect: function(p) { _taskProjectId = p.id; _taskProjectName = p.name; loadTaskData(); }
+      onSelect: function(p) { _taskProjectId = p.id; _taskProjectCode = p.code; _taskProjectName = p.name; loadTaskData(); }
     }) + '<style>#task-proj-combo{min-width:0!important;width:160px}</style>';
   // Stage filter
   html += '<span style="font-size:11px;color:var(--muted);white-space:nowrap;margin-left:4px">阶段</span>' +
@@ -140,7 +141,7 @@ function _renderTaskFilters() {
         comboId: 'task-proj-combo',
         inputId: 'task-proj-input',
         dropdownId: 'task-proj-dropdown',
-        onSelect: function(p) { _taskProjectId = p.id; _taskProjectName = p.name; loadTaskData(); }
+        onSelect: function(p) { _taskProjectId = p.id; _taskProjectCode = p.code; _taskProjectName = p.name; loadTaskData(); }
       }) + '<style>#task-proj-combo{min-width:0!important}</style>' +
     '</div>';
   }
@@ -534,7 +535,8 @@ function _renderPriority(p) {
 
 /* ── Task Dialog ── */
 
-var _tfProjectId = null; // project ID selected in the task form
+var _tfProjectId = null; // project numeric ID selected in the task form
+var _tfProjectCode = null; // project code (e.g. PE0450) for API calls to /projects/{code}/...
 var _tfAssigneeId = null; // assignee ID selected in the task form
 
 function _tfStageName() {
@@ -692,7 +694,7 @@ function _submitViewComment(taskId) {
 function openTaskDialog(taskId) {
   var isEdit = !!taskId;
   var title = isEdit ? '编辑任务' : '新建任务';
-  _tfProjectId = _taskProjectId || window._taskProjectId; // default to page context
+  _tfProjectId = _taskProjectId || window._taskProjectId; _tfProjectCode = _taskProjectCode || window._taskProjectCode || _taskProjectId; // default to page context
   _tfAssigneeId = null;
 
   if (isEdit) {
@@ -730,7 +732,7 @@ function _showTaskForm(title, task) {
         '<div style="margin-top:2px">' + createProjectCombo({
           comboId: 'tf-proj-combo', inputId: 'tf-project-input', dropdownId: 'tf-proj-dropdown',
           selectedIdFn: function() { return _tfProjectId; },
-          onSelect: function(p) { _tfProjectId = p.id; _loadTfExecutions(p.id); }
+          onSelect: function(p) { _tfProjectId = p.id; _tfProjectCode = p.code; _loadTfExecutions(p.code); }
         }) + '<div id="tf-project-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择所属项目</div></div></div>' +
       '<div style="' + _grid2 + '">' +
         '<div><label style="' + _lbl + '">阶段 *</label><select class="search-inp" id="tf-execution" style="' + inp + '"><option value="">请选择阶段...</option>' + execOpts + '</select><div id="tf-execution-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择阶段</div></div>' +
@@ -834,7 +836,9 @@ function _showTaskForm(title, task) {
   }
 
 function _loadTfExecutions(projectId, selectedId) {
-  API.get('/projects/' + projectId + '/gantt').then(function(data) {
+  // Use project code (e.g. PE0450) for the /projects/{identifier}/... API
+  var identifier = _tfProjectCode || projectId;
+  API.get('/projects/' + identifier + '/gantt').then(function(data) {
     var sel = document.getElementById('tf-execution');
     if (!sel) return;
     var prevVal = selectedId || sel.value;
@@ -865,7 +869,7 @@ function _loadTfExecutions(projectId, selectedId) {
   if (!isEdit && _tfProjectId) {
     setTimeout(function() {
       loadAllProjects().then(function() {
-        var p = _allProjects.find(function(x) { return x.id == _tfProjectId; });
+        var p = _allProjects.find(function(x) { return x.id == _tfProjectId || x.code == _tfProjectId; });
         if (p) document.getElementById('tf-project-input').value = p.name;
       });
     }, 80);

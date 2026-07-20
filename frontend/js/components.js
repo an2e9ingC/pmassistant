@@ -1033,7 +1033,7 @@ function _renderSearchDropdown(dropdownId, items, selectedId, q, selectFnName) {
   }) : items;
   if (!list.length) { dd.innerHTML = '<div class="combo-no-match">未找到匹配项目</div>'; return; }
   dd.innerHTML = list.map(function(p) {
-    var cls = p.id == selectedId ? 'combo-opt selected' : 'combo-opt';
+    var cls = (p.id == selectedId || p.code == selectedId) ? 'combo-opt selected' : 'combo-opt';
     return '<div class="' + cls + '" onmousedown="event.preventDefault()" onclick="' + selectFnName + '(\'' + p.id + '\')">' +
       '<div class="combo-opt-name">' + escHtml(p.code || p.name) + '</div>' +
       (p.code ? '<div class="combo-opt-meta">' + escHtml(p.name) + '</div>' : '') +
@@ -1050,7 +1050,7 @@ function _renderComboDropdown(dropdownId, selectedId, q, selectFnName) {
   }) : _allProjects;
   if (!list.length) { dd.innerHTML = '<div class="combo-no-match">未找到匹配项目</div>'; return; }
   dd.innerHTML = list.map(function(p) {
-    var cls = p.id == selectedId ? 'combo-opt selected' : 'combo-opt';
+    var cls = (p.id == selectedId || p.code == selectedId) ? 'combo-opt selected' : 'combo-opt';
     return '<div class="' + cls + '" onmousedown="event.preventDefault()" onclick="' + selectFnName + '(\'' + p.id + '\')">' +
       '<div class="combo-opt-name">' + escHtml(p.code || p.name) + '</div>' +
       (p.code ? '<div class="combo-opt-meta">' + escHtml(p.name) + '</div>' : '') +
