@@ -244,15 +244,17 @@ async def create_issue(
     db: Session = Depends(get_db),
 ):
     """Create a GitLab issue (bug report or feature request) in the PMA project."""
-    # GitLab OAuth users must use their own token to create issues
+    # Token selection: OAuth user → own token; admin → PAT fallback; others → reject
     if user.auth_source == "gitlab":
         if not user.gitlab_access_token:
             return {"code": 1, "message": "GitLab 授权已过期，请重新登录后再提交反馈"}
         effective_token = user.gitlab_access_token
-    else:
+    elif user.role == "admin":
         effective_token = settings.GITLAB_TOKEN
-    if not effective_token:
-        return {"code": 1, "message": "GitLab Token 未配置，无法创建 Issue"}
+        if not effective_token:
+            return {"code": 1, "message": "GitLab Token 未配置，无法创建 Issue"}
+    else:
+        return {"code": 1, "message": "请使用 GitLab 账号登录后再提交反馈\n\n当前为本地账号登录，无法创建 GitLab Issue。请退出后使用 GitLab 账号登录。"}
 
     # Build issue content using templates
     user_info = f"**反馈人**: {body.reporter}" if body.reporter else ""
@@ -361,13 +363,18 @@ async def upload_file(
     if not file:
         return {"code": 1, "message": "未选择文件"}
 
-    # Use user's token if GitLab user, else system token
+    # Token selection: OAuth user → own token; admin → PAT fallback; others → reject
     from backend.services.gitlab_client import GitLabClient
     import httpx
 
-    token = user.gitlab_access_token if user.auth_source == "gitlab" else settings.GITLAB_TOKEN
+    if user.auth_source == "gitlab":
+        token = user.gitlab_access_token
+    elif user.role == "admin":
+        token = settings.GITLAB_TOKEN
+    else:
+        token = None
     if not token:
-        return {"code": 1, "message": "GitLab Token 未配置"}
+        return {"code": 1, "message": "请使用 GitLab 账号登录后再上传文件"}
 
     url = f"{settings.GITLAB_BASE_URL.rstrip('/')}/projects/{_project_path_encoded()}/uploads"
     files = {"file": (file.filename, await file.read(), file.content_type)}

@@ -252,12 +252,26 @@ async def submit_to_gitlab(bug_id: int, db: Session = Depends(get_db), user=Depe
         from backend.services.gitlab_client import GitLabClient
         import logging as _logging
         _logger = _logging.getLogger(__name__)
-        client = GitLabClient()
+
+        # Token selection: OAuth user → own token; admin → PAT fallback; others → reject
+        if user.auth_source == "gitlab":
+            if not user.gitlab_access_token:
+                raise HTTPException(status_code=400, detail="GitLab 授权已过期，请重新登录后再提交")
+            effective_token = user.gitlab_access_token
+        elif user.role == "admin":
+            effective_token = settings.GITLAB_TOKEN
+            if not effective_token:
+                raise HTTPException(status_code=400, detail="GitLab Token 未配置，请联系管理员")
+        else:
+            raise HTTPException(status_code=400, detail="请使用 GitLab 账号登录后再提交 Issue")
+
+        client = GitLabClient(token=effective_token)
         title = f"[PMA Bug #{bug_id}] {b['title']}"
         desc = b.get("description", "") + f"\n\n---\nPMA Bug: {b.get('product_name','')} / {b.get('component_name','')}"
         assignee = user.gitlab_user_id if user.auth_source == "gitlab" else None
-        _logger.info(f"[bug-gitlab] submit bug#{bug_id} user={user.username} auth_source={user.auth_source} "
-                     f"gitlab_user_id={user.gitlab_user_id} assignee_id={assignee}")
+        _logger.info(f"[bug-gitlab] submit bug#{bug_id} user={user.username} role={user.role} auth_source={user.auth_source} "
+                     f"gitlab_user_id={user.gitlab_user_id} assignee_id={assignee}"
+                     f" using_token={'oauth' if user.auth_source == 'gitlab' else 'pat'}")
         result = await client.create_issue(proj_path, title, desc, assignee_id=assignee)
         await client.close()
 
