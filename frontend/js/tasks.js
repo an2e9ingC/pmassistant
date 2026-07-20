@@ -31,7 +31,9 @@ function initTasks() {
 
 function initProjectTasks(projectId, projectName) {
   // Called from project detail tab — no project selector
+  // projectId is the project code (e.g. IT0001), also used as code
   _taskProjectId = projectId;
+  _taskProjectCode = projectId;
   _taskProjectName = projectName || '';
   _taskFilterStatus = '';
   _taskFilterExecution = '';
@@ -547,6 +549,17 @@ function _tfStageName() {
   return null;
 }
 
+function _resolveProjectId() {
+  // Resolve numeric project ID from either code or ID
+  var raw = _tfProjectId || _taskProjectId;
+  if (!raw) return null;
+  // Already numeric
+  if (typeof raw === 'number' || /^\d+$/.test(String(raw))) return parseInt(raw);
+  // Look up by code from cached project list
+  var p = (_allProjects || []).find(function(x) { return x.code == raw; });
+  return p ? p.id : null;
+}
+
 function _closeTaskDialog() {
   var overlay = document.querySelector('.note-dialog-overlay');
   if (overlay) overlay.remove();
@@ -870,7 +883,7 @@ function _loadTfExecutions(projectId, selectedId) {
     setTimeout(function() {
       loadAllProjects().then(function() {
         var p = _allProjects.find(function(x) { return x.id == _tfProjectId || x.code == _tfProjectId; });
-        if (p) document.getElementById('tf-project-input').value = p.name;
+        if (p) document.getElementById('tf-project-input').value = (p.code ? p.code + ' ' : '') + p.name;
       });
     }, 80);
   }
@@ -918,7 +931,7 @@ async function submitTask(taskId) {
     due_date: document.getElementById('tf-due').value || null,
     execution_id: parseInt(document.getElementById('tf-execution').value) || null,
     stage_name: _tfStageName(),
-    project_id: _tfProjectId || _taskProjectId,
+    project_id: _resolveProjectId(),
   };
 
   // Clear all hints first
@@ -928,7 +941,7 @@ async function submitTask(taskId) {
   var valid = true;
   if (!data.title) { var h = document.getElementById('tf-title-hint'); if (h) h.style.display = ''; valid = false; }
   if (!data.project_id) { var h = document.getElementById('tf-project-hint'); if (h) h.style.display = ''; valid = false; }
-  if (!data.execution_id) { var h = document.getElementById('tf-execution-hint'); if (h) h.style.display = ''; valid = false; }
+  if (!data.execution_id && !data.stage_name) { var h = document.getElementById('tf-execution-hint'); if (h) h.style.display = ''; valid = false; }
   if (!data.assignee_id) { var h = document.getElementById('tf-assignee-hint'); if (h) h.style.display = ''; valid = false; }
   if (!data.due_date) { var h = document.getElementById('tf-due-hint'); if (h) h.style.display = ''; valid = false; }
   if (!valid) return;

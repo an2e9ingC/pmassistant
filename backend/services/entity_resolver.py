@@ -11,8 +11,10 @@ from backend.models.zentao import CachedProject, PmaProduct, PmaCustomer
 
 
 def resolve_project(db: Session, code: str):
-    """Look up a project by code — CachedProject first, fallback to PmaProduct."""
+    """Look up a project by code or numeric ID — CachedProject first, fallback to PmaProduct."""
     p = db.query(CachedProject).filter(CachedProject.code == code).first()
+    if not p and code.isdigit():
+        p = db.query(CachedProject).filter(CachedProject.id == int(code)).first()
     if not p:
         p = db.query(PmaProduct).filter(PmaProduct.code == code).first()
     if not p and code.isdigit():

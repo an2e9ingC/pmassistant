@@ -214,6 +214,24 @@ log_audit(db, user, "delete_user", f"username={uname!r}", AUDIT_CAT_USER, "high"
 | 前端 JS | 取当天日期用 `fmtLocalDate(d)` | `fmtLocalDate()`（`utils.js`） |
 | 前端 JS | 禁止 `new Date().toISOString().slice(0,10)` 取当天日期 | UTC 偏移会导致日期误差 |
 
+### 实体标识符规范（id/code 兼容）
+
+**所有 API 路由的 `{identifier}` 参数必须同时接受数字 ID 和字符串 code。** 统一通过 `backend/services/entity_resolver.py` 的 `resolve_project()`/`resolve_product()` 解析。
+
+| 实体 | 路径参数 | 解析函数 | 支持格式 |
+|------|---------|---------|---------|
+| 项目 | `{identifier}` | `resolve_project()` | `PE0450` 或 `1424` |
+| 产品 | `{identifier}` | `resolve_product()` | `CD-LM` 或 `5` |
+
+**实现模式**：
+```python
+p = db.query(Model).filter(Model.code == code).first()    # 先按 code 查
+if not p and code.isdigit():
+    p = db.query(Model).filter(Model.id == int(code)).first()  # 再按数字 ID 查
+```
+
+**前端无需区分传 id 还是 code**，后端自动兼容。
+
 ### 服务器与环境
 
 | 环境 | 地址 | 用途 |
