@@ -724,28 +724,29 @@ function _showTaskForm(title, task) {
     // ── 基本信息 ──
     '<div style="' + _card + '">' +
       '<div style="' + _cardHd + '">基本信息</div>' +
-      '<div style="margin-bottom:6px"><label style="' + _lbl + '">标题 *</label><input class="search-inp" id="tf-title" value="' + escHtml(t.title || '') + '" style="' + inp + '"></div>' +
+      '<div style="margin-bottom:6px"><label style="' + _lbl + '">标题 *</label><input class="search-inp" id="tf-title" value="' + escHtml(t.title || '') + '" placeholder="请填入任务标题" style="' + inp + '"></div>' +
+      '<div id="tf-title-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请填入任务标题</div>' +
       '<div style="margin-bottom:6px"><label style="' + _lbl + '">所属项目 *</label>' +
         '<div style="margin-top:2px">' + createProjectCombo({
           comboId: 'tf-proj-combo', inputId: 'tf-project-input', dropdownId: 'tf-proj-dropdown',
           selectedIdFn: function() { return _tfProjectId; },
           onSelect: function(p) { _tfProjectId = p.id; _loadTfExecutions(p.id); }
-        }) + '</div></div>' +
+        }) + '<div id="tf-project-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择所属项目</div></div></div>' +
       '<div style="' + _grid2 + '">' +
-        '<div><label style="' + _lbl + '">阶段</label><select class="search-inp" id="tf-execution" style="' + inp + '"><option value="">选择阶段...</option>' + execOpts + '</select></div>' +
-        '<div><label style="' + _lbl + '">负责人</label><div style="margin-top:2px">' + createUserCombo({
+        '<div><label style="' + _lbl + '">阶段 *</label><select class="search-inp" id="tf-execution" style="' + inp + '"><option value="">请选择阶段...</option>' + execOpts + '</select><div id="tf-execution-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择阶段</div></div>' +
+        '<div><label style="' + _lbl + '">负责人 *</label><div style="margin-top:2px">' + createUserCombo({
           comboId: 'tf-assignee-combo', inputId: 'tf-assignee-input', dropdownId: 'tf-assignee-dropdown',
           selectedIdFn: function() { return _tfAssigneeId; },
           onSelect: function(u) { _tfAssigneeId = u.id; }
-        }) + '</div></div>' +
+        }) + '<div id="tf-assignee-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择负责人</div></div></div>' +
       '</div>' +
     '</div>' +
     // ── 状态与进度 ──
     '<div style="' + _card + '">' +
       '<div style="' + _cardHd + '">状态与进度</div>' +
       '<div style="' + _grid2 + '">' +
-        '<div><label style="' + _lbl + '">计划开始</label><input class="search-inp" id="tf-start-date" type="date" value="' + (t.start_date || '') + '" style="' + inp + '"></div>' +
-        '<div><label style="' + _lbl + '">截止日期</label><input class="search-inp" id="tf-due" type="date" value="' + (t.due_date || '') + '" style="' + inp + '"></div>' +
+        '<div><label style="' + _lbl + '">计划开始</label><input class="search-inp" id="tf-start-date" type="date" value="' + (t.start_date || fmtLocalDate()) + '" style="' + inp + '"></div>' +
+        '<div><label style="' + _lbl + '">截止日期 *</label><input class="search-inp" id="tf-due" type="date" value="' + (t.due_date || '') + '" style="' + inp + '" required><div id="tf-due-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请填写截止日期</div></div>' +
         '<div><label style="' + _lbl + '">状态</label><select class="search-inp" id="tf-status" style="' + inp + '">' +
           '<option value="todo"' + (t.status==='todo'?' selected':'') + '>待办</option>' +
           '<option value="in_progress"' + (t.status==='in_progress'?' selected':'') + '>进行中</option>' +
@@ -916,8 +917,17 @@ async function submitTask(taskId) {
     project_id: _tfProjectId || _taskProjectId,
   };
 
-  if (!data.title) { showToast('标题不能为空', 'error'); return; }
-  if (!data.project_id) { showToast('请在对话框中选择所属项目', 'error'); return; }
+  // Clear all hints first
+  ['tf-title-hint','tf-project-hint','tf-execution-hint','tf-assignee-hint','tf-due-hint'].forEach(function(id) {
+    var el = document.getElementById(id); if (el) el.style.display = 'none';
+  });
+  var valid = true;
+  if (!data.title) { var h = document.getElementById('tf-title-hint'); if (h) h.style.display = ''; valid = false; }
+  if (!data.project_id) { var h = document.getElementById('tf-project-hint'); if (h) h.style.display = ''; valid = false; }
+  if (!data.execution_id) { var h = document.getElementById('tf-execution-hint'); if (h) h.style.display = ''; valid = false; }
+  if (!data.assignee_id) { var h = document.getElementById('tf-assignee-hint'); if (h) h.style.display = ''; valid = false; }
+  if (!data.due_date) { var h = document.getElementById('tf-due-hint'); if (h) h.style.display = ''; valid = false; }
+  if (!valid) return;
 
   // Collect output items
   var outputs = [];
