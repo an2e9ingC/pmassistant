@@ -86,12 +86,57 @@ async def sync_wecom_data(db: Session) -> dict:
             wecom_userids = [u.wecom_userid for u in users]
             checkins = await client.get_checkin_data(batch_start, batch_end, wecom_userids)
 
+            # Debug: log first record to verify data format
+            if checkins and created == 0 and updated == 0:
+                logger.info(f"WeCom checkin sample: {json.dumps(checkins[0], ensure_ascii=False)[:300]}")
+
+            # Group checkin records by (user_id, date), sum hours from checkin/checkout pairs
+            daily = {}  # (user_id, date_str) -> {"in": ts, "out": ts}
             for record in checkins:
-                result = _upsert_checkin(db, record, "checkin")
-                if result == "created":
-                    created += 1
-                elif result == "updated":
+                uid = record.get("userid", "")
+                ct = record.get("checkin_time", 0)
+                ctype = record.get("checkin_type", "")
+                if not uid or not ct:
+                    continue
+                dt = datetime.fromtimestamp(ct, tz=timezone.utc)
+                ds = dt.strftime("%Y-%m-%d")
+                key = (uid, ds)
+                if key not in daily:
+                    daily[key] = {"in": None, "out": None, "raw": []}
+                if "上班" in ctype:
+                    if daily[key]["in"] is None or ct < daily[key]["in"]:
+                        daily[key]["in"] = ct
+                else:
+                    if daily[key]["out"] is None or ct > daily[key]["out"]:
+                        daily[key]["out"] = ct
+                daily[key]["raw"].append(record)
+
+            for (uid, ds), d in daily.items():
+                hours = 0.0
+                if d["in"] and d["out"]:
+                    hours = max(0, (d["out"] - d["in"]) / 3600.0)
+                elif d["in"]:
+                    hours = 4.0  # half-day if only checkin
+                existing = db.query(WeComCheckin).filter(
+                    WeComCheckin.user_id == uid,
+                    WeComCheckin.date == date.fromisoformat(ds),
+                    WeComCheckin.source == "checkin",
+                ).first()
+                if existing:
+                    existing.work_hours = hours
+                    existing.raw_data = json.dumps(d["raw"][:5], ensure_ascii=False)
+                    existing.synced_at = datetime.now(timezone.utc)
                     updated += 1
+                else:
+                    db.add(WeComCheckin(
+                        user_id=uid,
+                        date=date.fromisoformat(ds),
+                        work_hours=hours,
+                        source="checkin",
+                        raw_data=json.dumps(d["raw"][:5], ensure_ascii=False),
+                        synced_at=datetime.now(timezone.utc),
+                    ))
+                    created += 1
 
             db.commit()
 
@@ -116,8 +161,10 @@ def _upsert_checkin(db: Session, record: dict, source: str) -> Optional[str]:
     checkin_epoch = record.get("opencheckintime")
     checkout_epoch = record.get("finishcheckintime")
 
-    if not user_id or not checkin_epoch:
+    if not user_id:
         return None
+    if checkin_epoch is None or checkin_epoch == 0:
+        return None  # no checkin time — skip
 
     dt = datetime.fromtimestamp(checkin_epoch, tz=timezone.utc)
     date_key = dt.date()
