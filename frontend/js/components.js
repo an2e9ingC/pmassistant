@@ -1246,9 +1246,9 @@ function _renderMonthCalendar(today, dailyMap, calData) {
   var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
     '<span style="font-size:11px;color:var(--muted)">'+_calYear+'年'+monthNames[_calMonth-1]+' · 本周 '+total.toFixed(1)+'h</span>' +
     '<span style="display:flex;gap:4px">' +
-      '<button class="btn-xs" onclick="_calShift(-1)">◀</button>' +
-      '<button class="btn-xs" style="font-weight:600" onclick="_calGoToday()">今天</button>' +
-      '<button class="btn-xs" onclick="_calShift(1)">▶</button>' +
+      '<button class="btn-xs" style="color:var(--fg);background:var(--bg);border:1px solid var(--border)" onclick="_calShift(-1)">◀</button>' +
+      '<button class="btn-xs" style="font-weight:600;color:var(--fg);background:var(--bg);border:1px solid var(--border)" onclick="_calGoToday()">今天</button>' +
+      '<button class="btn-xs" style="color:var(--fg);background:var(--bg);border:1px solid var(--border)" onclick="_calShift(1)">▶</button>' +
     '</span></div>';
 
   html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);text-align:center;margin-bottom:4px">';
@@ -1278,13 +1278,21 @@ function _renderMonthCalendar(today, dailyMap, calData) {
     if (isCurrentMonth && h > 0) {
       tipText = (typeof fmtHours === 'function' ? fmtHours(h) : h.toFixed(1)+'h');
       if (dd && dd.checkin_info) tipText += ' | ' + dd.checkin_info.trim();
-      if (h <= 8) {
+      if (h < 8) {
         var pct = h/8*100;
-        cellBg = 'background:linear-gradient(to top,#3B82F6 '+pct+'%,transparent '+pct+'%);';
+        var blueColor = isDark ? '#6B9FFF' : '#3B82F6';
+        cellBg = 'background:linear-gradient(to top,' + blueColor + ' ' + pct + '%,transparent ' + pct + '%);';
+      } else if (h < 8.5) {
+        cellBg = 'background:var(--success);'; // green: 8h ~ 8h30m
       } else {
-        var overH = h - 8;
-        var overPct = overH/8*100;
-        cellBg = 'background:linear-gradient(to top,#fbbf24 0%,#ef4444 '+overPct+'%,transparent '+overPct+'%);';
+        // 8 levels, each 1h, from yellow #EAFF00 to red #FF2400
+        var overLevel = Math.min(7, Math.floor(h - 8.5));
+        // Theme-aware OT colors: light=low-sat muted, dark=higher-luminance for visibility
+        var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        var otColors = isDark
+          ? ['#D4C89A','#D4B078','#D49860','#CC8050','#C06844','#B0503C','#A04038','#903434']
+          : ['#C5B88A','#C9A070','#C88860','#C07054','#B4604C','#A45048','#944444','#843A3A'];
+        cellBg = 'background:' + otColors[overLevel] + ';';
       }
     } else if (intensity.bg) {
       // Fallback to intensity-based solid color for current month with 0h

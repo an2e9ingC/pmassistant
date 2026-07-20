@@ -749,16 +749,21 @@ input[type="checkbox"] { accent-color: var(--accent); }
   display: inline-block; padding: 3px 10px; border-radius: 5px;
   font-family: var(--mono); font-size: 14px; font-weight: 650;
 }
-/* within +-5% of standard = green (OK) */
-.uc-week-bar.uc-hbar-ok    { background: var(--success-lt); color: var(--success); }
-/* below standard by >5% = blue (under) */
-.uc-week-bar.uc-hbar-under { background: var(--accent-lt); color: var(--accent); }
-/* above standard: graded like daily intensity */
-.uc-week-bar.uc-hbar-low   { background: var(--success-lt); color: var(--success); }
-.uc-week-bar.uc-hbar-mid   { background: var(--accent-lt); color: var(--accent); }
-.uc-week-bar.uc-hbar-high  { background: var(--warn-lt); color: var(--warn); }
-.uc-week-bar.uc-hbar-over  { background: var(--danger); color: #fff; }
+/* Unified low-saturation palette — same as calendar cells */
 .uc-week-bar.uc-hbar-empty { background: var(--bg); color: var(--muted); }
+.uc-week-bar.uc-hbar-under { background: #D6E0F5; color: #5B8DEF; }
+.uc-week-bar.uc-hbar-ok    { background: #D4E8D8; color: #6BAF7B; }
+.uc-week-bar.uc-hbar-low   { background: #F0ECE0; color: #A09068; }
+.uc-week-bar.uc-hbar-mid   { background: #F0E0D4; color: #B07850; }
+.uc-week-bar.uc-hbar-high  { background: #F0D4C8; color: #A85840; }
+.uc-week-bar.uc-hbar-over  { background: #E8CCCC; color: #8C3C3C; }
+/* Dark theme: higher luminance for readability */
+[data-theme="dark"] .uc-week-bar.uc-hbar-under { background: #1E2D4A; color: #7BAFFF; }
+[data-theme="dark"] .uc-week-bar.uc-hbar-ok    { background: #1A3322; color: #6CCF8B; }
+[data-theme="dark"] .uc-week-bar.uc-hbar-low   { background: #3A3020; color: #D4C89A; }
+[data-theme="dark"] .uc-week-bar.uc-hbar-mid   { background: #3A2818; color: #D4B078; }
+[data-theme="dark"] .uc-week-bar.uc-hbar-high  { background: #381C10; color: #CC8050; }
+[data-theme="dark"] .uc-week-bar.uc-hbar-over  { background: #2C1010; color: #D08080; }
 
 /* Tab buttons on the right of profile card */
 .profile-tabs { display: flex; gap: 8px; }
