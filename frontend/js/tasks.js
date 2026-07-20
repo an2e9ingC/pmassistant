@@ -1275,13 +1275,13 @@ function openWorklogDialog(taskId) {
       '<div style="margin-bottom:4px;font-size:11px;color:var(--muted)">项目: <span style="color:var(--fg);font-weight:500">' + escHtml(task.project_code||'？') + '</span> ' + escHtml(task.project_name||'') + '</div>' +
       '<div style="margin-bottom:8px;font-size:11px;color:var(--muted)">任务: <span style="color:var(--fg);font-weight:500">' + escHtml(task.name||task.title||'？') + '</span></div>' +
       '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">日期 *</label>' +
-        '<input class="search-inp" id="wl-date" type="date" required value="'+today+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
+        '<input class="search-inp" id="wl-date" type="date" required value="'+today+'" style="width:100%;box-sizing:border-box;margin-top:2px"><div id="wl-date-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择日期</div></div>' +
       '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工时(h) *</label>' +
-        '<input class="search-inp" id="wl-hours" type="number" step="0.5" min="0.5" required value="1" style="width:100%;box-sizing:border-box;margin-top:2px" oninput="_wlCheckOverBudget(' + taskId + ')"></div>' +
+        '<input class="search-inp" id="wl-hours" type="number" step="0.5" min="0.5" required value="1" style="width:100%;box-sizing:border-box;margin-top:2px" oninput="_wlCheckOverBudget(' + taskId + ')"><div id="wl-hours-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请输入有效工时(≥0.5h)</div></div>' +
       '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">进度(%) * 当前: '+(task.progress||0)+'%</label>' +
-        '<input class="search-inp" id="wl-progress" type="number" min="0" max="100" step="5" required value="'+(task.progress||0)+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
+        '<input class="search-inp" id="wl-progress" type="number" min="0" max="100" step="5" required value="'+(task.progress||0)+'" style="width:100%;box-sizing:border-box;margin-top:2px"><div id="wl-progress-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请输入进度(0-100)</div></div>' +
       '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工作描述 *</label>' +
-        '<textarea class="search-inp" id="wl-desc" rows="2" required style="width:100%;box-sizing:border-box;margin-top:2px;resize:vertical"></textarea></div>' +
+        '<textarea class="search-inp" id="wl-desc" rows="2" required style="width:100%;box-sizing:border-box;margin-top:2px;resize:vertical" placeholder="请填写工作内容描述"></textarea><div id="wl-desc-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请填写工作描述</div></div>' +
     '</div>';
     openDialog('记录工时', html, [
       {text:'取消',onclick:'_closeTaskDialog()'},
@@ -1332,10 +1332,16 @@ async function submitWorklog(taskId) {
   var desc = document.getElementById('wl-desc').value.trim();
   var date = document.getElementById('wl-date').value;
   var remainingEl = document.getElementById('wl-remaining');
-  if (!date) { showToast('请选择日期', 'error'); return; }
-  if (!hours || hours <= 0) { showToast('请输入有效的工时数', 'error'); return; }
-  if (isNaN(progress) || progress < 0 || progress > 100) { showToast('请输入有效的进度(0-100)', 'error'); return; }
-  if (!desc) { showToast('请填写工作描述', 'error'); return; }
+  // Clear all hints
+  ['wl-date-hint','wl-hours-hint','wl-progress-hint','wl-desc-hint'].forEach(function(id) {
+    var el = document.getElementById(id); if (el) el.style.display = 'none';
+  });
+  var valid = true;
+  if (!date) { var h = document.getElementById('wl-date-hint'); if (h) h.style.display = ''; valid = false; }
+  if (!hours || hours <= 0) { var h = document.getElementById('wl-hours-hint'); if (h) h.style.display = ''; valid = false; }
+  if (isNaN(progress) || progress < 0 || progress > 100) { var h = document.getElementById('wl-progress-hint'); if (h) h.style.display = ''; valid = false; }
+  if (!desc) { var h = document.getElementById('wl-desc-hint'); if (h) h.style.display = ''; valid = false; }
+  if (!valid) return;
   try {
     await API.post('/worklogs', {task_id:taskId, hours:hours, date:date, description:desc});
     await API.put('/tasks/'+taskId, {progress:progress});
@@ -1361,10 +1367,16 @@ async function _submitWorklogEdit(wlId, taskId) {
   var progress = parseInt(document.getElementById('wl-progress').value);
   var desc = document.getElementById('wl-desc').value.trim();
   var date = document.getElementById('wl-date').value;
-  if (!date) { showToast('请选择日期', 'error'); return; }
-  if (!hours || hours <= 0) { showToast('请输入有效的工时数', 'error'); return; }
-  if (isNaN(progress) || progress < 0 || progress > 100) { showToast('请输入有效的进度(0-100)', 'error'); return; }
-  if (!desc) { showToast('请填写工作描述', 'error'); return; }
+  // Clear all hints
+  ['wl-date-hint','wl-hours-hint','wl-progress-hint','wl-desc-hint'].forEach(function(id) {
+    var el = document.getElementById(id); if (el) el.style.display = 'none';
+  });
+  var valid = true;
+  if (!date) { var h = document.getElementById('wl-date-hint'); if (h) h.style.display = ''; valid = false; }
+  if (!hours || hours <= 0) { var h = document.getElementById('wl-hours-hint'); if (h) h.style.display = ''; valid = false; }
+  if (isNaN(progress) || progress < 0 || progress > 100) { var h = document.getElementById('wl-progress-hint'); if (h) h.style.display = ''; valid = false; }
+  if (!desc) { var h = document.getElementById('wl-desc-hint'); if (h) h.style.display = ''; valid = false; }
+  if (!valid) return;
   try {
     await API.put('/worklogs/'+wlId, {hours:hours, date:date, description:desc});
     await API.put('/tasks/'+taskId, {progress:progress});
