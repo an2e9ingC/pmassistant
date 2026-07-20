@@ -133,7 +133,7 @@ async def validate_release_url(url: str) -> dict:
         result["error"] = f"GitLab上不存在 release 或 tag: {tag_name}"
         return result
     except Exception as e:
-        result["error"] = str(e)[:200]
+        result["error"] = f"校验失败: {str(e)[:150]}"
         logger.warning(f"GitLab URL validation error for {url!r}: {e}")
         return result
     finally:

@@ -290,20 +290,10 @@ async def create_issue(
             title=title,
             description=template,
             labels=all_labels,
+            assignee_id=body.assignee_id or None,
         )
         if result:
             issue_iid = result.get("iid")
-            if body.assignee_id and issue_iid:
-                try:
-                    await client._request(
-                        "PUT",
-                        f"/projects/{_project_path_encoded()}/issues/{issue_iid}",
-                        json={"assignee_ids": [body.assignee_id]},
-                    )
-                except Exception as e:
-                    import logging
-                    logging.getLogger(__name__).warning(f"Failed to assign issue: {e}")
-
             web_url = result.get("web_url", "")
             return {
                 "code": 0,
@@ -383,12 +373,15 @@ async def upload_file(
     files = {"file": (file.filename, await file.read(), file.content_type)}
 
     async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.post(
-            url,
-            headers={"Authorization": f"Bearer {token}"},
-            files=files,
-        )
-        if resp.status_code in (200, 201):
-            data = resp.json()
-            return {"code": 0, "data": {"url": data.get("url", ""), "markdown": data.get("markdown", "")}, "message": "ok"}
-        return {"code": 1, "message": f"上传失败: HTTP {resp.status_code}"}
+        try:
+            resp = await client.post(
+                url,
+                headers={"Authorization": f"Bearer {token}"},
+                files=files,
+            )
+            if resp.status_code in (200, 201):
+                data = resp.json()
+                return {"code": 0, "data": {"url": data.get("url", ""), "markdown": data.get("markdown", "")}, "message": "ok"}
+            return {"code": 1, "message": f"上传失败: HTTP {resp.status_code}"}
+        except httpx.RequestError as e:
+            return {"code": 1, "message": f"上传失败: GitLab 连接异常 ({e})"}

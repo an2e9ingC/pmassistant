@@ -14,7 +14,7 @@
 | 你想做什么 | 使用工具 | 说明 |
 |-----------|---------|------|
 | "这个功能在哪实现的" | `search_graph(query="...")` | BM25 全文搜索，camelCase 分词，结构重要性排序 |
-| "这个函数被谁调用 / 调用了谁" | `trace_path(mode="calls")` | 上下游调用链，支持 `direction="both"` |
+| "这个函数被谁调用 / 调用了谁" | `trace_path(mode="calls")` + `grep -rn 'func_name' backend/` | MCP 追踪 + grep 搜索所有调用方，确保无遗漏 |
 | "数据从 API 入口到数据库怎么流转" | `trace_path(mode="data_flow")` | 沿 CALLS + DATA_FLOWS 追踪参数/返回值传递 |
 | "看这个函数的完整源码" | `get_code_snippet(qualified_name)` | 精确源码，支持 `include_neighbors=true` 获取上下文 |
 | "项目怎么分层的 / 有哪些模块" | `get_architecture()` | 包结构、服务依赖、Leiden 社区检测（揭示实际架构边界） |

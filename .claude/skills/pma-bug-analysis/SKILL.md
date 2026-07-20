@@ -19,6 +19,14 @@ allowed-tools: Read, Write, Edit, Bash, LSP
 
 修复 bug 时，用 `search_code(pattern="...")` 或 `trace_path` 扫描同类问题。列出同类问题并询问是否一并修复。
 
+## 搜索所有调用方（硬性规则）
+
+**分析一个函数的行为前，必须先搜索所有调用方。** 同一功能可能有多条调用路径（如 `create_issue` 被 `bugs.py` 和 `gitlab.py` 两处调用，实现方式不同）。只分析一处会遗漏关键差异。
+
+```bash
+grep -rn 'function_name' backend/ --include='*.py' | grep -v __pycache__
+```
+
 ## 日志完善原则
 
 - 外部 API 调用：记录请求 URL + 响应状态码 + 响应体预览（出错时）

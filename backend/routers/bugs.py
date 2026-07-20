@@ -250,10 +250,15 @@ async def submit_to_gitlab(bug_id: int, db: Session = Depends(get_db), user=Depe
 
     try:
         from backend.services.gitlab_client import GitLabClient
+        import logging as _logging
+        _logger = _logging.getLogger(__name__)
         client = GitLabClient()
         title = f"[PMA Bug #{bug_id}] {b['title']}"
         desc = b.get("description", "") + f"\n\n---\nPMA Bug: {b.get('product_name','')} / {b.get('component_name','')}"
-        result = await client.create_issue(proj_path, title, desc)
+        assignee = user.gitlab_user_id if user.auth_source == "gitlab" else None
+        _logger.info(f"[bug-gitlab] submit bug#{bug_id} user={user.username} auth_source={user.auth_source} "
+                     f"gitlab_user_id={user.gitlab_user_id} assignee_id={assignee}")
+        result = await client.create_issue(proj_path, title, desc, assignee_id=assignee)
         await client.close()
 
         gitlab_url = result.get("web_url", "")
@@ -293,7 +298,9 @@ async def sync_gitlab_issues(db: Session = Depends(get_db), _=Depends(require_pe
                 bug_service.create_analysis(db, {"bug_id": b.id,
                     "content": f"GitLab Issue 已关闭 (state=closed)"}, None)
                 synced += 1
-        except Exception:
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"[gitlab-sync] Bug #{b.id} sync failed: {e}")
             continue
     db.commit()
     return {"code": 0, "data": {"synced": synced}, "message": "ok"}

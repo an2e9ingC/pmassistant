@@ -187,7 +187,9 @@ async def fetch_document(
         client = GitLabClient()
         try:
             content = await client.get_raw_file(project_path, file_path, ref)
-        except Exception:
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"[doc-fetch] GitLab raw file fetch failed ({e}), falling back to direct HTTP")
             pass  # Fall through to direct fetch
         finally:
             await client.close()

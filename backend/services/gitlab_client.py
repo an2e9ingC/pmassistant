@@ -190,13 +190,29 @@ class GitLabClient:
     async def create_issue(
         self, project_path: str, title: str,
         description: str = "", labels: str = "",
+        assignee_id: int = None,
     ) -> dict | None:
-        """Create a new issue in a GitLab project."""
+        """Create a new issue in a GitLab project.
+
+        Args:
+            project_path: URL-encoded GitLab project path
+            title: Issue title
+            description: Issue body (markdown)
+            labels: Comma-separated label names
+            assignee_id: GitLab user ID to assign the issue to
+        """
         pid = quote(project_path, safe="")
         data = {"title": title, "description": description}
         if labels:
             data["labels"] = labels
-        return await self._request("POST", f"/projects/{pid}/issues", json=data)
+        if assignee_id:
+            data["assignee_ids"] = [assignee_id]
+        logger.info(f"[gitlab] create_issue project={project_path!r} assignee_id={assignee_id!r} data={data}")
+        result = await self._request("POST", f"/projects/{pid}/issues", json=data)
+        logger.info(f"[gitlab] create_issue response: iid={result.get('iid') if result else None} "
+                    f"assignees={[a.get('username') for a in (result.get('assignees') or [])] if result else None} "
+                    f"author={result.get('author',{}).get('username') if result else None}")
+        return result
 
     async def get_issue(
         self, project_path: str, issue_iid: int,
