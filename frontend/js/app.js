@@ -196,10 +196,6 @@ function gotoView(view, opts) {
   var viewEl = document.getElementById('view-' + view);
   if (viewEl) viewEl.classList.add('active');
 
-  // Hide floating profile card when leaving user-center
-  if (view !== 'user-center' && window._ucFloatingCard) {
-    window._ucFloatingCard.el.style.display = 'none';
-  }
   // Hide right panel when leaving user-center
   if (view !== 'user-center' && window._ucRightPanel) {
     window._ucRightPanel.style.display = 'none';
@@ -1425,13 +1421,11 @@ function initUserCenter() {
       '</div>' +
     '</div>';
 
-  // Container: tab-switched content area below floating card
-  // Left: task OR bug table (switched via floating card buttons)
-  // Right: calendar (fixed, no scroll)
+  // Container: profile bar at top + tab-switched content below
   container.innerHTML =
     '<div style="display:flex;flex-direction:column;height:calc(100vh - 54px - 48px);overflow:hidden">' +
-    // Spacer: reserves space for the floating card (height set by JS)
-    '<div id="uc-card-spacer"></div>' +
+    // Profile bar — inline, not floating; reserve space for right panel
+    '<div id="uc-profile-bar-wrap" style="margin-right:358px">' + profileBarHtml + '</div>' +
     // Expand panel
     '<div class="profile-expand" id="uc-expand"><div class="profile-expand-inner"><div id="uc-expand-content"></div></div></div>' +
     // Bottom area: left (tab-switched tables) + right (calendar)
@@ -1463,47 +1457,9 @@ function initUserCenter() {
     window._ucRightPanel.style.display = '';
   }
 
-  // Create or show floating profile card
-  if (window._ucFloatingCard) {
-    // Re-show existing card (position preserved from last drag)
-    window._ucFloatingCard.el.style.display = '';
-  } else {
-    // First time: create card — centered over task list area, 61.8% of task list width
-    var sidebarW = 228;
-    var rightPanelW = 358; // 340px panel + 18px gap
-    var taskListW = window.innerWidth - sidebarW - rightPanelW;
-    var cardW = Math.round(taskListW * 0.618);
-    var cardX = sidebarW + Math.round((taskListW - cardW) / 2);
-    var cardY = 70; // below topbar (54px) + 16px gap
-
-    window._ucFloatingCard = createFloatingCard({
-      id: 'user-profile',
-      content: profileBarHtml,
-      width: cardW,
-      initialX: cardX,
-      initialY: cardY,
-      closable: false,
-      savePosition: true
-    });
-  }
-
-  // Reserve card height via spacer so content below doesn't overlap
+  // Dynamic table scroll heights (like dashboard's _resizeProjTable)
+  // Dynamic table scroll heights (like dashboard's _resizeProjTable)
   window._ucUpdateLayout = function() {
-    var spacer = document.getElementById('uc-card-spacer');
-    var card = window._ucFloatingCard && window._ucFloatingCard.el;
-    var rightPanelW = 358;
-    var sidebarW = 228;
-    var taskListW = window.innerWidth - sidebarW - rightPanelW;
-    if (spacer && card) {
-      spacer.style.height = (card.offsetHeight + 12) + 'px';
-    }
-    // Dynamically resize and reposition profile card: 61.8% of task list width, centered
-    if (card) {
-      var w = Math.round(taskListW * 0.618);
-      card.style.width = w + 'px';
-      card.style.left = (sidebarW + Math.round((taskListW - w) / 2)) + 'px';
-    }
-    // Dynamic table scroll heights (like dashboard's _resizeProjTable)
     var tw = document.getElementById('uc-tasks-table-wrap');
     if (tw) { var tr = tw.getBoundingClientRect(); tw.style.maxHeight = Math.max(200, window.innerHeight - tr.top - 16) + 'px'; }
     var bw = document.getElementById('uc-bugs-table-wrap');
