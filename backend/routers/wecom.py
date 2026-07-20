@@ -84,7 +84,8 @@ async def wecom_users(
         except Exception as e:
             db.rollback()
             import logging
-            logging.getLogger(__name__).warning(f"WeCom user sync failed: {e}")
+            logging.getLogger(__name__).error(f"WeCom user sync failed: {e}")
+            raise
 
     q_lower = q.strip().lower()
     users = db.query(WeComUser).order_by(WeComUser.name).all()

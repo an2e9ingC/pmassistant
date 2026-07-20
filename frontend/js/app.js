@@ -644,24 +644,28 @@ async function clearSVNSync() {
 }
 
 async function triggerSingleSync(key) {
-  var names = { zentao: '禅道', gitlab: 'GitLab', nas: 'NAS', svn: 'SVN' };
+  var names = { zentao: '禅道', gitlab: 'GitLab', nas: 'NAS', svn: 'SVN', wecom: '企业微信' };
   var name = names[key] || key;
   showToast(name + ' 同步中...', 'info');
   try {
     var result = await API.post('/sync/trigger/' + key);
     var d = result || {};
-    var summary = '';
+    var summary = '', status = 'success';
     if (key === 'svn') {
       var ss = d.svn_summary || {};
       summary = ss.summary || '完成';
     } else if (key === 'gitlab') {
       var gs = d.gitlab_summary || {};
       summary = gs.summary || '完成';
+    } else if (key === 'wecom') {
+      var ws = d.wecom_summary || {};
+      summary = ws.summary || '完成';
+      status = ws.status === 'failed' ? 'error' : 'success';
     } else {
       summary = '已触发（请使用完整同步）';
     }
     _srcSyncMsg[key] = summary;
-    showToast(name + ' 同步完成: ' + summary, 'success');
+    showToast(name + ' 同步完成: ' + summary, status);
     updateLinkStatus();
   } catch(e) {
     showToast(name + ' 同步失败: ' + (e.message || '未知错误'), 'error');

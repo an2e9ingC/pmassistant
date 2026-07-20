@@ -96,14 +96,24 @@ async def trigger_single_sync(source: str, db: Session = Depends(get_db), _=Depe
         if not settings.WECOM_CORP_ID or not settings.WECOM_SECRET:
             return {"code": 0, "data": {"wecom_summary": {"status": "skipped", "summary": "未配置企业微信"}}, "message": "ok"}
         from backend.services import wecom_service as _wecom_svc
+        import logging
+        _wc_logger = logging.getLogger(__name__)
         t0 = _time.time()
-        wc_result = await _wecom_svc.sync_wecom_data(db)
-        elapsed = round(_time.time() - t0, 1)
-        return {"code": 0, "data": {
-            "wecom_summary": {"status": "success",
-                               "summary": f"打卡{wc_result.get('fetched',0)}条 / 新增{wc_result.get('created',0)} / 更新{wc_result.get('updated',0)}"},
-            "timings": {"total": elapsed},
-        }, "message": "ok"}
+        try:
+            wc_result = await _wecom_svc.sync_wecom_data(db)
+            elapsed = round(_time.time() - t0, 1)
+            _wc_logger.info(f"[企业微信] 单源同步完成: 打卡{wc_result.get('fetched',0)}条 / 新增{wc_result.get('created',0)} / 更新{wc_result.get('updated',0)}")
+            return {"code": 0, "data": {
+                "wecom_summary": {"status": "success",
+                                   "summary": f"打卡{wc_result.get('fetched',0)}条 / 新增{wc_result.get('created',0)} / 更新{wc_result.get('updated',0)}"},
+                "timings": {"total": elapsed},
+            }, "message": "ok"}
+        except Exception as e:
+            _wc_logger.error(f"[企业微信] 单源同步失败: {e}")
+            return {"code": 0, "data": {
+                "wecom_summary": {"status": "failed", "summary": str(e)[:120]},
+                "timings": {"total": round(_time.time() - t0, 1)},
+            }, "message": "ok"}
 
     return {"code": 1, "message": f"不支持的数据源: {source}"}
 

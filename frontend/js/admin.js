@@ -121,6 +121,12 @@ function renderConfigForm(cfg) {
             ' data-section="' + sec.key + '" data-field="enabled"' +
             (enabledOn ? ' checked' : '') + ' value="1" style="position:absolute;opacity:0;pointer-events:none">' +
           toggleSwitch(enabledOn, "toggleSourceEnabled('" + sec.key + "')", {id: euid + '-toggle'}) +
+          '<button class="btn btn-xs" onclick="triggerSingleSync(\'' + sec.key + '\')" title="同步此数据源" style="font-size:10px;padding:2px 6px;white-space:nowrap;flex-shrink:0">' +
+            '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+              '<polyline points="1.5,5.5 3.5,2.5 1.5,2.5"/><polyline points="14.5,10.5 12.5,13.5 14.5,13.5"/>' +
+              '<path d="M2.5 8a5.5 5.5 0 0 1 10-2.5"/><path d="M13.5 8a5.5 5.5 0 0 1-10 2.5"/>' +
+            '</svg>' +
+          '</button>' +
           '<button class="btn btn-xs" onclick="testSourceConnection(\'' + sec.key + '\')" style="font-size:10px;padding:2px 8px;white-space:nowrap;flex-shrink:0">测试连接</button>' +
           '<button class="btn btn-xs" onclick="openSourceConfigDialog(\'' + sec.key + '\')" title="编辑配置" style="font-size:10px;padding:2px 6px;white-space:nowrap;flex-shrink:0">' +
             '<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +

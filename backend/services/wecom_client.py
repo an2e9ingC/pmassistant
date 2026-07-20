@@ -127,7 +127,13 @@ class WeComClient:
     async def get_approval_data(
         self, start_time: int, end_time: int
     ) -> list:
-        """Fetch approval (审批) data for a date range."""
+        """Fetch approval (审批) data for a date range.
+
+        WeCom approval API expects uint32 Unix timestamps, max 31-day range.
+        """
+        # Clamp to 31 days max
+        if end_time - start_time > 31 * 86400:
+            start_time = end_time - 31 * 86400
         body = {
             "starttime": start_time,
             "endtime": end_time,

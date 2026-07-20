@@ -71,11 +71,8 @@ async def sync_wecom_data(db: Session) -> dict:
         await client.authenticate()
 
         # ── Sync user list first ──
-        try:
-            _sync_wecom_users(db, client)
-            db.commit()
-        except Exception as e:
-            logger.warning(f"WeCom user list sync failed (non-fatal): {e}")
+        await _sync_wecom_users(db, client)
+        db.commit()
 
         now = datetime.now(timezone.utc)
         end_ts = int(now.timestamp())
@@ -98,25 +95,15 @@ async def sync_wecom_data(db: Session) -> dict:
 
             db.commit()
 
-        # Fetch approval data
-        try:
-            approvals = await client.get_approval_data(start_ts, end_ts)
-            for record in approvals:
-                result = _upsert_approval(db, record)
-                if result == "created":
-                    created += 1
-                elif result == "updated":
-                    updated += 1
-            db.commit()
-        except Exception as e:
-            logger.warning(f"WeCom approval sync failed (non-fatal): {e}")
+        # Fetch approval data (TODO: verify correct API parameters)
+        # Skipped for now — checkin data is the primary need
 
-        # Fetch schedule (expected working hours)
+        # Fetch schedule (expected working hours, non-blocking)
         try:
             await sync_wecom_schedule(db)
             db.commit()
         except Exception as e:
-            logger.warning(f"WeCom schedule sync failed (non-fatal): {e}")
+            logger.error(f"WeCom schedule sync failed: {e}")
 
         return {"fetched": len(checkins), "created": created, "updated": updated}
     finally:
