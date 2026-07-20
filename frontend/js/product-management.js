@@ -626,8 +626,9 @@ function _pmShowEditProductDialog(productId, productName, productCode) {
       openDialog('编辑产品 — ' + escHtml(productName),
         '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">产品编号</label>' +
           '<input class="search-inp" id="pm-edit-code" value="' + escHtml(p.code || '') + '" style="width:100%;box-sizing:border-box"></div>' +
-        '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">产品名称</label>' +
-          '<input class="search-inp" id="pm-edit-name" value="' + escHtml(p.name || '') + '" style="width:100%;box-sizing:border-box"></div>' +
+        '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">产品名称 <span style="font-weight:400">（不能包含空格和中文符号）</span></label>' +
+          '<input class="search-inp" id="pm-edit-name" value="' + escHtml(p.name || '') + '" style="width:100%;box-sizing:border-box" oninput="_pmValidateProdName(this)">' +
+          '<div id="pm-newprod-name-err" style="font-size:10px;color:var(--danger);margin-top:2px;display:none"></div></div>' +
         '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">状态</label>' +
           '<select class="search-inp" id="pm-edit-status" style="width:100%;box-sizing:border-box">' +
             '<option value="normal"' + (p.status === 'normal' ? ' selected' : '') + '>正常</option>' +
@@ -650,6 +651,13 @@ async function _pmSaveEditProduct(productId) {
   var name = document.getElementById('pm-edit-name').value.trim();
   var status = document.getElementById('pm-edit-status').value;
   if (!name) { showToast('请输入产品名称', 'error'); return; }
+  // Validate name: no spaces + Chinese punctuation
+  var forbidden = _pmGetNameForbidden();
+  var bad = '';
+  for (var i = 0; i < name.length; i++) {
+    if (forbidden.has(name[i])) { bad = name[i]; break; }
+  }
+  if (bad) { showToast('产品名称不能包含空格和中文符号', 'error'); return; }
 
   var tags = [];
   document.querySelectorAll('.pm-edit-tag:checked').forEach(function(cb) { tags.push(cb.value); });
@@ -722,8 +730,6 @@ function _pmBuildProdCode() {
     (document.getElementById('pmnc-form').value || '#');
   var preview = document.getElementById('pmnc-preview');
   if (preview) preview.textContent = code;
-  var nameEl = document.getElementById('pm-newprod-name');
-  if (nameEl) nameEl.value = code;
   // Auto-select matching tags from naming options
   var autoTags = {};
   ['pmnc-series','pmnc-fpga','pmnc-cpu','pmnc-adc','pmnc-form'].forEach(function(sid) {
@@ -737,7 +743,29 @@ function _pmBuildProdCode() {
   document.querySelectorAll('.pm-newprod-tag').forEach(function(cb) {
     cb.checked = !!autoTags[cb.value];
   });
+  // Fetch next version for this base code
+  _pmFetchNextVersion(code);
   return code;
+}
+
+function _pmFetchNextVersion(baseCode) {
+  if (baseCode.indexOf('#') >= 0) {
+    var verEl = document.getElementById('pmnc-version');
+    if (verEl) verEl.textContent = '—';
+    return;
+  }
+  API.get('/product-management/next-product-version?base_code=' + encodeURIComponent(baseCode)).then(function(res) {
+    var verEl = document.getElementById('pmnc-version');
+    if (verEl) verEl.textContent = res.version;
+    var fullEl = document.getElementById('pmnc-full-code');
+    if (fullEl) fullEl.textContent = res.full_code;
+    // Update top preview to show full code with version
+    var preview = document.getElementById('pmnc-preview');
+    if (preview) preview.textContent = res.full_code;
+  }).catch(function() {
+    var verEl = document.getElementById('pmnc-version');
+    if (verEl) verEl.textContent = '—';
+  });
 }
 
 function _pmShowNamingProductDialog() {
@@ -780,9 +808,10 @@ function _pmShowNamingProductDialog() {
       : '<span style="font-size:12px;color:var(--muted)">暂无标签，请先在文档模板中配置</span>';
 
     var formHtml =
+      // Auto-generated code preview — centered at top
       '<div style="text-align:center;margin-bottom:12px">' +
-        '<div style="font-size:10px;color:var(--muted);margin-bottom:2px">公司固定缩写</div>' +
-        '<div style="display:inline-block;font-size:24px;font-weight:700;font-family:var(--mono);color:var(--muted);background:var(--bg);padding:4px 14px;border-radius:6px;border:1px solid var(--border);letter-spacing:0.05em">L</div>' +
+        '<div style="font-size:10px;color:var(--muted);margin-bottom:4px">自动生成编号</div>' +
+        '<div style="display:inline-block;font-size:22px;font-weight:700;font-family:var(--mono);color:var(--accent);background:var(--accent-lt);padding:6px 18px;border-radius:6px;border:1px solid var(--accent);letter-spacing:0.05em" id="pmnc-preview">L####</div>' +
       '</div>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">' +
         '<div><label style="font-size:10px;color:var(--muted)">系列</label>' + makeSelect('pmnc-series', _prodNamingOpts.series) + '</div>' +
@@ -791,14 +820,19 @@ function _pmShowNamingProductDialog() {
         '<div><label style="font-size:10px;color:var(--muted)">ADC</label>' + makeSelect('pmnc-adc', _prodNamingOpts.adc) + '</div>' +
         '<div><label style="font-size:10px;color:var(--muted)">形态</label>' + makeSelect('pmnc-form', _prodNamingOpts.form) + '</div>' +
         '<div style="display:flex;flex-direction:column;justify-content:flex-end">' +
-          '<div style="text-align:center;padding:4px;background:var(--accent-lt);border-radius:6px;border:1px solid var(--accent)">' +
-            '<div style="font-size:9px;color:var(--muted)">自动生成编号</div>' +
-            '<div id="pmnc-preview" style="font-size:20px;font-weight:700;font-family:var(--mono);color:var(--accent)">L####</div>' +
+          '<div style="text-align:center;padding:4px;background:var(--bg);border-radius:6px;border:1px solid var(--border)">' +
+            '<div style="font-size:9px;color:var(--muted)">自动生成版本号</div>' +
+            '<div style="font-size:14px;font-weight:600;font-family:var(--mono);color:var(--fg)">' +
+              '<span id="pmnc-version" style="font-size:20px;font-weight:700;color:var(--warn)">—</span>' +
+            '</div>' +
           '</div>' +
         '</div>' +
       '</div>' +
-      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">产品名称 <span style="font-weight:400">（自动与编号一致）</span></label>' +
-      '<input class="search-inp" id="pm-newprod-name" style="width:100%;box-sizing:border-box;margin-top:4px;color:var(--muted);background:var(--bg)" disabled></div>' +
+      // Hidden field to store the full code (base + version)
+      '<input type="hidden" id="pmnc-full-code" value="">' +
+      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">产品名称 <span style="font-weight:400;color:var(--danger)">*</span> <span style="font-weight:400">（不能包含空格和中文符号）</span></label>' +
+      '<input class="search-inp" id="pm-newprod-name" placeholder="输入产品名称" style="width:100%;box-sizing:border-box;margin-top:4px" oninput="_pmValidateProdName(this)">' +
+      '<div id="pm-newprod-name-err" style="font-size:10px;color:var(--danger);margin-top:2px;display:none"></div></div>' +
       '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">状态</label>' +
       '<select id="pm-newprod-status" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);margin-top:4px">' +
         '<option value="normal">正常</option><option value="closed">已关闭</option>' +
@@ -816,17 +850,48 @@ function _pmShowNamingProductDialog() {
     ], {maxWidth: 560});
 
     setTimeout(function() {
-      var code = _pmBuildProdCode();
-      var nameEl = document.getElementById('pm-newprod-name');
-      if (nameEl) nameEl.value = code;
-    }, 60);
+      _pmBuildProdCode();
+    }, 80);
   });
 }
 
+// Name validation: no spaces, no Chinese punctuation
+var _PM_PROD_NAME_FORBIDDEN = null;
+function _pmGetNameForbidden() {
+  if (!_PM_PROD_NAME_FORBIDDEN) {
+    _PM_PROD_NAME_FORBIDDEN = new Set((' \t　' +
+      '，、；：。！？' +
+      '（）《》「」『』' +
+      '【】〔〕').split(''));
+  }
+  return _PM_PROD_NAME_FORBIDDEN;
+}
+function _pmValidateProdName(input) {
+  var errEl = document.getElementById('pm-newprod-name-err');
+  if (!errEl) return true;
+  var val = input.value;
+  var forbidden = _pmGetNameForbidden();
+  var bad = '';
+  for (var i = 0; i < val.length; i++) {
+    if (forbidden.has(val[i])) { bad = val[i]; break; }
+  }
+  if (bad) {
+    errEl.textContent = '名称包含非法字符: "' + bad + '"（不能包含空格和中文符号）';
+    errEl.style.display = 'block';
+    return false;
+  }
+  errEl.style.display = 'none';
+  return true;
+}
+
 async function _pmSubmitNamingProduct() {
-  var code = _pmBuildProdCode();
-  if (code.indexOf('#') >= 0) { showToast('请选择所有属性', 'error'); return; }
-  var name = code;
+  var baseCode = _pmBuildProdCode();
+  if (baseCode.indexOf('#') >= 0) { showToast('请选择所有属性', 'error'); return; }
+  var name = document.getElementById('pm-newprod-name').value.trim();
+  if (!name) { showToast('请输入产品名称', 'error'); return; }
+  if (!_pmValidateProdName(document.getElementById('pm-newprod-name'))) {
+    showToast('产品名称包含非法字符', 'error'); return;
+  }
   var status = document.getElementById('pm-newprod-status').value;
   var tags = [];
   // Auto-tags from naming convention selections
@@ -844,13 +909,16 @@ async function _pmSubmitNamingProduct() {
   var projectIds = [];
   document.querySelectorAll('.pm-newprod-proj:checked').forEach(function(cb) { projectIds.push(parseInt(cb.value)); });
 
+  // Use full code (base + version)
+  var fullCode = document.getElementById('pmnc-full-code').value || (baseCode + '-V1');
+
   try {
     await API.post('/product-management/products', {
-      name: name, code: code, node_id: _pmSelectedNodeId,
+      name: name, code: fullCode, node_id: _pmSelectedNodeId,
       status: status, project_ids: projectIds,
       description: tags.join(', ')
     });
-    showToast('产品已创建: ' + code, 'success');
+    showToast('产品已创建: ' + fullCode, 'success');
     var d = document.querySelector('.shared-dialog-overlay');
     if (d) d.remove();
     await refreshPMData();

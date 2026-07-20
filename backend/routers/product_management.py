@@ -184,6 +184,18 @@ def create_local_product(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.get("/next-product-version", response_model=dict)
+def next_product_version(
+    base_code: str = Query(..., min_length=1),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    """Return the next hex version number for a given base product code."""
+    version = pm_service.get_next_version(db, base_code)
+    full_code = f"{base_code}-{version}"
+    return {"code": 0, "data": {"base_code": base_code, "version": version, "full_code": full_code}, "message": "ok"}
+
+
 @router.put("/products/{identifier}", response_model=dict)
 def update_local_product(
     identifier: str,

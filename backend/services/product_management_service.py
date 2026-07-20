@@ -188,6 +188,10 @@ def create_local_product(
     if not node:
         raise ValueError(f"节点不存在: {node_id}")
 
+    # Validate name: no spaces, no Chinese punctuation
+    if not _is_valid_product_name(name):
+        raise ValueError("产品名称不能包含空格和中文符号")
+
     # Check name uniqueness
     existing = db.query(PmaProduct).filter(
         PmaProduct.name == name, PmaProduct.is_local == True
@@ -246,6 +250,11 @@ def update_local_product(db: Session, product_id: int, data: dict) -> dict:
     ).first()
     if not product:
         raise ValueError(f"本地产品不存在: {product_id}")
+
+    # Validate name if provided
+    if "name" in data and data["name"] is not None:
+        if not _is_valid_product_name(data["name"]):
+            raise ValueError("产品名称不能包含空格和中文符号")
 
     for k, v in data.items():
         if hasattr(product, k) and v is not None:
@@ -546,3 +555,47 @@ def _init_project_stages(db: Session, project_id: int, project_type: str):
         ))
     db.commit()
     return stage_count
+
+
+# ── Product Name Validation ──
+
+# Characters forbidden in product names: spaces + Chinese punctuation
+_NAME_FORBIDDEN = set(
+    " \t　"  # spaces + full-width space
+    "，、；：。！？"  # ，、；：。！？
+    "（）《》「」『』"  # （）《》「」『』
+    "【】〔〕"  # 【】〔〕
+)
+
+
+def _is_valid_product_name(name: str) -> bool:
+    """Check that product name contains no spaces or Chinese punctuation."""
+    return not any(ch in _NAME_FORBIDDEN for ch in name)
+
+
+def get_next_version(db: Session, base_code: str) -> str:
+    """Compute the next hex version number for a given base code.
+
+    Format: Vn where n increments as hex (1,2,...,9,A,B,...,F,10,...).
+    Scans existing products whose code starts with ``base_code-V`` and
+    returns the next available version string (e.g. ``V3``).
+    """
+    prefix = base_code + "-V"
+    existing = (
+        db.query(PmaProduct.code)
+        .filter(PmaProduct.code.like(prefix + "%"))
+        .all()
+    )
+    max_dec = 0
+    for (code,) in existing:
+        suffix = code[len(prefix):]
+        try:
+            dec = int(suffix, 16)
+            if dec > max_dec:
+                max_dec = dec
+        except ValueError:
+            pass
+    next_dec = max_dec + 1
+    # Format as uppercase hex without zero-padding
+    next_hex = format(next_dec, "X")
+    return "V" + next_hex
