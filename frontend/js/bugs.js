@@ -498,18 +498,11 @@ function openBugWorklogEditDialog(bugId, wlId) {
   API.get('/bugs/'+bugId+'/worklogs').then(function(logs) {
     var w = (logs||[]).find(function(l){return l.id===wlId;});
     if (!w) { showToast('未找到工时记录','error'); return; }
-    var html = '<div>' +
-      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">日期 *</label>' +
-        '<input class="search-inp" id="bwl-date" type="date" value="'+(w.date||'')+'" style="width:100%;margin-top:2px"></div>' +
-      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工时(h) *</label>' +
-        '<input class="search-inp" id="bwl-hours" type="number" step="0.5" min="0.5" value="'+w.hours+'" style="width:100%;margin-top:2px"></div>' +
-      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">描述</label>' +
-        '<textarea class="search-inp" id="bwl-desc" rows="2" style="width:100%;margin-top:2px;resize:vertical">'+escHtml(w.description||'')+'</textarea></div>' +
-    '</div>';
-    openDialog('编辑工时', html, [
-      {text:'取消',onclick:'closeSharedDialog();openBugDetail('+bugId+')'},
-      {text:'保存',cls:'btn-primary',onclick:'_submitBugWorklogEdit('+bugId+','+wlId+')'}
-    ], {maxWidth:400});
+    editWorklogEntry({
+      id: w.id, task_id: null, bug_id: bugId,
+      hours: w.hours, description: w.description, progress: 0,
+      source: 'bug'
+    }, w.date || '');
   });
 }
 

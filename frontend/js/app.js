@@ -1605,7 +1605,7 @@ function _ucLoadTasks(user) {
     _ucLoadCalendar(user);
     _ucLoadWecomCalendar(user);
   }).catch(function() {
-    document.getElementById('uc-tasks-table-tbody').innerHTML = '<tr><td colspan="13"><div class="empty-state">加载失败</div></td></tr>';
+    document.getElementById('uc-tasks-table-tbody').innerHTML = '<tr><td colspan="14"><div class="empty-state">加载失败</div></td></tr>';
   });
 }
 
@@ -1649,7 +1649,7 @@ function _renderUcTableHead() {
   var dueInd = _ucSortCol === 'due_date'
     ? (_ucSortDir === 'asc' ? '▲' : '▼')
     : '<span style="color:var(--muted)">⇅</span>';
-  document.getElementById('uc-tasks-table-head').innerHTML = '<tr><th style="width:6%">任务编号</th><th style="width:8%">项目编号</th><th style="width:100px">产品编号</th><th>任务标题</th><th style="width:70px">状态</th><th style="width:6%;cursor:pointer;user-select:none" onclick="_ucSortBy(\'priority\')">优先级 ' + prioInd + '</th><th style="width:6%">进度</th><th style="width:7%;cursor:pointer;user-select:none" onclick="_ucSortBy(\'due_date\')">截止 ' + dueInd + '</th><th style="width:1%;white-space:nowrap">操作</th></tr>';
+  document.getElementById('uc-tasks-table-head').innerHTML = '<tr><th style="width:6%">任务编号</th><th style="width:8%">项目编号</th><th style="width:100px">产品编号</th><th>阶段</th><th>任务标题</th><th style="width:70px">状态</th><th style="width:6%;cursor:pointer;user-select:none" onclick="_ucSortBy(\'priority\')">优先级 ' + prioInd + '</th><th style="width:6%">进度</th><th style="width:7%;cursor:pointer;user-select:none" onclick="_ucSortBy(\'due_date\')">截止 ' + dueInd + '</th><th style="width:1%;white-space:nowrap">操作</th></tr>';
 }
 
 function _ucSortBy(col) {
@@ -1685,7 +1685,7 @@ function _renderUcTaskTable() {
     });
   }
   var tbody = document.getElementById('uc-tasks-table-tbody');
-  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state">暂无匹配任务</div></td></tr>'; return; }
+  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state">暂无匹配任务</div></td></tr>'; return; }
   tbody.innerHTML = filtered.map(function(t) {
     var pct = t.progress || 0;
     var overdue = t.due_date && t.status !== 'done' && t.status !== 'closed' && t.due_date < fmtLocalDate();
@@ -1694,6 +1694,7 @@ function _renderUcTaskTable() {
       '<td style="text-align:center;font-size:11px;font-family:var(--mono);color:var(--muted)">#' + t.id + '</td>' +
       '<td style="text-align:center">' + (t.project_code ? projCodeTag(t.project_code, 'event.stopPropagation();openProject(\'' + escHtml(t.project_code).replace(/'/g, "\\'") + '\')', t.project_name) : '-') + '</td>' +
       '<td style="text-align:center;font-size:12px">' + prodTag + '</td>' +
+      '<td style="font-size:12px">' + escHtml(t.stage_name||'') + '</td>' +
       '<td style="text-align:left;font-weight:530">' + escHtml(t.title) + '</td>' +
       '<td style="text-align:center">' + renderPill(t.status||'todo') + '</td>' +
       '<td style="text-align:center"><span class="prio-tag '+(t.priority||'medium')+'">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[t.priority]||t.priority)+'</span></td>' +
@@ -1764,7 +1765,7 @@ async function _ucLoadBugs() {
     var tbody = document.getElementById('uc-bugs-table-tbody');
     if (!filtered.length) {
       var label = _ucBugTab === 'assignee' ? '暂无待处理的Bug' : '暂无创建的Bug';
-      tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state">' + label + '</div></td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state">' + label + '</div></td></tr>';
       if (_ucActiveTab === 'bugs') _ucLoadBugStats();
       return;
     }
@@ -1784,7 +1785,7 @@ async function _ucLoadBugs() {
         '<td style="text-align:center;white-space:nowrap" onclick="event.stopPropagation()">' + iconEdit(_ucEnsureBugsJs('openBugDialog('+b.id+')'),'编辑') + iconDelete(_ucEnsureBugsJs('deleteBugById('+b.id+')'),'删除') + '</td>' +
       '</tr>';
     }).join('');
-  } catch(e) { document.getElementById('uc-bugs-table-tbody').innerHTML = '<tr><td colspan="9"><div class="error-state">加载失败</div></td></tr>'; }
+  } catch(e) { document.getElementById('uc-bugs-table-tbody').innerHTML = '<tr><td colspan="10"><div class="error-state">加载失败</div></td></tr>'; }
   if (_ucActiveTab === 'bugs') _ucLoadBugStats();
   setTimeout(function() { if (typeof window._ucUpdateLayout === "function") window._ucUpdateLayout(); }, 50);
 }

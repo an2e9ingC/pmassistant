@@ -878,16 +878,24 @@ function createProductCombo(opts) {
 }
 
 function createTaskCombo(opts) {
-  // opts.projectIdFn: function returning current project ID (or null)
+  // opts.projectIdFn: function returning current project code (or null)
+  // opts.stageFilterFn: function returning selected stage name (or empty string for all)
   // opts.onSelect: called with selected task object
   var comboId = opts.comboId, inputId = opts.inputId, dropdownId = opts.dropdownId;
   var pidFn = opts.projectIdFn || function() { return null; };
+  var stageFn = opts.stageFilterFn || function() { return ''; };
   var onSelect = opts.onSelect;
   var loadFn = _fnName(comboId, 'Load');
   var openFn = _fnName(comboId, 'Open');
   var filterFn = _fnName(comboId, 'Filter');
   var selectFn = _fnName(comboId, 'Select');
   var enterFn = _fnName(comboId, 'Enter');
+
+  function _filterStage(items) {
+    var stage = stageFn();
+    if (!stage) return items;
+    return items.filter(function(t) { return (t.stage_name||'') === stage; });
+  }
 
   window[loadFn] = async function() {
     var pid = pidFn();
@@ -896,7 +904,7 @@ function createTaskCombo(opts) {
       var data = await API.get('/tasks?project_id=' + pid + '&limit=100');
       var items = (data && data.items) ? data.items : (data || []);
       window['_combo_'+comboId] = items;
-      return items;
+      return _filterStage(items);
     } catch(e) { window['_combo_'+comboId] = []; return []; }
   };
 
@@ -910,7 +918,7 @@ function createTaskCombo(opts) {
   };
 
   window[filterFn] = function(q) {
-    var items = window['_combo_'+comboId] || [];
+    var items = _filterStage(window['_combo_'+comboId] || []);
     _renderTaskDropdown(dropdownId, items, q, selectFn);
   };
 
@@ -1319,8 +1327,10 @@ function openDayDetail(dateStr, totalHours) {
       dayData.tasks.forEach(function(t, i) {
         var rowNum = i + 1;
         var desc = (t.description || '').substring(0, 60) + ((t.description||'').length > 60 ? '...' : '');
+        var recordedAt = t.created_at ? fmtISODateTime(t.created_at).substring(11, 19) : '';
         rowsHtml += '<tr>' +
           '<td style="text-align:center;color:var(--muted)">' + rowNum + '</td>' +
+          '<td style="font-size:11px;color:var(--muted);white-space:nowrap">' + escHtml(recordedAt) + '</td>' +
           '<td style="font-family:var(--mono);font-size:11px">' + escHtml(t.project_code||'') + '</td>' +
           '<td style="font-size:12px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escHtml(t.project_name||'')+'">' + escHtml(t.project_name||'') + '</td>' +
           '<td style="font-size:12px">' + escHtml(t.stage_name||'') + '</td>' +
@@ -1337,7 +1347,7 @@ function openDayDetail(dateStr, totalHours) {
       });
     }
     var tableHtml = rowsHtml ? '<div style="max-height:420px;overflow-y:auto;margin:-12px -16px 0 -16px"><table class="proj-table" style="font-size:11px;margin:0"><thead><tr>' +
-      '<th style="width:36px">#</th><th style="width:70px">项目编号</th><th>项目名</th><th>阶段</th><th>任务名</th><th style="width:52px">进度</th><th style="width:52px">工时</th><th>工作内容</th><th style="width:80px">操作</th>' +
+      '<th style="width:36px">#</th><th style="width:48px">记录时间</th><th style="width:70px">项目编号</th><th>项目名</th><th>阶段</th><th>任务名</th><th style="width:52px">进度</th><th style="width:52px">工时</th><th>工作内容</th><th style="width:80px">操作</th>' +
       '</tr></thead><tbody>' + rowsHtml + '</tbody></table></div>' : '<div style="color:var(--muted);text-align:center;padding:20px">当日无工时记录</div>';
     openDialog(dateStr+' 工时详情 ('+totalHours.toFixed(1)+'h)',
       tableHtml,
@@ -1364,28 +1374,99 @@ function copyWorklogEntryById(wlId, dateStr) {
 }
 
 function editWorklogEntry(t, dateStr) {
-  var html = '<div>' +
+  var isBug = t.source === 'bug';
+  var projectHtml = isBug ? '' :
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">项目</label>' +
+      createProjectCombo({comboId: 'wl-edit-proj', inputId: 'wl-edit-proj-input', dropdownId: 'wl-edit-proj-dd', placeholder: '搜索项目...',
+        onSelect: function(p) {
+          document.getElementById('wl-edit-project-id').value = p.id;
+          document.getElementById('wl-edit-project-code').value = p.code || '';
+          _wlEditLoadStages(p.code || '');
+        }}) + '</div>';
+  var stageTaskHtml = isBug ? '' :
+    '<input type="hidden" id="wl-edit-project-id" value="' + (t.project_id||'') + '">' +
+    '<input type="hidden" id="wl-edit-project-code" value="' + escHtml(t.project_code||'') + '">' +
+    '<div style="margin-bottom:8px;display:flex;gap:8px">' +
+      '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">阶段</label>' +
+        '<select class="search-inp" id="wl-edit-stage" style="width:100%;box-sizing:border-box" onchange="_wlEditOnStageChange()"><option value="">全部阶段</option></select></div>' +
+      '<div style="flex:2"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">任务</label>' +
+        createTaskCombo({comboId: 'wl-edit-task', inputId: 'wl-edit-task-input', dropdownId: 'wl-edit-task-dd',
+          projectIdFn: function() { return document.getElementById('wl-edit-project-code').value; },
+          stageFilterFn: function() { return document.getElementById('wl-edit-stage').value; },
+          onSelect: function(tsk) {
+            document.getElementById('wl-edit-task-id').value = tsk.id;
+            document.getElementById('wl-edit-progress').value = tsk.progress || 0;
+          }}) + '</div></div>' +
+    '<input type="hidden" id="wl-edit-task-id" value="' + (t.task_id||'') + '">';
+  var html = '<div>' + projectHtml + stageTaskHtml +
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">日期 *</label>' +
       '<input class="search-inp" id="wl-edit-date" type="date" required value="'+dateStr+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工时(h) *</label>' +
       '<input class="search-inp" id="wl-edit-hours" type="number" step="0.5" min="0.5" required value="'+t.hours+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
+    (isBug ? '' : '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">进度(%) *</label>' +
+      '<input class="search-inp" id="wl-edit-progress" type="number" min="0" max="100" step="5" required value="'+(t.progress||0)+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>') +
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工作描述</label>' +
       '<textarea class="search-inp" id="wl-edit-desc" rows="2" style="width:100%;box-sizing:border-box;margin-top:2px;resize:vertical">'+escHtml(t.description||'')+'</textarea></div>' +
     '</div>';
   openDialog('编辑工时', html, [
     {text:'取消',onclick:'closeSharedDialog()'},
-    {text:'保存',cls:'btn-primary',onclick:'saveWorklogEntry('+t.id+','+(t.source==='bug'?'true':'false')+')'}
-  ], {maxWidth:400});
+    {text:'保存',cls:'btn-primary',onclick:'saveWorklogEntry('+t.id+','+(isBug?'true':'false')+')'}
+  ], {maxWidth: isBug ? 400 : 480});
+  if (!isBug) {
+    setTimeout(function() {
+      var inp = document.getElementById('wl-edit-proj-input');
+      if (inp && t.project_code) inp.value = t.project_code + ' ' + (t.project_name||'');
+      if (t.project_code) _wlEditLoadStages(t.project_code, t.stage_name);
+      var taskInp = document.getElementById('wl-edit-task-input');
+      if (taskInp && t.title) taskInp.value = t.title;
+    }, 150);
+  }
+}
+
+function _wlEditLoadStages(projectCode, selectedStage) {
+  var sel = document.getElementById('wl-edit-stage');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">加载中...</option>';
+  API.get('/tasks?project_id=' + projectCode + '&limit=200').then(function(data) {
+    var items = (data && data.items) ? data.items : (data || []);
+    var stages = [];
+    var seen = {};
+    items.forEach(function(t) {
+      var s = t.stage_name || '';
+      if (s && !seen[s]) { seen[s] = true; stages.push(s); }
+    });
+    stages.sort();
+    sel.innerHTML = '<option value="">全部阶段</option>' + stages.map(function(s) {
+      return '<option value="' + escHtml(s) + '"' + (s === selectedStage ? ' selected' : '') + '>' + escHtml(s) + '</option>';
+    }).join('');
+  }).catch(function() {
+    sel.innerHTML = '<option value="">全部阶段</option>';
+  });
+}
+
+function _wlEditOnStageChange() {
+  document.getElementById('wl-edit-task-id').value = '';
+  var taskInput = document.getElementById('wl-edit-task-input');
+  if (taskInput) taskInput.value = '';
+  var loadFn = window['wlEditTaskLoad'];
+  if (loadFn) loadFn();
 }
 
 async function saveWorklogEntry(wlId, isBug) {
   var hours = parseFloat(document.getElementById('wl-edit-hours').value);
   var desc = document.getElementById('wl-edit-desc').value.trim();
   var date = document.getElementById('wl-edit-date').value;
+  var taskIdEl = document.getElementById('wl-edit-task-id');
+  var progressEl = document.getElementById('wl-edit-progress');
+  var newTaskId = taskIdEl ? (parseInt(taskIdEl.value) || 0) : 0;
+  var progress = progressEl ? (parseInt(progressEl.value) || 0) : 0;
   if (!date || !hours || hours <= 0) { showToast('请填写日期和工时', 'error'); return; }
   var url = (isBug ? '/bug-worklogs/' : '/worklogs/') + wlId;
   try {
-    await API.put(url, {hours: hours, date: date, description: desc});
+    var payload = {hours: hours, date: date, description: desc};
+    if (newTaskId && !isBug) payload.task_id = newTaskId;
+    await API.put(url, payload);
+    if (newTaskId && !isBug) await API.put('/tasks/' + newTaskId, {progress: progress});
     closeSharedDialog();
     showToast('工时已更新', 'success');
     if (typeof _ucLoadCalendar === 'function') { var u = getCurrentUser(); if (u) _ucLoadCalendar(u); }
@@ -1512,20 +1593,59 @@ function initImagePaste(textarea, bugId, onUrlInserted) {
 
 /* ── Generic Worklog Dialog (used by calendar + task views) ── */
 
+function _wlLoadStages(projectCode) {
+  var sel = document.getElementById('wl-stage');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">加载中...</option>';
+  API.get('/tasks?project_id=' + projectCode + '&limit=200').then(function(data) {
+    var items = (data && data.items) ? data.items : (data || []);
+    var stages = [];
+    var seen = {};
+    items.forEach(function(t) {
+      var s = t.stage_name || '';
+      if (s && !seen[s]) { seen[s] = true; stages.push(s); }
+    });
+    stages.sort();
+    sel.innerHTML = '<option value="">全部阶段</option>' + stages.map(function(s) {
+      return '<option value="' + escHtml(s) + '">' + escHtml(s) + '</option>';
+    }).join('');
+  }).catch(function() {
+    sel.innerHTML = '<option value="">全部阶段</option>';
+  });
+}
+
+function _wlOnStageChange() {
+  // Clear task selection and re-open task combo
+  document.getElementById('wl-task-id').value = '';
+  var taskInput = document.getElementById('wl-task-input');
+  if (taskInput) taskInput.value = '';
+  // Trigger task reload
+  var loadFn = window['wlTaskLoad'];
+  if (loadFn) loadFn();
+}
+
 function openWorklogFromCalendar(dateStr) {
   var html = '<div>' +
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">项目</label>' +
       createProjectCombo({comboId: 'wl-proj', inputId: 'wl-proj-input', dropdownId: 'wl-proj-dd', placeholder: '搜索项目...',
-        onSelect: function(p) { document.getElementById('wl-project-id').value = p.id; document.getElementById('wl-project-code').value = p.code || ''; }}) + '</div>' +
+        onSelect: function(p) {
+          document.getElementById('wl-project-id').value = p.id;
+          document.getElementById('wl-project-code').value = p.code || '';
+          _wlLoadStages(p.code || '');
+        }}) + '</div>' +
     '<input type="hidden" id="wl-project-id" value="">' +
     '<input type="hidden" id="wl-project-code" value="">' +
-    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">任务</label>' +
-      createTaskCombo({comboId: 'wl-task', inputId: 'wl-task-input', dropdownId: 'wl-task-dd',
-        projectIdFn: function() { return document.getElementById('wl-project-code').value; },
-        onSelect: function(t) {
-          document.getElementById('wl-task-id').value = t.id;
-          document.getElementById('wl-progress').value = t.progress || 0;
-        }}) + '</div>' +
+    '<div style="margin-bottom:8px;display:flex;gap:8px">' +
+      '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">阶段</label>' +
+        '<select class="search-inp" id="wl-stage" style="width:100%;box-sizing:border-box" onchange="_wlOnStageChange()"><option value="">全部阶段</option></select></div>' +
+      '<div style="flex:2"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">任务</label>' +
+        createTaskCombo({comboId: 'wl-task', inputId: 'wl-task-input', dropdownId: 'wl-task-dd',
+          projectIdFn: function() { return document.getElementById('wl-project-code').value; },
+          stageFilterFn: function() { return document.getElementById('wl-stage').value; },
+          onSelect: function(t) {
+            document.getElementById('wl-task-id').value = t.id;
+            document.getElementById('wl-progress').value = t.progress || 0;
+          }}) + '</div></div>' +
     '<input type="hidden" id="wl-task-id" value="">' +
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">日期 *</label>' +
       '<input class="search-inp" id="wl-date" type="date" required value="'+dateStr+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +

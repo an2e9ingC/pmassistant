@@ -180,6 +180,7 @@ def get_calendar(
         zprojs = db.query(CachedProject).filter(CachedProject.id.in_(proj_ids)).all()
         proj_map.update({p.id: p for p in zprojs})
     exec_ids = {t.execution_id for t in task_map.values() if t and t.execution_id}
+    exec_map = {}
     if exec_ids:
         from backend.models.zentao import CachedExecution
         execs = db.query(CachedExecution).filter(CachedExecution.id.in_(exec_ids)).all()
@@ -193,7 +194,8 @@ def get_calendar(
             daily_map[d] = {"date": d, "total_hours": 0.0, "tasks": []}
         task = task_map.get(w.task_id)
         proj = proj_map.get(task.project_id) if task else None
-        exe = exec_map.get(task.execution_id) if task else None
+        exe = exec_map.get(task.execution_id) if task and task.execution_id else None
+        stage = (exe.name if exe else '') or (task.stage_name if task else '')
         daily_map[d]["total_hours"] += w.hours or 0.0
         daily_map[d]["tasks"].append({
             "id": w.id,
@@ -201,10 +203,11 @@ def get_calendar(
             "title": task.title if task else "(已删除)",
             "hours": w.hours,
             "progress": task.progress if task else 0,
+            "created_at": to_local_str(w.created_at) if w.created_at else '',
             "project_id": task.project_id if task else None,
             "project_code": getattr(proj, 'code', '') or '',
             "project_name": getattr(proj, 'name', '') or '',
-            "stage_name": exe.name if exe else '',
+            "stage_name": stage,
             "description": w.description,
             "source": "task",
         })
@@ -220,6 +223,7 @@ def get_calendar(
             "title": ("Bug #" + str(bw.bug_id) + " " + bug.title) if bug else ("Bug #" + str(bw.bug_id)),
             "hours": bw.hours,
             "progress": 0,
+            "created_at": to_local_str(bw.created_at) if bw.created_at else '',
             "project_id": None,
             "project_code": '',
             "project_name": '',

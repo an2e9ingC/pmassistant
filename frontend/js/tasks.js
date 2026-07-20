@@ -328,7 +328,8 @@ function renderTaskTableCompact(tasks, execs) {
     '<th style="width:7%">计划开始</th>' +
     '<th style="width:7%">截止日期</th>' +
     '<th style="width:7%">完成日期</th>' +
-    '<th style="width:12%">最新动态</th>' +
+    '<th style="width:10%">最新动态</th>' +
+    '<th style="width:6%">时间</th>' +
     '<th style="width:1%;white-space:nowrap">操作</th>' +
     '</tr></thead><tbody>';
 
@@ -351,6 +352,7 @@ function renderTaskTableCompact(tasks, execs) {
         html += _renderTaskRowCompact(t, stageStartMap[stageName] || null);
       } else {
         html += '<td style="color:var(--muted);font-size:12px">—</td>' +
+          '<td style="color:var(--muted);font-size:12px">—</td>' +
           '<td style="color:var(--muted);font-size:12px">—</td>' +
           '<td style="color:var(--muted);font-size:12px">—</td>' +
           '<td style="color:var(--muted);font-size:12px">—</td>' +
@@ -413,17 +415,15 @@ function renderTaskTableCompact(tasks, execs) {
 
 function _renderLatestActivity(t) {
   var act = t.latest_activity;
-  if (!act || !act.content) return '<td style="font-size:11px;color:var(--muted)">—</td>';
-  var icon = act.type === 'worklog'
-    ? '<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l2.5 2.5"/></svg>'
-    : '<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 2h12v8H4l-2 3V2z"/></svg>';
-  var text = act.content.length > 40 ? act.content.substring(0, 40) + '...' : act.content;
+  if (!act || !act.content) return '<td style="font-size:11px;color:var(--muted)">—</td><td style="font-size:11px;color:var(--muted)">—</td>';
+  var user = act.username || '?';
+  var fullContent = '@' + user + ': ' + act.content;
+  var text = fullContent.length > 40 ? fullContent.substring(0, 40) + '...' : fullContent;
   var time = act.created_at ? fmtISODateTime(act.created_at) : '';
-  return '<td style="font-size:11px;max-width:160px" title="' + escHtml((act.username || '?') + ' ' + time + '\n' + act.content) + '">' +
-    '<span style="color:var(--muted);margin-right:2px">' + icon + '</span>' +
+  return '<td style="font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left" title="' + escHtml(fullContent) + '">' +
     '<span style="color:var(--fg)">' + escHtml(text) + '</span>' +
-    '<div style="font-size:9px;color:var(--muted)">' + escHtml(time) + '</div>' +
-    '</td>';
+    '</td>' +
+    '<td style="font-size:11px;color:var(--muted);white-space:nowrap" title="' + escHtml(time) + '">' + escHtml(time) + '</td>';
 }
 
 function _renderTaskRowCompact(t, stageStart) {
@@ -1274,20 +1274,13 @@ function openWorklogEditDialog(wlId, taskId) {
     var task = results[1]||{};
     var w = logs.find(function(l){return l.id===wlId;});
     if(!w){showToast('未找到工时记录','error');return;}
-    var html = '<div>' +
-      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">日期 *</label>' +
-        '<input class="search-inp" id="wl-date" type="date" required value="'+(w.date||'')+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
-      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工时(h) *</label>' +
-        '<input class="search-inp" id="wl-hours" type="number" step="0.5" min="0.5" required value="'+w.hours+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
-      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">进度(%) * 当前: '+(task.progress||0)+'%</label>' +
-        '<input class="search-inp" id="wl-progress" type="number" min="0" max="100" step="5" required value="'+(task.progress||0)+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
-      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工作描述 *</label>' +
-        '<textarea class="search-inp" id="wl-desc" rows="2" required style="width:100%;box-sizing:border-box;margin-top:2px;resize:vertical">'+escHtml(w.description||'')+'</textarea></div>' +
-    '</div>';
-    openDialog('编辑工时', html, [
-      {text:'取消',onclick:'_closeTaskDialog()'},
-      {text:'保存',cls:'btn-primary',onclick:'_submitWorklogEdit('+wlId+','+taskId+')'}
-    ], {maxWidth:450});
+    editWorklogEntry({
+      id: w.id, task_id: w.task_id,
+      project_id: task.project_id, project_code: task.project_code, project_name: task.project_name,
+      stage_name: task.stage_name, title: task.title || task.name,
+      hours: w.hours, description: w.description, progress: task.progress,
+      source: 'task'
+    }, w.date || '');
   }).catch(function(e){showToast('加载失败: '+(e.message||''),'error');});
 }
 
