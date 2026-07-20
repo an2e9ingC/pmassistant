@@ -1290,7 +1290,7 @@ function _renderMonthCalendar(today, dailyMap, calData) {
       // Fallback to intensity-based solid color for current month with 0h
       cellBg = intensity.bg + ';';
     }
-    cells += '<div onclick="openDayDetail(\''+dStr+'\','+h+')" '+(tipText?'title="'+tipText+'"':'')+' style="border:1px solid '+(isToday?'var(--accent)':'var(--border)')+';border-radius:4px;padding:3px 2px;text-align:center;cursor:pointer;' +
+    cells += '<div onclick="openDayDetail(\''+dStr+'\','+h+(calData&&calData._wecom?',true':'')+')" '+(tipText?'title="'+tipText+'"':'')+' style="border:1px solid '+(isToday?'var(--accent)':'var(--border)')+';border-radius:4px;padding:3px 2px;text-align:center;cursor:pointer;' +
       cellBg + ';' + (isCurrentMonth ? '' : 'opacity:0.35;') + '">' +
       '<div style="font-size:11px;font-weight:'+(isToday?'700':'400')+';color:'+(isCurrentMonth?'var(--fg)':'var(--muted)')+'">'+displayDay+'</div>' +
     '</div>';
@@ -1317,9 +1317,34 @@ function _calGoToday() {
 
 var _dayDetailTasks = []; // closure for edit/copy operations
 
-function openDayDetail(dateStr, totalHours) {
-  if (window.__wecomCalendar) {
-    showToast("打卡工时 " + dateStr + ": " + (typeof fmtHours === "function" ? fmtHours(totalHours) : totalHours.toFixed(1) + "h"), "info");
+function openDayDetail(dateStr, totalHours, fromWecom) {
+  if (fromWecom) {
+    API.get('/wecom/calendar?date_from='+dateStr+'&date_to='+dateStr).then(function(data) {
+      var dd = (data && data.daily && data.daily.length) ? data.daily[0] : null;
+      var checkins = (dd && dd.checkins) ? dd.checkins : [];
+      var rowsHtml = '';
+      if (checkins.length) {
+        checkins.forEach(function(c, i) {
+          var tag = c.type.indexOf('上班') >= 0 ? '↑' : '↓';
+          var cls = c.type.indexOf('上班') >= 0 ? 'color:var(--accent)' : 'color:var(--warn)';
+          var ex = c.exception ? (' <span style="font-size:10px;color:var(--danger)">' + escHtml(c.exception) + '</span>') : '';
+          rowsHtml += '<tr>' +
+            '<td style="text-align:center;color:var(--muted)">' + (i+1) + '</td>' +
+            '<td style="font-weight:600;' + cls + '">' + tag + ' ' + escHtml(c.type) + '</td>' +
+            '<td style="font-family:var(--mono);font-weight:500">' + escHtml(c.time) + ex + '</td>' +
+            '<td style="font-size:11px;color:var(--muted);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escHtml(c.location) + '">' + escHtml(c.location || '—') + '</td>' +
+          '</tr>';
+        });
+      }
+      var tableHtml = rowsHtml ? '<div style="max-height:360px;overflow-y:auto;margin:-12px -16px 0 -16px"><table class="proj-table" style="font-size:11px;margin:0"><thead><tr>' +
+        '<th style="width:30px">#</th><th style="width:90px">类型</th><th style="width:80px">时间</th><th>地点</th>' +
+        '</tr></thead><tbody>' + rowsHtml + '</tbody></table></div>' : '<div style="color:var(--muted);text-align:center;padding:20px">当日无打卡记录</div>';
+      var titleStr = dateStr + ' 打卡详情 (' + (typeof fmtHours === 'function' ? fmtHours(totalHours) : totalHours.toFixed(1)+'h') + ')';
+      openDialog(titleStr,
+        tableHtml, [{text:'关闭',onclick:"document.querySelector('.note-dialog-overlay').remove()"}]);
+    }).catch(function() {
+      showToast('加载打卡详情失败', 'error');
+    });
     return;
   }
   var uid = '';

@@ -2443,6 +2443,7 @@ function _ucLoadWecomCalendar(user) {
         '</div>' +
       '</div>';
     if (typeof _renderMonthCalendar === 'function') {
+      data._wecom = true;
       html += _renderMonthCalendar(now, dailyMap, data);
     }
     if (data.last_sync_at) {

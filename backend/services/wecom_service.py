@@ -78,7 +78,7 @@ async def sync_wecom_data(db: Session) -> dict:
         end_ts = int(now.timestamp())
         start_ts = end_ts - 60 * 86400  # last 60 days
 
-        created, updated = 0, 0
+        created, updated, total_fetched = 0, 0, 0
 
         # Fetch checkin data in 30-day batches
         for batch_start in range(start_ts, end_ts, 30 * 86400):
@@ -89,6 +89,8 @@ async def sync_wecom_data(db: Session) -> dict:
             # Debug: log first record to verify data format
             if checkins and created == 0 and updated == 0:
                 logger.info(f"WeCom checkin sample: {json.dumps(checkins[0], ensure_ascii=False)[:300]}")
+
+            total_fetched += len(checkins)
 
             # Group checkin records by (user_id, date), pair consecutive records
             daily = {}  # (user_id, date_str) -> [timestamps sorted]
@@ -117,6 +119,9 @@ async def sync_wecom_data(db: Session) -> dict:
                 # (multi-pair days already have lunch gap from pairing)
                 if len(d["times"]) == 2 and hours > 5:
                     hours -= 1.5
+                # Only "未打卡" means no actual checkin; other exceptions (时间异常 etc.) are still valid
+                if any(r.get("exception_type", "") == "未打卡" for r in d["raw"]):
+                    hours = 0.0
                 hours = max(0, hours)
                 existing = db.query(WeComCheckin).filter(
                     WeComCheckin.user_id == uid,
@@ -151,7 +156,7 @@ async def sync_wecom_data(db: Session) -> dict:
         except Exception as e:
             logger.error(f"WeCom schedule sync failed: {e}")
 
-        return {"fetched": len(checkins), "created": created, "updated": updated}
+        return {"fetched": total_fetched, "created": created, "updated": updated}
     finally:
         await client.close()
 
@@ -305,16 +310,24 @@ def get_checkin_calendar(
         if d not in daily_map:
             daily_map[d] = {"date": d, "total_hours": 0.0, "checkin_info": ""}
         daily_map[d]["total_hours"] += c.work_hours or 0.0
-        # Extract checkin time info from raw_data
+        # Extract checkin details from raw_data
         try:
             raw = json.loads(c.raw_data or "[]")
+            if "checkins" not in daily_map[d]:
+                daily_map[d]["checkins"] = []
             for r in raw:
                 ct = r.get("checkin_time", 0)
                 if ct:
-                    t = datetime.fromtimestamp(ct, tz=timezone.utc)
+                    t = datetime.fromtimestamp(ct, tz=timezone.utc) + timedelta(hours=8)
                     ctype = r.get("checkin_type", "")
                     tag = "↑" if "上班" in ctype else "↓"
                     daily_map[d]["checkin_info"] += f"{tag}{t.strftime('%H:%M')} "
+                    daily_map[d]["checkins"].append({
+                        "type": ctype,
+                        "time": t.strftime("%H:%M:%S"),
+                        "exception": r.get("exception_type", ""),
+                        "location": r.get("location_title", "") or r.get("location_detail", "") or "",
+                    })
         except Exception:
             pass
 
