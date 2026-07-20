@@ -22,6 +22,19 @@ class WeComCheckin(Base):
     synced_at = Column(DateTime, default=func.now())            # last sync time
 
 
+class WeComUser(Base):
+    """WeCom user/department list synced from address book."""
+
+    __tablename__ = "pma_wecom_users"
+
+    id = Column(Integer, primary_key=True)
+    userid = Column(String(128), unique=True, nullable=False, index=True)
+    name = Column(String(128), nullable=False)
+    department = Column(String(256), nullable=True)
+    raw_data = Column(Text, nullable=True)  # JSON
+    synced_at = Column(DateTime, default=func.now())
+
+
 class WeComSchedule(Base):
     """WeCom expected working hours per month (from company schedule)."""
 

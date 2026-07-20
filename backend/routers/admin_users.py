@@ -226,6 +226,7 @@ def list_users(db: Session = Depends(get_db), _=Depends(require_admin)):
                 "last_login_ip": u.last_login_ip or None,
                 "last_login_ua": u.last_login_ua or None,
                 "is_online": is_user_online(u.id),
+                "wecom_userid": u.wecom_userid or "",
             }
             for u in users
         ],

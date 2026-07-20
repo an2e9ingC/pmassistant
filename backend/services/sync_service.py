@@ -397,7 +397,7 @@ class SyncService:
                     _sync_progress["phase"] = "企业微信打卡数据"
                     from backend.services import wecom_service as _wecom_svc
                     t0 = time.time()
-                    wc_result = asyncio.run(_wecom_svc.sync_wecom_data(db))
+                    wc_result = await _wecom_svc.sync_wecom_data(db)
                     timings["wecom"] = round(time.time() - t0, 1)
                     wecom_summary = {
                         "status": "success",

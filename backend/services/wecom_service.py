@@ -22,6 +22,34 @@ def _parse_date(d: Optional[str]) -> Optional[date]:
 
 # ── Sync ──
 
+
+async def _sync_wecom_users(db, client):
+    """Sync WeCom user list to pma_wecom_users table."""
+    import json
+    from backend.models.wecom import WeComUser
+    raw_users = await client.get_user_list()
+    now = datetime.now(timezone.utc)
+    for ru in raw_users:
+        uid = ru.get("userid", "")
+        if not uid:
+            continue
+        existing = db.query(WeComUser).filter(WeComUser.userid == uid).first()
+        name = str(ru.get("name", "") or "")
+        dept = str(ru.get("department", "") or "")
+        if existing:
+            existing.name = name
+            existing.department = dept
+            existing.raw_data = json.dumps(ru, ensure_ascii=False)
+            existing.synced_at = now
+        else:
+            db.add(WeComUser(
+                userid=uid,
+                name=name,
+                department=dept,
+                raw_data=json.dumps(ru, ensure_ascii=False),
+                synced_at=now,
+            ))
+
 async def sync_wecom_data(db: Session) -> dict:
     """Full sync: fetch checkin + approval data from WeCom for all linked users.
 
@@ -41,6 +69,13 @@ async def sync_wecom_data(db: Session) -> dict:
     client = WeComClient()
     try:
         await client.authenticate()
+
+        # ── Sync user list first ──
+        try:
+            _sync_wecom_users(db, client)
+            db.commit()
+        except Exception as e:
+            logger.warning(f"WeCom user list sync failed (non-fatal): {e}")
 
         now = datetime.now(timezone.utc)
         end_ts = int(now.timestamp())

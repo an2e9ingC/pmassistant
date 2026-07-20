@@ -350,13 +350,54 @@ function switchUserTab(tab) {
   _userTab = tab;
   document.getElementById('utab-users').classList.toggle('active', tab === 'users');
   document.getElementById('utab-roles').classList.toggle('active', tab === 'roles');
+  document.getElementById('utab-wecom').classList.toggle('active', tab === 'wecom');
   document.getElementById('usec-users').style.display = tab === 'users' ? '' : 'none';
   document.getElementById('usec-roles').style.display = tab === 'roles' ? '' : 'none';
+  document.getElementById('usec-wecom').style.display = tab === 'wecom' ? '' : 'none';
+  if (tab === 'wecom') loadWecomUserList();
+}
+
+async function loadWecomUserList() {
+  var tbody = document.getElementById('wecom-users-tbody');
+  tbody.innerHTML = '<tr><td colspan="6"><div class="loading-spinner">加载中...</div></td></tr>';
+  try {
+    var users = await API.get('/wecom/users/list');
+    document.getElementById('wecom-users-count').textContent = '共 ' + (users || []).length + ' 人';
+    if (!users || !users.length) {
+      tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">暂无数据，点击"从企业微信同步"获取</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = users.map(function(u, i) {
+      return '<tr>' +
+        '<td style="text-align:center;color:var(--muted)">' + (i + 1) + '</td>' +
+        '<td style="font-family:var(--mono);font-size:12px">' + escHtml(u.userid) + '</td>' +
+        '<td>' + escHtml(u.name) + '</td>' +
+        '<td style="font-size:12px;color:var(--muted)">' + escHtml(u.department) + '</td>' +
+        '<td style="font-size:12px">' + (u.pma_user ? '<span style="color:var(--success)">' + escHtml(u.pma_user) + '</span>' : '<span style="color:var(--muted)">—</span>') + '</td>' +
+        '<td style="font-size:11px;color:var(--muted)">' + (u.synced_at ? u.synced_at.substring(11, 19) : '—') + '</td>' +
+      '</tr>';
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="6"><div class="error-state">加载失败: ' + escHtml(e.message) + '</div></td></tr>';
+  }
+}
+
+async function refreshWecomUsers() {
+  var btn = document.querySelector('#usec-wecom .btn');
+  if (btn) { btn.disabled = true; btn.textContent = '同步中...'; }
+  try {
+    await API.get('/wecom/users?refresh=1');
+    showToast('企业微信用户已同步', 'success');
+    loadWecomUserList();
+  } catch(e) {
+    showToast('同步失败: ' + (e.message || '未知错误'), 'error');
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '从企业微信同步'; }
 }
 
 async function initUserManagement() {
   _userList = [];
-  document.getElementById('users-tbody').innerHTML = '<tr><td colspan="9"><div class="loading-spinner">加载中...</div></td></tr>';
+  document.getElementById('users-tbody').innerHTML = '<tr><td colspan="10"><div class="loading-spinner">加载中...</div></td></tr>';
   document.getElementById('roles-tbody').innerHTML = '<tr><td colspan="7"><div class="loading-spinner">加载中...</div></td></tr>';
   try {
     var rolesPromise = API.get('/admin/users/roles');
@@ -369,7 +410,7 @@ async function initUserManagement() {
     renderUserKPIs();
     renderRoleKPIs();
   } catch(e) {
-    document.getElementById('users-tbody').innerHTML = '<tr><td colspan="9"><div class="error-state">加载失败: ' + escHtml(e.message) + '</div></td></tr>';
+    document.getElementById('users-tbody').innerHTML = '<tr><td colspan="10"><div class="error-state">加载失败: ' + escHtml(e.message) + '</div></td></tr>';
   }
 }
 
@@ -579,7 +620,7 @@ function renderUserTable() {
   if (_userFilter === 'active') users = users.filter(function(u) { return u.is_active; });
   else if (_userFilter === 'disabled') users = users.filter(function(u) { return !u.is_active; });
   if (!users.length) {
-    tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state" style="padding:16px">暂无匹配用户</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state" style="padding:16px">暂无匹配用户</div></td></tr>';
     return;
   }
   tbody.innerHTML = users.map(function(u, idx) {
@@ -622,6 +663,11 @@ function renderUserTable() {
       '<td style="font-size:12px">' + authSourceHtml + '</td>' +
       '<td>' + (roleBadges || '<span style="font-size:11px;color:var(--muted)">未分配</span>') + '</td>' +
       '<td>' + statusHtml + '</td>' +
+      '<td style="font-size:12px;white-space:nowrap">' +
+        (u.wecom_userid
+          ? '<button class="btn btn-xs" onclick="openWecomLinkDialog(' + u.id + ')" title="已关联企业微信" style="font-size:10px;padding:2px 6px;color:var(--success);background:var(--success-lt);border-color:var(--success)">' + escHtml(u.wecom_userid) + '</button>'
+          : '<button class="btn btn-xs" onclick="openWecomLinkDialog(' + u.id + ')" title="关联企业微信" style="font-size:10px;padding:2px 6px;color:var(--muted)">关联</button>') +
+      '</td>' +
       '<td style="font-size:11px">' + loginHtml + '</td>' +
       '<td style="font-size:12px;color:var(--muted)">' + escHtml(fmtISODateTime(u.last_login_at) || '—') + '</td>' +
       '<td style="font-size:12px;color:var(--muted)">' + escHtml(fmtISODateTime(u.created_at) || '') + '</td>' +
@@ -754,6 +800,76 @@ function removeUdMsTag(el, ev) {
   }
 }
 
+function openWecomLinkDialog(userId) {
+  var u = _userList.find(function(x) { return x.id === userId; });
+  if (!u) return;
+  var currentWid = u.wecom_userid || '';
+  var html = '<div class="note-dialog-overlay">' +
+    '<div class="note-dialog" style="width:480px;max-width:none">' +
+      '<div class="note-dialog-head"><span class="note-dialog-title">关联企业微信: ' + escHtml(u.username) + '</span>' +
+        '<button class="note-dialog-close" onclick="closeUserDialog()">&times;</button></div>' +
+      '<div style="padding:8px 0">' +
+        '<input class="search-inp" id="wlink-search" placeholder="搜索企业微信用户..." style="margin-bottom:8px" oninput="filterWecomLinkList()">' +
+        (currentWid ? '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">当前: <span style="color:var(--accent)">' + escHtml(currentWid) + '</span> <button class="btn btn-xs" onclick="linkWecomUser(' + userId + ',\x27\x27)" style="font-size:9px;padding:1px 4px">解除</button></div>' : '') +
+        '<div id="wlink-list" style="max-height:340px;overflow-y:auto">加载中...</div>' +
+      '</div></div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+  window.__wlink_userId = userId;
+  window.__wlink_currentWid = currentWid;
+  // Load WeCom users
+  API.get('/wecom/users/list').then(function(users) {
+    window.__wlink_users = users || [];
+    renderWecomLinkList(window.__wlink_users, currentWid, userId);
+  }).catch(function() {
+    document.getElementById('wlink-list').innerHTML = '<div class="error-state">加载失败</div>';
+  });
+}
+
+function renderWecomLinkList(users, selectedWid, userId) {
+  var list = document.getElementById('wlink-list');
+  if (!list) return;
+  if (!users.length) { list.innerHTML = '<div class="empty-state">暂无企业微信用户，请先在"企业微信用户"tab中同步</div>'; return; }
+  var uid = userId || window.__wlink_userId || 0;
+  list.innerHTML = users.map(function(w) {
+    var isLinked = (w.pma_user && w.pma_user !== '');
+    var isCurrent = w.userid === selectedWid;
+    return '<div class="wlink-row' + (isCurrent ? ' wlink-current' : '') + '" style="display:flex;align-items:center;gap:12px"' +
+      (isLinked ? ' title="已关联PMA用户: ' + escHtml(w.pma_user) + '"' : '') + '>' +
+      '<div class="wlink-info" style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;overflow:hidden">' +
+        '<span class="wlink-name" style="white-space:nowrap">' + escHtml(w.name) + '</span>' +
+        '<span class="wlink-id" style="font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap">' + escHtml(w.userid) + '</span>' +
+        (w.department ? '<span class="wlink-dept" style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(w.department) + '</span>' : '') +
+      '</div>' +
+      (isCurrent ? '<span style="font-size:11px;color:var(--success);white-space:nowrap;flex-shrink:0">已关联</span>' :
+        isLinked ? '<span style="font-size:11px;color:var(--muted);white-space:nowrap;flex-shrink:0">' + escHtml(w.pma_user) + '</span>' :
+        '<button class="btn btn-xs btn-primary" onclick="linkWecomUser(' + uid + ',\x27' + escHtml(w.userid) + '\x27)" style="font-size:10px;padding:2px 8px;white-space:nowrap;flex-shrink:0">关联</button>') +
+    '</div>';
+  }).join('');
+}
+
+function filterWecomLinkList() {
+  var q = (document.getElementById('wlink-search') || {}).value || '';
+  var users = window.__wlink_users || [];
+  var currentWid = window.__wlink_currentWid || '';
+  if (q.trim()) {
+    var ql = q.trim().toLowerCase();
+    users = users.filter(function(w) { return (w.name + w.userid).toLowerCase().indexOf(ql) >= 0; });
+  }
+  renderWecomLinkList(users, currentWid, window.__wlink_userId);
+}
+
+async function linkWecomUser(userId, wecomUserid) {
+  try {
+    var payload = { wecom_userid: wecomUserid };
+    await API.put('/admin/users/' + userId, payload);
+    showToast(wecomUserid ? '已关联企业微信' : '已解除关联', 'success');
+    closeUserDialog();
+    initUserManagement();
+  } catch(e) {
+    showToast('操作失败: ' + (e.message || ''), 'error');
+  }
+}
+
 function closeUserDialog() {
   var overlay = document.querySelector('.note-dialog-overlay');
   if (overlay) overlay.remove();
@@ -836,14 +952,8 @@ function openUserEditDialog(id) {
       '<div class="user-form">' +
         '<div class="user-form-field"><label>角色组（可多选）</label><div id="ue-role-cbs">' + _roleCheckboxes(u.role_ids || []) + '</div></div>' +
         '<div class="user-form-field"><label>企业微信账号</label>' +
-          (typeof createSearchCombo === 'function'
-            ? createSearchCombo({ comboId: 'ue-wecom-combo-' + id, inputId: 'ue-wecom-inp-' + id, dropdownId: 'ue-wecom-dd-' + id,
-                placeholder: '搜索企业微信用户...',
-                dataSource: function() { return API.get('/wecom/users').then(function(d) { return (d || []).map(function(u, i) { return { id: i, code: u.userid, name: u.name + ' (' + u.userid + ')' }; }); }); },
-                onSelect: function(p) { window.__ue_wecom_selected = p; },
-                selectedIdFn: function() { return window.__ue_wecom_selected ? window.__ue_wecom_selected.id : -1; }
-              })
-            : '<input class="config-input" id="ue-wecom-inp-' + id + '" value="' + escHtml(u.wecom_userid || '') + '" placeholder="留空则不关联企业微信">') +
+          '<input class="config-input" id="ue-wecom-inp-' + id + '" value="' + escHtml(u.wecom_userid || '') + '" list="ue-wecom-list-' + id + '" placeholder="输入搜索或手动填写，留空则不关联" autocomplete="off">' +
+          '<datalist id="ue-wecom-list-' + id + '"></datalist>' +
         '</div>' +
         passwordField +
       '</div>' +
@@ -853,14 +963,25 @@ function openUserEditDialog(id) {
         '<button class="btn btn-primary" onclick="submitUserEdit(' + id + ')">保存</button></div>' +
     '</div></div>';
   document.body.insertAdjacentHTML('beforeend', html);
-}
-  if (u.wecom_userid) {
-    var wcInp = document.getElementById('ue-wecom-inp-' + id);
-    if (wcInp) { wcInp.value = u.wecom_userid; }
-    window.__ue_wecom_selected = { id: -1, code: u.wecom_userid, name: u.wecom_userid };
-  } else {
-    window.__ue_wecom_selected = null;
+  // Load WeCom user list on input focus
+  var wcInp = document.getElementById('ue-wecom-inp-' + id);
+  var wcList = document.getElementById('ue-wecom-list-' + id);
+  if (wcInp && wcList) {
+    var wecomLoaded = false;
+    wcInp.addEventListener('focus', function() {
+      if (wecomLoaded) return;
+      wecomLoaded = true;
+      API.get('/wecom/users').then(function(users) {
+        (users || []).forEach(function(u) {
+          var opt = document.createElement('option');
+          opt.value = u.userid;
+          opt.textContent = u.name + ' (' + u.userid + ')';
+          wcList.appendChild(opt);
+        });
+      }).catch(function() { wecomLoaded = false; });
+    });
   }
+}
 
 async function submitUserEdit(id) {
   var roleIds = [];
@@ -872,12 +993,7 @@ async function submitUserEdit(id) {
   var payload = { role: role ? role.key : 'viewer' };
   if (password) payload.password = password;
   var wecomEl = document.getElementById('ue-wecom-inp-' + id);
-  if (wecomEl) {
-    var wv = wecomEl.value.trim();
-    var sel = window.__ue_wecom_selected;
-    payload.wecom_userid = (sel && sel.code) ? sel.code : (wv || '');
-    window.__ue_wecom_selected = null;
-  }
+  if (wecomEl) payload.wecom_userid = wecomEl.value.trim() || '';
   try {
     msg.innerHTML = '<span style="color:var(--muted)">保存中...</span>';
     await API.put('/admin/users/' + id, payload);

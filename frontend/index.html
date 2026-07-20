@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="app-version" content="v2026.07.19-beta4">
+<meta name="app-version" content="v2026.07.20-beta3">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>PM Assistant · 集成禅道 & GitLab</title>
 <script>
@@ -630,13 +630,14 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
       <div class="tabs" style="margin-bottom:12px">
         <span class="tab active" id="utab-users" onclick="switchUserTab('users')">用户管理</span>
         <span class="tab" id="utab-roles" onclick="switchUserTab('roles')">角色组管理</span>
+        <span class="tab" id="utab-wecom" onclick="switchUserTab('wecom')">企业微信用户</span>
       </div>
       <div id="usec-users">
         <div class="kpi-grid" style="margin-bottom:12px" id="user-kpi-grid"></div>
         <div class="card table-scroll" style="max-height:calc(100vh - 340px)">
           <table class="proj-table">
             <thead><tr>
-              <th style="width:40px">序号</th><th>用户名</th><th width="8%">来源</th><th width="20%">角色组</th><th width="6%">状态</th><th width="10%">登录状态</th><th width="12%">上次登录</th><th width="10%">创建时间</th><th width="14%">操作</th>
+              <th style="width:40px">序号</th><th>用户名</th><th width="8%">来源</th><th width="20%">角色组</th><th width="6%">状态</th><th width="8%">企业微信</th><th width="10%">登录状态</th><th width="12%">上次登录</th><th width="10%">创建时间</th><th width="14%">操作</th>
             </tr></thead>
             <tbody id="users-tbody">
               <tr><td colspan="9"><div class="loading-spinner">加载中...</div></td></tr>
@@ -655,6 +656,22 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
               <th style="width:40px">序号</th><th>角色Key</th><th>显示名</th><th>特殊权限</th><th>用户数</th><th style="width:12%">操作</th>
             </tr></thead>
             <tbody id="roles-tbody">
+              <tr><td colspan="6"><div class="loading-spinner">加载中...</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div id="usec-wecom" style="display:none">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="font-size:12px;color:var(--muted)" id="wecom-users-count"></span>
+          <button class="btn btn-xs" onclick="refreshWecomUsers()" style="font-size:10px;padding:2px 8px">从企业微信同步</button>
+        </div>
+        <div class="card table-scroll" style="max-height:calc(100vh - 300px)">
+          <table class="proj-table">
+            <thead><tr>
+              <th style="width:40px">序号</th><th>userid</th><th>姓名</th><th>部门</th><th width="12%">关联PMA用户</th><th width="10%">同步时间</th>
+            </tr></thead>
+            <tbody id="wecom-users-tbody">
               <tr><td colspan="6"><div class="loading-spinner">加载中...</div></td></tr>
             </tbody>
           </table>
