@@ -388,6 +388,7 @@ def _task_dict(t: Task, db=None) -> dict:
         "assignee_name": assignee_name,
         "assignee_username": None,
         "reporter_id": t.reporter_id,
+        "reporter_name": _resolve_reporter_name(db, t.reporter_id) if db else "",
         "parent_id": t.parent_id,
         "blocked_by_id": t.blocked_by_id,
         "progress": t.progress or 0,
@@ -514,3 +515,13 @@ def _recalc_stage_progress(db: Session, stage_id: int) -> list[str]:
                 db.commit()
                 messages.append(f'项目"{project.name}"立项阶段进度回退，项目状态已自动切换为待启动')
     return messages
+
+def _resolve_reporter_name(db: Session, reporter_id) -> str:
+    """Resolve reporter_id to display_name."""
+    if not reporter_id:
+        return ""
+    from backend.models.local import LocalUser
+    u = db.query(LocalUser).filter(LocalUser.id == reporter_id).first()
+    if u:
+        return u.display_name or u.username
+    return ""

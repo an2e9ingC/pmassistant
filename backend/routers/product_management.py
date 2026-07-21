@@ -186,6 +186,7 @@ def create_local_product(
             status=body.status,
             description=body.description or "",
             project_ids=body.project_ids,
+            reporter_id=user.id,
         )
         from backend.models.document import ProductLine
         node = db.query(ProductLine).filter(ProductLine.id == body.node_id).first()
@@ -323,6 +324,7 @@ def create_local_project(
             begin=body.begin,
             end=body.end,
             customer_name=body.customer_name,
+            reporter_id=user.id,
             estimate=body.estimate,
             tags=body.tags,
             planned_delivery_qty=body.planned_delivery_qty,

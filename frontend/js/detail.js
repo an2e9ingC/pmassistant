@@ -173,7 +173,7 @@ function buildInfo(p, notes, delivery) {
       ';padding:2px 10px;border-radius:4px;font-size:13px">' + escHtml(getProjectTypeLabel(p.project_type)) + '</span>' +
     '</div></div>' +
     '<div class="dkpi"><div class="dkpi-lbl">项目状态</div><div class="dkpi-val" style="font-size:16px;font-weight:600;color:' + st.color + '">' + st.label + '</div></div>' +
-    '<div class="dkpi"><div class="dkpi-lbl">项目经理</div><div class="dkpi-val" style="font-size:16px;font-weight:600">' + escHtml(p.pm_name || '—') + '</div></div>' +
+    '<div class="dkpi"><div class="dkpi-lbl">创建人</div><div class="dkpi-val" style="font-size:16px;font-weight:600">' + escHtml(p.reporter_name || '—') + '</div></div>' +
     '<div class="dkpi"><div class="dkpi-lbl">客户</div><div class="dkpi-val" style="font-size:16px;font-weight:600">' +
       (p.customer_name ? '<span style="cursor:pointer" onclick="openCustomerByName(\'' + escHtml(p.customer_name) + '\')" title="查看客户详情">' + renderCustomerBadge(p.customer_name) + '</span>' : '<span style="color:var(--muted)">—</span>') +
     '</div></div>' +

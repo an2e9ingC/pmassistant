@@ -44,6 +44,8 @@ class CachedProject(Base):
     synced_at = Column(DateTime, default=func.now())
     # PMA-local flag: True for manually created projects (not synced from Zentao)
     is_local = Column(Boolean, default=False)
+    # Creator info
+    reporter_id = Column(Integer, ForeignKey("local_users.id"), nullable=True)
 
 
 class CachedExecution(Base):
@@ -135,6 +137,8 @@ class PmaProduct(Base):
     synced_at = Column(DateTime, default=func.now())
     # PMA-local flag: True for manually created products (not synced from Zentao)
     is_local = Column(Boolean, default=False)
+    # Creator info
+    reporter_id = Column(Integer, ForeignKey("local_users.id"), nullable=True)
 
 
 class ProductProjectLink(Base):

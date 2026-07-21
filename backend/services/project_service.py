@@ -462,6 +462,7 @@ def _project_brief(p: CachedProject, has_pending_docs: bool = False, has_incompl
         "name": p.name,
         "project_type": p.project_type,
         "customer_name": _resolve_customer(p, linked_customers or []),
+        "reporter_id": p.reporter_id,
         "status": _map_status(p.status, has_pending_docs, has_incomplete_tasks, has_stage_anomalies),
         "progress": stage_progress if stage_progress is not None else p.progress,
         "begin": str(p.begin) if p.begin else None,
@@ -506,6 +507,17 @@ def _resolve_customer(p: CachedProject, linked_customers: list = None) -> str:
     if linked_customers:
         return "、".join(linked_customers)
     return p.customer_name or ""
+
+
+def _resolve_reporter_name(db: Session, reporter_id) -> str:
+    """Resolve reporter_id to display_name."""
+    if not reporter_id:
+        return ""
+    from backend.models.local import LocalUser
+    u = db.query(LocalUser).filter(LocalUser.id == reporter_id).first()
+    if u:
+        return u.display_name or u.username
+    return ""
 
 
 def _resolve_user_for_role(db: Session, responsible_role: str):
@@ -624,6 +636,8 @@ def _project_detail(p: CachedProject, db: Session, has_pending_docs: bool = Fals
         "consumed": p.consumed,
         "pm_name": p.pm_name,
         "customer_name": _resolve_customer(p, linked_customers or []),
+        "reporter_id": p.reporter_id,
+        "reporter_name": _resolve_reporter_name(db, p.reporter_id),
         "program_name": p.program_name or "",
         "background": p.background or "",
         "description": p.description or "",

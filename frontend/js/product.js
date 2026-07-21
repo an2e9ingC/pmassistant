@@ -521,6 +521,11 @@ function renderProdInfo(p) {
 
   html += '</div>';
 
+  // Creator info
+  if (p.reporter_name) {
+    html += '<div style="font-size:11px;color:var(--muted);margin:8px 0 4px">创建者: ' + escHtml(p.reporter_name) + '</div>';
+  }
+
   // Product Block Diagram — inline render of 设计框图
   html += '<div style="margin-top:20px">' + sectionHeader('产品框图') + '</div>';
   html += '<div class="card" style="padding:0;overflow:hidden" id="prod-block-card">';

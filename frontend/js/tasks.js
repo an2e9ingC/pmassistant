@@ -608,7 +608,7 @@ function _showTaskView(t) {
       '<div style="' + _grid2 + '">' +
         '<div><span style="' + _lbl + '">项目</span><div style="' + _val + '">' + projHtml + '</div></div>' +
         '<div><span style="' + _lbl + '">阶段</span><div style="' + _val + '">' + escHtml(t.stage_name || t.execution_name || '-') + '</div></div>' +
-        '<div><span style="' + _lbl + '">负责人</span><div style="' + _val + '">' + escHtml(t.assignee_name || t.assignee_username || '-') + '</div></div>' +
+        '<div><span style="' + _lbl + '">创建人 → 负责人</span><div style="' + _val + '">' + escHtml(t.reporter_name || '-') + ' → ' + escHtml(t.assignee_name || t.assignee_username || '-') + '</div></div>' +
         '<div><span style="' + _lbl + '">截止日期</span><div style="' + _val + ';color:' + (overdue ? 'var(--danger)' : '') + '">' + (t.due_date || '-') + '<span style="font-size:11px;color:' + (overdue ? 'var(--danger)' : 'var(--muted)') + '">' + daysInfo + '</span></div></div>' +
       '</div>' +
     '</div>' +
@@ -744,14 +744,17 @@ function _showTaskForm(title, task) {
       '<div style="' + _cardHd + '">基本信息</div>' +
       '<div style="margin-bottom:6px"><label style="' + _lbl + '">标题 *</label><input class="search-inp" id="tf-title" value="' + escHtml(t.title || '') + '" placeholder="请填入任务标题" style="' + inp + '"></div>' +
       '<div id="tf-title-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请填入任务标题</div>' +
-      '<div style="margin-bottom:6px"><label style="' + _lbl + '">所属项目 *</label>' +
-        '<div style="margin-top:2px">' + createProjectCombo({
-          comboId: 'tf-proj-combo', inputId: 'tf-project-input', dropdownId: 'tf-proj-dropdown',
-          selectedIdFn: function() { return _tfProjectId; },
-          onSelect: function(p) { _tfProjectId = p.id; _tfProjectCode = p.code; _loadTfExecutions(p.code); }
-        }) + '<div id="tf-project-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择所属项目</div></div></div>' +
       '<div style="' + _grid2 + '">' +
+        '<div><label style="' + _lbl + '">所属项目 *</label>' +
+          '<div style="margin-top:2px">' + createProjectCombo({
+            comboId: 'tf-proj-combo', inputId: 'tf-project-input', dropdownId: 'tf-proj-dropdown',
+            selectedIdFn: function() { return _tfProjectId; },
+            onSelect: function(p) { _tfProjectId = p.id; _tfProjectCode = p.code; _loadTfExecutions(p.code); }
+          }) + '<div id="tf-project-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择所属项目</div></div></div>' +
         '<div><label style="' + _lbl + '">阶段 *</label><select class="search-inp" id="tf-execution" style="' + inp + '"><option value="">请选择阶段...</option>' + execOpts + '</select><div id="tf-execution-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择阶段</div></div>' +
+      '</div>' +
+      '<div style="' + _grid2 + '">' +
+        '<div><label style="' + _lbl + '">创建人</label><div style="' + inp + ';padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:13px;color:var(--fg)">' + escHtml(t.reporter_name || '—') + '</div></div>' +
         '<div><label style="' + _lbl + '">负责人 *</label><div style="margin-top:2px">' + createUserCombo({
           comboId: 'tf-assignee-combo', inputId: 'tf-assignee-input', dropdownId: 'tf-assignee-dropdown',
           selectedIdFn: function() { return _tfAssigneeId; },

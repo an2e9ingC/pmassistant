@@ -191,6 +191,7 @@ def create_local_product(
     status: str = "normal",
     description: str = "",
     project_ids: Optional[list[int]] = None,
+    reporter_id: Optional[int] = None,
 ) -> dict:
     """Create a PMA-local product and optionally link to projects."""
     # Verify node exists
@@ -217,6 +218,7 @@ def create_local_product(
         is_local=True,
         description=description,
         tags=description or "",
+        reporter_id=reporter_id,
         synced_at=None,  # mark as not synced
     )
     db.add(product)
@@ -341,6 +343,7 @@ def create_local_project(
     tags: Optional[str] = None,
     planned_delivery_qty: Optional[int] = None,
     consumed: Optional[float] = None,
+    reporter_id: Optional[int] = None,
 ) -> dict:
     """Create a PMA-local project."""
     if product_ids is None:
@@ -366,6 +369,7 @@ def create_local_project(
         tags=tags,
         planned_delivery_qty=planned_delivery_qty,
         consumed=consumed or 0,
+        reporter_id=reporter_id,
         synced_at=None,
     )
     db.add(project)
@@ -499,6 +503,7 @@ def _product_item(p: PmaProduct, db: Session) -> dict:
         "tags": p.tags,
         "tags_list": [t.strip() for t in (p.tags or "").split(",") if t.strip()],
         "is_local": bool(p.is_local),
+        "reporter_id": p.reporter_id,
         "project_count": project_count,
         "node_ids": node_ids,
         "synced_at": to_local_str(p.synced_at) if p.synced_at else None,
@@ -544,6 +549,7 @@ def _project_item(p: CachedProject, db: Session) -> dict:
         "tags": p.tags,
         "tags_list": [t.strip() for t in (p.tags or "").split(",") if t.strip()],
         "is_local": bool(p.is_local),
+        "reporter_id": p.reporter_id,
         "product_count": product_count,
         "product_names": product_names,
         "synced_at": to_local_str(p.synced_at) if p.synced_at else None,

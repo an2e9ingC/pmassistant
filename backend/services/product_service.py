@@ -280,6 +280,8 @@ def _product_detail(p: PmaProduct, db: Session) -> dict:
         "releases_list": _get_product_releases(db, p.id),
         "doc_completion": _doc_completion(p.id, db),
         "is_local": bool(p.is_local),
+        "reporter_id": p.reporter_id,
+        "reporter_name": _resolve_reporter_name(db, p.reporter_id),
         "synced_at": to_local_str(p.synced_at) or None,
         "tree_path": _get_product_tree_path(db, p.id),
         "linked_node_ids": _get_product_node_ids(db, p.id),
@@ -327,3 +329,13 @@ def _get_product_releases(db: Session, product_id: int) -> list[dict]:
         "gitlab_url_valid": r.gitlab_url_valid,
         "gitlab_url_checked_at": to_local_str(r.gitlab_url_checked_at) if r.gitlab_url_checked_at else None,
     } for r in releases]
+
+def _resolve_reporter_name(db: Session, reporter_id) -> str:
+    """Resolve reporter_id to display_name."""
+    if not reporter_id:
+        return ""
+    from backend.models.local import LocalUser
+    u = db.query(LocalUser).filter(LocalUser.id == reporter_id).first()
+    if u:
+        return u.display_name or u.username
+    return ""
