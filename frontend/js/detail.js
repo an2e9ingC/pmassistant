@@ -239,7 +239,7 @@ function buildInfo(p, notes, delivery) {
     html += '<div class="section-hd" style="margin-top:20px"><div class="section-title">项目背景</div></div>';
   }
   html += '<div class="card" style="padding:12px 16px;min-height:40px" id="proj-background-content">';
-  html += (p.background ? '<div style="font-size:12.5px;line-height:1.7;white-space:pre-wrap">' + escHtml(p.background) + '</div>' : '<div style="color:var(--muted);font-size:12px;font-style:italic">暂无项目背景说明</div>');
+  html += (p.background ? '<div class="markdown-body" style="font-size:12.5px;line-height:1.7">' + (typeof marked !== 'undefined' ? marked.parse(p.background) : '<pre style="white-space:pre-wrap">' + escHtml(p.background) + '</pre>') + '</div>' : '<div style="color:var(--muted);font-size:12px;font-style:italic">暂无项目背景说明</div>');
   html += '</div>';
 
   // Notes section
@@ -264,14 +264,20 @@ function editProjectBackground() {
   if (!_comboCurCode || !_projDetail) return;
   var currentBg = (_projDetail && _projDetail.background) ? _projDetail.background : '';
   openDialog('编辑项目背景 — ' + escHtml(_projDetail.name || ''),
-    '<div style="margin-bottom:12px">' +
-      '<textarea id="proj-bg-input" class="search-inp" rows="6" placeholder="输入项目背景说明..." style="width:100%;box-sizing:border-box;resize:vertical;font-size:13px">' + escHtml(currentBg) + '</textarea>' +
-    '</div>',
+    '<div style="margin-bottom:8px;display:flex;gap:4px">' +
+      '<button class="btn btn-xs" onclick="document.getElementById(\'proj-bg-edit\').style.display=\'\';document.getElementById(\'proj-bg-preview\').style.display=\'none\';this.classList.add(\'btn-primary\');this.nextElementSibling.classList.remove(\'btn-primary\')" style="font-size:10px" id="proj-bg-edit-btn">编辑</button>' +
+      '<button class="btn btn-xs" onclick="document.getElementById(\'proj-bg-edit\').style.display=\'none\';document.getElementById(\'proj-bg-preview\').style.display=\'\';this.classList.add(\'btn-primary\');this.previousElementSibling.classList.remove(\'btn-primary\')" style="font-size:10px" id="proj-bg-preview-btn">预览</button>' +
+    '</div>' +
+    '<div id="proj-bg-edit" style="margin-bottom:8px">' +
+      '<textarea id="proj-bg-input" class="search-inp" rows="8" placeholder="支持 Markdown 格式，如 # 标题、**粗体**、- 列表" style="width:100%;box-sizing:border-box;resize:vertical;font-size:13px;font-family:var(--mono)">' + escHtml(currentBg) + '</textarea>' +
+    '</div>' +
+    '<div id="proj-bg-preview" class="markdown-body" style="display:none;margin-bottom:8px;padding:8px;border:1px solid var(--border);border-radius:6px;min-height:100px;max-height:300px;overflow-y:auto;background:var(--bg);font-size:12.5px;line-height:1.7"></div>' +
+    '<script>setTimeout(function(){var ta=document.getElementById("proj-bg-input");if(ta){ta.oninput=function(){var pv=document.getElementById("proj-bg-preview");if(pv)pv.innerHTML=typeof marked!=="undefined"?marked.parse(ta.value):"<pre>"+ta.value+"</pre>"}}},100)</' + 'script>',
     [
       {text: '取消', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
       {text: '保存', cls: 'btn-primary', onclick: 'saveProjectBackground()'},
     ],
-    {hideClose: true});
+    {hideClose: true, maxWidth: 640});
 }
 
 async function saveProjectBackground() {
@@ -885,6 +891,18 @@ function buildDocs(data) {
     var bg = stageColors[stageIdx % stageColors.length];
     var cellStyle = 'background:' + bg + ';';
 
+    // Calculate stage progress
+    var doneCount = 0, totalCount = 0;
+    if (hasDocs) {
+      var stageItems = stage.documents || [];
+      stageItems.forEach(function(d) { totalCount++; if (d.done) doneCount++; });
+    }
+    var progressPct = totalCount > 0 ? Math.round(doneCount / totalCount * 100) : 0;
+    var progressColor = progressPct >= 100 ? 'var(--success)' : (progressPct > 0 ? 'var(--warn)' : 'var(--muted)');
+    var progressRing = totalCount > 0 ? '<span style="display:inline-flex;align-items:center;gap:4px;vertical-align:middle">' +
+      renderProgressCircle(progressPct, 28, { label: '', color: progressColor }) +
+      '<span style="font-size:9px;color:var(--muted);font-weight:400">' + doneCount + '/' + totalCount + '</span></span>' : '';
+
     if (!hasDocs) {
       rows += '<tr style="opacity:0.5">' +
         '<td style="vertical-align:middle;text-align:center;font-weight:600;white-space:nowrap;word-break:keep-all;' + cellStyle + 'color:var(--accent);font-size:12px">' + escHtml(stageName) + ' <sup style="font-size:10px;color:var(--muted);font-weight:400">0</sup></td>' +
@@ -931,7 +949,7 @@ function buildDocs(data) {
         var updatedBy = d.updated_by || '';
 
         rows += '<tr id="doc-row-' + d.id + '">' +
-          (i === 0 ? '<td rowspan="' + items.length + '" style="vertical-align:middle;text-align:center;font-weight:600;' + cellStyle + 'color:var(--accent);font-size:12px">' + escHtml(stageName) + ' <sup style="font-size:10px;color:var(--muted);font-weight:400">' + items.length + '</sup></td>' : '') +
+          (i === 0 ? '<td rowspan="' + items.length + '" style="vertical-align:middle;text-align:center;font-weight:600;' + cellStyle + 'color:var(--accent);font-size:12px">' + escHtml(stageName) + ' <sup style="font-size:10px;color:var(--muted);font-weight:400">' + items.length + '</sup><div style="margin-top:4px">' + progressRing + '</div></td>' : '') +
           '<td style="font-family:var(--mono);color:var(--muted);text-align:center;' + cellStyle + '">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
           '<td style="font-weight:500;width:180px;word-break:break-all;' + cellStyle + '" title="' + escHtml(d.description || '') + '">' + escHtml(d.doc_name) + '</td>' +
           '<td style="font-size:12px;white-space:nowrap;word-break:keep-all;' + cellStyle + '">' + escHtml(d.responsible_role || '—') + '</td>' +
@@ -939,7 +957,7 @@ function buildDocs(data) {
           '<td style="font-size:11px;' + cellStyle + '">' + escHtml(docTypeLabel) + '</td>' +
           '<td style="font-size:12px;word-break:break-all;text-align:left;' + cellStyle + '" id="doc-loc-cell-' + d.id + '">' + locHtml + '</td>' +
           '<td style="font-size:11px;color:var(--muted);white-space:nowrap;word-break:keep-all;' + cellStyle + '">' + escHtml(updatedAt) + '</td>' +
-          '<td style="font-size:12px;color:var(--muted);' + cellStyle + '">' + escHtml(updatedBy) + '</td>' +
+          '<td style="font-size:12px;color:var(--muted);' + cellStyle + '">' + escHtml(getDisplayName(updatedBy)) + '</td>' +
           '<td style="white-space:nowrap;word-break:keep-all;text-align:center;' + cellStyle + '">' +
             (d.location && !d.location.startsWith('@') && isPreviewableUrl(d.location)
               ? iconEye('previewDocument(\'' + encodeURIComponent(d.location) + '\',\'' + escJs(d.doc_name || '') + '\')', '预览')
@@ -1768,7 +1786,7 @@ function showProjectFormDialog(isEdit) {
       // Row 3: 项目类型 | 客户名称
       '<div style="display:flex;gap:10px;margin-bottom:10px">' +
         '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">项目类型</label>' +
-          '<select class="search-inp" id="proj-form-type" style="width:100%;box-sizing:border-box" onchange="_autoGenProjCode()">' +
+          '<select class="search-inp" id="proj-form-type" style="width:100%;box-sizing:border-box" onchange="_autoGenProjCode(true)">' +
             projectTypes.map(function(pt) {
               var sel = (p && p.project_type === pt.id) || (!isEdit && pt.id === 'RD');
               return '<option value="' + escHtml(pt.id) + '"' + (sel ? ' selected' : '') + '>' + escHtml(pt.label) + '</option>';
@@ -1788,12 +1806,20 @@ function showProjectFormDialog(isEdit) {
       '<svg class="proj-combo-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2,5 7,10 12,5"/></svg>' +
       '<div class="proj-combo-dropdown" id="proj-form-prod-dd"></div>' +
       '</div></div>' +
-      // Row 5: 计划开始 | 计划结束
+      // Row 5: 计划开始 | 计划结束 | 项目状态
       '<div style="display:flex;gap:10px;margin-bottom:10px">' +
         '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">计划开始</label>' +
           '<input class="search-inp" id="proj-form-begin" type="date" value="' + ((p && p.begin) || '') + '" style="width:100%;box-sizing:border-box"></div>' +
         '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">计划结束</label>' +
           '<input class="search-inp" id="proj-form-end" type="date" value="' + ((p && p.end) || '') + '" style="width:100%;box-sizing:border-box"></div>' +
+        '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">项目状态</label>' +
+          '<select class="search-inp" id="proj-form-status" style="width:100%;box-sizing:border-box">' +
+            '<option value="wait"' + ((p && p.status === 'wait') || (!isEdit) ? ' selected' : '') + '>待启动</option>' +
+            '<option value="doing"' + (p && p.status === 'doing' ? ' selected' : '') + '>进行中</option>' +
+            '<option value="suspended"' + (p && p.status === 'suspended' ? ' selected' : '') + '>已挂起</option>' +
+            '<option value="done"' + (p && p.status === 'done' ? ' selected' : '') + '>已完成</option>' +
+            '<option value="closed"' + (p && p.status === 'closed' ? ' selected' : '') + '>已关闭</option>' +
+          '</select></div>' +
       '</div>' +
       // Row 6: 实际开始 | 实际结束
       '<div style="display:flex;gap:10px;margin-bottom:10px">' +
@@ -2049,11 +2075,11 @@ function _projFormConfirmTags() {
   _renderProjFormTags();
 }
 
-function _autoGenProjCode() {
+function _autoGenProjCode(force) {
   var typeEl = document.getElementById('proj-form-type');
   var codeEl = document.getElementById('proj-form-code');
   if (!typeEl || !codeEl) return;
-  if (codeEl.value && codeEl.value.trim()) return; // don't overwrite existing code
+  if (!force && codeEl.value && codeEl.value.trim()) return; // don't overwrite existing code unless forced
   var type = typeEl.value || 'RD';
   API.get('/product-management/next-project-code?project_type=' + encodeURIComponent(type)).then(function(data) {
     if (data && data.code) codeEl.value = data.code;
@@ -2080,6 +2106,9 @@ async function saveProjectForm(isEdit) {
   payload.code = code;
 
   payload.project_type = g('proj-form-type').value;
+
+  var statusEl = g('proj-form-status');
+  if (statusEl) payload.status = statusEl.value;
 
   var custEl = g('proj-form-customer');
   if (custEl && custEl.value.trim()) payload.customer_name = custEl.value.trim();
@@ -2702,7 +2731,7 @@ function buildActivities(items, opts) {
     var time = fmtISODateTime(a.created_at);
     html += '<tr>' +
       '<td class="act-td-time">' + escHtml(time) + '</td>' +
-      '<td class="act-td-user">' + escHtml(a.username) + '</td>' +
+      '<td class="act-td-user">' + escHtml(getDisplayName(a.display_name || a.username)) + '</td>' +
       '<td style="white-space:nowrap"><span class="activity-action pill">' + escHtml(a.action) + '</span></td>' +
       '<td class="act-td-detail">' + (a.detail ? escHtml(a.detail) : '') + '</td>' +
       '</tr>';

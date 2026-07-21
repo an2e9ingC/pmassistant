@@ -544,7 +544,7 @@ function showRoleUsers(roleId, roleLabel) {
   var allTags = _userList.map(function(u) {
     var sel = _ruSelected.hasOwnProperty(u.id);
     return '<span class="ru-user-tag' + (sel ? ' selected' : '') + '" data-uid="' + u.id + '" onclick="ruToggleUser(' + u.id + ')"' +
-      '>' + escHtml(u.username) + (u.is_active ? '' : ' <span style="font-size:9px;opacity:0.6">已禁用</span>') + '</span>';
+      '>' + escHtml(getDisplayName(u.username)) + (u.is_active ? '' : ' <span style="font-size:9px;opacity:0.6">已禁用</span>') + '</span>';
   }).join('');
 
   var bodyHtml = '<div style="padding:8px 0">' +
@@ -626,7 +626,7 @@ function renderUserTable() {
   if (_userFilter === 'active') users = users.filter(function(u) { return u.is_active; });
   else if (_userFilter === 'disabled') users = users.filter(function(u) { return !u.is_active; });
   if (!users.length) {
-    tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state" style="padding:16px">暂无匹配用户</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state" style="padding:16px">暂无匹配用户</div></td></tr>';
     return;
   }
   tbody.innerHTML = users.map(function(u, idx) {
@@ -666,6 +666,7 @@ function renderUserTable() {
     return '<tr>' +
       '<td style="font-family:var(--mono);color:var(--muted);text-align:center">' + (idx + 1) + '</td>' +
       '<td style="font-size:13px;font-weight:500">' + escHtml(u.username) + '</td>' +
+      '<td style="font-size:12px">' + escHtml(u.wecom_name || '—') + '</td>' +
       '<td style="font-size:12px">' + authSourceHtml + '</td>' +
       '<td>' + (roleBadges || '<span style="font-size:11px;color:var(--muted)">未分配</span>') + '</td>' +
       '<td>' + statusHtml + '</td>' +
@@ -1242,7 +1243,7 @@ function openRoleMemberDialog(roleId, roleLabel) {
     var inRole = (u.role_ids || []).indexOf(roleId) >= 0;
     return '<label class="rm-user-row" data-rm-username="' + u.username.toLowerCase() + '" style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;cursor:pointer">' +
       '<input type="checkbox" ' + (inRole ? 'checked' : '') + ' value="' + u.id + '" class="rm-user-cb">' +
-      escHtml(u.username) + ' <span style="font-size:10px;color:var(--muted)">' + escHtml(_roleLabels[u.role] || u.role) + '</span>' +
+      escHtml(getDisplayName(u.username)) + ' (@' + escHtml(u.username) + ') <span style="font-size:10px;color:var(--muted)">' + escHtml(_roleLabels[u.role] || u.role) + '</span>' +
     '</label>';
   }).join('');
 

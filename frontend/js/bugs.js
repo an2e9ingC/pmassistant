@@ -483,7 +483,7 @@ function _renderWorklogTable(logs, bugId) {
     var bg = i % 2 === 1 ? 'background:var(--surface2)' : '';
     h += '<tr style="border-bottom:1px solid var(--border);' + bg + '">' +
       '<td style="padding:4px;text-align:center;font-size:11px">'+(w.date||'?')+'</td>' +
-      '<td style="padding:4px;text-align:center;font-size:11px">'+escHtml(w.username||'?')+'</td>' +
+      '<td style="padding:4px;text-align:center;font-size:11px">'+escHtml(getDisplayName(w.display_name||w.username||''))+'</td>' +
       '<td style="padding:4px;text-align:center">'+w.hours.toFixed(1)+'</td>' +
       '<td style="padding:4px;text-align:left;white-space:normal;word-break:break-word">'+escHtml(w.description||'')+'</td>' +
       '<td style="padding:2px;text-align:center;white-space:nowrap">' +
@@ -555,7 +555,7 @@ function _loadBugAnalyses(bugId) {
     if (!analyses.length) { el.innerHTML = '<div style="color:var(--muted);font-size:12px">暂无分析记录</div>'; return; }
     var h = '';
     analyses.forEach(function(a) {
-      var userHtml = a.username ? ' · ' + escHtml(a.username) : '';
+      var userHtml = a.username ? ' · ' + escHtml(getDisplayName(a.display_name || a.username)) : '';
       h += '<div style="border-left:2px solid var(--accent);padding:4px 0 8px 12px;margin-bottom:4px">' +
         '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">'+(fmtISODateTime(a.created_at)||'?') + userHtml + '</div>' +
         '<div class="markdown-body" style="font-size:13px;line-height:1.6">'+renderMarkdown(a.content)+'</div></div>';
