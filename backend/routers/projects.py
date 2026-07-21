@@ -604,6 +604,16 @@ def get_activities(
         ).distinct().all() if r[0]
     ))
 
+    # Resolve display_name for all usernames at once
+    usernames_set = {r.username for r in rows if r.username}
+    display_map = {}
+    if usernames_set:
+        from backend.models.local import LocalUser as _LU
+        lu_rows = db.query(_LU.username, _LU.display_name).filter(_LU.username.in_(usernames_set)).all()
+        for uname, dname in lu_rows:
+            if dname:
+                display_map[uname] = dname
+
     return {
         "code": 0,
         "data": {
@@ -611,6 +621,7 @@ def get_activities(
                 {
                     "id": r.id,
                     "username": r.username,
+                    "display_name": display_map.get(r.username, "") or "",
                     "action": r.action,
                     "detail": r.detail or "",
                     "created_at": to_local_str(r.created_at),

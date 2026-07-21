@@ -15,6 +15,16 @@ from backend.models.local import LocalUser, Role, UserRole
 from backend.schemas.auth import LoginRequest, LoginResponse, UserInfo
 from backend.services.auth_service import authenticate_user, create_access_token, hash_password, verify_password
 
+
+def _resolve_wecom_display_name(db: Session, wecom_userid: str):  # -> Optional[str]
+    """Look up Chinese display name from WeChat Work user list."""
+    from backend.models.wecom import WeComUser
+    wu = db.query(WeComUser).filter(WeComUser.userid == wecom_userid).first()
+    if wu and wu.name:
+        return wu.name
+    return None
+
+
 # In-memory CSRF state storage: state -> expiry_timestamp
 _oauth_states: Dict[str, float] = {}
 _OAUTH_STATE_TTL = 600  # 10 minutes
@@ -63,6 +73,16 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)):
     user_info = UserInfo.model_validate(user).model_dump()
     user_info["permissions"] = ",".join(get_user_perms(user))
     user_info["gitlab_token_valid"] = bool(user.auth_source == "gitlab" and user.gitlab_access_token)
+    # Resolve display name from WeChat Work if available, persist to DB
+    if user.wecom_userid:
+        resolved = _resolve_wecom_display_name(db, user.wecom_userid)
+        if resolved and user.display_name != resolved:
+            user.display_name = resolved
+            db.commit()
+    if not user_info.get("display_name") and user.wecom_userid:
+        resolved = _resolve_wecom_display_name(db, user.wecom_userid)
+        if resolved:
+            user_info["display_name"] = resolved
     return {
         "code": 0,
         "data": {
@@ -75,10 +95,15 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/me", response_model=dict)
-def me(user: LocalUser = Depends(get_current_user)):
+def me(user: LocalUser = Depends(get_current_user), db: Session = Depends(get_db)):
     user_info = UserInfo.model_validate(user).model_dump()
     user_info["permissions"] = ",".join(get_user_perms(user))
     user_info["gitlab_token_valid"] = bool(user.auth_source == "gitlab" and user.gitlab_access_token)
+    # Resolve display name from WeChat Work if available
+    if not user_info.get("display_name") and user.wecom_userid:
+        resolved = _resolve_wecom_display_name(db, user.wecom_userid)
+        if resolved:
+            user_info["display_name"] = resolved
     return {
         "code": 0,
         "data": user_info,

@@ -118,9 +118,36 @@ def seed_document_templates(db: Session) -> int:
 
 # Project type definitions (display name only — stages come from PmaSetting)
 PROJECT_TYPE_DEFS: dict[str, dict] = {
-    "RD": {"label": "研发项目"},
-    "SC": {"label": "生产项目"},
+    "RD": {"label": "研发项目", "code_prefix": "PE"},
+    "SC": {"label": "生产项目", "code_prefix": "PE"},
 }
+
+# Default start numbers for known code prefixes
+_DEFAULT_START = {"PE": 456, "LSJ": 538, "SW": 1, "PT": 1}
+
+
+def _get_project_code_prefix(db: Session, project_type: str) -> tuple[str, int]:
+    """Return (code_prefix, start_number) for a project type.
+
+    Looks up the prefix from PROJECT_TYPE_DEFS and custom project types,
+    with fallback to "PE".
+    """
+    # Check built-in types
+    info = PROJECT_TYPE_DEFS.get(project_type)
+    if info:
+        prefix = info.get("code_prefix", "PE")
+        return prefix, _DEFAULT_START.get(prefix, 1)
+    # Check custom types
+    customs = _get_custom_project_types(db)
+    if project_type in customs:
+        custom_info = customs[project_type]
+        if isinstance(custom_info, dict):
+            prefix = custom_info.get("code_prefix", "PE")
+        else:
+            prefix = "PE"
+        return prefix, _DEFAULT_START.get(prefix, 1)
+    # Fallback
+    return "PE", 456
 
 
 CUSTOM_PROJECT_TYPES_KEY = "custom_project_types"  # PmaSetting key, JSON: {"SW": "软件迭代项目", ...}
@@ -175,13 +202,18 @@ def get_project_types(db: Session) -> list[dict]:
         label = label_overrides.get(ptype, info["label"])
         _ensure_stage_types_seeded(db, ptype)
         stages = get_stage_types_for_project_type(db, ptype)
-        result.append({"id": ptype, "label": label, "stages": stages, "builtin": True})
+        result.append({"id": ptype, "label": label, "code_prefix": info.get("code_prefix", "PE"), "stages": stages, "builtin": True})
     # Include persisted custom project types
     customs = _get_custom_project_types(db)
-    for ptype, label in customs.items():
-        label = label_overrides.get(ptype, label)
+    for ptype, entry in customs.items():
+        if isinstance(entry, dict):
+            label = label_overrides.get(ptype, entry.get("label", ptype))
+            code_prefix = entry.get("code_prefix", "PE")
+        else:
+            label = label_overrides.get(ptype, entry)
+            code_prefix = "PE"
         stages = _get_custom_stage_types(db, ptype)
-        result.append({"id": ptype, "label": label, "stages": stages, "builtin": False})
+        result.append({"id": ptype, "label": label, "code_prefix": code_prefix, "stages": stages, "builtin": False})
     return result
 
 

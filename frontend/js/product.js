@@ -1392,7 +1392,7 @@ function buildProdActivities(items, opts) {
     var time = fmtISODateTime(a.created_at);
     html += '<tr>' +
       '<td class="act-td-time">' + escHtml(time) + '</td>' +
-      '<td class="act-td-user">' + escHtml(a.username) + '</td>' +
+      '<td class="act-td-user">' + escHtml(getDisplayName(a.display_name || a.username)) + '</td>' +
       '<td style="white-space:nowrap"><span class="activity-action pill">' + escHtml(a.action) + '</span></td>' +
       '<td class="act-td-detail">' + (a.detail ? escHtml(a.detail) : '') + '</td>' +
       '</tr>';

@@ -28,9 +28,29 @@ context: fork
    - 分支必须从 `origin/trunk` 最新提交创建
    - 验证：`git merge-base <new-branch> origin/trunk` 应等于 `origin/trunk` 最新 commit
 
-3. 准备开发环境：
-   - 启动服务：`./server.sh -p <PORT> restart`
-   - 拷贝数据库：`cp data/pma.db data/pma-$PORT.db`
+3. 准备开发环境（**严格按以下顺序**）：
+
+   a. **停止主服务器**（SQLite 独占锁，必须停服才能安全拷贝）：
+   ```bash
+   ./server.sh -p 8000 stop
+   ```
+   b. **拷贝主数据库和配置文件到 worktree**：
+   ```bash
+   cp /home/xuchuan/workspace/pma/data/pma-8000.db data/pma-$PORT.db
+   cp /home/xuchuan/workspace/pma/.env .env
+   ```
+   > - 主 session DB 路径为 `pma-8000.db`（不是 `data/pma.db`）
+   > - `.env` 等 gitignore 文件 worktree 不会自动包含，必须手动拷贝
+   > - GitLab OAuth 只支持主 session 端口（8000），worktree 请使用管理员账号密码登录
+   
+   c. **重启主服务器**：
+   ```bash
+   (cd /home/xuchuan/workspace/pma && ./server.sh -p 8000 start)
+   ```
+   d. **启动 worktree 服务**：
+   ```bash
+   ./server.sh -p $PORT restart
+   ```
 
 ## 资源隔离
 

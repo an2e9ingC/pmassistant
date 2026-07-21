@@ -49,6 +49,17 @@ async def _sync_wecom_users(db, client):
                 raw_data=json.dumps(ru, ensure_ascii=False),
                 synced_at=now,
             ))
+    # Backfill LocalUser.display_name from WeChat Work name for linked users
+    from backend.models.local import LocalUser
+    for ru in raw_users:
+        uid = ru.get("userid", "")
+        name = str(ru.get("name", "") or "")
+        if uid and name:
+            linked = db.query(LocalUser).filter(
+                LocalUser.wecom_userid == uid,
+            ).first()
+            if linked:
+                linked.display_name = name
 
 async def sync_wecom_data(db: Session) -> dict:
     """Full sync: fetch checkin + approval data from WeCom for all linked users.

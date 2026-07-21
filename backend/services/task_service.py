@@ -1,7 +1,7 @@
 """Task CRUD + stats + consumed_hours recalculation."""
 from __future__ import annotations
 import json
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Optional, List
 
 from sqlalchemy.orm import Session
@@ -126,9 +126,12 @@ def create_task(db: Session, data: dict, user) -> dict:
     db.refresh(t)
     _link_task_to_stage(db, t)
     _log_audit(db, t.project_id, uname, "task_create", f"创建任务 #{t.id}: {t.title}")
+    auto_messages = []
     if t.stage_id:
-        _recalc_stage_progress(db, t.stage_id)
-    return _task_dict(t, db)
+        auto_messages = _recalc_stage_progress(db, t.stage_id)
+    result = _task_dict(t, db)
+    result["auto_messages"] = auto_messages
+    return result
 
 
 def create_tasks_batch(db: Session, tasks_data: list, user) -> List[dict]:
@@ -232,13 +235,16 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
 
     # Auto-link to project stage by name, then recalc stage progress
     stage_id = _link_task_to_stage(db, t)
+    auto_messages = []
     if stage_id:
-        _recalc_stage_progress(db, stage_id)
+        auto_messages = _recalc_stage_progress(db, stage_id)
 
     if changes:
         _log_audit(db, t.project_id, uname, "task_update", f"更新任务 #{t.id}: " + "; ".join(changes[:3]))
 
-    return _task_dict(t, db)
+    result = _task_dict(t, db)
+    result["auto_messages"] = auto_messages
+    return result
 
 
 def extend_task_estimate(db: Session, task_id: int, additional_hours: float) -> Optional[dict]:
@@ -462,12 +468,14 @@ def _link_task_to_stage(db: Session, t: Task) -> Optional[int]:
     return None
 
 
-def _recalc_stage_progress(db: Session, stage_id: int):
-    """Recalculate and cache stage.progress from all linked tasks."""
+def _recalc_stage_progress(db: Session, stage_id: int) -> list[str]:
+    """Recalculate and cache stage.progress from all linked tasks.
+    Returns a list of human-readable messages about auto-updates performed."""
+    messages = []
     from backend.models.project_stage import ProjectStage
     stage = db.query(ProjectStage).filter(ProjectStage.id == stage_id).first()
     if not stage:
-        return
+        return messages
     tasks = db.query(Task).filter(Task.stage_id == stage_id).all()
     if not tasks:
         # Fallback: match by stage_name
@@ -480,6 +488,11 @@ def _recalc_stage_progress(db: Session, stage_id: int):
     if stage.progress != pct:
         stage.progress = pct
         db.commit()
+    # #125: 阶段进度100% → 自动切换阶段状态为"已完成"
+    if pct >= 100 and stage.status != 'completed':
+        stage.status = 'completed'
+        db.commit()
+        messages.append(f'阶段"{stage.name}"进度100%，已自动设为已完成')
     # Sync project overall progress
     from backend.models.zentao import CachedProject
     project = db.query(CachedProject).filter(CachedProject.id == stage.project_id).first()
@@ -490,3 +503,14 @@ def _recalc_stage_progress(db: Session, stage_id: int):
         if project.progress != proj_pct:
             project.progress = proj_pct
             db.commit()
+        # #122: 项目立项阶段进度 ↔ 项目状态联动
+        if stage.name and '项目立项' in stage.name:
+            if stage.status == 'completed' and pct >= 100 and project.status != 'doing':
+                project.status = 'doing'
+                db.commit()
+                messages.append(f'项目"{project.name}"立项阶段已完成，项目状态已自动切换为进行中')
+            elif (stage.status != 'completed' or pct < 100) and project.status == 'doing':
+                project.status = 'wait'
+                db.commit()
+                messages.append(f'项目"{project.name}"立项阶段进度回退，项目状态已自动切换为待启动')
+    return messages

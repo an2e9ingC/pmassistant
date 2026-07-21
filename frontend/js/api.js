@@ -45,6 +45,57 @@ const API = {
   del(path) { return this.request('DELETE', path); },
 };
 
+// ── Global display-name cache (username → display_name) ──
+var _displayNameCache = {};
+var _displayNameLoaded = false;
+
+function getDisplayName(username) {
+  if (!username) return '';
+  return _displayNameCache[username] || username;
+}
+
+function loadDisplayNameCache() {
+  if (_displayNameLoaded) return Promise.resolve(_displayNameCache);
+  // Try admin user list first, fallback to wecom users
+  return API.get('/admin/users').then(function(users) {
+    if (users && users.length) {
+      users.forEach(function(u) {
+        if (u.display_name && u.display_name !== u.username) {
+          _displayNameCache[u.username] = u.display_name;
+        }
+        if (u.wecom_name) {
+          _displayNameCache[u.username] = u.wecom_name;
+        }
+      });
+    }
+    _displayNameLoaded = true;
+    return _displayNameCache;
+  }).catch(function() {
+    // Fallback: try wecom user list
+    return API.get('/wecom/users/list').then(function(data) {
+      var list = data && data.users ? data.users : (data || []);
+      if (Array.isArray(list)) {
+        list.forEach(function(wu) {
+          if (wu.userid && wu.name) {
+            _displayNameCache[wu.userid] = wu.name;
+          }
+        });
+      }
+      _displayNameLoaded = true;
+      return _displayNameCache;
+    }).catch(function() {
+      _displayNameLoaded = true;
+      return _displayNameCache;
+    });
+  });
+}
+
+// Auto-load on first use
+setTimeout(function() {
+  var token = localStorage.getItem('pma_token');
+  if (token) loadDisplayNameCache();
+}, 500);
+
 // ── Server status poller (shutdown notice + restart detection) ──
 var _serverStartTime = null;
 

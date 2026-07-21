@@ -270,8 +270,8 @@ def next_project_code(
     """Return the next available project code based on project type."""
     from sqlalchemy import func as _func
     from backend.models.zentao import CachedProject
-    prefix = "LSJ" if project_type == "SJ" else "PE"
-    start = 538 if prefix == "LSJ" else 456
+    from backend.services.document_service import _get_project_code_prefix
+    prefix, start = _get_project_code_prefix(db, project_type)
     # Find the maximum code number for this prefix
     result = db.query(_func.max(CachedProject.code)).filter(
         CachedProject.code.like(f"{prefix}%")
