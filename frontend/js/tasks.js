@@ -540,6 +540,7 @@ function _renderPriority(p) {
 var _tfProjectId = null; // project numeric ID selected in the task form
 var _tfProjectCode = null; // project code (e.g. PE0450) for API calls to /projects/{code}/...
 var _tfAssigneeId = null; // assignee ID selected in the task form
+var _tfOriginalStatus = null; // original status when editing
 
 function _tfStageName() {
   var sel = document.getElementById('tf-execution');
@@ -709,9 +710,11 @@ function openTaskDialog(taskId) {
   var title = isEdit ? '编辑任务' : '新建任务';
   _tfProjectId = _taskProjectId || window._taskProjectId; _tfProjectCode = _taskProjectCode || window._taskProjectCode || _taskProjectId; // default to page context
   _tfAssigneeId = null;
+  _tfOriginalStatus = null;
 
   if (isEdit) {
     API.get('/tasks/' + taskId).then(function(data) {
+      _tfOriginalStatus = data.status;
       _showTaskForm(title, data);
     }).catch(function(e) {
       showToast('加载任务失败: ' + (e.message || ''), 'error');
@@ -961,13 +964,56 @@ async function submitTask(taskId) {
   }
   data.output_items = outputs;
 
+  // Bidirectional sync: progress ↔ status
+  if (data.progress >= 100 && data.status !== 'done') {
+    data.status = 'done';
+    document.getElementById('tf-status').value = 'done';
+    showToast('进度100%，状态已自动设为已完成', 'success');
+  }
+  if (data.status === 'done' && data.progress < 100) {
+    data.status = 'in_progress';
+    document.getElementById('tf-status').value = 'in_progress';
+    showToast('进度 <100%，状态已自动设为进行中', 'success');
+  }
+  // When progress reaches 100%, confirm
+  if (data.progress >= 100) {
+    _pendingTaskConfirm = { isEdit: !!taskId, data: data, taskId: taskId };
+    openDialog('确认任务完成',
+      '<div style="font-size:13px;margin-bottom:8px">进度 <b>100%</b>，任务状态将设置为<b>已完成</b>。</div>' +
+      '<div style="font-size:11px;color:var(--muted)">任务: ' + escHtml(data.title || '') + '</div>',
+      [
+        {text: '取消', onclick: "var d=document.querySelector('.shared-dialog-overlay');if(d)d.remove();"},
+        {text: '确认', cls: 'btn-primary', onclick: "_doSubmitTaskConfirm()"},
+      ],
+      {hideClose: true}
+    );
+    return;
+  }
+
+  _doSaveTask(taskId, data);
+}
+
+async function _doSubmitTaskConfirm() {
+  var d = document.querySelector('.shared-dialog-overlay'); if (d) d.remove();
+  if (!_pendingTaskConfirm) return;
+  var p = _pendingTaskConfirm;
+  _pendingTaskConfirm = null;
+  _doSaveTask(p.taskId, p.data);
+}
+
+async function _doSaveTask(taskId, data) {
   try {
+    var res;
     if (taskId) {
-      await API.put('/tasks/' + taskId, data);
+      res = await API.put('/tasks/' + taskId, data);
       showToast('任务已更新', 'success');
     } else {
-      await API.post('/tasks', data);
+      res = await API.post('/tasks', data);
       showToast('任务已创建', 'success');
+    }
+    // Show auto-update messages from backend (stage/project status changes)
+    if (res && res.auto_messages && res.auto_messages.length) {
+      res.auto_messages.forEach(function(msg) { showToast(msg, 'success'); });
     }
     _closeTaskDialog();
     loadTaskData();

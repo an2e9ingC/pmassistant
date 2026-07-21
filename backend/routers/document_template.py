@@ -44,6 +44,7 @@ def list_project_types(db: Session = Depends(get_db), _=Depends(get_current_user
 def create_project_type(
     project_type: str = Query(..., description="Project type ID, e.g. SW"),
     label: str = Query(..., description="Display name, e.g. 软件迭代项目"),
+    code_prefix: str = Query("", description="Project code prefix, e.g. PE, SW, PT, LSJ"),
     db: Session = Depends(get_db),
     user=Depends(require_perm("doc_template")),
 ):
@@ -53,20 +54,22 @@ def create_project_type(
     customs = _get_custom_project_types(db)
     if project_type in customs:
         raise HTTPException(status_code=400, detail=f"项目类型 '{project_type}' 已存在")
-    customs[project_type] = label
+    prefix = code_prefix.strip() or "PE"
+    customs[project_type] = {"label": label, "code_prefix": prefix}
     _save_custom_project_types(db, customs)
-    log_audit(db, user, "doc_ptype_add", f"{project_type}: {label}", AUDIT_CAT_TEMPLATE, "medium")
-    return {"code": 0, "data": {"id": project_type, "label": label, "stages": [], "builtin": False}, "message": "ok"}
+    log_audit(db, user, "doc_ptype_add", f"{project_type}: {label} (prefix={prefix})", AUDIT_CAT_TEMPLATE, "medium")
+    return {"code": 0, "data": {"id": project_type, "label": label, "code_prefix": prefix, "stages": [], "builtin": False}, "message": "ok"}
 
 
 @router.put("/project-types/{project_type}", response_model=dict)
 def update_project_type(
     project_type: str,
     label: str = Query(..., description="New display label"),
+    code_prefix: str = Query("", description="New code prefix (optional)"),
     db: Session = Depends(get_db),
     user=Depends(require_perm("doc_template")),
 ):
-    """Update a project type's display label."""
+    """Update a project type's display label and optionally code prefix."""
     from backend.services.document_service import (
         _DEFAULT_RD_STAGES, _DEFAULT_SC_STAGES, PROJECT_TYPE_DEFS,
         _get_custom_project_types, _save_custom_project_types,
@@ -82,12 +85,21 @@ def update_project_type(
         _save_project_type_labels(db, overrides)
         # Also update in-memory for this session
         PROJECT_TYPE_DEFS[project_type]["label"] = label
+        if code_prefix.strip():
+            PROJECT_TYPE_DEFS[project_type]["code_prefix"] = code_prefix.strip()
     else:
         customs = _get_custom_project_types(db)
         if project_type not in customs:
             raise HTTPException(status_code=404, detail=f"项目类型 '{project_type}' 不存在")
-        old_label = customs[project_type]
-        customs[project_type] = label
+        existing = customs[project_type]
+        if isinstance(existing, dict):
+            old_label = existing.get("label", "")
+            existing["label"] = label
+            if code_prefix.strip():
+                existing["code_prefix"] = code_prefix.strip()
+        else:
+            old_label = existing
+            customs[project_type] = {"label": label, "code_prefix": code_prefix.strip() or "PE"}
         _save_custom_project_types(db, customs)
 
     log_audit(db, user, "doc_ptype_edit", f"{project_type}: {old_label} -> {label}", AUDIT_CAT_TEMPLATE, "medium")

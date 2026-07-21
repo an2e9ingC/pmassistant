@@ -259,6 +259,10 @@ function showAddProjectTypeDialog() {
     '<div style="margin-bottom:12px">' +
     '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">显示名称</label>' +
     '<input class="search-inp" id="ptype-label" placeholder="如：软件迭代项目" style="width:100%;box-sizing:border-box">' +
+    '</div>' +
+    '<div style="margin-bottom:12px">' +
+    '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">项目编号前缀 <span style="font-weight:400">（如 PE、SW、PT、LSJ）</span></label>' +
+    '<input class="search-inp" id="ptype-prefix" placeholder="如：SW" style="width:100%;box-sizing:border-box">' +
     '</div>';
   openDialog('新增项目类型', html, [
     { text: '取消', onclick: "document.querySelector('.note-dialog-overlay').remove()" },
@@ -269,10 +273,11 @@ function showAddProjectTypeDialog() {
 async function createProjectType() {
   var id = document.getElementById('ptype-id').value.trim();
   var label = document.getElementById('ptype-label').value.trim();
+  var prefix = document.getElementById('ptype-prefix').value.trim();
   if (!id) { showToast('请输入项目类型 ID', 'error'); return; }
   if (!label) { showToast('请输入显示名称', 'error'); return; }
   try {
-    await API.post('/doc-templates/project-types?project_type=' + encodeURIComponent(id) + '&label=' + encodeURIComponent(label));
+    await API.post('/doc-templates/project-types?project_type=' + encodeURIComponent(id) + '&label=' + encodeURIComponent(label) + '&code_prefix=' + encodeURIComponent(prefix || 'PE'));
     document.querySelector('.note-dialog-overlay').remove();
     showToast('项目类型已创建: ' + label, 'success');
     initDocTemplates();
@@ -293,8 +298,10 @@ function renderTemplatesPage() {
   _projectTypes.forEach(function(pt) {
     var isActive = pt.id === _currentProjectType;
     var labelEsc = escHtml(pt.label).replace(/'/g, "\\'");
+    var prefix = pt.code_prefix || '';
     ptypeTabs += '<div class="map-tab' + (isActive ? ' active' : '') + '" onclick="selectProjectTypeTab(\'' + escHtml(pt.id) + '\')">' +
       '<span class="ptype-label">' + escHtml(pt.label) + '</span>' +
+      (prefix ? ' <code style="font-size:9px;opacity:0.8;background:var(--accent-lt);padding:1px 4px;border-radius:3px">' + prefix + '</code>' : '') +
       (pt.builtin ? '' : ' <span style="font-size:9px;opacity:0.7">自定义</span>') +
       (canEdit ? '<span style="margin-left:4px;opacity:0.4;cursor:pointer;font-size:11px" onclick="event.stopPropagation();showRenameProjectTypeDialog(\'' + escHtml(pt.id) + '\',\'' + labelEsc + '\')" title="重命名">✎</span>' : '') +
       (canEdit && !pt.builtin ? '<span style="margin-left:2px;opacity:0.4;cursor:pointer;color:var(--danger);font-size:12px" onclick="event.stopPropagation();deleteProjectType(\'' + escHtml(pt.id) + '\',\'' + labelEsc + '\')" title="删除项目类型">✕</span>' : '') +
@@ -1184,12 +1191,20 @@ function deleteStageType(stageType) {
 /* ── Project Type Rename / Delete ── */
 
 function showRenameProjectTypeDialog(ptypeId, currentLabel) {
+  var current = _projectTypes.find(function(p) { return p.id === ptypeId; });
+  var currentPrefix = (current && current.code_prefix) || '';
   var html = '<div class="note-dialog-overlay">' +
-    '<div class="note-dialog" style="max-width:380px">' +
-      '<div class="note-dialog-head"><span class="note-dialog-title">重命名项目类型</span>' +
+    '<div class="note-dialog" style="max-width:400px">' +
+      '<div class="note-dialog-head"><span class="note-dialog-title">编辑项目类型 — ' + escHtml(ptypeId) + '</span>' +
         '<button class="note-dialog-close" onclick="this.closest(\'.note-dialog-overlay\').remove()">&times;</button></div>' +
-      '<div style="margin-bottom:10px;font-size:12px;color:var(--muted)">当前名称: <b>' + escHtml(currentLabel) + '</b></div>' +
-      '<input class="search-inp" id="ptype-rename-input" value="' + escHtml(currentLabel) + '" style="margin-bottom:12px">' +
+      '<div style="margin-bottom:12px">' +
+        '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">显示名称</label>' +
+        '<input class="search-inp" id="ptype-rename-input" value="' + escHtml(currentLabel) + '" style="width:100%;box-sizing:border-box">' +
+      '</div>' +
+      '<div style="margin-bottom:12px">' +
+        '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">项目编号前缀</label>' +
+        '<input class="search-inp" id="ptype-prefix-input" value="' + escHtml(currentPrefix) + '" placeholder="如：PE、SW、PT、LSJ" style="width:100%;box-sizing:border-box">' +
+      '</div>' +
       '<div style="display:flex;justify-content:flex-end;gap:8px">' +
         '<button class="btn" onclick="this.closest(\'.note-dialog-overlay\').remove()">取消</button>' +
         '<button class="btn btn-primary" onclick="renameProjectType(\'' + escHtml(ptypeId) + '\')">保存</button>' +
@@ -1202,22 +1217,20 @@ function showRenameProjectTypeDialog(ptypeId, currentLabel) {
 
 async function renameProjectType(ptypeId) {
   var newLabel = document.getElementById('ptype-rename-input').value.trim();
+  var newPrefix = (document.getElementById('ptype-prefix-input') || {}).value || '';
+  newPrefix = newPrefix.trim();
   if (!newLabel) { showToast('请输入新名称', 'error'); return; }
-  // Check if unchanged
   var current = _projectTypes.find(function(p) { return p.id === ptypeId; });
-  if (current && current.label === newLabel) {
-    document.querySelector('.note-dialog-overlay').remove();
-    return;
-  }
   try {
-    await API.put('/doc-templates/project-types/' + encodeURIComponent(ptypeId) + '?label=' + encodeURIComponent(newLabel));
+    var params = 'label=' + encodeURIComponent(newLabel);
+    if (newPrefix) params += '&code_prefix=' + encodeURIComponent(newPrefix);
+    await API.put('/doc-templates/project-types/' + encodeURIComponent(ptypeId) + '?' + params);
     document.querySelector('.note-dialog-overlay').remove();
-    // Update local cache
-    if (current) current.label = newLabel;
-    showToast('项目类型已重命名: ' + newLabel, 'success');
+    if (current) { current.label = newLabel; if (newPrefix) current.code_prefix = newPrefix; }
+    showToast('项目类型已更新: ' + newLabel, 'success');
     renderTemplatesPage();
   } catch(e) {
-    showToast('重命名失败: ' + (e.message || ''), 'error');
+    showToast('更新失败: ' + (e.message || ''), 'error');
   }
 }
 

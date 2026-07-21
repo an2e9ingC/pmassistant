@@ -1404,7 +1404,7 @@ function initUserCenter() {
       '<div style="display:flex;align-items:center;gap:20px;min-width:0">' +
         '<div class="profile-avatar">' + escHtml((user.display_name||user.username).charAt(0).toUpperCase()) + '</div>' +
         '<div class="profile-info">' +
-          '<div class="profile-name">' + escHtml(user.display_name||user.username) + '</div>' +
+          '<div class="profile-name">' + escHtml(user.display_name || user.username) + '</div>' +
           '<div class="profile-row"><div class="profile-user">@' + escHtml(user.username) + '</div>' +
             (user.wecom_userid ? '<span class="profile-wecom-tag" title="已关联企业微信">' + escHtml(user.wecom_userid) + '</span>' : '<span style="font-size:11px;color:var(--muted)">未关联企业微信</span>') +
             '<button class="profile-action-btn" id="btn-gitlab" onclick="_ucTogglePanel(\'gitlab\')"><svg width="16" height="16" viewBox="0 0 380 380" fill="currentColor"><path d="M282.83 170.73l-.27-.69-26.14-68.22a6.81 6.81 0 00-2.69-3.24 7 7 0 00-8 .43 7 7 0 00-2.32 3.52l-17.65 54H154.07l-17.65-54a6.86 6.86 0 00-2.32-3.53 7 7 0 00-8-.43 6.87 6.87 0 00-2.69 3.24L97.44 170l-.26.69a48.54 48.54 0 0016.1 56.1l.09.07.24.17 39.82 30.2 19.7 15.11 12 9.08a7.07 7.07 0 004.33 1.58 7.09 7.09 0 004.33-1.58l12-9.08 19.7-15.11 40.06-30.35.09-.07a48.63 48.63 0 0016.08-56.1z"/></svg> GitLab</button>' +

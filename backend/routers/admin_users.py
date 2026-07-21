@@ -207,7 +207,14 @@ def get_role_users(role_id: int, db: Session = Depends(get_db), _=Depends(requir
 @router.get("", response_model=dict)
 def list_users(db: Session = Depends(get_db), _=Depends(require_admin)):
     from backend.middleware.auth import _get_perms, is_user_online
+    from backend.models.wecom import WeComUser
     users = db.query(LocalUser).order_by(LocalUser.id).all()
+    # Resolve WeChat Work Chinese names for linked users
+    wecom_uids = [u.wecom_userid for u in users if u.wecom_userid]
+    wecom_map = {}
+    if wecom_uids:
+        for wu in db.query(WeComUser).filter(WeComUser.userid.in_(wecom_uids)).all():
+            wecom_map[wu.userid] = wu.name
     return {
         "code": 0,
         "data": [
@@ -227,6 +234,7 @@ def list_users(db: Session = Depends(get_db), _=Depends(require_admin)):
                 "last_login_ua": u.last_login_ua or None,
                 "is_online": is_user_online(u.id),
                 "wecom_userid": u.wecom_userid or "",
+                "wecom_name": wecom_map.get(u.wecom_userid, "") if u.wecom_userid else "",
             }
             for u in users
         ],
