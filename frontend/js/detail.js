@@ -1775,14 +1775,16 @@ function showProjectFormDialog(isEdit) {
 
     var bodyHtml =
       // Row 1: 项目编号 with admin edit icon on the right
-      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">项目编号' + (!isEdit ? ' <span style="color:var(--muted)">（自动生成）</span>' : '') + '</label>' +
+      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">项目编号 <span style="color:var(--danger)">*</span>' + (!isEdit ? ' <span style="color:var(--muted)">（自动生成）</span>' : '') + '</label>' +
       '<div style="position:relative">' +
       '<input class="search-inp" id="proj-form-code" value="' + escHtml((p && p.code) || '') + '"' + codeReadonly + ' style="width:100%;box-sizing:border-box;' + codeBg + '" placeholder="自动生成">' +
       codeEditIcon +
-      '</div></div>' +
+      '</div>' +
+      '<div id="proj-form-code-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请输入项目编号</div></div>' +
       // Row 2: 项目名称
       '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">项目名称 *</label>' +
-      '<input class="search-inp" id="proj-form-name" value="' + escHtml((p && p.name) || '') + '" style="width:100%;box-sizing:border-box" placeholder="项目名称（不能包含空格）"></div>' +
+      '<input class="search-inp" id="proj-form-name" value="' + escHtml((p && p.name) || '') + '" style="width:100%;box-sizing:border-box" placeholder="项目名称（不能包含空格）">' +
+    '<div id="proj-form-name-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请输入项目名称（不能包含空格）</div></div>' +
       // Row 3: 项目类型 | 客户名称
       '<div style="display:flex;gap:10px;margin-bottom:10px">' +
         '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">项目类型</label>' +
@@ -1791,13 +1793,15 @@ function showProjectFormDialog(isEdit) {
               var sel = (p && p.project_type === pt.id) || (!isEdit && pt.id === 'RD');
               return '<option value="' + escHtml(pt.id) + '"' + (sel ? ' selected' : '') + '>' + escHtml(pt.label) + '</option>';
             }).join('') +
-          '</select></div>' +
-        '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">客户名称</label>' +
+          '</select>' +
+          '<div id="proj-form-type-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择项目类型</div></div>' +
+        '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">客户名称 <span style="color:var(--danger)">*</span></label>' +
         '<div class="proj-combo" id="proj-form-customer-combo">' +
         '<input class="proj-combo-input" id="proj-form-customer" value="' + escHtml(p ? p.customer_name || '' : '') + '" autocomplete="off" placeholder="搜索选择已有客户..." onfocus="projFormCustomerComboOpen()" oninput="projFormCustomerComboFilter(this.value)" onclick="projFormCustomerComboOpen()">' +
         '<svg class="proj-combo-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2,5 7,10 12,5"/></svg>' +
         '<div class="proj-combo-dropdown" id="proj-form-customer-dd"></div>' +
-        '</div></div>' +
+        '</div>' +
+        '<div id="proj-form-customer-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择客户</div></div>' +
       '</div>' +
       // Row 4: 关联产品（搜索下拉多选）
       '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">关联产品</label>' +
@@ -1808,10 +1812,12 @@ function showProjectFormDialog(isEdit) {
       '</div></div>' +
       // Row 5: 计划开始 | 计划结束 | 项目状态
       '<div style="display:flex;gap:10px;margin-bottom:10px">' +
-        '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">计划开始</label>' +
-          '<input class="search-inp" id="proj-form-begin" type="date" value="' + ((p && p.begin) || '') + '" style="width:100%;box-sizing:border-box"></div>' +
-        '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">计划结束</label>' +
-          '<input class="search-inp" id="proj-form-end" type="date" value="' + ((p && p.end) || '') + '" style="width:100%;box-sizing:border-box"></div>' +
+        '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">计划开始 <span style="color:var(--danger)">*</span></label>' +
+          '<input class="search-inp" id="proj-form-begin" type="date" value="' + ((p && p.begin) || '') + '" style="width:100%;box-sizing:border-box">' +
+          '<div id="proj-form-begin-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择计划开始</div></div>' +
+        '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">计划结束 <span style="color:var(--danger)">*</span></label>' +
+          '<input class="search-inp" id="proj-form-end" type="date" value="' + ((p && p.end) || '') + '" style="width:100%;box-sizing:border-box">' +
+          '<div id="proj-form-end-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择计划结束</div></div>' +
         '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">项目状态</label>' +
           '<select class="search-inp" id="proj-form-status" style="width:100%;box-sizing:border-box">' +
             '<option value="wait"' + ((p && p.status === 'wait') || (!isEdit) ? ' selected' : '') + '>待启动</option>' +
@@ -1831,7 +1837,8 @@ function showProjectFormDialog(isEdit) {
       // Row 7: 预估总工时 | 实际总工时
       '<div style="display:flex;gap:10px;margin-bottom:10px">' +
         '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">预估总工时</label>' +
-          '<input class="search-inp" id="proj-form-estimate" type="number" value="' + ((p && p.estimate != null) ? p.estimate : '') + '" style="width:100%;box-sizing:border-box"></div>' +
+          '<input class="search-inp" id="proj-form-estimate" type="number" value="' + ((p && p.estimate != null) ? p.estimate : '') + '" style="width:100%;box-sizing:border-box">' +
+    '<div id="proj-form-estimate-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请填写预估工时</div></div>' +
         '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">实际总工时</label>' +
           '<input class="search-inp" id="proj-form-consumed" type="number" value="' + ((p && p.consumed != null) ? p.consumed : '') + '" style="width:100%;box-sizing:border-box"></div>' +
       '</div>' +
@@ -2117,17 +2124,19 @@ async function saveProjectForm(isEdit) {
   var estEl = g('proj-form-estimate');
   if (estEl && estEl.value !== '') payload.estimate = parseFloat(estEl.value) || 0;
 
-  // Required field validation for new projects
-  if (!isEdit) {
-    if (!name) { showToast('请输入项目名称', 'error'); return; }
-    if (/\s/.test(name)) { showToast('项目名称不能包含空格', 'error'); return; }
-    if (!code) { showToast('项目编号不能为空', 'error'); return; }
-    if (!payload.project_type) { showToast('请选择项目类型', 'error'); return; }
-    if (!payload.customer_name) { showToast('请选择客户', 'error'); return; }
-    if (!payload.begin) { showToast('请选择计划开始', 'error'); return; }
-    if (!payload.end) { showToast('请选择计划结束', 'error'); return; }
-    if (!payload.estimate) { showToast('请填写预估工时', 'error'); return; }
-  }
+  // Required field validation (inline hints, matching task form pattern)
+  ['proj-form-name-hint','proj-form-code-hint','proj-form-type-hint','proj-form-customer-hint','proj-form-begin-hint','proj-form-end-hint','proj-form-estimate-hint'].forEach(function(id) {
+    var el = document.getElementById(id); if (el) el.style.display = 'none';
+  });
+  var valid = true;
+  if (!name) { var h = document.getElementById('proj-form-name-hint'); if (h) { h.textContent = '请输入项目名称（不能包含空格）'; h.style.display = ''; } valid = false; }
+  else if (/\s/.test(name)) { var h = document.getElementById('proj-form-name-hint'); if (h) { h.textContent = '项目名称不能包含空格'; h.style.display = ''; } valid = false; }
+  if (!code) { var h = document.getElementById('proj-form-code-hint'); if (h) h.style.display = ''; valid = false; }
+  if (!payload.customer_name) { var h = document.getElementById('proj-form-customer-hint'); if (h) h.style.display = ''; valid = false; }
+  if (!payload.begin) { var h = document.getElementById('proj-form-begin-hint'); if (h) h.style.display = ''; valid = false; }
+  if (!payload.end) { var h = document.getElementById('proj-form-end-hint'); if (h) h.style.display = ''; valid = false; }
+  if (!payload.estimate) { var h = document.getElementById('proj-form-estimate-hint'); if (h) h.style.display = ''; valid = false; }
+  if (!valid) return;
 
   // Dates
   ['begin','end','real_began','real_end'].forEach(function(k) {
@@ -2163,7 +2172,12 @@ async function saveProjectForm(isEdit) {
       result = await API.post('/product-management/projects', payload);
     }
     closeSharedDialog();
-    showToast(result.message || (isEdit ? '项目已更新' : '项目已创建'), 'success');
+    if (isEdit) {
+      var count = result._updated_count;
+      showToast(count > 0 ? '已更新 ' + count + ' 个字段' : '未检测到变更', count > 0 ? 'success' : 'warn');
+    } else {
+      showToast('项目已创建', 'success');
+    }
     if (isEdit) {
       loadProjectDetail(_comboCurCode);
     } else {

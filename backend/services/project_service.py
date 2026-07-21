@@ -502,8 +502,10 @@ def _calc_risk_level(p: CachedProject, has_pending_docs: bool = False, has_incom
 
 
 def _resolve_customer(p: CachedProject, linked_customers: list = None) -> str:
-    """Return customer from linked customers only (p.customer_name is deprecated)."""
-    return "、".join(linked_customers or []) if linked_customers else ""
+    """Return customer from linked customers, fallback to p.customer_name."""
+    if linked_customers:
+        return "、".join(linked_customers)
+    return p.customer_name or ""
 
 
 def _resolve_user_for_role(db: Session, responsible_role: str):

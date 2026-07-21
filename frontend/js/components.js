@@ -990,23 +990,31 @@ function initSearchCombo(opts) {
   var onSelect = opts.onSelect;
   var getData = opts.dataSource;
   var selectedIdFn = opts.selectedIdFn || function() { return null; };
+  var cacheKey = '_combo_data_' + comboId;
 
   var openFn = _fnName(comboId, 'Open');
   var filterFn = _fnName(comboId, 'Filter');
   var selectFn = _fnName(comboId, 'Select');
+
+  function _loadAndCache() {
+    return Promise.resolve(typeof getData === 'function' ? getData() : getData).then(function(items) {
+      window[cacheKey] = items || [];
+      return window[cacheKey];
+    });
+  }
 
   window[openFn] = function() {
     var wrap = document.getElementById(comboId);
     if (wrap) wrap.classList.add('open');
     var input = document.getElementById(inputId);
     if (input) input.select();
-    Promise.resolve(typeof getData === 'function' ? getData() : getData).then(function(items) {
+    _loadAndCache().then(function(items) {
       _renderSearchDropdown(dropdownId, items, selectedIdFn(), '', selectFn);
     });
   };
 
   window[filterFn] = function(q) {
-    Promise.resolve(typeof getData === 'function' ? getData() : getData).then(function(items) {
+    _loadAndCache().then(function(items) {
       _renderSearchDropdown(dropdownId, items, selectedIdFn(), q, selectFn);
     });
   };
@@ -1014,13 +1022,15 @@ function initSearchCombo(opts) {
   window[selectFn] = function(id) {
     var wrap = document.getElementById(comboId);
     if (wrap) wrap.classList.remove('open');
-    Promise.resolve(typeof getData === 'function' ? getData() : getData).then(function(items) {
-      var p = items.find(function(x) { return x.id == id; });
-      if (p) {
-        document.getElementById(inputId).value = p.name;
-        if (onSelect) onSelect(p);
-      }
-    });
+    // Sync update from cache first (avoid race with user clicking save)
+    var cached = window[cacheKey] || [];
+    var p = cached.find(function(x) { return x.id == id; });
+    if (p) {
+      document.getElementById(inputId).value = p.name;
+      if (onSelect) onSelect(p);
+    }
+    // Also refresh cache for next use
+    _loadAndCache();
   };
 }
 

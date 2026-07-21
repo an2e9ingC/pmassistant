@@ -630,6 +630,54 @@ toggleSwitch(isOn, onclick, opts)
 - **禁止使用 checkbox 原生控件**
 - **禁止使用非标准颜色**
 
+## 23. 表单必填项校验规范
+
+### 23.1 核心原则
+
+**禁止使用 toast 做必填项提示。** 使用内联 hint 文字，与"新建任务"表单保持一致的交互模式。
+
+### 23.2 组件模式
+
+每个必填字段配三个元素：
+
+```html
+<label>字段名 <span style="color:var(--danger)">*</span></label>
+<input id="xxx-field" ...>
+<div id="xxx-field-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请填写xxx</div>
+```
+
+### 23.3 校验逻辑
+
+```js
+// 1. 清除所有旧提示
+['xxx-hint','yyy-hint','zzz-hint'].forEach(function(id) {
+  var el = document.getElementById(id); if (el) el.style.display = 'none';
+});
+
+// 2. 逐项检查，显示内联提示
+var valid = true;
+if (!data.field1) { var h = g('xxx-hint'); if (h) h.style.display = ''; valid = false; }
+if (!data.field2) { var h = g('yyy-hint'); if (h) h.style.display = ''; valid = false; }
+
+// 3. 校验不通过时 return（不弹 toast）
+if (!valid) return;
+```
+
+### 23.4 禁止的做法
+
+```js
+// ❌ 禁止：用 toast 做必填校验
+if (!name) { showToast('请输入名称', 'error'); return; }
+```
+
+### 23.5 参考实现
+
+- [frontend/js/tasks.js](frontend/js/tasks.js#L941-L949) `submitTask` — 任务表单校验
+- [frontend/js/detail.js](frontend/js/detail.js) `saveProjectForm` — 项目表单校验
+
+---
+
 **修改记录：**
+- 2026-07-21：新增 §23 表单必填项内联 hint 校验规范
 - 2026-07-02：新增 iOS 风格功能开关规范，作为全站标准控件
 - 2026-06-18：新增区块操作按钮规范，统一 btn-primary 蓝色按钮 + section-hd 右上角布局

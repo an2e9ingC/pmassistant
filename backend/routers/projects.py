@@ -752,8 +752,10 @@ def update_project(
     log_project_activity(db, project.id, user.username, "编辑项目",
                          "; ".join(changes) if changes else "no changes")
 
-    # Return updated project detail
+    # Return updated project detail with changes count
     detail = project_service.get_project_detail(db, project.id)
+    detail["_updated_fields"] = changes
+    detail["_updated_count"] = len(changes)
     return {"code": 0, "data": detail, "message": f"已更新 {len(changes)} 个字段"}
 
 
