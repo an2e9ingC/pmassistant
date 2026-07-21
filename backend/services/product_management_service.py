@@ -371,6 +371,16 @@ def create_local_project(
     db.add(project)
     db.flush()
 
+    # Link customer via customer_project_links
+    if customer_name and customer_name.strip():
+        from backend.models.zentao import CustomerProjectLink, PmaCustomer
+        cust = db.query(PmaCustomer).filter(PmaCustomer.name == customer_name.strip()).first()
+        if not cust:
+            cust = PmaCustomer(name=customer_name.strip())
+            db.add(cust)
+            db.flush()
+        db.add(CustomerProjectLink(project_id=project.id, customer_id=cust.id))
+
     # Link to products
     for pid in product_ids:
         prod = db.query(PmaProduct).filter(PmaProduct.id == pid).first()

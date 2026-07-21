@@ -732,6 +732,21 @@ def update_project(
 
     changes = []
     data = payload.model_dump(exclude_unset=True)
+
+    # Handle customer_name → customer_project_links sync
+    new_cust = data.get("customer_name")
+    if new_cust is not None:
+        from backend.models.zentao import CustomerProjectLink, PmaCustomer
+        db.query(CustomerProjectLink).filter(CustomerProjectLink.project_id == project.id).delete()
+        new_cust = new_cust.strip()
+        if new_cust:
+            cust = db.query(PmaCustomer).filter(PmaCustomer.name == new_cust).first()
+            if not cust:
+                cust = PmaCustomer(name=new_cust)
+                db.add(cust)
+                db.flush()
+            db.add(CustomerProjectLink(project_id=project.id, customer_id=cust.id))
+
     for field, value in data.items():
         if field in ("begin", "end", "real_began", "real_end"):
             if value is not None:
