@@ -350,19 +350,4 @@ def get_bug_list(db: Session, project_id: Optional[int] = None, product_id: Opti
         q = q.filter(PmaBug.product_id == product_id)
     total = q.count()
     items = q.order_by(PmaBug.id.desc()).offset((page - 1) * limit).limit(limit).all()
-    return [_bug_dict(b) for b in items], total
-
-
-def _bug_dict(b: PmaBug) -> dict:
-    return {
-        "id": b.id,
-        "title": b.title,
-        "status": b.status,
-        "severity": b.severity,
-        "priority": b.priority,
-        "project_id": b.project_id,
-        "product_id": b.product_id,
-        "assignee_id": b.assignee_id,
-        "created_at": b.created_at.isoformat() if b.created_at else None,
-        "updated_at": b.updated_at.isoformat() if b.updated_at else None,
-    }
+    return [_bug_dict(b, db) for b in items], total
