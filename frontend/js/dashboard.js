@@ -126,11 +126,15 @@ var dashFilter = {
 
   buildParams: function() {
     var p = { page: 1, limit: 50 };
-    if (this.search) p.search = this.search;
-    if (this.type && this.type !== 'all' && this.type !== 'fav') p.type = this.type;
-    if (this.status) p.status = this.status;
-    if (this.category) p.category = this.category;
-    if (this.program) p.program_id = this.program;
+    if (this.search) {
+      p.search = this.search;
+      // Search globally — ignore type/status/category/program filters
+    } else {
+      if (this.type && this.type !== 'all' && this.type !== 'fav') p.type = this.type;
+      if (this.status) p.status = this.status;
+      if (this.category) p.category = this.category;
+      if (this.program) p.program_id = this.program;
+    }
     p.sort_by = this.sortBy;
     p.sort_order = this.sortOrder;
     return p;
@@ -238,8 +242,8 @@ async function loadProjectTable() {
     var data = await API.get('/dashboard/projects?' + query);
     var list = data.items || [];
 
-    // Filter by favorites (client-side)
-    if (dashFilter.type === 'fav') {
+    // Filter by favorites (client-side), skip when searching globally
+    if (dashFilter.type === 'fav' && !dashFilter.search) {
       list = list.filter(function(p) { return isFav('project', p.id); });
     }
 
