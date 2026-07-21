@@ -344,6 +344,7 @@ def create_template(db: Session, data: dict) -> dict:
         file_pattern=data.get("file_pattern"),
         doc_type=data.get("doc_type"),
         is_unnecessary=1 if data.get("is_unnecessary") else 0,
+        is_optional=1 if data.get("is_optional") else 0,
     )
     db.add(tpl)
     db.commit()
@@ -356,7 +357,7 @@ def update_template(db: Session, template_id: int, data: dict) -> Optional[dict]
     tpl = db.query(DocumentTemplate).filter(DocumentTemplate.id == template_id).first()
     if not tpl:
         return None
-    for field in ("stage_type", "doc_name", "sort_order", "description", "responsible_role", "doc_path", "base_path", "file_pattern", "doc_type", "is_unnecessary"):
+    for field in ("stage_type", "doc_name", "sort_order", "description", "responsible_role", "doc_path", "base_path", "file_pattern", "doc_type", "is_unnecessary", "is_optional"):
         if field in data:
             setattr(tpl, field, data[field])
     db.commit()
@@ -408,6 +409,7 @@ def _template_dict(t: DocumentTemplate) -> dict:
         "file_pattern": t.file_pattern or "",
         "doc_type": t.doc_type or "",
         "is_unnecessary": bool(t.is_unnecessary),
+        "is_optional": bool(t.is_optional),
     }
 
 
@@ -507,6 +509,7 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
                     responsible_role=tpl.responsible_role, description=tpl.description,
                     doc_type=tpl.doc_type, doc_path=doc_path,
                     base_path=tpl.base_path, file_pattern=tpl.file_pattern,
+                    is_optional=bool(tpl.is_optional),
                 )
                 db.add(pd)
                 changed = True
@@ -563,6 +566,7 @@ def _query_project_documents(db: Session, project_id: int) -> list[dict]:
         db.query(ProjectDocument, CachedExecution.status.label("exec_status"))
         .outerjoin(CachedExecution, CachedExecution.id == ProjectDocument.execution_id)
         .filter(ProjectDocument.project_id == project_id)
+        .filter(or_(ProjectDocument.is_removed == 0, ProjectDocument.is_removed == None))
         .order_by(ProjectDocument.execution_id, ProjectDocument.sort_order)
         .all()
     )
@@ -628,6 +632,8 @@ def _query_project_documents(db: Session, project_id: int) -> list[dict]:
             "doc_type": pd_doc.doc_type or "",
             "updated_by": pd_doc.updated_by,
             "updated_at": to_local_str(pd_doc.updated_at) if pd_doc.updated_at else None,
+            "is_optional": bool(pd_doc.is_optional),
+            "is_removed": bool(pd_doc.is_removed),
         })
     return docs
 
@@ -650,6 +656,8 @@ def update_project_document(
         pd.location = data["location"]
     if "completed_at" in data and data["completed_at"]:
         pd.completed_at = data["completed_at"]
+    if "is_removed" in data and data["is_removed"] is not None:
+        pd.is_removed = data["is_removed"]
 
     pd.updated_by = username
     db.commit()
@@ -721,6 +729,8 @@ def _task_template_dict(t: TaskTemplate) -> dict:
         "sort_order": t.sort_order,
         "description": t.description or "",
         "responsible_role": t.responsible_role or "",
+        "is_unnecessary": bool(t.is_unnecessary),
+        "is_optional": bool(t.is_optional),
     }
 
 
@@ -752,6 +762,7 @@ def create_task_template(db: Session, data: dict) -> dict:
         description=data.get("description"),
         responsible_role=data.get("responsible_role"),
         is_unnecessary=1 if data.get("is_unnecessary") else 0,
+        is_optional=1 if data.get("is_optional") else 0,
     )
     db.add(tpl)
     db.commit()
@@ -764,7 +775,7 @@ def update_task_template(db: Session, template_id: int, data: dict) -> Optional[
     tpl = db.query(TaskTemplate).filter(TaskTemplate.id == template_id).first()
     if not tpl:
         return None
-    for field in ("stage_type", "task_name", "sort_order", "description", "responsible_role", "is_unnecessary"):
+    for field in ("stage_type", "task_name", "sort_order", "description", "responsible_role", "is_unnecessary", "is_optional"):
         if field in data:
             setattr(tpl, field, data[field])
     db.commit()

@@ -22,6 +22,8 @@ class TemplateCreate(BaseModel):
     doc_type: Optional[str] = None
     responsible_role: Optional[str] = None
     description: Optional[str] = None
+    is_optional: int = 0
+    is_unnecessary: int = 0
 
 
 class TemplateUpdate(BaseModel):
@@ -32,6 +34,8 @@ class TemplateUpdate(BaseModel):
     responsible_role: Optional[str] = None
     doc_path: Optional[str] = None
     doc_type: Optional[str] = None
+    is_optional: Optional[int] = None
+    is_unnecessary: Optional[int] = None
 
 
 @router.get("/project-types", response_model=dict)
@@ -440,6 +444,8 @@ class TaskTemplateCreate(BaseModel):
     sort_order: int = 0
     responsible_role: Optional[str] = None
     description: Optional[str] = None
+    is_optional: int = 0
+    is_unnecessary: int = 0
 
 
 class TaskTemplateUpdate(BaseModel):
@@ -448,6 +454,8 @@ class TaskTemplateUpdate(BaseModel):
     sort_order: Optional[int] = None
     description: Optional[str] = None
     responsible_role: Optional[str] = None
+    is_optional: Optional[int] = None
+    is_unnecessary: Optional[int] = None
 
 
 @task_router.get("", response_model=dict)

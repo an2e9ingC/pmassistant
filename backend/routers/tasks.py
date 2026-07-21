@@ -143,6 +143,7 @@ def create_task(
     user=Depends(require_perm("task_edit")),
 ):
     t = task_service.create_task(db, payload.model_dump(), user)
+    log_audit(db, user, "task_create", f"任务「{payload.title}」", AUDIT_CAT_TASK, "medium")
     return {"code": 0, "data": t, "message": "ok"}
 
 
@@ -202,6 +203,7 @@ def update_task(
     t = task_service.update_task(db, task_id, payload.model_dump(exclude_unset=True), user)
     if not t:
         raise HTTPException(status_code=404, detail="Task not found")
+    log_audit(db, user, "task_update", f"更新任务 #{task_id}", AUDIT_CAT_TASK, "medium")
     return {"code": 0, "data": t, "message": "ok"}
 
 
@@ -232,6 +234,7 @@ def delete_task(
     ok = task_service.delete_task(db, task_id, user)
     if not ok:
         raise HTTPException(status_code=404, detail="Task not found")
+    log_audit(db, user, "task_delete", f"删除任务 #{task_id}", AUDIT_CAT_TASK, "high")
     return {"code": 0, "data": None, "message": "ok"}
 
 

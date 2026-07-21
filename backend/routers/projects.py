@@ -320,6 +320,7 @@ class DocumentUpdate(BaseModel):
     status: Optional[str] = None  # "pending" | "submitted"
     location: Optional[str] = None
     completed_at: Optional[str] = None
+    is_removed: Optional[int] = None  # 0=正常 1=已删除（可选项）
 
 
 @router.put("/{identifier}/documents/{doc_id}", response_model=dict)
@@ -766,6 +767,9 @@ def update_project(
     db.commit()
     log_project_activity(db, project.id, user.username, "编辑项目",
                          "; ".join(changes) if changes else "no changes")
+    log_audit(db, user, "project_update",
+              f"project={project.code} changes={'; '.join(changes) if changes else 'no changes'}",
+              AUDIT_CAT_PROJECT, "medium")
 
     # Return updated project detail with changes count
     detail = project_service.get_project_detail(db, project.id)

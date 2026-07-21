@@ -446,6 +446,7 @@ function _renderDocTemplateSection(stageName, canEdit) {
         (canEdit
           ? '<td style="white-space:nowrap;text-align:center" ondragover="event.stopPropagation()" ondrop="event.stopPropagation()">' +
               (d.is_unnecessary ? '<span style="font-size:10px;color:var(--warn);margin-right:4px" title="已标记为无需文档">无需</span>' : '') +
+              '<span style="font-size:10px;color:' + (d.is_optional ? 'var(--accent)' : 'var(--muted)') + ';margin-right:4px;cursor:pointer" onclick="event.stopPropagation();toggleDocOptional(\'' + escHtml(_selectedStage) + '\',' + d.id + ',' + (d.is_optional ? '1' : '0') + ')" title="' + (d.is_optional ? '可选项（点击取消）' : '非可选项（点击设为可选）') + '">' + (d.is_optional ? '可选' : '必选') + '</span>' +
               iconCopy('copyTemplate(' + d.id + ')') +
               iconEdit('showEditTemplateForm(' + d.id + ')') +
               iconDelete('deleteTemplate(' + d.id + ')') +
@@ -521,6 +522,7 @@ function _renderTaskTemplateSection(stageName, canEdit) {
         (canEdit
           ? '<td style="white-space:nowrap;text-align:center" ondragover="event.stopPropagation()" ondrop="event.stopPropagation()">' +
               (t.is_unnecessary ? '<span style="font-size:10px;color:var(--warn);margin-right:4px" title="已标记为无需任务">无需</span>' : '') +
+              '<span style="font-size:10px;color:' + (t.is_optional ? 'var(--accent)' : 'var(--muted)') + ';margin-right:4px;cursor:pointer" onclick="event.stopPropagation();toggleTaskOptional(\'' + escHtml(_selectedStage) + '\',' + t.id + ',' + (t.is_optional ? '1' : '0') + ')" title="' + (t.is_optional ? '可选项（点击取消）' : '非可选项（点击设为可选）') + '">' + (t.is_optional ? '可选' : '必选') + '</span>' +
               iconCopy('copyTaskTemplate(' + t.id + ')') +
               iconEdit('showEditTaskTemplateForm(' + t.id + ')') +
               iconDelete('deleteTaskTemplate(' + t.id + ')') +
@@ -571,6 +573,11 @@ function showAddTemplateForm() {
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">最终路径预览 &nbsp;<span style="font-weight:400;font-size:10px">* 替换为项目代号</span></label>' +
       '<input class="search-inp" id="dt-path-preview" value="" style="width:100%;box-sizing:border-box;color:var(--accent);font-size:11px;font-family:var(--mono)" disabled>' +
     '</div>' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer">' +
+        '<input type="checkbox" id="dt-is-optional" style="width:16px;height:16px;cursor:pointer">' +
+        '可选项（标记后，项目可按需删除该文档）' +
+      '</label></div>' +
     '<div style="margin-bottom:4px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">说明（可选）</label>' +
       '<input class="search-inp" id="dt-desc" style="width:100%;box-sizing:border-box">' +
@@ -623,6 +630,11 @@ function showEditTemplateForm(id) {
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">最终路径预览 &nbsp;<span style="font-weight:400;font-size:10px">* 替换为项目代号</span></label>' +
       '<input class="search-inp" id="dt-path-preview" value="" style="width:100%;box-sizing:border-box;color:var(--accent);font-size:11px;font-family:var(--mono)" disabled>' +
     '</div>' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer">' +
+        '<input type="checkbox" id="dt-is-optional" style="width:16px;height:16px;cursor:pointer"' + (d.is_optional ? ' checked' : '') + '>' +
+        '可选项（标记后，项目可按需删除该文档）' +
+      '</label></div>' +
     '<div style="margin-bottom:4px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">说明（可选）</label>' +
       '<input class="search-inp" id="dt-desc" value="' + escHtml(d.description || '') + '" style="width:100%;box-sizing:border-box">' +
@@ -657,6 +669,9 @@ function saveTemplate(id) {
   if (!role) { showToast('请选择责任人', 'error'); return; }
   if (isNaN(sort) || sort < 0) sort = 0;
 
+  var isOptEl = document.getElementById('dt-is-optional');
+  var isOptional = isOptEl && isOptEl.checked ? 1 : 0;
+
   var stageType = _selectedStage;
   if (!id && !stageType) { showToast('阶段类型丢失，请重新选择阶段', 'error'); return; }
 
@@ -673,8 +688,9 @@ function saveTemplate(id) {
     existing.base_path = basePath;
     existing.file_pattern = filePattern;
     existing.doc_type = docType;
+    existing.is_optional = !!isOptional;
     _pendingOps.push({ type: 'edit', id: id, stage_type: stageType,
-      doc_name: name, sort_order: sort, responsible_role: role || '', description: desc, doc_path: path, base_path: basePath, file_pattern: filePattern, doc_type: docType });
+      doc_name: name, sort_order: sort, responsible_role: role || '', description: desc, doc_path: path, base_path: basePath, file_pattern: filePattern, doc_type: docType, is_optional: isOptional });
   } else if (id && id < 0) {
     // Edit locally-added (not yet saved) template — update pending add op
     var arr = _templatesGrouped[stageType] || [];
@@ -705,9 +721,9 @@ function saveTemplate(id) {
     // New template — add locally with temp ID
     var tempId = _nextTempId--;
     var newDoc = { id: tempId, stage_type: stageType, doc_name: name,
-      sort_order: sort, responsible_role: role || '', description: desc, doc_path: path, base_path: basePath, file_pattern: filePattern, doc_type: docType };
+      sort_order: sort, responsible_role: role || '', description: desc, doc_path: path, base_path: basePath, file_pattern: filePattern, doc_type: docType, is_optional: !!isOptional };
     _pendingOps.push({ type: 'add', tempId: tempId, stage_type: stageType,
-      doc_name: name, sort_order: sort, responsible_role: role || '', description: desc, doc_path: path, base_path: basePath, file_pattern: filePattern, doc_type: docType });
+      doc_name: name, sort_order: sort, responsible_role: role || '', description: desc, doc_path: path, base_path: basePath, file_pattern: filePattern, doc_type: docType, is_optional: isOptional });
     var arr2 = _templatesGrouped[stageType];
     if (!arr2) { _templatesGrouped[stageType] = []; arr2 = _templatesGrouped[stageType]; }
     arr2.push(newDoc);
@@ -853,6 +869,46 @@ function toggleTaskUnnecessary(id, current) {
   }).catch(function(e) { showToast('操作失败: ' + (e.message || ''), 'error'); });
 }
 
+function toggleDocOptional(stageName, id, current) {
+  var newVal = current ? 0 : 1;
+  var arr = _templatesGrouped[stageName] || [];
+  var d = arr.find(function(x) { return x.id === id; });
+  if (!d) return;
+  d.is_optional = !!newVal;
+  var found = false;
+  for (var i = 0; i < _pendingOps.length; i++) {
+    if (_pendingOps[i].type === 'edit' && _pendingOps[i].id === id) {
+      _pendingOps[i].is_optional = newVal; found = true; break;
+    }
+  }
+  if (!found) {
+    _pendingOps.push({ type: 'edit', id: id, stage_type: stageName,
+      doc_name: d.doc_name, sort_order: d.sort_order, responsible_role: d.responsible_role || '',
+      description: d.description || '', doc_path: d.doc_path || '', base_path: d.base_path || '',
+      file_pattern: d.file_pattern || '', doc_type: d.doc_type || '', is_optional: newVal });
+  }
+  renderTemplatesPage();
+}
+function toggleTaskOptional(stageName, id, current) {
+  var newVal = current ? 0 : 1;
+  var arr = _taskTemplatesGrouped[stageName] || [];
+  var t = arr.find(function(x) { return x.id === id; });
+  if (!t) return;
+  t.is_optional = !!newVal;
+  var found = false;
+  for (var i = 0; i < _taskPendingOps.length; i++) {
+    if (_taskPendingOps[i].type === 'edit' && _taskPendingOps[i].id === id) {
+      _taskPendingOps[i].is_optional = newVal; found = true; break;
+    }
+  }
+  if (!found) {
+    _taskPendingOps.push({ type: 'edit', id: id, stage_type: stageName,
+      task_name: t.task_name, sort_order: t.sort_order, responsible_role: t.responsible_role || '',
+      description: t.description || '', is_optional: newVal });
+  }
+  renderTemplatesPage();
+}
+
 function deleteTemplate(id) {
   if (!confirm('确认删除此文档模板？')) return;
   if (id > 0) {
@@ -888,6 +944,11 @@ function showAddTaskTemplateForm() {
         '<input class="search-inp" id="dt-task-sort" type="number" min="0" value="' + nextSort + '" style="width:100%;box-sizing:border-box;padding:8px 4px;text-align:center"></div>' +
       '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">责任人（岗位） <span style="color:var(--danger)">*必填</span></label>' + _roleSelect('') + '</div>' +
     '</div>' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer">' +
+        '<input type="checkbox" id="dt-task-is-optional" style="width:16px;height:16px;cursor:pointer">' +
+        '可选项（标记后，项目可按需删除该任务）' +
+      '</label></div>' +
     '<div style="margin-bottom:4px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">任务描述（可选）</label>' +
       '<textarea class="search-inp" id="dt-task-desc" rows="3" style="width:100%;box-sizing:border-box;resize:vertical" placeholder="任务详细描述"></textarea>' +
@@ -911,6 +972,11 @@ function showEditTaskTemplateForm(id) {
         '<input class="search-inp" id="dt-task-sort" type="number" min="0" value="' + (t.sort_order != null ? t.sort_order : 1) + '" style="width:100%;box-sizing:border-box;padding:8px 4px;text-align:center"></div>' +
       '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">责任人（岗位） <span style="color:var(--danger)">*必填</span></label>' + _roleSelect(t.responsible_role || '') + '</div>' +
     '</div>' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer">' +
+        '<input type="checkbox" id="dt-task-is-optional" style="width:16px;height:16px;cursor:pointer"' + (t.is_optional ? ' checked' : '') + '>' +
+        '可选项（标记后，项目可按需删除该任务）' +
+      '</label></div>' +
     '<div style="margin-bottom:4px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">任务描述（可选）</label>' +
       '<textarea class="search-inp" id="dt-task-desc" rows="3" style="width:100%;box-sizing:border-box;resize:vertical">' + escHtml(t.description || '') + '</textarea>' +
@@ -932,6 +998,9 @@ function saveTaskTemplate(id) {
   var sort = sortVal !== '' ? parseInt(sortVal) : 0;
   var role = roleEl ? roleEl.value.trim() : '';
   var desc = descEl ? descEl.value.trim() : '';
+  var isOptTaskEl = document.getElementById('dt-task-is-optional');
+  var isOptional = isOptTaskEl && isOptTaskEl.checked ? 1 : 0;
+
   if (!name) { showToast('请输入任务名称', 'error'); return; }
 
   var stageType = _selectedStage;
@@ -946,8 +1015,9 @@ function saveTaskTemplate(id) {
     existing.sort_order = sort;
     existing.responsible_role = role || '';
     existing.description = desc;
+    existing.is_optional = !!isOptional;
     _taskPendingOps.push({ type: 'edit', id: id, stage_type: stageType,
-      task_name: name, sort_order: sort, responsible_role: role || '', description: desc });
+      task_name: name, sort_order: sort, responsible_role: role || '', description: desc, is_optional: isOptional });
   } else if (id && id < 0) {
     // Edit locally-added (not yet saved)
     var arr = _taskTemplatesGrouped[stageType] || [];
@@ -971,9 +1041,9 @@ function saveTaskTemplate(id) {
     // New template — add locally with temp ID
     var tempId = _nextTempId--;
     var newTpl = { id: tempId, stage_type: stageType, task_name: name,
-      sort_order: sort, responsible_role: role || '', description: desc };
+      sort_order: sort, responsible_role: role || '', description: desc, is_optional: !!isOptional };
     _taskPendingOps.push({ type: 'add', tempId: tempId, stage_type: stageType,
-      task_name: name, sort_order: sort, responsible_role: role || '', description: desc });
+      task_name: name, sort_order: sort, responsible_role: role || '', description: desc, is_optional: isOptional });
     var arr2 = _taskTemplatesGrouped[stageType];
     if (!arr2) { _taskTemplatesGrouped[stageType] = []; arr2 = _taskTemplatesGrouped[stageType]; }
     arr2.push(newTpl);
@@ -1054,7 +1124,8 @@ async function saveAllTaskChanges() {
           task_name: op.task_name,
           sort_order: op.sort_order,
           responsible_role: op.responsible_role || '',
-          description: op.description || ''
+          description: op.description || '',
+          is_optional: op.is_optional || 0
         });
         // Update temp ID references
         if (op.tempId) {
@@ -1070,7 +1141,8 @@ async function saveAllTaskChanges() {
           task_name: op.task_name,
           sort_order: op.sort_order,
           responsible_role: op.responsible_role || '',
-          description: op.description || ''
+          description: op.description || '',
+          is_optional: op.is_optional || 0
         });
       } else if (op.type === 'delete') {
         await API.del('/task-templates/' + op.id);
@@ -1291,7 +1363,7 @@ async function saveAllChanges() {
             _pendingOps.push({ type: 'edit', id: docs[di].id, stage_type: stageTypes[si],
               doc_name: docs[di].doc_name, sort_order: newSort,
               responsible_role: docs[di].responsible_role || '',
-              description: docs[di].description || '', doc_path: docs[di].doc_path || '', doc_type: docs[di].doc_type || '' });
+              description: docs[di].description || '', doc_path: docs[di].doc_path || '', doc_type: docs[di].doc_type || '', is_optional: docs[di].is_optional ? 1 : 0 });
           }
         }
       }
@@ -1306,10 +1378,10 @@ async function saveAllChanges() {
     var op = ops[i];
     try {
       if (op.type === 'add') {
-        await API.post('/doc-templates', { project_type: _currentProjectType, stage_type: op.stage_type, doc_name: op.doc_name, sort_order: op.sort_order, responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '', doc_type: op.doc_type || '' });
+        await API.post('/doc-templates', { project_type: _currentProjectType, stage_type: op.stage_type, doc_name: op.doc_name, sort_order: op.sort_order, responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '', doc_type: op.doc_type || '', is_optional: op.is_optional || 0 });
         success++;
       } else if (op.type === 'edit') {
-        await API.put('/doc-templates/' + op.id, { doc_name: op.doc_name, sort_order: op.sort_order, responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '', doc_type: op.doc_type || '' });
+        await API.put('/doc-templates/' + op.id, { doc_name: op.doc_name, sort_order: op.sort_order, responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '', doc_type: op.doc_type || '', is_optional: op.is_optional || 0 });
         success++;
       } else if (op.type === 'delete') {
         await API.del('/doc-templates/' + op.id);

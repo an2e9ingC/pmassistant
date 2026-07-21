@@ -24,6 +24,7 @@ class DocumentTemplate(Base):
     file_pattern = Column(String(256), nullable=True)  # 文件名模板（如 01_{code}_SCH-FINAL.rar）
     doc_type = Column(String(32), nullable=True)  # 文档类型: gitlab/svn/nas
     is_unnecessary = Column(Integer, default=0)  # 0=正常 1=无需文档
+    is_optional = Column(Integer, default=0)  # 0=必选 1=可选（项目可按需删除）
 
 
 class ProjectDocument(Base):
@@ -46,6 +47,8 @@ class ProjectDocument(Base):
     base_path = Column(String(512), nullable=True)  # 基础路径
     file_pattern = Column(String(256), nullable=True)  # 文件名模板
     updated_by = Column(String(64), nullable=True)
+    is_optional = Column(Integer, default=0)  # 0=必选 1=可选（从模板复制）
+    is_removed = Column(Integer, default=0)  # 0=正常 1=已删除（可选项被项目移除）
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
@@ -107,6 +110,7 @@ class TaskTemplate(Base):
     description = Column(String(512), nullable=True)
     responsible_role = Column(String(128), nullable=True)  # 责任人/岗位
     is_unnecessary = Column(Integer, default=0)  # 0=正常 1=无需任务
+    is_optional = Column(Integer, default=0)  # 0=必选 1=可选（项目可按需删除）
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 

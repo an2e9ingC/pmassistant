@@ -951,7 +951,8 @@ function buildDocs(data) {
         rows += '<tr id="doc-row-' + d.id + '">' +
           (i === 0 ? '<td rowspan="' + items.length + '" style="vertical-align:middle;text-align:center;font-weight:600;' + cellStyle + 'color:var(--accent);font-size:12px">' + escHtml(stageName) + ' <sup style="font-size:10px;color:var(--muted);font-weight:400">' + items.length + '</sup><div style="margin-top:4px">' + progressRing + '</div></td>' : '') +
           '<td style="font-family:var(--mono);color:var(--muted);text-align:center;' + cellStyle + '">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
-          '<td style="font-weight:500;width:180px;word-break:break-all;' + cellStyle + '" title="' + escHtml(d.description || '') + '">' + escHtml(d.doc_name) + '</td>' +
+          '<td style="font-weight:500;width:180px;word-break:break-all;' + cellStyle + '" title="' + escHtml(d.description || '') + '">' + escHtml(d.doc_name) +
+            (d.is_optional ? ' <span style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:3px" title="可选项">可选</span>' : '') + '</td>' +
           '<td style="font-size:12px;white-space:nowrap;word-break:keep-all;' + cellStyle + '">' + escHtml(d.responsible_role || '—') + '</td>' +
           '<td style="white-space:nowrap;word-break:keep-all;' + cellStyle + '">' + statusHtml + '</td>' +
           '<td style="font-size:11px;' + cellStyle + '">' + escHtml(docTypeLabel) + '</td>' +
@@ -964,8 +965,8 @@ function buildDocs(data) {
               : (d.location && d.location !== '无需文档' && d.location !== '已删除'
               ? '<a href="' + escHtml(d.location) + '" target="_blank" title="打开链接" style="text-decoration:none;font-size:15px">&#x1F517;</a>'
               : '')) +
+            (d.is_optional && canEdit ? iconDelete('removeOptionalDoc(' + d.id + ')', '移除此文档') : '') +
             (canEdit ? iconEdit('openDocEditDialog(' + d.id + ')', '编辑') : '') +
-            (canEdit ? iconDelete('deleteDocStatus(' + d.id + ')', '删除') : '') +
           '</td>' +
         '</tr>';
       });
@@ -996,6 +997,15 @@ function markDocUnnecessary(docId) { saveDocStatus(docId, 'unnecessary'); }
 function deleteDocStatus(docId) {
   if (!confirm('确认删除此文档记录？')) return;
   saveDocStatus(docId, 'deleted');
+}
+
+async function removeOptionalDoc(docId) {
+  if (!confirm('移除此可选项后，该文档将不再显示，也不计入完成统计。确认移除？')) return;
+  try {
+    await API.put('/projects/' + _comboCurCode + '/documents/' + docId, { is_removed: 1 });
+    showToast('已移除可选项', 'success');
+    API.get('/projects/' + _comboCurCode + '/documents').then(function(docs) { buildDocs(docs); });
+  } catch(e) { showToast('移除失败: ' + (e.message || ''), 'error'); }
 }
 
 async function saveDocStatus(docId, status) {
