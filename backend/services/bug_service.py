@@ -323,3 +323,46 @@ def _recalc_bug_hours(db, bug_id):
     ).filter(BugWorkLog.bug_id == bug_id).scalar() or 0.0
     db.query(PmaBug).filter(PmaBug.id == bug_id).update({PmaBug.consumed_hours: float(total)})
     db.commit()
+
+
+def get_bug_stats(db: Session, project_id: Optional[int] = None) -> dict:
+    """Return bug statistics: total, by status, by severity."""
+    q = db.query(PmaBug)
+    if project_id:
+        q = q.filter(PmaBug.project_id == project_id)
+    total = q.count()
+    statuses = {}
+    for row in q.with_entities(PmaBug.status, sa_func.count()).group_by(PmaBug.status).all():
+        statuses[row[0] or 'unknown'] = row[1]
+    severities = {}
+    for row in q.with_entities(PmaBug.severity, sa_func.count()).group_by(PmaBug.severity).all():
+        severities[row[0] or 'unknown'] = row[1]
+    return {"total": total, "by_status": statuses, "by_severity": severities}
+
+
+def get_bug_list(db: Session, project_id: Optional[int] = None, product_id: Optional[int] = None,
+                 page: int = 1, limit: int = 100):
+    """Return paginated bug list."""
+    q = db.query(PmaBug)
+    if project_id:
+        q = q.filter(PmaBug.project_id == project_id)
+    if product_id:
+        q = q.filter(PmaBug.product_id == product_id)
+    total = q.count()
+    items = q.order_by(PmaBug.id.desc()).offset((page - 1) * limit).limit(limit).all()
+    return [_bug_dict(b) for b in items], total
+
+
+def _bug_dict(b: PmaBug) -> dict:
+    return {
+        "id": b.id,
+        "title": b.title,
+        "status": b.status,
+        "severity": b.severity,
+        "priority": b.priority,
+        "project_id": b.project_id,
+        "product_id": b.product_id,
+        "assignee_id": b.assignee_id,
+        "created_at": b.created_at.isoformat() if b.created_at else None,
+        "updated_at": b.updated_at.isoformat() if b.updated_at else None,
+    }
