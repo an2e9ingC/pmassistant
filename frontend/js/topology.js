@@ -12,6 +12,12 @@ function initTopology() {
   document.getElementById('topo-cust').value = '';
   document.getElementById('topo-tbody').innerHTML = '<tr><td colspan="5"><div class="empty-state" style="padding:20px">输入关键字开始搜索...</div></td></tr>';
 
+  // Auto-focus fuzzy search
+  setTimeout(function() {
+    var el = document.getElementById('topo-fuzzy');
+    if (el) { el.focus(); el.select(); }
+  }, 300);
+
   // Pre-fill customer search if navigated from customer badge
   if (typeof _pendingCustSelect !== 'undefined' && _pendingCustSelect) {
     document.getElementById('topo-cust').value = _pendingCustSelect;

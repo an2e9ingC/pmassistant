@@ -13,6 +13,10 @@ var TOAST_PERM_LABELS = {
 // ── View init wrappers (complex init logic extracted from gotoView) ──
 
 function initDashboard() {
+  setTimeout(function() {
+    var el = document.getElementById('proj-search');
+    if (el) { el.focus(); el.select(); }
+  }, 300);
   var dashNewProjBtn = document.getElementById('dash-new-proj-btn');
   if (dashNewProjBtn) {
     var user = getCurrentUser();

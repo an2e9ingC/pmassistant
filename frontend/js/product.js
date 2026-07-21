@@ -29,6 +29,10 @@ async function initProductList() {
   _prodActiveL1 = null;
   _prodActiveL2 = null;
   renderProdOverview();
+  setTimeout(function() {
+    var el = document.getElementById('prod-search');
+    if (el) { el.focus(); el.select(); }
+  }, 300);
 }
 
 function _prodTotal(l1, l2) {
