@@ -1885,10 +1885,10 @@ function showProjectFormDialog(isEdit) {
           dropdownId: 'proj-form-customer-dd',
           dataSource: function() {
             return API.get('/users/customers/names').then(function(names) {
-              return (names || []).map(function(n) { return {name: n}; });
+              return (names || []).map(function(n) { return {id: n, name: n}; });
             }).catch(function() { return []; });
           },
-          onSelect: function(p) { document.getElementById('proj-form-customer').value = p.name; }
+          onSelect: function(p) { document.getElementById('proj-form-customer').value = p.name || p; }
         });
       }
     }, 150);
@@ -2093,16 +2093,13 @@ async function saveProjectForm(isEdit) {
   var payload = {};
   var g = function(id) { return document.getElementById(id); };
 
-  // Validate
+  // Validate required fields for new projects
   var nameEl = g('proj-form-name');
   var name = (nameEl && nameEl.value || '').trim();
-  if (!name) { showToast('请输入项目名称', 'error'); return; }
-  if (/\s/.test(name)) { showToast('项目名称不能包含空格', 'error'); return; }
   payload.name = name;
 
   var codeEl = g('proj-form-code');
   var code = (codeEl && codeEl.value || '').trim();
-  if (!isEdit && !code) { showToast('项目编号不能为空', 'error'); return; }
   payload.code = code;
 
   payload.project_type = g('proj-form-type').value;
@@ -2112,6 +2109,25 @@ async function saveProjectForm(isEdit) {
 
   var custEl = g('proj-form-customer');
   if (custEl && custEl.value.trim()) payload.customer_name = custEl.value.trim();
+
+  var beginEl = g('proj-form-begin');
+  if (beginEl && beginEl.value) payload.begin = beginEl.value;
+  var endEl = g('proj-form-end');
+  if (endEl && endEl.value) payload.end = endEl.value;
+  var estEl = g('proj-form-estimate');
+  if (estEl && estEl.value !== '') payload.estimate = parseFloat(estEl.value) || 0;
+
+  // Required field validation for new projects
+  if (!isEdit) {
+    if (!name) { showToast('请输入项目名称', 'error'); return; }
+    if (/\s/.test(name)) { showToast('项目名称不能包含空格', 'error'); return; }
+    if (!code) { showToast('项目编号不能为空', 'error'); return; }
+    if (!payload.project_type) { showToast('请选择项目类型', 'error'); return; }
+    if (!payload.customer_name) { showToast('请选择客户', 'error'); return; }
+    if (!payload.begin) { showToast('请选择计划开始', 'error'); return; }
+    if (!payload.end) { showToast('请选择计划结束', 'error'); return; }
+    if (!payload.estimate) { showToast('请填写预估工时', 'error'); return; }
+  }
 
   // Dates
   ['begin','end','real_began','real_end'].forEach(function(k) {
@@ -2136,7 +2152,7 @@ async function saveProjectForm(isEdit) {
   // Linked products (create mode only; edit mode uses maintenance page)
   if (!isEdit) {
     payload.product_ids = _projFormSelectedPids;
-    payload.status = 'wait';
+    if (!payload.status) payload.status = 'wait';
   }
 
   try {

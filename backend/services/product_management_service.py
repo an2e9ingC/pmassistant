@@ -5,7 +5,17 @@ ZenTao/local products and project associations.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
+
+
+def _parse_date(val) -> Optional[date]:
+    """Parse ISO date string YYYY-MM-DD to date object."""
+    if not val:
+        return None
+    try:
+        return date.fromisoformat(val)
+    except (ValueError, TypeError):
+        return None
 from typing import Optional
 
 from sqlalchemy import func as sqlfunc
@@ -324,8 +334,15 @@ def create_local_project(
     status: str = "wait",
     description: str = "",
     product_ids: Optional[list[int]] = None,
+    begin: Optional[str] = None,
+    end: Optional[str] = None,
+    customer_name: Optional[str] = None,
+    estimate: Optional[float] = None,
+    tags: Optional[str] = None,
+    planned_delivery_qty: Optional[int] = None,
+    consumed: Optional[float] = None,
 ) -> dict:
-    """Create a PMA-local project. Product linkage is optional (未来新产品 placeholder)."""
+    """Create a PMA-local project."""
     if product_ids is None:
         product_ids = []
 
@@ -342,6 +359,13 @@ def create_local_project(
         model="scrum",
         is_local=True,
         description=description,
+        begin=_parse_date(begin) if begin else None,
+        end=_parse_date(end) if end else None,
+        customer_name=customer_name,
+        estimate=estimate or 0,
+        tags=tags,
+        planned_delivery_qty=planned_delivery_qty,
+        consumed=consumed or 0,
         synced_at=None,
     )
     db.add(project)
@@ -502,6 +526,9 @@ def _project_item(p: CachedProject, db: Session) -> dict:
         "end": str(p.end) if p.end else None,
         "pm_name": p.pm_name,
         "customer_name": p.customer_name,
+        "estimate": p.estimate,
+        "planned_delivery_qty": p.planned_delivery_qty,
+        "consumed": p.consumed,
         "program_name": p.program_name,
         "description": p.description,
         "tags": p.tags,

@@ -42,7 +42,14 @@ class LocalProjectCreate(BaseModel):
     project_type: str = "RD"
     status: str = "wait"
     description: Optional[str] = None
-    product_ids: List[int]  # required: at least 1 product
+    product_ids: Optional[List[int]] = None
+    begin: Optional[str] = None
+    end: Optional[str] = None
+    customer_name: Optional[str] = None
+    estimate: Optional[float] = None
+    tags: Optional[str] = None
+    planned_delivery_qty: Optional[int] = None
+    consumed: Optional[float] = None
 
 
 class LocalProjectUpdate(BaseModel):
@@ -51,6 +58,13 @@ class LocalProjectUpdate(BaseModel):
     project_type: Optional[str] = None
     status: Optional[str] = None
     description: Optional[str] = None
+    begin: Optional[str] = None
+    end: Optional[str] = None
+    customer_name: Optional[str] = None
+    estimate: Optional[float] = None
+    tags: Optional[str] = None
+    planned_delivery_qty: Optional[int] = None
+    consumed: Optional[float] = None
 
 
 class ProductNodeLinkRequest(BaseModel):
@@ -305,10 +319,17 @@ def create_local_project(
             project_type=body.project_type,
             status=body.status,
             description=body.description or "",
-            product_ids=body.product_ids,
+            product_ids=body.product_ids or [],
+            begin=body.begin,
+            end=body.end,
+            customer_name=body.customer_name,
+            estimate=body.estimate,
+            tags=body.tags,
+            planned_delivery_qty=body.planned_delivery_qty,
+            consumed=body.consumed,
         )
         log_audit(db, user, "local_project_create",
-                  f"name={body.name}, code={body.code}, products={len(body.product_ids)}",
+                  f"name={body.name}, code={body.code}, products={len(body.product_ids or [])}",
                   AUDIT_CAT_PROJECT, "medium")
         return {"code": 0, "data": project, "message": "ok"}
     except ValueError as e:
