@@ -455,9 +455,15 @@ def _log_audit(db: Session, project_id: int, username: Optional[str], action: st
 def _link_task_to_stage(db: Session, t: Task) -> Optional[int]:
     """Auto-set t.stage_id by matching t.stage_name to a ProjectStage row in the same project.
     Returns the stage_id if linked, or None."""
-    if t.stage_id or not t.stage_name or not t.project_id:
+    if not t.stage_name or not t.project_id:
         return t.stage_id
     from backend.models.project_stage import ProjectStage
+    # If already linked, verify stage_name still matches; re-link if changed
+    if t.stage_id:
+        current = db.query(ProjectStage).filter(ProjectStage.id == t.stage_id).first()
+        if current and current.name == t.stage_name:
+            return t.stage_id
+    # Find matching stage by name
     stage = db.query(ProjectStage).filter(
         ProjectStage.project_id == t.project_id,
         ProjectStage.name == t.stage_name,
