@@ -1019,7 +1019,15 @@ function _renderProdDocsInline(docs) {
     grouped[st].push(d);
   });
 
-  var colorMap = { '硬件开发': 'var(--accent-lt)', '结构设计': '#e8f5e9', 'BSP开发': '#fff3e0', '软件开发': '#e3f2fd', '测试': '#fce4ec', '通用': 'var(--surface)' };
+  var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  var colorMap = {
+    '硬件开发': 'var(--accent-lt)',
+    '结构设计': isDark ? '#283528' : '#e8f5e9',
+    'BSP开发': isDark ? '#353020' : '#fff3e0',
+    '软件开发': isDark ? '#2a3340' : '#e3f2fd',
+    '测试': isDark ? '#352830' : '#fce4ec',
+    '通用': 'var(--surface)'
+  };
   var typeLabels = { gitlab: 'GitLab', svn: 'SVN', nas: 'NAS', solidworks: '结构设计', pma: 'PMA' };
   var html = '<div class="card" style="padding:0;overflow:hidden">';
   html += '<div class="table-scroll" style="max-height:600px"><table class="stage-table"><thead><tr>' +

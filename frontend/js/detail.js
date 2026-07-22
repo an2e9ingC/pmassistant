@@ -881,7 +881,10 @@ function buildDocs(data) {
   }
 
   var typeLabels = { gitlab: 'GitLab', svn: 'SVN', nas: 'NAS', solidworks: '结构设计', pma: 'PMA' };
-  var stageColors = ['var(--accent-lt)', '#e8f5e9', '#fff3e0', '#e3f2fd', '#e0f2f1', '#f5f5f5', '#fff8e1', '#e8eaf6'];
+  var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  var stageColors = isDark
+    ? ['var(--accent-lt)', '#283528', '#353020', '#2a3340', '#283530', '#2c2c30', '#353028', '#2a2e3a']
+    : ['var(--accent-lt)', '#e8f5e9', '#fff3e0', '#e3f2fd', '#e0f2f1', '#f5f5f5', '#fff8e1', '#e8eaf6'];
 
   var rows = '';
   stageList.forEach(function(stage, stageIdx) {

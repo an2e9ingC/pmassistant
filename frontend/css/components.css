@@ -211,6 +211,10 @@
 .proj-table tbody tr:nth-child(odd) td { background: var(--surface); }
 .proj-table tbody tr:nth-child(even) td { background: var(--bg); }
 .proj-table tbody tr:hover td { background: var(--surface2); }
+/* Dark theme: Gantt month palette — ice gray-blue / dark green alternating */
+[data-theme="dark"] .proj-table tbody tr:nth-child(odd) td { background: #2a3340; }
+[data-theme="dark"] .proj-table tbody tr:nth-child(even) td { background: #222a35; }
+[data-theme="dark"] .proj-table tbody tr:hover td { background: #334050; }
 /* Within .table-scroll, use separate border model for sticky to work */
 .table-scroll .proj-table { border-collapse: separate; border-spacing: 0; }
 .table-scroll .proj-table th { border-bottom: 1px solid var(--border); }
