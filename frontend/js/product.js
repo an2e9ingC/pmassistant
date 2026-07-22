@@ -1030,7 +1030,7 @@ function _renderProdDocsInline(docs) {
   };
   var typeLabels = { gitlab: 'GitLab', svn: 'SVN', nas: 'NAS', solidworks: '结构设计', pma: 'PMA' };
   var html = '<div class="card" style="padding:0;overflow:hidden">';
-  html += '<div class="table-scroll" style="max-height:600px"><table class="stage-table"><thead><tr>' +
+  html += '<div class="table-scroll" id="prod-docs-table-wrap"><table class="stage-table"><thead><tr>' +
     '<th style="width:100px">分类</th><th style="width:50px">序号</th><th>文档名称</th><th style="width:80px">责任人</th><th style="width:80px">状态</th><th style="width:50px">类型</th><th>路径</th><th style="width:100px">最后修改时间</th><th style="width:80px">修改人</th><th style="width:100px">操作</th>' +
     '</tr></thead><tbody>';
   stageOrder.forEach(function(st) {
@@ -1089,7 +1089,19 @@ function _renderProdDocsInline(docs) {
   html += '</tbody></table></div></div>';
 
   el.innerHTML = html;
+  // Dynamic table height: fill available viewport space
+  _resizeProdDocsTable();
 }
+
+function _resizeProdDocsTable() {
+  ['prod-docs-table-wrap', 'proj-docs-table-wrap'].forEach(function(id) {
+    var wrap = document.getElementById(id);
+    if (!wrap) return;
+    var top = wrap.getBoundingClientRect().top;
+    wrap.style.maxHeight = Math.max(200, window.innerHeight - top - 24) + 'px';
+  });
+}
+window.addEventListener('resize', _resizeProdDocsTable);
 
 function _filterSearchableItems(input) {
   var q = (input.value || '').toLowerCase();
@@ -1127,7 +1139,7 @@ function renderProdMaintenance(p) {
     html += '<div style="padding:12px 16px 0"><div class="section-hd"><div class="section-title">关联项目 (' + projects.length + ')</div></div></div>';
   }
   if (projects.length) {
-    html += '<div class="table-scroll" style="max-height:400px"><table class="stage-table"><thead><tr>' +
+    html += '<div class="table-scroll" id="proj-docs-table-wrap"><table class="stage-table"><thead><tr>' +
       '<th>项目编号</th><th>项目名</th><th>客户</th><th>类型</th><th>状态</th><th>进度</th><th>计划完成</th>' +
       '</tr></thead><tbody>';
     projects.forEach(function(proj) {
