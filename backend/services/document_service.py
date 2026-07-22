@@ -1177,8 +1177,27 @@ def get_or_init_product_documents(db: Session, product_id: int) -> list[dict]:
             # Check if location matches template pattern
             mismatch = ""
             if existing.location and (tpl.base_path or tpl.file_pattern):
-                if existing.location != existing.doc_path:
-                    mismatch = f"路径与模板不匹配（期望: {existing.doc_path}）"
+                import re as _re
+                # If doc_path already contains regex patterns (e.g. \d{4}), use it directly
+                pat = existing.doc_path
+                has_regex = bool(_re.search(r'\\d\{', pat))
+                if not has_regex:
+                    # Convert template placeholders to regex
+                    pat = _re.escape(pat)
+                    pat = pat.replace(r'\{code\}', _re.escape(product_code or ''))
+                    pat = pat.replace(r'\{YYYY\}', r'\d{4}')
+                    pat = pat.replace(r'\{MM\}', r'\d{2}')
+                    pat = pat.replace(r'\{DD\}', r'\d{2}')
+                    pat = pat.replace(r'\{YY\}', r'\d{2}')
+                # Also handle SVN wildcards * and ?
+                pat = pat.replace(r'\*', '.*')
+                pat = pat.replace(r'\?', '.')
+                try:
+                    if not _re.match(pat, existing.location):
+                        mismatch = f"路径与模板不匹配（期望: {existing.doc_path}）"
+                except _re.error:
+                    if existing.location != existing.doc_path:
+                        mismatch = f"路径与模板不匹配（期望: {existing.doc_path}）"
             elif existing.location and existing.doc_path and ('*' in existing.doc_path or '?' in existing.doc_path):
                 mismatch = f"路径包含通配符，无法校验（模板: {existing.doc_path}）"
             results.append({
