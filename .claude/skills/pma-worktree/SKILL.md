@@ -93,13 +93,21 @@ Worktree B:         ./server.sh -p 8002 restart
 2. **merge**
    ```bash
    ExitWorktree(action: "keep")      # 回到主 session trunk
+   git status --porcelain            # 检查 trunk 是否有未提交改动
+   # 如果有未提交改动（非 worktree 产生的）→ 先 stash 保存
+   git stash push -u -m "上线前自动保存"
    git pull origin trunk --ff-only   # 确保 trunk 最新
    git merge --no-ff <branch>        # --no-ff 保留分支痕迹
+   git stash pop                     # 恢复 stash（有冲突则用 trunk 版本）
+   # 如果 pop 有冲突 → git checkout --theirs <files> → git add <files> → git stash drop
    ```
 
 3. **push + cleanup**
    ```bash
    git push origin trunk
+   git status --short                 # 确认无残留 staged 文件
+   # 有残留 → git reset HEAD <files> # 取消 stage
+   # 无意义的 diff → git checkout -- <files> # 回退
    ExitWorktree(action: "remove")    # 删除 worktree 目录和分支
    ```
 
