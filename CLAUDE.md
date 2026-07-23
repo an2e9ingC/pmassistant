@@ -134,10 +134,10 @@ NAS 文件 ───────────┘
 
 | 触发条件 | 必须调用 | 说明 |
 |---------|---------|------|
-| 用户消息包含 `worktree:` 前缀 | `Skill("pma-worktree")` | 并行开发：git worktree 隔离、分支管理、合并流程 |
+| 用户消息包含 `worktree:` 前缀 | `Skill("pma-worktree")` | 创建隔离 git worktree 开发环境 |
 | 用户说 "commit" / "提交" | `Skill("pma-version")` + `Skill("pma-commit")` | 版本号管理 + Git 提交规范 |
 | 用户消息包含 `issue#N` | `Skill("pma-issue-workflow")` | GitLab Issue 解决：获取详情→定位→诊断→设计→实现→迭代→commit |
-| 用户说 "merge" / "合并" | `Skill("pma-worktree")` | rebase+review → 回主session → merge --no-ff |
+| 用户说 "上线" | `Skill("pma-worktree")` | 一键发布：commit → rebase → review → merge → push → cleanup |
 | 排查/分析 bug / 报错 / 异常 | `Skill("pma-bug-analysis")` | Bug 分析流程：查日志→定位→加日志→修复，扫描同类问题 |
 | 前端 UI/CSS/JS 修改 | `Skill("pma-frontend-rules")` + `Skill("pma-web-design")` | 开发流程 + 配色/间距/布局/组件/动画视觉决策 |
 | 自验证/检查前端/verify | `Skill("pma-frontend-verify")` | Chrome DevTools MCP 端到端验证 UI 改动，调试 JS 运行时行为 |
@@ -146,12 +146,10 @@ NAS 文件 ───────────┘
 
 ## 3. 工作流速查
 
+> Skill 触发条件详见 [Section 2](#2-skills强制执行--must-调用-skill-工具)，此处仅列出非 skill 的操作命令。
+
 | 用户指令 | AI 必须执行 |
 |---------|-----------|
-| `worktree: <描述>` | `Skill("pma-worktree")` → EnterWorktree → 开发 → 等 merge |
-| `issue#N: <描述>` | `Skill("pma-issue-workflow")` → 理解→定位→诊断→设计→实现→迭代→等 commit |
-| "commit" / "提交" | `Skill("pma-version")` + `Skill("pma-commit")` → 更新版本号 → commit |
-| "merge" / "合并" | `Skill("pma-worktree")` → rebase+review → 回主session → merge --no-ff → 等 push |
 | `./server.sh status` | 查看所有运行实例概览 |
 | `./server.sh stop` | 停止所有实例 |
 | 后端 .py 修改 | `Skill("code-review")` → 修复 → `./server.sh -p <PORT> restart` |
