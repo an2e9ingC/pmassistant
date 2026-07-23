@@ -1,6 +1,6 @@
 ---
 name: pma-worktree
-description: PMA 并行开发模式 — 用 git worktree 隔离多分支开发环境。触发词：worktree:
+description: PMA 并行开发模式 — 用 git worktree 隔离多分支开发环境。触发词：worktree: / merge / 合并 / push / 推送 / cleanup / 清理
 user-invocable: true
 allowed-tools: Read, Write, Edit, Bash, LSP, Agent
 context: fork
@@ -12,10 +12,15 @@ context: fork
 
 每个 worktree session = 一个"独立开发者"，拥有独立的分支、工作目录、服务端口、数据库和日志文件。
 
-## 触发方式
+## 触发命令
 
-- `worktree:` 前缀的 prompt → 创建独立 worktree
-- 其他 prompt → 在当前分支直接操作
+| 命令 | 用途 |
+|------|------|
+| `worktree: <描述>` | 创建新 worktree 并切到 worktree 开发环境 |
+| `merge` / `合并` | 执行合并流程：rebase → 二次 rebase → code review → --no-ff merge |
+| `push` / `推送` | 推送 trunk 到远程服务器 |
+| `cleanup` / `清理` | 删除已合入的 worktree 分支和工作目录 |
+| 其他 prompt | 在当前分支直接操作，不创建 worktree |
 
 ## 创建 Worktree 流程
 
