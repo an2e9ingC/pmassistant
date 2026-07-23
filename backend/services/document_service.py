@@ -542,7 +542,8 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
                     pd.doc_path != expected_path or
                     pd.base_path != tpl.base_path or
                     pd.file_pattern != tpl.file_pattern or
-                    pd.doc_type != tpl.doc_type):
+                    pd.doc_type != tpl.doc_type or
+                    pd.is_optional != bool(tpl.is_optional)):
                 pd.sort_order = tpl.sort_order
                 pd.responsible_role = tpl.responsible_role
                 pd.description = tpl.description
@@ -550,6 +551,7 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
                 pd.base_path = tpl.base_path
                 pd.file_pattern = tpl.file_pattern
                 pd.doc_type = tpl.doc_type
+                pd.is_optional = bool(tpl.is_optional)
                 changed = True
 
     if changed:
