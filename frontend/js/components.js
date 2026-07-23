@@ -1804,12 +1804,12 @@ function openBatchEditDialog() {
     {text:'取消',onclick:'closeSharedDialog()'},
     {text:'确定',cls:'btn-primary',onclick:'submitBatchEdit()'}
   ], {maxWidth:440});
-  // Load assignee options
-  API.get('/admin/users?limit=200').then(function(data) {
+  // Load assignee options from public user list
+  API.get('/users/options').then(function(data) {
+    if (!data) return;
     var sel = document.getElementById('ba-assignee');
-    var users = data.items || data || [];
-    users.forEach(function(u) {
-      sel.innerHTML += '<option value="' + u.id + '">' + escHtml(u.display_name || u.username) + '</option>';
+    (data || []).forEach(function(u) {
+      sel.innerHTML += '<option value="' + u.id + '">' + escHtml(u.name) + '</option>';
     });
   });
   // Load stage options from first selected task's project
@@ -1863,12 +1863,12 @@ function openAssignDialog(taskId) {
       {text:'取消',onclick:'closeSharedDialog()'},
       {text:'指派',cls:'btn-primary',onclick:'submitAssign(' + taskId + ')'}
     ], {maxWidth:360});
-    API.get('/admin/users?limit=200').then(function(data) {
+    API.get('/users/options').then(function(data) {
+      if (!data) return;
       var sel = document.getElementById('as-assignee');
-      var users = data.items || data || [];
       sel.innerHTML = '<option value="">不修改</option>';
-      users.forEach(function(u) {
-        sel.innerHTML += '<option value="' + u.id + '"' + (u.id === task.assignee_id ? ' selected' : '') + '>' + escHtml(u.display_name || u.username) + '</option>';
+      (data || []).forEach(function(u) {
+        sel.innerHTML += '<option value="' + u.id + '"' + (u.id === task.assignee_id ? ' selected' : '') + '>' + escHtml(u.name) + '</option>';
       });
     });
   }).catch(function(e) { showToast('加载失败: ' + (e.message || ''), 'error'); });

@@ -61,38 +61,19 @@ function getDisplayName(username) {
 
 function loadDisplayNameCache() {
   if (_displayNameLoaded) return Promise.resolve(_displayNameCache);
-  // Try admin user list first, fallback to wecom users
-  return API.get('/admin/users').then(function(users) {
-    if (!users) { throw new Error('no access'); }
-    if (users.length) {
-      users.forEach(function(u) {
-        if (u.display_name && u.display_name !== u.username) {
-          _displayNameCache[u.username] = u.display_name;
-        }
-        if (u.wecom_name) {
-          _displayNameCache[u.username] = u.wecom_name;
-        }
-      });
-    }
+  // Use public user list — available to all authenticated users
+  return API.get('/users/options').then(function(users) {
+    if (!users) { _displayNameLoaded = true; return _displayNameCache; }
+    (users || []).forEach(function(u) {
+      if (u.name && u.name !== u.code) {
+        _displayNameCache[u.code] = u.name;
+      }
+    });
     _displayNameLoaded = true;
     return _displayNameCache;
   }).catch(function() {
-    // Fallback: try wecom user list
-    return API.get('/wecom/users/list').then(function(data) {
-      var list = data && data.users ? data.users : (data || []);
-      if (Array.isArray(list)) {
-        list.forEach(function(wu) {
-          if (wu.userid && wu.name) {
-            _displayNameCache[wu.userid] = wu.name;
-          }
-        });
-      }
-      _displayNameLoaded = true;
-      return _displayNameCache;
-    }).catch(function() {
-      _displayNameLoaded = true;
-      return _displayNameCache;
-    });
+    _displayNameLoaded = true;
+    return _displayNameCache;
   });
 }
 

@@ -1244,8 +1244,8 @@ async function init() {
   // Data source status — render defaults immediately, then update
   renderSourceTags();
   updateLinkStatus();
-  // Load PMA settings (password verification toggles etc.)
-  loadPmaSettings();
+  // Load PMA settings (password verification toggles etc.) — admin only
+  if (isAdmin) loadPmaSettings();
   // Load public settings (debug_perm + role-permission mapping)
   API.get('/admin/settings/public').then(function(d) {
     window._debugPermEnabled = d && d.debug_perm;
