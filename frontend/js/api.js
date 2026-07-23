@@ -26,6 +26,11 @@ const API = {
       return;
     }
 
+    // 403: silently return empty for non-admin users accessing admin APIs
+    if (res.status === 403) {
+      return null;
+    }
+
     var json;
     try {
       json = await res.json();
@@ -58,7 +63,8 @@ function loadDisplayNameCache() {
   if (_displayNameLoaded) return Promise.resolve(_displayNameCache);
   // Try admin user list first, fallback to wecom users
   return API.get('/admin/users').then(function(users) {
-    if (users && users.length) {
+    if (!users) { throw new Error('no access'); }
+    if (users.length) {
       users.forEach(function(u) {
         if (u.display_name && u.display_name !== u.username) {
           _displayNameCache[u.username] = u.display_name;
