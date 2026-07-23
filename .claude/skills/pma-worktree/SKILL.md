@@ -168,10 +168,11 @@ git stash pop                     # 恢复 stash（有冲突则用 trunk 版本�
 ```bash
 cd $PMA_TRUNK_DIR
 git push origin trunk
-git status --short                 # 确认无残留 staged 文件
+git push origin --delete <worktree-branch>  # 删除远程临时分支
+git status --short                         # 确认无残留 staged 文件
 # 有残留 → git reset HEAD <files> # 取消 stage
 # 无意义的 diff → git checkout -- <files> # 回退
-ExitWorktree(action: "remove")    # 删除 worktree 目录和分支
+ExitWorktree(action: "remove")            # 删除 worktree 目录和本地分支
 ```
 
 ### 冲突处理
@@ -187,5 +188,6 @@ Worktree B 上线 → fetch 拉到 A 的改动 → 二次 rebase → push trunk
 
 ## 清理
 
-- 正常：`上线` 命令最后一步自动 `ExitWorktree(action: "remove")`
+- 正常：`上线` 命令最后一步自动 `ExitWorktree(action: "remove")` + 删除远程临时分支
+- 远程分支：`git push origin --delete <branch>`（上线后自动执行）
 - 异常：`git worktree remove .claude/worktrees/<name>` + `git branch -D <branch>`
