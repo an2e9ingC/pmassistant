@@ -186,6 +186,43 @@ def update_seen_version(
     return {"code": 0, "message": "ok"}
 
 
+@router.get("/preferences", response_model=dict)
+def get_preferences(user=Depends(get_current_user)):
+    """Get current user's preferences (theme, ticker, etc.)."""
+    import json
+    try:
+        prefs = json.loads(user.preferences or "{}")
+    except (json.JSONDecodeError, TypeError):
+        prefs = {}
+    return {"code": 0, "data": prefs, "message": "ok"}
+
+
+class PreferencesUpdate(BaseModel):
+    key: str
+    value: str
+
+
+@router.put("/preferences", response_model=dict)
+def update_preferences(
+    payload: PreferencesUpdate,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Update a single preference key for the current user."""
+    import json
+    try:
+        prefs = json.loads(user.preferences or "{}")
+    except (json.JSONDecodeError, TypeError):
+        prefs = {}
+    prefs[payload.key] = payload.value
+    db.query(LocalUser).filter(LocalUser.id == user.id).update(
+        {LocalUser.preferences: json.dumps(prefs, ensure_ascii=False)},
+        synchronize_session=False,
+    )
+    db.commit()
+    return {"code": 0, "message": "ok"}
+
+
 # ── GitLab OAuth endpoints ──
 
 

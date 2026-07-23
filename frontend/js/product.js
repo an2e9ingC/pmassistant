@@ -312,7 +312,7 @@ async function initProductDetail(code, tabId) {
     dropdownId: 'prod-combo-dropdown',
     dataSource: _prodComboAll,
     selectedIdFn: function() { return _prodDetailCurId; },
-    onSelect: function(p) { _prodDetailCurId = p.id; _prodDetailCurCode = p.code || String(p.id); loadProductDetail(_prodDetailCurCode); history.replaceState({ view: 'product-detail', params: [_prodDetailCurCode, 'info'] }, '', buildHash('product-detail', _prodDetailCurCode, 'info')); }
+    onSelect: function(p) { _prodDetailCurId = p.id; _prodDetailCurCode = p.code || String(p.id); loadProductDetail(_prodDetailCurCode); if (!_prodDetailTargetTab) { history.replaceState({ view: 'product-detail', params: [_prodDetailCurCode, 'info'] }, '', buildHash('product-detail', _prodDetailCurCode, 'info')); } }
   });
   if (_prodDetailCurId) {
     loadProductDetail(_prodDetailCurCode);
@@ -321,7 +321,7 @@ async function initProductDetail(code, tabId) {
 
 var _prodDetail = null;
 
-function switchProdTab(id, el) {
+function switchProdTab(id, el, skipHistory) {
   document.querySelectorAll('#view-product-detail .dsec').forEach(function(s) { s.classList.remove('active'); });
   document.querySelectorAll('#view-product-detail .dtab').forEach(function(t) { t.classList.remove('active'); });
   var sec = document.getElementById('prodsec-' + id);
@@ -331,16 +331,15 @@ function switchProdTab(id, el) {
   if (id === 'maintenance' && _prodDetail) renderProdMaintenance(_prodDetail);
   if (id === 'activities') loadProdActivities();
   if (id === 'bugs' && _prodDetailCurCode) {
-    // Ensure bugs.js is loaded for openBugDetail
     if (typeof openBugDetail !== 'function' && typeof loadViewScript === 'function') {
       loadViewScript('/js/bugs.js?v=' + APP_VERSION, function() { loadProductBugs(); });
     } else {
       loadProductBugs();
     }
   }
-  // Update hash to reflect current tab
-  if (_prodDetailCurCode && typeof buildHash === 'function') {
-    history.replaceState({ view: 'product-detail', params: [_prodDetailCurCode, id] }, '', buildHash('product-detail', _prodDetailCurCode, id));
+  // Update hash: user clicks push, back navigation skip
+  if (!skipHistory && _prodDetailCurCode && typeof buildHash === 'function') {
+    history.pushState({ view: 'product-detail', params: [_prodDetailCurCode, id] }, '', buildHash('product-detail', _prodDetailCurCode, id));
   }
 }
 
@@ -349,7 +348,7 @@ async function loadProductDetail(code) {
   var targetTab = _prodDetailTargetTab || 'info';
   _prodDetailTargetTab = null;
   var tabEl = document.querySelector('#view-product-detail .dtab[onclick*="switchProdTab(\'' + targetTab + '\'"]');
-  if (tabEl) switchProdTab(targetTab, tabEl);
+  if (tabEl) switchProdTab(targetTab, tabEl, true /* skipHistory — replaceState above already handles it */);
 
   var selected = _prodComboAll.find(function(p) { return p.code === code || String(p.id) === code; });
   if (selected) {

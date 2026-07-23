@@ -42,10 +42,11 @@ function initDetailView(code, tabId) {
       var p = _allProjects.find(function(x) { return x.code === code || String(x.id) === code; });
       if (p) {
         document.getElementById('combo-input').value = '';
+        // Set target tab BEFORE projComboSelect — it calls loadProjectDetail synchronously
+        if (tabId && typeof setDetailTargetTab === 'function') {
+          setDetailTargetTab(tabId);
+        }
         projComboSelect(p.id);
-      }
-      if (tabId && typeof setDetailTargetTab === 'function') {
-        setDetailTargetTab(tabId);
       }
     } else if (window._pendingProjectCode) {
       var pc = _allProjects.find(function(x) { return x.code === window._pendingProjectCode || String(x.id) === window._pendingProjectCode; });
@@ -557,7 +558,7 @@ async function submitFeedback() {
 function toggleTheme() {
   var mode = localStorage.getItem('pm_theme_mode') || 'auto';
   var next = mode === 'auto' ? 'light' : (mode === 'light' ? 'dark' : 'auto');
-  localStorage.setItem('pm_theme_mode', next);
+  _savePref('pm_theme_mode', next);
   _applyTheme(_getEffectiveTheme());
 }
 
@@ -999,7 +1000,7 @@ function applyTickerSpeed() {
 
 function toggleAlertTicker() {
   _tickerEnabled = !_tickerEnabled;
-  localStorage.setItem('pma_ticker_enabled', _tickerEnabled ? '1' : '0');
+  _savePref('pma_ticker_enabled', _tickerEnabled ? '1' : '0');
   var ticker = document.getElementById('alert-ticker');
   if (_tickerEnabled) {
     if (ticker) ticker.style.display = '';
@@ -1012,7 +1013,7 @@ function toggleAlertTicker() {
 
 function setTickerSpeed(speed) {
   _tickerSpeed = speed;
-  localStorage.setItem('pma_ticker_speed', speed);
+  _savePref('pma_ticker_speed', speed);
   applyTickerSpeed();
 }
 
@@ -1047,8 +1048,10 @@ function _adjustTickerPosition(notifBarHeight) {
 }
 
 function setThemeMode(mode) {
-  localStorage.setItem('pm_theme_mode', mode);
-  _applyTheme(_getEffectiveTheme());
+  _savePref('pm_theme_mode', mode);
+  var effective = _getEffectiveTheme();
+  localStorage.setItem('pm_theme', effective);  // pre-render hint for inline script
+  _applyTheme(effective);
   var themeTgl = document.getElementById('theme-toggle');
   if (themeTgl) themeTgl.classList.toggle('on', document.documentElement.getAttribute('data-theme') === 'dark');
 }
@@ -1178,25 +1181,20 @@ async function init() {
     if (typeof initProjectTypeLabels === 'function') initProjectTypeLabels();
   }
 
-  // Theme — compute effective theme from saved preference
+  // Legacy theme key migration
   if (!localStorage.getItem('pm_theme_mode')) {
-    var saved = localStorage.getItem('pm_theme'); // legacy key
-    localStorage.setItem('pm_theme_mode', saved === 'dark' ? 'dark' : saved === 'light' ? 'light' : 'auto');
+    var saved = localStorage.getItem('pm_theme');
+    var m = saved === 'dark' ? 'dark' : saved === 'light' ? 'light' : 'auto';
+    localStorage.setItem('pm_theme_mode', m);
   }
-  _applyTheme(_getEffectiveTheme());
-  var themeTgl = document.getElementById('theme-toggle');
-  if (themeTgl) themeTgl.classList.toggle('on', document.documentElement.getAttribute('data-theme') === 'dark');
 
-  // User display
+  // User display — non-blocking UI setup
   var user = getCurrentUser();
   if (user) {
     var initials = (user.username || '').substring(0, 2).toUpperCase();
     document.getElementById('user-avatar').textContent = initials;
     document.getElementById('user-name').textContent = user.display_name || user.username;
-    // Show/hide nav items based on user permissions (driven by VIEW_REGISTRY)
     updateNavVisibility();
-
-    // Show sync button only for users with sync permission
     var perms = (user && user.permissions) ? user.permissions.split(',') : [];
     var isAdmin = user && (user.role === 'admin' || perms.indexOf('admin') >= 0);
     var syncBtn = document.getElementById('src-sync-btn');
@@ -1204,6 +1202,23 @@ async function init() {
       syncBtn.style.display = 'flex';
     }
   }
+
+  // Sync preferences from backend BEFORE rendering content (avoid theme flash)
+  if (user && user.id) {
+    try {
+      var prefs = await API.get('/auth/preferences');
+      if (prefs && typeof prefs === 'object') {
+        Object.keys(prefs).forEach(function(k) {
+          if (prefs[k] != null) localStorage.setItem(k, String(prefs[k]));
+        });
+      }
+    } catch(e) { /* non-critical */ }
+  }
+
+  // Apply theme once — after sync, before content render
+  _applyTheme(_getEffectiveTheme());
+  var themeTgl = document.getElementById('theme-toggle');
+  if (themeTgl) themeTgl.classList.toggle('on', document.documentElement.getAttribute('data-theme') === 'dark');
 
   // Show welcome dialog for first-time GitLab users
   var isNewUser = localStorage.getItem('pma_new_user') === '1';
@@ -1339,7 +1354,7 @@ async function init() {
   var parsed = parseHash();
   var hashView = parsed.view;
   var hashParams = parsed.params;
-  var lastView = hashView || localStorage.getItem('pm_view') || 'user-center';
+  var lastView = hashView || 'user-center';
   gotoView(lastView, {params: hashView ? hashParams : [], pushState: false});
   // Ensure initial history state exists so back button works from the first navigation
   if (!history.state || !history.state.view) {
@@ -2086,6 +2101,12 @@ async function showNewUserWelcomeDialog() {
   document.body.insertAdjacentHTML('beforeend', html);
 }
 
+function _savePref(key, value) {
+  try { localStorage.setItem(key, value); } catch(e) {}
+  // Persist to backend
+  try { API.put('/auth/preferences', { key: key, value: String(value) }); } catch(e) {}
+}
+
 function _getEffectiveTheme() {
   var mode = localStorage.getItem('pm_theme_mode') || 'auto';
   if (mode === 'auto') {
@@ -2096,7 +2117,7 @@ function _getEffectiveTheme() {
 }
 
 function _applyTheme(theme) {
-  localStorage.setItem('pm_theme', theme);
+  localStorage.setItem('pm_theme', theme);  // effective theme for pre-render
   document.documentElement.setAttribute('data-theme', theme);
 
   var mode = localStorage.getItem('pm_theme_mode') || 'auto';

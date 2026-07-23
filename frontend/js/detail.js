@@ -24,7 +24,10 @@ initProjectCombo({
     _comboCurCode = p.code || String(p.id);
     document.getElementById('combo-input').value = _comboCurCode;
     loadProjectDetail(_comboCurCode);
-    history.replaceState({ view: 'detail', params: [_comboCurCode, 'info'] }, '', buildHash('detail', _comboCurCode, 'info'));
+    // Only replace state on fresh navigation, not back-navigation tab restore
+    if (!_detailTargetTab) {
+      history.replaceState({ view: 'detail', params: [_comboCurCode, 'info'] }, '', buildHash('detail', _comboCurCode, 'info'));
+    }
   }
 });
 
@@ -96,7 +99,6 @@ async function loadProjectDetail(code) {
     var targetTab = _detailTargetTab || 'info';
     _detailTargetTab = null;
     switchDTab(targetTab);
-    // Update hash to reflect current tab
     history.replaceState({ view: 'detail', params: [_comboCurCode, targetTab] }, '', buildHash('detail', _comboCurCode, targetTab));
   } catch(e) {
     document.getElementById('detail-header').innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '</div>';
@@ -1615,9 +1617,9 @@ function switchDTab(id, el) {
       loadViewScript('/js/tasks.js?v=250630', function() { initProjectTasks(_comboCurCode, projName); });
     }
   }
-  // Update hash to reflect current tab (replace: don't add history entry per tab switch)
-  if (_comboCurCode && typeof buildHash === 'function') {
-    history.replaceState({ view: 'detail', params: [String(_comboCurCode), id] }, '', buildHash('detail', String(_comboCurCode), id));
+  // Update hash: user clicks push, initial load skip (history is handled by loadProjectDetail)
+  if (_comboCurCode && typeof buildHash === 'function' && el) {
+    history.pushState({ view: 'detail', params: [String(_comboCurCode), id] }, '', buildHash('detail', String(_comboCurCode), id));
   }
 }
 

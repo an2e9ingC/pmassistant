@@ -164,8 +164,7 @@ function _updateDocTemplatesHash() {
   }
   // Encode non-ASCII params so decodeURIComponent in initDocTemplates works reliably
   var encodedParams = params.map(function(p) { return encodeURIComponent(p); });
-  // Don't push for doc-templates internal nav — use replace
-  history.replaceState({ view: 'doc-templates', params: params }, '', buildHash('doc-templates', encodedParams[0], encodedParams[1], encodedParams[2]));
+  history.pushState({ view: 'doc-templates', params: params }, '', buildHash('doc-templates', encodedParams[0], encodedParams[1], encodedParams[2]));
 }
 
 // Safe decodeURIComponent — falls back to raw string when already decoded (browser-dependent)

@@ -57,6 +57,26 @@ async function onLogin(e) {
     API.token = json.data.access_token;
     localStorage.setItem('pma_token', json.data.access_token);
     localStorage.setItem('pma_user', JSON.stringify(json.data.user));
+    // Preload preferences before redirect to prevent theme flash
+    try {
+      var prefsResp = await fetch('/api/auth/preferences', {
+        headers: { 'Authorization': 'Bearer ' + json.data.access_token }
+      });
+      var prefsJson = await prefsResp.json();
+      if (prefsJson.code === 0 && prefsJson.data) {
+        var prefs = prefsJson.data;
+        // Sync prefs to localStorage so index.html inline script uses them
+        if (prefs.pm_theme_mode) localStorage.setItem('pm_theme_mode', prefs.pm_theme_mode);
+        if (prefs.pma_ticker_enabled) localStorage.setItem('pma_ticker_enabled', prefs.pma_ticker_enabled);
+        if (prefs.pma_ticker_speed) localStorage.setItem('pma_ticker_speed', prefs.pma_ticker_speed);
+        // Compute and save effective theme for inline script
+        var mode = prefs.pm_theme_mode || 'auto';
+        var theme = mode === 'auto'
+          ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+          : (mode === 'dark' ? 'dark' : 'light');
+        localStorage.setItem('pm_theme', theme);
+      }
+    } catch(e) {}
     window.location.href = '/#/user-center';
   } catch(err) {
     errorEl.textContent = '网络错误，请检查服务器连接';

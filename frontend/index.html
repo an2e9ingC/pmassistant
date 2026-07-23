@@ -3,10 +3,22 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="app-version" content="v2026.07.22-beta7">
+<meta name="app-version" content="v2026.07.23-beta1">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>PM Assistant · 集成禅道 & GitLab</title>
 <script>
+// Apply saved theme BEFORE any rendering to prevent flash
+(function() {
+  // Use saved effective theme if available (set by setThemeMode/_applyTheme), else compute from mode
+  var theme = localStorage.getItem('pm_theme');
+  if (!theme || (theme !== 'light' && theme !== 'dark')) {
+    var mode = localStorage.getItem('pm_theme_mode') || 'auto';
+    theme = mode === 'auto'
+      ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+      : (mode === 'dark' ? 'dark' : mode === 'light' ? 'light' : 'light');
+  }
+  document.documentElement.setAttribute('data-theme', theme);
+})();
 window.APP_VERSION = document.querySelector('meta[name="app-version"]').content;
 (function(){
 var v = window.APP_VERSION;

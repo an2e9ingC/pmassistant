@@ -406,9 +406,9 @@ async function _pmSelectNode(nodeId) {
   _pmSelectedNodeId = nodeId;
   await _pmLoadContent();
   renderProductManagementPage();
-  // Update hash with current tree node (replace: tree navigation doesn't add history entries)
+  // Update hash with current tree node
   if (typeof buildHash === 'function') {
-    history.replaceState({ view: 'product-management', params: [String(nodeId)] }, '', buildHash('product-management', String(nodeId)));
+    history.pushState({ view: 'product-management', params: [String(nodeId)] }, '', buildHash('product-management', String(nodeId)));
   }
 }
 

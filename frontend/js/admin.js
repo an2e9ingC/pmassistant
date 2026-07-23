@@ -1038,6 +1038,7 @@ async function deleteUser(id, username) {
 /* ── PMA Settings in Config Page ── */
 
 async function loadPmaSettingsUI() {
+  if (!canAccess('admin')) return;
   try {
     var settings = await API.get('/admin/settings');
     var items = [];

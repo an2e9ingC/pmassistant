@@ -16,6 +16,7 @@ class LocalUser(Base):
     role = Column(String(32), default="viewer")  # primary role (legacy)
     zentao_account = Column(String(64), nullable=True)
     wecom_userid = Column(String(128), nullable=True)  # 企业微信 userid
+    preferences = Column(Text, default="{}")  # JSON: user preferences (theme, ticker, etc.)
     auth_source = Column(String(16), default="local")  # 'local' or 'gitlab'
     gitlab_user_id = Column(Integer, nullable=True, index=True)  # GitLab user ID
     gitlab_access_token = Column(String(256), nullable=True)  # OAuth access token (for API calls as user)
