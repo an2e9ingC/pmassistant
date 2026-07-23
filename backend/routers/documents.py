@@ -276,5 +276,5 @@ def check_project_docs_endpoint(
     result = check_project_docs(db, project_id)
     from backend.routers.logs import log_audit
     from backend.audit_categories import AUDIT_CAT_PROJECT
-    log_audit(db, user, "project_doc_scan", f"project_id={project_id} matched={result.get('total_matched',0)}", AUDIT_CAT_PROJECT, "low")
+    log_audit(db, user, "project_doc_scan", f"项目ID={project_id} 匹配数={result.get('total_matched',0)}", AUDIT_CAT_PROJECT, "low")
     return {"code": 0, "data": result, "message": f"已扫描 {result.get('scanned', 0)} 个文档，匹配 {result.get('total_matched', 0)} 个"}

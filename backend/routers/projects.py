@@ -12,7 +12,7 @@ from backend.models.zentao import CachedProject, CachedExecution
 from backend.services.entity_resolver import resolve_project
 from backend.services.project_service import log_project_activity
 from backend.routers.logs import log_audit
-from backend.audit_categories import AUDIT_CAT_PROJECT
+from backend.audit_categories import AUDIT_CAT_PROJECT, FIELD_LABEL
 from backend.services import project_service
 import re as _re, os as _os
 
@@ -762,20 +762,21 @@ def update_project(
         if hasattr(project, field):
             old_val = getattr(project, field)
             if str(old_val) != str(value):
-                changes.append(f"{field}:'{old_val}'->'{value}'")
+                field_label = FIELD_LABEL.get(field, field)
+                changes.append(f"{field_label}: '{old_val}' -> '{value}'")
             setattr(project, field, value)
 
     # If project_type changed, resync stages/docs/tasks from new type's templates
     if data.get("project_type") and data["project_type"] != old_type:
         from backend.services.product_management_service import _resync_on_type_change
         _resync_on_type_change(db, project.id, data["project_type"])
-        changes.append(f"project_type:'{old_type}'->'{data['project_type']}' (resync templates)")
+        changes.append(f"项目类型: '{old_type}' -> '{data['project_type']}' (已重同步模板)")
 
     db.commit()
     log_project_activity(db, project.id, user.username, "编辑项目",
                          "; ".join(changes) if changes else "no changes")
     log_audit(db, user, "project_update",
-              f"project={project.code} changes={'; '.join(changes) if changes else 'no changes'}",
+              f"项目={project.code} 变更={'; '.join(changes) if changes else '无变更'}",
               AUDIT_CAT_PROJECT, "medium")
 
     # Return updated project detail with changes count

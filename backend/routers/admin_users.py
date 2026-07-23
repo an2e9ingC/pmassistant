@@ -258,21 +258,21 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
         if payload.role not in ROLES:
             raise HTTPException(status_code=400, detail=f"无效角色，可选: {', '.join(ROLES)}")
         user.role = payload.role
-        changes.append(f"role={payload.role}")
+        changes.append(f"角色={payload.role}")
     if payload.password:
         if user.auth_source == "gitlab":
             raise HTTPException(status_code=400, detail="GitLab 用户无需本地密码")
         user.password_hash = hash_password(payload.password)
-        changes.append("password_changed")
+        changes.append("密码已修改")
     if payload.is_active is not None:
         user.is_active = payload.is_active
-        changes.append(f"active={payload.is_active}")
+        changes.append(f"激活={payload.is_active}")
     if payload.permissions is not None:
         user.permissions = payload.permissions
-        changes.append(f"permissions={payload.permissions}")
+        changes.append(f"权限={payload.permissions}")
     if payload.wecom_userid is not None:
         user.wecom_userid = payload.wecom_userid if payload.wecom_userid != "" else None
-        changes.append(f"wecom_userid={payload.wecom_userid}")
+        changes.append(f"企微用户ID={payload.wecom_userid}")
     db.commit()
     if changes:
         log_audit(db, cu, "user_update", f"用户 {user.username}: {'; '.join(changes)}", AUDIT_CAT_USER, "medium")

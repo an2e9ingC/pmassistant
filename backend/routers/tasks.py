@@ -274,7 +274,7 @@ def import_tasks_from_template(
     from backend.services.project_service import log_project_activity
     project = resolve_project(db, project_id)
     count = _sync_tasks_from_templates(db, project.id, project.project_type or "RD")
-    log_audit(db, user, "task_import_templates", f"project={project.code} created={count}", AUDIT_CAT_TASK, "medium")
+    log_audit(db, user, "task_import_templates", f"项目={project.code} 创建数={count}", AUDIT_CAT_TASK, "medium")
     log_project_activity(db, project.id, user.username, "导入模板任务", f"从模板创建了 {count} 个任务")
     return {"code": 0, "data": {"created": count}, "message": f"已创建 {count} 个任务"}
 
@@ -291,7 +291,7 @@ def delete_all_tasks(
     project = resolve_project(db, project_id)
     count = db.query(Task).filter(Task.project_id == project.id).delete()
     db.commit()
-    log_audit(db, user, "task_delete_all", f"project={project.code} deleted={count}", AUDIT_CAT_TASK, "high")
+    log_audit(db, user, "task_delete_all", f"项目={project.code} 删除数={count}", AUDIT_CAT_TASK, "high")
     log_project_activity(db, project.id, user.username, "清空所有任务", f"删除了 {count} 个任务")
     return {"code": 0, "data": {"deleted": count}, "message": f"已删除 {count} 个任务"}
 
@@ -325,5 +325,5 @@ def init_project_stages(
         linked += updated
     if linked:
         db.commit()
-    log_audit(db, user, "stage_init", f"project={project.code} created={count} linked_tasks={linked}", AUDIT_CAT_TASK, "medium")
+    log_audit(db, user, "stage_init", f"项目={project.code} 创建数={count} 关联任务数={linked}", AUDIT_CAT_TASK, "medium")
     return {"code": 0, "data": {"created": count, "linked_tasks": linked}, "message": f"已创建 {count} 个阶段，关联 {linked} 个任务"}

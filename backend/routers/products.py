@@ -124,7 +124,7 @@ def link_product_project(
     user=Depends(require_admin),
 ):
     result = product_service.add_product_project_link(db, body.product_id, body.project_id)
-    log_product_activity(db, body.product_id, user.username, "关联项目", f"project_id:{body.project_id}")
+    log_product_activity(db, body.product_id, user.username, "关联项目", f"项目ID: {body.project_id}")
     return {"code": 0, "data": result, "message": "ok"}
 
 
@@ -136,7 +136,7 @@ def unlink_product_project(
     user=Depends(require_admin),
 ):
     result = product_service.remove_product_project_link(db, product_id, project_id)
-    log_product_activity(db, product_id, user.username, "取消关联项目", f"project_id:{project_id}")
+    log_product_activity(db, product_id, user.username, "取消关联项目", f"项目ID: {project_id}")
     return {"code": 0, "data": result, "message": "ok"}
 
 
@@ -395,7 +395,7 @@ def update_product_document(
     doc.updated_by = user.username
     db.commit()
     detail = "; ".join(doc_changes) if doc_changes else "无变更"
-    log_product_activity(db, product.id, user.username, "更新文档", f"doc_name:'{doc.doc_name}'; {detail}")
+    log_product_activity(db, product.id, user.username, "更新文档", f"文档名称: '{doc.doc_name}'; {detail}")
     return {"code": 0, "data": {"id": doc.id, "status": doc.status}, "message": "ok"}
 
 
@@ -491,7 +491,7 @@ def upload_block_diagram(
     db.add(bd)
     db.commit()
     db.refresh(bd)
-    log_product_activity(db, product.id, user.username, "上传框图", f"filename:{bd.filename}")
+    log_product_activity(db, product.id, user.username, "上传框图", f"文件名: {bd.filename}")
 
     return {
         "code": 0,
@@ -529,7 +529,7 @@ def delete_block_diagram(
 
     db.delete(bd)
     db.commit()
-    log_product_activity(db, product.id, user.username, "删除框图", f"filename:{bd.filename}")
+    log_product_activity(db, product.id, user.username, "删除框图", f"文件名: {bd.filename}")
     return {"code": 0, "message": "已删除"}
 
 

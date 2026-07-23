@@ -226,14 +226,15 @@ def update_local_product(
             db, prod.id, body.model_dump(exclude_none=True)
         )
         changes = []
+        from backend.audit_categories import FIELD_LABEL
         if body.name and old and old.get("name") != body.name:
-            changes.append(f"name:'{old['name']}'->'{body.name}'")
+            changes.append(f"产品名称: '{old['name']}' -> '{body.name}'")
         if body.code and old and old.get("code") != body.code:
-            changes.append(f"code:'{old['code']}'->'{body.code}'")
+            changes.append(f"产品编号: '{old['code']}' -> '{body.code}'")
         if body.status and old and old.get("status") != body.status:
-            changes.append(f"status:'{old['status']}'->'{body.status}'")
+            changes.append(f"状态: '{old['status']}' -> '{body.status}'")
         if body.description is not None and old and old.get("description") != body.description:
-            changes.append(f"description:'{old.get('description','')}'->'{body.description}'")
+            changes.append(f"描述: '{old.get('description','')}' -> '{body.description}'")
         detail = "; ".join(changes) if changes else "无变更"
         log_audit(db, user, "local_product_update", detail, AUDIT_CAT_PRODUCT, "medium")
         log_product_activity(db, prod.id, user.username, "编辑产品", detail)
@@ -331,7 +332,7 @@ def create_local_project(
             consumed=body.consumed,
         )
         log_audit(db, user, "local_project_create",
-                  f"name={body.name}, code={body.code}, products={len(body.product_ids or [])}",
+                  f"名称={body.name}, 编号={body.code}, 产品数={len(body.product_ids or [])}",
                   AUDIT_CAT_PROJECT, "medium")
         return {"code": 0, "data": project, "message": "ok"}
     except ValueError as e:
@@ -352,7 +353,7 @@ def update_local_project(
             db, project.id, body.model_dump(exclude_none=True)
         )
         log_audit(db, user, "local_project_update",
-                  f"project.id={project.id}",
+                  f"项目ID={project.id}",
                   AUDIT_CAT_PROJECT, "medium")
         return {"code": 0, "data": result, "message": "ok"}
     except ValueError as e:

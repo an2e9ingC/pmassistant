@@ -9,6 +9,7 @@ from sqlalchemy.sql import func as sa_func
 
 from backend.models.task import Task, WorkLog, TaskComment
 from backend.database import to_local_str
+from backend.audit_categories import FIELD_LABEL
 
 
 def get_tasks(
@@ -235,7 +236,8 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
             if field == "assignee_id":
                 ov_display = user_name_map.get(int(old_val), old_val) if old_val else ''
                 nv_display = user_name_map.get(int(new_val), new_val) if new_val else ''
-            changes.append(f"{field}: {ov_display} -> {nv_display}")
+            field_label = FIELD_LABEL.get(field, field)
+            changes.append(f"{field_label}: {ov_display} -> {nv_display}")
 
     if "stage_name" in data:
         t.stage_name = data["stage_name"] or None
