@@ -1,6 +1,6 @@
 ---
 name: pma-worktree
-description: PMA 并行开发模式 — 用 git worktree 隔离多分支开发环境。触发词：worktree:
+description: PMA 并行开发模式 — 用 git worktree 隔离多分支开发环境。触发词：worktree: / 上线
 user-invocable: true
 allowed-tools: Read, Write, Edit, Bash, LSP, Agent
 context: fork
@@ -12,10 +12,13 @@ context: fork
 
 每个 worktree session = 一个"独立开发者"，拥有独立的分支、工作目录、服务端口、数据库和日志文件。
 
-## 触发方式
+## 触发命令
 
-- `worktree:` 前缀的 prompt → 创建独立 worktree
-- 其他 prompt → 在当前分支直接操作
+| 命令 | 用途 |
+|------|------|
+| `worktree: <描述>` | 创建新 worktree 并切到 worktree 开发环境 |
+| `上线` | 自动完成：fetch → rebase → review → 二次rebase → merge → push → cleanup |
+| 其他 prompt | 在当前分支直接操作，不创建 worktree |
 
 ## 创建 Worktree 流程
 
@@ -67,28 +70,51 @@ Worktree B:         ./server.sh -p 8002 restart
 | `data/server-$PORT.log` | 服务器日志 |
 | `.pma-server-$PORT.pid` | 进程 PID 文件 |
 
-## 合并流程（用户说 "merge" 时执行）
+## 上线流程（用户说 "上线" 时自动执行）
 
-**阶段一：在 worktree 中**
-1. `git fetch origin`
-2. `git rebase origin/trunk`
-3. `git diff origin/trunk...HEAD`（Code Review）
+> 一键完成从 worktree 到远程 trunk 的完整发布链路。
 
-**阶段二：返回主 session**
-4. `ExitWorktree(action: "keep")`
-5. `git merge --no-ff <feature-branch>`
+0. **自动 commit（如有未提交改动）**
+   ```bash
+   if git status --porcelain | grep -q .; then
+       /pma-commit   # 按 pma-commit 规范自动提交
+   fi
+   ```
 
-**阶段三：用户确认后**
-6. 用户说 "push" → `git push origin trunk`
-7. 用户确认清理 → `ExitWorktree(action: "remove")`
+1. **rebase + review**
+   ```bash
+   git fetch origin
+   git rebase origin/trunk           # 冲突在这里解决
+   git diff origin/trunk...HEAD      # Code Review
+   git fetch origin                  # 二次 fetch（防止其他 worktree 抢先合入）
+   git rebase origin/trunk           # 二次 rebase（通常快进）
+   ```
 
-## 安全原则
+2. **merge**
+   ```bash
+   ExitWorktree(action: "keep")      # 回到主 session trunk
+   git pull origin trunk --ff-only   # 确保 trunk 最新
+   git merge --no-ff <branch>        # --no-ff 保留分支痕迹
+   ```
 
-- 用户不主动说 merge，绝不合并
-- Merge 后不自动 push
-- Push 前不做清理（保留回滚能力）
+3. **push + cleanup**
+   ```bash
+   git push origin trunk
+   ExitWorktree(action: "remove")    # 删除 worktree 目录和分支
+   ```
+
+### 冲突处理
+- rebase 有冲突 → 手动解决 → `git rebase --continue`
+- 无法解决 → `git rebase --abort`，通知用户中止
+- 二次 rebase 有冲突 → 说明和其他 worktree 同时改到同一区域，需人工介入
+
+### 多 worktree 并行
+```
+Worktree A 上线 → push trunk
+Worktree B 上线 → fetch 拉到 A 的改动 → 二次 rebase → push trunk
+```
 
 ## 清理
 
-- 正常：merge + push 成功后 `ExitWorktree(action: "remove")`
+- 正常：`上线` 命令最后一步自动 `ExitWorktree(action: "remove")`
 - 异常：`git worktree remove .claude/worktrees/<name>` + `git branch -D <branch>`

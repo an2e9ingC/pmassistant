@@ -1584,7 +1584,7 @@ function _ucLoadTasks(user) {
     _ucLoadCalendar(user);
     _ucLoadWecomCalendar(user);
   }).catch(function() {
-    document.getElementById('uc-tasks-table-tbody').innerHTML = '<tr><td colspan="14"><div class="empty-state">加载失败</div></td></tr>';
+    document.getElementById('uc-tasks-table-tbody').innerHTML = '<tr><td colspan="15"><div class="empty-state">加载失败</div></td></tr>';
   });
 }
 
@@ -1628,7 +1628,7 @@ function _renderUcTableHead() {
   var dueInd = _ucSortCol === 'due_date'
     ? (_ucSortDir === 'asc' ? '▲' : '▼')
     : '<span style="color:var(--muted)">⇅</span>';
-  document.getElementById('uc-tasks-table-head').innerHTML = '<tr><th style="width:6%">任务编号</th><th style="width:8%">项目编号</th><th style="width:100px">产品编号</th><th>阶段</th><th>任务标题</th><th style="width:70px">状态</th><th style="width:6%;cursor:pointer;user-select:none" onclick="_ucSortBy(\'priority\')">优先级 ' + prioInd + '</th><th style="width:6%">进度</th><th style="width:7%;cursor:pointer;user-select:none" onclick="_ucSortBy(\'due_date\')">截止 ' + dueInd + '</th><th style="width:1%;white-space:nowrap">操作</th></tr>';
+  document.getElementById('uc-tasks-table-head').innerHTML = '<tr><th style="width:22px"><input type="checkbox" id="task-select-all" onchange="_toggleSelectAllTasks(this)" title="全选/取消全选"></th><th style="width:6%">任务编号</th><th style="width:8%">项目编号</th><th style="width:100px">产品编号</th><th>阶段</th><th>任务标题</th><th style="width:70px">状态</th><th style="width:6%;cursor:pointer;user-select:none" onclick="_ucSortBy(\'priority\')">优先级 ' + prioInd + '</th><th style="width:6%">进度</th><th style="width:7%;cursor:pointer;user-select:none" onclick="_ucSortBy(\'due_date\')">截止 ' + dueInd + '</th><th style="width:1%;white-space:nowrap">操作</th></tr>';
 }
 
 function _ucSortBy(col) {
@@ -1664,12 +1664,13 @@ function _renderUcTaskTable() {
     });
   }
   var tbody = document.getElementById('uc-tasks-table-tbody');
-  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state">暂无匹配任务</div></td></tr>'; return; }
+  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state">暂无匹配任务</div></td></tr>'; return; }
   tbody.innerHTML = filtered.map(function(t) {
     var pct = t.progress || 0;
     var overdue = t.due_date && t.status !== 'done' && t.status !== 'closed' && t.due_date < fmtLocalDate();
     var prodTag = t.product_code ? '<span class="proj-code-btn" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="event.stopPropagation();openProductDetail(\'' + escHtml(t.product_code) + '\')" title="' + escHtml(t.product_code) + ' ' + escHtml(t.product_name || '') + '">' + escHtml(t.product_code) + '</span>' : '<span style="font-size:12px;color:var(--muted)">—</span>';
     return '<tr style="cursor:pointer" onclick="_ucOpenTask('+t.id+')">' +
+      '<td style="text-align:center;width:22px" onclick="event.stopPropagation();if(event.target!==this.firstElementChild){var cb=this.firstElementChild;if(cb){cb.checked=!cb.checked;cb.onchange()}}"><input type="checkbox" value="' + t.id + '" onchange="_onTaskCheckbox(this)" class="task-checkbox"></td>' +
       '<td style="text-align:center;font-size:11px;font-family:var(--mono);color:var(--muted)">#' + t.id + '</td>' +
       '<td style="text-align:center">' + (t.project_code ? projCodeTag(t.project_code, 'event.stopPropagation();openProject(\'' + escHtml(t.project_code).replace(/'/g, "\\'") + '\')', t.project_name) : '-') + '</td>' +
       '<td style="text-align:center;font-size:12px">' + prodTag + '</td>' +
@@ -1685,6 +1686,9 @@ function _renderUcTaskTable() {
       '</td>' +
     '</tr>';
   }).join('');
+  _selectedTasks = new Set();
+  var batchHtml = (typeof _renderBatchToolbar === 'function') ? _renderBatchToolbar() : '';
+  document.getElementById('uc-tasks-table-wrap').insertAdjacentHTML('beforeend', batchHtml);
   setTimeout(function() { if (typeof window._ucUpdateLayout === 'function') window._ucUpdateLayout(); }, 50);
 }
 
@@ -1744,7 +1748,7 @@ async function _ucLoadBugs() {
     var tbody = document.getElementById('uc-bugs-table-tbody');
     if (!filtered.length) {
       var label = _ucBugTab === 'assignee' ? '暂无待处理的Bug' : '暂无创建的Bug';
-      tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state">' + label + '</div></td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state">' + label + '</div></td></tr>';
       if (_ucActiveTab === 'bugs') _ucLoadBugStats();
       return;
     }
@@ -1764,7 +1768,7 @@ async function _ucLoadBugs() {
         '<td style="text-align:center;white-space:nowrap" onclick="event.stopPropagation()">' + iconEdit(_ucEnsureBugsJs('openBugDialog('+b.id+')'),'编辑') + iconDelete(_ucEnsureBugsJs('deleteBugById('+b.id+')'),'删除') + '</td>' +
       '</tr>';
     }).join('');
-  } catch(e) { document.getElementById('uc-bugs-table-tbody').innerHTML = '<tr><td colspan="10"><div class="error-state">加载失败</div></td></tr>'; }
+  } catch(e) { document.getElementById('uc-bugs-table-tbody').innerHTML = '<tr><td colspan="11"><div class="error-state">加载失败</div></td></tr>'; }
   if (_ucActiveTab === 'bugs') _ucLoadBugStats();
   setTimeout(function() { if (typeof window._ucUpdateLayout === "function") window._ucUpdateLayout(); }, 50);
 }

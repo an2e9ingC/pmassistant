@@ -204,6 +204,18 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
 
     old_status = t.status
     changes = []
+    # Batch-resolve assignee ID → display name for readable logs
+    user_name_map = {}
+    for fid in ("assignee_id",):
+        ov = getattr(t, fid) if fid in ("assignee_id",) else None
+        nv = data.get(fid)
+        ids = set()
+        if ov: ids.add(int(ov))
+        if nv: ids.add(int(nv))
+        if ids:
+            from backend.models.local import LocalUser
+            for u in db.query(LocalUser).filter(LocalUser.id.in_(ids)).all():
+                user_name_map[u.id] = u.display_name or u.username
     for field in ("title", "description", "status", "priority", "type",
                    "execution_id", "stage_name", "assignee_id", "parent_id", "blocked_by_id",
                    "start_date", "due_date", "sort_order", "progress"):
@@ -218,7 +230,12 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
                 setattr(t, field, _parse_date(new_val) if new_val else None)
             else:
                 setattr(t, field, new_val)
-            changes.append(f"{field}: {old_val} -> {new_val}")
+            ov_display = old_val
+            nv_display = new_val if new_val else ''
+            if field == "assignee_id":
+                ov_display = user_name_map.get(int(old_val), old_val) if old_val else ''
+                nv_display = user_name_map.get(int(new_val), new_val) if new_val else ''
+            changes.append(f"{field}: {ov_display} -> {nv_display}")
 
     if "stage_name" in data:
         t.stage_name = data["stage_name"] or None

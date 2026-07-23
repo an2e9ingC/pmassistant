@@ -193,6 +193,31 @@ def import_tasks(
     return {"code": 0, "data": tasks, "message": "ok"}
 
 
+class TaskBatchUpdate(BaseModel):
+    task_ids: List[int]
+    updates: TaskUpdate
+
+
+@router.put("/batch", response_model=dict)
+def batch_update_tasks(
+    payload: TaskBatchUpdate,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("task_edit")),
+):
+    """Batch update fields for multiple tasks."""
+    if not payload.task_ids:
+        raise HTTPException(status_code=400, detail="请选择至少一个任务")
+    updates = payload.updates.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(status_code=400, detail="请至少设置一个要更新的字段")
+    updated = 0
+    for tid in payload.task_ids:
+        t = task_service.update_task(db, tid, updates, user)
+        if t: updated += 1
+    db.commit()
+    return {"code": 0, "data": {"updated": updated, "total": len(payload.task_ids)}, "message": "ok"}
+
+
 @router.put("/{task_id}", response_model=dict)
 def update_task(
     task_id: int,
@@ -203,7 +228,6 @@ def update_task(
     t = task_service.update_task(db, task_id, payload.model_dump(exclude_unset=True), user)
     if not t:
         raise HTTPException(status_code=404, detail="Task not found")
-    log_audit(db, user, "task_update", f"更新任务 #{task_id}", AUDIT_CAT_TASK, "medium")
     return {"code": 0, "data": t, "message": "ok"}
 
 

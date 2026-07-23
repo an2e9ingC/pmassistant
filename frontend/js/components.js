@@ -1736,3 +1736,151 @@ async function submitGenericWorklog() {
     showToast('提交失败: ' + (e.message || ''), 'error');
   }
 }
+var _selectedTasks = new Set();
+
+function _onTaskCheckbox(cb) {
+  var tid = parseInt(cb.value);
+  if (cb.checked) _selectedTasks.add(tid); else _selectedTasks.delete(tid);
+  _updateBatchToolbar();
+}
+
+function _toggleSelectAllTasks(cb) {
+  document.querySelectorAll('.task-checkbox').forEach(function(c) {
+    c.checked = cb.checked;
+    var tid = parseInt(c.value);
+    if (cb.checked) _selectedTasks.add(tid); else _selectedTasks.delete(tid);
+  });
+  _updateBatchToolbar();
+}
+
+function _renderBatchToolbar() {
+  return '<div id="batch-toolbar" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:500;' +
+    'background:var(--accent);color:#fff;padding:8px 16px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.2);' +
+    'align-items:center;gap:12px">' +
+    '<span id="batch-count">已选 0 个任务</span>' +
+    '<button onclick="openBatchEditDialog()" style="padding:4px 12px;border:1px solid #fff;border-radius:4px;background:transparent;color:#fff;cursor:pointer;font-size:12px">批量编辑</button>' +
+    '<button onclick="_clearBatchSelection()" style="padding:4px 12px;border:none;border-radius:4px;background:rgba(255,255,255,0.2);color:#fff;cursor:pointer;font-size:12px">取消</button>' +
+    '</div>';
+}
+
+function _updateBatchToolbar() {
+  var bar = document.getElementById('batch-toolbar');
+  if (!bar) return;
+  var count = _selectedTasks.size;
+  if (count > 0) {
+    bar.style.display = 'flex';
+    document.getElementById('batch-count').textContent = '已选 ' + count + ' 个任务';
+  } else {
+    bar.style.display = 'none';
+  }
+}
+
+function _clearBatchSelection() {
+  _selectedTasks.clear();
+  document.querySelectorAll('.task-checkbox').forEach(function(c) { c.checked = false; });
+  var allCb = document.getElementById('task-select-all');
+  if (allCb) allCb.checked = false;
+  _updateBatchToolbar();
+}
+
+function openBatchEditDialog() {
+  if (_selectedTasks.size === 0) { showToast('请先选择任务', 'error'); return; }
+  var inp = 'width:100%;box-sizing:border-box;margin-top:1px';
+  var html = '<div style="max-height:500px;overflow-y:auto">' +
+    '<div style="margin-bottom:4px;font-size:11px;color:var(--muted)">将对 <b>' + _selectedTasks.size + '</b> 个任务批量设置以下属性（留空=不修改）</div>' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">指派负责人</label>' +
+      '<select class="search-inp" id="ba-assignee" style="' + inp + '"><option value="">不修改</option></select></div>' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">状态</label>' +
+      '<select class="search-inp" id="ba-status" style="' + inp + '"><option value="">不修改</option>' +
+        '<option value="todo">待办</option><option value="in_progress">进行中</option><option value="review">评审中</option><option value="done">已完成</option><option value="closed">已关闭</option></select></div>' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">阶段</label>' +
+      '<select class="search-inp" id="ba-stage" style="' + inp + '"><option value="">不修改</option></select></div>' +
+    '<div style="display:flex;gap:8px;margin-bottom:8px">' +
+      '<div style="flex:1"><label style="font-size:11px;color:var(--muted)">计划开始</label><input class="search-inp" id="ba-start" type="date" style="' + inp + '"></div>' +
+      '<div style="flex:1"><label style="font-size:11px;color:var(--muted)">截止日期</label><input class="search-inp" id="ba-due" type="date" style="' + inp + '"></div>' +
+    '</div>' +
+    '</div>';
+  openDialog('批量编辑任务', html, [
+    {text:'取消',onclick:'closeSharedDialog()'},
+    {text:'确定',cls:'btn-primary',onclick:'submitBatchEdit()'}
+  ], {maxWidth:440});
+  // Load assignee options
+  API.get('/admin/users?limit=200').then(function(data) {
+    var sel = document.getElementById('ba-assignee');
+    var users = data.items || data || [];
+    users.forEach(function(u) {
+      sel.innerHTML += '<option value="' + u.id + '">' + escHtml(u.display_name || u.username) + '</option>';
+    });
+  });
+  // Load stage options from first selected task's project
+  var firstId = _selectedTasks.values().next().value;
+  API.get('/tasks/' + firstId).then(function(task) {
+    if (task.project_code) {
+      API.get('/tasks?project_id=' + task.project_code + '&limit=200').then(function(data) {
+        var sel = document.getElementById('ba-stage');
+        var items = data.items || data || [];
+        var stages = [...new Set(items.map(function(t) { return t.stage_name; }).filter(Boolean))].sort();
+        stages.forEach(function(s) {
+          sel.innerHTML += '<option value="' + escHtml(s) + '">' + escHtml(s) + '</option>';
+        });
+      });
+    }
+  });
+}
+
+async function submitBatchEdit() {
+  var updates = {};
+  var assignee = document.getElementById('ba-assignee').value;
+  var status = document.getElementById('ba-status').value;
+  var stage = document.getElementById('ba-stage').value;
+  var start = document.getElementById('ba-start').value;
+  var due = document.getElementById('ba-due').value;
+  if (assignee) updates.assignee_id = parseInt(assignee);
+  if (status) updates.status = status;
+  if (stage) updates.stage_name = stage;
+  if (start) updates.start_date = start;
+  if (due) updates.due_date = due;
+  if (Object.keys(updates).length === 0) { showToast('请至少设置一个字段', 'error'); return; }
+  try {
+    var r = await API.put('/tasks/batch', {task_ids: Array.from(_selectedTasks), updates: updates});
+    showToast('已更新 ' + r.updated + '/' + r.total + ' 个任务', 'success');
+    closeSharedDialog();
+    _clearBatchSelection();
+    if (typeof loadTaskData === 'function') loadTaskData();
+    if (typeof _ucLoadCalendar === 'function') { var u = getCurrentUser(); if (u) _ucLoadCalendar(u); }
+  } catch(e) { showToast('批量更新失败: ' + (e.message || ''), 'error'); }
+}
+
+function openAssignDialog(taskId) {
+  API.get('/tasks/' + taskId).then(function(task) {
+    var inp = 'width:100%;box-sizing:border-box;margin-top:1px';
+    var html = '<div>' +
+      '<div style="margin-bottom:4px;font-size:11px;color:var(--muted)">当前负责人: <b>' + escHtml(task.assignee_name || task.assignee_username || '未指派') + '</b></div>' +
+      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">新负责人</label>' +
+        '<select class="search-inp" id="as-assignee" style="' + inp + '"><option value="">加载中...</option></select></div>' +
+      '</div>';
+    openDialog('指派任务 — ' + escHtml(task.title || ''), html, [
+      {text:'取消',onclick:'closeSharedDialog()'},
+      {text:'指派',cls:'btn-primary',onclick:'submitAssign(' + taskId + ')'}
+    ], {maxWidth:360});
+    API.get('/admin/users?limit=200').then(function(data) {
+      var sel = document.getElementById('as-assignee');
+      var users = data.items || data || [];
+      sel.innerHTML = '<option value="">不修改</option>';
+      users.forEach(function(u) {
+        sel.innerHTML += '<option value="' + u.id + '"' + (u.id === task.assignee_id ? ' selected' : '') + '>' + escHtml(u.display_name || u.username) + '</option>';
+      });
+    });
+  }).catch(function(e) { showToast('加载失败: ' + (e.message || ''), 'error'); });
+}
+
+async function submitAssign(taskId) {
+  var assignee = document.getElementById('as-assignee').value;
+  if (!assignee) { showToast('请选择负责人', 'error'); return; }
+  try {
+    await API.put('/tasks/' + taskId, {assignee_id: parseInt(assignee)});
+    closeSharedDialog();
+    showToast('已指派', 'success');
+    if (typeof loadTaskData === 'function') loadTaskData();
+  } catch(e) { showToast('指派失败: ' + (e.message || ''), 'error'); }
+}
