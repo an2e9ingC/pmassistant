@@ -423,9 +423,16 @@ def update_local_project(db: Session, project_id: int, data: dict) -> dict:
     if not project:
         raise ValueError(f"本地项目不存在: {project_id}")
 
+    old_type = project.project_type
     for k, v in data.items():
         if hasattr(project, k) and v is not None:
             setattr(project, k, v)
+
+    # If project_type changed, resync stages/docs/tasks from new type's templates
+    new_type = data.get("project_type")
+    if new_type and new_type != old_type:
+        _resync_on_type_change(db, project_id, new_type)
+
     db.commit()
     return _project_item(project, db)
 
@@ -554,6 +561,33 @@ def _project_item(p: CachedProject, db: Session) -> dict:
         "product_names": product_names,
         "synced_at": to_local_str(p.synced_at) if p.synced_at else None,
     }
+
+
+def _resync_on_type_change(db: Session, project_id: int, new_type: str):
+    """When project_type changes: reset stages, docs, and template-originated tasks.
+
+    Manual tasks (template_id IS NULL) are preserved.
+    """
+    from backend.models.project_stage import ProjectStage
+    from backend.models.document import ProjectDocument
+    from backend.models.task import Task
+    from backend.services.document_service import _sync_from_templates, _sync_tasks_from_templates
+
+    # 1. Reset stages
+    db.query(ProjectStage).filter(ProjectStage.project_id == project_id).delete()
+    _init_project_stages(db, project_id, new_type)
+
+    # 2. Reset documents
+    db.query(ProjectDocument).filter(ProjectDocument.project_id == project_id).delete()
+    _sync_from_templates(db, project_id, new_type)
+
+    # 3. Remove template-originated tasks (keep manual tasks)
+    db.query(Task).filter(
+        Task.project_id == project_id, Task.template_id.isnot(None)
+    ).delete()
+    _sync_tasks_from_templates(db, project_id, new_type)
+
+    db.flush()
 
 
 def _init_project_stages(db: Session, project_id: int, project_type: str):

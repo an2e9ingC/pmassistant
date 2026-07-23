@@ -733,6 +733,7 @@ def update_project(
 
     changes = []
     data = payload.model_dump(exclude_unset=True)
+    old_type = project.project_type
 
     # Handle customer_name → customer_project_links sync
     new_cust = data.get("customer_name")
@@ -763,6 +764,12 @@ def update_project(
             if str(old_val) != str(value):
                 changes.append(f"{field}:'{old_val}'->'{value}'")
             setattr(project, field, value)
+
+    # If project_type changed, resync stages/docs/tasks from new type's templates
+    if data.get("project_type") and data["project_type"] != old_type:
+        from backend.services.product_management_service import _resync_on_type_change
+        _resync_on_type_change(db, project.id, data["project_type"])
+        changes.append(f"project_type:'{old_type}'->'{data['project_type']}' (resync templates)")
 
     db.commit()
     log_project_activity(db, project.id, user.username, "编辑项目",
