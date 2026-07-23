@@ -269,6 +269,7 @@ function renderTaskTable(tasks, execs) {
   }
 
   var html = '<table class="proj-table"><thead><tr>' +
+    '<th style="width:22px"><input type="checkbox" id="task-select-all" onchange="_toggleSelectAllTasks(this)" title="全选/取消全选"></th>' +
     '<th style="width:7%">任务编号</th>' +
     '<th style="width:8%">项目编号</th>' +
     '<th style="width:10%;text-align:left">项目名称</th>' +
@@ -281,8 +282,10 @@ function renderTaskTable(tasks, execs) {
     '<th>操作</th>' +
     '</tr></thead><tbody>';
 
+  _selectedTasks = new Set();
   tasks.forEach(function(t) { html += _renderTaskRow(t, stageMap); });
   html += '</tbody></table>';
+  html += _renderBatchToolbar();
   content.innerHTML = html;
 }
 
@@ -321,9 +324,10 @@ function renderTaskTableCompact(tasks, execs) {
   }
   var stageKeys = allStages.filter(function(sn) { return grouped[sn] !== undefined; });
 
+  _selectedTasks = new Set();
   var html = '<div class="table-scroll" style="max-height:calc(100vh - 340px)"><table class="stage-table"><thead><tr>' +
     '<th style="width:10%">阶段</th>' +
-    '<th style="width:17%">任务标题</th>' +
+    '<th style="width:15%">任务标题</th>' +
     '<th style="width:6%">状态</th>' +
     '<th style="width:5%">优先级</th>' +
     '<th style="width:7%">负责人</th>' +
@@ -333,6 +337,7 @@ function renderTaskTableCompact(tasks, execs) {
     '<th style="width:7%">完成日期</th>' +
     '<th style="width:10%">最新动态</th>' +
     '<th style="width:6%">时间</th>' +
+    '<th style="width:22px"><input type="checkbox" id="task-select-all" onchange="_toggleSelectAllTasks(this)" title="全选/取消全选"></th>' +
     '<th style="width:1%;white-space:nowrap">操作</th>' +
     '</tr></thead><tbody>';
 
@@ -364,6 +369,7 @@ function renderTaskTableCompact(tasks, execs) {
           '<td style="color:var(--muted);font-size:12px">—</td>' +
           '<td style="color:var(--muted);font-size:12px">—</td>' +
           '<td style="color:var(--muted);font-size:12px">—</td>' +
+          '<td style="width:22px"></td>' +
           '<td style="color:var(--muted);font-size:12px">—</td>';
       }
       html += '</tr>';
@@ -371,6 +377,7 @@ function renderTaskTableCompact(tasks, execs) {
   });
 
   html += '</tbody></table></div>';
+  html += _renderBatchToolbar();
   content.innerHTML = html;
 
   // Group hover: hovering the stage-name cell highlights all rows of that stage
@@ -440,12 +447,13 @@ function _renderTaskRowCompact(t, stageStart) {
   return '<td style="text-align:left;cursor:pointer" onclick="openTaskViewDialog(' + t.id + ')" title="查看任务详情">' + escHtml(t.title) + '</td>' +
     '<td style="text-align:center">' + renderPill(t.status || 'todo') + '</td>' +
     '<td style="text-align:center">' + (typeof renderPriority === 'function' ? renderPriority(t.priority) : escHtml(t.priority || 'medium')) + '</td>' +
-    '<td style="font-size:12px;cursor:pointer;color:var(--accent)" onclick="openTaskViewDialog(' + t.id + ')" title="查看负责人">' + escHtml(assigneeName) + '</td>' +
+    '<td style="font-size:12px;cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();openAssignDialog(' + t.id + ')" title="指派任务">' + escHtml(assigneeName) + '</td>' +
     '<td style="text-align:center">' + progressHtml + '</td>' +
     '<td style="font-size:12px;color:' + (t.start_date ? 'var(--fg)' : 'var(--muted)') + '" title="' + startTitle + '">' + escHtml(startDateStr) + '</td>' +
     '<td style="font-size:12px">' + (t.due_date ? t.due_date : '—') + '</td>' +
     '<td style="font-size:12px">' + (t.completed_at ? formatDate(t.completed_at) : '—') + '</td>' +
     _renderLatestActivity(t) +
+    '<td style="text-align:center;width:22px" onclick="event.stopPropagation();if(event.target!==this.firstElementChild){var cb=this.firstElementChild;if(cb){cb.checked=!cb.checked;cb.onchange()}}"><input type="checkbox" value="' + t.id + '" onchange="_onTaskCheckbox(this)" class="task-checkbox"></td>' +
     '<td style="white-space:nowrap" onclick="event.stopPropagation()">' + iconEdit('openTaskDialog(' + t.id + ')') + iconDelete('deleteTask(' + t.id + ')') + '</td>';
 }
 
@@ -508,6 +516,7 @@ function _renderTaskRow(t, stageMap) {
   var overdue = t.due_date && t.status !== 'done' && t.status !== 'closed' && t.due_date < fmtLocalDate();
   var projCode = t.project_code || '';
   return '<tr class="clickable">' +
+    '<td style="text-align:center;width:22px" onclick="event.stopPropagation();if(event.target!==this.firstElementChild){var cb=this.firstElementChild;if(cb){cb.checked=!cb.checked;cb.onchange()}}"><input type="checkbox" value="' + t.id + '" onchange="_onTaskCheckbox(this)" class="task-checkbox"></td>' +
     '<td style="font-size:11px;font-family:var(--mono);color:var(--muted)">#' + t.id + '</td>' +
     '<td>' + (projCode ? projCodeTag(projCode, 'openProject(\'' + escHtml(projCode).replace(/'/g, "\\'") + '\')', t.project_name) : '-') + '</td>' +
     '<td style="text-align:left;font-size:12px">' + escHtml(t.project_name || '-') + '</td>' +
@@ -1514,3 +1523,4 @@ async function doDeleteTask(taskId, taskTitle) {
     showToast('删除失败: ' + (e.message || ''), 'error');
   }
 }
+
