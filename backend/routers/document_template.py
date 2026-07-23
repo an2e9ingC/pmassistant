@@ -247,8 +247,8 @@ def sync_all_projects(
     result = document_service.sync_all_projects(db)
     log_audit(
         db, user, "doc_template_sync_all",
-        f"{result['synced']}/{result['total']} projects synced"
-        + (f", {result['failed']} failed" if result['failed'] else ""),
+        f"{result['synced']}/{result['total']} 个项目已同步"
+        + (f", {result['failed']} 个失败" if result['failed'] else ""),
         AUDIT_CAT_TEMPLATE, "medium",
     )
     return {"code": 0, "data": result, "message": "ok"}
@@ -524,8 +524,8 @@ def sync_all_projects_tasks(
     result = document_service.sync_all_projects_tasks(db)
     log_audit(
         db, user, "task_template_sync_all",
-        f"{result['synced']}/{result['total']} projects synced"
-        + (f", {result['failed']} failed" if result['failed'] else ""),
+        f"{result['synced']}/{result['total']} 个项目已同步"
+        + (f", {result['failed']} 个失败" if result['failed'] else ""),
         AUDIT_CAT_TEMPLATE, "medium",
     )
     return {"code": 0, "data": result, "message": "ok"}
