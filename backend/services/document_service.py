@@ -849,6 +849,15 @@ def _sync_tasks_from_templates(db: Session, project_id: int, project_type: str =
             if tpl.responsible_role:
                 assignee_id = _resolve_user_for_role(db, tpl.responsible_role)
 
+            # Reviewer: stage owner for template-imported tasks
+            reviewer_id = None
+            stage = db.query(ProjectStage).filter(
+                ProjectStage.project_id == project_id,
+                ProjectStage.name == st
+            ).first()
+            if stage and stage.owner_id:
+                reviewer_id = stage.owner_id
+
             task = Task(
                 project_id=project_id,
                 execution_id=0,
@@ -859,6 +868,7 @@ def _sync_tasks_from_templates(db: Session, project_id: int, project_type: str =
                 priority="medium",
                 type="development",
                 assignee_id=assignee_id,
+                reviewer_id=reviewer_id,
                 reporter_id=1,
                 template_id=tpl.id,
                 sort_order=tpl.sort_order,

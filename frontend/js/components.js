@@ -1884,3 +1884,37 @@ async function submitAssign(taskId) {
     if (typeof loadTaskData === 'function') loadTaskData();
   } catch(e) { showToast('指派失败: ' + (e.message || ''), 'error'); }
 }
+
+function openReviewerDialog(taskId) {
+  API.get('/tasks/' + taskId).then(function(task) {
+    var inp = 'width:100%;box-sizing:border-box;margin-top:1px';
+    var html = '<div>' +
+      '<div style="margin-bottom:4px;font-size:11px;color:var(--muted)">当前审批人: <b>' + escHtml(task.reviewer_name || '未设置') + '</b></div>' +
+      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">新审批人</label>' +
+        '<select class="search-inp" id="rv-reviewer" style="' + inp + '"><option value="">加载中...</option></select></div>' +
+      '</div>';
+    openDialog('设置审批人 — ' + escHtml(task.title || ''), html, [
+      {text:'取消',onclick:'closeSharedDialog()'},
+      {text:'确认',cls:'btn-primary',onclick:'submitReviewer(' + taskId + ')'}
+    ], {maxWidth:360});
+    API.get('/users/options').then(function(data) {
+      if (!data) return;
+      var sel = document.getElementById('rv-reviewer');
+      sel.innerHTML = '<option value="">不修改</option>';
+      (data || []).forEach(function(u) {
+        sel.innerHTML += '<option value="' + u.id + '"' + (u.id === task.reviewer_id ? ' selected' : '') + '>' + escHtml(u.name) + '</option>';
+      });
+    });
+  }).catch(function(e) { showToast('加载失败: ' + (e.message || ''), 'error'); });
+}
+
+async function submitReviewer(taskId) {
+  var reviewer = document.getElementById('rv-reviewer').value;
+  if (!reviewer) { showToast('请选择审批人', 'error'); return; }
+  try {
+    await API.put('/tasks/' + taskId, {reviewer_id: parseInt(reviewer)});
+    closeSharedDialog();
+    showToast('审批人已更新', 'success');
+    if (typeof loadTaskData === 'function') loadTaskData();
+  } catch(e) { showToast('更新失败: ' + (e.message || ''), 'error'); }
+}

@@ -20,6 +20,7 @@ FIELD_LABEL = {
     "execution_id": "迭代",
     "stage_name": "阶段名称",
     "assignee_id": "负责人",
+    "reviewer_id": "审批人",
     "parent_id": "父任务",
     "blocked_by_id": "阻塞任务",
     "start_date": "开始日期",

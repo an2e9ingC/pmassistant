@@ -1441,6 +1441,7 @@ function initUserCenter() {
       '<div class="profile-tabs">' +
         '<button class="profile-tab-btn tab-tasks active" id="btn-my-tasks" onclick="_ucSwitchTab(\'tasks\')"><span>我的任务</span><span class="profile-tab-count" id="uc-tasks-count">...</span></button>' +
         '<button class="profile-tab-btn tab-bugs" id="btn-my-bugs" onclick="_ucSwitchTab(\'bugs\')"><span>我的Bug</span><span class="profile-tab-count" id="uc-bugs-count">...</span></button>' +
+        '<button class="profile-tab-btn tab-approvals" id="btn-my-approvals" onclick="_ucSwitchTab(\'approvals\')"><span>我的审批</span><span class="profile-tab-count" id="uc-approvals-count">...</span></button>' +
       '</div>' +
     '</div>';
 
@@ -1464,6 +1465,12 @@ function initUserCenter() {
         '<div id="uc-bugs-section" style="flex:1;flex-direction:column;min-height:0;display:none">' +
           '<div class="task-filter-bar" id="uc-bugs-filter-bar"></div>' +
           '<div class="table-scroll" id="uc-bugs-table-wrap"><table class="proj-table clickable"><thead id="uc-bugs-table-head"></thead><tbody id="uc-bugs-table-tbody"></tbody></table></div>' +
+        '</div>' +
+        // Approvals section (hidden by default)
+        '<div id="uc-approvals-section" style="flex:1;flex-direction:column;min-height:0;display:none">' +
+          '<div class="table-scroll" id="uc-approvals-table-wrap"><table class="proj-table clickable"><thead><tr>' +
+            '<th style="width:8%">项目编号</th><th>阶段</th><th>任务标题</th><th style="width:7%">进度</th><th style="width:8%">责任人</th><th style="width:1%;white-space:nowrap">操作</th>' +
+          '</tr></thead><tbody id="uc-approvals-table-tbody"></tbody></table></div>' +
         '</div>' +
       '</div>' +
     '</div>' +
@@ -1499,6 +1506,8 @@ function initUserCenter() {
   _ucLoadTasks(user);
   // Preload bug count for the tab button, stats hidden (bugs section not active)
   _ucLoadBugs();
+  // Preload approvals count for the tab button
+  _ucLoadApprovals();
 }
 
 var _ucTasks = [];
@@ -1541,13 +1550,17 @@ function _ucSwitchTab(tab) {
   // Update button active states in floating card
   var tasksBtn = document.getElementById('btn-my-tasks');
   var bugsBtn = document.getElementById('btn-my-bugs');
+  var approvalsBtn = document.getElementById('btn-my-approvals');
   if (tasksBtn) tasksBtn.classList.toggle('active', tab === 'tasks');
   if (bugsBtn) bugsBtn.classList.toggle('active', tab === 'bugs');
+  if (approvalsBtn) approvalsBtn.classList.toggle('active', tab === 'approvals');
   // Show/hide content sections
   var tasksSec = document.getElementById('uc-tasks-section');
   var bugsSec = document.getElementById('uc-bugs-section');
+  var approvalsSec = document.getElementById('uc-approvals-section');
   if (tasksSec) tasksSec.style.display = tab === 'tasks' ? 'flex' : 'none';
   if (bugsSec) bugsSec.style.display = tab === 'bugs' ? 'flex' : 'none';
+  if (approvalsSec) approvalsSec.style.display = tab === 'approvals' ? 'flex' : 'none';
   // Update right-side stats to match active tab
   _ucRefreshRightStats();
   // Load data for the active tab
@@ -1556,6 +1569,8 @@ function _ucSwitchTab(tab) {
     if (user) _ucLoadTasks(user);
   } else if (tab === 'bugs') {
     _ucLoadBugs();
+  } else if (tab === 'approvals') {
+    _ucLoadApprovals();
   }
 }
 
@@ -1569,6 +1584,59 @@ function _ucNewBug() {
   if (ctx.product || ctx.project) window._bugPreFill = ctx;
   if (typeof openBugDialog === 'function') openBugDialog();
   else if (typeof loadViewScript === 'function') loadViewScript('/js/bugs.js?v=' + APP_VERSION, function() { openBugDialog(); });
+}
+
+function _ucLoadApprovals() {
+  var user = getCurrentUser();
+  if (!user) return;
+  // Load tasks where current user is reviewer and status is review
+  API.get('/tasks?reviewer_id=' + user.id + '&status=review').then(function(tasks) {
+    _ucApprovals = tasks || [];
+    var countEl = document.getElementById('uc-approvals-count');
+    if (countEl) countEl.textContent = _ucApprovals.length;
+    _renderUcApprovalTable();
+  }).catch(function(e) {
+    console.error('_ucLoadApprovals failed:', e);
+    document.getElementById('uc-approvals-table-tbody').innerHTML = '<tr><td colspan="6"><div class="empty-state">加载失败: ' + (e && e.message ? e.message : '') + '</div></td></tr>';
+  });
+}
+
+function _renderUcApprovalTable() {
+  var tbody = document.getElementById('uc-approvals-table-tbody');
+  if (!tbody) return;
+  if (!_ucApprovals || !_ucApprovals.length) {
+    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">暂无需要审批的任务</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = _ucApprovals.map(function(t) {
+    return '<tr>' +
+      '<td style="font-size:11px;color:var(--muted)">' + escHtml(t.project_code || '') + '</td>' +
+      '<td style="font-size:12px">' + escHtml(t.stage_name || '') + '</td>' +
+      '<td style="font-size:13px;cursor:pointer;color:var(--accent)" onclick="_ucOpenTask(' + t.id + ')">' + escHtml(t.title) + '</td>' +
+      '<td style="text-align:center">' + renderProgressCircle(t.progress || 0, 26, {label:''}) + '</td>' +
+      '<td style="font-size:12px">' + escHtml(t.assignee_name || '') + '</td>' +
+      '<td style="white-space:nowrap">' +
+        '<button class="btn-xs btn-primary" onclick="_ucApproveTask(' + t.id + ',\'' + escJs(t.title) + '\')">批准</button>' +
+        '<button class="btn-xs" style="color:var(--danger);border-color:var(--danger);margin-left:4px" onclick="_ucRejectTask(' + t.id + ',\'' + escJs(t.title) + '\')">驳回</button>' +
+      '</td></tr>';
+  }).join('');
+}
+
+function _ucApproveTask(taskId, taskTitle) {
+  if (!confirm('确认批准任务「' + taskTitle + '」？批准后任务将标记为已完成。')) return;
+  API.post('/tasks/' + taskId + '/approve').then(function() {
+    showToast('任务「' + taskTitle + '」已批准', 'success');
+    _ucLoadApprovals();
+  }).catch(function(e) { showToast('批准失败: ' + (e.message || ''), 'error'); });
+}
+
+function _ucRejectTask(taskId, taskTitle) {
+  var reason = prompt('请输入驳回原因：');
+  if (!reason || !reason.trim()) return;
+  API.post('/tasks/' + taskId + '/reject?reason=' + encodeURIComponent(reason.trim())).then(function() {
+    showToast('任务「' + taskTitle + '」已驳回', 'warn');
+    _ucLoadApprovals();
+  }).catch(function(e) { showToast('驳回失败: ' + (e.message || ''), 'error'); });
 }
 
 function _ucLoadTasks(user) {
@@ -1676,7 +1744,7 @@ function _renderUcTaskTable() {
       '<td style="text-align:center;font-size:12px">' + prodTag + '</td>' +
       '<td style="font-size:12px">' + escHtml(t.stage_name||'') + '</td>' +
       '<td style="text-align:left;font-weight:530">' + escHtml(t.title) + '</td>' +
-      '<td style="text-align:center">' + renderPill(t.status||'todo') + '</td>' +
+      '<td style="text-align:center;cursor:pointer" onclick="event.stopPropagation();openReviewerDialog(' + t.id + ')" title="' + (t.reviewer_name ? '审批人: ' + escHtml(t.reviewer_name) + ' — 点击修改' : '点击设置审批人') + '">' + renderPill(t.status||'todo') + '</td>' +
       '<td style="text-align:center"><span class="prio-tag '+(t.priority||'medium')+'">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[t.priority]||t.priority)+'</span></td>' +
       '<td style="text-align:center">'+renderProgressCircle(pct,36,{label:''})+'</td>' +
       '<td style="text-align:center;font-size:12px;color:'+(overdue?'var(--danger)':'')+'">'+(t.due_date||'-')+'</td>' +

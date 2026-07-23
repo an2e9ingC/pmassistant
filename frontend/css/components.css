@@ -65,7 +65,7 @@
 /* PMA task statuses */
 .pill.todo { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
 .pill.in_progress { background: var(--accent-lt); color: var(--accent); }
-.pill.review { background: var(--warn-lt); color: var(--warn); }
+.pill.review { background: var(--warn-lt); color: var(--warn); border: 1px solid var(--warn); }
 .pill.done { background: var(--success-lt); color: var(--success); }
 
 /* ── Priority tag ── */

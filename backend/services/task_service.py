@@ -18,6 +18,7 @@ def get_tasks(
     execution_id: Optional[int] = None,
     status: Optional[str] = None,
     assignee_id: Optional[int] = None,
+    reviewer_id: Optional[int] = None,
 ) -> List[dict]:
     """List tasks with optional filters."""
     q = db.query(Task)
@@ -29,6 +30,8 @@ def get_tasks(
         q = q.filter(Task.status == status)
     if assignee_id:
         q = q.filter(Task.assignee_id == assignee_id)
+    if reviewer_id:
+        q = q.filter(Task.reviewer_id == reviewer_id)
     q = q.order_by(Task.sort_order, Task.created_at.desc())
     return [_task_dict(t, db) for t in q.all()]
 
@@ -113,6 +116,7 @@ def create_task(db: Session, data: dict, user) -> dict:
         priority=data.get("priority", "medium"),
         type=data.get("type", "development"),
         assignee_id=data.get("assignee_id"),
+        reviewer_id=data.get("reviewer_id") or uid,  # default to reporter
         reporter_id=uid,
         parent_id=data.get("parent_id"),
         blocked_by_id=data.get("blocked_by_id"),
@@ -150,6 +154,7 @@ def create_tasks_batch(db: Session, tasks_data: list, user) -> List[dict]:
             priority=data.get("priority", "medium"),
             type=data.get("type", "development"),
             assignee_id=data.get("assignee_id"),
+            reviewer_id=data.get("reviewer_id") or uid,  # default to reporter
             reporter_id=uid,
             progress=int(data.get("progress", 0) or 0),
             estimate_hours=float(data.get("estimate_hours", 0) or 0),
@@ -218,14 +223,15 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
             for u in db.query(LocalUser).filter(LocalUser.id.in_(ids)).all():
                 user_name_map[u.id] = u.display_name or u.username
     for field in ("title", "description", "status", "priority", "type",
-                   "execution_id", "stage_name", "assignee_id", "parent_id", "blocked_by_id",
+                   "execution_id", "stage_name", "assignee_id", "reviewer_id",
+                   "parent_id", "blocked_by_id",
                    "start_date", "due_date", "sort_order", "progress"):
         if field in data and getattr(t, field) != data[field]:
             old_val = getattr(t, field)
             new_val = data[field]
             if field == "execution_id":
                 setattr(t, field, int(new_val) if new_val else None)
-            elif field in ("assignee_id", "parent_id", "blocked_by_id"):
+            elif field in ("assignee_id", "reviewer_id", "parent_id", "blocked_by_id"):
                 setattr(t, field, int(new_val) if new_val else None)
             elif field in ("start_date", "due_date"):
                 setattr(t, field, _parse_date(new_val) if new_val else None)
@@ -249,14 +255,34 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
     if "status" in data and data["status"] in ("done", "closed") and old_status not in ("done", "closed"):
         t.completed_at = datetime.now(timezone.utc)
 
+    auto_messages = []
+    # Auto review flow: progress >= 100 → review (or auto-done if self-review)
+    new_progress = data.get("progress")
+    if new_progress is not None and new_progress >= 100 and old_status not in ("review", "done"):
+        reviewer_id = None
+        if t.stage_id:
+            from backend.models.project_stage import ProjectStage
+            stage = db.query(ProjectStage).filter(ProjectStage.id == t.stage_id).first()
+            if stage and stage.owner_id:
+                reviewer_id = stage.owner_id
+        if reviewer_id and reviewer_id == t.assignee_id:
+            # Self-review: skip approval, auto-complete
+            t.status = "done"
+            t.completed_at = datetime.now(timezone.utc)
+            auto_messages.append("审批人与责任人相同，任务已自动完成")
+        else:
+            t.status = "review"
+            t.reviewer_id = reviewer_id
+            auto_messages.append("进度已达100%，任务已进入评审中")
+        changes.append(f"状态: {old_status} -> {t.status}")
+
     db.commit()
     db.refresh(t)
 
     # Auto-link to project stage by name, then recalc stage progress
     stage_id = _link_task_to_stage(db, t)
-    auto_messages = []
     if stage_id:
-        auto_messages = _recalc_stage_progress(db, stage_id)
+        auto_messages += _recalc_stage_progress(db, stage_id)
 
     if changes:
         _log_audit(db, t.project_id, uname, "task_update", f"更新任务「{t.title}」: " + "; ".join(changes[:3]))
@@ -264,6 +290,60 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
     result = _task_dict(t, db)
     result["auto_messages"] = auto_messages
     return result
+
+
+def approve_task(db: Session, task_id: int, user=None) -> Optional[dict]:
+    """Approve a task in review status. Only the assigned reviewer can approve."""
+    uid, uname = _get_user_info(user)
+    t = db.query(Task).filter(Task.id == task_id).first()
+    if not t:
+        return None
+    if t.reviewer_id and t.reviewer_id != uid:
+        raise PermissionError("只有审批人可以批准此任务")
+    if t.status != "review":
+        raise ValueError("任务不在评审状态")
+
+    t.status = "done"
+    t.completed_at = datetime.now(timezone.utc)
+    db.commit()
+
+    # Add approval comment
+    comment = TaskComment(
+        task_id=t.id, user_id=uid,
+        content="已批准",
+    )
+    db.add(comment)
+    db.commit()
+
+    _log_audit(db, t.project_id, uname, "task_update", f"审批通过「{t.title}」→ 已完成")
+    return _task_dict(t, db)
+
+
+def reject_task(db: Session, task_id: int, reason: str, user=None) -> Optional[dict]:
+    """Reject a task in review status. Only the assigned reviewer can reject."""
+    uid, uname = _get_user_info(user)
+    t = db.query(Task).filter(Task.id == task_id).first()
+    if not t:
+        return None
+    if t.reviewer_id and t.reviewer_id != uid:
+        raise PermissionError("只有审批人可以驳回此任务")
+    if t.status != "review":
+        raise ValueError("任务不在评审状态")
+
+    t.status = "in_progress"
+    t.progress = 90
+    db.commit()
+
+    # Add rejection comment
+    comment = TaskComment(
+        task_id=t.id, user_id=uid,
+        content=f"驳回：{reason}",
+    )
+    db.add(comment)
+    db.commit()
+
+    _log_audit(db, t.project_id, uname, "task_update", f"驳回「{t.title}」: {reason}")
+    return _task_dict(t, db)
 
 
 def extend_task_estimate(db: Session, task_id: int, additional_hours: float) -> Optional[dict]:
@@ -406,6 +486,8 @@ def _task_dict(t: Task, db=None) -> dict:
         "assignee_id": t.assignee_id,
         "assignee_name": assignee_name,
         "assignee_username": None,
+        "reviewer_id": t.reviewer_id,
+        "reviewer_name": _resolve_reviewer_name(db, t.reviewer_id) if db else "",
         "reporter_id": t.reporter_id,
         "reporter_name": _resolve_reporter_name(db, t.reporter_id) if db else "",
         "parent_id": t.parent_id,
@@ -554,6 +636,17 @@ def _resolve_reporter_name(db: Session, reporter_id) -> str:
         return ""
     from backend.models.local import LocalUser
     u = db.query(LocalUser).filter(LocalUser.id == reporter_id).first()
+    if u:
+        return u.display_name or u.username
+    return ""
+
+
+def _resolve_reviewer_name(db: Session, reviewer_id) -> str:
+    """Resolve reviewer_id to display_name."""
+    if not reviewer_id:
+        return ""
+    from backend.models.local import LocalUser
+    u = db.query(LocalUser).filter(LocalUser.id == reviewer_id).first()
     if u:
         return u.display_name or u.username
     return ""

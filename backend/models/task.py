@@ -21,6 +21,7 @@ class Task(Base):
     priority = Column(String(16), default="medium")  # low / medium / high / critical
     type = Column(String(32), default="development")  # development / bugfix / review / documentation / testing / other
     assignee_id = Column(Integer, ForeignKey("local_users.id"), nullable=True)
+    reviewer_id = Column(Integer, ForeignKey("local_users.id"), nullable=True)  # 审批人，进度100%时从 stage.owner_id 解析
     reporter_id = Column(Integer, ForeignKey("local_users.id"), nullable=False)
     parent_id = Column(Integer, ForeignKey("pma_tasks.id"), nullable=True)
     blocked_by_id = Column(Integer, ForeignKey("pma_tasks.id"), nullable=True)

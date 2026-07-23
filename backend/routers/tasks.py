@@ -46,6 +46,7 @@ class TaskCreate(BaseModel):
     priority: Optional[str] = "medium"
     type: Optional[str] = "development"
     assignee_id: Optional[int] = None
+    reviewer_id: Optional[int] = None
     parent_id: Optional[int] = None
     blocked_by_id: Optional[int] = None
     estimate_hours: Optional[float] = 0.0
@@ -75,6 +76,7 @@ class TaskUpdate(BaseModel):
     stage_name: Optional[str] = None
     progress: Optional[int] = None
     assignee_id: Optional[int] = None
+    reviewer_id: Optional[int] = None
     parent_id: Optional[int] = None
     blocked_by_id: Optional[int] = None
     estimate_hours: Optional[float] = None
@@ -90,6 +92,7 @@ def list_tasks(
     execution_id: Optional[int] = Query(None),
     status: Optional[str] = Query(None),
     assignee_id: Optional[int] = Query(None),
+    reviewer_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
@@ -97,7 +100,7 @@ def list_tasks(
     if project_id:
         p = resolve_project(db, project_id)
         pid = p.id
-    tasks = task_service.get_tasks(db, pid, execution_id, status, assignee_id)
+    tasks = task_service.get_tasks(db, pid, execution_id, status, assignee_id, reviewer_id)
     return {"code": 0, "data": tasks, "message": "ok"}
 
 
@@ -260,6 +263,45 @@ def delete_task(
         raise HTTPException(status_code=404, detail="Task not found")
     log_audit(db, user, "task_delete", f"删除任务 #{task_id}", AUDIT_CAT_TASK, "high")
     return {"code": 0, "data": None, "message": "ok"}
+
+
+@router.post("/{task_id}/approve", response_model=dict)
+def approve_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Approve a task in review status. Only the assigned reviewer can approve."""
+    try:
+        result = task_service.approve_task(db, task_id, user)
+        if not result:
+            raise HTTPException(status_code=404, detail="Task not found")
+        log_audit(db, user, "task_update", f"审批通过任务 #{task_id}", AUDIT_CAT_TASK, "medium")
+        return {"code": 0, "data": result, "message": "审批已通过，任务已完成"}
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{task_id}/reject", response_model=dict)
+def reject_task(
+    task_id: int,
+    reason: str = Query(..., description="驳回原因"),
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Reject a task in review status. Only the assigned reviewer can reject."""
+    try:
+        result = task_service.reject_task(db, task_id, reason, user)
+        if not result:
+            raise HTTPException(status_code=404, detail="Task not found")
+        log_audit(db, user, "task_update", f"驳回任务 #{task_id}: {reason}", AUDIT_CAT_TASK, "medium")
+        return {"code": 0, "data": result, "message": "已驳回，任务状态已改为进行中"}
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/import-from-templates", response_model=dict)

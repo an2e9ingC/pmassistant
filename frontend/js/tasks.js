@@ -445,7 +445,7 @@ function _renderTaskRowCompact(t, stageStart) {
   var startDateStr = effectiveStart || '—';
   var startTitle = effectiveStart ? escHtml(effectiveStart) : (stageStart ? '默认取阶段开始时间' : '未设置');
   return '<td style="text-align:left;cursor:pointer" onclick="openTaskViewDialog(' + t.id + ')" title="查看任务详情">' + escHtml(t.title) + '</td>' +
-    '<td style="text-align:center">' + renderPill(t.status || 'todo') + '</td>' +
+    '<td style="text-align:center;cursor:pointer" onclick="event.stopPropagation();openReviewerDialog(' + t.id + ')" title="' + (t.status === 'review' && t.reviewer_name ? '审批人: ' + escHtml(t.reviewer_name) + ' — 点击修改' : '点击修改审批人') + '">' + renderPill(t.status || 'todo') + '</td>' +
     '<td style="text-align:center">' + (typeof renderPriority === 'function' ? renderPriority(t.priority) : escHtml(t.priority || 'medium')) + '</td>' +
     '<td style="font-size:12px;cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();openAssignDialog(' + t.id + ')" title="指派任务">' + escHtml(assigneeName) + '</td>' +
     '<td style="text-align:center">' + progressHtml + '</td>' +
@@ -522,7 +522,7 @@ function _renderTaskRow(t, stageMap) {
     '<td style="text-align:left;font-size:12px">' + escHtml(t.project_name || '-') + '</td>' +
     '<td style="text-align:left"><a href="javascript:void(0)" onclick="openTaskViewDialog(' + t.id + ')" style="color:var(--accent)">' + escHtml(t.title) + '</a></td>' +
     '<td>' + (stageName ? '<span style="font-size:11px;color:var(--muted)">' + escHtml(stageName) + '</span>' : '-') + '</td>' +
-    '<td>' + renderPill(t.status || 'todo') + '</td>' +
+    '<td style="cursor:pointer" onclick="event.stopPropagation();openReviewerDialog(' + t.id + ')" title="' + (t.reviewer_name ? '审批人: ' + escHtml(t.reviewer_name) + ' — 点击修改' : '点击设置审批人') + '">' + renderPill(t.status || 'todo') + '</td>' +
     '<td>' + _renderPriority(t.priority) + '</td>' +
     '<td>' + renderProgressCircle(progressPct, 26, {label:''}) + '</td>' +
     '<td style="color:' + (overdue ? 'var(--danger)' : '') + '">' + (t.due_date || '-') + '</td>' +
@@ -549,6 +549,7 @@ function _renderPriority(p) {
 var _tfProjectId = null; // project numeric ID selected in the task form
 var _tfProjectCode = null; // project code (e.g. PE0450) for API calls to /projects/{code}/...
 var _tfAssigneeId = null; // assignee ID selected in the task form
+var _tfReviewerId = null; // reviewer ID selected in the task form
 var _tfOriginalStatus = null; // original status when editing
 
 function _tfStageName() {
@@ -625,7 +626,8 @@ function _showTaskView(t) {
     '<div style="' + _card + '">' +
       '<div style="' + _cardHd + '">状态与进度</div>' +
       '<div style="' + _grid2 + '">' +
-        '<div><span style="' + _lbl + '">状态</span><div style="margin-top:3px">' + renderPill(t.status || 'todo') + '</div></div>' +
+        '<div><span style="' + _lbl + '">状态</span><div style="margin-top:3px">' + renderPill(t.status || 'todo') +
+          (t.status === 'review' && t.reviewer_name ? '<div style="font-size:10px;color:var(--muted);margin-top:2px">审批人: ' + escHtml(t.reviewer_name) + '</div>' : '') + '</div></div>' +
         '<div><span style="' + _lbl + '">优先级</span><div style="margin-top:3px">' + _renderPriority(t.priority || 'medium') + '</div></div>' +
         '<div><span style="' + _lbl + '">进度</span><div style="margin-top:2px">' + renderProgressCircle(t.progress || 0, 30, {label:''}) + '</div></div>' +
         (function() {
@@ -697,11 +699,14 @@ function _loadViewComments(taskId) {
     var el = document.getElementById('tv-comments');
     if (!el) return;
     if (!comments || !comments.length) { el.innerHTML = '<div style="color:var(--muted);font-size:12px">暂无评论</div>'; return; }
-    el.innerHTML = comments.map(function(c) {
-      return '<div style="padding:4px 0;border-bottom:1px solid var(--border)">' +
-        '<span style="font-size:10px;color:var(--muted)">' + escHtml(c.display_name || c.username) + ' · ' + (fmtISODateTime(c.created_at) || '') + '</span>' +
-        '<div style="font-size:13px">' + escHtml(c.content) + '</div></div>';
-    }).join('');
+    el.innerHTML = '<table class="stage-table" style="width:100%;font-size:12px"><thead><tr>' +
+      '<th style="width:130px">时间</th><th style="width:80px">用户</th><th>内容</th></tr></thead><tbody>' +
+      comments.map(function(c) {
+        return '<tr>' +
+          '<td style="font-size:10px;color:var(--muted);white-space:nowrap">' + (fmtISODateTime(c.created_at) || '') + '</td>' +
+          '<td style="font-size:12px">' + escHtml(c.display_name || c.username) + '</td>' +
+          '<td style="font-size:13px">' + escHtml(c.content) + '</td></tr>';
+      }).join('') + '</tbody></table>';
   }).catch(function() {});
 }
 
@@ -719,6 +724,7 @@ function openTaskDialog(taskId) {
   var title = isEdit ? '编辑任务' : '新建任务';
   _tfProjectId = _taskProjectId || window._taskProjectId; _tfProjectCode = _taskProjectCode || window._taskProjectCode || _taskProjectId; // default to page context
   _tfAssigneeId = null;
+  _tfReviewerId = null;
   _tfOriginalStatus = null;
 
   if (isEdit) {
@@ -769,6 +775,11 @@ function _showTaskForm(title, task) {
           selectedIdFn: function() { return _tfAssigneeId; },
           onSelect: function(u) { _tfAssigneeId = u.id; }
         }) + '<div id="tf-assignee-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择负责人</div></div></div>' +
+        '<div><label style="' + _lbl + '">审批人</label><div style="margin-top:2px">' + createUserCombo({
+          comboId: 'tf-reviewer-combo', inputId: 'tf-reviewer-input', dropdownId: 'tf-reviewer-dropdown',
+          selectedIdFn: function() { return _tfReviewerId; },
+          onSelect: function(u) { _tfReviewerId = u.id; }
+        }) + '</div></div>' +
       '</div>' +
     '</div>' +
     // ── 状态与进度 ──
@@ -846,9 +857,10 @@ function _showTaskForm(title, task) {
     if (t.description) { _loadExistingNoteImages(t.description, 'tf-desc-img-preview'); }
   }, 150);
 
-  // Pre-fill project, assignee, and stage from task data (edit mode)
+  // Pre-fill project, assignee, reviewer, and stage from task data (edit mode)
   _tfProjectId = t.project_id || _taskProjectId;
   _tfAssigneeId = t.assignee_id || null;
+  _tfReviewerId = t.reviewer_id || null;
   if (isEdit && t.project_id) {
     // Set project name from task data
     var projName = (t.project_code ? '[' + t.project_code + '] ' : '') + (t.project_name || '');
@@ -859,6 +871,11 @@ function _showTaskForm(title, task) {
       if (_tfAssigneeId && t.assignee_name) {
         var ai = document.getElementById('tf-assignee-input');
         if (ai) ai.value = t.assignee_name;
+      }
+      // Pre-fill reviewer name
+      if (_tfReviewerId && t.reviewer_name) {
+        var ri = document.getElementById('tf-reviewer-input');
+        if (ri) ri.value = t.reviewer_name;
       }
     }, 50);
   }
@@ -940,6 +957,7 @@ async function submitTask(taskId) {
     status: document.getElementById('tf-status').value,
     priority: document.getElementById('tf-priority').value,
     assignee_id: _tfAssigneeId,
+    reviewer_id: _tfReviewerId,
     progress: parseInt(document.getElementById('tf-progress').value) || 0,
     estimate_hours: parseFloat(document.getElementById('tf-estimate').value) || 0,
     start_date: document.getElementById('tf-start-date').value || null,
@@ -977,21 +995,20 @@ async function submitTask(taskId) {
   data.output_items = outputs;
 
   // Bidirectional sync: progress ↔ status
-  if (data.progress >= 100 && data.status !== 'done') {
-    data.status = 'done';
-    document.getElementById('tf-status').value = 'done';
-    showToast('进度100%，状态已自动设为已完成', 'success');
+  if (data.progress >= 100 && data.status !== 'review' && data.status !== 'done') {
+    data.status = 'review';
+    document.getElementById('tf-status').value = 'review';
   }
   if (data.status === 'done' && data.progress < 100) {
-    data.status = 'in_progress';
-    document.getElementById('tf-status').value = 'in_progress';
-    showToast('进度 <100%，状态已自动设为进行中', 'success');
+    data.progress = 100;
+    document.getElementById('tf-progress').value = 100;
+    showToast('状态设为已完成，进度已自动设为100%', 'warn');
   }
   // When progress reaches 100%, confirm
-  if (data.progress >= 100) {
+  if (data.progress >= 100 && data.status === 'review') {
     _pendingTaskConfirm = { isEdit: !!taskId, data: data, taskId: taskId };
-    openDialog('确认任务完成',
-      '<div style="font-size:13px;margin-bottom:8px">进度 <b>100%</b>，任务状态将设置为<b>已完成</b>。</div>' +
+    openDialog('确认提交评审',
+      '<div style="font-size:13px;margin-bottom:8px">进度 <b>100%</b>，任务将进入<b>评审中</b>状态，等待审批人确认。</div>' +
       '<div style="font-size:11px;color:var(--muted)">任务: ' + escHtml(data.title || '') + '</div>',
       [
         {text: '取消', onclick: "var d=document.querySelector('.shared-dialog-overlay');if(d)d.remove();"},
