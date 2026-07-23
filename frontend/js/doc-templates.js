@@ -702,6 +702,8 @@ function saveTemplate(id) {
       existing.doc_path = path;
       existing.base_path = basePath;
       existing.file_pattern = filePattern;
+      existing.doc_type = docType;
+      existing.is_optional = !!isOptional;
     }
     // Update the pending add op too
     for (var pi = 0; pi < _pendingOps.length; pi++) {
@@ -713,6 +715,8 @@ function saveTemplate(id) {
         _pendingOps[pi].doc_path = path;
         _pendingOps[pi].base_path = basePath;
         _pendingOps[pi].file_pattern = filePattern;
+        _pendingOps[pi].doc_type = docType;
+        _pendingOps[pi].is_optional = isOptional;
         break;
       }
     }
@@ -762,13 +766,19 @@ function copyTemplate(id) {
     responsible_role: tpl.responsible_role || '',
     description: tpl.description || '',
     doc_path: tpl.doc_path || '',
-    doc_type: tpl.doc_type || ''
+    base_path: tpl.base_path || '',
+    file_pattern: tpl.file_pattern || '',
+    doc_type: tpl.doc_type || '',
+    is_optional: tpl.is_optional || false,
+    is_unnecessary: tpl.is_unnecessary || false
   };
   arr.push(newDoc);
   _pendingOps.push({ type: 'add', tempId: tempId, stage_type: _selectedStage,
     doc_name: newDoc.doc_name, sort_order: newDoc.sort_order,
     responsible_role: newDoc.responsible_role,
-    description: newDoc.description, doc_path: newDoc.doc_path, doc_type: newDoc.doc_type });
+    description: newDoc.description, doc_path: newDoc.doc_path,
+    base_path: newDoc.base_path, file_pattern: newDoc.file_pattern,
+    doc_type: newDoc.doc_type, is_optional: newDoc.is_optional, is_unnecessary: newDoc.is_unnecessary });
   showToast('已复制，请修改后保存', 'info');
   renderTemplatesPage();
 }

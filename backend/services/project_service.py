@@ -357,17 +357,27 @@ def get_project_gantt(db: Session, project_id: int) -> dict:
                 s.progress = pct
                 db.commit()
             who = None
-            # Resolve first task assignee for who column
+            who_tooltip = None
+            unique_names = []
+            seen_names = set()
             for t in tasks:
                 if t.assignee_id:
                     u = db.query(LocalUser).filter(LocalUser.id == t.assignee_id).first()
                     if u:
-                        who = (u.display_name or u.username).split("（")[0].split("、")[0]
-                        break
+                        name = (u.display_name or u.username).split("（")[0]
+                        if name not in seen_names:
+                            seen_names.add(name)
+                            unique_names.append(name)
+            if len(unique_names) == 1:
+                who = unique_names[0]
+            elif len(unique_names) > 1:
+                who = "团队"
+                who_tooltip = "、".join(unique_names)
             gantt_stages.append({
                 "id": s.id, "name": s.name,
                 "standard_stage": s.name,
                 "who": who,
+                "who_tooltip": who_tooltip,
                 "start": str(s.start_date) if s.start_date else None,
                 "end": str(s.end_date) if s.end_date else None,
                 "status": s.status,

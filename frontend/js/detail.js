@@ -708,7 +708,7 @@ function buildGantt(data) {
         nameEl +
         '<div class="gs-risk">' + riskHtml + '</div>' +
         '<div class="gs-prog">' + renderProgressRing(prog) + '</div>' +
-        '<div class="gs-who">' + escHtml((s.who || '—').split('（')[0].split('、')[0]) + '</div>' +
+        '<div class="gs-who"' + (s.who_tooltip ? ' title="' + escHtml(s.who_tooltip) + '"' : '') + '>' + escHtml(s.who || '—') + '</div>' +
       '</div>' +
       '<div class="gantt-bar-cell" style="min-width:' + displayWidth + 'px;width:' + displayWidth + 'px">' +
         '<div class="gantt-grid">' + gCols + '</div>' +
