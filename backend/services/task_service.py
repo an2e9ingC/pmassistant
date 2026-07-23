@@ -259,7 +259,7 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
         auto_messages = _recalc_stage_progress(db, stage_id)
 
     if changes:
-        _log_audit(db, t.project_id, uname, "task_update", f"更新任务 #{t.id}: " + "; ".join(changes[:3]))
+        _log_audit(db, t.project_id, uname, "task_update", f"更新任务「{t.title}」: " + "; ".join(changes[:3]))
 
     result = _task_dict(t, db)
     result["auto_messages"] = auto_messages
@@ -449,6 +449,13 @@ def _log_audit(db: Session, project_id: int, username: Optional[str], action: st
     try:
         from backend.audit_categories import AUDIT_CAT_TASK
         from backend.models.local import AuditLog, ProjectActivity
+        _TASK_ACTION_CN = {
+            "task_create": "任务创建",
+            "task_create_batch": "批量创建任务",
+            "task_import": "导入任务",
+            "task_update": "任务更新",
+            "task_delete": "任务删除",
+        }
         log = AuditLog(
             username=username,
             action=action,
@@ -462,7 +469,7 @@ def _log_audit(db: Session, project_id: int, username: Optional[str], action: st
             act = ProjectActivity(
                 project_id=project_id,
                 username=username,
-                action="PMA任务: " + action,
+                action=_TASK_ACTION_CN.get(action, action),
                 detail=detail,
             )
             db.add(act)
