@@ -57,11 +57,23 @@ def list_user_options(db: Session = Depends(get_db), _=Depends(get_current_user)
 
 
 @user_router.get("/customers/names", response_model=dict)
-def list_customer_names(db: Session = Depends(get_db), _=Depends(get_current_user)):
-    """Return cached customer names for delivery form dropdown."""
+def list_customer_names(
+    search: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    """Return cached customer names for project form dropdown. Supports Chinese search."""
     from backend.models.zentao import PmaCustomer
-    customers = db.query(PmaCustomer.name).order_by(PmaCustomer.name).all()
-    return {"code": 0, "data": [c[0] for c in customers if c[0]], "message": "ok"}
+    q = db.query(PmaCustomer).order_by(PmaCustomer.name)
+    if search:
+        q = q.filter(
+            PmaCustomer.name.ilike(f"%{search}%") |
+            PmaCustomer.full_name.ilike(f"%{search}%")
+        )
+    customers = q.all()
+    return {"code": 0, "data": [
+        {"name": c.name, "full_name": c.full_name or ""} for c in customers if c.name
+    ], "message": "ok"}
 
 
 @user_router.get("/pm-names", response_model=dict)

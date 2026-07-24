@@ -1760,6 +1760,10 @@ function showProjectFormDialog(isEdit) {
 
     var tagNames = allTags.filter(function(t) { return t.category === 'project' || !t.category || t.category === ''; }).map(function(t) { return t.name; });
 
+    var user = getCurrentUser();
+    var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+    var hasCustomerPerm = perms.indexOf('customer_link') >= 0 || perms.indexOf('admin') >= 0;
+
     function dl(id, options, selected, placeholder) {
       var sel = selected || '';
       var ph = placeholder || '输入搜索或选择...';
@@ -1811,11 +1815,14 @@ function showProjectFormDialog(isEdit) {
           '</select>' +
           '<div id="proj-form-type-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择项目类型</div></div>' +
         '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">客户名称 <span style="color:var(--danger)">*</span></label>' +
-        '<div class="proj-combo" id="proj-form-customer-combo">' +
+        '<div style="display:flex;gap:4px;align-items:flex-end"><div class="proj-combo" style="flex:1" id="proj-form-customer-combo">' +
         '<input class="proj-combo-input" id="proj-form-customer" value="' + escHtml(p ? p.customer_name || '' : '') + '" autocomplete="off" placeholder="搜索选择已有客户..." onfocus="projFormCustomerComboOpen()" oninput="projFormCustomerComboFilter(this.value)" onclick="projFormCustomerComboOpen()">' +
         '<svg class="proj-combo-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2,5 7,10 12,5"/></svg>' +
         '<div class="proj-combo-dropdown" id="proj-form-customer-dd"></div>' +
+        '<svg class="proj-combo-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2,5 7,10 12,5"/></svg>' +
+        '<div class="proj-combo-dropdown" id="proj-form-customer-dd"></div>' +
         '</div>' +
+        (hasCustomerPerm ? '<button type="button" onclick="projFormCreateCustomer()" title="新建客户" style="flex-shrink:0;margin-bottom:1px;width:28px;height:28px;border:1px solid var(--accent);border-radius:6px;background:var(--accent-lt);color:var(--accent);font-size:16px;cursor:pointer">+</button>' : '') + '</div>' +
         '<div id="proj-form-customer-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择客户</div></div>' +
       '</div>' +
       // Row 4: 关联产品（搜索下拉多选）
@@ -1905,9 +1912,14 @@ function showProjectFormDialog(isEdit) {
           comboId: 'proj-form-customer-combo',
           inputId: 'proj-form-customer',
           dropdownId: 'proj-form-customer-dd',
-          dataSource: function() {
-            return API.get('/users/customers/names').then(function(names) {
-              return (names || []).map(function(n) { return {id: n, name: n}; });
+          dataSource: function(query) {
+            var url = '/users/customers/names';
+            if (query) url += '?search=' + encodeURIComponent(query);
+            return API.get(url).then(function(names) {
+              return (names || []).map(function(n) {
+                var label = n.full_name ? n.name + ' (' + n.full_name + ')' : n.name;
+                return {id: n.name, name: n.name, full_name: n.full_name, label: label};
+              });
             }).catch(function() { return []; });
           },
           onSelect: function(p) { document.getElementById('proj-form-customer').value = p.name || p; }
@@ -1983,6 +1995,60 @@ function showProjectFormDialog(isEdit) {
   });
 }
 
+
+function projFormCreateCustomer() {
+  // Save current dialog content so we can restore after customer creation
+  var dialogEl = document.querySelector('.shared-dialog-overlay .note-dialog');
+  window._savedProjFormContent = dialogEl ? dialogEl.innerHTML : null;
+  var inp = 'width:100%;box-sizing:border-box;margin-top:1px';
+  openDialog('新建客户',
+    '<div>' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">客户名称 <span style="color:var(--danger)">*</span></label>' +
+      '<input class="search-inp" id="new-cust-name" placeholder="如 CD-AKT（城市拼音-公司名首字母）" style="' + inp + '">' +
+    '</div>' +
+    '<div style="margin-top:8px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">客户全称</label>' +
+      '<input class="search-inp" id="new-cust-fullname" placeholder="如 领目科技有限公司" style="' + inp + '">' +
+    '</div>',
+    [
+      {text: '取消', onclick: 'restoreProjFormDialog()'},
+      {text: '创建', cls: 'btn-primary', onclick: 'submitProjFormCreateCustomer()'}
+    ],
+    {maxWidth: 400}
+  );
+}
+
+function restoreProjFormDialog() {
+  if (window._savedProjFormContent) {
+    var overlay = document.querySelector('.shared-dialog-overlay');
+    if (overlay) overlay.innerHTML = '<div class="note-dialog" style="max-width:560px">' + window._savedProjFormContent + '</div>';
+    window._savedProjFormContent = null;
+  } else {
+    closeSharedDialog();
+  }
+}
+
+async function submitProjFormCreateCustomer() {
+  var name = document.getElementById('new-cust-name').value.trim();
+  var fullname = document.getElementById('new-cust-fullname').value.trim();
+  if (!name) { showToast('请输入客户名称', 'error'); return; }
+  try {
+    await API.post('/customers', {name: name, full_name: fullname});
+    showToast('客户已创建', 'success');
+    // Restore project form dialog with customer name filled in
+    if (window._savedProjFormContent) {
+      var overlay = document.querySelector('.shared-dialog-overlay');
+      if (overlay) overlay.innerHTML = '<div class="note-dialog" style="max-width:560px">' + window._savedProjFormContent + '</div>';
+      window._savedProjFormContent = null;
+      setTimeout(function() {
+        var input = document.getElementById('proj-form-customer');
+        if (input) input.value = name;
+      }, 100);
+    } else {
+      closeSharedDialog();
+    }
+  } catch(e) { showToast('创建失败: ' + (e.message || ''), 'error'); }
+}
 
 function _unlockProjCode() {
   var codeEl = document.getElementById('proj-form-code');
@@ -2634,21 +2700,25 @@ function loadMaintProjectStages() {
   var container = document.getElementById('maint-proj-stages');
   if (!_comboCurCode) { if (container) container.innerHTML = '<div class="empty-state" style="padding:12px">请选择项目</div>'; return; }
 
-  // Update section header with add button
+  var user = getCurrentUser();
+  var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+  var canEditStage = perms.indexOf('stage_mapping') >= 0 || perms.indexOf('admin') >= 0;
+
+  // Update section header with add button (only if has stage_mapping permission)
   var hd = document.getElementById('maint-hd-stages');
-  if (hd) hd.outerHTML = sectionHeader('阶段信息', null, '添加阶段', 'openAddStageDialog()', 'maint-hd-stages');
+  if (hd) hd.outerHTML = sectionHeader('阶段信息', null, canEditStage ? '添加阶段' : null, canEditStage ? 'openAddStageDialog()' : null, 'maint-hd-stages');
 
   container.innerHTML = '<div class="loading-spinner">加载中...</div>';
   API.get('/projects/' + _comboCurCode + '/stages').then(function(result) {
     var stages = (result && result.stages) ? result.stages : [];
     _maintAllStages = stages;
-    _renderMaintStages(stages, container);
+    _renderMaintStages(stages, container, canEditStage);
   }).catch(function(e) {
     container.innerHTML = '<div class="empty-state" style="padding:12px;color:var(--danger)">加载失败: ' + (e.message || '') + '</div>';
   });
 }
 
-function _renderMaintStages(stages, container) {
+function _renderMaintStages(stages, container, canEditStage) {
   if (!stages.length) {
     container.innerHTML = '<div class="empty-state" style="padding:12px">暂无阶段数据 — 请在任务详情页点击"初始化阶段"按钮</div>';
     return;
@@ -2689,7 +2759,7 @@ function _renderMaintStages(stages, container) {
       '<td style="text-align:center;cursor:pointer" onclick="gotoStageTasksFromMaint(\'' + escHtml(s.name).replace(/'/g, "\\'") + '\')" title="跳转到任务详情">' + (typeof renderProgressRing === 'function' ? '<div style="display:inline-block">' + renderProgressRing(progress) + '</div>' : progress + '%') + '</td>' +
       '<td style="font-size:12px">' + escHtml(completedDate) + '</td>' +
       '<td style="white-space:nowrap">' +
-        (s.id ? iconEdit('openStageDialog(' + s.id + ')', '编辑阶段') + iconDelete('deleteMaintStage(' + s.id + ',\'' + escHtml(s.name).replace(/'/g, "\\'") + '\')', '删除阶段') : '') +
+        (s.id && canEditStage ? iconEdit('openStageDialog(' + s.id + ')', '编辑阶段') + iconDelete('deleteMaintStage(' + s.id + ',\'' + escHtml(s.name).replace(/'/g, "\\'") + '\')', '删除阶段') : '') +
       '</td>' +
     '</tr>';
   });

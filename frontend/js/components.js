@@ -1013,6 +1013,21 @@ function initSearchCombo(opts) {
     });
   };
 
+  // Enter to select first result (same pattern as createProjectCombo)
+  setTimeout(function() {
+    var input = document.getElementById(inputId);
+    if (input) {
+      input.onkeydown = function(e) {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        var dd = document.getElementById(dropdownId);
+        if (!dd || dd.children.length === 0) return;
+        var first = dd.querySelector('.combo-opt');
+        if (first) first.click();
+      };
+    }
+  }, 200);
+
   window[filterFn] = function(q) {
     _loadAndCache().then(function(items) {
       _renderSearchDropdown(dropdownId, items, selectedIdFn(), q, selectFn);
@@ -1039,14 +1054,16 @@ function _renderSearchDropdown(dropdownId, items, selectedId, q, selectFnName) {
   if (!dd) return;
   var v = (q || '').trim().toLowerCase();
   var list = v ? items.filter(function(p) {
-    return (p.code || '').toLowerCase().indexOf(v) >= 0 || (p.name || '').toLowerCase().indexOf(v) >= 0;
+    return (p.code || '').toLowerCase().indexOf(v) >= 0 ||
+      (p.name || '').toLowerCase().indexOf(v) >= 0 ||
+      (p.full_name || '').toLowerCase().indexOf(v) >= 0;
   }) : items;
   if (!list.length) { dd.innerHTML = '<div class="combo-no-match">未找到匹配项目</div>'; return; }
   dd.innerHTML = list.map(function(p) {
     var cls = (p.id == selectedId || p.code == selectedId) ? 'combo-opt selected' : 'combo-opt';
     return '<div class="' + cls + '" onmousedown="event.preventDefault()" onclick="' + selectFnName + '(\'' + p.id + '\')">' +
       '<div class="combo-opt-name">' + escHtml(p.code || p.name) + '</div>' +
-      (p.code ? '<div class="combo-opt-meta">' + escHtml(p.name) + '</div>' : '') +
+      (p.code ? '<div class="combo-opt-meta">' + escHtml(p.name) + '</div>' : (p.full_name ? '<div class="combo-opt-meta">' + escHtml(p.full_name) + '</div>' : '')) +
     '</div>';
   }).join('');
 }
@@ -1063,7 +1080,7 @@ function _renderComboDropdown(dropdownId, selectedId, q, selectFnName) {
     var cls = (p.id == selectedId || p.code == selectedId) ? 'combo-opt selected' : 'combo-opt';
     return '<div class="' + cls + '" onmousedown="event.preventDefault()" onclick="' + selectFnName + '(\'' + p.id + '\')">' +
       '<div class="combo-opt-name">' + escHtml(p.code || p.name) + '</div>' +
-      (p.code ? '<div class="combo-opt-meta">' + escHtml(p.name) + '</div>' : '') +
+      (p.code ? '<div class="combo-opt-meta">' + escHtml(p.name) + '</div>' : (p.full_name ? '<div class="combo-opt-meta">' + escHtml(p.full_name) + '</div>' : '')) +
     '</div>';
   }).join('');
 }
