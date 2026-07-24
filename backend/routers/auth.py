@@ -393,6 +393,23 @@ async def gitlab_oauth_callback(code: str, state: str, request: Request, db: Ses
                                 (request.client.host if request.client else ""))
     local_user.last_login_ua = _parse_ua(request.headers.get("User-Agent", ""))
 
+    # Resolve display name from WeChat Work for linked GitLab users
+    # (mirrors login() behavior: GitLab name might be pinyin, WeChat Work has the correct Chinese name)
+    if local_user.wecom_userid:
+        resolved = _resolve_wecom_display_name(db, local_user.wecom_userid)
+        if resolved and local_user.display_name != resolved:
+            local_user.display_name = resolved
+    elif local_user.auth_source == "gitlab":
+        # Auto-link new GitLab users to WeChat Work by case-insensitive username match
+        # (handles the case where WeCom auto-match in wecom.py hasn't run yet)
+        from backend.models.wecom import WeComUser
+        wu = db.query(WeComUser).filter(
+            WeComUser.userid.ilike(local_user.username)
+        ).first()
+        if wu:
+            local_user.wecom_userid = wu.userid
+            local_user.display_name = wu.name
+
     db.commit()
 
     # Generate PMA JWT
