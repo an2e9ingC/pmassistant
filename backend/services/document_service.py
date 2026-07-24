@@ -332,6 +332,14 @@ def get_stage_types(db: Session) -> list[str]:
 
 def create_template(db: Session, data: dict) -> dict:
     """Create a new document template."""
+    # Check duplicate name within same project_type + stage_type
+    dup = db.query(DocumentTemplate).filter(
+        DocumentTemplate.project_type == data.get("project_type", "RD"),
+        DocumentTemplate.stage_type == data["stage_type"],
+        DocumentTemplate.doc_name == data["doc_name"],
+    ).first()
+    if dup:
+        raise ValueError(f"文档模板「{data['doc_name']}」在该阶段下已存在")
     tpl = DocumentTemplate(
         project_type=data.get("project_type", "RD"),
         stage_type=data["stage_type"],
@@ -357,6 +365,17 @@ def update_template(db: Session, template_id: int, data: dict) -> Optional[dict]
     tpl = db.query(DocumentTemplate).filter(DocumentTemplate.id == template_id).first()
     if not tpl:
         return None
+    # Check duplicate name (exclude self)
+    new_name = data.get("doc_name", tpl.doc_name)
+    if new_name != tpl.doc_name or "stage_type" in data:
+        dup = db.query(DocumentTemplate).filter(
+            DocumentTemplate.project_type == tpl.project_type,
+            DocumentTemplate.stage_type == data.get("stage_type", tpl.stage_type),
+            DocumentTemplate.doc_name == new_name,
+            DocumentTemplate.id != template_id,
+        ).first()
+        if dup:
+            raise ValueError(f"文档模板「{new_name}」在该阶段下已存在")
     for field in ("stage_type", "doc_name", "sort_order", "description", "responsible_role", "doc_path", "base_path", "file_pattern", "doc_type", "is_unnecessary", "is_optional"):
         if field in data:
             setattr(tpl, field, data[field])
@@ -756,6 +775,13 @@ def get_task_templates_grouped(db: Session, project_type: str = "RD") -> dict:
 
 def create_task_template(db: Session, data: dict) -> dict:
     """Create a new task template."""
+    dup = db.query(TaskTemplate).filter(
+        TaskTemplate.project_type == data.get("project_type", "RD"),
+        TaskTemplate.stage_type == data["stage_type"],
+        TaskTemplate.task_name == data["task_name"],
+    ).first()
+    if dup:
+        raise ValueError(f"任务模板「{data['task_name']}」在该阶段下已存在")
     tpl = TaskTemplate(
         project_type=data.get("project_type", "RD"),
         stage_type=data["stage_type"],
@@ -777,6 +803,16 @@ def update_task_template(db: Session, template_id: int, data: dict) -> Optional[
     tpl = db.query(TaskTemplate).filter(TaskTemplate.id == template_id).first()
     if not tpl:
         return None
+    new_name = data.get("task_name", tpl.task_name)
+    if new_name != tpl.task_name or "stage_type" in data:
+        dup = db.query(TaskTemplate).filter(
+            TaskTemplate.project_type == tpl.project_type,
+            TaskTemplate.stage_type == data.get("stage_type", tpl.stage_type),
+            TaskTemplate.task_name == new_name,
+            TaskTemplate.id != template_id,
+        ).first()
+        if dup:
+            raise ValueError(f"任务模板「{new_name}」在该阶段下已存在")
     for field in ("stage_type", "task_name", "sort_order", "description", "responsible_role", "is_unnecessary", "is_optional"):
         if field in data:
             setattr(tpl, field, data[field])

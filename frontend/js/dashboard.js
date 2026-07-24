@@ -192,6 +192,25 @@ async function loadKpiCards() {
     }).join(' &nbsp;·&nbsp; ');
     document.getElementById('kpi-completed-count').textContent = data.completed_count;
     document.getElementById('kpi-high-risk-count').textContent = data.high_risk_count;
+    // Add config gear for admin users on high-risk card
+    var user = getCurrentUser();
+    var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+    var isAdmin = user && (user.role === 'admin' || perms.indexOf('admin') >= 0 || perms.indexOf('project_edit') >= 0);
+    var hrCard = document.querySelector('[data-filter="high_risk"]');
+    if (hrCard && isAdmin) {
+      hrCard.title = '统计条件：存在红色告警的项目（单击筛选，双击配置规则）';
+      hrCard.ondblclick = function(e) { e.stopPropagation(); showRiskConfigDialog(); };
+      var gear = document.getElementById('kpi-risk-gear');
+      if (!gear) {
+        var gearEl = document.createElement('span');
+      gearEl.id = 'kpi-risk-gear';
+      gearEl.title = '配置高风险规则';
+      gearEl.style.cssText = 'position:absolute;top:4px;right:6px;cursor:pointer;font-size:14px;opacity:0.6';
+      gearEl.innerHTML = '&#9881;';
+      gearEl.onclick = function(e) { e.stopPropagation(); showRiskConfigDialog(); };
+      hrCard.appendChild(gearEl);
+      }
+    }
     document.getElementById('kpi-incomplete-docs-count').textContent = data.incomplete_docs_count;
 
     var badge = document.getElementById('alert-badge');
@@ -199,6 +218,10 @@ async function loadKpiCards() {
       badge.textContent = data.pending_alerts;
       badge.style.display = data.pending_alerts > 0 ? '' : 'none';
     }
+
+    // Load risk config for admin users
+    loadRiskConfig();
+
     if (_srcStates && _srcStates.zentao === 'pending') {
       _srcStates.zentao = 'ok';
       renderSourceTags();
@@ -225,6 +248,53 @@ async function loadKpiCards() {
   } catch(e) {
     console.error('Failed to load KPI:', e);
   }
+}
+
+
+// ── Risk Config (global scope) ──
+
+async function loadRiskConfig() {
+  try {
+    var config = await API.get('/dashboard/risk-config');
+    if (config) _riskConfig = config;
+  } catch(e) { /* non-admin: silent */ }
+}
+
+function showRiskConfigDialog() {
+  var c = _riskConfig || {};
+  var row = 'padding:8px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between';
+  var lbl = 'font-size:13px;color:var(--fg)';
+  var inp = 'width:72px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;text-align:center;font-size:13px;background:var(--bg);color:var(--fg)';
+  var chk = 'width:18px;height:18px;cursor:pointer;accent-color:var(--accent)';
+  openDialog('高风险项目判定标准',
+    '<div>' +
+      '<div style="' + row + '"><span style="' + lbl + '">阶段逾期容忍天数</span><input id="rc-overdue-days" type="number" min="0" value="' + (c.stage_overdue_days||0) + '" style="' + inp + '"></div>' +
+      '<div style="' + row + '"><span style="' + lbl + '">最少逾期阶段数</span><input id="rc-min-overdue" type="number" min="1" value="' + (c.min_overdue_stages||1) + '" style="' + inp + '"></div>' +
+      '<div style="' + row + '"><span style="' + lbl + '">文档未提交算高风险</span><input type="checkbox" id="rc-pending-docs"' + (c.include_pending_docs?' checked':'') + ' style="' + chk + '"></div>' +
+      '<div style="' + row + '"><span style="' + lbl + '">审核缺同意算高风险</span><input type="checkbox" id="rc-review-missing"' + (c.include_review_missing?' checked':'') + ' style="' + chk + '"></div>' +
+    '</div>',
+    [
+      {text: '取消', onclick: 'closeSharedDialog()'},
+      {text: '保存', cls: 'btn-primary', onclick: 'saveRiskConfig()'}
+    ],
+    {maxWidth: 420}
+  );
+}
+
+async function saveRiskConfig() {
+  var config = {
+    stage_overdue_days: parseInt(document.getElementById('rc-overdue-days').value) || 0,
+    min_overdue_stages: parseInt(document.getElementById('rc-min-overdue').value) || 1,
+    include_pending_docs: document.getElementById('rc-pending-docs').checked,
+    include_review_missing: document.getElementById('rc-review-missing').checked,
+  };
+  try {
+    await API.put('/dashboard/risk-config', config);
+    _riskConfig = config;
+    closeSharedDialog();
+    showToast('风险配置已保存', 'success');
+    loadKpiCards();
+  } catch(e) { showToast('保存失败: ' + (e.message || ''), 'error'); }
 }
 
 

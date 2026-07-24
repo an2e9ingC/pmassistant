@@ -1,11 +1,14 @@
+import json
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
-from backend.middleware.auth import get_current_user
+from backend.middleware.auth import get_current_user, require_perm
 from backend.services import dashboard_service, bug_service
+from backend.routers.logs import log_audit
+from backend.audit_categories import AUDIT_CAT_SYSTEM
 
 _STATUS_MAP = {
     "wait": "pending", "doing": "active", "done": "completed",
@@ -19,6 +22,28 @@ router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 def get_kpi(db: Session = Depends(get_db), _=Depends(get_current_user)):
     data = dashboard_service.get_kpi(db)
     return {"code": 0, "data": data, "message": "ok"}
+
+
+@router.get("/risk-config", response_model=dict)
+def get_risk_config(
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("project_edit")),
+):
+    """Get risk detection configuration."""
+    config = dashboard_service.get_risk_config(db)
+    return {"code": 0, "data": config, "message": "ok"}
+
+
+@router.put("/risk-config", response_model=dict)
+def update_risk_config(
+    payload: dict,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("project_edit")),
+):
+    """Update risk detection configuration."""
+    config = dashboard_service.set_risk_config(db, payload)
+    log_audit(db, user, "risk_config_update", json.dumps(config, ensure_ascii=False), AUDIT_CAT_SYSTEM, "medium")
+    return {"code": 0, "data": config, "message": "风险配置已更新"}
 
 
 @router.get("/projects", response_model=dict)

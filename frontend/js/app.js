@@ -2034,6 +2034,7 @@ function _ucTogglePanel(type) {
   if (type === 'gitlab') {
     var isGitlab = user.auth_source === 'gitlab';
     content.innerHTML =
+      '<div class="expand-card" style="visibility:hidden"></div>' +
       '<div class="expand-card">' +
         '<h3><svg width="16" height="16" viewBox="0 0 380 380" fill="#e24329"><path d="M282.83 170.73l-.27-.69-26.14-68.22a6.81 6.81 0 00-2.69-3.24 7 7 0 00-8 .43 7 7 0 00-2.32 3.52l-17.65 54H154.07l-17.65-54a6.86 6.86 0 00-2.32-3.53 7 7 0 00-8-.43 6.87 6.87 0 00-2.69 3.24L97.44 170l-.26.69a48.54 48.54 0 0016.1 56.1l.09.07.24.17 39.82 30.2 19.7 15.11 12 9.08a7.07 7.07 0 004.33 1.58 7.09 7.09 0 004.33-1.58l12-9.08 19.7-15.11 40.06-30.35.09-.07a48.63 48.63 0 0016.08-56.1z"/></svg> GitLab 账户</h3>' +
         (isGitlab ? '' +
@@ -2041,8 +2042,7 @@ function _ucTogglePanel(type) {
           '<div class="integration-row"><span class="integration-row-lbl">Token 状态</span><span class="integration-row-val ok">'+(user.gitlab_token_valid?'有效':'无效')+'</span></div>' +
           '<a class="integration-link" href="http://192.168.0.128/'+escHtml(user.username)+'" target="_blank">GitLab 个人主页 ↗</a>'
         : '<div class="integration-row"><span class="integration-row-lbl">状态</span><span class="integration-row-val">未启用，请使用本地密码登录</span></div>') +
-      '</div>' +
-      '<div class="expand-card" style="visibility:hidden"></div>';
+      '</div>';
   } else if (type === 'security') {
     var isGitlab = user.auth_source === 'gitlab';
     content.innerHTML =
