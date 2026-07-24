@@ -219,13 +219,19 @@ async def fetch_document(
     try:
         import httpx, os, base64
 
-        # Add SVN Basic Auth for SVN server URLs
+        # Add Basic Auth for SVN/PDM server URLs (auto-detect by URL prefix)
         headers = {}
         svn_base = os.environ.get("SVN_BASE_URL", "")
         svn_user = os.environ.get("SVN_USERNAME", "")
         svn_pass = os.environ.get("SVN_PASSWORD", "")
+        pdm_base = os.environ.get("PDM_BASE_URL", "")
+        pdm_user = os.environ.get("PDM_USERNAME", "")
+        pdm_pass = os.environ.get("PDM_PASSWORD", "")
         if svn_user and svn_pass and svn_base and decoded_url.startswith(svn_base.rstrip("/")):
             cred = base64.b64encode(f"{svn_user}:{svn_pass}".encode()).decode()
+            headers["Authorization"] = f"Basic {cred}"
+        elif pdm_user and pdm_pass and pdm_base and decoded_url.startswith(pdm_base.rstrip("/")):
+            cred = base64.b64encode(f"{pdm_user}:{pdm_pass}".encode()).decode()
             headers["Authorization"] = f"Basic {cred}"
 
         async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as http_client:

@@ -25,12 +25,25 @@ def _encode_url(url: str) -> str:
     return urllib.parse.urlunsplit((scheme, netloc, path, query, fragment))
 
 
-def _add_svn_auth(req: urllib.request.Request) -> urllib.request.Request:
-    """Add Basic auth header if SVN credentials are configured."""
+def _add_http_auth(req: urllib.request.Request) -> urllib.request.Request:
+    """Add Basic auth header, auto-detecting PDM vs SVN based on URL."""
     import os
     import base64
+
+    url = getattr(req, 'full_url', '') or req.get_full_url() if hasattr(req, 'get_full_url') else ''
+    pdm_base = os.environ.get("PDM_BASE_URL", "")
+    pdm_user = os.environ.get("PDM_USERNAME", "")
+    pdm_pass = os.environ.get("PDM_PASSWORD", "")
     svn_user = os.environ.get("SVN_USERNAME", "")
     svn_pass = os.environ.get("SVN_PASSWORD", "")
+
+    # PDM auth: if URL matches PDM_BASE_URL and PDM credentials are configured
+    if url and pdm_user and pdm_pass and pdm_base and url.startswith(pdm_base.rstrip("/")):
+        cred = base64.b64encode(f"{pdm_user}:{pdm_pass}".encode()).decode()
+        req.add_header("Authorization", f"Basic {cred}")
+        return req
+
+    # SVN auth fallback
     if svn_user and svn_pass:
         cred = base64.b64encode(f"{svn_user}:{svn_pass}".encode()).decode()
         req.add_header("Authorization", f"Basic {cred}")
@@ -139,7 +152,7 @@ def _list_directory_svn(base_url: str) -> list:
     # (e.g. PE0454*/售前部/*_技术协议.* where files are 3 levels deep from base)
     req = urllib.request.Request(base_url, data=data.encode(), method="PROPFIND",
                                   headers={"Depth": "3", "Content-Type": "application/xml"})
-    _add_svn_auth(req)
+    _add_http_auth(req)
     try:
         resp = urllib.request.urlopen(req, timeout=HTTP_TIMEOUT)
         body = resp.read().decode("utf-8", errors="replace")
@@ -161,7 +174,7 @@ def _list_directory_html(base_url: str) -> list:
     base_url = _encode_url(base_url)
     try:
         req = urllib.request.Request(base_url)
-        _add_svn_auth(req)
+        _add_http_auth(req)
         resp = urllib.request.urlopen(req, timeout=HTTP_TIMEOUT)
         body = resp.read().decode("utf-8", errors="replace")
         # Parse href from HTML directory listing
@@ -169,6 +182,152 @@ def _list_directory_html(base_url: str) -> list:
         return [h.strip() for h in hrefs]
     except Exception:
         return []
+
+
+# ── PDM (SOLIDWORKS PDM Web2 via SSH) ──
+
+def _pdm_ssh_client():
+    """Create a connected SSH client for PDM server. Returns (client, base_path) or (None, '')."""
+    import os as _os
+    pdm_host = _os.environ.get("PDM_SSH_HOST", "")
+    pdm_user = _os.environ.get("PDM_SSH_USERNAME", "")
+    pdm_pass = _os.environ.get("PDM_SSH_PASSWORD", "")
+    base_path = _os.environ.get("PDM_BASE_PATH", "")
+    if not pdm_host or not pdm_user:
+        return None, ""
+    import paramiko
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        ssh.connect(pdm_host, username=pdm_user, password=pdm_pass,
+                     look_for_keys=False, allow_agent=False, timeout=15)
+        return ssh, base_path
+    except Exception as e:
+        logger.warning(f"[pdm] SSH connect failed: {e}")
+        return None, ""
+
+
+def _list_directory_pdm(ssh, folder_path: str) -> list:
+    """List entries in a PDM folder via SSH. Returns list of names."""
+    if not ssh or not folder_path:
+        return []
+    try:
+        cmd = f'cmd /c "dir /b \"{folder_path}\" 2>nul"'
+        _, stdout, _ = ssh.exec_command(cmd, timeout=15)
+        output = stdout.read().decode("gbk", errors="replace").strip()
+        if output:
+            return [line.strip() for line in output.split("\n") if line.strip()]
+        return []
+    except Exception as e:
+        logger.warning(f"[pdm] dir failed for {folder_path!r}: {e}")
+        return []
+
+
+def _pdm_path_to_windows(template_path: str) -> str:
+    """Convert a PDM template URL to a Windows filesystem path.
+    Example:
+      http://192.168.0.191/SOLIDWORKSPDM/LM-PDM/1.结构项目/{code}*/3.项目输出/*.pdf
+      → D:\LMPDM\1.结构项目\{code}*\3.项目输出\*.pdf
+    """
+    import os as _os
+    base_path = _os.environ.get("PDM_BASE_PATH", "")
+    base_url = _os.environ.get("PDM_BASE_URL", "")
+    if not base_path:
+        return template_path
+
+    # Strip the PDM base URL prefix (with or without trailing LM-PDM/)
+    p = template_path
+    if base_url:
+        # Remove the base URL prefix (e.g., http://192.168.0.191/SOLIDWORKSPDM)
+        url_prefix = base_url.rstrip("/")
+        if p.startswith(url_prefix):
+            p = p[len(url_prefix):]
+        # Also remove /LM-PDM prefix if present (LM-PDM maps to D:\LMPDM)
+        p = p.lstrip("/")
+        # The first path segment (vault name like LM-PDM) maps to base_path
+        # Remove it since we prepend base_path directly
+        parts = p.split("/", 1)
+        if len(parts) > 1:
+            p = parts[1]  # everything after the vault name
+
+    p = unquote(p)
+    return p.replace("/", "\\")
+
+
+def _resolve_pdm_path(template_path: str):  # -> Optional[str]
+    """Resolve a PDM template path (with wildcards) to a specific file URL.
+
+    Uses SSH to list directories and match wildcard patterns.
+    Returns the full PDM Web2 URL of the first matching file, or None.
+    """
+    ssh, base_path = _pdm_ssh_client()
+    if not ssh:
+        return None
+    try:
+        rel_path = _pdm_path_to_windows(template_path)
+        # Safety: reject paths that try to escape via ..
+        if ".." in rel_path:
+            logger.warning(f"[pdm] unsafe path: {rel_path!r}")
+            return None
+
+        # Parse wildcards using _parse_doc_path
+        # For Windows paths, convert to file:// URL for _parse_doc_path
+        # Actually, _parse_doc_path expects a URL, let's handle wildcards manually
+        from urllib.parse import unquote
+
+        # Split into segments and resolve wildcards level by level
+        segments = rel_path.split("\\")
+        resolved = []
+
+        for seg_idx, seg in enumerate(segments):
+            if "*" in seg or "?" in seg:
+                current_dir = "\\".join([base_path] + resolved)
+                entries = _list_directory_pdm(ssh, current_dir)
+                regex_str = _glob_to_regex(seg)
+                matched = [e for e in entries if re.match(regex_str, e, re.IGNORECASE)]
+                if matched:
+                    resolved.append(matched[0])
+                    if seg_idx == len(segments) - 1:
+                        return _build_pdm_url("\\".join([base_path] + resolved))
+                else:
+                    remaining = "\\".join(segments[len(resolved):])
+                    file_regex = _glob_to_regex(remaining) if ("*" in remaining or "?" in remaining) else re.escape(remaining)
+                    matched_files = [e for e in entries if re.match(file_regex, e, re.IGNORECASE)]
+                    if matched_files:
+                        return _build_pdm_url("\\".join([base_path] + resolved + [matched_files[0]]))
+                    return None
+            else:
+                resolved.append(seg)
+
+        # All segments resolved (no wildcards at end)
+        current_dir = "\\".join([base_path] + resolved)
+        entries = _list_directory_pdm(ssh, current_dir)
+        if entries:
+            return _build_pdm_url("\\".join([base_path] + resolved + [entries[0]]))
+        return None
+    except Exception as e:
+        logger.warning(f"[pdm] resolve failed for {template_path!r}: {e}")
+        return None
+    finally:
+        try:
+            ssh.close()
+        except Exception:
+            pass
+
+
+def _build_pdm_url(resolved_path: str) -> str:
+    """Build PDM Web2 URL from resolved Windows path."""
+    import os as _os
+    base_path = _os.environ.get("PDM_BASE_PATH", "")
+    base_url = _os.environ.get("PDM_BASE_URL", "")
+    # Extract vault name from base_path (last component, e.g. LM-PDM from D:\LM-PDM)
+    vault = base_path.rstrip("\\").rsplit("\\", 1)[-1] if base_path else ""
+    # Convert D:\LM-PDM\1.结构项目\...\file.pdf → /LM-PDM/1.结构项目/.../file.pdf
+    rel = resolved_path
+    if base_path and rel.upper().startswith(base_path.upper()):
+        rel = rel[len(base_path):]
+    rel = rel.lstrip("\\").replace("\\", "/")
+    return f"{base_url.rstrip('/')}/{vault}/{rel}"
 
 
 def check_file_exists(url: str) -> bool:
@@ -182,7 +341,7 @@ def check_file_exists(url: str) -> bool:
     url = _encode_url(url)
     try:
         req = urllib.request.Request(url, method="HEAD")
-        _add_svn_auth(req)
+        _add_http_auth(req)
         resp = urllib.request.urlopen(req, timeout=HTTP_TIMEOUT)
         return resp.status >= 200 and resp.status < 300
     except Exception:
@@ -221,7 +380,7 @@ def get_svn_metadata(url: str) -> tuple:
     try:
         req = urllib.request.Request(url, data=data.encode(), method="PROPFIND",
                                       headers={"Depth": "0", "Content-Type": "application/xml"})
-        _add_svn_auth(req)
+        _add_http_auth(req)
         resp = urllib.request.urlopen(req, timeout=HTTP_TIMEOUT)
         body = resp.read().decode("utf-8", errors="replace")
         import re as _re
@@ -583,6 +742,8 @@ async def check_all_product_docs(db, product_ids: list = None, skip_svn: bool = 
                     doc_type = "svn"
                 elif "gitlab" in template_path.lower() or "git" in template_path:
                     doc_type = "gitlab"
+                elif "solidworks" in template_path.lower() or "solidworkspdm" in template_path.lower():
+                    doc_type = "solidworks"
 
             # ── GitLab doc: use batch result ──
             if _is_gitlab_doc(doc_type, template_path):
@@ -660,7 +821,15 @@ async def check_all_product_docs(db, product_ids: list = None, skip_svn: bool = 
             mismatch = ""
             matched_url = None
 
-            if doc.location and template_path:
+            # PDM (solidworks) docs: use SSH-based directory listing
+            is_pdm = doc_type == "solidworks"
+            if is_pdm:
+                try:
+                    matched_url = _resolve_pdm_path(template_path or check_path)
+                except Exception as e:
+                    matched_url = None
+                    logger.warning(f"[pdm] Scan failed for doc {doc.id} ({doc.doc_name}): {e}")
+            elif doc.location and template_path:
                 loc_decoded = unquote(doc.location)
                 exists = check_file_exists(loc_decoded)
                 matched_url = loc_decoded if exists else None
@@ -824,6 +993,8 @@ async def check_product_docs(db, product_id: int) -> dict:
                 doc_type = "svn"
             elif "gitlab" in template_path.lower() or "git" in template_path:
                 doc_type = "gitlab"
+            elif "solidworks" in template_path.lower() or "solidworkspdm" in template_path.lower():
+                doc_type = "solidworks"
 
         if _is_gitlab_doc(doc_type, template_path):
             gitlab_docs.append((doc, template_path))
@@ -927,8 +1098,17 @@ async def check_product_docs(db, product_id: int) -> dict:
         exists = False
         mismatch = ""
 
+        # PDM (solidworks) docs: use SSH-based directory listing
+        if doc.doc_type == "solidworks":
+            try:
+                matched_url = _resolve_pdm_path(template_path or check_path)
+                exists = matched_url is not None
+            except Exception as e:
+                matched_url = None
+                exists = False
+                logger.warning(f"[pdm] Scan failed for doc {doc.id} ({doc.doc_name}): {e}")
         # If a location was previously resolved, just check if it still exists
-        if doc.location and template_path:
+        elif doc.location and template_path:
             loc_decoded = unquote(doc.location)
             exists = check_file_exists(loc_decoded)
             matched_url = loc_decoded if exists else None
@@ -962,6 +1142,8 @@ async def check_product_docs(db, product_id: int) -> dict:
                 doc_type = "svn"
             elif "gitlab" in template_path.lower() or "git" in template_path:
                 doc_type = "gitlab"
+            elif "solidworks" in template_path.lower() or "solidworkspdm" in template_path.lower():
+                doc_type = "solidworks"
 
         results.append({
             "doc_id": doc.id,
@@ -1085,8 +1267,17 @@ def check_project_docs(db, project_id: int) -> dict:
 
         logger.warning(f"[project-doc-scan] #{doc.id} '{doc.doc_name}' path={check_path[:120]}")
 
+        # PDM (solidworks) docs: use SSH-based directory listing
+        if doc.doc_type == "solidworks":
+            try:
+                matched_url = _resolve_pdm_path(template_path or check_path)
+                exists = matched_url is not None
+            except Exception as e:
+                matched_url = None
+                exists = False
+                logger.warning(f"[pdm] Scan failed for doc {doc.id} ({doc.doc_name}): {e}")
         # If a location was previously resolved, just check if it still exists
-        if doc.location and template_path:
+        elif doc.location and template_path:
             # Decode percent-encoded location if needed (for backward compat)
             loc_decoded = unquote(doc.location)
             exists = check_file_exists(loc_decoded)
@@ -1122,6 +1313,8 @@ def check_project_docs(db, project_id: int) -> dict:
                 doc_type = "svn"
             elif "gitlab" in template_path.lower() or "git" in template_path:
                 doc_type = "gitlab"
+            elif "solidworks" in template_path.lower() or "solidworkspdm" in template_path.lower():
+                doc_type = "solidworks"
 
         results.append({
             "doc_id": doc.id,
