@@ -221,6 +221,23 @@ class GitLabClient:
         pid = quote(project_path, safe="")
         return await self._request("GET", f"/projects/{pid}/issues/{issue_iid}")
 
+    async def create_issue_note(
+        self, project_path: str, issue_iid: int, body: str,
+    ) -> dict | None:
+        """Add a comment/note to a GitLab issue.
+
+        Args:
+            project_path: URL-encoded GitLab project path (e.g. 'group%2Fproject')
+            issue_iid: Issue IID (project-internal ID)
+            body: Comment body (markdown)
+        """
+        pid = quote(project_path, safe="")
+        data = {"body": body}
+        logger.info(f"[gitlab] create_issue_note project={project_path!r} issue_iid={issue_iid}")
+        result = await self._request("POST", f"/projects/{pid}/issues/{issue_iid}/notes", json=data)
+        logger.info(f"[gitlab] create_issue_note response: id={result.get('id') if result else None}")
+        return result
+
     # ── Members ──
 
     async def get_members(self, project_path: str) -> list:

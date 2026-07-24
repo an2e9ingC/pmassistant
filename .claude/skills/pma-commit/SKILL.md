@@ -69,6 +69,31 @@ Co-Authored-By: <model-name> / <tool-name>
 3. `git commit -m "..."`（AI 生成 commit 必须加 `Co-Authored-By:`）
 4. `./server.sh -p <PORT> restart`
 5. `index_repository(repo_path="/home/xuchuan/workspace/pma", mode="moderate")`
+6. **GitLab Issue 评论**：如果 commit message 中包含 `Closes #N`，自动将问题分析和解决方案作为评论发布到 GitLab Issue #N：
+
+   ```
+   提取 commit message 中的 issue 编号 N → 构造评论内容 → POST /api/gitlab/issue-note
+   ```
+
+   评论模板：
+   ```markdown
+   ## 🤖 AI 分析摘要
+
+   ### 问题分析
+   {1-3句话描述问题根因或需求背景}
+
+   ### 解决方案
+   {1-3句话描述修改内容和解决思路}
+
+   ### 修改文件
+   - `path/to/file1` — 修改说明
+   - `path/to/file2` — 修改说明
+
+   ---
+   commit: {commit_sha} | 版本: {app_version}
+   ```
+
+7. **如果 commit message 不含 `Closes #N`**，跳过此步骤。
 
 ## 重要规则
 

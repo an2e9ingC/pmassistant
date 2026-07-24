@@ -113,3 +113,8 @@ PYEOF
 - 遵循 pma-commit 规范
 - 必须包含 `Closes #X`
 - 更新版本号
+
+### 8. 发布分析总结到 GitLab Issue
+- Commit 完成后，自动将问题分析和解决方案作为评论发布到对应的 GitLab Issue
+- 调用 `POST /api/gitlab/issue-note` 接口
+- 评论模板见 pma-commit skill 中的定义

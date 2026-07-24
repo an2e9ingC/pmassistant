@@ -352,6 +352,49 @@ async def get_issue(
         await client.close()
 
 
+class IssueNoteCreate(BaseModel):
+    issue_iid: int
+    body: str
+
+
+@router.post("/issue-note", response_model=dict)
+async def create_issue_note(
+    body: IssueNoteCreate,
+    user: LocalUser = Depends(get_current_user),
+):
+    """Add a comment/note to a GitLab issue.
+
+    Used by AI tools to automatically post problem analysis and solution
+    summaries as issue comments when committing fixes or implementing features.
+    """
+    project_path = _get_project_path()
+
+    # Token selection: OAuth user → own token; admin → PAT fallback
+    if user.auth_source == "gitlab" and user.gitlab_access_token:
+        effective_token = user.gitlab_access_token
+    else:
+        effective_token = getattr(settings, "GITLAB_TOKEN", None) or ""
+    if not effective_token:
+        return {"code": 1, "message": "GitLab Token 未配置，无法添加评论"}
+
+    from backend.services.gitlab_client import GitLabClient
+
+    client = GitLabClient(token=effective_token)
+    try:
+        result = await client.create_issue_note(project_path, body.issue_iid, body.body)
+        if result:
+            return {
+                "code": 0,
+                "data": {"id": result.get("id"), "created_at": result.get("created_at")},
+                "message": "评论已添加",
+            }
+        return {"code": 1, "message": "GitLab API 返回空"}
+    except RuntimeError as e:
+        return {"code": 1, "message": f"添加评论失败: {e}"}
+    finally:
+        await client.close()
+
+
 @router.post("/upload")
 async def upload_file(
     request: Request,
