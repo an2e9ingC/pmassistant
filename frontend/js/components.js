@@ -1754,6 +1754,11 @@ async function submitGenericWorklog() {
   }
 }
 var _selectedTasks = new Set();
+var _baAssigneeId = null;
+var _baReviewerId = null;
+var _baStatus = '';
+var _baStage = '';
+var _baStageOptions = [];
 
 function _onTaskCheckbox(cb) {
   var tid = parseInt(cb.value);
@@ -1802,44 +1807,65 @@ function _clearBatchSelection() {
 
 function openBatchEditDialog() {
   if (_selectedTasks.size === 0) { showToast('请先选择任务', 'error'); return; }
-  var inp = 'width:100%;box-sizing:border-box;margin-top:1px';
+
+  // Reset batch edit state
+  _baAssigneeId = null;
+  _baReviewerId = null;
+  _baStatus = '';
+  _baStage = '';
+
   var html = '<div style="max-height:500px;overflow-y:auto">' +
     '<div style="margin-bottom:4px;font-size:11px;color:var(--muted)">将对 <b>' + _selectedTasks.size + '</b> 个任务批量设置以下属性（留空=不修改）</div>' +
-    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">指派负责人</label>' +
-      '<select class="search-inp" id="ba-assignee" style="' + inp + '"><option value="">不修改</option></select></div>' +
-    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">状态</label>' +
-      '<select class="search-inp" id="ba-status" style="' + inp + '"><option value="">不修改</option>' +
-        '<option value="todo">待办</option><option value="in_progress">进行中</option><option value="review">评审中</option><option value="done">已完成</option><option value="closed">已关闭</option></select></div>' +
-    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">阶段</label>' +
-      '<select class="search-inp" id="ba-stage" style="' + inp + '"><option value="">不修改</option></select></div>' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">指派负责人</label><div style="margin-top:2px">' +
+      createUserCombo({
+        comboId: 'ba-assignee-combo', inputId: 'ba-assignee-input', dropdownId: 'ba-assignee-dropdown',
+        placeholder: '不修改（留空）',
+        selectedIdFn: function() { return _baAssigneeId; },
+        onSelect: function(u) { _baAssigneeId = u.id; }
+      }) + '</div></div>' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">审批人</label><div style="margin-top:2px">' +
+      createUserCombo({
+        comboId: 'ba-reviewer-combo', inputId: 'ba-reviewer-input', dropdownId: 'ba-reviewer-dropdown',
+        placeholder: '不修改（留空）',
+        selectedIdFn: function() { return _baReviewerId; },
+        onSelect: function(u) { _baReviewerId = u.id; }
+      }) + '</div></div>' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">状态</label><div style="margin-top:2px">' +
+      createSearchCombo({
+        comboId: 'ba-status-combo', inputId: 'ba-status-input', dropdownId: 'ba-status-dropdown',
+        dataSource: [
+          {id: 'todo', name: '待办'}, {id: 'in_progress', name: '进行中'},
+          {id: 'review', name: '评审中'}, {id: 'done', name: '已完成'}, {id: 'closed', name: '已关闭'}
+        ],
+        placeholder: '不修改（留空）',
+        onSelect: function(s) { _baStatus = s.id; }
+      }) + '</div></div>' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">阶段</label><div style="margin-top:2px">' +
+      createSearchCombo({
+        comboId: 'ba-stage-combo', inputId: 'ba-stage-input', dropdownId: 'ba-stage-dropdown',
+        dataSource: function() { return _baStageOptions; },
+        placeholder: '不修改（留空）',
+        onSelect: function(s) { _baStage = s.id; }
+      }) + '</div></div>' +
     '<div style="display:flex;gap:8px;margin-bottom:8px">' +
-      '<div style="flex:1"><label style="font-size:11px;color:var(--muted)">计划开始</label><input class="search-inp" id="ba-start" type="date" style="' + inp + '"></div>' +
-      '<div style="flex:1"><label style="font-size:11px;color:var(--muted)">截止日期</label><input class="search-inp" id="ba-due" type="date" style="' + inp + '"></div>' +
+      '<div style="flex:1"><label style="font-size:11px;color:var(--muted)">计划开始</label><input class="search-inp" id="ba-start" type="date" style="width:100%;box-sizing:border-box;margin-top:1px"></div>' +
+      '<div style="flex:1"><label style="font-size:11px;color:var(--muted)">截止日期</label><input class="search-inp" id="ba-due" type="date" style="width:100%;box-sizing:border-box;margin-top:1px"></div>' +
     '</div>' +
     '</div>';
   openDialog('批量编辑任务', html, [
     {text:'取消',onclick:'closeSharedDialog()'},
     {text:'确定',cls:'btn-primary',onclick:'submitBatchEdit()'}
-  ], {maxWidth:440});
-  // Load assignee options from public user list
-  API.get('/users/options').then(function(data) {
-    if (!data) return;
-    var sel = document.getElementById('ba-assignee');
-    (data || []).forEach(function(u) {
-      sel.innerHTML += '<option value="' + u.id + '">' + escHtml(u.name) + '</option>';
-    });
-  });
+  ], {maxWidth: 460});
+
   // Load stage options from first selected task's project
+  _baStageOptions = [];
   var firstId = _selectedTasks.values().next().value;
   API.get('/tasks/' + firstId).then(function(task) {
     if (task.project_code) {
       API.get('/tasks?project_id=' + task.project_code + '&limit=200').then(function(data) {
-        var sel = document.getElementById('ba-stage');
         var items = data.items || data || [];
         var stages = [...new Set(items.map(function(t) { return t.stage_name; }).filter(Boolean))].sort();
-        stages.forEach(function(s) {
-          sel.innerHTML += '<option value="' + escHtml(s) + '">' + escHtml(s) + '</option>';
-        });
+        _baStageOptions = stages.map(function(s) { return {id: s, name: s}; });
       });
     }
   });
@@ -1847,14 +1873,12 @@ function openBatchEditDialog() {
 
 async function submitBatchEdit() {
   var updates = {};
-  var assignee = document.getElementById('ba-assignee').value;
-  var status = document.getElementById('ba-status').value;
-  var stage = document.getElementById('ba-stage').value;
+  if (_baAssigneeId) updates.assignee_id = _baAssigneeId;
+  if (_baReviewerId) updates.reviewer_id = _baReviewerId;
+  if (_baStatus) updates.status = _baStatus;
+  if (_baStage) updates.stage_name = _baStage;
   var start = document.getElementById('ba-start').value;
   var due = document.getElementById('ba-due').value;
-  if (assignee) updates.assignee_id = parseInt(assignee);
-  if (status) updates.status = status;
-  if (stage) updates.stage_name = stage;
   if (start) updates.start_date = start;
   if (due) updates.due_date = due;
   if (Object.keys(updates).length === 0) { showToast('请至少设置一个字段', 'error'); return; }

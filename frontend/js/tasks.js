@@ -445,7 +445,9 @@ function _renderTaskRowCompact(t, stageStart) {
   var startDateStr = effectiveStart || '—';
   var startTitle = effectiveStart ? escHtml(effectiveStart) : (stageStart ? '默认取阶段开始时间' : '未设置');
   return '<td style="text-align:left;cursor:pointer" onclick="openTaskViewDialog(' + t.id + ')" title="查看任务详情">' + escHtml(t.title) + '</td>' +
-    '<td style="text-align:center;cursor:pointer" onclick="event.stopPropagation();openReviewerDialog(' + t.id + ')" title="' + (t.status === 'review' && t.reviewer_name ? '审批人: ' + escHtml(t.reviewer_name) + ' — 点击修改' : '点击修改审批人') + '">' + renderPill(t.status || 'todo') + '</td>' +
+    (_hasProjectEditPerm()
+      ? '<td style="text-align:center;cursor:pointer" onclick="event.stopPropagation();openReviewerDialog(' + t.id + ')" title="' + (t.status === 'review' && t.reviewer_name ? '审批人: ' + escHtml(t.reviewer_name) + ' — 点击修改' : '点击修改审批人') + '">' + renderPill(t.status || 'todo') + '</td>'
+      : '<td style="text-align:center">' + renderPill(t.status || 'todo') + '</td>') +
     '<td style="text-align:center">' + (typeof renderPriority === 'function' ? renderPriority(t.priority) : escHtml(t.priority || 'medium')) + '</td>' +
     '<td style="font-size:12px;cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();openAssignDialog(' + t.id + ')" title="指派任务">' + escHtml(assigneeName) + '</td>' +
     '<td style="text-align:center">' + progressHtml + '</td>' +
@@ -522,7 +524,9 @@ function _renderTaskRow(t, stageMap) {
     '<td style="text-align:left;font-size:12px">' + escHtml(t.project_name || '-') + '</td>' +
     '<td style="text-align:left"><a href="javascript:void(0)" onclick="openTaskViewDialog(' + t.id + ')" style="color:var(--accent)">' + escHtml(t.title) + '</a></td>' +
     '<td>' + (stageName ? '<span style="font-size:11px;color:var(--muted)">' + escHtml(stageName) + '</span>' : '-') + '</td>' +
-    '<td style="cursor:pointer" onclick="event.stopPropagation();openReviewerDialog(' + t.id + ')" title="' + (t.reviewer_name ? '审批人: ' + escHtml(t.reviewer_name) + ' — 点击修改' : '点击设置审批人') + '">' + renderPill(t.status || 'todo') + '</td>' +
+    (_hasProjectEditPerm()
+      ? '<td style="cursor:pointer" onclick="event.stopPropagation();openReviewerDialog(' + t.id + ')" title="' + (t.reviewer_name ? '审批人: ' + escHtml(t.reviewer_name) + ' — 点击修改' : '点击设置审批人') + '">' + renderPill(t.status || 'todo') + '</td>'
+      : '<td>' + renderPill(t.status || 'todo') + '</td>') +
     '<td>' + _renderPriority(t.priority) + '</td>' +
     '<td>' + renderProgressCircle(progressPct, 26, {label:''}) + '</td>' +
     '<td style="color:' + (overdue ? 'var(--danger)' : '') + '">' + (t.due_date || '-') + '</td>' +
@@ -775,11 +779,13 @@ function _showTaskForm(title, task) {
           selectedIdFn: function() { return _tfAssigneeId; },
           onSelect: function(u) { _tfAssigneeId = u.id; }
         }) + '<div id="tf-assignee-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择负责人</div></div></div>' +
-        '<div><label style="' + _lbl + '">审批人</label><div style="margin-top:2px">' + createUserCombo({
-          comboId: 'tf-reviewer-combo', inputId: 'tf-reviewer-input', dropdownId: 'tf-reviewer-dropdown',
-          selectedIdFn: function() { return _tfReviewerId; },
-          onSelect: function(u) { _tfReviewerId = u.id; }
-        }) + '</div></div>' +
+        (_hasProjectEditPerm()
+          ? '<div><label style="' + _lbl + '">审批人</label><div style="margin-top:2px">' + createUserCombo({
+              comboId: 'tf-reviewer-combo', inputId: 'tf-reviewer-input', dropdownId: 'tf-reviewer-dropdown',
+              selectedIdFn: function() { return _tfReviewerId; },
+              onSelect: function(u) { _tfReviewerId = u.id; }
+            }) + '</div></div>'
+          : '<div><label style="' + _lbl + '">审批人</label><div style="' + inp + ';padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:13px;color:var(--fg)" id="tf-reviewer-static">' + escHtml(t.reviewer_name || '—') + '</div></div>') +
       '</div>' +
     '</div>' +
     // ── 状态与进度 ──
