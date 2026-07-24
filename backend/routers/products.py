@@ -329,6 +329,7 @@ class DocUpdate(BaseModel):
     doc_type: Optional[str] = None  # gitlab/svn/nas/solidworks/pma
     uploaded_by: Optional[str] = None
     uploaded_at: Optional[str] = None
+    is_removed: Optional[int] = None  # 0=正常 1=已删除（可选项移除）
 
 
 @router.put("/{identifier}/documents/{doc_id}", response_model=dict)
@@ -377,7 +378,12 @@ def update_product_document(
             # Set uploader if location is being filled (new upload)
             if not doc.uploaded_by:
                 doc.uploaded_by = user.username
-                doc.uploaded_at = _dt.utcnow()
+    if body.is_removed is not None:
+        doc.is_removed = body.is_removed
+        if body.is_removed:
+            doc_changes.append("已移除可选项")
+    if body.location:
+        doc.uploaded_at = _dt.utcnow()
     if body.doc_type is not None:
         doc.doc_type = body.doc_type
     if body.uploaded_by is not None:

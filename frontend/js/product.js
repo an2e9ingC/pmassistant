@@ -1058,7 +1058,7 @@ function _renderProdDocsInline(docs) {
         statusHtml = '<span class="pill blocked">未提交</span>';
       }
 
-      html += '<td style="font-family:var(--mono);color:var(--muted);text-align:center;' + cellStyle + '">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
+      html += '<td style="font-family:var(--mono);color:var(--muted);text-align:center;' + cellStyle + '">' + (i + 1) + '</td>' +
         '<td style="font-weight:500;width:180px;word-break:break-all;' + cellStyle + '">' + escHtml(d.doc_name) + '</td>' +
         '<td style="font-size:12px;white-space:nowrap;' + cellStyle + '">' + escHtml(d.responsible_role || '—') + '</td>' +
         '<td style="white-space:nowrap;' + cellStyle + '">' + statusHtml + '</td>' +
@@ -1081,6 +1081,7 @@ function _renderProdDocsInline(docs) {
               ? iconEye("previewDocument('" + encodeURIComponent(d.location) + "','" + escJs(d.doc_name || '') + "')")
               : '<a href="' + escHtml(d.location) + '" target="_blank" title="打开链接" style="text-decoration:none;font-size:15px">&#x1F517;</a>')
             : '') +
+          (d.is_optional && canEdit ? iconDelete('removeOptionalProductDoc(' + d.id + ')', '移除此文档') : '') +
         '</td>' +
       '</tr>';
     });
@@ -1090,6 +1091,17 @@ function _renderProdDocsInline(docs) {
   el.innerHTML = html;
   // Dynamic table height: fill available viewport space
   _resizeProdDocsTable();
+}
+
+async function removeOptionalProductDoc(docId) {
+  if (!confirm('移除此可选项后，该文档将不再显示，也不计入完成统计。确认移除？')) return;
+  try {
+    await API.put('/products/' + _prodDetailCurCode + '/documents/' + docId, { is_removed: 1 });
+    showToast('已移除可选项', 'success');
+    // Re-fetch and re-render docs only (don't reload entire page)
+    var docs = await API.get('/products/' + _prodDetailCurCode + '/documents');
+    _renderProdDocsInline(docs);
+  } catch(e) { showToast('移除失败: ' + (e.message || ''), 'error'); }
 }
 
 function _resizeProdDocsTable() {
@@ -1348,20 +1360,24 @@ var _prodActivityFilterAction = '';
 var _prodActivityOptions = null;
 
 async function loadProdActivities() {
-  if (!_prodDetailCurCode) return;
+  var code = _prodDetailCurCode || (_prodDetail && _prodDetail.code) || '';
   var container = document.getElementById('prod-activities-content');
+  if (!code) {
+    if (container) container.innerHTML = '<div class="empty-state">请先选择产品</div>';
+    return;
+  }
   if (!container) return;
   container.innerHTML = '<div class="loading-spinner">加载活动记录...</div>';
   try {
     var params = 'sort=' + _prodActivitySort + '&limit=200';
     if (_prodActivityFilterUser) params += '&username=' + encodeURIComponent(_prodActivityFilterUser);
     if (_prodActivityFilterAction) params += '&action=' + encodeURIComponent(_prodActivityFilterAction);
-    var resp = await API.get('/products/' + _prodDetailCurCode + '/activities?' + params);
+    var resp = await API.get('/products/' + encodeURIComponent(code) + '/activities?' + params);
     var items = resp && resp.items ? resp.items : (Array.isArray(resp) ? resp : []);
     var opts = resp && resp.options ? resp.options : null;
     buildProdActivities(items, opts);
   } catch(e) {
-    container.innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '</div>';
+    container.innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message || '') + '</div>';
   }
 }
 

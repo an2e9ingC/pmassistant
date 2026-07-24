@@ -839,9 +839,13 @@ def _sync_tasks_from_templates(db: Session, project_id: int, project_type: str =
 
     Returns count of newly created tasks.
     """
+    import logging
+    _log = logging.getLogger(__name__)
+    from backend.models.project_stage import ProjectStage
     from backend.services.project_service import _resolve_user_for_role
 
     standard_stages = get_stage_types_for_project_type(db, project_type)
+    _log.info(f"[task-sync] project_id={project_id} type={project_type} stages={standard_stages}")
     created_count = 0
 
     for st in standard_stages:
@@ -853,12 +857,14 @@ def _sync_tasks_from_templates(db: Session, project_id: int, project_type: str =
             .order_by(TaskTemplate.sort_order)
             .all()
         )
+        _log.info(f"[task-sync] stage={st} templates={len(templates)}")
 
         for tpl in templates:
             existing = db.query(Task).filter(
                 Task.template_id == tpl.id,
                 Task.project_id == project_id,
                 Task.stage_name == st,
+                or_(Task.is_diverged == 0, Task.is_diverged == None),
             ).first()
             if existing:
                 # Update title/responsible_role if template changed
@@ -879,6 +885,16 @@ def _sync_tasks_from_templates(db: Session, project_id: int, project_type: str =
                         changed = True
                 if changed:
                     created_count += 1
+                continue
+
+            # Check if a removed task exists (user diverged) — skip recreation
+            removed = db.query(Task).filter(
+                Task.template_id == tpl.id,
+                Task.project_id == project_id,
+                Task.stage_name == st,
+                Task.is_diverged == 1,
+            ).first()
+            if removed:
                 continue
 
             assignee_id = None
@@ -1150,6 +1166,7 @@ def _product_template_dict(t: ProductDocTemplate) -> dict:
         "base_path": t.base_path or "",
         "file_pattern": t.file_pattern or "",
         "doc_type": t.doc_type or "",
+        "is_optional": bool(t.is_optional),
     }
 
 
@@ -1188,13 +1205,22 @@ def get_or_init_product_documents(db: Session, product_id: int) -> list[dict]:
                 template_path = tpl.doc_path or ""
                 actual_path = template_path
 
-            # Find existing doc instance
+            # Find existing doc instance (skip soft-deleted)
             existing = db.query(ProductDocument).filter(
                 ProductDocument.product_id == product_id,
                 ProductDocument.template_id == tpl.id,
+                or_(ProductDocument.is_removed == 0, ProductDocument.is_removed == None),
             ).first()
 
             if not existing:
+                # Check if a removed doc exists (user explicitly removed it) — skip recreation
+                removed = db.query(ProductDocument).filter(
+                    ProductDocument.product_id == product_id,
+                    ProductDocument.template_id == tpl.id,
+                    ProductDocument.is_removed == 1,
+                ).first()
+                if removed:
+                    continue
                 existing = ProductDocument(
                     product_id=product_id,
                     template_id=tpl.id,
@@ -1206,6 +1232,7 @@ def get_or_init_product_documents(db: Session, product_id: int) -> list[dict]:
                     doc_path=actual_path,
                     doc_type=tpl.doc_type or "",
                     status="pending",
+                    is_optional=bool(tpl.is_optional),
                 )
                 db.add(existing)
                 db.flush()
@@ -1217,6 +1244,7 @@ def get_or_init_product_documents(db: Session, product_id: int) -> list[dict]:
                 existing.responsible_role = tpl.responsible_role
                 existing.description = tpl.description
                 existing.doc_type = tpl.doc_type or existing.doc_type or ""
+                existing.is_optional = bool(tpl.is_optional)
                 # Always sync doc_path from template (location is user-uploaded path, independent)
                 existing.doc_path = actual_path
 
@@ -1261,6 +1289,8 @@ def get_or_init_product_documents(db: Session, product_id: int) -> list[dict]:
                 "status": existing.status,
                 "done": done,
                 "warn": warn,
+                "is_optional": bool(existing.is_optional),
+                "is_removed": bool(existing.is_removed),
                 "location": existing.location or "",
                 "mismatch": mismatch,
                 "uploaded_by": existing.uploaded_by or "",

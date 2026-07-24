@@ -898,6 +898,27 @@ function toggleDocOptional(stageName, id, current) {
   }
   renderTemplatesPage();
 }
+function toggleProductDocOptional(id, current) {
+  var newVal = current ? 0 : 1;
+  var t = _productTemplates.find(function(x) { return x.id === id; });
+  if (!t) return;
+  t.is_optional = !!newVal;
+  var found = false;
+  for (var i = 0; i < _productPendingOps.length; i++) {
+    if (_productPendingOps[i].type === 'edit' && _productPendingOps[i].id === id) {
+      _productPendingOps[i].is_optional = newVal; found = true; break;
+    }
+  }
+  if (!found) {
+    _productPendingOps.push({ type: 'edit', id: id,
+      doc_name: t.doc_name, sort_order: t.sort_order, stage_type: t.stage_type || '通用',
+      responsible_role: t.responsible_role || '', description: t.description || '',
+      doc_path: t.doc_path || '', base_path: t.base_path || '', file_pattern: t.file_pattern || '',
+      doc_type: t.doc_type || '', is_optional: newVal });
+  }
+  renderProductTreePage();
+}
+
 function toggleTaskOptional(stageName, id, current) {
   var newVal = current ? 0 : 1;
   var arr = _taskTemplatesGrouped[stageName] || [];
@@ -1740,6 +1761,7 @@ function renderProductTreePage() {
             : '—') + '</td>' +
           '<td style="font-size:12px;color:var(--muted)">' + escHtml(d.description || '') + '</td>' +
           (canEdit ? '<td style="white-space:nowrap;text-align:center" ondragover="event.stopPropagation()" ondrop="event.stopPropagation()">' +
+            '<span style="font-size:10px;color:' + (d.is_optional ? 'var(--accent)' : 'var(--muted)') + ';cursor:pointer;margin-right:4px" onclick="event.stopPropagation();toggleProductDocOptional(' + d.id + ',' + (d.is_optional ? '1' : '0') + ')" title="' + (d.is_optional ? '可选项（点击取消）' : '非可选项（点击设为可选）') + '">' + (d.is_optional ? '可选' : '必选') + '</span>' +
             iconCopy('copyProductTemplate(' + d.id + ')') +
             iconEdit('showEditProductTemplateForm(' + d.id + ')') +
             iconDelete('deleteProductTemplate(' + d.id + ')') +
@@ -1872,6 +1894,11 @@ function showAddProductTemplateForm() {
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">最终路径预览 &nbsp;<span style="font-weight:400;font-size:10px">* 替换为产品代号</span></label>' +
       '<input class="search-inp" id="ptf-path-preview" value="" style="width:100%;box-sizing:border-box;color:var(--accent);font-size:11px;font-family:var(--mono)" disabled>' +
     '</div>' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer">' +
+        '<input type="checkbox" id="ptf-is-optional" style="width:16px;height:16px;cursor:pointer">' +
+        '可选项（标记后，产品可按需删除该文档）' +
+      '</label></div>' +
     '<div style="margin-bottom:4px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">说明（可选）</label>' +
       '<input class="search-inp" id="ptf-desc" style="width:100%;box-sizing:border-box">' +
@@ -1923,6 +1950,11 @@ function showEditProductTemplateForm(id) {
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">最终路径预览 &nbsp;<span style="font-weight:400;font-size:10px">* 替换为产品代号</span></label>' +
       '<input class="search-inp" id="ptf-path-preview" value="" style="width:100%;box-sizing:border-box;color:var(--accent);font-size:11px;font-family:var(--mono)" disabled>' +
     '</div>' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer">' +
+        '<input type="checkbox" id="ptf-is-optional" style="width:16px;height:16px;cursor:pointer"' + (tpl.is_optional ? ' checked' : '') + '>' +
+        '可选项（标记后，产品可按需删除该文档）' +
+      '</label></div>' +
     '<div style="margin-bottom:4px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">说明（可选）</label>' +
       '<input class="search-inp" id="ptf-desc" value="' + escHtml(tpl.description || '') + '" style="width:100%;box-sizing:border-box">' +
@@ -1969,6 +2001,8 @@ function saveProductTemplate(id) {
   var stage = stageEl ? stageEl.value : (_productStage || '通用');
   var typeEl = document.getElementById('ptf-doctype');
   var docType = typeEl ? typeEl.value : '';
+  var isOptEl = document.getElementById('ptf-is-optional');
+  var isOptional = isOptEl && isOptEl.checked ? 1 : 0;
   if (!nameEl.value.trim()) { showToast('请输入文档名称', 'error'); return; }
   if (!basePath && !filePattern) { showToast('请填写路径或文档名', 'error'); return; }
   if (!docType) { showToast('请选择文档类型', 'error'); return; }
@@ -1984,14 +2018,16 @@ function saveProductTemplate(id) {
     if (!tpl) { showToast('未找到该模板', 'error'); return; }
     tpl.doc_name = name; tpl.doc_path = fullPath; tpl.base_path = basePath; tpl.file_pattern = filePattern; tpl.doc_type = docType;
     tpl.sort_order = order; tpl.stage_type = stage; tpl.description = desc; tpl.responsible_role = role;
+    tpl.is_optional = !!isOptional;
     _productPendingOps.push({ type: 'edit', id: id,
       doc_name: name, sort_order: order, stage_type: stage, responsible_role: role,
-      description: desc, doc_path: fullPath, base_path: basePath, file_pattern: filePattern, doc_type: docType });
+      description: desc, doc_path: fullPath, base_path: basePath, file_pattern: filePattern, doc_type: docType, is_optional: isOptional });
   } else if (id && id < 0) {
     var tpl2 = _productTemplates.find(function(x) { return x.id === id; });
     if (tpl2) {
       tpl2.doc_name = name; tpl2.doc_path = fullPath; tpl2.base_path = basePath; tpl2.file_pattern = filePattern; tpl2.doc_type = docType;
       tpl2.sort_order = order; tpl2.stage_type = stage; tpl2.description = desc; tpl2.responsible_role = role;
+      tpl2.is_optional = !!isOptional;
     }
     for (var pi = 0; pi < _productPendingOps.length; pi++) {
       if (_productPendingOps[pi].tempId === id) {
@@ -2000,6 +2036,7 @@ function saveProductTemplate(id) {
         _productPendingOps[pi].doc_type = docType; _productPendingOps[pi].sort_order = order;
         _productPendingOps[pi].stage_type = stage; _productPendingOps[pi].responsible_role = role;
         _productPendingOps[pi].description = desc;
+        _productPendingOps[pi].is_optional = isOptional;
         break;
       }
     }
@@ -2007,11 +2044,11 @@ function saveProductTemplate(id) {
     var tempId = _productNextTempId--;
     var newDoc = { id: tempId, doc_name: name, sort_order: order,
       stage_type: stage, responsible_role: role, description: desc,
-      doc_path: fullPath, base_path: basePath, file_pattern: filePattern, doc_type: docType };
+      doc_path: fullPath, base_path: basePath, file_pattern: filePattern, doc_type: docType, is_optional: !!isOptional };
     _productTemplates.push(newDoc);
     _productPendingOps.push({ type: 'add', tempId: tempId,
       doc_name: name, sort_order: order, stage_type: stage, responsible_role: role,
-      description: desc, doc_path: fullPath, base_path: basePath, file_pattern: filePattern, doc_type: docType });
+      description: desc, doc_path: fullPath, base_path: basePath, file_pattern: filePattern, doc_type: docType, is_optional: isOptional });
   }
   renderProductTreePage();
 }
@@ -2029,14 +2066,16 @@ function copyProductTemplate(id) {
     responsible_role: tpl.responsible_role || '',
     description: tpl.description || '',
     doc_path: tpl.doc_path || '',
-    doc_type: tpl.doc_type || ''
+    doc_type: tpl.doc_type || '',
+    is_optional: tpl.is_optional || false
   };
   _productTemplates.push(newDoc);
   _productPendingOps.push({ type: 'add', tempId: tempId,
     doc_name: newDoc.doc_name, sort_order: newDoc.sort_order,
     stage_type: newDoc.stage_type, doc_type: newDoc.doc_type,
     responsible_role: newDoc.responsible_role,
-    description: newDoc.description, doc_path: newDoc.doc_path });
+    description: newDoc.description, doc_path: newDoc.doc_path,
+    is_optional: newDoc.is_optional });
   showToast('已复制，请修改后保存', 'info');
   renderProductTreePage();
 }
@@ -2097,10 +2136,10 @@ async function saveProductChanges() {
     var op = ops[i];
     try {
       if (op.type === 'add') {
-        await API.post('/product-doc-templates', { product_id: _selectedNodeId, doc_name: op.doc_name, sort_order: op.sort_order, stage_type: op.stage_type || '通用', doc_type: op.doc_type || '', responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '', base_path: op.base_path || '', file_pattern: op.file_pattern || '' });
+        await API.post('/product-doc-templates', { product_id: _selectedNodeId, doc_name: op.doc_name, sort_order: op.sort_order, stage_type: op.stage_type || '通用', doc_type: op.doc_type || '', responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '', base_path: op.base_path || '', file_pattern: op.file_pattern || '', is_optional: op.is_optional || 0 });
         success++;
       } else if (op.type === 'edit') {
-        await API.put('/product-doc-templates/' + op.id, { doc_name: op.doc_name, sort_order: op.sort_order, stage_type: op.stage_type || '通用', doc_type: op.doc_type || '', responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '', base_path: op.base_path || '', file_pattern: op.file_pattern || '' });
+        await API.put('/product-doc-templates/' + op.id, { doc_name: op.doc_name, sort_order: op.sort_order, stage_type: op.stage_type || '通用', doc_type: op.doc_type || '', responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '', base_path: op.base_path || '', file_pattern: op.file_pattern || '', is_optional: op.is_optional || 0 });
         success++;
       } else if (op.type === 'delete') {
         await API.del('/product-doc-templates/' + op.id);

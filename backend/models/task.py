@@ -34,6 +34,7 @@ class Task(Base):
     completed_at = Column(DateTime, nullable=True)
     output_items = Column(Text, nullable=True)  # JSON: [{"name": "...", "url": "...", "type": "link"}]
     template_id = Column(Integer, ForeignKey("task_templates.id"), nullable=True)  # NULL = manually created
+    is_diverged = Column(Integer, default=0)  # 0=模板同步 1=已脱离模板（用户修改后不再同步）
     sort_order = Column(Integer, default=0)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

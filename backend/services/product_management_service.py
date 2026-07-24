@@ -409,8 +409,9 @@ def create_local_project(
         from backend.services.document_service import _sync_from_templates, _sync_tasks_from_templates
         _sync_from_templates(db, project.id, project_type)
         _sync_tasks_from_templates(db, project.id, project_type)
-    except Exception:
-        pass  # non-critical: templates will sync on first page view
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Template sync failed for project {code} ({project_type}): {e}")
 
     return _project_item(project, db)
 

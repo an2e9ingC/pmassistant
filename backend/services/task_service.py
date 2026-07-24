@@ -5,6 +5,7 @@ from datetime import date, datetime, timezone
 from typing import Optional, List
 
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from sqlalchemy.sql import func as sa_func
 
 from backend.models.task import Task, WorkLog, TaskComment
@@ -32,6 +33,7 @@ def get_tasks(
         q = q.filter(Task.assignee_id == assignee_id)
     if reviewer_id:
         q = q.filter(Task.reviewer_id == reviewer_id)
+    q = q.filter(or_(Task.is_diverged == 0, Task.is_diverged == None))
     q = q.order_by(Task.sort_order, Task.created_at.desc())
     return [_task_dict(t, db) for t in q.all()]
 
@@ -54,7 +56,10 @@ def get_task(db: Session, task_id: int) -> Optional[dict]:
 
 def get_my_tasks(db: Session, user_id: int) -> List[dict]:
     """Get tasks assigned to a user across all projects."""
-    tasks = db.query(Task).filter(Task.assignee_id == user_id).order_by(
+    tasks = db.query(Task).filter(
+        Task.assignee_id == user_id,
+        or_(Task.is_diverged == 0, Task.is_diverged == None),
+    ).order_by(
         Task.status != "closed",
         Task.due_date.asc().nullslast(),
         Task.created_at.desc(),
@@ -209,6 +214,7 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
         return None
 
     old_status = t.status
+    old_stage_name = t.stage_name
     changes = []
     # Batch-resolve assignee ID → display name for readable logs
     user_name_map = {}
@@ -247,6 +253,13 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
 
     if "stage_name" in data:
         t.stage_name = data["stage_name"] or None
+        if t.stage_name != old_stage_name and t.template_id:
+            t.is_removed = 1  # mark as diverged from template
+    # When assignee of a template task is changed, mark as diverged
+    if t.template_id and "assignee_id" in data:
+        new_assignee = data["assignee_id"]
+        if new_assignee is not None and int(new_assignee or 0) != (t.assignee_id or 0):
+            t.is_removed = 1
     if "estimate_hours" in data:
         t.estimate_hours = float(data["estimate_hours"] or 0)
     if "output_items" in data:
@@ -361,23 +374,33 @@ def extend_task_estimate(db: Session, task_id: int, additional_hours: float) -> 
 
 
 def delete_task(db: Session, task_id: int, user=None) -> bool:
-    """Delete a task and its worklogs + comments."""
+    """Delete a task. Template-originated tasks are soft-deleted (is_diverged=1)
+    to prevent re-creation on template re-sync. Manual tasks are hard-deleted."""
     uid, uname = _get_user_info(user)
     t = db.query(Task).filter(Task.id == task_id).first()
     if not t:
         return False
 
-    db.query(WorkLog).filter(WorkLog.task_id == task_id).delete()
-    db.query(TaskComment).filter(TaskComment.task_id == task_id).delete()
     project_id = t.project_id
     stage_id = t.stage_id
     title = t.title
-    db.delete(t)
-    db.commit()
 
-    if stage_id:
-        _recalc_stage_progress(db, stage_id)
-    _log_audit(db, project_id, uname, "task_delete", f"删除任务 #{task_id}: {title}")
+    if t.template_id:
+        # Soft-delete template task: mark as diverged so sync won't recreate
+        t.is_diverged = 1
+        db.commit()
+        if stage_id:
+            _recalc_stage_progress(db, stage_id)
+        _log_audit(db, project_id, uname, "task_delete", f"移除模板任务 #{task_id}: {title}")
+    else:
+        # Hard delete manual task
+        db.query(WorkLog).filter(WorkLog.task_id == task_id).delete()
+        db.query(TaskComment).filter(TaskComment.task_id == task_id).delete()
+        db.delete(t)
+        db.commit()
+        if stage_id:
+            _recalc_stage_progress(db, stage_id)
+        _log_audit(db, project_id, uname, "task_delete", f"删除任务 #{task_id}: {title}")
     return True
 
 

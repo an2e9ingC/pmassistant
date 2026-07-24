@@ -124,12 +124,6 @@ Worktree B:         cd $PMA_WORKTREE_DIR && ./server.sh -p 8002 restart
 | `data/server-$PORT.log` | 服务器日志 |
 | `.pma-server-$PORT.pid` | 进程 PID 文件 |
 
-## 代码修改完成后的验证（必须执行）
-
-1. 告知用户验证方式（浏览器访问地址、刷新页面、点击哪些按钮等）
-2. 确保验证所需的服务器已启动（如未启动则先启动）
-3. 纯前端修改不需要重启服务器，后端修改需重启
-
 ## 上线流程（用户说 "上线" 时自动执行）
 
 > 一键完成从 worktree 到远程 trunk 的完整发布链路。

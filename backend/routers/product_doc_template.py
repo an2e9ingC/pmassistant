@@ -40,6 +40,7 @@ class TemplateCreate(BaseModel):
     description: Optional[str] = None
     base_path: Optional[str] = None  # 路径模板, * = 产品代号
     file_pattern: Optional[str] = None  # 文件名模板, * = 产品代号
+    is_optional: int = 0  # 0=必选 1=可选
 
 
 class TemplateUpdate(BaseModel):
@@ -53,6 +54,7 @@ class TemplateUpdate(BaseModel):
     doc_type: Optional[str] = None
     base_path: Optional[str] = None
     file_pattern: Optional[str] = None
+    is_optional: Optional[int] = None
 
 
 # ── Product Tree (read) ──
@@ -193,7 +195,7 @@ def update_template(
     field_labels = {
         "doc_name": "名称", "base_path": "路径", "file_pattern": "文档名",
         "stage_type": "阶段", "doc_type": "类型", "responsible_role": "责任人",
-        "sort_order": "序号", "description": "说明",
+        "sort_order": "序号", "description": "说明", "is_optional": "可选",
     }
     for fk, fl in field_labels.items():
         ov = getattr(old_tpl, fk, None) or ""

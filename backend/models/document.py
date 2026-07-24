@@ -69,6 +69,7 @@ class ProductDocTemplate(Base):
     base_path = Column(String(512), nullable=True)  # 路径模板, * = 产品代号占位符
     file_pattern = Column(String(256), nullable=True)  # 文件名模板, * = 产品代号占位符
     doc_type = Column(String(32), nullable=True)  # 文档类型: gitlab/svn/nas
+    is_optional = Column(Integer, default=0)  # 0=必选 1=可选（产品可按需删除）
 
 
 class ProductNamingOption(Base):
@@ -149,6 +150,8 @@ class ProductDocument(Base):
     uploaded_by = Column(String(64), nullable=True)
     uploaded_at = Column(DateTime, nullable=True)
     updated_by = Column(String(64), nullable=True)
+    is_optional = Column(Integer, default=0)  # 0=必选 1=可选（从模板复制）
+    is_removed = Column(Integer, default=0)  # 0=正常 1=已删除（可选项被移除）
     svn_author = Column(String(128), nullable=True)  # SVN 最后提交人
     svn_last_modified = Column(String(128), nullable=True)  # SVN 最后修改时间（北京时间 YYYY-MM-DD HH:MM:SS）
     svn_rev = Column(String(32), nullable=True)  # SVN 最后提交版本号（version-name）

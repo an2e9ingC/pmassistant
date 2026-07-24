@@ -445,9 +445,7 @@ function _renderTaskRowCompact(t, stageStart) {
   var startDateStr = effectiveStart || '—';
   var startTitle = effectiveStart ? escHtml(effectiveStart) : (stageStart ? '默认取阶段开始时间' : '未设置');
   return '<td style="text-align:left;cursor:pointer" onclick="openTaskViewDialog(' + t.id + ')" title="查看任务详情">' + escHtml(t.title) + '</td>' +
-    (_hasProjectEditPerm()
-      ? '<td style="text-align:center;cursor:pointer" onclick="event.stopPropagation();openReviewerDialog(' + t.id + ')" title="' + (t.status === 'review' && t.reviewer_name ? '审批人: ' + escHtml(t.reviewer_name) + ' — 点击修改' : '点击修改审批人') + '">' + renderPill(t.status || 'todo') + '</td>'
-      : '<td style="text-align:center">' + renderPill(t.status || 'todo') + '</td>') +
+    '<td style="text-align:center;cursor:pointer" onclick="event.stopPropagation();openReviewerDialog(' + t.id + ')" title="' + (t.status === 'review' && t.reviewer_name ? '审批人: ' + escHtml(t.reviewer_name) + ' — 点击修改' : '点击修改审批人') + '">' + renderPill(t.status || 'todo') + '</td>' +
     '<td style="text-align:center">' + (typeof renderPriority === 'function' ? renderPriority(t.priority) : escHtml(t.priority || 'medium')) + '</td>' +
     '<td style="font-size:12px;cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();openAssignDialog(' + t.id + ')" title="指派任务">' + escHtml(assigneeName) + '</td>' +
     '<td style="text-align:center">' + progressHtml + '</td>' +
@@ -456,7 +454,7 @@ function _renderTaskRowCompact(t, stageStart) {
     '<td style="font-size:12px">' + (t.completed_at ? formatDate(t.completed_at) : '—') + '</td>' +
     _renderLatestActivity(t) +
     '<td style="text-align:center;width:22px" onclick="event.stopPropagation();if(event.target!==this.firstElementChild){var cb=this.firstElementChild;if(cb){cb.checked=!cb.checked;cb.onchange()}}"><input type="checkbox" value="' + t.id + '" onchange="_onTaskCheckbox(this)" class="task-checkbox"></td>' +
-    '<td style="white-space:nowrap" onclick="event.stopPropagation()">' + iconEdit('openTaskDialog(' + t.id + ')') + iconDelete('deleteTask(' + t.id + ')') + '</td>';
+    '<td style="white-space:nowrap" onclick="event.stopPropagation()">' + iconEdit('openTaskDialog(' + t.id + ')') + iconDelete('deleteTask(' + t.id + ',\'' + escJs(t.title) + '\')') + '</td>';
 }
 
 /* ── Import / Clear Tasks ── */
@@ -524,16 +522,14 @@ function _renderTaskRow(t, stageMap) {
     '<td style="text-align:left;font-size:12px">' + escHtml(t.project_name || '-') + '</td>' +
     '<td style="text-align:left"><a href="javascript:void(0)" onclick="openTaskViewDialog(' + t.id + ')" style="color:var(--accent)">' + escHtml(t.title) + '</a></td>' +
     '<td>' + (stageName ? '<span style="font-size:11px;color:var(--muted)">' + escHtml(stageName) + '</span>' : '-') + '</td>' +
-    (_hasProjectEditPerm()
-      ? '<td style="cursor:pointer" onclick="event.stopPropagation();openReviewerDialog(' + t.id + ')" title="' + (t.reviewer_name ? '审批人: ' + escHtml(t.reviewer_name) + ' — 点击修改' : '点击设置审批人') + '">' + renderPill(t.status || 'todo') + '</td>'
-      : '<td>' + renderPill(t.status || 'todo') + '</td>') +
+    '<td style="cursor:pointer" onclick="event.stopPropagation();openReviewerDialog(' + t.id + ')" title="' + (t.reviewer_name ? '审批人: ' + escHtml(t.reviewer_name) + ' — 点击修改' : '点击设置审批人') + '">' + renderPill(t.status || 'todo') + '</td>' +
     '<td>' + _renderPriority(t.priority) + '</td>' +
     '<td>' + renderProgressCircle(progressPct, 26, {label:''}) + '</td>' +
     '<td style="color:' + (overdue ? 'var(--danger)' : '') + '">' + (t.due_date || '-') + '</td>' +
     '<td>' +
       iconEdit('openTaskDialog(' + t.id + ')', '编辑任务') +
       iconCopy('openCopyTaskDialog(' + t.id + ')', '复制任务') +
-      iconDelete('deleteTask(' + t.id + ')', '删除任务') +
+      iconDelete('deleteTask(' + t.id + ',\'' + escJs(t.title) + '\')', '删除任务') +
     '</td>' +
   '</tr>';
 }
@@ -779,13 +775,11 @@ function _showTaskForm(title, task) {
           selectedIdFn: function() { return _tfAssigneeId; },
           onSelect: function(u) { _tfAssigneeId = u.id; }
         }) + '<div id="tf-assignee-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择负责人</div></div></div>' +
-        (_hasProjectEditPerm()
-          ? '<div><label style="' + _lbl + '">审批人</label><div style="margin-top:2px">' + createUserCombo({
-              comboId: 'tf-reviewer-combo', inputId: 'tf-reviewer-input', dropdownId: 'tf-reviewer-dropdown',
-              selectedIdFn: function() { return _tfReviewerId; },
-              onSelect: function(u) { _tfReviewerId = u.id; }
-            }) + '</div></div>'
-          : '<div><label style="' + _lbl + '">审批人</label><div style="' + inp + ';padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:13px;color:var(--fg)" id="tf-reviewer-static">' + escHtml(t.reviewer_name || '—') + '</div></div>') +
+        '<div><label style="' + _lbl + '">审批人</label><div style="margin-top:2px">' + createUserCombo({
+          comboId: 'tf-reviewer-combo', inputId: 'tf-reviewer-input', dropdownId: 'tf-reviewer-dropdown',
+          selectedIdFn: function() { return _tfReviewerId; },
+          onSelect: function(u) { _tfReviewerId = u.id; }
+        }) + '</div></div>' +
       '</div>' +
     '</div>' +
     // ── 状态与进度 ──
@@ -1523,16 +1517,21 @@ async function submitComment(taskId) {
 
 /* ── Delete Task ── */
 
-async function deleteTask(taskId) {
-  // Find task title for confirmation
-  var taskTitle = '';
-  var taskEl = document.querySelector('#task-content tr[data-task-id="' + taskId + '"] td:nth-child(2)');
-  if (!taskEl) taskEl = document.querySelector('#pma-tasks-content tr[data-task-id="' + taskId + '"] td:nth-child(2)');
-  if (taskEl) taskTitle = taskEl.textContent.trim();
+async function deleteTask(taskId, taskName) {
+  var taskTitle = taskName || '';
+  if (!taskTitle) {
+    // Fallback DOM search if title not passed
+    var rows = document.querySelectorAll('#task-content tr[data-task-id="' + taskId + '"]:not(.task-stage-row), #pma-tasks-content tr[data-task-id="' + taskId + '"]:not(.task-stage-row)');
+    for (var i = 0; i < rows.length; i++) {
+      var link = rows[i].querySelector('[onclick*="openTaskViewDialog"]');
+      if (link) { taskTitle = link.textContent.trim(); break; }
+    }
+  }
+  var label = '#' + taskId + (taskTitle ? ': ' + taskTitle : '');
   openDialog('删除任务',
-    '<div class="confirm-dlg">确认删除任务 <b>' + escHtml(taskTitle || '#' + taskId) + '</b>？<br><br>相关工时记录和评论也会被删除。</div>',
+    '<div class="confirm-dlg">确认删除任务 <b>' + escHtml(label) + '</b>？<br><br>相关工时记录和评论也会被删除。</div>',
     [{text: '取消', onclick: 'closeSharedDialog()'},
-     {text: '确认删除', cls: 'btn-danger', onclick: 'closeSharedDialog();doDeleteTask(' + taskId + ',\'' + escHtml(taskTitle || '').replace(/'/g, "\\'") + '\')'}],
+     {text: '确认删除', cls: 'btn-danger', onclick: 'closeSharedDialog();doDeleteTask(' + taskId + ',\'' + escHtml(label).replace(/'/g, "\\'") + '\')'}],
     {hideClose: true});
 }
 async function doDeleteTask(taskId, taskTitle) {
