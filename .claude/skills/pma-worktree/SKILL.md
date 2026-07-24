@@ -213,3 +213,16 @@ Worktree B 上线 → fetch 拉到 A 的改动 → 二次 rebase → push trunk
 - 正常：`上线` 命令最后一步自动 `ExitWorktree(action: "remove")` + 删除远程临时分支
 - 远程分支：`git push origin --delete <branch>`（上线后自动执行）
 - 异常：`git worktree remove .claude/worktrees/<name>` + `git branch -D <branch>`
+- **退出后清理残留**：每次 worktree session 退出后，检查 `.claude/worktrees/` 下是否有 `git worktree list` 中不存在的残留目录，将其删除：
+  ```bash
+  # 列出当前活跃的 worktree 路径
+  git worktree list --porcelain | grep '^worktree ' | cut -d' ' -f2- > /tmp/active_worktrees.txt
+  # 删除 .claude/worktrees/ 下不在活跃列表中的目录
+  for d in .claude/worktrees/*/; do
+    d=$(realpath "$d")
+    if ! grep -qxF "$d" /tmp/active_worktrees.txt; then
+      echo "清理残留 worktree: $d"
+      rm -rf "$d"
+    fi
+  done
+  ```

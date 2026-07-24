@@ -27,6 +27,13 @@ allowed-tools: Read, Write, Edit, Bash, LSP
 grep -rn 'function_name' backend/ --include='*.py' | grep -v __pycache__
 ```
 
+## 修复后提供测试链接
+
+修复完成后：
+1. 执行 `./server.sh status` 获取当前服务地址和端口
+2. 向用户提供可直接点击的验证 URL（如 `http://192.168.100.100:8000/#/detail/PE0445/docs`），说明需要查看哪个页面/功能来验证修复效果
+3. 当前会话未使用默认端口时，URL 需使用实际端口（如 `http://192.168.100.100:8001/...`）
+
 ## 日志完善原则
 
 - 外部 API 调用：记录请求 URL + 响应状态码 + 响应体预览（出错时）
