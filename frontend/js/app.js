@@ -1023,8 +1023,14 @@ async function loadAlertTicker() {
   try {
     var data = await API.get('/dashboard/alerts?limit=30');
     var alerts = data.items || [];
-    if (!alerts.length) { ticker.style.display = 'none'; return; }
     ticker.style.display = '';
+    var inner = document.getElementById('alert-ticker-inner');
+    if (!alerts.length) {
+      inner.style.animationName = 'none';
+      inner.innerHTML = '<span style="color:#22c55e;padding:2px 12px">✅ 一切安好，暂无告警</span>';
+      return;
+    }
+    inner.style.animationName = 'ticker-scroll';
     applyTickerSpeed();
     // Duplicate items for seamless scrolling
     var items = alerts.concat(alerts);

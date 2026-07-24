@@ -18,4 +18,4 @@ data/backups/permanent/
 data/source_config-*.json
 data/uploads/
 data/.shutdown-*
-pma-8000.log.*
+data/pma-.log.*
