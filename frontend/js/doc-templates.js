@@ -561,15 +561,15 @@ function showAddTemplateForm() {
       '</div>' +
     '</div>' +
     '<div style="margin-bottom:10px">' +
-      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">路径 <span style="color:var(--danger)">*必填</span> &nbsp;<span style="font-weight:400;font-size:10px">{code} = 项目代号占位符</span></label>' +
+      '<label class="dt-path-label" style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">路径 <span style="color:var(--danger)">*必填</span> &nbsp;<span class="dt-path-hint" style="font-weight:400;font-size:10px">{code} = 项目代号占位符</span></label>' +
       '<input class="search-inp" id="dt-base-path" placeholder="http://.../项目/{code}/" style="width:100%;box-sizing:border-box;margin-bottom:6px" oninput="_updateProjPathPreview()">' +
     '</div>' +
     '<div style="margin-bottom:10px">' +
-      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名 <span style="color:var(--danger)">*必填</span> &nbsp;<span style="font-weight:400;font-size:10px">{code} = 项目代号占位符</span></label>' +
+      '<label class="dt-file-label" style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名 <span style="color:var(--danger)">*必填</span> &nbsp;<span class="dt-file-hint" style="font-weight:400;font-size:10px">{code} = 项目代号占位符</span></label>' +
       '<input class="search-inp" id="dt-file-pattern" placeholder="01_{code}_SCH-FINAL.rar" style="width:100%;box-sizing:border-box" oninput="_updateProjPathPreview()">' +
     '</div>' +
     '<div style="margin-bottom:10px">' +
-      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">最终路径预览 &nbsp;<span style="font-weight:400;font-size:10px">* 替换为项目代号</span></label>' +
+      '<label class="dt-preview-label" style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">最终路径预览 &nbsp;<span style="font-weight:400;font-size:10px">* 替换为项目代号</span></label>' +
       '<input class="search-inp" id="dt-path-preview" value="" style="width:100%;box-sizing:border-box;color:var(--accent);font-size:11px;font-family:var(--mono)" disabled>' +
     '</div>' +
     '<div style="margin-bottom:10px">' +
@@ -618,15 +618,15 @@ function showEditTemplateForm(id) {
       '</div>' +
     '</div>' +
     '<div style="margin-bottom:10px">' +
-      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">路径 <span style="color:var(--danger)">*必填</span> &nbsp;<span style="font-weight:400;font-size:10px">{code} = 项目代号占位符</span></label>' +
+      '<label class="dt-path-label" style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">路径 <span style="color:var(--danger)">*必填</span> &nbsp;<span class="dt-path-hint" style="font-weight:400;font-size:10px">{code} = 项目代号占位符</span></label>' +
       '<input class="search-inp" id="dt-base-path" value="' + escHtml(bp) + '" placeholder="http://.../项目/{code}/" style="width:100%;box-sizing:border-box;margin-bottom:6px" oninput="_updateProjPathPreview()">' +
     '</div>' +
     '<div style="margin-bottom:10px">' +
-      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名 <span style="color:var(--danger)">*必填</span> &nbsp;<span style="font-weight:400;font-size:10px">{code} = 项目代号占位符</span></label>' +
+      '<label class="dt-file-label" style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名 <span style="color:var(--danger)">*必填</span> &nbsp;<span class="dt-file-hint" style="font-weight:400;font-size:10px">{code} = 项目代号占位符</span></label>' +
       '<input class="search-inp" id="dt-file-pattern" value="' + escHtml(fp) + '" placeholder="01_{code}_SCH-FINAL.rar" style="width:100%;box-sizing:border-box" oninput="_updateProjPathPreview()">' +
     '</div>' +
     '<div style="margin-bottom:10px">' +
-      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">最终路径预览 &nbsp;<span style="font-weight:400;font-size:10px">* 替换为项目代号</span></label>' +
+      '<label class="dt-preview-label" style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">最终路径预览 &nbsp;<span style="font-weight:400;font-size:10px">* 替换为项目代号</span></label>' +
       '<input class="search-inp" id="dt-path-preview" value="" style="width:100%;box-sizing:border-box;color:var(--accent);font-size:11px;font-family:var(--mono)" disabled>' +
     '</div>' +
     '<div style="margin-bottom:10px">' +
@@ -659,7 +659,7 @@ function saveTemplate(id) {
   var desc = descEl ? descEl.value.trim() : '';
   var basePath = basePathEl ? basePathEl.value.trim() : '';
   var filePattern = patternEl ? patternEl.value.trim() : '';
-  var path = (basePath + '/' + filePattern).replace(/\/{2,}/g, '/');
+  var path = (basePath + '/' + filePattern).replace(/([^:])\/{2,}/g, '$1/');
   var typeEl = document.getElementById('dt-doctype');
   var docType = typeEl ? typeEl.value : '';
   if (!name) { showToast('请输入文档名称', 'error'); return; }
@@ -1558,16 +1558,60 @@ function _applyDocTypePlaceholder(dialog, type) {
   if (!dialog || !type) return;
   var hidden = dialog.querySelector('.doc-type-value');
   if (hidden) hidden.value = type;
+
+  var isSolidworks = type === 'solidworks';
+
+  // Update path label and hint
+  var pathLabel = dialog.querySelector('.dt-path-label');
+  var pathHint = dialog.querySelector('.dt-path-hint');
+  if (pathLabel) {
+    pathLabel.innerHTML = isSolidworks
+      ? 'PDM 目录路径 <span style="color:var(--danger)">*必填</span>'
+      : '路径 <span style="color:var(--danger)">*必填</span>';
+  }
+  if (pathHint) {
+    pathHint.textContent = isSolidworks
+      ? '{code} = 项目代号, * = 通配符, 如 PE0445*'
+      : '{code} = 项目代号占位符';
+  }
+
+  // Update file pattern label and hint
+  var fileLabel = dialog.querySelector('.dt-file-label');
+  var fileHint = dialog.querySelector('.dt-file-hint');
+  if (fileLabel) {
+    fileLabel.innerHTML = isSolidworks
+      ? '文件名模式 <span style="color:var(--danger)">*必填</span>'
+      : '文档名 <span style="color:var(--danger)">*必填</span>';
+  }
+  if (fileHint) {
+    fileHint.textContent = isSolidworks
+      ? '{code} = 项目代号, *.pdf = 匹配所有PDF'
+      : '{code} = 项目代号占位符';
+  }
+
+  // Update preview label
+  var previewLabel = dialog.querySelector('.dt-preview-label');
+  if (previewLabel) {
+    previewLabel.innerHTML = isSolidworks
+      ? 'PDM 完整路径预览 &nbsp;<span style="font-weight:400;font-size:10px">* 替换为项目代号</span>'
+      : '最终路径预览 &nbsp;<span style="font-weight:400;font-size:10px">* 替换为项目代号</span>';
+  }
+
+  // Update placeholders
   var placeholders = {
     gitlab: 'GitLab 发布链接，如 http://192.168.0.128/.../-/releases/...',
     svn: 'SVN 地址，如 http://192.168.0.124:8443/svn/...',
     nas: 'NAS 路径，如 \\\\192.168.0.x\\share\\...',
-    solidworks: '结构设计文件路径',
+    solidworks: 'http://192.168.0.191/SOLIDWORKSPDM/LM-PDM/1.结构项目/{code}*/3.项目输出/',
     pma: 'PMA 系统内部链接'
   };
-  var pathInput = dialog.querySelector('input[id*="path"]');
+  var pathInput = dialog.querySelector('input[id*="base-path"]');
   if (pathInput && placeholders[type]) {
     pathInput.placeholder = placeholders[type];
+  }
+  var fileInput = dialog.querySelector('input[id*="file-pattern"]');
+  if (fileInput) {
+    fileInput.placeholder = isSolidworks ? '*.pdf' : '01_{code}_SCH-FINAL.rar';
   }
 }
 var _dtBreadcrumbIds = [];       // cached breadcrumb node IDs for click nav
@@ -1841,7 +1885,7 @@ function _updateProjPathPreview() {
   var base = baseEl ? baseEl.value.trim() : '';
   var pat = patEl ? patEl.value.trim() : '';
   if (!base && !pat) { previewEl.value = ''; return; }
-  previewEl.value = (base + '/' + pat).replace(/\/{2,}/g, '/');
+  previewEl.value = (base + '/' + pat).replace(/([^:])\/{2,}/g, '$1/');
 }
 
 function _updatePathPreview() {
@@ -1852,7 +1896,7 @@ function _updatePathPreview() {
   var base = baseEl ? baseEl.value.trim() : '';
   var pat = patEl ? patEl.value.trim() : '';
   if (!base && !pat) { previewEl.value = ''; return; }
-  previewEl.value = (base + '/' + pat).replace(/\/{2,}/g, '/');
+  previewEl.value = (base + '/' + pat).replace(/([^:])\/{2,}/g, '$1/');
 }
 
 function showAddProductTemplateForm() {

@@ -56,6 +56,50 @@ async def trigger_single_sync(source: str, db: Session = Depends(get_db), _=Depe
             "timings": {"total": elapsed},
         }, "message": "ok"}
 
+    if source == "pdm":
+        from backend.services.doc_scanner import check_product_docs, check_project_docs
+        from backend.models.zentao import PmaProduct, CachedProject
+        from backend.models.document import ProductDocument, ProjectDocument
+        # Clear all solidworks document locations before scanning
+        db.query(ProductDocument).filter(
+            ProductDocument.doc_type == "solidworks",
+            ProductDocument.location.isnot(None), ProductDocument.location != ""
+        ).update({ProductDocument.location: None, ProductDocument.status: "pending"})
+        db.query(ProjectDocument).filter(
+            ProjectDocument.doc_type == "solidworks",
+            ProjectDocument.location.isnot(None), ProjectDocument.location != ""
+        ).update({ProjectDocument.location: None, ProjectDocument.status: "pending"})
+        db.commit()
+        t0 = _time.time()
+        total_scanned, total_submitted, total_reverted, total_location, total_matched = 0, 0, 0, 0, 0
+        # Scan product documents
+        for prod in db.query(PmaProduct).all():
+            r = await check_product_docs(db, prod.id)
+            total_scanned += r.get("scanned", 0)
+            total_submitted += r.get("auto_submitted", 0)
+            total_reverted += r.get("reverted", 0)
+            total_location += r.get("location_filled", 0)
+            total_matched += r.get("total_matched", 0)
+        # Scan project documents
+        for proj in db.query(CachedProject).all():
+            r = check_project_docs(db, proj.id)
+            total_scanned += r.get("scanned", 0)
+            total_submitted += r.get("auto_submitted", 0)
+            total_reverted += r.get("reverted", 0)
+            total_location += r.get("location_filled", 0)
+            total_matched += r.get("total_matched", 0)
+        elapsed = round(_time.time() - t0, 1)
+        summary_parts = [f"总匹配{total_matched}个", f"新匹配{total_submitted}个"]
+        if total_reverted: summary_parts.append(f"回退{total_reverted}个")
+        if total_location: summary_parts.append(f"补填路径{total_location}个")
+        return {"code": 0, "data": {
+            "pdm_summary": {"status": "success", "summary": " / ".join(summary_parts),
+                            "scanned": total_scanned, "total_matched": total_matched,
+                            "auto_submitted": total_submitted,
+                            "reverted": total_reverted, "location_filled": total_location},
+            "timings": {"total": elapsed},
+        }, "message": "ok"}
+
     if source == "gitlab":
         from backend.config import settings
         if not settings.GITLAB_TOKEN:

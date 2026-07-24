@@ -47,6 +47,15 @@ var _configSections = [
     { key: 'username', label: '用户名', type: 'text', ph: '' },
     { key: 'password', label: '密码', type: 'password', ph: '' },
   ]},
+  { key: 'pdm', title: 'SOLIDWORKS PDM', summaryKey: 'base_url', summaryPrefix: '地址: ', fields: [
+    { key: 'base_url', label: 'PDM 地址', type: 'url', ph: 'http://192.168.0.191/SOLIDWORKSPDM' },
+    { key: 'username', label: 'HTTP 用户名', type: 'text', ph: '' },
+    { key: 'password', label: 'HTTP 密码', type: 'password', ph: '' },
+    { key: 'ssh_host', label: 'SSH 主机', type: 'text', ph: '192.168.0.191' },
+    { key: 'ssh_username', label: 'SSH 用户名', type: 'text', ph: '' },
+    { key: 'ssh_password', label: 'SSH 密码', type: 'password', ph: '' },
+    { key: 'base_path', label: 'Windows 磁盘路径', type: 'text', ph: 'D:\\LMPDM' },
+  ]},
   { key: 'wecom', title: '企业微信 (WeCom)', summaryKey: 'corp_id', summaryPrefix: 'CorpID: ', fields: [
     { key: 'corp_id', label: '企业ID (Corp ID)', type: 'text', ph: 'ww...' },
     { key: 'secret', label: '应用 Secret', type: 'password', ph: '' },

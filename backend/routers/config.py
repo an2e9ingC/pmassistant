@@ -59,6 +59,17 @@ class SvnConfig(BaseModel):
     enabled: bool = True
 
 
+class PdmConfig(BaseModel):
+    base_url: str = ""
+    username: str = ""
+    password: str = ""
+    ssh_host: str = ""
+    ssh_username: str = ""
+    ssh_password: str = ""
+    base_path: str = ""
+    enabled: bool = True
+
+
 class WeComConfig(BaseModel):
     corp_id: str = ""
     secret: str = ""
@@ -71,6 +82,7 @@ class DataSourceConfig(BaseModel):
     gitlab: GitLabConfig = GitLabConfig()
     nas: NasConfig = NasConfig()
     svn: SvnConfig = SvnConfig()
+    pdm: PdmConfig = PdmConfig()
     wecom: WeComConfig = WeComConfig()
 
 
@@ -109,6 +121,16 @@ def _load_config() -> dict:
             "username": os.environ.get("SVN_USERNAME", ""),
             "password": os.environ.get("SVN_PASSWORD", ""),
             "enabled": os.environ.get("SVN_ENABLED", "true").lower() in ("1", "true", "yes"),
+        },
+        "pdm": {
+            "base_url": os.environ.get("PDM_BASE_URL", ""),
+            "username": os.environ.get("PDM_USERNAME", ""),
+            "password": os.environ.get("PDM_PASSWORD", ""),
+            "ssh_host": os.environ.get("PDM_SSH_HOST", ""),
+            "ssh_username": os.environ.get("PDM_SSH_USERNAME", ""),
+            "ssh_password": os.environ.get("PDM_SSH_PASSWORD", ""),
+            "base_path": os.environ.get("PDM_BASE_PATH", ""),
+            "enabled": os.environ.get("PDM_ENABLED", "true").lower() in ("1", "true", "yes"),
         },
         "wecom": {
             "corp_id": os.environ.get("WECOM_CORP_ID", ""),
@@ -160,6 +182,14 @@ def _save_config(cfg: dict) -> None:
         "svn.username": "SVN_USERNAME",
         "svn.password": "SVN_PASSWORD",
         "svn.enabled": "SVN_ENABLED",
+        "pdm.base_url": "PDM_BASE_URL",
+        "pdm.username": "PDM_USERNAME",
+        "pdm.password": "PDM_PASSWORD",
+        "pdm.ssh_host": "PDM_SSH_HOST",
+        "pdm.ssh_username": "PDM_SSH_USERNAME",
+        "pdm.ssh_password": "PDM_SSH_PASSWORD",
+        "pdm.base_path": "PDM_BASE_PATH",
+        "pdm.enabled": "PDM_ENABLED",
         "wecom.corp_id": "WECOM_CORP_ID",
         "wecom.secret": "WECOM_SECRET",
         "wecom.sync_interval": "WECOM_SYNC_INTERVAL",
@@ -424,6 +454,21 @@ def clear_svn_data(db: Session = Depends(get_db), user=Depends(require_perm("syn
     return {"code": 0, "data": {"cleared": cleared}, "message": f"已清除{cleared}条SVN数据"}
 
 
+@router.post("/clear-solidworks", response_model=dict)
+def clear_solidworks_data(db: Session = Depends(get_db), user=Depends(require_perm("sync"))):
+    """Clear all SOLIDWORKS PDM-synced data for debugging."""
+    from backend.models.document import ProductDocument
+    cleared = db.query(ProductDocument).filter(
+        ProductDocument.doc_type == "solidworks"
+    ).update({ProductDocument.location: None, ProductDocument.status: "pending",
+              ProductDocument.uploaded_at: None, ProductDocument.completed_at: None,
+              ProductDocument.svn_author: None, ProductDocument.svn_last_modified: None,
+              ProductDocument.svn_rev: None}, synchronize_session=False)
+    db.commit()
+    log_audit(db, user, "clear_solidworks", f"清除PDM同步数据: {cleared}条", AUDIT_CAT_SYSTEM, "high")
+    return {"code": 0, "data": {"cleared": cleared}, "message": f"已清除{cleared}条PDM数据"}
+
+
 # ── Changelog ──
 
 @router.get("/changelog", response_model=dict)
@@ -514,6 +559,34 @@ def test_connection(source: str, _=Depends(require_admin)):
                 req.add_header("Authorization", f"Basic {cred}")
             resp = urllib.request.urlopen(req, timeout=10)
             return {"code": 0, "data": {"ok": True, "detail": f"HTTP {resp.status} — SVN 连接成功"}, "message": "ok"}
+
+        elif source == "pdm":
+            ssh_host = section.get("ssh_host", "")
+            ssh_user = section.get("ssh_username", "")
+            ssh_pass = section.get("ssh_password", "")
+            base_path = section.get("base_path", "")
+            if not ssh_host or not ssh_user:
+                return {"code": 0, "data": {"ok": False, "detail": "未配置 SSH 主机或用户名"}, "message": "ok"}
+            import paramiko
+            ssh = paramiko.SSHClient()
+            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            try:
+                ssh.connect(ssh_host, username=ssh_user, password=ssh_pass,
+                             look_for_keys=False, allow_agent=False, timeout=10)
+                # Test: run dir on base_path
+                cmd = f'dir /b "{base_path}"' if base_path else "echo PDM SSH OK"
+                _, stdout, _ = ssh.exec_command(cmd, timeout=10)
+                output = stdout.read().decode("gbk", errors="replace").strip()
+                ssh.close()
+                lines = output.split("\n")[:5] if output else []
+                detail = f"SSH 连接成功 — {base_path or 'PDM'} ({len(lines)} 项)"
+                return {"code": 0, "data": {"ok": True, "detail": detail}, "message": "ok"}
+            except Exception as e:
+                try:
+                    ssh.close()
+                except Exception:
+                    pass
+                return {"code": 0, "data": {"ok": False, "detail": f"SSH 连接失败: {str(e)[:120]}"}, "message": "ok"}
 
         elif source == "wecom":
             corp_id = section.get("corp_id", "")
