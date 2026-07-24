@@ -163,6 +163,28 @@ git stash pop                     # 恢复 stash（有冲突则用 trunk 版本�
 # 如果 pop 有冲突 → git checkout --theirs <files> → git add <files> → git stash drop
 ```
 
+### 2.5 Schema 检查（merge 后、重启前）
+
+> **禁止自动执行 DB 迁移。** Worktree 测试可能污染数据库，只做只读检查。
+
+```bash
+cd $PMA_TRUNK_DIR
+python3 -c "
+from backend.database import engine
+from sqlalchemy import inspect
+inspector = inspect(engine)
+# 只检查本次修改涉及的表
+for table in ['pma_tasks', 'product_documents', 'product_doc_templates', 'document_templates', 'task_templates']:
+    if not inspector.has_table(table):
+        continue
+    cols = {c['name'] for c in inspector.get_columns(table)}
+    # 从 git diff 中提取新增的 Column 定义
+    # 如果代码中有新列但 DB 没有 → 报告给用户
+"
+```
+
+如果发现缺失列 → 告知用户手动执行 `ALTER TABLE ... ADD COLUMN ...`，**不自动执行**。
+
 ### 3. push + cleanup
 
 ```bash
