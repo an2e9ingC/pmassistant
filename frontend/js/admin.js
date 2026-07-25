@@ -361,6 +361,14 @@ async function clearZenTaoData() {
   await clearDatabase();
 }
 
+async function resetAllGuides() {
+  if (!confirm('确定重置所有用户的新手引导标记？\n\n此操作会使所有已登录用户在下次登录时重新看到新手引导。通常在修改了新手引导代码后使用。')) return;
+  try {
+    var r = await API.post('/auth/guide/reset-all', {});
+    showToast(r.message || '已重置', 'success');
+  } catch(e) { showToast('重置失败: ' + (e.message || ''), 'error'); }
+}
+
 async function clearDatabase() {
   if (!confirm('确定清除所有缓存数据？（项目/产品/执行/任务/Bug等）\n注意：此操作不可撤销，清除后需重新同步。')) return;
   if (!confirm('再次确认：清除后需从禅道重新同步全部数据，可能耗时较长。确定继续？')) return;

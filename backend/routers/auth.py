@@ -10,7 +10,9 @@ from sqlalchemy.orm import Session
 
 from backend.config import settings
 from backend.database import get_db
-from backend.middleware.auth import get_current_user, get_user_perms, _get_perms
+from backend.middleware.auth import get_current_user, get_user_perms, _get_perms, require_admin
+from backend.routers.logs import log_audit
+from backend.audit_categories import AUDIT_CAT_USER
 from backend.models.local import LocalUser, Role, UserRole
 from backend.schemas.auth import LoginRequest, LoginResponse, UserInfo
 from backend.services.auth_service import authenticate_user, create_access_token, hash_password, verify_password
@@ -181,6 +183,35 @@ def update_seen_version(
     """Mark a changelog version as seen by the current user."""
     db.query(LocalUser).filter(LocalUser.id == user.id).update(
         {LocalUser.seen_version: version}, synchronize_session=False
+    )
+    db.commit()
+    return {"code": 0, "message": "ok"}
+
+
+@router.post("/guide/reset-all", response_model=dict)
+def reset_all_guides(
+    db: Session = Depends(get_db),
+    user=Depends(require_admin),
+):
+    """Reset need_guide=True for all active users (admin only).
+    Used when guide content has been modified and all users should re-see it.
+    """
+    count = db.query(LocalUser).filter(LocalUser.is_active == True).update(
+        {LocalUser.need_guide: True}, synchronize_session=False
+    )
+    db.commit()
+    log_audit(db, user, "guide_reset_all", f"重置所有用户新手引导标记: {count}人", AUDIT_CAT_USER, "medium")
+    return {"code": 0, "data": {"updated": count}, "message": f"已为 {count} 位用户重置新手引导"}
+
+
+@router.put("/guide/done", response_model=dict)
+def mark_guide_done(
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Mark current user's guide as completed (need_guide=False)."""
+    db.query(LocalUser).filter(LocalUser.id == user.id).update(
+        {LocalUser.need_guide: False}, synchronize_session=False
     )
     db.commit()
     return {"code": 0, "message": "ok"}
