@@ -82,7 +82,7 @@ Co-Authored-By: <model-name> / <tool-name>
 
    评论模板：
    ```markdown
-   ## 🤖 AI 分析摘要
+   ## 分析处理摘要
 
    ### 问题分析
    {1-3句话描述问题根因或需求背景}

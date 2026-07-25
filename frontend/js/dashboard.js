@@ -16,7 +16,14 @@ var dashFilter = {
 
   // ── KPI card click (single-select: clicking already-active card does nothing) ──
 
+  _clearSearch: function() {
+    this.search = '';
+    var inp = document.getElementById('proj-search');
+    if (inp) inp.value = '';
+  },
+
   setCard: function(cat, el) {
+    this._clearSearch();
     if (cat === 'fav') {
       // Fav card: switch to fav mode, clear category highlight
       if (this.type === 'fav') return; // already on fav, no-op
@@ -49,6 +56,7 @@ var dashFilter = {
 
   setType: function(type, el) {
     if (this.type === type) return;
+    this._clearSearch();
     this.type = type;
     this.category = ''; // reset category highlight when switching type
     document.querySelectorAll('#dash-type-filter .tab').forEach(function(t) { t.classList.remove('active'); });
@@ -61,6 +69,7 @@ var dashFilter = {
 
   setStatus: function(status, el) {
     if (this.status === status) return;
+    this._clearSearch();
     this.status = status;
     document.querySelectorAll('#dash-status-filter .tab').forEach(function(t) { t.classList.remove('active'); });
     if (el) el.classList.add('active');
@@ -71,6 +80,7 @@ var dashFilter = {
 
   setProgram: function(pid, el) {
     if (this.program === pid) return;
+    this._clearSearch();
     this.program = pid;
     document.querySelectorAll('#dash-program-filter .tab').forEach(function(t) { t.classList.remove('active'); });
     if (el) el.classList.add('active');
