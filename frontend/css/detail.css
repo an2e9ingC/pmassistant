@@ -562,6 +562,13 @@
 
 @keyframes sync-spin { to { transform: rotate(360deg); } }
 
+/* ── Alert Ticker ── */
+@keyframes ticker-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+body.has-ticker .view.active { padding-bottom: 28px; }
+
 /* ── Inline Document Editing ── */
 
 .doc-edit-row td {

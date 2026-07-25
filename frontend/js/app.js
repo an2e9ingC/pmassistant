@@ -1014,9 +1014,12 @@ var _tickerTimer = null;
 
 function initAlertTicker() {
   if (_tickerEnabled) {
+    document.body.classList.add('has-ticker');
     loadAlertTicker();
     if (_tickerTimer) clearInterval(_tickerTimer);
     _tickerTimer = setInterval(loadAlertTicker, 60000);
+  } else {
+    document.body.classList.remove('has-ticker');
   }
 }
 
@@ -1031,9 +1034,11 @@ function toggleAlertTicker() {
   var ticker = document.getElementById('alert-ticker');
   if (_tickerEnabled) {
     if (ticker) ticker.style.display = '';
+    document.body.classList.add('has-ticker');
     initAlertTicker();
   } else {
     if (ticker) ticker.style.display = 'none';
+    document.body.classList.remove('has-ticker');
     if (_tickerTimer) { clearInterval(_tickerTimer); _tickerTimer = null; }
   }
 }
@@ -1050,8 +1055,9 @@ async function loadAlertTicker() {
   try {
     var data = await API.get('/dashboard/alerts?limit=30');
     var alerts = data.items || [];
-    if (!alerts.length) { ticker.style.display = 'none'; return; }
+    if (!alerts.length) { ticker.style.display = 'none'; document.body.classList.remove('has-ticker'); return; }
     ticker.style.display = '';
+    document.body.classList.add('has-ticker');
     applyTickerSpeed();
     // Duplicate items for seamless scrolling
     var items = alerts.concat(alerts);
