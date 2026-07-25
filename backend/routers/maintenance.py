@@ -16,7 +16,17 @@ router = APIRouter(prefix="/api/maintenance", tags=["maintenance"])
 
 
 class LinkIds(BaseModel):
+    """Simple ID list — still used for customer/tag linking."""
     ids: List[int]
+
+
+class ProductLinkItem(BaseModel):
+    product_id: int
+    quantity: int = 1
+
+
+class ProductLinks(BaseModel):
+    items: List[ProductLinkItem]
 
 
 # ── Customer List ──
@@ -34,27 +44,29 @@ def list_customers(db: Session = Depends(get_db), _=Depends(get_current_user)):
 def get_project_products(identifier: str, db: Session = Depends(get_db), _=Depends(require_perm("project_edit"))):
     project = resolve_project(db, identifier)
     links = db.query(ProductProjectLink).filter(ProductProjectLink.project_id == project.id).all()
-    product_ids = [l.product_id for l in links]
+    qty_map = {l.product_id: l.quantity for l in links}
+    product_ids = list(qty_map.keys())
     products = db.query(PmaProduct).filter(PmaProduct.id.in_(product_ids)).all() if product_ids else []
-    return {"code": 0, "data": [{"id": p.id, "name": p.name, "code": p.code} for p in products], "message": "ok"}
+    return {"code": 0, "data": [{"id": p.id, "name": p.name, "code": p.code, "quantity": qty_map.get(p.id, 1)} for p in products], "message": "ok"}
 
 
 @router.put("/projects/{identifier}/products", response_model=dict)
-def set_project_products(identifier: str, payload: LinkIds, db: Session = Depends(get_db), user=Depends(require_perm("project_edit"))):
+def set_project_products(identifier: str, payload: ProductLinks, db: Session = Depends(get_db), user=Depends(require_perm("project_edit"))):
     project = resolve_project(db, identifier)
     # Get old names before deleting links
     old_links = db.query(ProductProjectLink).filter(ProductProjectLink.project_id == project.id).all()
     old_pids = [l.product_id for l in old_links]
     old_names = [p.name for p in db.query(PmaProduct).filter(PmaProduct.id.in_(old_pids)).all()] if old_pids else []
     db.query(ProductProjectLink).filter(ProductProjectLink.project_id == project.id).delete()
-    for pid in payload.ids:
-        db.add(ProductProjectLink(product_id=pid, project_id=project.id))
+    for item in payload.items:
+        db.add(ProductProjectLink(product_id=item.product_id, project_id=project.id, quantity=item.quantity))
     db.commit()
-    names = [p.name for p in db.query(PmaProduct).filter(PmaProduct.id.in_(payload.ids)).all()]
+    new_pids = [item.product_id for item in payload.items]
+    names = [p.name for p in db.query(PmaProduct).filter(PmaProduct.id.in_(new_pids)).all()] if new_pids else []
     old_str = ", ".join(old_names) if old_names else "无"
     new_str = ", ".join(names) if names else "无"
     log_project_activity(db, project.id, user.username, "关联产品", f"product:'{old_str}'->'{new_str}'")
-    return {"code": 0, "data": payload.ids, "message": "ok"}
+    return {"code": 0, "data": [{"product_id": item.product_id, "quantity": item.quantity} for item in payload.items], "message": "ok"}
 
 
 # ── Project/Customer Linking ──

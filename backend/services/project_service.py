@@ -459,6 +459,7 @@ def get_project_products(db: Session, project_id: int) -> list[dict]:
                 "program_name": prod.program_name,
                 "nas_path": prod.nas_path,
                 "git_url": prod.git_url,
+                "quantity": lr.quantity,
             })
     return products
 

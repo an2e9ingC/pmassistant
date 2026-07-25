@@ -727,6 +727,7 @@ class ProjectUpdate(BaseModel):
     background: Optional[str] = None
     tags: Optional[str] = None
     linked_project_ids: Optional[str] = None
+    product_ids: Optional[list] = None  # List[ProductLinkItem] for edit mode
     description: Optional[str] = None
     is_local: Optional[bool] = None
 

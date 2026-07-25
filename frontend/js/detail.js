@@ -203,8 +203,14 @@ function buildInfo(p, notes, delivery) {
     '<div class="card card-pad" style="flex:1;min-width:0">' +
       '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">关联产品（' + products.length + '）</div>';
   if (products.length) {
-    html += '<div style="display:flex;flex-wrap:wrap;gap:4px">' +
-      products.map(function(prod) { return linkChip(prod.code || prod.name, 'openProductDetail(\'' + escHtml(prod.code || String(prod.id)).replace(/'/g, "\\'") + '\')', prod.name || ''); }).join('') +
+    html += '<div style="display:flex;flex-wrap:wrap;gap:8px">' +
+      products.map(function(prod) {
+        var chip = linkChip(prod.code || prod.name, 'openProductDetail(\'' + escHtml(prod.code || String(prod.id)).replace(/'/g, "\\'") + '\')', prod.name || '');
+        var qty = prod.quantity || 1;
+        return '<span style="position:relative;display:inline-block">' + chip +
+          '<span style="position:absolute;top:-7px;right:-7px;background:var(--accent);color:#fff;border-radius:50%;min-width:16px;height:16px;line-height:16px;text-align:center;font-size:9px;font-weight:600;padding:0 2px;box-sizing:border-box">' + qty + '</span>' +
+          '</span>';
+      }).join('') +
     '</div>';
   } else {
     html += '<div style="font-size:12px;color:var(--muted);font-style:italic">暂无</div>';
@@ -1721,6 +1727,7 @@ function buildMaintenance() {
 // ── Unified Project Form Dialog (Create + Edit) ──
 
 var _projFormSelectedPids = [];   // selected product IDs
+var _projFormSelectedProdQtys = {};  // product_id -> quantity
 var _projFormLinkedCodes = [];    // selected linked project codes
 var _projFormSelectedTags = [];   // selected tag names
 var _projFormAllTagsFull = [];    // all tags (for dialog)
@@ -1743,12 +1750,14 @@ function showProjectFormDialog(isEdit) {
     if (!projectTypes.length) projectTypes = [{id: 'RD', label: '研发项目'}, {id: 'SC', label: '生产项目'}];
 
     _projFormSelectedPids = [];
+    _projFormSelectedProdQtys = {};
     _projFormLinkedCodes = [];
     _projFormSelectedTags = [];
     // Pre-fill for edit mode
     if (isEdit && p) {
       if (p.linked_products) {
-        _projFormSelectedPids = p.linked_products.map(function(lp) { return lp.product_id; });
+        _projFormSelectedPids = p.linked_products.map(function(lp) { return lp.id; });
+        p.linked_products.forEach(function(lp) { _projFormSelectedProdQtys[lp.id] = lp.quantity || 1; });
       }
       if (p.linked_project_ids) {
         _projFormLinkedCodes = p.linked_project_ids.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
@@ -1780,7 +1789,7 @@ function showProjectFormDialog(isEdit) {
     var prodSelectedText = '';
     if (isEdit && p && p.linked_products) {
       prodSelectedText = p.linked_products.map(function(lp) {
-        return lp.product_code || lp.product_name || '';
+        return lp.code || lp.name || '';
       }).join(', ');
     }
 
@@ -1831,7 +1840,9 @@ function showProjectFormDialog(isEdit) {
       '<input class="proj-combo-input" id="proj-form-prod-input" value="' + escHtml(prodSelectedText) + '" autocomplete="off" placeholder="搜索选择产品（可多选）..." onfocus="projFormProdComboOpen()" oninput="projFormProdComboFilter(this.value)" onclick="projFormProdComboOpen()">' +
       '<svg class="proj-combo-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2,5 7,10 12,5"/></svg>' +
       '<div class="proj-combo-dropdown" id="proj-form-prod-dd"></div>' +
-      '</div></div>' +
+      '</div>' +
+      '<div id="proj-form-prod-selected" style="margin-top:6px"></div>' +
+      '</div>' +
       // Row 5: 计划开始 | 计划结束 | 项目状态
       '<div style="display:flex;gap:10px;margin-bottom:10px">' +
         '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">计划开始 <span style="color:var(--danger)">*</span></label>' +
@@ -1956,6 +1967,7 @@ function showProjectFormDialog(isEdit) {
             var pid = parseInt(p.id);
             if (_projFormSelectedPids.indexOf(pid) < 0) {
               _projFormSelectedPids.push(pid);
+              _projFormSelectedProdQtys[pid] = 1;
             }
             // Fetch all products to rebuild display text from selected IDs
             API.get('/product-management/all-products').then(function(products) {
@@ -1966,6 +1978,7 @@ function showProjectFormDialog(isEdit) {
               });
               el.value = names.join(', ');
             }).catch(function() {});
+            _renderProjFormSelectedProds();
           }
         });
       }
@@ -1992,7 +2005,55 @@ function showProjectFormDialog(isEdit) {
     // Init tags: show badges with edit button (maintenance-style)
     _projFormAllTagsFull = allTags || [];
     _renderProjFormTags();
+    // Render selected products with quantity inputs
+    _renderProjFormSelectedProds();
   });
+}
+
+function _renderProjFormSelectedProds() {
+  var container = document.getElementById('proj-form-prod-selected');
+  if (!container) return;
+  if (!_projFormSelectedPids.length) { container.innerHTML = ''; return; }
+  // Fetch all products to get names for selected IDs
+  API.get('/product-management/all-products').then(function(products) {
+    var html = '';
+    _projFormSelectedPids.forEach(function(pid) {
+      var prod = (products || []).find(function(x) { return x.id === pid; });
+      var name = prod ? (prod.code || prod.name) : ('ID:' + pid);
+      var qty = _projFormSelectedProdQtys[pid] || 1;
+      html += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">' +
+        '<span style="background:var(--accent-lt);color:var(--accent);padding:1px 8px;border-radius:4px;font-family:var(--mono);font-size:11px">' + escHtml(name) + '</span>' +
+        '<span style="color:var(--muted);font-size:11px">数量:</span>' +
+        '<input type="number" class="search-inp proj-form-prod-qty" value="' + qty + '" min="1" ' +
+        'style="width:55px;padding:2px 6px;text-align:center;font-size:11px" ' +
+        'onchange="_projFormProdQtyChange(' + pid + ', this.value)" onfocus="this.select()">' +
+        '<span onclick="_projFormRemoveProd(' + pid + ')" style="cursor:pointer;opacity:0.4;font-size:14px;margin-left:4px" title="移除">&times;</span>' +
+        '</div>';
+    });
+    container.innerHTML = html;
+  }).catch(function() { container.innerHTML = ''; });
+}
+
+function _projFormProdQtyChange(pid, val) {
+  _projFormSelectedProdQtys[pid] = Math.max(1, parseInt(val) || 1);
+}
+
+function _projFormRemoveProd(pid) {
+  var idx = _projFormSelectedPids.indexOf(pid);
+  if (idx >= 0) _projFormSelectedPids.splice(idx, 1);
+  delete _projFormSelectedProdQtys[pid];
+  _renderProjFormSelectedProds();
+  // Update search combo display text
+  var el = document.getElementById('proj-form-prod-input');
+  if (!el) return;
+  API.get('/product-management/all-products').then(function(products) {
+    var names = [];
+    _projFormSelectedPids.forEach(function(spid) {
+      var prod = (products || []).find(function(x) { return x.id === spid; });
+      if (prod) names.push(prod.code || prod.name || '');
+    });
+    el.value = names.join(', ');
+  }).catch(function() {});
 }
 
 
@@ -2239,11 +2300,13 @@ async function saveProjectForm(isEdit) {
   var linkedEl = g('proj-form-linked-input');
   if (linkedEl && linkedEl.value.trim()) payload.linked_project_ids = linkedEl.value.trim();
 
-  // Linked products (create mode only; edit mode uses maintenance page)
-  if (!isEdit) {
-    payload.product_ids = _projFormSelectedPids;
-    if (!payload.status) payload.status = 'wait';
+  // Linked products (with quantity support)
+  if (_projFormSelectedPids.length) {
+    payload.product_ids = _projFormSelectedPids.map(function(pid) {
+      return { product_id: pid, quantity: _projFormSelectedProdQtys[pid] || 1 };
+    });
   }
+  if (!isEdit && !payload.status) payload.status = 'wait';
 
   try {
     var result;
@@ -2306,7 +2369,12 @@ function _renderMaintSection(containerId, hdId, linked, idKey, labelKey, type, l
     var onClick = clickFn ? ' onclick="event.stopPropagation();' + clickFn + '(\''+escHtml(x[clickArg]).replace(/'/g,"\\'")+'\')"' : '';
     var displayLabel = (type === 'prod' && x.code) ? escHtml(x.code) : escHtml(x[labelKey]);
     var tooltip = (type === 'prod' && x.code) ? escHtml(x[labelKey]) : '查看详情';
-    return '<span class="'+chipClass+'"' + onClick + ' title="' + tooltip + '">' + displayLabel + '</span>' +
+    var qtyBadge = (type === 'prod')
+      ? '<span style="position:absolute;top:-7px;right:-7px;background:var(--accent);color:#fff;border-radius:50%;min-width:16px;height:16px;line-height:16px;text-align:center;font-size:9px;font-weight:600;padding:0 2px;box-sizing:border-box">' + (x.quantity || 1) + '</span>'
+      : '';
+    var wrapperOpen = (type === 'prod') ? '<span style="position:relative;display:inline-block">' : '';
+    var wrapperClose = (type === 'prod') ? '</span>' : '';
+    return wrapperOpen + '<span class="'+chipClass+'"' + onClick + ' title="' + tooltip + '">' + displayLabel + '</span>' + qtyBadge + wrapperClose +
       ' <span onclick="maintRemove_' + type + '(' + x[idKey] + ')" style="cursor:pointer;opacity:0.5;font-size:14px" title="移除">&times;</span>';
   }).join('') : '<span style="font-size:12px;color:var(--muted)">暂无' + labelName + '</span>';
 
@@ -2339,15 +2407,53 @@ async function loadMaintProjectProducts() {
 }
 
 function maintOpenDialog_prod() {
-  var linkedIds = (_maintLinkedProds || []).map(function(p) { return p.id; });
-  multiSelectDialog('编辑关联产品', _maintAllProds, linkedIds, {
-    placeholder: '搜索产品...', maxWidth: 550,
-    renderItem: function(item, selected) {
-      return (item.code ? '<span style="font-size:11px;padding:1px 6px;border-radius:4px;background:var(--accent-lt);color:var(--accent);font-family:var(--mono);margin-right:6px;white-space:nowrap">' + escHtml(item.code) + '</span>' : '') +
-        '<span>' + escHtml(item.name) + '</span>';
-    }
-  }, function(ids) {
-    API.put('/maintenance/projects/' + _comboCurCode + '/products', { ids: ids }).then(function() { loadMaintProjectProducts(); });
+  var linkedMap = {};
+  (_maintLinkedProds || []).forEach(function(p) { linkedMap[p.id] = p.quantity || 1; });
+
+  var bodyHtml = '<input class="search-inp" placeholder="搜索产品..." oninput="_filterSearchableItems(this)" style="margin-bottom:6px">' +
+    '<div style="max-height:280px;overflow-y:auto;margin-bottom:8px" class="searchable-list">' +
+    (_maintAllProds || []).map(function(item) {
+      var isLinked = linkedMap.hasOwnProperty(item.id);
+      var qty = linkedMap[item.id] || 1;
+      var codeBadge = item.code
+        ? '<span style="font-size:11px;padding:1px 6px;border-radius:4px;background:var(--accent-lt);color:var(--accent);font-family:var(--mono);margin-right:6px;white-space:nowrap">' + escHtml(item.code) + '</span>'
+        : '';
+      var searchText = String(item.name + ' ' + (item.code || '')).toLowerCase();
+      return '<label class="searchable-item" data-search-text="' + escHtml(searchText) +
+        '" style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:13px;cursor:pointer">' +
+        '<input type="checkbox" value="' + item.id + '"' + (isLinked ? ' checked' : '') + ' class="maint-prod-cb" onchange="_maintProdCbChange(this)">' +
+        codeBadge + '<span>' + escHtml(item.name) + '</span>' +
+        '<input type="number" class="search-inp maint-prod-qty" value="' + qty + '" min="1" ' +
+        'style="width:55px;margin-left:auto;padding:2px 6px;text-align:center;font-size:11px"' +
+        (isLinked ? '' : ' disabled') + ' onfocus="this.select()">' +
+        '</label>';
+    }).join('') +
+    '</div>';
+
+  openDialog('编辑关联产品', bodyHtml, [
+    {text: '取消', onclick: 'closeSharedDialog()'},
+    {text: '保存', cls: 'btn-primary', onclick: '_maintSaveProducts()'}
+  ], {hideClose: true, maxWidth: 550});
+}
+
+function _maintProdCbChange(cb) {
+  var qtyInput = cb.parentElement.querySelector('.maint-prod-qty');
+  if (qtyInput) {
+    qtyInput.disabled = !cb.checked;
+    if (cb.checked && (!qtyInput.value || parseInt(qtyInput.value) < 1)) qtyInput.value = 1;
+  }
+}
+
+function _maintSaveProducts() {
+  var items = [];
+  document.querySelectorAll('.maint-prod-cb:checked').forEach(function(cb) {
+    var qtyInput = cb.parentElement.querySelector('.maint-prod-qty');
+    var qty = qtyInput ? parseInt(qtyInput.value) || 1 : 1;
+    items.push({ product_id: parseInt(cb.value), quantity: Math.max(1, qty) });
+  });
+  closeSharedDialog();
+  API.put('/maintenance/projects/' + _comboCurCode + '/products', { items: items }).then(function() {
+    loadMaintProjectProducts();
   });
 }
 
@@ -2356,8 +2462,10 @@ function maintRemove_prod(pid) {
   var name = prod ? (prod.name || '') : '';
   verifyPassword('移除产品关联: ' + name, 'pw_verify_maint_remove').then(function(ok) {
     if (!ok) return;
-    var ids = _maintLinkedProds.map(function(p) { return p.id; }).filter(function(id) { return id !== pid; });
-    API.put('/maintenance/projects/' + _comboCurCode + '/products', { ids: ids }).then(function() { loadMaintProjectProducts(); });
+    var items = _maintLinkedProds
+      .filter(function(p) { return p.id !== pid; })
+      .map(function(p) { return { product_id: p.id, quantity: p.quantity || 1 }; });
+    API.put('/maintenance/projects/' + _comboCurCode + '/products', { items: items }).then(function() { loadMaintProjectProducts(); });
   });
 }
 
