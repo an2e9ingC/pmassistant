@@ -415,6 +415,10 @@
 .config-section.gitlab  .config-section-title { background: var(--warn-lt); }
 .config-section.nas     .config-section-title { background: var(--success-lt); }
 .config-section.svn     .config-section-title { background: #ede9fe; }
+.config-section.pdm     { border-left: 4px solid #0891b2; }
+.config-section.wecom   { border-left: 4px solid #059669; }
+.config-section.pdm     .config-section-title { background: #ecfeff; }
+.config-section.wecom   .config-section-title { background: #ecfdf5; }
 .config-fields {
   display: flex; flex-direction: column;
 }
@@ -698,6 +702,8 @@
   animation: bd-fade-in 0.2s ease;
 }
 [data-theme="dark"] .config-section.svn .config-section-title { background: #2e1065; }
+[data-theme="dark"] .config-section.pdm .config-section-title { background: #164e63; }
+[data-theme="dark"] .config-section.wecom .config-section-title { background: #064e3b; }
 @keyframes bd-fade-in {
   from { opacity: 0; }
   to { opacity: 1; }

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="app-version" content="v2026.07.24-beta5">
+<meta name="app-version" content="v2026.07.25-beta1">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>PM Assistant · 集成禅道 & GitLab</title>
 <script>
@@ -42,7 +42,7 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
 
 <!-- ═══════════ SIDEBAR ═══════════ -->
 <aside class="sidebar">
-  <div class="sidebar-brand" onclick="gotoView('dashboard')" title="返回首页">
+  <div class="sidebar-brand" onclick="gotoView('user-center')" title="个人中心">
     <img src="/logo/logo-mark-light.svg" alt="PMAssistant" class="brand-logo brand-logo-light" style="width:120px;height:auto">
     <img src="/logo/logo-mark-dark.svg" alt="PMAssistant" class="brand-logo brand-logo-dark" style="width:120px;height:auto">
   </div>
@@ -309,9 +309,15 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
         </svg>
       </button>
       <div style="position:relative">
-        <div class="user-pill" onclick="gotoView('user-center')" title="个人中心">
+        <div class="user-pill" id="user-menu-btn" onclick="toggleUserMenu(event)" title="用户菜单">
           <div class="avatar" id="user-avatar">--</div>
           <span class="user-label" id="user-name">用户</span>
+          <svg class="user-menu-arrow" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="2,3 5,7 8,3"/></svg>
+        </div>
+        <div class="user-menu" id="user-dropdown">
+          <div class="user-menu-item" onclick="gotoView('user-center');closeUserMenu()">个人中心</div>
+          <div class="user-menu-item" onclick="openPreferencesDialog();closeUserMenu()">偏好设置</div>
+          <div class="user-menu-item" onclick="switchAccount()">退出</div>
         </div>
       </div>
     </div>

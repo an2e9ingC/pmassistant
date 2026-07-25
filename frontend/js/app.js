@@ -770,6 +770,33 @@ function closeNotifDropdown() {
   if (dd) dd.classList.remove('open');
 }
 
+/* ── User Menu Dropdown ── */
+function toggleUserMenu(e) {
+  e.stopPropagation();
+  var dd = document.getElementById('user-dropdown');
+  if (!dd) return;
+  var isOpen = dd.classList.contains('open');
+  closeUserMenu();
+  if (!isOpen) dd.classList.add('open');
+}
+function closeUserMenu() {
+  var dd = document.getElementById('user-dropdown');
+  if (dd) dd.classList.remove('open');
+}
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('#user-menu-btn')) closeUserMenu();
+});
+
+function openPreferencesDialog() {
+  openDialog('偏好设置', '<div id="pref-dialog-content" style="min-width:360px"></div>', [
+    {text: '关闭', onclick: 'closeSharedDialog()'}
+  ], {maxWidth: 520});
+  setTimeout(function() {
+    var el = document.getElementById('pref-dialog-content');
+    if (el) _renderPreferencesPanel(el);
+  }, 80);
+}
+
 document.addEventListener('click', function(e) {
   var dd = document.getElementById('notif-dropdown');
   if (dd && dd.classList.contains('open') && !e.target.closest('.icon-btn') && !e.target.closest('.notif-item')) {
@@ -1220,15 +1247,15 @@ async function init() {
   var themeTgl = document.getElementById('theme-toggle');
   if (themeTgl) themeTgl.classList.toggle('on', document.documentElement.getAttribute('data-theme') === 'dark');
 
-  // Show welcome dialog for first-time GitLab users
+  // Show guide for new users OR when guide content has been updated
   var isNewUser = localStorage.getItem('pma_new_user') === '1';
-  if (isNewUser) {
-    localStorage.removeItem('pma_new_user');
-    showNewUserGuide();
-  }
-
-  // Show changelog on version update (skip during new user guide)
-  if (!isNewUser) {
+  var seenGuideVer = localStorage.getItem('pma_guide_version');
+  var showGuide = isNewUser || String(seenGuideVer) !== String(_guideVersion);
+  if (showGuide) {
+    if (isNewUser) localStorage.removeItem('pma_new_user');
+    localStorage.setItem('pma_guide_version', _guideVersion);
+    showNewUserGuide(); // changelog will be shown after guide completes
+  } else {
     checkNewVersion();
   }
 
@@ -1451,7 +1478,7 @@ function initUserCenter() {
     // Profile bar — inline, not floating; reserve space for right panel
     '<div id="uc-profile-bar-wrap" style="margin-right:358px">' + profileBarHtml + '</div>' +
     // Expand panel
-    '<div class="profile-expand" id="uc-expand"><div class="profile-expand-inner"><div id="uc-expand-content"></div></div></div>' +
+    '<div class="profile-expand" id="uc-expand" style="margin-right:358px"><div class="profile-expand-inner"><div id="uc-expand-content"></div></div></div>' +
     // Bottom area: left (tab-switched tables) + right (calendar)
     '<div style="flex:1;min-height:0;display:flex;flex-direction:column">' +
       // ── Left: tab-switched content (tasks or bugs), reserve space for right panel ──
@@ -2061,8 +2088,7 @@ function _ucTogglePanel(type) {
 }
 
 function _renderPreferencesPanel(content) {
-  if (!content) content = document.getElementById('uc-expand-content');
-  if (!content) return;
+  if (!content) content = document.getElementById('pref-dialog-content') || document.getElementById('uc-expand-content');
   var tickerOn = localStorage.getItem('pma_ticker_enabled') !== '0';
   var tickerSpeed = localStorage.getItem('pma_ticker_speed') || 'normal';
   var themeMode = localStorage.getItem('pm_theme_mode') || 'auto';
@@ -2086,7 +2112,7 @@ function _renderPreferencesPanel(content) {
       '" onclick="setThemeMode(\'' + m + '\');_renderPreferencesPanel()">' + themeIcons[m] + '</button>';
   });
 
-  content.innerHTML =
+  var html =
     '<div class="expand-card" style="visibility:hidden"></div>' +
     '<div class="expand-card">' +
       '<h3 style="margin-bottom:12px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> 偏好设置</h3>' +
@@ -2107,13 +2133,18 @@ function _renderPreferencesPanel(content) {
         // Card 2: 外观
         '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px">' +
           '<div style="font-size:12px;font-weight:600;color:var(--fg);margin-bottom:10px">外观</div>' +
-          '<span style="font-size:11px;color:var(--muted)">主题模式</span><div style="margin-top:3px">' + themeBtns + '</div>' +
+          '<div class="integration-row">' +
+            '<span class="integration-row-lbl">主题模式</span>' +
+            '<span class="integration-row-val">' + themeBtns + '</span>' +
+          '</div>' +
         '</div>' +
 
       '</div>' +
 
       '<div style="font-size:10px;color:var(--muted);margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">更多偏好设置即将上线</div>' +
     '</div>';
+  if (content) content.innerHTML = html;
+  return html;
 }
 
 async function showNewUserWelcomeDialog() {
@@ -2254,8 +2285,9 @@ function fetchBranch() {
 
 // ── New User Guide ──
 
+var _guideVersion = 2; // bump when guide steps are modified
 var _guideAllSteps = [
-  { el: '.sidebar-brand', tip: '点击 PMA Logo 随时返回项目总览首页', pos: 'bottom' },
+  { el: '.sidebar-brand', tip: '点击 PMA Logo 进入个人中心', pos: 'bottom' },
   { el: '.sidebar-nav', tip: '通过左侧导航栏切换各个功能页面', pos: 'right' },
   { el: '#topbar-sources', tip: '顶部标签显示数据源连接状态，鼠标悬停查看详情', pos: 'bottom' },
   { el: '#notif-bell-btn', tip: '铃铛图标是通知中心，查看系统告警和历史消息', pos: 'bottom' },
@@ -2377,7 +2409,7 @@ async function showGuideWelcome() {
       '<div style="margin-top:6px;line-height:2">' + contactsHtml + '</div>' +
     '</div>';
   openDialog('&#x1F44B; 欢迎使用 PMA', html,
-    [{ text: '开始使用', cls: 'btn-primary', onclick: "var d=document.querySelector('.shared-dialog-overlay,.note-dialog-overlay');if(d)d.remove()" }],
+    [{ text: '开始使用', cls: 'btn-primary', onclick: "var d=document.querySelector('.shared-dialog-overlay,.note-dialog-overlay');if(d)d.remove();checkNewVersion()" }],
     { maxWidth: 460 }
   );
 }
