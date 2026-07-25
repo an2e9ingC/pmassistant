@@ -148,6 +148,7 @@ class ProductProjectLink(Base):
     product_id = Column(Integer, ForeignKey("pma_products.id"), nullable=False, index=True)
     project_id = Column(Integer, ForeignKey("zenta_projects.id"), nullable=False, index=True)
     created_at = Column(DateTime, default=func.now())
+    quantity = Column(Integer, nullable=False, default=1, server_default="1")
 
     __table_args__ = (UniqueConstraint("product_id", "project_id"),)
 

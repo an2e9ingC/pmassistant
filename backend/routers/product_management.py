@@ -14,6 +14,7 @@ from backend.services import product_management_service as pm_service
 from backend.services import product_service as prod_service
 from backend.services.product_service import log_product_activity
 from backend.services.entity_resolver import resolve_project, resolve_product
+from backend.routers.maintenance import ProductLinkItem
 
 router = APIRouter(prefix="/api/product-management", tags=["product-management"])
 
@@ -42,7 +43,7 @@ class LocalProjectCreate(BaseModel):
     project_type: str = "RD"
     status: str = "wait"
     description: Optional[str] = None
-    product_ids: Optional[List[int]] = None
+    product_ids: Optional[List[ProductLinkItem]] = None
     begin: Optional[str] = None
     end: Optional[str] = None
     customer_name: Optional[str] = None

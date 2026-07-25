@@ -386,7 +386,9 @@ def create_local_project(
         db.add(CustomerProjectLink(project_id=project.id, customer_id=cust.id))
 
     # Link to products
-    for pid in product_ids:
+    for item in (product_ids or []):
+        pid = item.product_id if hasattr(item, 'product_id') else item
+        qty = item.quantity if hasattr(item, 'quantity') else 1
         prod = db.query(PmaProduct).filter(PmaProduct.id == pid).first()
         if prod:
             existing_link = db.query(ProductProjectLink).filter(
@@ -394,7 +396,7 @@ def create_local_project(
                 ProductProjectLink.project_id == project.id,
             ).first()
             if not existing_link:
-                db.add(ProductProjectLink(product_id=pid, project_id=project.id))
+                db.add(ProductProjectLink(product_id=pid, project_id=project.id, quantity=qty))
 
     db.commit()
 
