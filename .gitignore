@@ -20,3 +20,4 @@ data/uploads/
 data/.shutdown-*
 pma-8000.log.*
 data/pma-8000.log.1
+data/pma-8000.log.1

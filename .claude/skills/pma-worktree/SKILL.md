@@ -83,6 +83,34 @@ export PMA_WORKTREE_DIR="<EnterWorktree 返回的实际路径>"
    ```
    > 之后所有文件操作必须使用这两个变量，禁止硬编码路径。
 
+   **验证 CWD**（`EnterWorktree` 返回后立即执行）：
+   ```bash
+   # 验证当前工作目录确实在 worktree 中
+   CWD=$(pwd)
+   if [ "$CWD" != "$PMA_WORKTREE_DIR" ]; then
+       echo "WARNING: CWD=$CWD, expected $PMA_WORKTREE_DIR — switching to worktree"
+       cd "$PMA_WORKTREE_DIR"
+   fi
+   # 验证 git 分支
+   BRANCH=$(git rev-parse --abbrev-ref HEAD)
+   echo "Working on branch: $BRANCH in $(pwd)"
+   ```
+   > **硬性规则：Edit / Write 工具的所有 `file_path` 必须使用 `$PMA_WORKTREE_DIR/...` 绝对路径，禁止使用相对路径。**
+   > 因为 Edit/Write 不解析 shell 环境变量，必须写成 `/home/xuchuan/workspace/pma/.claude/worktrees/<name>/frontend/js/app.js` 这样的绝对路径。
+   > **每轮对话开始编辑前，先用 `pwd` 确认 CWD 在 worktree 中。** 如果 `EnterWorktree` 返回错误或异常，不要跳过验证直接编辑。
+
+   **EnterWorktree 失败时的手动补救**：
+   如果 `EnterWorktree` 报错 "Cannot enter" 或超时，不要假设已进入 worktree。按以下步骤手动处理：
+   ```bash
+   # 1. 确认 worktree 路径存在
+   ls $PMA_WORKTREE_DIR/.git
+   # 2. 手动 cd 进入
+   cd $PMA_WORKTREE_DIR
+   # 3. 确认分支
+   git rev-parse --abbrev-ref HEAD
+   # 4. 之后所有 Edit/Write 的 file_path 使用绝对路径拼接
+   ```
+
 4. 准备开发环境（**严格按以下顺序，所有路径使用环境变量**）：
 
    a. **停止主服务器**（SQLite 独占锁，必须停服才能安全拷贝）：

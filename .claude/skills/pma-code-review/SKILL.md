@@ -140,6 +140,13 @@ query_graph("MATCH (f:Function) WHERE f.cyclomatic > 15 ...")  # 高复杂度函
 - **Python**：`python3 -m py_compile <file>`
 - **CSS**：检查是否有未闭合的括号、无效属性名
 - **HTML**：检查标签闭合、属性引号匹配
+- **前端 Div 配对**（`frontend/**` 下所有文件）：改动涉及 `<div>` 等 HTML 标签时，必须检查 Open/Close 数量是否匹配。用以下命令核对：
+  ```bash
+  # 对比每个文件中 <div 和 </div> 的数量
+  grep -c '<div ' <file>   # 开放标签数
+  grep -c '</div>' <file>  # 闭合标签数
+  # 两者必须相等；如果不等则存在漏闭合或多余的 </div>
+  ```
 
 ### 2. 前端规范
 
