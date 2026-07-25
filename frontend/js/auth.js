@@ -227,9 +227,6 @@ function handleGitlabCallback() {
     if (token) {
       API.token = token;
       localStorage.setItem('pma_token', token);
-      if (params.get('new_user') === '1') {
-        localStorage.setItem('pma_new_user', '1');
-      }
       // If opened as popup, redirect opener and close self
       if (window.opener && window.opener !== window) {
         try {

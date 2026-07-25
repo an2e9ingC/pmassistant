@@ -1253,13 +1253,8 @@ async function init() {
   var themeTgl = document.getElementById('theme-toggle');
   if (themeTgl) themeTgl.classList.toggle('on', document.documentElement.getAttribute('data-theme') === 'dark');
 
-  // Show guide for new users OR when guide content has been updated
-  var isNewUser = localStorage.getItem('pma_new_user') === '1';
-  var seenGuideVer = localStorage.getItem('pma_guide_version');
-  var showGuide = isNewUser || String(seenGuideVer) !== String(_guideVersion);
-  if (showGuide) {
-    if (isNewUser) localStorage.removeItem('pma_new_user');
-    localStorage.setItem('pma_guide_version', _guideVersion);
+  // Show guide based on user.need_guide flag (from DB, persisted across sessions)
+  if (user && user.need_guide) {
     showNewUserGuide(); // changelog will be shown after guide completes
   } else {
     checkNewVersion();
@@ -2291,7 +2286,6 @@ function fetchBranch() {
 
 // ── New User Guide ──
 
-var _guideVersion = 2; // bump when guide steps are modified
 var _guideAllSteps = [
   { el: '.sidebar-brand', tip: '点击 PMA Logo 进入个人中心', pos: 'bottom' },
   { el: '.sidebar-nav', tip: '通过左侧导航栏切换各个功能页面', pos: 'right' },
@@ -2415,7 +2409,7 @@ async function showGuideWelcome() {
       '<div style="margin-top:6px;line-height:2">' + contactsHtml + '</div>' +
     '</div>';
   openDialog('&#x1F44B; 欢迎使用 PMA', html,
-    [{ text: '开始使用', cls: 'btn-primary', onclick: "var d=document.querySelector('.shared-dialog-overlay,.note-dialog-overlay');if(d)d.remove();checkNewVersion()" }],
+    [{ text: '开始使用', cls: 'btn-primary', onclick: "var d=document.querySelector('.shared-dialog-overlay,.note-dialog-overlay');if(d)d.remove();API.put('/auth/guide/done',{});checkNewVersion()" }],
     { maxWidth: 460 }
   );
 }
