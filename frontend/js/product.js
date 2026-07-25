@@ -371,7 +371,7 @@ async function loadProductDetail(code) {
     var docs = [];
     try { docs = await API.get('/products/' + code + '/documents') || []; } catch(e) {}
     renderProdDetailHeader(detail, docs);
-    renderProdInfo(detail);
+    renderProdInfo(detail, docs);
     renderProdDocs(detail, docs);  // pass pre-loaded docs to avoid duplicate fetch
   } catch(e) {
     document.getElementById('prod-detail-header').innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '</div>';
@@ -434,7 +434,7 @@ function renderProdDetailHeader(p, docs) {
 
 // ── Tab: 基本信息 ──
 
-function renderProdInfo(p) {
+function renderProdInfo(p, docs) {
   var productType = p.tree_path || p.category || p.program_name || '未分类';
 
   var html = '<div class="card" style="padding:20px">';
@@ -525,10 +525,28 @@ function renderProdInfo(p) {
     html += '<div style="font-size:11px;color:var(--muted);margin:8px 0 4px">创建者: ' + escHtml(p.reporter_name) + '</div>';
   }
 
-  // Product Block Diagram — inline render of 设计框图
-  html += '<div style="margin-top:20px">' + sectionHeader('产品框图') + '</div>';
+  // Product Spec Sheet — default to 产品规格书, dropdown to switch to 设计框图
+  var blockDocs = docs || [];
+  var blockOptions = ['产品规格书', '设计框图'];
+  var findBlockDoc = function(name) {
+    var found = null;
+    blockDocs.forEach(function(d) {
+      if (!found && d.doc_name && d.doc_name.indexOf(name) >= 0 && d.location) found = d;
+    });
+    return found;
+  };
+  var defaultDoc = findBlockDoc('产品规格书') || findBlockDoc('设计框图');
+  var currentBlockName = defaultDoc ? (findBlockDoc('产品规格书') ? '产品规格书' : '设计框图') : null;
+
+  html += '<div style="margin-top:20px;display:flex;align-items:center;justify-content:space-between">' +
+    sectionHeader(currentBlockName || '产品规格书') +
+    '<select id="block-doc-select" style="font-size:12px;padding:2px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--fg);cursor:pointer" onchange="switchBlockDoc(this.value)">';
+  blockOptions.forEach(function(opt) {
+    html += '<option value="' + escHtml(opt) + '"' + (currentBlockName === opt ? ' selected' : '') + '>' + escHtml(opt) + '</option>';
+  });
+  html += '</select></div>';
   html += '<div class="card" style="padding:0;overflow:hidden" id="prod-block-card">';
-  html += '<div id="prod-block-content"><div class="loading-spinner" style="padding:20px">加载中...</div></div>';
+  html += '<div id="prod-block-content"></div>';
   html += '</div>';
 
   // Product Notes
@@ -539,26 +557,28 @@ function renderProdInfo(p) {
 
   document.getElementById('prodsec-info').innerHTML = html;
 
-  // Load 设计框图 document and render inline
-  API.get('/products/' + p.code + '/documents').then(function(docs) {
-    var blockDoc = null;
-    (docs || []).forEach(function(d) {
-      if (!blockDoc && d.doc_name && d.doc_name.indexOf('设计框图') >= 0 && d.location) blockDoc = d;
-    });
+  // Render block doc inline
+  var renderBlockDoc = function(docName) {
+    var doc = findBlockDoc(docName);
     var el = document.getElementById('prod-block-content');
-    if (el) {
-      if (blockDoc) {
-        var token = localStorage.getItem('pma_token') || '';
-        var fetchUrl = '/api/documents/fetch?url=' + encodeURIComponent(blockDoc.location) + '&token=' + encodeURIComponent(token);
-        el.innerHTML = '<iframe src="' + fetchUrl + '" style="width:100%;min-height:500px;border:none"></iframe>';
-      } else {
-        el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">未找到设计框图，请按要求提交</div>';
-      }
+    if (!el) return;
+    if (doc) {
+      var token = localStorage.getItem('pma_token') || '';
+      var fetchUrl = '/api/documents/fetch?url=' + encodeURIComponent(doc.location) + '&token=' + encodeURIComponent(token);
+      el.innerHTML = '<iframe src="' + fetchUrl + '" style="width:100%;min-height:500px;border:none"></iframe>';
+    } else {
+      el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">未找到' + docName + '，请按要求提交</div>';
     }
-  }).catch(function() {
-    var el = document.getElementById('prod-block-content');
-    if (el) el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">加载失败</div>';
-  });
+  };
+  renderBlockDoc(currentBlockName || '产品规格书');
+
+  // Expose switch function globally for the onchange handler
+  window.switchBlockDoc = function(docName) {
+    // Update section header text
+    var hdr = document.querySelector('#prodsec-info .section-hd .section-title');
+    if (hdr) hdr.textContent = docName;
+    renderBlockDoc(docName);
+  };
 
   // Load notes
   API.get('/products/' + p.code + '/notes').then(function(notes) {
