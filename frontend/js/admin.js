@@ -29,13 +29,13 @@ var _configSections = [
     { key: 'sync_releases', label: '同步禅道发布版本（GitLab URL 校验数据源）', type: 'toggle', ph: '' },
   ]},
   { key: 'gitlab', title: 'GitLab', summaryKey: 'base_url', summaryPrefix: 'API: ', fields: [
-    { key: 'base_url', label: 'API 地址', type: 'url', ph: 'http://192.168.0.128/api/v4' },
-    { key: 'token', label: 'Access Token (数据同步)', type: 'password', ph: '' },
-    { key: 'app_id', label: 'OAuth Application ID', type: 'text', ph: '' },
-    { key: 'app_secret', label: 'OAuth Application Secret', type: 'password', ph: '' },
-    { key: 'oauth_enabled', label: '启用 GitLab OAuth 登录', type: 'toggle', ph: '' },
-    { key: 'oauth_redirect_uri', label: 'OAuth 回调地址', type: 'url', ph: 'http://192.168.1.x:8000/api/auth/gitlab/callback' },
-    { key: 'project_path', label: 'PMA 项目路径 (Issue/成员)', type: 'text', ph: 'group/subgroup/pma' },
+    { key: 'project_path', label: 'PMA 项目路径 (Issue/成员)', type: 'text', ph: 'group/subgroup/pma', group: 'project' },
+    { key: 'base_url', label: 'API 地址', type: 'url', ph: 'http://192.168.0.128/api/v4', group: 'sync' },
+    { key: 'token', label: 'Access Token (数据同步)', type: 'password', ph: '', group: 'sync' },
+    { key: 'oauth_enabled', label: '启用 GitLab OAuth 登录', type: 'toggle', ph: '', group: 'oauth' },
+    { key: 'app_id', label: 'OAuth Application ID', type: 'text', ph: '', group: 'oauth' },
+    { key: 'app_secret', label: 'OAuth Application Secret', type: 'password', ph: '', group: 'oauth' },
+    { key: 'oauth_redirect_uri', label: 'OAuth 回调地址', type: 'url', ph: 'http://192.168.1.x:8000/api/auth/gitlab/callback', group: 'oauth' },
   ]},
   { key: 'nas', title: 'NAS 存储', summaryKey: 'host', summaryPrefix: '主机: ', fields: [
     { key: 'host', label: '主机地址', type: 'text', ph: '192.168.x.x' },
@@ -186,10 +186,30 @@ function openSourceConfigDialog(secKey) {
   if (!sec) return;
   var data = (_adminFormData && _adminFormData[secKey]) ? _adminFormData[secKey] : {};
 
+  // Group fields if they have a 'group' property
+  var hasGroups = sec.fields.some(function(f) { return f.group; });
   var fieldsHtml = '';
-  sec.fields.forEach(function(f) {
-    fieldsHtml += _renderFieldHtml(f, secKey, data);
-  });
+  if (hasGroups) {
+    var groupLabels = { project: '项目', sync: '数据同步', oauth: 'OAuth 登录' };
+    var groups = {};
+    sec.fields.forEach(function(f) {
+      var g = f.group || '';
+      if (!groups[g]) groups[g] = [];
+      groups[g].push(f);
+    });
+    Object.keys(groups).forEach(function(g) {
+      if (g && groupLabels[g]) {
+        fieldsHtml += '<div style="font-size:11px;font-weight:600;color:var(--muted);margin:10px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--border)">' + groupLabels[g] + '</div>';
+      }
+      groups[g].forEach(function(f) {
+        fieldsHtml += _renderFieldHtml(f, secKey, data);
+      });
+    });
+  } else {
+    sec.fields.forEach(function(f) {
+      fieldsHtml += _renderFieldHtml(f, secKey, data);
+    });
+  }
 
   var bodyHtml = '<div style="display:flex;flex-direction:column;max-height:55vh;overflow-y:auto;padding:4px 0">' +
     fieldsHtml +
@@ -199,6 +219,26 @@ function openSourceConfigDialog(secKey) {
     { text: '取消', cls: '', onclick: "this.closest('.note-dialog-overlay').remove()" },
     { text: '保存', cls: 'btn-primary', onclick: "saveSourceConfig('" + secKey + "');this.closest('.note-dialog-overlay').remove()" },
   ], { maxWidth: 560 });
+
+  // GitLab OAuth dynamic toggle: disable oauth fields when oauth_enabled is off
+  if (secKey === 'gitlab') {
+    setTimeout(function() {
+      var toggle = document.querySelector('.config-input[data-field="oauth_enabled"]');
+      var oauthFields = document.querySelectorAll('[data-field="app_id"], [data-field="app_secret"], [data-field="oauth_redirect_uri"]');
+      function _syncOauthFields() {
+        var on = toggle && toggle.checked;
+        oauthFields.forEach(function(el) {
+          el.disabled = !on;
+          el.style.opacity = on ? '1' : '0.5';
+          el.style.pointerEvents = on ? 'auto' : 'none';
+        });
+      }
+      if (toggle) {
+        toggle.addEventListener('change', _syncOauthFields);
+        _syncOauthFields();
+      }
+    }, 100);
+  }
 }
 
 async function saveSourceConfig(secKey) {
