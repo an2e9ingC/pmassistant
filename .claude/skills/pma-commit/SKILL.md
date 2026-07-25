@@ -59,8 +59,13 @@ Co-Authored-By: <model-name> / <tool-name>
 
 ### 2. Code Review
 
-1. `Skill("code-review")` 对本次修改进行 review
-2. 修复发现的问题，确认无遗留后进入下一步
+1. 对 `git diff` 改动进行快速自检：
+   - 语法检查：`node --check` / `python3 -m py_compile`
+   - 前端改动：`grep -c '<div '` vs `grep -c '</div>'` 数量配对
+   - 残留引用：删除的 id/class/函数用 grep 确认无残留
+   - 后端改动：确认 audit log + `to_iso_str` 规范
+2. 问题较多或改动较大时，调用 `Skill("code-review")` 完整审查
+3. 修复发现的问题，确认无遗留后进入下一步
 
 ### 3. 停服 → Commit → 重启
 

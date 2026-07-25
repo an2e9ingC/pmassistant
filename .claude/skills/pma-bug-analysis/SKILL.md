@@ -27,11 +27,20 @@ allowed-tools: Read, Write, Edit, Bash, LSP
 grep -rn 'function_name' backend/ --include='*.py' | grep -v __pycache__
 ```
 
+## 修复后自检（Code Review）
+
+**修复完成后、重启服务器或交付验证前**，必须对 `git diff` 改动进行快速自检：
+
+1. **语法检查**：`node --check <file>`（JS）/ `python3 -m py_compile <file>`（Python）
+2. **Div 配对检查**（前端改动时）：`grep -c '<div ' <file>` vs `grep -c '</div>' <file>` 数量必须一致
+3. **残留引用**：删除的 id/class/函数名，用 `grep -rn 'name' frontend/` 确认无残留引用
+4. **后端改动**：增删改操作是否已调用 `log_audit`、DateTime 是否通过 `to_iso_str` 序列化
+
 ## 修复后提供测试链接
 
 修复完成后：
 1. 执行 `./server.sh status` 获取当前服务地址和端口
-2. 向用户提供可直接点击的验证 URL（如 `http://192.168.100.100:8000/#/detail/PE0445/docs`），说明需要查看哪个页面/功能来验证修复效果
+2. 向用户提供可直接点击的验证 URL，使用标准 markdown 链接格式（如 `http://192.168.100.100:8000/#/detail/PE0445/docs` — [项目详情](http://192.168.100.100:8000/#/detail/PE0445/docs)），说明需要查看哪个页面/功能来验证修复效果。**禁止对链接使用粗体或其他修饰。**
 3. 当前会话未使用默认端口时，URL 需使用实际端口（如 `http://192.168.100.100:8001/...`）
 
 ## 日志完善原则

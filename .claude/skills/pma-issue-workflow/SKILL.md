@@ -99,15 +99,18 @@ PYEOF
 
 ### 5. 实现
 - 修改代码
-- JS 语法检查：`node --check <file>`
-- Python 语法检查：`python3 -m py_compile <file>`
-- grep 检查无旧引用残留
+- **简易 Code Review**（重启/交付前必须执行）：
+  - JS 语法检查：`node --check <file>`
+  - Python 语法检查：`python3 -m py_compile <file>`
+  - Div 配对检查（前端改动时）：`grep -c '<div ' <file>` vs `grep -c '</div>' <file>`
+  - 残留引用检查：删除的 id/class/函数名用 grep 确认无残留
+  - 后端改动：确认 audit log + `to_iso_str` 规范
 - 后端 `.py` 修改后 `./server.sh -p <PORT> restart`
 
 ### 6. 用户反馈迭代
 - 告知问题原因
 - 告知用户改了什么
-- **提供测试链接**：通过 `./server.sh status` 获取当前服务地址和端口，给出可直接点击的验证 URL（如 `http://192.168.100.100:8000`），并说明用户需要查看哪个页面/功能来验证修复效果
+- **提供测试链接**：通过 `./server.sh status` 获取当前服务地址和端口，给出可直接点击的验证 URL，使用标准 markdown 链接格式（如 [项目详情](http://192.168.100.100:8000/#/detail/PE0445/docs)），说明需要查看哪个页面/功能来验证修复效果。**禁止对链接使用粗体或其他修饰。**
 - 等待用户确认
 
 ### 7. Commit
