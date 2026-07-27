@@ -555,11 +555,14 @@ function renderProdInfo(p, docs) {
 
   html += '<div style="margin-top:20px;display:flex;align-items:center;justify-content:space-between">' +
     sectionHeader(currentBlockName || '产品规格书') +
+    '<div style="display:flex;align-items:center;gap:6px">' +
     '<select id="block-doc-select" style="font-size:12px;padding:2px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--fg);cursor:pointer" onchange="switchBlockDoc(this.value)">';
   blockOptions.forEach(function(opt) {
     html += '<option value="' + escHtml(opt) + '"' + (currentBlockName === opt ? ' selected' : '') + '>' + escHtml(opt) + '</option>';
   });
-  html += '</select></div>';
+  html += '</select>' +
+    '<button class="btn btn-sm" title="全屏查看" style="font-size:12px;padding:2px 6px" onclick="openBlockDocFullscreen()">⛶</button>' +
+    '</div></div>';
   html += '<div class="card" style="padding:0;overflow:hidden" id="prod-block-card">';
   html += '<div id="prod-block-content"></div>';
   html += '</div>';
@@ -587,6 +590,14 @@ function renderProdInfo(p, docs) {
     var hdr = document.querySelector('#prodsec-info .section-hd .section-title');
     if (hdr) hdr.textContent = docName;
     renderBlockDoc(docName);
+  };
+
+  window.openBlockDocFullscreen = function() {
+    var sel = document.getElementById('block-doc-select');
+    var docName = sel ? sel.value : (currentBlockName || '产品规格书');
+    var doc = findBlockDoc(docName);
+    if (doc) openDocIframeFullscreen(doc.location, doc.doc_name || docName);
+    else showToast('未找到"' + docName + '"的文档', 'info');
   };
 
   // Load notes

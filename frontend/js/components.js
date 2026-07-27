@@ -798,6 +798,33 @@ function togglePreviewFullscreen(dlgId) {
   }
 }
 
+/* Open a document URL in a fullscreen iframe overlay (for detail page preview cards) */
+function openDocIframeFullscreen(url, title) {
+  var token = localStorage.getItem('pma_token') || '';
+  var fetchUrl = '/api/documents/fetch?url=' + encodeURIComponent(url) + '&token=' + encodeURIComponent(token);
+  var dlgId = 'fs-doc-dlg-' + Date.now();
+  var html = '<div class="note-dialog-overlay" id="' + dlgId + '" style="z-index:9999">' +
+    '<div class="note-dialog" style="position:fixed;inset:0;width:100vw;height:100vh;max-width:100vw;max-height:100vh;border-radius:0;display:flex;flex-direction:column">' +
+      '<div class="note-dialog-head" style="flex-shrink:0">' +
+        '<span class="note-dialog-title">' + escHtml(title || '文档全屏预览') + '</span>' +
+        '<span style="display:flex;align-items:center;gap:8px">' +
+          '<button class="note-dialog-close" onclick="document.getElementById(\'' + dlgId + '\').remove()">&times;</button>' +
+        '</span>' +
+      '</div>' +
+      '<div style="flex:1;overflow:auto">' +
+        '<iframe src="' + fetchUrl + '" style="width:100%;height:100%;border:none"></iframe>' +
+      '</div>' +
+    '</div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+  var escHandler = function(e) {
+    if (e.key === 'Escape') {
+      document.getElementById(dlgId).remove();
+      document.removeEventListener('keydown', escHandler);
+    }
+  };
+  document.addEventListener('keydown', escHandler);
+}
+
 /* ═══════════════════════════════════════════════════
    PROJECT COMBO — reusable searchable project selector
    Usage: createProjectCombo({ comboId, inputId, dropdownId, placeholder, onSelect })
