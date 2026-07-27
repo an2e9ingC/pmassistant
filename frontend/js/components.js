@@ -693,16 +693,16 @@ function previewDocument(url, filename) {
   var title = filename || u.split('/').pop() || u.split('\\').pop() || '文档预览';
   var isHttp = /^https?:\/\//.test(url);
 
-  // Build dialog — 95vw/95vh default, fullscreen support
+  // Build dialog — fullscreen by default
   var dlgId = 'preview-dlg-' + Date.now();
-  var dlgStyle = 'max-width:95vw;width:95vw;max-height:95vh;display:flex;flex-direction:column';
+  var dlgStyle = 'position:fixed;inset:0;width:100vw;height:100vh;max-width:100vw;max-height:100vh;display:flex;flex-direction:column;border-radius:0';
   var html = '<div class="note-dialog-overlay" id="' + dlgId + '" style="z-index:9999">' +
     '<div class="note-dialog" id="' + dlgId + '-dlg" style="' + dlgStyle + '">' +
       '<div class="note-dialog-head" style="flex-shrink:0">' +
         '<span class="note-dialog-title">' + escHtml(title) + '</span>' +
         '<span style="display:flex;align-items:center;gap:8px">' +
-          (isHttp && ext !== 'pdf' && ext !== 'docx' && ext !== 'vsdx' ? '<a href="' + escHtml(url) + '" target="_blank" style="font-size:11px;color:var(--accent);text-decoration:none;margin-right:4px">在新窗口打开</a>' : '') +
-          (ext === 'pdf' || ext === 'docx' || ext === 'vsdx' ? '<button class="btn btn-sm" title="在新窗口中全屏查看" style="font-size:12px;padding:2px 6px;margin-right:4px" onclick="window.open(\'' + fetchUrl + '\', \'_blank\')">⛶</button>' : '') +
+          (isHttp ? '<a href="' + escHtml(url) + '" target="_blank" style="font-size:11px;color:var(--accent);text-decoration:none;margin-right:4px">在新窗口打开</a>' : '') +
+          '<button class="btn btn-sm fs-btn-exit" id="' + dlgId + '-fsbtn" title="退出全屏" style="font-size:12px;padding:2px 6px;margin-right:4px" onclick="togglePreviewFullscreen(\'' + dlgId + '\')">⛶</button>' +
           '<button class="note-dialog-close" onclick="document.getElementById(\'' + dlgId + '\').remove()">&times;</button>' +
         '</span>' +
       '</div>' +
@@ -712,8 +712,19 @@ function previewDocument(url, filename) {
     '</div></div>';
   document.body.insertAdjacentHTML('beforeend', html);
 
-  // ESC to close
-  var escHandler = function(e) { if (e.key === 'Escape') { document.getElementById(dlgId).remove(); document.removeEventListener('keydown', escHandler); } };
+  // ESC: 1st exits fullscreen, 2nd closes dialog
+  var escHandler = function(e) {
+    if (e.key !== 'Escape') return;
+    var dlg = document.getElementById(dlgId);
+    if (!dlg) { document.removeEventListener('keydown', escHandler); return; }
+    var inner = dlg.querySelector('.note-dialog');
+    if (inner && inner.style.position === 'fixed') {
+      togglePreviewFullscreen(dlgId);
+    } else {
+      dlg.remove();
+      document.removeEventListener('keydown', escHandler);
+    }
+  };
   document.addEventListener('keydown', escHandler);
 
   var body = document.getElementById(dlgId + '-body');
@@ -754,6 +765,37 @@ function previewDocument(url, filename) {
   }).catch(function(e) {
     body.innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '</div>';
   });
+}
+
+/* Toggle preview dialog fullscreen mode */
+function togglePreviewFullscreen(dlgId) {
+  var dlg = document.getElementById(dlgId);
+  if (!dlg) return;
+  var body = dlg.querySelector('.note-dialog');
+  var btn = document.getElementById(dlgId + '-fsbtn');
+  if (!body) return;
+  var isFullscreen = body.style.position === 'fixed';
+  if (isFullscreen) {
+    // Exit fullscreen → 95vw windowed mode
+    body.style.position = '';
+    body.style.inset = '';
+    body.style.width = '95vw';
+    body.style.height = '';
+    body.style.maxWidth = '95vw';
+    body.style.maxHeight = '95vh';
+    body.style.borderRadius = '';
+    if (btn) { btn.classList.remove('fs-btn-exit'); btn.title = '全屏查看'; }
+  } else {
+    // Enter fullscreen
+    body.style.position = 'fixed';
+    body.style.inset = '0';
+    body.style.width = '100vw';
+    body.style.height = '100vh';
+    body.style.maxWidth = '100vw';
+    body.style.maxHeight = '100vh';
+    body.style.borderRadius = '0';
+    if (btn) { btn.classList.add('fs-btn-exit'); btn.title = '退出全屏'; }
+  }
 }
 
 /* ═══════════════════════════════════════════════════
