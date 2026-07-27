@@ -860,41 +860,13 @@ def _sync_tasks_from_templates(db: Session, project_id: int, project_type: str =
         _log.info(f"[task-sync] stage={st} templates={len(templates)}")
 
         for tpl in templates:
+            # Already imported from this template — skip entirely
             existing = db.query(Task).filter(
                 Task.template_id == tpl.id,
                 Task.project_id == project_id,
                 Task.stage_name == st,
-                or_(Task.is_diverged == 0, Task.is_diverged == None),
             ).first()
             if existing:
-                # Update title/responsible_role if template changed
-                changed = False
-                if existing.title != tpl.task_name:
-                    existing.title = tpl.task_name
-                    changed = True
-                if existing.description != (tpl.description or None):
-                    existing.description = tpl.description or None
-                    changed = True
-                if existing.stage_name != st:
-                    existing.stage_name = st
-                    changed = True
-                if tpl.responsible_role:
-                    user_id = _resolve_user_for_role(db, tpl.responsible_role)
-                    if user_id and existing.assignee_id != user_id:
-                        existing.assignee_id = user_id
-                        changed = True
-                if changed:
-                    created_count += 1
-                continue
-
-            # Check if a removed task exists (user diverged) — skip recreation
-            removed = db.query(Task).filter(
-                Task.template_id == tpl.id,
-                Task.project_id == project_id,
-                Task.stage_name == st,
-                Task.is_diverged == 1,
-            ).first()
-            if removed:
                 continue
 
             assignee_id = None
