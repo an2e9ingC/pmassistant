@@ -165,7 +165,10 @@ function buildInfo(p, notes, delivery) {
   };
   var st = statusMap[p.status] || { label: p.status || '—', color: 'var(--muted)' };
 
-  var html = '<div class="card" style="padding:20px">';
+  var html = '<div style="display:flex;gap:20px;align-items:flex-start">';
+
+  // Left column — main card (golden ratio ~61.8%)
+  html += '<div class="card" style="flex:1.618;min-width:0;padding:20px">';
 
   // KPI row 1 — 4 columns
   html += '<div class="delivery-kpi" style="grid-template-columns:repeat(4, 1fr);margin-bottom:16px">' +
@@ -239,22 +242,29 @@ function buildInfo(p, notes, delivery) {
 
   html += '</div>'; // .card
 
-  // Project Background (editable by project_edit permission)
+  // Right column — project notes (independent card)
+  html += '<div style="flex:1;min-width:0">';
+  html += '<div class="card card-clip" style="padding:0;overflow:hidden">';
+  html += '<div style="padding:8px 12px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">';
+  html += '<span style="font-size:12px;font-weight:600">项目笔记</span>';
+  html += '<button class="btn-xs" onclick="openNoteDialog()">+ 添加笔记</button>';
+  html += '</div>';
+  html += '<div style="max-height:400px;overflow-y:auto"><div id="notes-content"></div></div>';
+  html += '</div></div>';
+
+  html += '</div>'; // flex row
+
+  // Project Background — full width below the flex row
   var hasEdit = _hasProjectEditPerm();
+  html += '<div style="margin-top:20px">';
   if (hasEdit) {
-    html += '<div style="margin-top:20px">' + sectionHeader('项目背景', null, '编辑', 'editProjectBackground()') + '</div>';
+    html += sectionHeader('项目背景', null, '编辑', 'editProjectBackground()');
   } else {
-    html += '<div class="section-hd" style="margin-top:20px"><div class="section-title">项目背景</div></div>';
+    html += '<div class="section-hd"><div class="section-title">项目背景</div></div>';
   }
   html += '<div class="card" style="padding:12px 16px;min-height:40px" id="proj-background-content">';
   html += (p.background ? '<div class="markdown-body" style="font-size:12.5px;line-height:1.7">' + (typeof marked !== 'undefined' ? marked.parse(p.background) : '<pre style="white-space:pre-wrap">' + escHtml(p.background) + '</pre>') + '</div>' : '<div style="color:var(--muted);font-size:12px;font-style:italic">暂无项目背景说明</div>');
-  html += '</div>';
-
-  // Notes section
-  html += '<div style="margin-top:20px">' + sectionHeader('项目笔记', null, '+ 添加笔记', 'openNoteDialog()') + '</div>';
-  html += '<div class="card" style="padding:0;overflow:hidden">';
-  html += '<div style="max-height:400px;overflow-y:auto"><div id="notes-content"></div></div>';
-  html += '</div>';
+  html += '</div></div>';
 
   document.getElementById('info-content').innerHTML = html;
 
