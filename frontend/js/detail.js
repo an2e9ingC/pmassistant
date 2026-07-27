@@ -81,7 +81,7 @@ async function loadProjectDetail(code) {
 
     buildDetailHeader(detail);
     buildDelivery(delivery);
-    buildInfo(detail, notes, delivery);
+    buildInfo(detail, notes, delivery, docs);
     buildGantt(ganttData);
     buildStages(stages);
     buildDocs(docs);
@@ -150,7 +150,7 @@ function buildDetailHeader(p) {
 
 /* Info Tab — Basic Info */
 
-function buildInfo(p, notes, delivery) {
+function buildInfo(p, notes, delivery, docs) {
   if (!p) return;
   var del = delivery || {};
 
@@ -254,19 +254,60 @@ function buildInfo(p, notes, delivery) {
 
   html += '</div>'; // flex row
 
-  // Project Background — full width below the flex row
-  var hasEdit = _hasProjectEditPerm();
-  html += '<div style="margin-top:20px">';
-  if (hasEdit) {
-    html += sectionHeader('项目背景', null, '编辑', 'editProjectBackground()');
-  } else {
-    html += '<div class="section-hd"><div class="section-title">项目背景</div></div>';
+  // 技术协议 — dropdown to switch, default 对外销售-技术协议, fallback 研发内部-技术协议
+  // Flatten docs from API response: { documents: [{ stage_name, documents: [...] }] }
+  var projDocs = [];
+  if (docs && docs.documents) {
+    docs.documents.forEach(function(stage) {
+      if (stage.documents) projDocs = projDocs.concat(stage.documents);
+    });
   }
-  html += '<div class="card" style="padding:12px 16px;min-height:40px" id="proj-background-content">';
-  html += (p.background ? '<div class="markdown-body" style="font-size:12.5px;line-height:1.7">' + (typeof marked !== 'undefined' ? marked.parse(p.background) : '<pre style="white-space:pre-wrap">' + escHtml(p.background) + '</pre>') + '</div>' : '<div style="color:var(--muted);font-size:12px;font-style:italic">暂无项目背景说明</div>');
-  html += '</div></div>';
+  var agreementOptions = ['对外销售-技术协议', '研发内部-技术协议'];
+  var findAgreementDoc = function(name) {
+    var found = null;
+    projDocs.forEach(function(d) {
+      if (!found && d.doc_name && d.doc_name.indexOf(name) >= 0 && d.location) found = d;
+    });
+    return found;
+  };
+  var defaultAgreement = findAgreementDoc('对外销售-技术协议') || findAgreementDoc('研发内部-技术协议');
+  var currentAgreementName = defaultAgreement
+    ? (findAgreementDoc('对外销售-技术协议') ? '对外销售-技术协议' : '研发内部-技术协议')
+    : null;
+
+  html += '<div style="margin-top:20px;display:flex;align-items:center;justify-content:space-between">' +
+    sectionHeader(currentAgreementName || '技术协议') +
+    '<select id="agreement-doc-select" style="font-size:12px;padding:2px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--fg);cursor:pointer" onchange="switchAgreementDoc(this.value)">';
+  agreementOptions.forEach(function(opt) {
+    html += '<option value="' + escHtml(opt) + '"' + (currentAgreementName === opt ? ' selected' : '') + '>' + escHtml(opt) + '</option>';
+  });
+  html += '</select></div>';
+  html += '<div class="card" style="padding:0;overflow:hidden" id="proj-agreement-card">';
+  html += '<div id="proj-agreement-content"></div>';
+  html += '</div>';
 
   document.getElementById('info-content').innerHTML = html;
+
+  // Render agreement doc inline
+  var renderAgreementDoc = function(docName) {
+    var doc = findAgreementDoc(docName);
+    var el = document.getElementById('proj-agreement-content');
+    if (!el) return;
+    if (doc) {
+      var token = localStorage.getItem('pma_token') || '';
+      var fetchUrl = '/api/documents/fetch?url=' + encodeURIComponent(doc.location) + '&token=' + encodeURIComponent(token);
+      el.innerHTML = '<iframe src="' + fetchUrl + '" style="width:100%;min-height:500px;border:none"></iframe>';
+    } else {
+      el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">未找到' + docName + '，请按要求提交</div>';
+    }
+  };
+  renderAgreementDoc(currentAgreementName || '对外销售-技术协议');
+
+  window.switchAgreementDoc = function(docName) {
+    var hdr = document.querySelector('#info-content .section-hd .section-title');
+    if (hdr) hdr.textContent = docName;
+    renderAgreementDoc(docName);
+  };
 
   // Populate notes
   buildNotes(notes || []);
