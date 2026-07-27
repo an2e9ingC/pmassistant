@@ -787,6 +787,9 @@ input[type="checkbox"] { accent-color: var(--accent); }
 /* 我的Bug — danger (matches 新建Bug button) */
 .profile-tab-btn.tab-bugs.active { background: var(--danger); color: #fff; border-color: var(--danger); }
 .profile-tab-btn.tab-bugs:not(.active):hover { border-color: var(--danger); }
+/* 我的审批 — warn/orange (matches 评审中 status) */
+.profile-tab-btn.tab-approvals.active { background: var(--warn); color: #fff; border-color: var(--warn); }
+.profile-tab-btn.tab-approvals:not(.active):hover { border-color: var(--warn); }
 .profile-tab-count {
   font-family: var(--mono); font-size: clamp(16px, 2vw, 24px); font-weight: 700; line-height: 1;
 }
