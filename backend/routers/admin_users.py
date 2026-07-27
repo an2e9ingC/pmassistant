@@ -204,6 +204,20 @@ def get_role_users(role_id: int, db: Session = Depends(get_db), _=Depends(requir
     }
 
 
+@router.get("/{user_id}", response_model=dict)
+def get_user_detail(user_id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
+    """Get a single user's full details (admin only, for viewing user center of other users)."""
+    u = db.query(LocalUser).filter(LocalUser.id == user_id).first()
+    if not u:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    from backend.schemas.auth import UserInfo
+    from backend.middleware.auth import get_user_perms
+    info = UserInfo.model_validate(u).model_dump()
+    info["permissions"] = ",".join(get_user_perms(u))
+    info["gitlab_token_valid"] = bool(u.auth_source == "gitlab" and u.gitlab_access_token)
+    return {"code": 0, "data": info, "message": "ok"}
+
+
 @router.get("", response_model=dict)
 def list_users(db: Session = Depends(get_db), _=Depends(require_admin)):
     from backend.middleware.auth import _get_perms, is_user_online

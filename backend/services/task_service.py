@@ -100,12 +100,12 @@ def get_task_stats(db: Session, project_id: Optional[int] = None) -> dict:
 
 
 def _get_user_info(user):
-    """Extract id and username from LocalUser or dict."""
+    """Extract id and display name from LocalUser or dict."""
     if user is None:
         return None, None
     if hasattr(user, 'id'):
-        return user.id, user.username
-    return user.get('id'), user.get('username')
+        return user.id, (user.display_name or user.username)
+    return user.get('id'), user.get('display_name') or user.get('username')
 
 
 def create_task(db: Session, data: dict, user) -> dict:
@@ -218,7 +218,7 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
     changes = []
     # Batch-resolve assignee ID → display name for readable logs
     user_name_map = {}
-    for fid in ("assignee_id",):
+    for fid in ("assignee_id", "reviewer_id"):
         ov = getattr(t, fid) if fid in ("assignee_id",) else None
         nv = data.get(fid)
         ids = set()
@@ -245,7 +245,7 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
                 setattr(t, field, new_val)
             ov_display = old_val
             nv_display = new_val if new_val else ''
-            if field == "assignee_id":
+            if field in ("assignee_id", "reviewer_id"):
                 ov_display = user_name_map.get(int(old_val), old_val) if old_val else ''
                 nv_display = user_name_map.get(int(new_val), new_val) if new_val else ''
             field_label = FIELD_LABEL.get(field, field)
@@ -299,6 +299,12 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
 
     if changes:
         _log_audit(db, t.project_id, uname, "task_update", f"更新任务「{t.title}」: " + "; ".join(changes[:3]))
+        # Also record as task comment for user-visible change history
+        comment_text = "; ".join(changes)
+        if not comment_text:
+            comment_text = "更新任务"
+        db.add(TaskComment(task_id=t.id, user_id=uid, content=comment_text))
+        db.commit()
 
     result = _task_dict(t, db)
     result["auto_messages"] = auto_messages

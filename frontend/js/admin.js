@@ -722,7 +722,7 @@ function renderUserTable() {
     }
     return '<tr>' +
       '<td style="font-family:var(--mono);color:var(--muted);text-align:center">' + (idx + 1) + '</td>' +
-      '<td style="font-size:13px;font-weight:500">' + escHtml(u.username) + '</td>' +
+      '<td style="font-size:13px;font-weight:500;cursor:pointer;color:var(--accent)" onclick="gotoView(\x27user-center\x27,{params:[' + u.id + ']})" title="查看用户中心">' + escHtml(u.username) + '</td>' +
       '<td style="font-size:12px">' + escHtml(u.wecom_name || '—') + '</td>' +
       '<td style="font-size:12px">' + authSourceHtml + '</td>' +
       '<td>' + (roleBadges || '<span style="font-size:11px;color:var(--muted)">未分配</span>') + '</td>' +

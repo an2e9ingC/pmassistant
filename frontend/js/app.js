@@ -1433,11 +1433,23 @@ function changePassword() {
   document.body.insertAdjacentHTML('beforeend', html);
 }
 
-function initUserCenter() {
+async function initUserCenter(viewUserId) {
   var container = document.getElementById('user-center-content');
   if (!container) return;
-  var user = getCurrentUser();
-  if (!user) { container.innerHTML = '<div class="error-state">未登录</div>'; return; }
+  var currentUser = getCurrentUser();
+  if (!currentUser) { container.innerHTML = '<div class="error-state">未登录</div>'; return; }
+
+  // If viewing another user's center (admin feature), load that user's data
+  var user = currentUser;
+  var isViewingOther = viewUserId && viewUserId !== currentUser.id;
+  window._ucViewUserId = isViewingOther ? viewUserId : null;
+  if (isViewingOther) {
+    try {
+      var resp = await API.get('/admin/users/' + viewUserId);
+      if (resp) { user = resp; }
+    } catch(e) { /* fall back to current user */ }
+  }
+
   var isGitlab = user.auth_source === 'gitlab';
   var perms = (user.permissions || '').split(',').filter(Boolean);
   var permLabels = {'admin':'系统管理','sync':'数据同步','project_edit':'项目维护','product_link':'产品维护','customer_link':'客户维护','doc_template':'文档模板配置','stage_mapping':'阶段映射','task_edit':'任务管理'};
@@ -1467,9 +1479,9 @@ function initUserCenter() {
       '</div>' +
       // Right: tab buttons with counts
       '<div class="profile-tabs">' +
-        '<button class="profile-tab-btn tab-tasks active" id="btn-my-tasks" onclick="_ucSwitchTab(\'tasks\')"><span>我的任务</span><span class="profile-tab-count" id="uc-tasks-count">...</span></button>' +
-        '<button class="profile-tab-btn tab-bugs" id="btn-my-bugs" onclick="_ucSwitchTab(\'bugs\')"><span>我的Bug</span><span class="profile-tab-count" id="uc-bugs-count">...</span></button>' +
-        '<button class="profile-tab-btn tab-approvals" id="btn-my-approvals" onclick="_ucSwitchTab(\'approvals\')"><span>我的审批</span><span class="profile-tab-count" id="uc-approvals-count">...</span></button>' +
+        '<button class="profile-tab-btn tab-tasks active" id="btn-my-tasks" onclick="_ucSwitchTab(\'tasks\')"><span>' + (isViewingOther ? escHtml(user.display_name||user.username) + '的任务' : '我的任务') + '</span><span class="profile-tab-count" id="uc-tasks-count">...</span></button>' +
+        '<button class="profile-tab-btn tab-bugs" id="btn-my-bugs" onclick="_ucSwitchTab(\'bugs\')"><span>' + (isViewingOther ? escHtml(user.display_name||user.username) + '的Bug' : '我的Bug') + '</span><span class="profile-tab-count" id="uc-bugs-count">...</span></button>' +
+        '<button class="profile-tab-btn tab-approvals" id="btn-my-approvals" onclick="_ucSwitchTab(\'approvals\')"><span>' + (isViewingOther ? escHtml(user.display_name||user.username) + '的审批' : '我的审批') + '</span><span class="profile-tab-count" id="uc-approvals-count">...</span></button>' +
       '</div>' +
     '</div>';
 
@@ -1496,9 +1508,7 @@ function initUserCenter() {
         '</div>' +
         // Approvals section (hidden by default)
         '<div id="uc-approvals-section" style="flex:1;flex-direction:column;min-height:0;display:none">' +
-          '<div class="table-scroll" id="uc-approvals-table-wrap"><table class="proj-table clickable"><thead><tr>' +
-            '<th style="width:8%">项目编号</th><th>阶段</th><th>任务标题</th><th style="width:7%">进度</th><th style="width:8%">责任人</th><th style="width:1%;white-space:nowrap">操作</th>' +
-          '</tr></thead><tbody id="uc-approvals-table-tbody"></tbody></table></div>' +
+          '<div class="table-scroll" id="uc-approvals-table-wrap"><table class="proj-table clickable"><thead id="uc-approvals-table-head"></thead><tbody id="uc-approvals-table-tbody"></tbody></table></div>' +
         '</div>' +
       '</div>' +
     '</div>' +
@@ -1617,8 +1627,9 @@ function _ucNewBug() {
 function _ucLoadApprovals() {
   var user = getCurrentUser();
   if (!user) return;
-  // Load tasks where current user is reviewer and status is review
-  API.get('/tasks?reviewer_id=' + user.id + '&status=review').then(function(tasks) {
+  var reviewerId = window._ucViewUserId || user.id;
+  // Load tasks where user is reviewer and status is review
+  API.get('/tasks?reviewer_id=' + reviewerId + '&status=review').then(function(tasks) {
     _ucApprovals = tasks || [];
     var countEl = document.getElementById('uc-approvals-count');
     if (countEl) countEl.textContent = _ucApprovals.length;
@@ -1629,23 +1640,33 @@ function _ucLoadApprovals() {
   });
 }
 
+var _ucApproveIcon = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3,8 6,11 13,4"/></svg>';
+var _ucRejectIcon = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>';
+
 function _renderUcApprovalTable() {
   var tbody = document.getElementById('uc-approvals-table-tbody');
   if (!tbody) return;
+  // Render table head
+  var head = document.getElementById('uc-approvals-table-head');
+  if (head) head.innerHTML = '<tr><th style="width:6%">任务编号</th><th style="width:8%">项目编号</th><th>阶段</th><th>任务标题</th><th style="width:70px">状态</th><th style="width:6%">进度</th><th style="width:8%">责任人</th><th style="width:7%">截止</th><th style="width:1%;white-space:nowrap">操作</th></tr>';
   if (!_ucApprovals || !_ucApprovals.length) {
-    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">暂无需要审批的任务</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state">暂无需要审批的任务</div></td></tr>';
     return;
   }
   tbody.innerHTML = _ucApprovals.map(function(t) {
-    return '<tr>' +
-      '<td style="font-size:11px;color:var(--muted)">' + escHtml(t.project_code || '') + '</td>' +
+    var overdue = t.due_date && t.status !== 'done' && t.status !== 'closed' && t.due_date < fmtLocalDate();
+    return '<tr style="cursor:pointer" onclick="_ucOpenTask(' + t.id + ')">' +
+      '<td style="text-align:center;font-size:11px;font-family:var(--mono);color:var(--muted)">#' + t.id + '</td>' +
+      '<td style="text-align:center">' + (t.project_code ? projCodeTag(t.project_code, 'event.stopPropagation();openProject(\'' + escHtml(t.project_code).replace(/'/g, "\\'") + '\')', t.project_name) : '-') + '</td>' +
       '<td style="font-size:12px">' + escHtml(t.stage_name || '') + '</td>' +
-      '<td style="font-size:13px;cursor:pointer;color:var(--accent)" onclick="_ucOpenTask(' + t.id + ')">' + escHtml(t.title) + '</td>' +
-      '<td style="text-align:center">' + renderProgressCircle(t.progress || 0, 26, {label:''}) + '</td>' +
+      '<td style="font-weight:530">' + escHtml(t.title) + '</td>' +
+      '<td style="text-align:center;cursor:pointer" onclick="event.stopPropagation();openReviewerDialog(' + t.id + ')" title="' + (t.reviewer_name ? '审批人: ' + escHtml(t.reviewer_name) + ' — 点击修改' : '点击设置审批人') + '">' + renderPill(t.status || 'review') + '</td>' +
+      '<td style="text-align:center">' + renderProgressCircle(t.progress || 0, 30, {label: ''}) + '</td>' +
       '<td style="font-size:12px">' + escHtml(t.assignee_name || '') + '</td>' +
-      '<td style="white-space:nowrap">' +
-        '<button class="btn-xs btn-primary" onclick="_ucApproveTask(' + t.id + ',\'' + escJs(t.title) + '\')">批准</button>' +
-        '<button class="btn-xs" style="color:var(--danger);border-color:var(--danger);margin-left:4px" onclick="_ucRejectTask(' + t.id + ',\'' + escJs(t.title) + '\')">驳回</button>' +
+      '<td style="text-align:center;font-size:12px;color:' + (overdue ? 'var(--danger)' : '') + '">' + (t.due_date || '-') + '</td>' +
+      '<td style="text-align:center;white-space:nowrap" onclick="event.stopPropagation()">' +
+        '<button class="btn-icon" onclick="_ucApproveTask(' + t.id + ',\'' + escJs(t.title) + '\')" title="批准" style="color:var(--success)">' + _ucApproveIcon + '</button>' +
+        '<button class="btn-icon" onclick="_ucRejectTask(' + t.id + ',\'' + escJs(t.title) + '\')" title="驳回" style="color:var(--danger);margin-left:2px">' + _ucRejectIcon + '</button>' +
       '</td></tr>';
   }).join('');
 }
@@ -1668,8 +1689,9 @@ function _ucRejectTask(taskId, taskTitle) {
 }
 
 function _ucLoadTasks(user) {
-  API.get('/tasks/my').then(function(tasks) {
-    _ucTasks = tasks || [];
+  var url = window._ucViewUserId ? '/tasks?assignee_id=' + window._ucViewUserId + '&limit=200' : '/tasks/my';
+  API.get(url).then(function(tasks) {
+    _ucTasks = Array.isArray(tasks) ? tasks : (tasks && tasks.items ? tasks.items : []);
     _ucUpdateTaskCount();
     _ucRenderTaskStats();
     _renderUcFilterBar();
@@ -1837,10 +1859,12 @@ async function _ucLoadBugs() {
   document.getElementById('uc-bugs-table-head').innerHTML = '<tr><th style="width:6%">Bug编号</th><th style="width:8%">项目编号</th><th style="width:100px">产品编号</th><th>Bug标题</th><th style="width:70px">状态</th><th style="width:6%">优先级</th><th style="width:6%">进度</th><th style="width:7%">截止</th><th style="width:1%;white-space:nowrap">操作</th></tr>';
   try {
     var user = getCurrentUser();
-    var uid = user ? user.id : null;
-    var bugs = await API.get('/bugs/my');
-    _ucUpdateBugCount((bugs || []).filter(function(b) { return b.assignee_id === uid; }).length);
-    var filtered = _ucRenderBugFilter(bugs, uid);
+    var viewUid = window._ucViewUserId || (user ? user.id : null);
+    var bugsUrl = window._ucViewUserId ? '/bugs?assignee_id=' + window._ucViewUserId + '&limit=200' : '/bugs/my';
+    var bugs = await API.get(bugsUrl);
+    bugs = Array.isArray(bugs) ? bugs : (bugs && bugs.items ? bugs.items : []);
+    _ucUpdateBugCount((bugs || []).filter(function(b) { return b.assignee_id === viewUid; }).length);
+    var filtered = _ucRenderBugFilter(bugs, viewUid);
     var tbody = document.getElementById('uc-bugs-table-tbody');
     if (!filtered.length) {
       var label = _ucBugTab === 'assignee' ? '暂无待处理的Bug' : '暂无创建的Bug';
@@ -1888,9 +1912,11 @@ async function _ucDeleteTask(taskId) {
 function _ucLoadBugStats() {
   var rs = document.getElementById('uc-right-stats');
   if (!rs) return;
-  API.get('/bugs/my').then(function(bugs) {
+  var bugsUrl2 = window._ucViewUserId ? '/bugs?assignee_id=' + window._ucViewUserId + '&limit=200' : '/bugs/my';
+  API.get(bugsUrl2).then(function(bugs) {
+    bugs = Array.isArray(bugs) ? bugs : (bugs && bugs.items ? bugs.items : []);
     var user = getCurrentUser();
-    var uid = user ? user.id : null;
+    var uid = window._ucViewUserId || (user ? user.id : null);
     // Filter by tab: assignee or reporter
     var filtered = _ucBugTab === 'assignee'
       ? (bugs||[]).filter(function(b) { return b.assignee_id === uid; })
