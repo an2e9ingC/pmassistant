@@ -1763,6 +1763,8 @@ function _onTaskCheckbox(cb) {
 
 function _toggleSelectAllTasks(cb) {
   document.querySelectorAll('.task-checkbox').forEach(function(c) {
+    // Only toggle visible checkboxes (filtered/paginated views may hide rows)
+    if (c.offsetParent === null) return;
     c.checked = cb.checked;
     var tid = parseInt(c.value);
     if (cb.checked) _selectedTasks.add(tid); else _selectedTasks.delete(tid);
