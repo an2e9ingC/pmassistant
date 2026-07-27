@@ -168,15 +168,11 @@ function buildInfo(p, notes, delivery, docs) {
   var html = '<div style="display:flex;gap:20px;align-items:flex-start">';
 
   // Left column — main card (golden ratio ~61.8%)
-  html += '<div class="card" style="flex:1.618;min-width:0;padding:20px">';
+  html += '<div class="card info-glass-card" style="flex:1.618;min-width:0;padding:20px">';
 
   // KPI row 1 — 4 columns
   html += '<div class="delivery-kpi" style="grid-template-columns:repeat(4, 1fr);margin-bottom:16px">' +
-    '<div class="dkpi"><div class="dkpi-lbl">项目类型</div><div class="dkpi-val" style="font-size:16px;font-weight:600">' +
-      '<span style="color:' + (p.project_type === 'RD' ? 'var(--accent)' : p.project_type === 'SC' ? 'var(--success)' : '#8b5cf6') +
-      ';background:' + (p.project_type === 'RD' ? 'var(--accent-lt)' : p.project_type === 'SC' ? 'var(--success-lt)' : 'var(--accent-lt)') +
-      ';padding:2px 10px;border-radius:4px;font-size:13px">' + escHtml(getProjectTypeLabel(p.project_type)) + '</span>' +
-    '</div></div>' +
+    '<div class="dkpi"><div class="dkpi-lbl">项目类型</div><div class="dkpi-val" style="font-size:16px;font-weight:600;color:' + (p.project_type === 'RD' ? 'var(--accent)' : p.project_type === 'SC' ? 'var(--success)' : '#8b5cf6') + '">' + escHtml(getProjectTypeLabel(p.project_type)) + '</div></div>' +
     '<div class="dkpi"><div class="dkpi-lbl">项目状态</div><div class="dkpi-val" style="font-size:16px;font-weight:600;color:' + st.color + '">' + st.label + '</div></div>' +
     '<div class="dkpi"><div class="dkpi-lbl">创建人</div><div class="dkpi-val" style="font-size:16px;font-weight:600">' + escHtml(p.reporter_name || '—') + '</div></div>' +
     '<div class="dkpi"><div class="dkpi-lbl">客户</div><div class="dkpi-val" style="font-size:16px;font-weight:600">' +

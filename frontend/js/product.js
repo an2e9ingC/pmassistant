@@ -440,7 +440,7 @@ function renderProdInfo(p, docs) {
   var html = '<div style="display:flex;gap:20px;align-items:flex-start">';
 
   // Left column — main card
-  html += '<div class="card" style="flex:1.618;min-width:0;padding:20px">';
+  html += '<div class="card info-glass-card" style="flex:1.618;min-width:0;padding:20px">';
 
   // Info row — 4 columns, consistent style
   html += '<div class="delivery-kpi" style="grid-template-columns:repeat(4, 1fr);margin-bottom:16px">' +
