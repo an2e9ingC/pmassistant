@@ -12,7 +12,7 @@ from backend.models.zentao import CachedProject, CachedExecution
 from backend.services.entity_resolver import resolve_project
 from backend.services.project_service import log_project_activity
 from backend.routers.logs import log_audit
-from backend.audit_categories import AUDIT_CAT_PROJECT, FIELD_LABEL
+from backend.audit_categories import AUDIT_CAT_PROJECT, AUDIT_CAT_TASK, FIELD_LABEL
 from backend.services import project_service
 import re as _re, os as _os
 
@@ -322,10 +322,95 @@ async def sync_stage_name_to_zentao(
 
 
 @router.get("/{identifier}/documents", response_model=dict)
-def get_documents(identifier: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
+def get_documents(
+    identifier: str,
+    include_removed: bool = Query(False),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
     project = resolve_project(db, identifier)
-    docs = project_service.get_project_documents(db, project.id)
+    docs = project_service.get_project_documents(db, project.id, include_removed=include_removed)
     return {"code": 0, "data": docs, "message": "ok"}
+
+
+class DocSyncBody(BaseModel):
+    doc_ids: list = []  # specific doc IDs to force re-import (for deleted docs)
+
+
+@router.post("/{identifier}/documents/sync", response_model=dict)
+def sync_documents(
+    identifier: str,
+    body: DocSyncBody,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("project_edit")),
+):
+    """Manually trigger document sync from templates, with optional force re-import."""
+    project = resolve_project(db, identifier)
+    from backend.services.document_service import _sync_from_templates
+    from backend.models.document import ProjectDocument
+
+    # Force re-import specified docs (e.g., previously deleted)
+    force_count = 0
+    if body.doc_ids:
+        for did in body.doc_ids:
+            pd = db.query(ProjectDocument).filter(ProjectDocument.id == did).first()
+            if pd and pd.is_removed:
+                # Re-create from template: find the template and recreate
+                from backend.models.document import DocumentTemplate
+                tpl = db.query(DocumentTemplate).filter(
+                    DocumentTemplate.stage_type == pd.stage_type,
+                    DocumentTemplate.doc_name == pd.doc_name,
+                ).first()
+                if tpl:
+                    pd.is_removed = 0
+                    pd.status = "pending"
+                    pd.location = None
+                    force_count += 1
+
+    # Run normal sync
+    _sync_from_templates(db, project.id, project.project_type or "RD")
+    db.commit()
+
+    docs = project_service.get_project_documents(db, project.id)
+    return {"code": 0, "data": docs, "message": f"同步完成，强制恢复 {force_count} 个文档"}
+
+
+class CustomDocCreate(BaseModel):
+    doc_name: str
+    stage_type: str
+    doc_type: str = ""
+    location: str = ""
+    description: str = ""
+    is_optional: bool = False
+
+
+@router.post("/{identifier}/documents/add", response_model=dict)
+def add_custom_document(
+    identifier: str,
+    body: CustomDocCreate,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("project_edit")),
+):
+    """Add a custom project document (not from a template)."""
+    project = resolve_project(db, identifier)
+    from backend.models.document import ProjectDocument
+    pd = ProjectDocument(
+        project_id=project.id,
+        execution_id=0,
+        stage_type=body.stage_type,
+        doc_name=body.doc_name,
+        sort_order=99,
+        status="pending",
+        doc_type=body.doc_type or "",
+        doc_path=body.location or "",
+        location=body.location or "",
+        description=body.description or "",
+        is_optional=body.is_optional,
+    )
+    db.add(pd)
+    db.commit()
+    log_audit(db, user, "doc_add", f"项目={project.code} 新增自定义文档「{body.doc_name}」", AUDIT_CAT_TASK, "medium")
+    return {"code": 0, "data": {"id": pd.id}, "message": f"文档「{body.doc_name}」已添加"}
 
 
 class DocumentUpdate(BaseModel):
@@ -355,14 +440,31 @@ def update_document(
     )
     if not result:
         raise HTTPException(status_code=404, detail="Document not found")
+
+    # Build human-readable change description
+    STATUS_TXT = {'pending': '未提交', 'submitted': '已提交'}
+    doc_name = result.get('doc_name', '?')
+    parts = []
+
     new_status = result.get('status', '?')
-    new_location = result.get('location', '?')
-    detail = f"doc={result.get('doc_name','')} status:{old_status}->{new_status}"
+    if old_status != new_status:
+        parts.append(f"状态: {STATUS_TXT.get(old_status, old_status)} → {STATUS_TXT.get(new_status, new_status)}")
+
+    new_location = result.get('location', '') or ''
     if old_location != new_location:
-        detail += f" location:{old_location}->{new_location}"
+        parts.append("路径已更新")
+
+    new_removed = result.get('is_removed')
+    old_removed = old.is_removed if old else 0
+    if old_removed != new_removed:
+        if new_removed:
+            parts.append("已标记删除")
+        else:
+            parts.append("已恢复")
+
+    detail = f"「{doc_name}」{'; '.join(parts)}" if parts else f"「{doc_name}」无变更"
     log_project_activity(db, project.id, user.username, "文档状态", detail)
-    log_audit(db, user, "project_doc_update",
-        f"project={project.code} {detail}", AUDIT_CAT_PROJECT, "low")
+    log_audit(db, user, "project_doc_update", f"project={project.code} {detail}", AUDIT_CAT_PROJECT, "low")
     return {"code": 0, "data": result, "message": "ok"}
 
 

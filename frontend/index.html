@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="app-version" content="v2026.07.27-beta5">
+<meta name="app-version" content="v2026.07.27-beta6">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>PM Assistant · 集成禅道 & GitLab</title>
 <script>
@@ -489,7 +489,7 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
         <div id="pma-tasks-content"><div class="empty-state" style="padding:20px">请选择项目</div></div>
       </div>
       <div class="dsec" id="dsec-docs">
-        <div class="section-hd"><div class="section-title">项目文档</div><a id="proj-docs-template-link" href="javascript:void(0)" style="font-size:11px;color:var(--accent);text-decoration:none;margin-left:8px">查看文档模板详情 →</a></div>
+        <div class="section-hd"><div class="section-title">项目文档</div><div style="display:flex;align-items:center;gap:8px;margin-left:auto"><button class="btn btn-sm" onclick="importTemplateDocs()" style="font-size:11px;padding:4px 12px;color:var(--accent);border-color:var(--accent)">📋 导入模板文档</button><button class="btn btn-sm" onclick="addCustomDoc()" style="font-size:11px;padding:4px 12px;background:var(--accent);color:#fff;border-color:var(--accent)">+ 新增文档</button><a id="proj-docs-template-link" href="javascript:void(0)" style="font-size:11px;color:var(--accent);text-decoration:none">模板详情 →</a></div></div>
         <div class="card" style="padding:0;overflow:hidden">
         <div class="table-scroll" style="max-height:calc(100vh - 320px)">
           <table class="stage-table">

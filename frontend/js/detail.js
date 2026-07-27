@@ -1027,7 +1027,7 @@ function buildDocs(data) {
               : (d.location && d.location !== '无需文档' && d.location !== '已删除'
               ? '<a href="' + escHtml(d.location) + '" target="_blank" title="打开链接" style="text-decoration:none;font-size:15px">&#x1F517;</a>'
               : '')) +
-            (d.is_optional && canEdit ? iconDelete('removeOptionalDoc(' + d.id + ')', '移除此文档') : '') +
+            (d.is_optional && canEdit ? iconDelete('removeOptionalDoc(' + d.id + ',\x27' + escJs(d.doc_name) + '\x27)', '移除此文档') : '') +
             (canEdit ? iconEdit('openDocEditDialog(' + d.id + ')', '编辑') : '') +
           '</td>' +
         '</tr>';
@@ -1056,13 +1056,31 @@ function openDocEditDialog(docId) {
 
 function submitDocStatus(docId) { saveDocStatus(docId, 'submitted'); }
 function markDocUnnecessary(docId) { saveDocStatus(docId, 'unnecessary'); }
-function deleteDocStatus(docId) {
-  if (!confirm('确认删除此文档记录？')) return;
+function deleteDocStatus(docId, docName) {
+  var label = docName || ('#' + docId);
+  openDialog('删除文档',
+    '<div class="confirm-dlg">确认删除文档 <b>' + escHtml(label) + '</b>？<br><br>删除后将不再显示。<br><br>如需恢复，可在"导入模板文档"中重新导入。</div>',
+    [{text: '取消', onclick: 'closeSharedDialog()'},
+     {text: '确认删除', cls: 'btn-danger', onclick: 'closeSharedDialog();_confirmDeleteDoc(' + docId + ',\x27' + escJs(label) + '\x27)'}],
+    {hideClose: true});
+}
+async function _confirmDeleteDoc(docId, docName) {
+  var ok = await verifyPassword('删除文档: ' + (docName || '#' + docId), 'skip_doc_delete');
+  if (!ok) return;
   saveDocStatus(docId, 'deleted');
 }
 
-async function removeOptionalDoc(docId) {
-  if (!confirm('移除此可选项后，该文档将不再显示，也不计入完成统计。确认移除？')) return;
+function removeOptionalDoc(docId, docName) {
+  var label = docName || ('#' + docId);
+  openDialog('移除可选项',
+    '<div class="confirm-dlg">确认移除文档 <b>' + escHtml(label) + '</b>？<br><br>移除后文档将不再显示，也不计入完成统计。<br><br>如需恢复，可在"导入模板文档"中重新导入。</div>',
+    [{text: '取消', onclick: 'closeSharedDialog()'},
+     {text: '确认移除', cls: 'btn-danger', onclick: 'closeSharedDialog();_confirmRemoveDoc(' + docId + ',\x27' + escJs(label) + '\x27)'}],
+    {hideClose: true});
+}
+async function _confirmRemoveDoc(docId, docName) {
+  var ok = await verifyPassword('移除文档: ' + (docName || '#' + docId), 'skip_doc_remove');
+  if (!ok) return;
   try {
     await API.put('/projects/' + _comboCurCode + '/documents/' + docId, { is_removed: 1 });
     showToast('已移除可选项', 'success');
@@ -1081,7 +1099,7 @@ async function saveDocStatus(docId, status) {
     body.status = 'submitted';
     body.location = '无需文档';
   } else if (status === 'deleted') {
-    body.status = 'deleted';
+    body.is_removed = 1;
     body.location = '已删除';
   } else if (loc) {
     body.location = loc;
@@ -1096,6 +1114,105 @@ async function saveDocStatus(docId, status) {
   } catch(e) {
     showToast('操作失败: ' + (e.message || '未知错误'), 'error');
   }
+}
+
+function refreshDocs() {
+  if (!_comboCurCode) return;
+  API.get('/projects/' + _comboCurCode + '/documents').then(function(data) {
+    buildDocs(data);
+  });
+}
+
+/* ── Import Template Docs ── */
+
+function importTemplateDocs() {
+  if (!_comboCurCode) return;
+  API.get('/projects/' + _comboCurCode + '/documents?include_removed=1').then(function(data) {
+    var stageList = (data && data.documents) ? data.documents : [];
+    var hasRemoved = false;
+    var rows = '';
+    stageList.forEach(function(stage) {
+      var items = stage.documents || [];
+      items.forEach(function(d) {
+        var isRemoved = d.is_removed;
+        if (isRemoved) hasRemoved = true;
+        rows += '<tr><td><input type="checkbox" value="' + d.id + '" data-removed="' + (isRemoved ? '1' : '0') + '"' + (isRemoved ? '' : ' checked disabled') + '></td>' +
+          '<td style="font-size:11px;color:var(--muted)">' + escHtml(stage.stage_name || '') + '</td>' +
+          '<td>' + escHtml(d.doc_name) + '</td>' +
+          '<td>' + (isRemoved ? '<span style="color:var(--danger)">已删除</span>' : '已导入') + '</td></tr>';
+      });
+    });
+
+    var html = '<div style="max-height:400px;overflow-y:auto"><table class="proj-table"><thead><tr><th style="width:30px">选</th><th>阶段</th><th>文档名</th><th>状态</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+    if (hasRemoved) {
+      html += '<div style="margin-top:8px;font-size:11px;color:var(--warn)">已删除的文档可勾选后强制重新导入</div>';
+    }
+
+    openDialog('导入模板文档', html, [
+      {text: '取消', onclick: 'closeSharedDialog()'},
+      {text: '确认导入', cls: 'btn-primary', onclick: 'doImportTemplateDocs()'}
+    ], {maxWidth: 600});
+  }).catch(function(e) { showToast('加载失败: ' + (e.message || ''), 'error'); });
+}
+
+function doImportTemplateDocs() {
+  var cbs = document.querySelectorAll('.shared-dialog-overlay input[type=checkbox]:checked');
+  var ids = [];
+  cbs.forEach(function(cb) { ids.push(parseInt(cb.value)); });
+  if (!ids.length) { showToast('请选择要导入的文档', 'error'); return; }
+  API.post('/projects/' + _comboCurCode + '/documents/sync', {doc_ids: ids}).then(function(r) {
+    showToast(r.message || '导入完成', 'success');
+    closeSharedDialog();
+    refreshDocs();
+  }).catch(function(e) { showToast('导入失败: ' + (e.message || ''), 'error'); });
+}
+
+/* ── Add Custom Document ── */
+
+function addCustomDoc() {
+  if (!_comboCurCode) return;
+  var stages = [];
+  // Get standard stages from last loaded docs data
+  var inp = 'width:100%;box-sizing:border-box;margin-top:2px';
+  var html = '<div style="display:flex;flex-direction:column;gap:10px">' +
+    '<div><label style="font-size:11px;color:var(--muted)">文档名称</label><input class="search-inp" id="custom-doc-name" style="' + inp + '" placeholder="如：硬件测试报告"></div>' +
+    '<div><label style="font-size:11px;color:var(--muted)">所属阶段</label><select class="search-inp" id="custom-doc-stage" style="' + inp + '"></select></div>' +
+    '<div><label style="font-size:11px;color:var(--muted)">文档类型</label><select class="search-inp" id="custom-doc-type" style="' + inp + '"><option value="">PMA内部</option><option value="gitlab">GitLab</option><option value="svn">SVN</option><option value="nas">NAS</option><option value="solidworks">结构设计</option></select></div>' +
+    '<div><label style="font-size:11px;color:var(--muted)">文档路径/链接</label><input class="search-inp" id="custom-doc-location" style="' + inp + '" placeholder="如：http://..."></div>' +
+    '<div><label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="custom-doc-optional" style="width:16px;height:16px">可选项（可按需删除）</label></div>' +
+  '</div>';
+
+  openDialog('新增文档', html, [
+    {text: '取消', onclick: 'closeSharedDialog()'},
+    {text: '添加', cls: 'btn-primary', onclick: 'submitCustomDoc()'}
+  ], {maxWidth: 500});
+
+  // Load stage options
+  API.get('/projects/' + _comboCurCode + '/documents').then(function(data) {
+    var sel = document.getElementById('custom-doc-stage');
+    var stageList = (data && data.documents) ? data.documents : [];
+    stageList.forEach(function(stage) {
+      sel.innerHTML += '<option value="' + escHtml(stage.stage_name || '') + '">' + escHtml(stage.stage_name || '') + '</option>';
+    });
+  });
+}
+
+function submitCustomDoc() {
+  var name = document.getElementById('custom-doc-name').value.trim();
+  var stage = document.getElementById('custom-doc-stage').value;
+  var docType = document.getElementById('custom-doc-type').value;
+  var location = document.getElementById('custom-doc-location').value.trim();
+  var isOptional = document.getElementById('custom-doc-optional').checked;
+  if (!name) { showToast('请输入文档名称', 'error'); return; }
+  if (!stage) { showToast('请选择所属阶段', 'error'); return; }
+  API.post('/projects/' + _comboCurCode + '/documents/add', {
+    doc_name: name, stage_type: stage, doc_type: docType,
+    location: location, is_optional: isOptional
+  }).then(function(r) {
+    showToast(r.message || '文档已添加', 'success');
+    closeSharedDialog();
+    refreshDocs();
+  }).catch(function(e) { showToast('添加失败: ' + (e.message || ''), 'error'); });
 }
 
 /* Delivery */
