@@ -505,6 +505,7 @@
   transition: background 0.12s;
 }
 .note-dialog-close:hover { background: var(--bg); color: var(--fg); }
+.fs-btn-exit { transform: rotate(180deg); }
 
 /* User form */
 .user-form { display: flex; flex-direction: column; gap: 10px; }

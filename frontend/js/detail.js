@@ -277,11 +277,14 @@ function buildInfo(p, notes, delivery, docs) {
 
   html += '<div style="margin-top:20px;display:flex;align-items:center;justify-content:space-between">' +
     sectionHeader(currentAgreementName || '技术协议') +
+    '<div style="display:flex;align-items:center;gap:6px">' +
     '<select id="agreement-doc-select" style="font-size:12px;padding:2px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--fg);cursor:pointer" onchange="switchAgreementDoc(this.value)">';
   agreementOptions.forEach(function(opt) {
     html += '<option value="' + escHtml(opt) + '"' + (currentAgreementName === opt ? ' selected' : '') + '>' + escHtml(opt) + '</option>';
   });
-  html += '</select></div>';
+  html += '</select>' +
+    '<button class="btn btn-sm" title="全屏查看" style="font-size:12px;padding:2px 6px" onclick="openAgreementDocFullscreen()">⛶</button>' +
+    '</div></div>';
   html += '<div class="card" style="padding:0;overflow:hidden" id="proj-agreement-card">';
   html += '<div id="proj-agreement-content"></div>';
   html += '</div>';
@@ -307,6 +310,14 @@ function buildInfo(p, notes, delivery, docs) {
     var hdr = document.querySelector('#info-content .section-hd .section-title');
     if (hdr) hdr.textContent = docName;
     renderAgreementDoc(docName);
+  };
+
+  window.openAgreementDocFullscreen = function() {
+    var sel = document.getElementById('agreement-doc-select');
+    var docName = sel ? sel.value : (currentAgreementName || '对外销售-技术协议');
+    var doc = findAgreementDoc(docName);
+    if (doc) openDocIframeFullscreen(doc.location, doc.doc_name || docName);
+    else showToast('未找到"' + docName + '"的文档', 'info');
   };
 
   // Populate notes
