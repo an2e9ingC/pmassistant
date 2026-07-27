@@ -213,11 +213,19 @@ for table in ['pma_tasks', 'product_documents', 'product_doc_templates', 'docume
 
 如果发现缺失列 → 告知用户手动执行 `ALTER TABLE ... ADD COLUMN ...`，**不自动执行**。
 
-### 3. push + cleanup
+### 3. push + backup + cleanup
 
 ```bash
 cd $PMA_TRUNK_DIR
 git push origin trunk
+
+# 备份 trunk 数据库
+DB_BACKUP_DIR="data/backups/permanent"
+mkdir -p "$DB_BACKUP_DIR"
+BACKUP_FILE="$DB_BACKUP_DIR/pma-8000-$(date +%Y%m%d-%H%M%S).db"
+cp data/pma-8000.db "$BACKUP_FILE"
+echo "数据库已备份: $BACKUP_FILE"
+
 git push origin --delete <worktree-branch>  # 删除远程临时分支
 git status --short                         # 确认无残留 staged 文件
 # 有残留 → git reset HEAD <files> # 取消 stage
