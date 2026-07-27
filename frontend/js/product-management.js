@@ -46,6 +46,7 @@ async function initProductManagement(nodeId) {
     }
     await _pmLoadContent();
     renderProductManagementPage();
+    _resizePMTable();
   } catch (e) {
     container.innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) +
       '<br><button class="btn" onclick="initProductManagement()">重试</button></div>';
@@ -181,7 +182,7 @@ function renderProductManagementPage() {
   } else if (isL1) {
     // L1 selected → Show L2 (产品系列) list
     if (_pmNodeChildren.length) {
-      rightHtml += '<div class="table-scroll" style="max-height:400px"><table class="stage-table"><thead><tr>' +
+      rightHtml += '<div class="table-scroll" id="pm-l1-table"><table class="stage-table"><thead><tr>' +
         '<th>产品系列名称</th><th>型号数</th>' +
         (_pmIsAdmin ? '<th style="width:100px">操作</th>' : '') +
         '</tr></thead><tbody>';
@@ -230,7 +231,7 @@ function renderProductManagementPage() {
     }
     rightHtml += '</div>';
     if (_pmNodeProducts.length) {
-      rightHtml += '<div class="table-scroll" style="max-height:400px"><table class="stage-table"><thead><tr>' +
+      rightHtml += '<div class="table-scroll" id="pm-l2-table"><table class="stage-table"><thead><tr>' +
         '<th>编号</th><th>产品名</th><th>状态</th><th>关联项目数</th><th>来源</th>' +
         (_pmIsAdmin ? '<th style="width:120px">操作</th>' : '') +
         '</tr></thead><tbody>';
@@ -1057,6 +1058,16 @@ async function _pmSaveProductProjects(productId) {
   }
 }
 
+/* Resize product table to fill window height */
+function _resizePMTable() {
+  ['pm-l1-table', 'pm-l2-table'].forEach(function(id) {
+    var wrap = document.getElementById(id);
+    if (!wrap) return;
+    var top = wrap.getBoundingClientRect().top;
+    wrap.style.maxHeight = Math.max(200, window.innerHeight - top - 24) + 'px';
+  });
+}
+
 /* ── Refresh ── */
 
 async function refreshPMData() {
@@ -1067,4 +1078,6 @@ async function refreshPMData() {
   } catch (e) { /* ignore */ }
   await _pmLoadContent();
   renderProductManagementPage();
+  _resizePMTable();
 }
+window.addEventListener('resize', _resizePMTable);
