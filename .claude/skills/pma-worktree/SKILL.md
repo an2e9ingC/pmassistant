@@ -219,10 +219,9 @@ for table in ['pma_tasks', 'product_documents', 'product_doc_templates', 'docume
 cd $PMA_TRUNK_DIR
 git push origin trunk
 
-# 备份 trunk 数据库
-DB_BACKUP_DIR="data/backups/permanent"
-mkdir -p "$DB_BACKUP_DIR"
-BACKUP_FILE="$DB_BACKUP_DIR/pma-8000-$(date +%Y%m%d-%H%M%S).db"
+# 备份 trunk 数据库（与定时备份同一目录和命名规则）
+mkdir -p data/backups
+BACKUP_FILE="data/backups/pma-backup-$(TZ=Asia/Shanghai date +%Y%m%d-%H%M%S).db"
 cp data/pma-8000.db "$BACKUP_FILE"
 echo "数据库已备份: $BACKUP_FILE"
 

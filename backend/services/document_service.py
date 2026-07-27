@@ -436,14 +436,10 @@ def _template_dict(t: DocumentTemplate) -> dict:
 # Project document lifecycle
 # ---------------------------------------------------------------------------
 
-def get_or_init_project_documents(db: Session, project_id: int, project_type: str = "RD") -> list[dict]:
-    """Get project documents, initializing from templates on first access.
-
-    Document templates are auto-synced so template changes propagate immediately.
-    Task templates are NOT auto-synced — use the "导入模板任务" button instead.
-    """
+def get_or_init_project_documents(db: Session, project_id: int, project_type: str = "RD", include_removed: bool = False) -> list[dict]:
+    """Get project documents, initializing from templates on first access."""
     _sync_from_templates(db, project_id, project_type)
-    return _query_project_documents(db, project_id)
+    return _query_project_documents(db, project_id, include_removed=include_removed)
 
 
 def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD") -> None:
@@ -533,11 +529,8 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
                 db.add(pd)
                 changed = True
 
-        # Remove docs no longer in template
-        for doc_name, pd in existing_names.items():
-            if doc_name not in template_names:
-                db.delete(pd)
-                changed = True
+        # NOTE: Don't delete docs not in template — may be custom-added.
+        # (No template_id column to distinguish custom vs template origin.)
 
         # Update existing docs
         for doc_name, pd in existing_names.items():
@@ -580,17 +573,17 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
 # ── Removed: _STAGE_KEYWORD_MAP and _match_stage_type (Zentao fuzzy matching) ──
 
 
-def _query_project_documents(db: Session, project_id: int) -> list[dict]:
+def _query_project_documents(db: Session, project_id: int, include_removed: bool = False) -> list[dict]:
     """Return all ProjectDocument rows for a project with computed warn flag.
     Uses outer join to include execution_id=0 placeholder docs (unmatched stages)."""
-    rows = (
+    q = (
         db.query(ProjectDocument, CachedExecution.status.label("exec_status"))
         .outerjoin(CachedExecution, CachedExecution.id == ProjectDocument.execution_id)
         .filter(ProjectDocument.project_id == project_id)
-        .filter(or_(ProjectDocument.is_removed == 0, ProjectDocument.is_removed == None))
-        .order_by(ProjectDocument.execution_id, ProjectDocument.sort_order)
-        .all()
     )
+    if not include_removed:
+        q = q.filter(or_(ProjectDocument.is_removed == 0, ProjectDocument.is_removed == None))
+    rows = q.order_by(ProjectDocument.execution_id, ProjectDocument.sort_order).all()
 
     # Also get execution names + task output status for display
     exec_names: dict[int, str] = {}
