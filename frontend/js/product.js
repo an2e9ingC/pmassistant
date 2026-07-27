@@ -437,7 +437,10 @@ function renderProdDetailHeader(p, docs) {
 function renderProdInfo(p, docs) {
   var productType = p.tree_path || p.category || p.program_name || '未分类';
 
-  var html = '<div class="card" style="padding:20px">';
+  var html = '<div style="display:flex;gap:20px;align-items:flex-start">';
+
+  // Left column — main card
+  html += '<div class="card" style="flex:1.618;min-width:0;padding:20px">';
 
   // Info row — 4 columns, consistent style
   html += '<div class="delivery-kpi" style="grid-template-columns:repeat(4, 1fr);margin-bottom:16px">' +
@@ -518,7 +521,19 @@ function renderProdInfo(p, docs) {
   html += '</div>';
 
 
+  html += '</div>'; // .card
+
+  // Right column — product notes (independent card)
+  html += '<div style="flex:1;min-width:0">';
+  html += '<div class="card card-clip" style="padding:0;overflow:hidden" id="prod-notes-card">';
+  html += '<div style="padding:8px 12px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">';
+  html += '<span style="font-size:12px;font-weight:600">产品笔记</span>';
+  html += '<button class="btn-xs" onclick="showAddProductNoteDialog()">+ 添加笔记</button>';
   html += '</div>';
+  html += '<div style="max-height:400px;overflow-y:auto"><div id="prod-notes-list"><div class="loading-spinner" style="padding:20px">加载中...</div></div></div>';
+  html += '</div></div>';
+
+  html += '</div>'; // flex row
 
   // Creator info
   if (p.reporter_name) {
@@ -547,12 +562,6 @@ function renderProdInfo(p, docs) {
   html += '</select></div>';
   html += '<div class="card" style="padding:0;overflow:hidden" id="prod-block-card">';
   html += '<div id="prod-block-content"></div>';
-  html += '</div>';
-
-  // Product Notes
-  html += '<div style="margin-top:20px">' + sectionHeader('产品笔记', null, '+ 添加笔记', 'showAddProductNoteDialog()') + '</div>';
-  html += '<div class="card" style="padding:0;overflow:hidden" id="prod-notes-card">';
-  html += '<div style="max-height:400px;overflow-y:auto"><div id="prod-notes-list"><div class="loading-spinner" style="padding:20px">加载中...</div></div></div>';
   html += '</div>';
 
   document.getElementById('prodsec-info').innerHTML = html;
