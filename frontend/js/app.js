@@ -1835,8 +1835,8 @@ function _ucRefreshTaskStats() {
 }
 
 function _ucOpenTask(taskId) {
-  if (typeof openTaskViewDialog === 'function') { openTaskViewDialog(taskId); }
-  else if (typeof loadViewScript === 'function') { loadViewScript('/js/tasks.js?v=' + APP_VERSION, function() { openTaskViewDialog(taskId); }); }
+  if (typeof openTaskDetail === 'function') { openTaskDetail(taskId); }
+  else if (typeof loadViewScript === 'function') { loadViewScript('/js/tasks.js?v=' + APP_VERSION, function() { openTaskDetail(taskId); }); }
 }
 
 function _renderUcTableHead() {
