@@ -72,6 +72,22 @@
   padding: 8px 12px; cursor: pointer; transition: background 0.1s;
 }
 .combo-opt:hover { background: var(--bg); }
+
+/* Wider combos in task filter bar */
+.task-filter-bar .proj-combo { min-width: 210px; max-width: 400px; }
+.task-filter-bar .proj-combo-input {
+  text-overflow: ellipsis; overflow: hidden; white-space: nowrap;
+}
+
+/* Clear button for filter combos */
+.combo-clear {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--muted); color: #fff; font-size: 10px;
+  cursor: pointer; flex-shrink: 0; line-height: 1;
+  margin-left: -4px;
+}
+.combo-clear:hover { background: var(--danger); }
 .combo-opt.selected { background: var(--accent-lt); }
 .combo-opt-name { font-size: 13px; font-weight: 510; line-height: 1.3; }
 .combo-opt-meta { font-size: 10.5px; color: var(--muted); margin-top: 1px; }

@@ -175,6 +175,37 @@
 .kpi-value { font-size: 28px; font-weight: 700; letter-spacing: -0.025em; line-height: 1; margin-bottom: 6px; font-variant-numeric: tabular-nums; }
 .kpi-meta { font-size: 12px; color: var(--muted); }
 .kpi-meta b { font-weight: 600; }
+
+/* User Center category cards */
+.uc-cat-cards { display: flex; gap: 8px; flex-wrap: wrap; padding-left: 4px; }
+.uc-cat-cards .kpi-card { min-width: 0; flex: 1 1 0; padding: 10px 14px 10px; overflow: hidden; }
+.uc-cat-cards .kpi-card .kpi-label { font-size: 10px; white-space: nowrap; }
+.uc-cat-cards .kpi-card .kpi-value { font-size: 20px; white-space: nowrap; }
+.uc-cat-cards .kpi-card .kpi-meta { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* kpi-card colors for user center filters */
+.kpi-card[data-filter="unfinished"] { border-left-color: var(--accent); }
+.kpi-card[data-filter="unfinished"] .kpi-value { color: var(--accent); }
+.kpi-card[data-filter="unfinished"].active {
+  border-color: var(--accent); background: var(--accent-lt);
+  box-shadow: var(--sh-md); transform: scale(1.02);
+}
+.kpi-card[data-filter="done"] { border-left-color: var(--success); }
+.kpi-card[data-filter="done"] .kpi-value { color: var(--success); }
+.kpi-card[data-filter="done"].active {
+  border-color: var(--success); background: var(--success-lt);
+  box-shadow: var(--sh-md); transform: scale(1.02);
+}
+.kpi-card[data-filter="review"] { border-left-color: var(--warn); }
+.kpi-card[data-filter="review"] .kpi-value { color: var(--warn); }
+.kpi-card[data-filter="review"].active {
+  border-color: var(--warn); background: var(--warn-lt);
+  box-shadow: var(--sh-md); transform: scale(1.02);
+}
+
+/* Project boundary: subtle top border on first row of each project group */
+.uc-proj-first { border-top: 2px solid var(--border); }
+
 .kpi-meta .up { color: var(--success); }
 .kpi-meta .dn { color: var(--danger); }
 
