@@ -113,26 +113,32 @@ export PMA_WORKTREE_DIR="<EnterWorktree 返回的实际路径>"
 
 4. 准备开发环境（**严格按以下顺序，所有路径使用环境变量**）：
 
-   a. **停止主服务器**（SQLite 独占锁，必须停服才能安全拷贝）：
+   a. **从最新备份拷贝数据库**（避免停 trunk 服务）：
    ```bash
-   cd $PMA_TRUNK_DIR && ./server.sh -p 8000 stop
+   # 优先使用最新备份，无备份时才停服拷贝
+   LATEST_BACKUP=$(ls -t $PMA_TRUNK_DIR/data/backups/pma-backup-*.db 2>/dev/null | head -1)
+   if [ -n "$LATEST_BACKUP" ]; then
+       cp "$LATEST_BACKUP" $PMA_WORKTREE_DIR/data/pma-$PORT.db
+       echo "使用备份数据库: $(basename $LATEST_BACKUP)"
+   else
+       echo "无备份可用，停服拷贝..."
+       cd $PMA_TRUNK_DIR && ./server.sh -p 8000 stop
+       cp $PMA_TRUNK_DIR/data/pma-8000.db $PMA_WORKTREE_DIR/data/pma-$PORT.db
+       cd $PMA_TRUNK_DIR && ./server.sh -p 8000 start
+   fi
    ```
+   > - 备份文件位于 `data/backups/pma-backup-YYYYMMDD-HHMMSS.db`
+   > - 使用最新备份可避免停服，且数据足够用于开发测试
+   > - 无备份时（首次创建/备份被清理）降级为停服拷贝
 
-   b. **拷贝主数据库和配置文件到 worktree**：
+   b. **拷贝配置文件到 worktree**：
    ```bash
-   cp $PMA_TRUNK_DIR/data/pma-8000.db $PMA_WORKTREE_DIR/data/pma-$PORT.db
    cp $PMA_TRUNK_DIR/.env $PMA_WORKTREE_DIR/.env
    ```
-   > - 主 session DB 路径为 `pma-8000.db`（不是 `data/pma.db`）
    > - `.env` 等 gitignore 文件 worktree 不会自动包含，必须手动拷贝
    > - GitLab OAuth 只支持主 session 端口（8000），worktree 请使用管理员账号密码登录
 
-   c. **重启主服务器**：
-   ```bash
-   cd $PMA_TRUNK_DIR && ./server.sh -p 8000 start
-   ```
-
-   d. **启动 worktree 服务**：
+   c. **启动 worktree 服务**：
    ```bash
    cd $PMA_WORKTREE_DIR && ./server.sh -p $PORT restart
    ```
