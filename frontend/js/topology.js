@@ -53,7 +53,7 @@ async function doFuzzySearch() {
     }
     tbody.innerHTML = items.map(function(item) {
       var projCode = item.project_code || '';
-      var coreName = extractCoreName(item.project_name);
+      var coreName = item.project_name || '';
       var productList = item.products || [];
       var productsHtml = productList.length
         ? productList.map(function(pr) {
@@ -105,7 +105,7 @@ async function doTopoSearch() {
     }
     tbody.innerHTML = items.map(function(item) {
       var projCode = item.project_code || '';
-      var coreName = extractCoreName(item.project_name);
+      var coreName = item.project_name || '';
       var productList = item.products || [];
       var productsHtml = productList.length
         ? productList.map(function(pr) {

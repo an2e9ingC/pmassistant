@@ -344,6 +344,7 @@ def create_local_project(
     planned_delivery_qty: Optional[int] = None,
     consumed: Optional[float] = None,
     reporter_id: Optional[int] = None,
+    linked_project_ids: Optional[str] = None,
 ) -> dict:
     """Create a PMA-local project."""
     if product_ids is None:
@@ -374,6 +375,10 @@ def create_local_project(
     )
     db.add(project)
     db.flush()
+
+    # Set linked project IDs if provided
+    if linked_project_ids:
+        project.linked_project_ids = linked_project_ids
 
     # Link customer via customer_project_links
     if customer_name and customer_name.strip():

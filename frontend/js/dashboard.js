@@ -333,8 +333,8 @@ async function loadProjectTable() {
     }
 
     tbody.innerHTML = list.map(function(p) {
-      var projCode = extractProjectCode(p.name, p.code);
-      var coreName = extractCoreName(p.name);
+      var projCode = p.code || '';
+      var coreName = p.name || '';
       // Tags
       var tagsList = p.tags_list || [];
       var tagsHtml = '';
