@@ -150,6 +150,21 @@ def _project_list_item(p, linked_customers=None, has_pending_docs: bool = False,
     tags_list = tags_str.split(",") if tags_str else []
 
     from backend.services.project_service import _calc_risk_level, _map_status
+
+    # Resolve linked project IDs to brief info for display
+    linked_project_ids_str = p.linked_project_ids or ""
+    linked_project_ids = [int(x.strip()) for x in linked_project_ids_str.split(",") if x.strip()]
+    linked_projects = []
+    if linked_project_ids:
+        try:
+            from sqlalchemy.orm import object_session
+            from backend.models.zentao import CachedProject as CP
+            sess = object_session(p)
+            rows = sess.query(CP.id, CP.code, CP.name).filter(CP.id.in_(linked_project_ids)).all()
+            linked_projects = [{"id": r[0], "code": r[1] or "", "name": r[2] or ""} for r in rows]
+        except Exception:
+            pass
+
     return {
         "id": p.id,
         "code": p.code,
@@ -166,6 +181,7 @@ def _project_list_item(p, linked_customers=None, has_pending_docs: bool = False,
         "tags": tags_str,
         "tags_list": tags_list,
         "risk_level": _calc_risk_level(p, has_pending_docs, has_incomplete_tasks, has_stage_anomalies),
+        "linked_projects": linked_projects,
     }
 
 

@@ -180,24 +180,27 @@ function buildInfo(p, notes, delivery, docs) {
     '</div></div>' +
   '</div>';
 
-  // KPI row 2 — key timeline + delivery + description tags
+  var linkedProjects = p.linked_projects || [];
+
+  // KPI row 2 — key timeline + delivery + linked opportunities
   html += '<div class="delivery-kpi" style="grid-template-columns:repeat(4, 1fr);margin-bottom:16px">' +
     '<div class="dkpi"><div class="dkpi-lbl">计划结束</div><div class="dkpi-val" style="font-size:16px;font-weight:600">' + (p.end ? formatDate(p.end) : '<span style="color:var(--muted)">—</span>') + '</div></div>' +
     '<div class="dkpi"><div class="dkpi-lbl">交付数量</div><div class="dkpi-val" style="font-size:16px;font-weight:600">' +
       '<span style="color:var(--success)">' + (del.done || 0) + '</span>' +
       '<span style="color:var(--muted);font-weight:400"> / ' + (del.planned || 0) + '</span>' +
     '</div></div>' +
-    // Description as PMA local tags
-    '<div class="dkpi" style="grid-column:span 2"><div class="dkpi-lbl">项目描述</div><div class="dkpi-val" style="font-size:12px;line-height:1.6">' +
-    (p.tags_list && p.tags_list.length
-      ? p.tags_list.map(function(t, idx) { return '<span class="tag-badge tag-' + (idx % 5) + '" style="font-size:10px;margin-right:2px">#' + escHtml(t) + '</span>'; }).join('')
+    // Linked opportunities (商机)
+    '<div class="dkpi" style="grid-column:span 2"><div class="dkpi-lbl">关联商机（' + linkedProjects.length + '）' +
+      (_hasProjectEditPerm() ? '<a href="javascript:void(0)" onclick="event.stopPropagation();editLinkedProjects()" title="编辑关联商机" style="text-decoration:none;font-size:14px">&#x1F517;</a>' : '') +
+    '</div><div class="dkpi-val" style="font-size:12px;line-height:1.6">' +
+    (linkedProjects.length
+      ? linkedProjects.map(function(lp) { return '<span class="proj-code-btn" onclick="loadProjectDetail(' + lp.id + ')" title="' + escHtml(lp.name || '') + '">' + escHtml(lp.code || lp.name) + '</span>'; }).join(' ')
       : '<span style="color:var(--muted)">—</span>') +
     '</div></div>' +
   '</div>';
 
   // Linked products + Linked projects — side-by-side cards
   var products = p.linked_products || [];
-  var linkedProjects = p.linked_projects || [];
   html += '<div style="display:flex;gap:16px;margin-bottom:16px">' +
     '<div class="card card-pad" style="flex:1;min-width:0">' +
       '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">关联产品（' + products.length + '）</div>';
@@ -216,7 +219,9 @@ function buildInfo(p, notes, delivery, docs) {
   }
   html += '</div>' +
     '<div class="card card-pad" style="flex:1;min-width:0">' +
-      '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">关联项目（' + linkedProjects.length + '）</div>';
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">关联项目（' + linkedProjects.length + '）' +
+        (_hasProjectEditPerm() ? ' ' + '<a href="javascript:void(0)" onclick="event.stopPropagation();editLinkedProjects()" title="编辑关联项目" style="text-decoration:none;font-size:14px">&#x1F517;</a>' : '') +
+      '</div>';
   if (linkedProjects.length) {
     html += '<div style="display:flex;flex-wrap:wrap;gap:4px">' +
       linkedProjects.map(function(lp) { return '<span class="proj-code-btn" onclick="loadProjectDetail('+lp.id+')" title="'+escHtml(lp.code||'')+'">'+escHtml(lp.name)+'</span>'; }).join('') +
@@ -363,6 +368,65 @@ async function saveProjectBackground() {
     showToast('保存失败: ' + (e.message || '未知错误'), 'error');
   }
 }
+
+var _editLinkedCodes = [];
+
+async function editLinkedProjects() {
+  if (!_comboCurCode || !_projDetail) return;
+  try {
+    var linked = (await API.get('/projects/' + _comboCurCode + '/linked-projects')) || [];
+    _editLinkedCodes = linked.map(function(p) { return p.code || p.name; });
+
+    openDialog('编辑关联项目 — ' + escHtml(_projDetail.name || ''),
+      '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">关联项目</label>' +
+      '<div class="proj-combo" id="edit-linked-combo">' +
+      '<input class="proj-combo-input" id="edit-linked-input" value="' + escHtml(_editLinkedCodes.join(', ')) + '" autocomplete="off" placeholder="搜索选择项目..." onfocus="editLinkedComboOpen()" oninput="editLinkedComboFilter(this.value)" onclick="editLinkedComboOpen()">' +
+      '<svg class="proj-combo-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2,5 7,10 12,5"/></svg>' +
+      '<div class="proj-combo-dropdown" id="edit-linked-dd"></div>' +
+      '</div></div>',
+      [{text: '取消', onclick: 'closeSharedDialog()'},
+       {text: '保存', cls: 'btn-primary', onclick: 'saveLinkedProjects()'}],
+      {hideClose: true, maxWidth: 460});
+
+    // Init search combo
+    setTimeout(function() {
+      if (typeof initSearchCombo === 'function') {
+        initSearchCombo({
+          comboId: 'edit-linked-combo',
+          inputId: 'edit-linked-input',
+          dropdownId: 'edit-linked-dd',
+          dataSource: function() { return API.get('/users/project-options').catch(function() { return []; }); },
+          onSelect: function(p) {
+            var code = p.code || p.name;
+            if (_editLinkedCodes.indexOf(code) < 0) _editLinkedCodes.push(code);
+            var el = document.getElementById('edit-linked-input');
+            if (el) el.value = _editLinkedCodes.join(', ');
+          }
+        });
+      }
+    }, 150);
+  } catch(e) {
+    showToast('加载失败: ' + (e.message || ''), 'error');
+  }
+}
+
+window.saveLinkedProjects = async function() {
+  // Collect IDs from selected codes
+  try {
+    var allProjects = (await API.get('/users/project-options')) || [];
+    var codeToId = {};
+    allProjects.forEach(function(p) { codeToId[p.code || p.name] = p.id; });
+    var ids = _editLinkedCodes.map(function(c) { return codeToId[c]; }).filter(Boolean);
+  } catch(e) { var ids = []; }
+  closeSharedDialog();
+  try {
+    await API.put('/projects/' + _comboCurCode + '/linked-projects', { ids: ids });
+    showToast('关联项目已更新', 'ok');
+    loadProjectDetail(_comboCurCode);
+  } catch(e) {
+    showToast('保存失败: ' + (e.message || '未知错误'), 'error');
+  }
+};
 
 /* Gantt Chart */
 
