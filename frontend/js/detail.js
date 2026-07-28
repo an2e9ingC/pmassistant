@@ -241,7 +241,7 @@ function buildInfo(p, notes, delivery, docs) {
       '</div>';
   if (linkedPeers.length) {
     html += '<div style="display:flex;flex-wrap:wrap;gap:4px">' +
-      linkedPeers.map(function(lp) { return '<span class="proj-code-btn" onclick="loadProjectDetail('+lp.id+')" title="'+escHtml(lp.code||'')+'">'+escHtml(lp.name)+'</span>'; }).join('') +
+      linkedPeers.map(function(lp) { return '<span class="proj-code-btn" onclick="loadProjectDetail('+lp.id+')" title="'+escHtml(lp.name||'')+'">'+escHtml(lp.code||lp.name)+'</span>'; }).join('') +
     '</div>';
   } else {
     html += '<div style="font-size:12px;color:var(--muted);font-style:italic">暂无</div>';
