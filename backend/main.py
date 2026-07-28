@@ -7,7 +7,8 @@ from logging.handlers import RotatingFileHandler
 from fastapi import FastAPI, Depends, HTTPException, Request, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, JSONResponse
+from fastapi.exceptions import RequestValidationError
 from sqlalchemy.orm import Session
 
 from backend.config import settings, SERVER_START_TIME
@@ -153,10 +154,14 @@ async def _add_no_cache_headers(request: Request, call_next):
     return response
 
 
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    logger.warning(f"[ValidationError] {request.method} {request.url.path}: {exc.errors()}")
+    return JSONResponse(status_code=422, content={"code": 1, "message": str(exc.errors())})
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
     logger.error(f"Unhandled error on {request.method} {request.url.path}: {exc}", exc_info=True)
-    from fastapi.responses import JSONResponse
     return JSONResponse(status_code=500, content={"code": 1, "message": str(exc)})
 
 # API routes

@@ -850,7 +850,8 @@ function _showTaskForm(title, task) {
   ];
 
   bodyHtml = '<div style="max-height:75vh;overflow-y:auto;padding-right:4px">' + bodyHtml + '</div>';
-  openDialog(title, bodyHtml, buttons, {maxWidth: '80vw', maxHeight: '90vh'});
+  var headerExtra = isEdit ? '' : '<button class="btn btn-xs" style="font-size:11px;white-space:nowrap" onclick="_closeTaskDialog();openBatchCreateDialog()">📝 批量创建</button>';
+  openDialog(title, bodyHtml, buttons, {maxWidth: '80vw', maxHeight: '90vh', headerExtra: headerExtra});
   _clearNoteImagePreviews('tf-desc-img-preview');
   setTimeout(function() {
     initNoteImagePaste('tf-desc');
@@ -1080,7 +1081,7 @@ var _batchExecutions = [];
 var _batchProjectId = null;
 
 function _batchExecOptions(selId) {
-  return '<select class="search-inp" id="' + selId + '" style="flex:1.5"><option value="">选择阶段</option>' +
+  return '<select class="search-inp" id="' + selId + '" style="flex:1.5"><option value="">选择阶段 *</option>' +
     _batchExecutions.map(function(s) {
       return '<option value="' + (s.execution_id || s.id || '') + '">' + escHtml(s.name || s.standard_stage || '') + '</option>';
     }).join('') + '</select>';
@@ -1089,13 +1090,14 @@ function _batchExecOptions(selId) {
 function _batchRowHTML(i, r) {
   r = r || {};
   return '<div style="display:flex;gap:3px;margin-bottom:4px;align-items:center;font-size:12px">' +
+    '<span style="width:22px;text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);flex-shrink:0">' + (i + 1) + '</span>' +
     _batchExecOptions('bt-exec-' + i) +
     '<input class="search-inp" id="bt-title-' + i + '" value="' + escHtml(r.title || '') + '" placeholder="标题 *" style="flex:2;min-width:120px">' +
     '<select class="search-inp" id="bt-status-' + i + '" style="flex:0.8;min-width:70px"><option value="todo">待办</option><option value="in_progress">进行中</option><option value="review">评审中</option><option value="done">已完成</option><option value="closed">已关闭</option></select>' +
     '<select class="search-inp" id="bt-priority-' + i + '" style="flex:0.7;min-width:55px"><option value="medium">中</option><option value="low">低</option><option value="high">高</option><option value="critical">紧急</option></select>' +
-    '<select class="search-inp" id="bt-assignee-' + i + '" style="flex:0.9;min-width:120px"><option value="">负责人</option></select>' +
-    '<input class="search-inp" id="bt-estimate-' + i + '" value="' + escHtml(r.estimate || '') + '" placeholder="工时(h)" style="flex:0.6;min-width:55px" type="number" step="0.5">' +
-    '<input class="search-inp" id="bt-due-' + i + '" value="' + escHtml(r.due_date || '') + '" type="date" style="flex:1;min-width:110px">' +
+    '<select class="search-inp" id="bt-assignee-' + i + '" style="flex:0.9;min-width:120px"><option value="">负责人 *</option></select>' +
+    '<input class="search-inp" id="bt-estimate-' + i + '" value="' + escHtml(r.estimate || '') + '" placeholder="工时(h) *" style="flex:0.6;min-width:55px" type="number" step="0.5">' +
+    '<span style="font-size:11px;color:var(--muted);white-space:nowrap;flex:1;min-width:110px;display:flex;align-items:center;gap:2px">截止 * <input class="search-inp" id="bt-due-' + i + '" value="' + escHtml(r.due_date || '') + '" type="date" style="flex:1;min-width:0"></span>' +
     '<input class="search-inp" id="bt-desc-' + i + '" value="' + escHtml(r.desc || '') + '" placeholder="描述" style="flex:1.5;min-width:100px">' +
     '<button class="btn-xs" onclick="_batchCopyRow(' + i + ')" title="同上" style="color:var(--accent)">同上</button>' +
     '<button class="btn-xs" onclick="this.parentElement.remove()" style="color:var(--danger)">×</button>' +
@@ -1123,7 +1125,8 @@ function _renderBatchForm(rows) {
       onSelect: function(p) { _batchProjectId = p.id; _loadBatchExecs(p.id); }
     }) + '</div></div>';
 
-  var html = projHtml + '<div id="batch-rows" style="max-height:400px;overflow:auto;min-width:900px">';
+  var html = projHtml + '<div id="batch-hint" style="display:none;font-size:10px;color:var(--danger);margin-bottom:4px"></div>' +
+    '<div id="batch-rows" style="max-height:400px;overflow:auto;min-width:900px">';
   rows.forEach(function(r, i) { html += _batchRowHTML(i, r); });
   html += '</div><button class="btn-xs" onclick="_batchAddRow()" style="margin-top:4px">+ 添加行</button>';
 
@@ -1163,7 +1166,7 @@ function _loadBatchExecs(projectId) {
 }
 
 function _refreshBatchExecSelects() {
-  var opts = '<option value="">选择阶段</option>' +
+  var opts = '<option value="">选择阶段 *</option>' +
     _batchExecutions.map(function(s) {
       var eid = s.execution_id || '';
       var label = s.name || s.standard_stage || '';
@@ -1203,19 +1206,35 @@ async function _submitBatchCreate() {
   var container = document.getElementById('batch-rows');
   if (!container) return;
   if (!_batchProjectId) { showToast('请选择项目', 'error'); return; }
+  // Clear previous hints and error styles
+  var hintEl = document.getElementById('batch-hint');
+  if (hintEl) hintEl.style.display = 'none';
   var rows = container.children;
+  var errors = [];
   for (var i = 0; i < rows.length; i++) {
-    var titleEl = rows[i].querySelector('[id^="bt-title-"]');
-    var execEl = rows[i].querySelector('[id^="bt-exec-"]');
-    var statusEl = rows[i].querySelector('[id^="bt-status-"]');
-    var priorityEl = rows[i].querySelector('[id^="bt-priority-"]');
-    var assigneeEl = rows[i].querySelector('[id^="bt-assignee-"]');
-    var estEl = rows[i].querySelector('[id^="bt-estimate-"]');
-    var dueEl = rows[i].querySelector('[id^="bt-due-"]');
-    var descEl = rows[i].querySelector('[id^="bt-desc-"]');
+    var row = rows[i];
+    var titleEl = document.getElementById('bt-title-' + i);
+    var execEl = document.getElementById('bt-exec-' + i);
+    var statusEl = document.getElementById('bt-status-' + i);
+    var priorityEl = document.getElementById('bt-priority-' + i);
+    var assigneeEl = document.getElementById('bt-assignee-' + i);
+    var estEl = document.getElementById('bt-estimate-' + i);
+    var dueEl = document.getElementById('bt-due-' + i);
+    var descEl = document.getElementById('bt-desc-' + i);
+    // Clear error borders
+    [execEl, assigneeEl, estEl, dueEl].forEach(function(el) { if (el) el.style.borderColor = ''; });
     var title = titleEl ? titleEl.value.trim() : '';
     if (!title) continue;
+    var rowLabel = '第' + (i + 1) + '行';
     var execVal = execEl ? execEl.value : '';
+    if (!execVal) { if (execEl) execEl.style.borderColor = 'var(--danger)'; errors.push(rowLabel + '未选择阶段'); }
+    var assigneeVal = assigneeEl ? assigneeEl.value : '';
+    if (!assigneeVal) { if (assigneeEl) assigneeEl.style.borderColor = 'var(--danger)'; errors.push(rowLabel + '未选择负责人'); }
+    var estVal = estEl ? estEl.value.trim() : '';
+    if (!estVal) { if (estEl) estEl.style.borderColor = 'var(--danger)'; errors.push(rowLabel + '未填写工时'); }
+    var dueVal = dueEl ? dueEl.value : '';
+    if (!dueVal) { if (dueEl) dueEl.style.borderColor = 'var(--danger)'; errors.push(rowLabel + '未填写截止日期'); }
+    if (!execVal || !assigneeVal || !estVal || !dueVal) continue;
     tasks.push({
       title: title,
       execution_id: execVal && execVal[0] !== '_' ? (parseInt(execVal) || null) : null,
@@ -1228,15 +1247,23 @@ async function _submitBatchCreate() {
       description: descEl ? (descEl.value.trim() || null) : null,
     });
   }
+  if (errors.length) {
+    if (hintEl) { hintEl.textContent = errors.join('；'); hintEl.style.display = ''; }
+    return;
+  }
   if (!tasks.length) { showToast('请至少填写一个任务标题', 'error'); return; }
 
   try {
-    await API.post('/tasks/batch', {project_id: _batchProjectId, tasks: tasks});
+    await API.post('/tasks/batch', {project_id: String(_batchProjectId), tasks: tasks});
     showToast('已创建 ' + tasks.length + ' 个任务', 'success');
     _closeTaskDialog();
     loadTaskData();
   } catch(e) {
-    showToast('批量创建失败: ' + (e.message || '未知错误'), 'error');
+    var msg = '未知错误';
+    if (typeof e === 'string') { msg = e; }
+    else if (e && e.message && typeof e.message === 'string') { msg = e.message; }
+    else if (e && e.detail) { msg = e.detail; }
+    showToast('批量创建失败: ' + msg, 'error');
   }
 }
 

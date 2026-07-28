@@ -169,9 +169,12 @@ def create_tasks_batch(db: Session, tasks_data: list, user) -> List[dict]:
         db.add(t)
         created.append(t)
     db.commit()
+    from backend.models.zentao import CachedProject
     for t in created:
         db.refresh(t)
-    _log_audit(db, t.project_id, uname, "task_create_batch", f"批量创建任务 #{t.id}: {t.title}")
+        proj = db.query(CachedProject).filter(CachedProject.id == t.project_id).first()
+        proj_info = f"[{proj.code}]" if proj and proj.code else f"项目#{t.project_id}"
+        _log_audit(db, t.project_id, uname, "task_create_batch", f"批量创建任务 {proj_info} #{t.id}: {t.title}")
     return [_task_dict(t, db) for t in created]
 
 

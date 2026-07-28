@@ -411,10 +411,11 @@ function openDialog(title, bodyHtml, buttons, opts) {
   var autoWidth = typeof maxWidth === 'number' ? '' : 'width:' + widthStyle + ';';
   var maxH = opts.maxHeight || '';
   var heightStyle = maxH ? 'max-height:' + maxH + ';overflow-y:auto;' : '';
+  var headerExtra = opts.headerExtra || '';
   var html = '<div class="note-dialog-overlay ' + overlayClass + '">' +
     '<div class="note-dialog" style="' + autoWidth + 'max-width:' + widthStyle + ';' + heightStyle + '">' +
       '<div class="note-dialog-head"><span class="note-dialog-title">' + title + '</span>' +
-        closeHtml + '</div>' +
+        '<span style="display:flex;align-items:center;gap:8px">' + headerExtra + closeHtml + '</span></div>' +
       bodyHtml +
       btnHtml +
     '</div></div>';
