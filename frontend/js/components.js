@@ -1843,13 +1843,26 @@ function _toggleSelectAllTasks(cb) {
 }
 
 function _renderBatchToolbar() {
-  return '<div id="batch-toolbar" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:500;' +
+  return '<div id="batch-toolbar" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:1000;' +
     'background:var(--accent);color:#fff;padding:8px 16px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.2);' +
     'align-items:center;gap:12px">' +
     '<span id="batch-count">已选 0 个任务</span>' +
     '<button onclick="openBatchEditDialog()" style="padding:4px 12px;border:1px solid #fff;border-radius:4px;background:transparent;color:#fff;cursor:pointer;font-size:12px">批量编辑</button>' +
     '<button onclick="_clearBatchSelection()" style="padding:4px 12px;border:none;border-radius:4px;background:rgba(255,255,255,0.2);color:#fff;cursor:pointer;font-size:12px">取消</button>' +
     '</div>';
+}
+
+// Inject batch toolbar into document.body (top-level) to escape stacking contexts
+function _ensureBatchToolbar() {
+  if (document.getElementById('batch-toolbar')) return;
+  document.body.insertAdjacentHTML('beforeend', _renderBatchToolbar());
+}
+
+function _adjustBatchToolbarPosition() {
+  var bar = document.getElementById('batch-toolbar');
+  if (!bar || bar.style.display === 'none') return;
+  var bottomH = typeof _getBottomBarHeight === 'function' ? _getBottomBarHeight() : 0;
+  bar.style.bottom = (bottomH + 20) + 'px';
 }
 
 function _updateBatchToolbar() {
@@ -1859,6 +1872,7 @@ function _updateBatchToolbar() {
   if (count > 0) {
     bar.style.display = 'flex';
     document.getElementById('batch-count').textContent = '已选 ' + count + ' 个任务';
+    _adjustBatchToolbarPosition();
   } else {
     bar.style.display = 'none';
   }
