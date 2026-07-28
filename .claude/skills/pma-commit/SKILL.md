@@ -74,11 +74,15 @@ Co-Authored-By: <model-name> / <tool-name>
 3. `git commit -m "..."`（AI 生成 commit 必须加 `Co-Authored-By:`）
 4. `./server.sh -p <PORT> restart`
 5. `index_repository(repo_path="/home/xuchuan/workspace/pma", mode="moderate")`
-6. **GitLab Issue 评论**：如果 commit message 中包含 `Closes #N`，自动将问题分析和解决方案作为评论发布到 GitLab Issue #N：
+6. **GitLab Issue 评论**：如果 commit message 中包含 `Closes #N`，使用 `scripts/gitlab_issue_comment.py` 发布评论：
 
+   ```bash
+   # 提取 commit message 中所有 Closes #N 编号
+   # 按模板构造评论内容，然后执行：
+   python3 scripts/gitlab_issue_comment.py --issue <N> --body "<markdown 内容>"
    ```
-   提取 commit message 中的 issue 编号 N → 构造评论内容 → POST /api/gitlab/issue-note
-   ```
+
+   **必须使用该脚本，禁止临时写 curl/inline Python 脚本。**
 
    评论模板：
    ```markdown
