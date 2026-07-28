@@ -137,6 +137,26 @@ export PMA_WORKTREE_DIR="<EnterWorktree 返回的实际路径>"
    cd $PMA_WORKTREE_DIR && ./server.sh -p $PORT restart
    ```
 
+### 完成后强制输出（fork 返回前必须显示）
+
+> **这是 worktree session 最重要的信息，必须醒目输出。**
+
+环境准备完成后，在返回给主会话的输出中，**必须**包含以下内容（用表格展示，确保醒目）：
+
+```markdown
+## ⚠️ 路径隔离提醒
+
+**本 session 在 worktree 中运行，所有文件编辑必须使用 worktree 绝对路径。**
+
+| 正确 ✅ | 错误 ❌ |
+|---------|--------|
+| `/home/xuchuan/workspace/pma/.claude/worktrees/<name>/frontend/js/app.js` | `/home/xuchuan/workspace/pma/frontend/js/app.js` |
+
+> 使用 trunk 路径会污染主分支代码！
+```
+
+如果该提醒未出现在返回结果中，视为 worktree 创建不完整。
+
 ## 资源隔离
 
 ```

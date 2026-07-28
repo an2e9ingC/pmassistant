@@ -158,6 +158,18 @@ NAS 文件 ───────────┘
 
 ## 4. 重要规则（每轮对话必须遵守）
 
+### Worktree 路径隔离（最高优先级 — 防止误改 trunk）
+
+> **硬性规则：当 CWD 包含 `.claude/worktrees/` 时，所有 Write/Edit 的 `file_path` 必须使用 worktree 绝对路径，严禁使用 trunk 路径。**
+
+| 操作 | 正确路径格式 | 错误示例 |
+|------|-------------|---------|
+| Read/Write/Edit | `/home/xuchuan/workspace/pma/.claude/worktrees/<name>/frontend/js/app.js` | `/home/xuchuan/workspace/pma/frontend/js/app.js`（trunk!） |
+| Bash 文件操作 | `cd` 到 worktree 目录后执行 | `cd /home/xuchuan/workspace/pma`（切到 trunk!） |
+
+**每轮对话开始编辑前，先确认 `pwd` 输出包含 `.claude/worktrees/`。** 
+`server.sh` 用相对路径 `./server.sh` 即可（CWD 已在 worktree 中）。
+
 ### 修改后重启规则
 
 **后端 `backend/**/*.py` 修改后**：
