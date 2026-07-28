@@ -438,10 +438,13 @@ def update_document(
     from backend.services import document_service
     from backend.models.document import ProjectDocument
     project = resolve_project(db, identifier)
-    # Get old values before update
+    # Get old values before update (must capture BEFORE update_project_document
+    # because it shares the same SQLAlchemy session object — old and pd are the
+    # same Python object, so the update mutates old in-place)
     old = db.query(ProjectDocument).filter(ProjectDocument.id == doc_id).first()
     old_status = old.status if old else '?'
     old_location = (old.location or '') if old else '?'
+    old_removed = old.is_removed if old else 0
     result = document_service.update_project_document(
         db, doc_id, body.model_dump(exclude_none=True), user.username
     )
@@ -462,7 +465,6 @@ def update_document(
         parts.append("路径已更新")
 
     new_removed = result.get('is_removed')
-    old_removed = old.is_removed if old else 0
     if old_removed != new_removed:
         if new_removed:
             parts.append("已标记删除")
