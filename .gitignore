@@ -10,6 +10,7 @@ dist/
 .claude/settings.json
 .claude/worktrees/
 data/*.log*
+data/pma.db
 data/pma-*.db
 data/backups/secrets/
 data/backups/pma-backup*.db
