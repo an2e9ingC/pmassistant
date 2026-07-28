@@ -382,6 +382,24 @@ def update_pma_settings(payload: dict, db: Session = Depends(get_db), _=Depends(
     for key in PMA_SETTINGS:
         if key in payload:
             PmaSetting.set(db, key, "1" if payload[key] else "0")
+
+    # When approval is disabled, auto-complete all tasks currently in review
+    if "approval_enabled" in payload and not payload["approval_enabled"]:
+        from backend.models.task import Task, TaskComment
+        from datetime import timezone, datetime as dt
+        from backend.audit_categories import AUDIT_CAT_TASK
+        review_tasks = db.query(Task).filter(Task.status == "review").all()
+        now = dt.now(timezone.utc)
+        for t in review_tasks:
+            t.status = "done"
+            t.completed_at = now
+            db.add(TaskComment(task_id=t.id, user_id=0, content="审批功能已关闭，任务自动完成"))
+            log_audit(db, None, "task_auto_complete",
+                      f"审批关闭, task_id={t.id}, title={t.title[:60]}",
+                      AUDIT_CAT_TASK, "medium")
+        if review_tasks:
+            db.commit()
+            return {"code": 0, "message": f"设置已保存，已将 {len(review_tasks)} 个评审中任务自动完成"}
     return {"code": 0, "message": "设置已保存"}
 
 
