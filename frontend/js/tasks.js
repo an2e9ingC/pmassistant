@@ -285,8 +285,8 @@ function renderTaskTable(tasks, execs) {
   _selectedTasks = new Set();
   tasks.forEach(function(t) { html += _renderTaskRow(t, stageMap); });
   html += '</tbody></table>';
-  html += _renderBatchToolbar();
   content.innerHTML = html;
+  _ensureBatchToolbar();
 }
 
 function renderTaskTableCompact(tasks, execs) {
@@ -377,8 +377,8 @@ function renderTaskTableCompact(tasks, execs) {
   });
 
   html += '</tbody></table></div>';
-  html += _renderBatchToolbar();
   content.innerHTML = html;
+  _ensureBatchToolbar();
 
   // Group hover: hovering the stage-name cell highlights all rows of that stage
   var tbody = content.querySelector('.stage-table tbody');

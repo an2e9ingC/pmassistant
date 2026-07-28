@@ -1041,6 +1041,7 @@ function toggleAlertTicker() {
     document.body.classList.remove('has-ticker');
     if (_tickerTimer) { clearInterval(_tickerTimer); _tickerTimer = null; }
   }
+  _syncBottomLayout();
 }
 
 function setTickerSpeed(speed) {
@@ -1055,10 +1056,11 @@ async function loadAlertTicker() {
   try {
     var data = await API.get('/dashboard/alerts?limit=30');
     var alerts = data.items || [];
-    if (!alerts.length) { ticker.style.display = 'none'; document.body.classList.remove('has-ticker'); return; }
+    if (!alerts.length) { ticker.style.display = 'none'; document.body.classList.remove('has-ticker'); _syncBottomLayout(); return; }
     ticker.style.display = '';
     document.body.classList.add('has-ticker');
     applyTickerSpeed();
+    _syncBottomLayout();
     // Duplicate items for seamless scrolling
     var items = alerts.concat(alerts);
     var html = '';
@@ -1075,9 +1077,25 @@ async function loadAlertTicker() {
   } catch(e) { /* non-critical */ }
 }
 
+function _syncBottomLayout() {
+  // Sync batch toolbar position and user-center layout with current bottom bar heights
+  if (typeof _adjustBatchToolbarPosition === 'function') _adjustBatchToolbarPosition();
+  if (typeof window._ucUpdateLayout === 'function') window._ucUpdateLayout();
+}
+
 function _adjustTickerPosition(notifBarHeight) {
   var ticker = document.getElementById('alert-ticker');
   if (ticker) ticker.style.bottom = (notifBarHeight || 0) + 'px';
+  _syncBottomLayout();
+}
+
+function _getBottomBarHeight() {
+  var h = 0;
+  var ticker = document.getElementById('alert-ticker');
+  var notifBar = document.getElementById('notif-bar');
+  if (ticker && ticker.style.display !== 'none' && _tickerEnabled) h += ticker.offsetHeight || 28;
+  if (notifBar && notifBar.style.display !== 'none') h += notifBar.offsetHeight;
+  return h;
 }
 
 function setThemeMode(mode) {
@@ -1488,7 +1506,7 @@ async function initUserCenter(viewUserId) {
 
   // Container: profile bar at top + tab-switched content below
   container.innerHTML =
-    '<div style="display:flex;flex-direction:column;height:calc(100vh - 54px - 48px);overflow:hidden">' +
+    '<div id="uc-inner" style="display:flex;flex-direction:column;height:calc(100vh - 54px - 48px);overflow:hidden">' +
     // Profile bar — inline, not floating; reserve space for right panel
     '<div id="uc-profile-bar-wrap" style="margin-right:358px">' + profileBarHtml + '</div>' +
     // Expand panel
@@ -1527,12 +1545,18 @@ async function initUserCenter(viewUserId) {
   }
 
   // Dynamic table scroll heights (like dashboard's _resizeProjTable)
-  // Dynamic table scroll heights (like dashboard's _resizeProjTable)
   window._ucUpdateLayout = function() {
+    var bottomH = typeof _getBottomBarHeight === 'function' ? _getBottomBarHeight() : 0;
+    // Adjust the inner flex container height to leave room for bottom bars
+    var inner = document.getElementById('uc-inner');
+    if (inner) { inner.style.height = 'calc(100vh - 54px - 48px - ' + bottomH + 'px)'; }
+    // Adjust table scroll heights
     var tw = document.getElementById('uc-tasks-table-wrap');
-    if (tw) { var tr = tw.getBoundingClientRect(); tw.style.maxHeight = Math.max(200, window.innerHeight - tr.top - 16) + 'px'; }
+    if (tw) { var tr = tw.getBoundingClientRect(); tw.style.maxHeight = Math.max(200, window.innerHeight - tr.top - 16 - bottomH) + 'px'; }
     var bw = document.getElementById('uc-bugs-table-wrap');
-    if (bw) { var br = bw.getBoundingClientRect(); bw.style.maxHeight = Math.max(200, window.innerHeight - br.top - 16) + 'px'; }
+    if (bw) { var br = bw.getBoundingClientRect(); bw.style.maxHeight = Math.max(200, window.innerHeight - br.top - 16 - bottomH) + 'px'; }
+    var aw = document.getElementById('uc-approvals-table-wrap');
+    if (aw) { var ar = aw.getBoundingClientRect(); aw.style.maxHeight = Math.max(200, window.innerHeight - ar.top - 16 - bottomH) + 'px'; }
   }
   setTimeout(window._ucUpdateLayout, 80);
   // Re-apply on window resize
@@ -1808,8 +1832,7 @@ function _renderUcTaskTable() {
     '</tr>';
   }).join('');
   _selectedTasks = new Set();
-  var batchHtml = (typeof _renderBatchToolbar === 'function') ? _renderBatchToolbar() : '';
-  document.getElementById('uc-tasks-table-wrap').insertAdjacentHTML('beforeend', batchHtml);
+  if (typeof _ensureBatchToolbar === 'function') _ensureBatchToolbar();
   setTimeout(function() { if (typeof window._ucUpdateLayout === 'function') window._ucUpdateLayout(); }, 50);
 }
 
