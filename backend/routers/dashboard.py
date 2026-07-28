@@ -1,7 +1,9 @@
 import json
+from datetime import datetime, timedelta, date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
@@ -119,6 +121,59 @@ def get_alerts(
         },
         "message": "ok",
     }
+
+
+@router.get("/recent-activity-feed", response_model=dict)
+def get_recent_activity_feed(
+    days: int = Query(7, ge=1, le=30),
+    limit: int = Query(50, ge=1, le=100),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    """Get recent task activity feed for bottom scrolling ticker.
+
+    Returns worklog entries from the last N days with project code,
+    assignee, date, and worklog description. Today's items get is_today=True.
+    """
+    from backend.models.task import WorkLog, Task
+    from backend.models.zentao import CachedProject
+    from backend.models.local import LocalUser
+
+    today = date.today()
+    since = datetime.utcnow() - timedelta(days=days)
+
+    # Query: worklog + task + project + assignee
+    rows = db.query(
+        WorkLog.id, WorkLog.description, WorkLog.date, WorkLog.created_at,
+        Task.id, Task.title,
+        CachedProject.code,
+        LocalUser.display_name,
+    ).join(Task, WorkLog.task_id == Task.id).join(
+        CachedProject, Task.project_id == CachedProject.id,
+    ).outerjoin(
+        LocalUser, Task.assignee_id == LocalUser.id,
+    ).filter(
+        WorkLog.created_at >= since,
+    ).order_by(
+        WorkLog.created_at.desc(),
+    ).limit(limit).all()
+
+    items = []
+    for r in rows:
+        wl_id, description, wl_date, created_at, task_id, title, proj_code, assignee_name = r
+        activity_date = wl_date if wl_date else (created_at.date() if created_at else None)
+        is_today = activity_date == today if activity_date else False
+
+        items.append({
+            "task_id": task_id,
+            "project_code": proj_code or "",
+            "assignee_name": assignee_name or "未分配",
+            "activity_date": str(activity_date) if activity_date else None,
+            "description": description or "",
+            "is_today": is_today,
+        })
+
+    return {"code": 0, "data": {"items": items}, "message": "ok"}
 
 
 @router.get("/bugs", response_model=dict)

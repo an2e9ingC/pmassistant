@@ -1010,6 +1010,7 @@ function startNotifPoll() {
 var _tickerEnabled = localStorage.getItem('pma_ticker_enabled') !== '0';  // default ON
 var _tickerSpeed = localStorage.getItem('pma_ticker_speed') || 'normal';  // slow|normal|fast
 var _tickerSpeeds = {slow: 300, normal: 210, fast: 140};
+var _tickerContentMode = localStorage.getItem('pma_ticker_mode') || 'alerts';  // alerts|activities
 var _tickerTimer = null;
 
 function initAlertTicker() {
@@ -1050,30 +1051,70 @@ function setTickerSpeed(speed) {
   applyTickerSpeed();
 }
 
+function toggleTickerContentMode() {
+  _tickerContentMode = _tickerContentMode === 'activities' ? 'alerts' : 'activities';
+  _savePref('pma_ticker_mode', _tickerContentMode);
+  loadAlertTicker();
+  _renderPreferencesPanel();
+}
+
+function tickerOpenTaskDetail(taskId) {
+  if (typeof openTaskDetail === 'function') { openTaskDetail(taskId); }
+  else if (typeof loadViewScript === 'function') { loadViewScript('/js/tasks.js?v=' + APP_VERSION, function() { openTaskDetail(taskId); }); }
+}
+
 async function loadAlertTicker() {
   var ticker = document.getElementById('alert-ticker');
   if (!ticker || !_tickerEnabled) return;
   try {
-    var data = await API.get('/dashboard/alerts?limit=30');
-    var alerts = data.items || [];
-    if (!alerts.length) { ticker.style.display = 'none'; document.body.classList.remove('has-ticker'); _syncBottomLayout(); return; }
-    ticker.style.display = '';
-    document.body.classList.add('has-ticker');
-    applyTickerSpeed();
-    _syncBottomLayout();
-    // Duplicate items for seamless scrolling
-    var items = alerts.concat(alerts);
-    var html = '';
-    items.forEach(function(a) {
-      var dot = a.severity === 'red' ? '#f87171' : '#fbbf24';
-      html += '<span style="display:inline-block;margin:0 12px;padding:2px 8px;border-radius:3px;background:var(--bg)">' +
-        '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:' + dot + ';margin-right:4px;vertical-align:middle"></span>' +
-        '<span style="color:var(--accent);cursor:pointer" onclick="openProject(\'' + escHtml(a.project_code || '') + '\')">' + escHtml(a.project_code || '') + '</span>' +
-        (a.project_name ? ' <span style="color:var(--muted);font-size:11px">' + escHtml(a.project_name) + '</span>' : '') +
-        ' <span style="color:var(--fg)">' + escHtml(a.message) + '</span>' +
-      '</span>';
-    });
-    document.getElementById('alert-ticker-inner').innerHTML = html;
+    if (_tickerContentMode === 'activities') {
+      var actData = await API.get('/dashboard/recent-activity-feed?days=7&limit=30');
+      var acts = actData.items || [];
+      if (!acts.length) { ticker.style.display = 'none'; document.body.classList.remove('has-ticker'); _syncBottomLayout(); return; }
+      ticker.style.display = '';
+      document.body.classList.add('has-ticker');
+      applyTickerSpeed();
+      _syncBottomLayout();
+      var actItems = acts.concat(acts);
+      var actHtml = '';
+      actItems.forEach(function(a) {
+        var desc = a.description || '';
+        var descDisplay = desc.length > 15 ? desc.substring(0, 15) + '...' : desc;
+        var newBadge = a.is_today ? ' <span style="display:inline-block;background:var(--success);color:#fff;font-size:10px;padding:0 3px;border-radius:2px;vertical-align:middle;position:relative;top:-1px;font-weight:600">NEW</span> ' : '';
+        actHtml += '<span class="ticker-activity-item" style="display:inline-block;margin:0 12px;padding:2px 8px;border-radius:3px;background:var(--bg);cursor:pointer" onclick="tickerOpenTaskDetail(' + a.task_id + ')" title="' + escHtml(desc) + '">' +
+          newBadge +
+          '<span style="color:var(--accent)">' + escHtml(a.project_code || '') + '</span>' +
+          '<span style="color:var(--muted);margin:0 4px">-</span>' +
+          '<span style="color:var(--fg)">' + escHtml(a.assignee_name || '') + '</span>' +
+          '<span style="color:var(--muted);margin:0 4px">-</span>' +
+          (a.activity_date ? '<span style="color:var(--muted);font-size:11px">' + a.activity_date + '</span>' : '') +
+          '<span style="color:var(--muted);margin:0 4px">-</span>' +
+          '<span style="color:var(--fg)">' + escHtml(descDisplay) + '</span>' +
+        '</span>';
+      });
+      document.getElementById('alert-ticker-inner').innerHTML = actHtml;
+    } else {
+      var data = await API.get('/dashboard/alerts?limit=30');
+      var alerts = data.items || [];
+      if (!alerts.length) { ticker.style.display = 'none'; document.body.classList.remove('has-ticker'); _syncBottomLayout(); return; }
+      ticker.style.display = '';
+      document.body.classList.add('has-ticker');
+      applyTickerSpeed();
+      _syncBottomLayout();
+      // Duplicate items for seamless scrolling
+      var items = alerts.concat(alerts);
+      var html = '';
+      items.forEach(function(a) {
+        var dot = a.severity === 'red' ? '#f87171' : '#fbbf24';
+        html += '<span style="display:inline-block;margin:0 12px;padding:2px 8px;border-radius:3px;background:var(--bg)">' +
+          '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:' + dot + ';margin-right:4px;vertical-align:middle"></span>' +
+          '<span style="color:var(--accent);cursor:pointer" onclick="openProject(\'' + escHtml(a.project_code || '') + '\')">' + escHtml(a.project_code || '') + '</span>' +
+          (a.project_name ? ' <span style="color:var(--muted);font-size:11px">' + escHtml(a.project_name) + '</span>' : '') +
+          ' <span style="color:var(--fg)">' + escHtml(a.message) + '</span>' +
+        '</span>';
+      });
+      document.getElementById('alert-ticker-inner').innerHTML = html;
+    }
   } catch(e) { /* non-critical */ }
 }
 
@@ -2337,6 +2378,7 @@ function _renderPreferencesPanel(content) {
   if (!content) content = document.getElementById('pref-dialog-content') || document.getElementById('uc-expand-content');
   var tickerOn = localStorage.getItem('pma_ticker_enabled') !== '0';
   var tickerSpeed = localStorage.getItem('pma_ticker_speed') || 'normal';
+  var tickerMode = localStorage.getItem('pma_ticker_mode') || 'alerts';
   var themeMode = localStorage.getItem('pm_theme_mode') || 'auto';
   var speedLabels = {slow: '慢速', normal: '正常', fast: '快速'};
   var speedBtns = '';
@@ -2344,6 +2386,13 @@ function _renderPreferencesPanel(content) {
     speedBtns += '<button class="btn btn-xs" style="margin-right:4px;' +
       (tickerSpeed === s ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : '') +
       '" onclick="setTickerSpeed(\'' + s + '\');_renderPreferencesPanel()">' + speedLabels[s] + '</button>';
+  });
+  var modeLabels = {alerts: '告警信息', activities: '任务动态'};
+  var modeBtns = '';
+  ['alerts', 'activities'].forEach(function(m) {
+    modeBtns += '<button class="btn btn-xs" style="margin-right:4px;' +
+      (tickerMode === m ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : '') +
+      '" onclick="toggleTickerContentMode()">' + modeLabels[m] + '</button>';
   });
   var themeIcons = {
     auto: '<svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="#f5c542" stroke-width="1.2" style="vertical-align:middle"><path d="M6 .278a.768.768 0 0 1 .08.858 7.208 7.208 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 0 1 .81.316.733.733 0 0 1-.031.893A8.349 8.349 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 0 1 6 .278z"/><text x="6.5" y="11" font-size="12" font-weight="700" fill="#f5c542" stroke="none" font-family="sans-serif">A</text></svg>',
@@ -2373,7 +2422,7 @@ function _renderPreferencesPanel(content) {
             '<span class="integration-row-lbl">底部滚动告警条</span>' +
             toggleSwitch(tickerOn, 'toggleAlertTicker();_renderPreferencesPanel()') +
           '</div>' +
-          (tickerOn ? '<div><span style="font-size:11px;color:var(--muted)">滚动速率</span><div style="margin-top:3px">' + speedBtns + '</div></div>' : '') +
+          (tickerOn ? '<div><span style="font-size:11px;color:var(--muted)">滚动速率</span><div style="margin-top:3px">' + speedBtns + '</div></div><div style="margin-top:6px"><span style="font-size:11px;color:var(--muted)">显示内容</span><div style="margin-top:3px">' + modeBtns + '</div></div>' : '') +
         '</div>' +
 
         // Card 2: 外观

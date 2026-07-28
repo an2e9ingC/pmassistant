@@ -617,6 +617,9 @@
   from { transform: translateX(0); }
   to   { transform: translateX(-50%); }
 }
+#alert-ticker:hover #alert-ticker-inner {
+  animation-play-state: paused;
+}
 body.has-ticker .view.active { padding-bottom: 28px; }
 
 /* ── Inline Document Editing ── */

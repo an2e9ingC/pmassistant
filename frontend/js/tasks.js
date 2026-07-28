@@ -841,8 +841,14 @@ function _resolveProjectId() {
 }
 
 function _closeTaskDialog() {
-  var overlay = document.querySelector('.note-dialog-overlay');
-  if (overlay) overlay.remove();
+  document.querySelectorAll('.note-dialog-overlay').forEach(function(ov) { ov.remove(); });
+}
+
+function _closeWorklogDialog() {
+  var overlays = document.querySelectorAll('.note-dialog-overlay');
+  if (overlays.length > 0) {
+    overlays[overlays.length - 1].remove(); // Remove only the topmost (worklog) dialog
+  }
 }
 
 function openTaskDetail(taskId) {
@@ -1712,9 +1718,9 @@ function openWorklogDialog(taskId) {
         '<textarea class="search-inp" id="wl-desc" rows="2" required style="width:100%;box-sizing:border-box;margin-top:2px;resize:vertical" placeholder="请填写工作内容描述"></textarea><div id="wl-desc-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请填写工作描述</div></div>' +
     '</div>';
     openDialog('记录工时', html, [
-      {text:'取消',onclick:'_closeTaskDialog()'},
+      {text:'取消',onclick:'_closeWorklogDialog()'},
       {text:'提交',cls:'btn-primary',onclick:'submitWorklog('+taskId+')'}
-    ], {maxWidth:450});
+    ], {maxWidth:450, keepExisting: true});
   }).catch(function() {
     showToast('加载任务信息失败', 'error');
   });
@@ -1784,7 +1790,7 @@ async function submitWorklog(taskId) {
       }
     }
     showToast('工时已记录', 'success');
-    _closeTaskDialog();
+    _closeWorklogDialog();
     _refreshTaskWorklogs(taskId);
     loadTaskData();
   } catch(e) { showToast('记录失败: '+(e.message||'未知错误'), 'error'); }
@@ -1809,7 +1815,7 @@ async function _submitWorklogEdit(wlId, taskId) {
     await API.put('/worklogs/'+wlId, {hours:hours, date:date, description:desc});
     await API.put('/tasks/'+taskId, {progress:progress});
     showToast('工时已更新', 'success');
-    _closeTaskDialog();
+    _closeWorklogDialog();
     _refreshTaskWorklogs(taskId);
     loadTaskData();
   } catch(e) { showToast('更新失败: '+(e.message||'未知错误'), 'error'); }

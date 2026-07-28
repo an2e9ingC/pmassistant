@@ -394,7 +394,7 @@ function openDialog(title, bodyHtml, buttons, opts) {
   var maxWidth = opts.maxWidth || 440;
 
   var existing = document.querySelector('.' + overlayClass);
-  if (existing) existing.remove();
+  if (existing && !opts.keepExisting) existing.remove();
 
   var btnHtml = '';
   if (buttons && buttons.length) {
