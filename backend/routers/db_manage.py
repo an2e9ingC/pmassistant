@@ -2,7 +2,9 @@
 
 import hashlib
 import os
+import shlex
 import shutil
+import subprocess
 import time
 import glob
 import logging
@@ -314,10 +316,32 @@ def restore_backup(
             shutil.copy2(str(pre_restore_path), _db_path)
         return {"code": 1, "message": f"恢复失败，已回滚: {e}"}
 
+    # Write DB-replaced marker for startup detection (fingerprint check)
+    try:
+        marker = Path(_db_path).parent / ".db-replaced"
+        marker.write_text(beijing_now().isoformat())
+    except Exception:
+        pass
+
+    # Schedule server restart via detached subprocess
+    # (gives time for the HTTP response to be sent before shutdown)
+    try:
+        # db_manage.py is in backend/routers/, server.sh is in project root (2 levels up)
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        port = os.environ.get("PMA_PORT", "8000")
+        subprocess.Popen(
+            ["/bin/bash", "-c",
+             f"sleep 2 && cd {shlex.quote(project_root)} && ./server.sh -p {shlex.quote(port)} restart"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True  # detach from parent, survive this process exit
+        )
+    except Exception as e:
+        logger.warning(f"Failed to spawn restart subprocess: {e}")
+
     return {
         "code": 0,
         "data": {"pre_restore_backup": pre_restore_path.name},
-        "message": f"已从备份 {safe_name} 恢复数据库。恢复前的数据库已备份为 {pre_restore_path.name}。请刷新页面以加载恢复后的数据。",
+        "message": "数据库已恢复，服务器即将重启，请等待页面自动刷新。",
     }
 
 

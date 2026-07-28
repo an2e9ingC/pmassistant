@@ -47,6 +47,8 @@ async def lifespan(app: FastAPI):
     logger.info("Starting PMA backend...")
     init_db()
     logger.info("Database initialized")
+    from backend.database import _log_db_change_if_replaced
+    _log_db_change_if_replaced()
 
     # ── Startup connection self-test: enabled sources must pass ──
     import json, urllib.request, urllib.error, sys
