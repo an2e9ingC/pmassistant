@@ -1,6 +1,6 @@
 # PMA 日志系统说明
 
-> 最后更新：2026-07-08
+> 最后更新：2026-07-29
 
 ---
 
@@ -59,6 +59,10 @@
 | | `local_product_create/update/delete` | `product_management.py` | PMA本地产品 CRUD |
 | | `product_projects_update` | `product_management.py` | 更新产品关联项目 |
 | **项目** | `local_project_create/update` | `product_management.py` | PMA本地项目创建/更新 |
+| | `project_update` | `projects.py` | 更新项目字段 |
+| | `project_background_update` | `projects.py` | 更新项目背景 |
+| | `project_linked_projects_update` | `projects.py` | 更新关联项目 |
+| | `project_delivery_plan_update` | `projects.py` | 更新交付计划 |
 | | `project_delete` | `projects.py` | 删除项目 |
 | **任务** | `task_create/create_batch/import/update/delete` | `task_service.py` | 任务 CRUD |
 | | `task_extend` | `tasks.py` | 任务延长预估工时 |
@@ -140,7 +144,7 @@ log_audit(db, user, "action_name", "详情描述", AUDIT_CAT_XXX, "medium")
 ```
 
 - `action`：kebab-case 标识（如 `product_create`、`bug_delete`）
-- `detail`：包含关键信息（对象名称、ID、变更前后值）
+- `detail`：包含关键信息（对象名称、ID、变更前后值），其中英文字段名必须通过 `FIELD_LABEL` 翻译为中文（见 [4.3 字段名中文化](#43-字段名中文化field_label)）
 - `level`：`high`（删除/权限）、`medium`（编辑/新增）、`low`（查看/配置）
 - `category`：必须使用 `AUDIT_CAT_*` 常量，禁止硬编码字符串
 
@@ -150,3 +154,87 @@ log_audit(db, user, "action_name", "详情描述", AUDIT_CAT_XXX, "medium")
 - ❌ 不要直接构造 `AuditLog` 对象（应通过 `log_audit()` 统一入口）
 - ❌ 不要硬编码 category 字符串（使用 `AUDIT_CAT_*` 常量）
 - ❌ 系统日志不要写入数据库（已移除 `DatabaseLogHandler` 和 `log_entries` 表）
+
+### 4.3 字段名中文化（FIELD_LABEL）
+
+`backend/audit_categories.py` 中的 `FIELD_LABEL` 字典将英文字段名映射为中文标签，确保操作日志的 `detail` 字段可读。
+
+**使用场景**：当 `log_audit()` 的 `detail` 中包含英文数据库字段名（如 `assignee_id`、`estimate_hours`）时，通过 `FIELD_LABEL` 翻译为中文（如 `负责人`、`预估工时`）。
+
+```python
+from backend.audit_categories import FIELD_LABEL
+
+field_label = FIELD_LABEL.get(field, field)  # 未找到映射时回退为原文
+changes.append(f"{field_label}: {old_val} -> {new_val}")
+```
+
+**维护规则**：
+- 新增 `log_audit()` 调用的 `detail` 中包含英文字段名时，**必须同步在 `FIELD_LABEL` 中增加映射**
+- 映射键（key）使用数据库列名或 API 字段名（snake_case），值（value）使用中文标签
+- 同一字段名在多个实体中复用（如 `status` 对 Task 和 Project 都译为 `状态`），无需重复定义
+
+**完整映射表**（`backend/audit_categories.py`）：
+
+| 英文键 | 中文标签 | 适用实体 |
+|--------|---------|---------|
+| `title` | 标题 | Task |
+| `description` | 描述 | Task / Project |
+| `status` | 状态 | Task / Project |
+| `priority` | 优先级 | Task |
+| `type` | 类型 | Task |
+| `execution_id` | 迭代 | Task |
+| `stage_name` | 阶段名称 | Task |
+| `assignee_id` | 负责人 | Task |
+| `reviewer_id` | 审批人 | Task |
+| `parent_id` | 父任务 | Task |
+| `blocked_by_id` | 阻塞任务 | Task |
+| `start_date` | 开始日期 | Task |
+| `due_date` | 截止日期 | Task |
+| `sort_order` | 排序 | Task |
+| `progress` | 进度 | Task / Project |
+| `estimate_hours` | 预估工时 | Task |
+| `name` | 名称 | Project / Product |
+| `code` | 编号 | Project / Product |
+| `project_type` | 项目类型 | Project |
+| `customer_name` | 客户名称 | Project |
+| `pm_name` | 项目经理 | Project |
+| `begin` | 开始日期 | Project |
+| `end` | 结束日期 | Project |
+| `real_began` | 实际开始 | Project |
+| `real_end` | 实际结束 | Project |
+| `estimate` | 预估工时 | Project |
+| `consumed` | 已消耗工时 | Project |
+| `program_name` | 项目集 | Project |
+| `planned_delivery_qty` | 计划交付数量 | Project |
+| `delivery_note` | 交付备注 | Project |
+| `background` | 项目背景 | Project |
+| `tags` | 标签 | Project |
+| `linked_project_ids` | 关联项目ID | Project |
+| `is_local` | 是否本地 | Project |
+| `owner_id` | 负责人 | Project |
+| `category` | 分类 | Product |
+| `nas_path` | NAS路径 | Product |
+| `git_url` | Git地址 | Product |
+| `pma_customer` | PMA客户 | Product |
+| `alias_name` | 别名 | Product |
+| `project` | 项目 | 通用 |
+| `product` | 产品 | 通用 |
+| `doc` | 文档 | 通用 |
+| `location` | 位置 | 通用 |
+| `stage` | 阶段 | 通用 |
+| `content` | 内容 | 通用 |
+| `note_id` | 笔记ID | 通用 |
+| `project_id` | 项目ID | 通用 |
+| `doc_name` | 文档名称 | 通用 |
+| `filename` | 文件名 | 通用 |
+| `role` | 角色 | 通用 |
+| `active` | 激活 | 通用 |
+| `permissions` | 权限 | 通用 |
+| `wecom_userid` | 企微用户ID | 通用 |
+| `matched` | 匹配数 | 通用 |
+| `created` | 创建数 | 通用 |
+| `deleted` | 删除数 | 通用 |
+| `linked_tasks` | 关联任务数 | 通用 |
+| `products` | 产品数 | 通用 |
+| `changes` | 变更 | 通用 |
+| `password_changed` | 密码已修改 | 通用 |

@@ -382,6 +382,8 @@ def update_product_document(
         doc.is_removed = body.is_removed
         if body.is_removed:
             doc_changes.append("已移除可选项")
+        else:
+            doc_changes.append("已恢复可选项")
     if body.location:
         doc.uploaded_at = _dt.utcnow()
     if body.doc_type is not None:
@@ -402,6 +404,9 @@ def update_product_document(
     db.commit()
     detail = "; ".join(doc_changes) if doc_changes else "无变更"
     log_product_activity(db, product.id, user.username, "更新文档", f"文档名称: '{doc.doc_name}'; {detail}")
+    log_audit(db, user, "product_doc_update",
+              f"product={product.code} doc_id={doc.id} 「{doc.doc_name}」{detail}",
+              AUDIT_CAT_PRODUCT, "low")
     return {"code": 0, "data": {"id": doc.id, "status": doc.status}, "message": "ok"}
 
 

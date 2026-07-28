@@ -258,11 +258,13 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
         t.stage_name = data["stage_name"] or None
         if t.stage_name != old_stage_name and t.template_id:
             t.is_removed = 1  # mark as diverged from template
+            changes.append("已脱离模板（阶段变更）")
     # When assignee of a template task is changed, mark as diverged
     if t.template_id and "assignee_id" in data:
         new_assignee = data["assignee_id"]
         if new_assignee is not None and int(new_assignee or 0) != (t.assignee_id or 0):
             t.is_removed = 1
+            changes.append("已脱离模板（责任人变更）")
     if "estimate_hours" in data:
         t.estimate_hours = float(data["estimate_hours"] or 0)
     if "output_items" in data:

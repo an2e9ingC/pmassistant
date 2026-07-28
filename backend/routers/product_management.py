@@ -228,7 +228,6 @@ def update_local_product(
             db, prod.id, body.model_dump(exclude_none=True)
         )
         changes = []
-        from backend.audit_categories import FIELD_LABEL
         if body.name and old and old.get("name") != body.name:
             changes.append(f"产品名称: '{old['name']}' -> '{body.name}'")
         if body.code and old and old.get("code") != body.code:

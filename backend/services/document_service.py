@@ -532,8 +532,10 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
         # NOTE: Don't delete docs not in template — may be custom-added.
         # (No template_id column to distinguish custom vs template origin.)
 
-        # Update existing docs
+        # Update existing docs (skip removed — user explicitly removed them)
         for doc_name, pd in existing_names.items():
+            if pd.is_removed:
+                continue
             tpl = template_names.get(doc_name)
             if not tpl:
                 continue
@@ -699,6 +701,8 @@ def _doc_dict(pd: ProjectDocument) -> dict:
         "doc_type": pd.doc_type or "",
         "updated_by": pd.updated_by,
         "updated_at": to_local_str(pd.updated_at) if pd.updated_at else None,
+        "is_removed": bool(pd.is_removed),
+        "is_optional": bool(pd.is_optional),
     }
 
 

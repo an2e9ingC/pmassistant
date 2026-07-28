@@ -351,6 +351,7 @@ def sync_documents(
 
     # Force re-import specified docs (e.g., previously deleted)
     force_count = 0
+    restored_names = []
     if body.doc_ids:
         for did in body.doc_ids:
             pd = db.query(ProjectDocument).filter(ProjectDocument.id == did).first()
@@ -366,10 +367,16 @@ def sync_documents(
                     pd.status = "pending"
                     pd.location = None
                     force_count += 1
+                    restored_names.append(pd.doc_name)
 
     # Run normal sync
     _sync_from_templates(db, project.id, project.project_type or "RD")
     db.commit()
+
+    if restored_names:
+        log_audit(db, user, "project_doc_restore",
+                  f"project={project.code} 强制恢复 {len(restored_names)} 个文档: {', '.join(restored_names)}",
+                  AUDIT_CAT_PROJECT, "medium")
 
     docs = project_service.get_project_documents(db, project.id)
     return {"code": 0, "data": docs, "message": f"同步完成，强制恢复 {force_count} 个文档"}
@@ -434,7 +441,7 @@ def update_document(
     # Get old values before update
     old = db.query(ProjectDocument).filter(ProjectDocument.id == doc_id).first()
     old_status = old.status if old else '?'
-    old_location = old.location if old else '?'
+    old_location = (old.location or '') if old else '?'
     result = document_service.update_project_document(
         db, doc_id, body.model_dump(exclude_none=True), user.username
     )
@@ -450,7 +457,7 @@ def update_document(
     if old_status != new_status:
         parts.append(f"状态: {STATUS_TXT.get(old_status, old_status)} → {STATUS_TXT.get(new_status, new_status)}")
 
-    new_location = result.get('location', '') or ''
+    new_location = result.get('location') or ''
     if old_location != new_location:
         parts.append("路径已更新")
 
@@ -508,6 +515,18 @@ def update_delivery_plan(
         if old_note != body.delivery_note:
             plan_changes.append(f"delivery_note:'{old_note}'->'{body.delivery_note}'")
         project.delivery_note = body.delivery_note
+    # Build audit-friendly change description with Chinese field labels
+    audit_changes = []
+    if plan_changes:
+        for c in plan_changes:
+            # plan_changes format: "field_name:'old'->'new'"
+            if ':' in c:
+                field_name, vals = c.split(':', 1)
+                label = FIELD_LABEL.get(field_name, field_name)
+                audit_changes.append(f"{label}: {vals}")
+    log_audit(db, user, "project_delivery_plan_update",
+              f"项目={project.code} {'; '.join(audit_changes) if audit_changes else '无变更'}",
+              AUDIT_CAT_PROJECT, "medium")
     db.commit()
     log_project_activity(db, project.id, user.username, "交付计划",
         "; ".join(plan_changes) if plan_changes else "无变更")
@@ -764,8 +783,11 @@ def update_project_background(
     project = resolve_project(db, identifier)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    old_bg = project.background or ""
     project.background = payload.background
     db.commit()
+    log_audit(db, user, "project_background_update",
+              f"项目={project.code} 项目背景已更新", AUDIT_CAT_PROJECT, "medium")
     return {"code": 0, "data": {"background": payload.background}, "message": "ok"}
 
 
@@ -835,6 +857,8 @@ def set_linked_projects(
                 peer.linked_project_ids = ",".join(str(i) for i in peer_ids) if peer_ids else ""
 
     db.commit()
+    log_audit(db, user, "project_linked_projects_update",
+              f"项目={project.code} 关联项目已更新 ({len(new_ids)}个)", AUDIT_CAT_PROJECT, "medium")
     return {"code": 0, "data": new_ids, "message": "ok"}
 
 
