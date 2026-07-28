@@ -1273,6 +1273,16 @@ async function init() {
     if (typeof initProjectTypeLabels === 'function') initProjectTypeLabels();
   }
 
+  // Activate correct view RIGHT after user refresh, before other async work
+  var parsed = parseHash();
+  var hashView = parsed.view;
+  var hashParams = parsed.params;
+  var lastView = hashView || 'user-center';
+  gotoView(lastView, {params: hashView ? hashParams : [], pushState: false});
+  if (!history.state || !history.state.view) {
+    history.replaceState({ view: lastView, params: hashParams }, '', '#/' + lastView);
+  }
+
   // Legacy theme key migration
   if (!localStorage.getItem('pm_theme_mode')) {
     var saved = localStorage.getItem('pm_theme');
@@ -1437,17 +1447,6 @@ async function init() {
       }
     } catch(ignore) {}
   }, 3000);
-
-  // Navigate to saved view or dashboard (respect URL hash first)
-  var parsed = parseHash();
-  var hashView = parsed.view;
-  var hashParams = parsed.params;
-  var lastView = hashView || 'user-center';
-  gotoView(lastView, {params: hashView ? hashParams : [], pushState: false});
-  // Ensure initial history state exists so back button works from the first navigation
-  if (!history.state || !history.state.view) {
-    history.replaceState({ view: lastView, params: hashParams }, '', '#/' + lastView);
-  }
 
   // Global ESC handler: first ESC blurs input, second closes dialog / clears search
   var _escBlurred = false;
