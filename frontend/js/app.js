@@ -1574,7 +1574,7 @@ async function initUserCenter(viewUserId) {
 }
 
 var _ucTasks = [];
-var _ucFilterStatus = 'all';
+var _ucFilterStatus = 'unfinished';
 var _ucFilterProd = '';
 var _ucFilterProj = '';
 var _ucSortCol = '';
@@ -1731,28 +1731,101 @@ function _ucLoadTasks(user) {
   });
 }
 
+function _ucMatchFilter(status) {
+  if (_ucFilterStatus === 'all' || !_ucFilterStatus) return true;
+  if (_ucFilterStatus === 'unfinished') return status !== 'done' && status !== 'review';
+  return status === _ucFilterStatus;
+}
+
 function _renderUcFilterBar() {
   var counts = {todo:0, in_progress:0, review:0, done:0};
-  var projSet = {}, prodSet = {};
   _ucTasks.forEach(function(t) {
     counts[t.status||'todo'] = (counts[t.status]||0)+1;
-    if(t.project_name) projSet[t.project_name]=1;
-    if(t.product_name) prodSet[t.product_name]=1;
   });
-  var projs = Object.keys(projSet).sort();
-  var projs = Object.keys(projSet).sort();
-  var tabs = [{k:'all',l:'全部',c:_ucTasks.length},{k:'todo',l:'待办',c:counts.todo||0},{k:'in_progress',l:'进行中',c:counts.in_progress||0}];
-  if (window._approvalEnabled) tabs.push({k:'review',l:'评审中',c:counts.review||0});
-  tabs.push({k:'done',l:'已完成',c:counts.done||0});
-  var prodSelHtml = createProductCombo({
+  var unfinishedCount = _ucTasks.reduce(function(s,t){return s + ((t.status||'todo')!=='done'&&(t.status||'todo')!=='review'?1:0);}, 0);
+
+  // Category cards — order: 未完成 → 已完成 → [评审中] → 全部
+  var cardsHtml = '<div class="uc-cat-cards">'
+    + '<div class="kpi-card' + (_ucFilterStatus==='unfinished'?' active':'') + '" data-filter="unfinished" onclick="_ucSetFilter(\'unfinished\')">'
+    + '<div class="kpi-label">未完成</div><div class="kpi-value">' + unfinishedCount + '</div><div class="kpi-meta">待办 + 进行中</div></div>'
+    + '<div class="kpi-card' + (_ucFilterStatus==='done'?' active':'') + '" data-filter="done" onclick="_ucSetFilter(\'done\')">'
+    + '<div class="kpi-label">已完成</div><div class="kpi-value">' + (counts.done||0) + '</div><div class="kpi-meta">已完成的全部任务</div></div>';
+  if (window._approvalEnabled) {
+    cardsHtml += '<div class="kpi-card' + (_ucFilterStatus==='review'?' active':'') + '" data-filter="review" onclick="_ucSetFilter(\'review\')">'
+      + '<div class="kpi-label">评审中</div><div class="kpi-value">' + (counts.review||0) + '</div><div class="kpi-meta">等待评审</div></div>';
+  }
+  cardsHtml += '<div class="kpi-card' + (_ucFilterStatus==='all'?' active':'') + '" data-filter="all" onclick="_ucSetFilter(\'all\')">'
+    + '<div class="kpi-label">全部</div><div class="kpi-value">' + _ucTasks.length + '</div><div class="kpi-meta">所有任务</div></div>'
+    + '</div>';
+
+  // Build product items from user's tasks only
+  var prodItems = [], prodSeen = {};
+  _ucTasks.forEach(function(t) {
+    var key = t.product_code || t.product_name || '';
+    if (key && !prodSeen[key]) {
+      prodSeen[key] = true;
+      prodItems.push({ id: 'p' + prodItems.length, code: t.product_code, name: t.product_name });
+    }
+  });
+  prodItems.sort(function(a, b) { return (a.code || a.name || '').localeCompare(b.code || b.name || ''); });
+
+  // Build project items from user's tasks only
+  var projItems = [], projSeen = {};
+  _ucTasks.forEach(function(t) {
+    var key = t.project_code || t.project_name || '';
+    if (key && !projSeen[key]) {
+      projSeen[key] = true;
+      projItems.push({ id: 'j' + projItems.length, code: t.project_code, name: t.project_name });
+    }
+  });
+  projItems.sort(function(a, b) { return (a.code || a.name || '').localeCompare(b.code || b.name || ''); });
+
+  // Product search combo (from user's tasks)
+  var prodSelHtml = createSearchCombo({
     comboId: 'uc-task-prod-filter', inputId: 'uc-task-prod-filter-input', dropdownId: 'uc-task-prod-filter-dropdown',
     placeholder: '全部产品',
-    onSelect: function(p) { _ucFilterProd = p.name; _renderUcTaskTable(); _ucRefreshTaskStats(); }
+    dataSource: prodItems,
+    selectedIdFn: function() { return ''; },
+    onSelect: function(p) { _ucFilterProd = p.name;
+      var inp = document.getElementById('uc-task-prod-filter-input');
+      if (inp) { var display = p.code ? p.code + ' ' + p.name : p.name; inp.value = display; inp.title = display; }
+      _renderUcTaskTable(); _ucRefreshTaskStats(); }
   });
-  var projSel = projs.length ? '<select class="proj-select" onchange="_ucFilterProj=this.value;_renderUcTaskTable();_ucRefreshTaskStats()"><option value="">全部项目</option>' + projs.map(function(p) { return '<option value="'+escHtml(p)+'"'+(_ucFilterProj===p?' selected':'')+'>'+escHtml(p)+'</option>'; }).join('') + '</select>' : '';
+
+  // Project search combo (from user's tasks)
+  var projSelHtml = createSearchCombo({
+    comboId: 'uc-task-proj-filter', inputId: 'uc-task-proj-filter-input', dropdownId: 'uc-task-proj-filter-dropdown',
+    placeholder: '全部项目',
+    dataSource: projItems,
+    selectedIdFn: function() { return ''; },
+    onSelect: function(p) { _ucFilterProj = p.name;
+      var inp = document.getElementById('uc-task-proj-filter-input');
+      if (inp) { var display = p.code ? p.code + ' ' + p.name : p.name; inp.value = display; inp.title = display; }
+      _renderUcTaskTable(); _ucRefreshTaskStats(); }
+  });
+
+  var projClearBtn = _ucFilterProj ? '<span class="combo-clear" onclick="_ucClearFilter(\'proj\')" title="清除项目过滤">✕</span>' : '';
+  var prodClearBtn = _ucFilterProd ? '<span class="combo-clear" onclick="_ucClearFilter(\'prod\')" title="清除产品过滤">✕</span>' : '';
+
   document.getElementById('uc-tasks-filter-bar').innerHTML =
-    '<div class="task-tabs">' + tabs.map(function(t) { return '<button class="task-tab' + (_ucFilterStatus===t.k?' active':'') + '" onclick="_ucSetFilter(\''+t.k+'\')">'+t.l+'<span class="task-tab-count">'+t.c+'</span></button>'; }).join('') + '</div>' +
-    '<span style="display:inline-block;vertical-align:middle">' + prodSelHtml + '</span>' + projSel;
+    '<div style="width:100%">' + cardsHtml + '</div>'
+    + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px">'
+    + projSelHtml + projClearBtn + prodSelHtml + prodClearBtn + '</div>';
+}
+
+function _ucClearFilter(type) {
+  if (type === 'proj') {
+    _ucFilterProj = '';
+    var inp = document.getElementById('uc-task-proj-filter-input');
+    if (inp) inp.value = '';
+  } else if (type === 'prod') {
+    _ucFilterProd = '';
+    var inp = document.getElementById('uc-task-prod-filter-input');
+    if (inp) inp.value = '';
+  }
+  _renderUcTaskTable();
+  _ucRefreshTaskStats();
+  _renderUcFilterBar();
 }
 
 function _ucSetFilter(s) { _ucFilterStatus = s; _ucFilterProd = ''; _ucFilterProj = ''; _renderUcFilterBar(); _renderUcTaskTable(); _ucRefreshTaskStats(); }
@@ -1773,7 +1846,7 @@ function _renderUcTableHead() {
   var dueInd = _ucSortCol === 'due_date'
     ? (_ucSortDir === 'asc' ? '▲' : '▼')
     : '<span style="color:var(--muted)">⇅</span>';
-  document.getElementById('uc-tasks-table-head').innerHTML = '<tr><th style="width:22px"><input type="checkbox" id="task-select-all" onchange="_toggleSelectAllTasks(this)" title="全选/取消全选"></th><th style="width:6%">任务编号</th><th style="width:8%">项目编号</th><th style="width:100px">产品编号</th><th>阶段</th><th>任务标题</th><th style="width:70px">状态</th><th style="width:6%;cursor:pointer;user-select:none" onclick="_ucSortBy(\'priority\')">优先级 ' + prioInd + '</th><th style="width:6%">进度</th><th style="width:7%;cursor:pointer;user-select:none" onclick="_ucSortBy(\'due_date\')">截止 ' + dueInd + '</th><th style="width:1%;white-space:nowrap">操作</th></tr>';
+  document.getElementById('uc-tasks-table-head').innerHTML = '<tr><th style="width:22px"><input type="checkbox" id="task-select-all" onchange="_toggleSelectAllTasks(this)" title="全选/取消全选"></th><th style="width:8%">项目编号</th><th style="width:100px">产品编号</th><th>阶段</th><th style="width:6%">任务编号</th><th>任务标题</th><th style="width:70px">状态</th><th style="width:6%;cursor:pointer;user-select:none" onclick="_ucSortBy(\'priority\')">优先级 ' + prioInd + '</th><th style="width:6%">进度</th><th style="width:7%;cursor:pointer;user-select:none" onclick="_ucSortBy(\'due_date\')">截止 ' + dueInd + '</th><th style="width:1%;white-space:nowrap">操作</th></tr>';
 }
 
 function _ucSortBy(col) {
@@ -1787,9 +1860,69 @@ function _ucSortBy(col) {
   if (_ucSortCol) _renderUcTaskTable();
 }
 
+function _ucTaskRow(t, opts) {
+  opts = opts || {};
+  var pct = t.progress || 0;
+  var overdue = t.due_date && t.status !== 'done' && t.status !== 'closed' && t.due_date < fmtLocalDate();
+
+  // Project code cell (with optional rowspan, skipped for merged rows)
+  var projCell = '';
+  if (!opts.skipProj) {
+    var prs = opts.projRowspan > 1 ? ' rowspan="' + opts.projRowspan + '"' : '';
+    projCell = '<td style="text-align:center;vertical-align:middle;border-right:2px solid var(--border)"' + prs + '>'
+      + (t.project_code ? projCodeTag(t.project_code, 'event.stopPropagation();openProject(\'' + escHtml(t.project_code).replace(/'/g, "\\'") + '\')', t.project_name) : '-')
+      + '</td>';
+  }
+
+  // Product code cell (with optional rowspan, skipped for merged rows)
+  var prodCell = '';
+  if (!opts.skipProd) {
+    var prds = opts.prodRowspan > 1 ? ' rowspan="' + opts.prodRowspan + '"' : '';
+    prodCell = '<td style="text-align:center;vertical-align:middle;font-size:12px"' + prds + '>'
+      + (t.product_code ? '<span class="proj-code-btn" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="event.stopPropagation();openProductDetail(\'' + escHtml(t.product_code) + '\')" title="' + escHtml(t.product_code) + ' ' + escHtml(t.product_name || '') + '">' + escHtml(t.product_code) + '</span>' : '<span style="font-size:12px;color:var(--muted)">—</span>')
+      + '</td>';
+  }
+
+  // Stage cell (with optional rowspan, skipped for merged rows)
+  var stageCell = '';
+  if (!opts.skipStage) {
+    var srs = opts.stageRowspan > 1 ? ' rowspan="' + opts.stageRowspan + '"' : '';
+    stageCell = '<td style="font-size:12px;text-align:center;vertical-align:middle"' + srs + '>' + escHtml(t.stage_name||'') + '</td>';
+  }
+
+  var trClass = opts.projFirst ? ' class="uc-proj-first"' : '';
+  return '<tr style="cursor:pointer" onclick="_ucOpenTask('+t.id+')"' + trClass + '>' +
+    // checkbox
+    '<td style="text-align:center;width:22px" onclick="event.stopPropagation();if(event.target!==this.firstElementChild){var cb=this.firstElementChild;if(cb){cb.checked=!cb.checked;cb.onchange()}}"><input type="checkbox" value="' + t.id + '" onchange="_onTaskCheckbox(this)" class="task-checkbox"></td>' +
+    // project code (rowspan)
+    projCell +
+    // product code (rowspan)
+    prodCell +
+    // stage (rowspan)
+    stageCell +
+    // task id
+    '<td style="text-align:center;font-size:11px;font-family:var(--mono);color:var(--muted)">#' + t.id + '</td>' +
+    // title
+    '<td style="text-align:left;font-weight:530">' + escHtml(t.title) + '</td>' +
+    // status
+    '<td style="text-align:center' + (window._approvalEnabled ? ';cursor:pointer' : '') + '"' + (window._approvalEnabled ? ' onclick="event.stopPropagation();openReviewerDialog(' + t.id + ')" title="' + (t.reviewer_name ? '审批人: ' + escHtml(t.reviewer_name) + ' — 点击修改' : '点击设置审批人') + '"' : '') + '>' + renderPill(t.status||'todo') + '</td>' +
+    // priority
+    '<td style="text-align:center"><span class="prio-tag '+(t.priority||'medium')+'">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[t.priority]||t.priority)+'</span></td>' +
+    // progress
+    '<td style="text-align:center">'+renderProgressCircle(pct,36,{label:''})+'</td>' +
+    // due date
+    '<td style="text-align:center;font-size:12px;color:'+(overdue?'var(--danger)':'')+'">'+(t.due_date||'-')+'</td>' +
+    // actions
+    '<td style="text-align:center;white-space:nowrap" onclick="event.stopPropagation()">' +
+      iconEdit('_ucOpenTask('+t.id+')', '查看/编辑') +
+      iconDelete('_ucDeleteTask('+t.id+')', '删除') +
+    '</td>' +
+  '</tr>';
+}
+
 function _renderUcTaskTable() {
   var filtered = _ucTasks.filter(function(t) {
-    if (_ucFilterStatus !== 'all' && t.status !== _ucFilterStatus) return false;
+    if (!_ucMatchFilter(t.status || 'todo')) return false;
     if (_ucFilterProd && t.product_name !== _ucFilterProd) return false;
     if (_ucFilterProj && t.project_name !== _ucFilterProj) return false;
     return true;
@@ -1808,29 +1941,89 @@ function _renderUcTaskTable() {
       return 0;
     });
   }
+
   var tbody = document.getElementById('uc-tasks-table-tbody');
   if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state">暂无匹配任务</div></td></tr>'; return; }
-  tbody.innerHTML = filtered.map(function(t) {
-    var pct = t.progress || 0;
-    var overdue = t.due_date && t.status !== 'done' && t.status !== 'closed' && t.due_date < fmtLocalDate();
-    var prodTag = t.product_code ? '<span class="proj-code-btn" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="event.stopPropagation();openProductDetail(\'' + escHtml(t.product_code) + '\')" title="' + escHtml(t.product_code) + ' ' + escHtml(t.product_name || '') + '">' + escHtml(t.product_code) + '</span>' : '<span style="font-size:12px;color:var(--muted)">—</span>';
-    return '<tr style="cursor:pointer" onclick="_ucOpenTask('+t.id+')">' +
-      '<td style="text-align:center;width:22px" onclick="event.stopPropagation();if(event.target!==this.firstElementChild){var cb=this.firstElementChild;if(cb){cb.checked=!cb.checked;cb.onchange()}}"><input type="checkbox" value="' + t.id + '" onchange="_onTaskCheckbox(this)" class="task-checkbox"></td>' +
-      '<td style="text-align:center;font-size:11px;font-family:var(--mono);color:var(--muted)">#' + t.id + '</td>' +
-      '<td style="text-align:center">' + (t.project_code ? projCodeTag(t.project_code, 'event.stopPropagation();openProject(\'' + escHtml(t.project_code).replace(/'/g, "\\'") + '\')', t.project_name) : '-') + '</td>' +
-      '<td style="text-align:center;font-size:12px">' + prodTag + '</td>' +
-      '<td style="font-size:12px">' + escHtml(t.stage_name||'') + '</td>' +
-      '<td style="text-align:left;font-weight:530">' + escHtml(t.title) + '</td>' +
-      '<td style="text-align:center' + (window._approvalEnabled ? ';cursor:pointer' : '') + '"' + (window._approvalEnabled ? ' onclick="event.stopPropagation();openReviewerDialog(' + t.id + ')" title="' + (t.reviewer_name ? '审批人: ' + escHtml(t.reviewer_name) + ' — 点击修改' : '点击设置审批人') + '"' : '') + '>' + renderPill(t.status||'todo') + '</td>' +
-      '<td style="text-align:center"><span class="prio-tag '+(t.priority||'medium')+'">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[t.priority]||t.priority)+'</span></td>' +
-      '<td style="text-align:center">'+renderProgressCircle(pct,36,{label:''})+'</td>' +
-      '<td style="text-align:center;font-size:12px;color:'+(overdue?'var(--danger)':'')+'">'+(t.due_date||'-')+'</td>' +
-      '<td style="text-align:center;white-space:nowrap" onclick="event.stopPropagation()">' +
-        iconEdit('_ucOpenTask('+t.id+')', '查看/编辑') +
-        iconDelete('_ucDeleteTask('+t.id+')', '删除') +
-      '</td>' +
-    '</tr>';
-  }).join('');
+
+  // Group tasks: project → product → stage → tasks
+  var projGroups = [];
+  var projMap = {};
+  filtered.forEach(function(t) {
+    var projKey = t.project_code || t.project_name || '__unknown__';
+    var prodKey = t.product_code || t.product_name || '__unknown__';
+    var stageKey = t.stage_name || '未分类';
+    if (!projMap[projKey]) {
+      projMap[projKey] = {
+        code: t.project_code || '',
+        name: t.project_name || '未知项目',
+        prodMap: {},
+        prods: []
+      };
+      projGroups.push(projMap[projKey]);
+    }
+    var pg = projMap[projKey];
+    if (!pg.prodMap[prodKey]) {
+      pg.prodMap[prodKey] = {
+        code: t.product_code || '',
+        name: t.product_name || '',
+        stageMap: {},
+        stages: []
+      };
+      pg.prods.push(pg.prodMap[prodKey]);
+    }
+    var pd = pg.prodMap[prodKey];
+    if (!pd.stageMap[stageKey]) {
+      pd.stageMap[stageKey] = { name: stageKey, tasks: [] };
+      pd.stages.push(pd.stageMap[stageKey]);
+    }
+    pd.stageMap[stageKey].tasks.push(t);
+  });
+  // Sort groups
+  projGroups.sort(function(a, b) {
+    if (a.code === '' && a.name === '未知项目') return 1;
+    if (b.code === '' && b.name === '未知项目') return -1;
+    return a.name.localeCompare(b.name);
+  });
+
+  // Build HTML with rowspan for project code, product code, and stage
+  var rowsHtml = '';
+  projGroups.forEach(function(pg) {
+    var projRowspan = pg.prods.reduce(function(s, pd) { return s + pd.stages.reduce(function(ss, st) { return ss + st.tasks.length; }, 0); }, 0);
+    var isFirstProjTask = true;
+    pg.prods.forEach(function(pd) {
+      var prodRowspan = pd.stages.reduce(function(s, st) { return s + st.tasks.length; }, 0);
+      var isFirstProdTask = true;
+      pd.stages.forEach(function(st) {
+        var stageRowspan = st.tasks.length;
+        var isFirstStageTask = true;
+        st.tasks.forEach(function(t) {
+          var opts = {};
+          if (isFirstProjTask) {
+            opts.projRowspan = projRowspan;
+            opts.projFirst = true;
+            isFirstProjTask = false;
+          } else {
+            opts.skipProj = true;
+          }
+          if (isFirstProdTask) {
+            opts.prodRowspan = prodRowspan;
+            isFirstProdTask = false;
+          } else {
+            opts.skipProd = true;
+          }
+          if (isFirstStageTask) {
+            opts.stageRowspan = stageRowspan;
+            isFirstStageTask = false;
+          } else {
+            opts.skipStage = true;
+          }
+          rowsHtml += _ucTaskRow(t, opts);
+        });
+      });
+    });
+  });
+  tbody.innerHTML = rowsHtml;
+
   _selectedTasks = new Set();
   if (typeof _ensureBatchToolbar === 'function') _ensureBatchToolbar();
   setTimeout(function() { if (typeof window._ucUpdateLayout === 'function') window._ucUpdateLayout(); }, 50);
@@ -1984,7 +2177,7 @@ function _ucBuildTaskStats() {
   var tasks = _ucTasks || [];
   // Apply filters
   if (_ucFilterStatus && _ucFilterStatus !== 'all') {
-    tasks = tasks.filter(function(t) { return (t.status || 'todo') === _ucFilterStatus; });
+    tasks = tasks.filter(function(t) { return _ucMatchFilter(t.status || 'todo'); });
   }
   if (_ucFilterProd) {
     tasks = tasks.filter(function(t) { return t.product_name === _ucFilterProd; });
