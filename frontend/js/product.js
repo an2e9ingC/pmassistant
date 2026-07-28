@@ -1195,7 +1195,7 @@ function renderProdMaintenance(p) {
       '</tr></thead><tbody>';
     projects.forEach(function(proj) {
       var projCode = proj.code || '';
-      var coreName = extractCoreName(proj.name);
+      var coreName = proj.name || '';
       html += '<tr style="cursor:pointer">' +
         '<td style="cursor:pointer" onclick="openProject(\'' + escHtml(proj.code || String(proj.id)).replace(/'/g, "\\'") + '\')">' + (projCode ? projCodeTag(projCode, 'event.stopPropagation();openProject(\'' + escHtml(projCode).replace(/'/g, "\\'") + '\')', proj.name) : '—') + '</td>' +
         '<td onclick="openProject(\'' + escHtml(proj.code || String(proj.id)).replace(/'/g, "\\'") + '\')"><div class="proj-name">' + escHtml(coreName) + '</div></td>' +

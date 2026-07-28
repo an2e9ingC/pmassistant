@@ -798,13 +798,170 @@ def set_linked_projects(
     db: Session = Depends(get_db),
     user=Depends(require_perm("project_edit")),
 ):
-    """Set linked/sibling projects."""
+    """Set linked/sibling projects with bidirectional sync."""
     project = resolve_project(db, identifier)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    project.linked_project_ids = ",".join(str(i) for i in payload.ids) if payload.ids else ""
+
+    # Parse old IDs
+    old_str = project.linked_project_ids or ""
+    old_ids = [int(x.strip()) for x in old_str.split(",") if x.strip()]
+    new_ids = list(dict.fromkeys(payload.ids or []))  # deduplicate, preserve order
+
+    # Update target project
+    project.linked_project_ids = ",".join(str(i) for i in new_ids) if new_ids else ""
+
+    # Bidirectional sync
+    added = [i for i in new_ids if i not in old_ids]
+    removed = [i for i in old_ids if i not in new_ids]
+    my_id = project.id
+
+    for peer_id in added:
+        peer = db.query(CachedProject).filter(CachedProject.id == peer_id).first()
+        if peer:
+            peer_ids_str = peer.linked_project_ids or ""
+            peer_ids = [int(x.strip()) for x in peer_ids_str.split(",") if x.strip()]
+            if my_id not in peer_ids:
+                peer_ids.append(my_id)
+                peer.linked_project_ids = ",".join(str(i) for i in peer_ids)
+
+    for peer_id in removed:
+        peer = db.query(CachedProject).filter(CachedProject.id == peer_id).first()
+        if peer:
+            peer_ids_str = peer.linked_project_ids or ""
+            peer_ids = [int(x.strip()) for x in peer_ids_str.split(",") if x.strip()]
+            if my_id in peer_ids:
+                peer_ids.remove(my_id)
+                peer.linked_project_ids = ",".join(str(i) for i in peer_ids) if peer_ids else ""
+
     db.commit()
-    return {"code": 0, "data": payload.ids, "message": "ok"}
+    return {"code": 0, "data": new_ids, "message": "ok"}
+
+
+# ── Convert LSJ opportunity to RD/SC project ──
+
+class LsjConvertRequest(BaseModel):
+    project_type: str  # "RD" or "SC"
+    name: str          # user-entered project name
+
+
+@router.post("/{identifier}/convert", response_model=dict)
+def convert_lsj_project(
+    identifier: str,
+    body: LsjConvertRequest,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("project_edit")),
+):
+    """Convert an LSJ (opportunity) project to an RD or SC project."""
+    source = resolve_project(db, identifier)
+    if not source:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if source.project_type in ("RD", "SC"):
+        raise HTTPException(status_code=400, detail="Only non-RD/SC projects can be converted")
+
+    if body.project_type not in ("RD", "SC"):
+        raise HTTPException(status_code=400, detail="Target type must be RD or SC")
+
+    from backend.services.document_service import _get_project_code_prefix
+    prefix, start = _get_project_code_prefix(db, body.project_type)
+
+    # Auto-generate code
+    from sqlalchemy import func
+    result = db.query(func.max(CachedProject.code)).filter(
+        CachedProject.code.like(f"{prefix}%")
+    ).scalar()
+    if result:
+        try:
+            num = int(result[len(prefix):])
+            next_num = max(start, num + 1)
+        except (ValueError, TypeError):
+            next_num = start
+    else:
+        next_num = start
+    new_code = f"{prefix}{next_num:04d}"
+
+    # Create new project with auto-filled data from source
+    new_project = CachedProject(
+        name=body.name,
+        code=new_code,
+        project_type=body.project_type,
+        status="wait",
+        model="scrum",
+        is_local=True,
+        description=source.description or "",
+        begin=source.begin,
+        end=source.end,
+        customer_name=source.customer_name,
+        estimate=source.estimate or 0,
+        tags=source.tags,
+        planned_delivery_qty=source.planned_delivery_qty or 0,
+        reporter_id=user.id,
+        synced_at=None,
+        linked_project_ids=str(source.id),
+    )
+    db.add(new_project)
+    db.flush()
+
+    # Copy product links from source
+    try:
+        from backend.models.zentao import ProductProjectLink
+        source_links = db.query(ProductProjectLink).filter(
+            ProductProjectLink.project_id == source.id
+        ).all()
+        for link in source_links:
+            db.add(ProductProjectLink(
+                product_id=link.product_id,
+                project_id=new_project.id,
+                quantity=link.quantity,
+            ))
+    except Exception:
+        pass
+
+    # Copy customer links
+    try:
+        from backend.models.zentao import CustomerProjectLink
+        source_cust_links = db.query(CustomerProjectLink).filter(
+            CustomerProjectLink.project_id == source.id
+        ).all()
+        for link in source_cust_links:
+            db.add(CustomerProjectLink(
+                project_id=new_project.id,
+                customer_id=link.customer_id,
+            ))
+    except Exception:
+        pass
+
+    # Bidirectional: add new project to source's linked_project_ids
+    source_ids_str = source.linked_project_ids or ""
+    source_ids = [int(x.strip()) for x in source_ids_str.split(",") if x.strip()]
+    if new_project.id not in source_ids:
+        source_ids.append(new_project.id)
+        source.linked_project_ids = ",".join(str(i) for i in source_ids)
+
+    db.commit()
+
+    # Init stages, docs, tasks from template
+    try:
+        from backend.services.product_management_service import _init_project_stages
+        _init_project_stages(db, new_project.id, body.project_type)
+    except Exception:
+        pass
+    try:
+        from backend.services.document_service import _sync_from_templates, _sync_tasks_from_templates
+        _sync_from_templates(db, new_project.id, body.project_type)
+        _sync_tasks_from_templates(db, new_project.id, body.project_type)
+    except Exception:
+        pass
+
+    log_audit(db, user, "lsj_convert",
+              f"{source.code} → {new_code} ({body.project_type}), name={body.name}",
+              AUDIT_CAT_PROJECT, "high")
+
+    return {
+        "code": 0,
+        "data": {"id": new_project.id, "code": new_code, "name": body.name},
+        "message": "ok",
+    }
 
 
 # ── Edit project (all PMA-managed fields) ──

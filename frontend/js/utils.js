@@ -274,25 +274,6 @@ function clearBellUnread() {
 }
 
 // Extract project code from name: "PE0406-CDLY-xxx" -> "PE0406"
-function extractProjectCode(name, code) {
-  if (code) return code;
-  if (!name) return '';
-  return name.split('-')[0] || '';
-}
-
-// Extract core project name: "PE0406-CDLY-全国产存储板卡" -> "全国产存储板卡"
-// "PE9004-PMAssistant" -> "PMAssistant"
-function extractCoreName(name) {
-  if (!name) return '';
-  var parts = name.split('-');
-  // First segment is always project code (PE0406, PE9004, etc.)
-  // If second segment looks like customer abbreviation (2-6 uppercase), strip it too
-  if (parts.length >= 2 && /^[A-Z]{2,6}$/.test(parts[1])) {
-    return parts.slice(2).join('-') || parts[1]; // fallback to customer if nothing left
-  }
-  return parts.slice(1).join('-') || name;
-}
-
 // Strip HTML tags from a string, returning plain text
 function stripHtml(html) {
   if (!html) return '';
@@ -329,9 +310,7 @@ function projCodeTag(code, clickHandlerOrProjectId, projectName) {
 }
 
 function renderProjectIdBlock(name, customerName) {
-  var code = extractProjectCode(name);
-  var core = extractCoreName(name);
-  var html = projCodeTag(code, null, core) + ' ' + escHtml(core);
+  var html = projCodeTag('', null, name) + ' ' + escHtml(name || '');
   if (customerName) {
     html += ' ' + renderCustomerBadge(customerName);
   }

@@ -313,7 +313,7 @@ async function saveRiskConfig() {
 async function loadProjectTable() {
   var params = dashFilter.buildParams();
   var tbody = document.getElementById('proj-tbody');
-  tbody.innerHTML = '<tr><td colspan="11"><div class="loading-spinner">加载中...</div></td></tr>';
+  tbody.innerHTML = '<tr><td colspan="12"><div class="loading-spinner">加载中...</div></td></tr>';
 
   try {
     var query = Object.keys(params).map(function(k) {
@@ -328,13 +328,13 @@ async function loadProjectTable() {
     }
 
     if (!list.length) {
-      tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state">未找到匹配项目</div></td></tr>';
+      tbody.innerHTML = '<tr><td colspan="12"><div class="empty-state">未找到匹配项目</div></td></tr>';
       return;
     }
 
     tbody.innerHTML = list.map(function(p) {
-      var projCode = extractProjectCode(p.name, p.code);
-      var coreName = extractCoreName(p.name);
+      var projCode = p.code || '';
+      var coreName = p.name || '';
       // Tags
       var tagsList = p.tags_list || [];
       var tagsHtml = '';
@@ -363,11 +363,14 @@ async function loadProjectTable() {
         '<td>' + renderPill(p.status) + '</td>' +
         '<td style="text-align:center">' + renderProgressCircle(parseFloat(p.progress) || 0, 32, { label: '' }) + '</td>' +
         '<td><span class="risk-tag" style="--risk-color:' + riskColor + ';background:' + riskBg + ';font-size:11px">' + riskLabel + '</span></td>' +
+        '<td style="font-size:11px">' + (p.linked_projects && p.linked_projects.length
+          ? p.linked_projects.map(function(lp) { return '<span class="proj-code-btn" style="font-size:10px" onclick="event.stopPropagation();openProject(\'' + escHtml(lp.code || String(lp.id)) + '\')" title="' + escHtml(lp.name || '') + '">' + escHtml(lp.code || lp.name) + '</span>'; }).join(' ')
+          : '<span style="color:var(--muted)">—</span>') + '</td>' +
         '<td>' + tagsHtml + '</td>' +
       '</tr>';
     }).join('');
   } catch(e) {
-    tbody.innerHTML = '<tr><td colspan="11"><div class="error-state">加载失败: ' + escHtml(e.message) + '<br><button onclick="loadProjectTable()">重试</button></div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="12"><div class="error-state">加载失败: ' + escHtml(e.message) + '<br><button onclick="loadProjectTable()">重试</button></div></td></tr>';
   }
 }
 

@@ -64,6 +64,13 @@ async function loadProjectDetail(code) {
 
     var detail = results[0];
     _projDetail = detail;
+    // Update combo and use pushState for navigation from linked project clicks
+    var prevCode = _comboCurCode;
+    _comboCurCode = detail.code || String(detail.id);
+    _comboCurId = detail.id;
+    var comboInput = document.getElementById('combo-input');
+    if (comboInput) comboInput.value = _comboCurCode;
+    var isLinkNav = prevCode && prevCode !== String(code);
     var ganttData = results[1];
     var stages = results[2];
     var docs = results[3];
@@ -99,7 +106,11 @@ async function loadProjectDetail(code) {
     var targetTab = _detailTargetTab || 'info';
     _detailTargetTab = null;
     switchDTab(targetTab);
-    history.replaceState({ view: 'detail', params: [_comboCurCode, targetTab] }, '', buildHash('detail', _comboCurCode, targetTab));
+    if (isLinkNav) {
+      history.pushState({ view: 'detail', params: [_comboCurCode, targetTab] }, '', buildHash('detail', _comboCurCode, targetTab));
+    } else {
+      history.replaceState({ view: 'detail', params: [_comboCurCode, targetTab] }, '', buildHash('detail', _comboCurCode, targetTab));
+    }
   } catch(e) {
     document.getElementById('detail-header').innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '</div>';
   }
@@ -120,8 +131,8 @@ function buildDetailHeader(p) {
     dateHtml = '计划时间待定';
   }
 
-  var projCode = extractProjectCode(p.name, p.code);
-  var coreName = extractCoreName(p.name);
+  var projCode = p.code || '';
+  var coreName = p.name || '';
   document.getElementById('detail-header').innerHTML =
     '<div class="detail-meta">' +
       '<div class="detail-title">' +
@@ -180,24 +191,31 @@ function buildInfo(p, notes, delivery, docs) {
     '</div></div>' +
   '</div>';
 
-  // KPI row 2 — key timeline + delivery + description tags
+  var allLinked = p.linked_projects || [];
+  // Split: 关联商机 = code starts with LSJ; 关联项目 = everything else
+  var linkedOpportunities = allLinked.filter(function(lp) { return lp.code && /^LSJ/i.test(lp.code); });
+  var linkedPeers = allLinked.filter(function(lp) { return !lp.code || !/^LSJ/i.test(lp.code); });
+
+  // KPI row 2 — key timeline + delivery + linked opportunities
   html += '<div class="delivery-kpi" style="grid-template-columns:repeat(4, 1fr);margin-bottom:16px">' +
     '<div class="dkpi"><div class="dkpi-lbl">计划结束</div><div class="dkpi-val" style="font-size:16px;font-weight:600">' + (p.end ? formatDate(p.end) : '<span style="color:var(--muted)">—</span>') + '</div></div>' +
     '<div class="dkpi"><div class="dkpi-lbl">交付数量</div><div class="dkpi-val" style="font-size:16px;font-weight:600">' +
       '<span style="color:var(--success)">' + (del.done || 0) + '</span>' +
       '<span style="color:var(--muted);font-weight:400"> / ' + (del.planned || 0) + '</span>' +
     '</div></div>' +
-    // Description as PMA local tags
-    '<div class="dkpi" style="grid-column:span 2"><div class="dkpi-lbl">项目描述</div><div class="dkpi-val" style="font-size:12px;line-height:1.6">' +
-    (p.tags_list && p.tags_list.length
-      ? p.tags_list.map(function(t, idx) { return '<span class="tag-badge tag-' + (idx % 5) + '" style="font-size:10px;margin-right:2px">#' + escHtml(t) + '</span>'; }).join('')
+    // Linked opportunities (商机) — only LSJ-type projects
+    '<div class="dkpi" style="grid-column:span 2"><div class="dkpi-lbl">关联商机（' + linkedOpportunities.length + '）' +
+      (_hasProjectEditPerm() ? '<a href="javascript:void(0)" onclick="event.stopPropagation();editLinkedProjects()" title="编辑关联商机" style="text-decoration:none;font-size:14px">&#x1F517;</a>' : '') +
+    '</div><div class="dkpi-val" style="font-size:12px;line-height:1.6">' +
+    (linkedOpportunities.length
+      ? linkedOpportunities.map(function(lp) { return '<span class="proj-code-btn" onclick="loadProjectDetail(' + lp.id + ')" title="' + escHtml(lp.name || '') + '">' + escHtml(lp.code || lp.name) + '</span>'; }).join(' ')
       : '<span style="color:var(--muted)">—</span>') +
     '</div></div>' +
   '</div>';
 
   // Linked products + Linked projects — side-by-side cards
   var products = p.linked_products || [];
-  var linkedProjects = p.linked_projects || [];
+  var isOpportunity = p.project_type && p.project_type !== 'RD' && p.project_type !== 'SC';
   html += '<div style="display:flex;gap:16px;margin-bottom:16px">' +
     '<div class="card card-pad" style="flex:1;min-width:0">' +
       '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">关联产品（' + products.length + '）</div>';
@@ -215,11 +233,15 @@ function buildInfo(p, notes, delivery, docs) {
     html += '<div style="font-size:12px;color:var(--muted);font-style:italic">暂无</div>';
   }
   html += '</div>' +
+    // 关联项目 (non-LSJ linked projects)
     '<div class="card card-pad" style="flex:1;min-width:0">' +
-      '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">关联项目（' + linkedProjects.length + '）</div>';
-  if (linkedProjects.length) {
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">关联项目（' + linkedPeers.length + '）' +
+        (isOpportunity && _hasProjectEditPerm() ? ' <a href="javascript:void(0)" onclick="event.stopPropagation();showLsjConvertDialog()" title="商机转化" style="text-decoration:none;font-size:14px">&#x1F504;</a>' : '') +
+        (_hasProjectEditPerm() ? ' ' + '<a href="javascript:void(0)" onclick="event.stopPropagation();editLinkedProjects()" title="编辑关联项目" style="text-decoration:none;font-size:14px">&#x1F517;</a>' : '') +
+      '</div>';
+  if (linkedPeers.length) {
     html += '<div style="display:flex;flex-wrap:wrap;gap:4px">' +
-      linkedProjects.map(function(lp) { return '<span class="proj-code-btn" onclick="loadProjectDetail('+lp.id+')" title="'+escHtml(lp.code||'')+'">'+escHtml(lp.name)+'</span>'; }).join('') +
+      linkedPeers.map(function(lp) { return '<span class="proj-code-btn" onclick="loadProjectDetail('+lp.id+')" title="'+escHtml(lp.code||'')+'">'+escHtml(lp.name)+'</span>'; }).join('') +
     '</div>';
   } else {
     html += '<div style="font-size:12px;color:var(--muted);font-style:italic">暂无</div>';
@@ -362,6 +384,94 @@ async function saveProjectBackground() {
   } catch(e) {
     showToast('保存失败: ' + (e.message || '未知错误'), 'error');
   }
+}
+
+var _editLinkedCodes = [];
+
+async function editLinkedProjects() {
+  if (!_comboCurCode || !_projDetail) return;
+  try {
+    var linked = (await API.get('/projects/' + _comboCurCode + '/linked-projects')) || [];
+    _editLinkedCodes = linked.map(function(p) { return p.code || p.name; });
+
+    var selectedHtml = _editLinkedCodes.length
+      ? '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px" id="edit-linked-selected">' +
+        _editLinkedCodes.map(function(code) {
+          return '<span style="display:inline-flex;align-items:center;gap:2px;background:var(--accent-lt);color:var(--accent);padding:2px 6px;border-radius:4px;font-size:11px;font-family:var(--mono)">' +
+            escHtml(code) + '<button onclick="removeEditLinkedCode(\'' + escHtml(code).replace(/'/g, "\\'") + '\')" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:12px;line-height:1;padding:0">&times;</button></span>';
+        }).join('') + '</div>'
+      : '';
+
+    openDialog('编辑关联项目 — ' + escHtml(_projDetail.name || ''),
+      '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">关联项目</label>' +
+      '<div class="proj-combo" id="edit-linked-combo">' +
+      '<input class="proj-combo-input" id="edit-linked-input" value="" autocomplete="off" placeholder="搜索选择项目..." onfocus="if(window.editLinkedComboOpen)editLinkedComboOpen()" oninput="if(window.editLinkedComboFilter)editLinkedComboFilter(this.value)" onclick="if(window.editLinkedComboOpen)editLinkedComboOpen()">' +
+      '<svg class="proj-combo-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2,5 7,10 12,5"/></svg>' +
+      '<div class="proj-combo-dropdown" id="edit-linked-dd"></div>' +
+      '</div>' + selectedHtml + '</div>',
+      [{text: '取消', onclick: 'closeSharedDialog()'},
+       {text: '保存', cls: 'btn-primary', onclick: 'saveLinkedProjects()'}],
+      {hideClose: true, maxWidth: 460});
+
+    // Init search combo (delayed to ensure DOM ready)
+    setTimeout(function() {
+      if (typeof initSearchCombo === 'function') {
+        initSearchCombo({
+          comboId: 'edit-linked-combo',
+          inputId: 'edit-linked-input',
+          dropdownId: 'edit-linked-dd',
+          dataSource: function() { return API.get('/users/project-options').catch(function() { return []; }); },
+          onSelect: function(p) {
+            var code = p.code || p.name;
+            if (_editLinkedCodes.indexOf(code) < 0) _editLinkedCodes.push(code);
+            _refreshEditLinkedCodes();
+            var el = document.getElementById('edit-linked-input');
+            if (el) el.value = '';
+          }
+        });
+      }
+    }, 150);
+  } catch(e) {
+    showToast('加载失败: ' + (e.message || ''), 'error');
+  }
+}
+
+function _refreshEditLinkedCodes() {
+  var container = document.getElementById('edit-linked-selected');
+  if (!container) return;
+  if (!_editLinkedCodes.length) { container.innerHTML = ''; return; }
+  container.innerHTML = _editLinkedCodes.map(function(code) {
+    return '<span style="display:inline-flex;align-items:center;gap:2px;background:var(--accent-lt);color:var(--accent);padding:2px 6px;border-radius:4px;font-size:11px;font-family:var(--mono)">' +
+      escHtml(code) + '<button onclick="removeEditLinkedCode(\'' + escHtml(code).replace(/'/g, "\\'") + '\')" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:12px;line-height:1;padding:0">&times;</button></span>';
+  }).join('');
+}
+
+window.removeEditLinkedCode = function(code) {
+  _editLinkedCodes = _editLinkedCodes.filter(function(c) { return c !== code; });
+  _refreshEditLinkedCodes();
+};
+
+window.saveLinkedProjects = async function() {
+  // Collect IDs from selected codes
+  try {
+    var allProjects = (await API.get('/users/project-options')) || [];
+    var codeToId = {};
+    allProjects.forEach(function(p) { codeToId[p.code || p.name] = p.id; });
+    var ids = _editLinkedCodes.map(function(c) { return codeToId[c]; }).filter(Boolean);
+  } catch(e) { var ids = []; }
+  closeSharedDialog();
+  try {
+    await API.put('/projects/' + _comboCurCode + '/linked-projects', { ids: ids });
+    showToast('关联项目已更新', 'ok');
+    loadProjectDetail(_comboCurCode);
+  } catch(e) {
+    showToast('保存失败: ' + (e.message || '未知错误'), 'error');
+  }
+};
+
+function showLsjConvertDialog() {
+  if (!_projDetail || !_comboCurCode) return;
+  showProjectFormDialog(false, _projDetail);
 }
 
 /* Gantt Chart */
@@ -1904,12 +2014,17 @@ function buildMaintenance() {
 var _projFormSelectedPids = [];   // selected product IDs
 var _projFormSelectedProdQtys = {};  // product_id -> quantity
 var _projFormLinkedCodes = [];    // selected linked project codes
+var _projFormConvertSource = null; // LSJ source project for conversion mode
 var _projFormSelectedTags = [];   // selected tag names
 var _projFormAllTagsFull = [];    // all tags (for dialog)
 
-function showProjectFormDialog(isEdit) {
+function showProjectFormDialog(isEdit, convertSource) {
   var p = isEdit ? _projDetail : null;
-  var title = isEdit ? ('编辑项目 — ' + escHtml(p ? p.name : '')) : '新建项目';
+  var isConvert = !!convertSource;
+  _projFormConvertSource = convertSource || null;
+  var title = isConvert ? ('商机转化 — ' + escHtml(convertSource.name || ''))
+             : isEdit ? ('编辑项目 — ' + escHtml(p ? p.name : ''))
+             : '新建项目';
 
   // Load all dropdown options in parallel
   Promise.all([
@@ -1928,18 +2043,33 @@ function showProjectFormDialog(isEdit) {
     _projFormSelectedProdQtys = {};
     _projFormLinkedCodes = [];
     _projFormSelectedTags = [];
-    // Pre-fill for edit mode
-    if (isEdit && p) {
-      if (p.linked_products) {
-        _projFormSelectedPids = p.linked_products.map(function(lp) { return lp.id; });
-        p.linked_products.forEach(function(lp) { _projFormSelectedProdQtys[lp.id] = lp.quantity || 1; });
+    // Pre-fill for edit or convert mode
+    if ((isEdit || isConvert) && (p || convertSource)) {
+      var src = isConvert ? convertSource : p;
+      if (src.linked_products) {
+        _projFormSelectedPids = src.linked_products.map(function(lp) { return lp.id; });
+        src.linked_products.forEach(function(lp) { _projFormSelectedProdQtys[lp.id] = lp.quantity || 1; });
       }
-      if (p.linked_project_ids) {
-        _projFormLinkedCodes = p.linked_project_ids.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+      if (src.linked_project_ids) {
+        _projFormLinkedCodes = src.linked_project_ids.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
       }
-      if (p.tags) {
-        _projFormSelectedTags = p.tags.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+      if (src.tags) {
+        _projFormSelectedTags = src.tags.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
       }
+    }
+
+    // In convert mode, use source data as form pre-fill (but keep name/code empty for user input)
+    if (isConvert) {
+      p = {
+        customer_name: convertSource.customer_name,
+        begin: convertSource.begin,
+        end: convertSource.end,
+        estimate: convertSource.estimate,
+        planned_delivery_qty: convertSource.planned_delivery_qty,
+        tags: convertSource.tags,
+        linked_products: convertSource.linked_products,
+        linked_project_ids: convertSource.linked_project_ids
+      };
     }
 
     var tagNames = allTags.filter(function(t) { return t.category === 'project' || !t.category || t.category === ''; }).map(function(t) { return t.name; });
@@ -1962,14 +2092,14 @@ function showProjectFormDialog(isEdit) {
 
     // Product selection: search combo with multi-select (like linked projects)
     var prodSelectedText = '';
-    if (isEdit && p && p.linked_products) {
-      prodSelectedText = p.linked_products.map(function(lp) {
+    if ((isEdit || isConvert) && src && src.linked_products) {
+      prodSelectedText = src.linked_products.map(function(lp) {
         return lp.code || lp.name || '';
       }).join(', ');
     }
 
     // Linked projects: use search combo component
-    var linkedProjSelected = p ? (p.linked_project_ids || '') : '';
+    var linkedProjSelected = (isEdit || isConvert) ? (src ? (src.linked_project_ids || '') : '') : '';
 
     // Code field: readonly by default, admin can unlock via edit icon
     var codeReadonly = ' readonly';
@@ -2414,6 +2544,7 @@ function _autoGenProjCode(force) {
 function showProjectEditDialog() { showProjectFormDialog(true); }
 
 async function saveProjectForm(isEdit) {
+  var isConvert = !!_projFormConvertSource;
   var payload = {};
   var g = function(id) { return document.getElementById(id); };
 
@@ -2421,6 +2552,29 @@ async function saveProjectForm(isEdit) {
   var nameEl = g('proj-form-name');
   var name = (nameEl && nameEl.value || '').trim();
   payload.name = name;
+
+  // For conversion, use the convert endpoint
+  if (isConvert && !isEdit) {
+    if (!name) { showToast('请输入项目名称', 'error'); return; }
+    var projectType = g('proj-form-type').value;
+    closeSharedDialog();
+    try {
+      var result = await API.post('/projects/' + _comboCurCode + '/convert', {
+        project_type: projectType,
+        name: name
+      });
+      showToast('商机转化成功！新项目：' + (result.code || ''), 'ok');
+      _projFormConvertSource = null;
+      if (result && result.code) {
+        _comboCurCode = result.code;
+        document.getElementById('combo-input').value = result.code;
+        loadProjectDetail(result.code);
+      }
+    } catch(e) {
+      showToast('转化失败: ' + (e.message || '未知错误'), 'error');
+    }
+    return;
+  }
 
   var codeEl = g('proj-form-code');
   var code = (codeEl && codeEl.value || '').trim();

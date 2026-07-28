@@ -51,6 +51,7 @@ class LocalProjectCreate(BaseModel):
     tags: Optional[str] = None
     planned_delivery_qty: Optional[int] = None
     consumed: Optional[float] = None
+    linked_project_ids: Optional[str] = None
 
 
 class LocalProjectUpdate(BaseModel):
@@ -331,6 +332,7 @@ def create_local_project(
             tags=body.tags,
             planned_delivery_qty=body.planned_delivery_qty,
             consumed=body.consumed,
+            linked_project_ids=body.linked_project_ids,
         )
         log_audit(db, user, "local_project_create",
                   f"名称={body.name}, 编号={body.code}, 产品数={len(body.product_ids or [])}",
