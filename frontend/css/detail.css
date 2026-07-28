@@ -158,52 +158,44 @@
   box-shadow: 0 0 0 2px var(--accent-lt);
   background: var(--surface);
 }
-/* card-pad hover in info tab side-by-side panels */
-#dsec-info .card-pad, #dsec-info .card:not(.info-glass-card) {
-  transition: border-color 0.12s, box-shadow 0.12s, background 0.12s;
-}
-#dsec-info .card-pad:hover, #dsec-info .card:not(.info-glass-card):hover {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-lt);
-  background: var(--surface);
-}
-/* Frost-glass info card — shared by project & product detail */
+/* ── Frost-glass info card — shared by project/product detail & task dialog ── */
+/* Card appearance, light theme */
 .info-glass-card {
   background: linear-gradient(135deg, rgba(180,188,200,0.5) 0%, rgba(180,188,200,0.15) 100%);
   backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(180,188,200,0.25);
 }
-/* Use parent IDs to beat #dsec-info / #prodsec-info specificity */
-#info-content .info-glass-card .dkpi,
-#info-content .info-glass-card .card-pad,
-#prodsec-info .info-glass-card .dkpi,
-#prodsec-info .info-glass-card .card-pad {
+/* Child dkpi / card-pad — normalize to identical static + hover */
+.info-glass-card .dkpi,
+.info-glass-card .card-pad {
   background: rgba(180,188,200,0.28);
   border-color: rgba(180,188,200,0.2);
+  box-shadow: none;
+  border-radius: 8px;
+  padding: 14px 16px;
+  transition: border-color 0.12s, box-shadow 0.12s, background 0.12s;
 }
-#info-content .info-glass-card .dkpi:hover,
-#info-content .info-glass-card .card-pad:hover,
-#prodsec-info .info-glass-card .dkpi:hover,
-#prodsec-info .info-glass-card .card-pad:hover {
+.info-glass-card .dkpi:hover,
+.info-glass-card .card-pad:hover {
   background: rgba(180,188,200,0.45);
   border-color: rgba(180,188,200,0.4);
   box-shadow: 0 4px 16px rgba(180,188,200,0.2);
 }
+/* Dark theme */
 [data-theme="dark"] .info-glass-card {
   background: linear-gradient(135deg, rgba(152,210,251,0.25) 0%, rgba(152,210,251,0.08) 100%);
   border-color: rgba(152,210,251,0.12);
 }
-[data-theme="dark"] #info-content .info-glass-card .dkpi,
-[data-theme="dark"] #info-content .info-glass-card .card-pad,
-[data-theme="dark"] #prodsec-info .info-glass-card .dkpi,
-[data-theme="dark"] #prodsec-info .info-glass-card .card-pad {
+[data-theme="dark"] .info-glass-card .dkpi,
+[data-theme="dark"] .info-glass-card .card-pad {
   background: rgba(152,210,251,0.18);
   border-color: rgba(152,210,251,0.15);
+  box-shadow: none;
+  border-radius: 8px;
+  padding: 14px 16px;
 }
-[data-theme="dark"] #info-content .info-glass-card .dkpi:hover,
-[data-theme="dark"] #info-content .info-glass-card .card-pad:hover,
-[data-theme="dark"] #prodsec-info .info-glass-card .dkpi:hover,
-[data-theme="dark"] #prodsec-info .info-glass-card .card-pad:hover {
+[data-theme="dark"] .info-glass-card .dkpi:hover,
+[data-theme="dark"] .info-glass-card .card-pad:hover {
   background: rgba(152,210,251,0.3);
   border-color: rgba(152,210,251,0.4);
   box-shadow: 0 4px 16px rgba(152,210,251,0.15);

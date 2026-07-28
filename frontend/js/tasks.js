@@ -10,6 +10,275 @@ function _hasProjectEditPerm() {
   var perms = (user && user.permissions) ? user.permissions.split(',') : [];
   return perms.indexOf('project_edit') !== -1 || perms.indexOf('admin') >= 0;
 }
+
+function _hasTaskEditPerm() {
+  if (typeof getCurrentUser !== 'function') return false;
+  var user = getCurrentUser();
+  var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+  return perms.indexOf('task_edit') !== -1 || perms.indexOf('admin') >= 0;
+}
+
+// ── Inline Edit Engine ──
+
+var _STATUS_OPTS = [{v:'todo',l:'待办'},{v:'in_progress',l:'进行中'},{v:'review',l:'评审中'},{v:'done',l:'已完成'},{v:'closed',l:'已关闭'}];
+var _PRIORITY_OPTS = [{v:'low',l:'低'},{v:'medium',l:'中'},{v:'high',l:'高'},{v:'critical',l:'紧急'}];
+
+function _buildEditableField(taskId, field, inputType, displayHtml, currentVal, opts, extraAttrs) {
+  if (!_hasTaskEditPerm()) return '<span>' + displayHtml + '</span>';
+  var optsJson = opts ? encodeURIComponent(JSON.stringify(opts)) : '';
+  var attrs = extraAttrs || '';
+  if (inputType === 'number') {
+    attrs += ' data-min="' + (opts && opts.min !== undefined ? opts.min : '') + '"';
+    attrs += ' data-max="' + (opts && opts.max !== undefined ? opts.max : '') + '"';
+    attrs += ' data-step="' + (opts && opts.step || '1') + '"';
+  }
+  return '<div class="editable-field" data-task-id="' + taskId + '" data-field="' + field + '" data-input-type="' + inputType + '" data-current-value="' + escHtml(String(currentVal || '')) + '"' + (optsJson ? ' data-opts="' + optsJson + '"' : '') + attrs + ' onclick="event.stopPropagation();_startInlineEdit(this)">' +
+    '<span class="ef-display">' + displayHtml + '</span>' +
+  '</div>';
+}
+
+function _startInlineEdit(el) {
+  if (!_hasTaskEditPerm()) return;
+  var field = el.closest('.editable-field') || el;
+  if (!field || !field.classList.contains('editable-field') || field.classList.contains('editing')) return;
+
+  var taskId = field.dataset.taskId;
+  var fieldName = field.dataset.field;
+  var inputType = field.dataset.inputType;
+  var currentVal = field.dataset.currentValue || '';
+  field._originalHTML = field.innerHTML;
+  field.classList.add('editing');
+
+  if (inputType === 'select') {
+    var optsJson = field.dataset.opts ? decodeURIComponent(field.dataset.opts) : '[]';
+    var opts = JSON.parse(optsJson);
+    var html = '<select class="search-inp ef-input" style="width:100%;box-sizing:border-box;font-size:13px;margin-top:1px">';
+    opts.forEach(function(o) {
+      html += '<option value="' + escHtml(String(o.v)) + '"' + (String(o.v) === String(currentVal) ? ' selected' : '') + '>' + escHtml(o.l) + '</option>';
+    });
+    html += '</select>';
+    html += '<div style="display:flex;gap:10px;margin-top:6px"><button class="btn-xs ef-save-btn" onclick="event.stopPropagation();_saveInlineEdit(this)">✓</button><button class="btn-xs ef-cancel-btn" onclick="event.stopPropagation();_cancelInlineEdit(this)">✕</button></div>';
+    field.innerHTML = html;
+    var sel = field.querySelector('.ef-input');
+    if (sel) { setTimeout(function() { sel.focus(); }, 50); }
+  } else if (inputType === 'user-select') {
+    if (!window._allUsers || !window._allUsers.length) {
+      field.innerHTML = '<span style="font-size:12px;color:var(--muted)">加载用户列表...</span>';
+      (typeof loadAllUsers === 'function' ? loadAllUsers() : Promise.resolve()).then(function() {
+        _renderUserSelect(field, currentVal);
+      });
+      return;
+    }
+    _renderUserSelect(field, currentVal);
+  } else if (inputType === 'stage-select') {
+    var projId = field.dataset.projectId || '';
+    if (!projId) { _cancelInlineEdit(btn); return; }
+    field.innerHTML = '<span style="font-size:12px;color:var(--muted)">加载阶段列表...</span>';
+    var identifier = field.dataset.projectCode || projId;
+    API.get('/projects/' + identifier + '/gantt').then(function(data) {
+      var stages = (data && data.stages) ? data.stages : [];
+      var opts = stages.map(function(s) {
+        return {v: s.name || s.standard_stage || '', l: s.name || s.standard_stage || ''};
+      });
+      field.dataset.opts = encodeURIComponent(JSON.stringify(opts));
+      field.dataset.inputType = 'select';
+      _renderSelectField(field, currentVal, opts);
+    }).catch(function() { _cancelInlineEdit(btn); });
+  } else if (inputType === 'date') {
+    field.innerHTML = '<input type="date" class="search-inp ef-input" value="' + escHtml(currentVal) + '" style="width:100%;box-sizing:border-box;font-size:13px;margin-top:1px">' +
+      '<div style="display:flex;gap:10px;margin-top:6px"><button class="btn-xs ef-save-btn" onclick="event.stopPropagation();_saveInlineEdit(this)">✓</button><button class="btn-xs ef-cancel-btn" onclick="event.stopPropagation();_cancelInlineEdit(this)">✕</button></div>';
+    var inp = field.querySelector('.ef-input');
+    if (inp) { setTimeout(function() { inp.focus(); }, 50); }
+    if (inp) { inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); _saveInlineEdit(inp); } if (e.key === 'Escape') { e.preventDefault(); _cancelInlineEdit(inp); } }); }
+  } else if (inputType === 'number') {
+    var min = field.dataset.min || '';
+    var max = field.dataset.max || '';
+    var step = field.dataset.step || '1';
+    field.innerHTML = '<input type="number" class="search-inp ef-input" value="' + escHtml(currentVal) + '" min="' + min + '" max="' + max + '" step="' + step + '" style="width:100%;box-sizing:border-box;font-size:13px;margin-top:1px">' +
+      '<div style="display:flex;gap:10px;margin-top:6px"><button class="btn-xs ef-save-btn" onclick="event.stopPropagation();_saveInlineEdit(this)">✓</button><button class="btn-xs ef-cancel-btn" onclick="event.stopPropagation();_cancelInlineEdit(this)">✕</button></div>';
+    var inp = field.querySelector('.ef-input');
+    if (inp) { setTimeout(function() { inp.focus(); inp.select(); }, 50); }
+    if (inp) { inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); _saveInlineEdit(inp); } if (e.key === 'Escape') { e.preventDefault(); _cancelInlineEdit(inp); } }); }
+  } else if (inputType === 'text') {
+    field.innerHTML = '<input type="text" class="search-inp ef-input" value="' + escHtml(currentVal) + '" style="width:100%;box-sizing:border-box;font-size:13px;margin-top:1px">' +
+      '<div style="display:flex;gap:10px;margin-top:6px"><button class="btn-xs ef-save-btn" onclick="event.stopPropagation();_saveInlineEdit(this)">✓</button><button class="btn-xs ef-cancel-btn" onclick="event.stopPropagation();_cancelInlineEdit(this)">✕</button></div>';
+    var inp = field.querySelector('.ef-input');
+    if (inp) { setTimeout(function() { inp.focus(); inp.select(); }, 50); }
+    if (inp) { inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); _saveInlineEdit(inp); } if (e.key === 'Escape') { e.preventDefault(); _cancelInlineEdit(inp); } }); }
+  } else if (inputType === 'textarea') {
+    field.innerHTML = '<textarea class="search-inp ef-input" rows="4" style="width:100%;box-sizing:border-box;font-size:13px;margin-top:1px;resize:vertical">' + escHtml(currentVal) + '</textarea>' +
+      '<div style="display:flex;gap:10px;margin-top:6px"><button class="btn-xs ef-save-btn" onclick="event.stopPropagation();_saveInlineEdit(this)">✓</button><button class="btn-xs ef-cancel-btn" onclick="event.stopPropagation();_cancelInlineEdit(this)">✕</button></div>';
+    var inp = field.querySelector('.ef-input');
+    if (inp) { setTimeout(function() { inp.focus(); }, 50); }
+  }
+}
+
+function _renderSelectField(field, currentVal, opts) {
+  field.classList.add('editing');
+  var html = '<select class="search-inp ef-input" style="width:100%;box-sizing:border-box;font-size:13px;margin-top:1px">';
+  opts.forEach(function(o) {
+    html += '<option value="' + escHtml(String(o.v)) + '"' + (String(o.v) === String(currentVal) ? ' selected' : '') + '>' + escHtml(o.l) + '</option>';
+  });
+  html += '</select>';
+  html += '<div style="display:flex;gap:10px;margin-top:6px"><button class="btn-xs ef-save-btn" onclick="event.stopPropagation();_saveInlineEdit(this)">✓</button><button class="btn-xs ef-cancel-btn" onclick="event.stopPropagation();_cancelInlineEdit(this)">✕</button></div>';
+  field.innerHTML = html;
+  var sel = field.querySelector('.ef-input');
+  if (sel) { setTimeout(function() { sel.focus(); }, 50); }
+}
+
+function _renderUserSelect(field, currentVal) {
+  var users = window._allUsers || [];
+  var opts = users.map(function(u) { return {v: u.id, l: u.display_name || u.name || u.username}; });
+  opts.unshift({v: '', l: '— 未分配 —'});
+  field.dataset.opts = encodeURIComponent(JSON.stringify(opts));
+  field.dataset.inputType = 'select';
+  _renderSelectField(field, currentVal, opts);
+}
+
+function _saveInlineEdit(el) {
+  var field = el.closest('.editable-field');
+  if (!field) return;
+  var taskId = field.dataset.taskId;
+  var fieldName = field.dataset.field;
+  var inputType = field.dataset.inputType;
+  var input = field.querySelector('.ef-input');
+  if (!input) return;
+  var newVal = input.value;
+  var currentVal = field.dataset.currentValue || '';
+
+  if (newVal === currentVal && inputType !== 'textarea') {
+    _cancelInlineEdit(el);
+    return;
+  }
+
+  var data = {};
+  if (inputType === 'number') {
+    data[fieldName] = newVal === '' ? null : (parseInt(newVal) || 0);
+  } else if (fieldName === 'assignee_id' || fieldName === 'reviewer_id') {
+    data[fieldName] = newVal === '' ? null : parseInt(newVal);
+  } else if (fieldName === 'estimate_hours') {
+    data[fieldName] = newVal === '' ? null : (parseFloat(newVal) || 0);
+  } else if (fieldName === 'start_date' || fieldName === 'due_date') {
+    data[fieldName] = newVal || null;
+  } else if (fieldName === 'execution_id') {
+    data[fieldName] = parseInt(newVal) || null;
+    data.stage_name = newVal && newVal.startsWith && newVal.startsWith('_') ? newVal.slice(1) : null;
+  } else if (fieldName === 'stage_name') {
+    var selId = field.dataset.executionId || '';
+    if (selId && selId.startsWith('_')) {
+      data.execution_id = null;
+      data.stage_name = newVal;
+    }
+    data[fieldName] = newVal;
+  } else {
+    data[fieldName] = newVal;
+  }
+
+  // Bidirectional sync: progress <-> status
+  if (fieldName === 'progress' || fieldName === 'status') {
+    var progressEl = document.querySelector('.editable-field[data-field="progress"]');
+    var statusEl = document.querySelector('.editable-field[data-field="status"]');
+    var progress = fieldName === 'progress' ? parseInt(newVal) || 0 : parseInt(progressEl ? progressEl.dataset.currentValue : 0) || 0;
+    var status = fieldName === 'status' ? newVal : (statusEl ? statusEl.dataset.currentValue : 'todo');
+    if (progress >= 100 && status !== 'review' && status !== 'done') {
+      status = window._approvalEnabled ? 'review' : 'done';
+      data.status = status;
+    }
+    if (status === 'done' && progress < 100) {
+      progress = 100;
+      data.progress = 100;
+    }
+    if (progress >= 100 && status === 'review' && fieldName === 'progress') {
+      var titleEl = document.querySelector('.note-dialog-title');
+      var taskTitle = titleEl ? titleEl.textContent : '';
+      _pendingConfirmField = { el: field, taskId: taskId, data: data, taskTitle: taskTitle };
+      openDialog('确认提交评审',
+        '<div style="font-size:13px;margin-bottom:8px">进度 <b>100%</b>，任务将进入<b>评审中</b>状态，等待审批人确认。</div>' +
+        '<div style="font-size:11px;color:var(--muted)">任务: ' + escHtml(taskTitle) + '</div>',
+        [
+          {text: '取消', onclick: "var d=document.querySelector('.shared-dialog-overlay');if(d)d.remove();_pendingConfirmField=null;"},
+          {text: '确认', cls: 'btn-primary', onclick: "_confirmSaveField()"},
+        ],
+        {hideClose: true}
+      );
+      return;
+    }
+  }
+
+  _doSaveFieldEdit(taskId, data, field);
+}
+
+var _pendingConfirmField = null;
+function _confirmSaveField() {
+  var d = document.querySelector('.shared-dialog-overlay'); if (d) d.remove();
+  if (!_pendingConfirmField) return;
+  var p = _pendingConfirmField;
+  _pendingConfirmField = null;
+  _doSaveFieldEdit(p.taskId, p.data, p.el);
+}
+
+function _doSaveFieldEdit(taskId, data, field) {
+  field.style.opacity = '0.6';
+  API.put('/tasks/' + taskId, data).then(function(res) {
+    field.style.opacity = '';
+    showToast('已更新', 'success');
+    if (res && res.auto_messages && res.auto_messages.length) {
+      res.auto_messages.forEach(function(msg) { showToast(msg, 'success'); });
+    }
+    var body = document.querySelector('.task-detail-body');
+    if (body) {
+      // Re-fetch and re-render
+      API.get('/tasks/' + taskId).then(function(data) {
+        body.innerHTML = _renderTaskDetailBody(data);
+        _refreshTaskWorklogs(taskId);
+        _loadDetailComments(taskId);
+        setTimeout(function() {
+          initNoteImagePaste('ef-desc');
+        }, 100);
+      }).catch(function() {});
+    }
+    if (typeof loadTaskData === 'function') { loadTaskData(); }
+  }).catch(function(e) {
+    field.style.opacity = '';
+    showToast('保存失败: ' + (e.message || '未知错误'), 'error');
+    _cancelInlineEdit(field);
+  });
+}
+
+function _cancelInlineEdit(el) {
+  var field = el.closest('.editable-field');
+  if (!field) return;
+  if (field._originalHTML) {
+    field.innerHTML = field._originalHTML;
+  }
+  field.classList.remove('editing');
+}
+
+function _loadDetailComments(taskId) {
+  API.get('/task-comments?task_id=' + taskId).then(function(comments) {
+    var el = document.querySelector('.task-detail-comments');
+    if (!el) return;
+    if (!comments || !comments.length) { el.innerHTML = '<div style="color:var(--muted);font-size:12px">暂无评论</div>'; return; }
+    el.innerHTML = '<table class="stage-table" style="width:100%;font-size:12px"><thead><tr>' +
+      '<th style="width:130px">时间</th><th style="width:80px">用户</th><th>内容</th></tr></thead><tbody>' +
+      comments.map(function(c) {
+        return '<tr>' +
+          '<td style="font-size:10px;color:var(--muted);white-space:nowrap">' + (fmtISODateTime(c.created_at) || '') + '</td>' +
+          '<td style="font-size:12px">' + escHtml(c.display_name || c.username) + '</td>' +
+          '<td style="font-size:13px">' + escHtml(c.content) + '</td></tr>';
+      }).join('') + '</tbody></table>';
+  }).catch(function() {});
+}
+
+function _submitDetailComment(taskId) {
+  var input = document.querySelector('.task-detail-comment-input');
+  if (!input || !input.value.trim()) return;
+  API.post('/task-comments', {task_id: taskId, content: input.value.trim()}).then(function() {
+    input.value = '';
+    _loadDetailComments(taskId);
+  }).catch(function(e) { showToast('评论失败: ' + (e.message || ''), 'error'); });
+}
+
 var _taskProjectId = null;   // null = show project selector
 var _taskProjectCode = null;  // project code (e.g. PE0450) for API calls
 var _taskProjectName = '';
@@ -444,7 +713,7 @@ function _renderTaskRowCompact(t, stageStart) {
   var effectiveStart = t.start_date || stageStart || null;
   var startDateStr = effectiveStart || '—';
   var startTitle = effectiveStart ? escHtml(effectiveStart) : (stageStart ? '默认取阶段开始时间' : '未设置');
-  return '<td style="text-align:left;cursor:pointer" onclick="openTaskViewDialog(' + t.id + ')" title="查看任务详情">' + escHtml(t.title) + '</td>' +
+  return '<td style="text-align:left;cursor:pointer" onclick="openTaskDetail(' + t.id + ')" title="查看任务详情">' + escHtml(t.title) + '</td>' +
     '<td style="text-align:center' + (window._approvalEnabled ? ';cursor:pointer' : '') + '"' + (window._approvalEnabled ? ' onclick="event.stopPropagation();openReviewerDialog(' + t.id + ')" title="' + (t.status === 'review' && t.reviewer_name ? '审批人: ' + escHtml(t.reviewer_name) + ' — 点击修改' : '点击修改审批人') + '"' : '') + '>' + renderPill(t.status || 'todo') + '</td>' +
     '<td style="text-align:center">' + (typeof renderPriority === 'function' ? renderPriority(t.priority) : escHtml(t.priority || 'medium')) + '</td>' +
     '<td style="font-size:12px;cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();openAssignDialog(' + t.id + ')" title="指派任务">' + escHtml(assigneeName) + '</td>' +
@@ -520,7 +789,7 @@ function _renderTaskRow(t, stageMap) {
     '<td style="font-size:11px;font-family:var(--mono);color:var(--muted)">#' + t.id + '</td>' +
     '<td>' + (projCode ? projCodeTag(projCode, 'openProject(\'' + escHtml(projCode).replace(/'/g, "\\'") + '\')', t.project_name) : '-') + '</td>' +
     '<td style="text-align:left;font-size:12px">' + escHtml(t.project_name || '-') + '</td>' +
-    '<td style="text-align:left"><a href="javascript:void(0)" onclick="openTaskViewDialog(' + t.id + ')" style="color:var(--accent)">' + escHtml(t.title) + '</a></td>' +
+    '<td style="text-align:left"><a href="javascript:void(0)" onclick="openTaskDetail(' + t.id + ')" style="color:var(--accent)">' + escHtml(t.title) + '</a></td>' +
     '<td>' + (stageName ? '<span style="font-size:11px;color:var(--muted)">' + escHtml(stageName) + '</span>' : '-') + '</td>' +
     '<td style="' + (window._approvalEnabled ? 'cursor:pointer' : '') + '"' + (window._approvalEnabled ? ' onclick="event.stopPropagation();openReviewerDialog(' + t.id + ')" title="' + (t.reviewer_name ? '审批人: ' + escHtml(t.reviewer_name) + ' — 点击修改' : '点击设置审批人') + '"' : '') + '>' + renderPill(t.status || 'todo') + '</td>' +
     '<td>' + _renderPriority(t.priority) + '</td>' +
@@ -576,20 +845,20 @@ function _closeTaskDialog() {
   if (overlay) overlay.remove();
 }
 
-function openTaskViewDialog(taskId) {
+function openTaskDetail(taskId) {
   API.get('/tasks/' + taskId).then(function(data) {
-    _showTaskView(data);
+    _showTaskDetail(data);
   }).catch(function(e) {
     showToast('加载失败: ' + (e.message || ''), 'error');
   });
 }
 
-var _card = 'background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px';
-var _cardHd = 'font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.03em';
-var _grid2 = 'display:grid;grid-template-columns:1fr 1fr;gap:6px 20px';
-var _grid4 = 'display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px 14px';
-var _lbl = 'font-size:11px;color:var(--muted)';
-var _val = 'font-size:13px;margin-top:1px';
+var _card = 'background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:16px;margin-bottom:12px';
+var _cardHd = 'font-size:14px;font-weight:620;letter-spacing:-0.01em;margin-bottom:10px';
+var _grid2 = 'display:grid;grid-template-columns:1fr 1fr;gap:8px 16px';
+var _grid4 = 'display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px 12px';
+var _lbl = 'display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:2px';
+var _val = 'font-size:13px';
 
 function _daysLeft(dueDate) {
   if (!dueDate) return '';
@@ -601,64 +870,107 @@ function _daysLeft(dueDate) {
   return ' (已过期' + Math.abs(diff) + '天)';
 }
 
-function _showTaskView(t) {
-  var labels = {todo:'待办', in_progress:'进行中', review:'评审中', done:'已完成', closed:'已关闭'};
+function _renderTaskDetailBody(t) {
   var overdue = t.due_date && t.status !== 'done' && t.status !== 'closed' && t.due_date < fmtLocalDate();
   var daysInfo = _daysLeft(t.due_date);
-  var projHtml = t.project_code ? projCodeTag(t.project_code, t.project_id, t.project_name) + ' ' + escHtml(t.project_name || '') : escHtml(t.project_name || '-');
+  var projHtml = t.project_code ? projCodeTag(t.project_code, null, t.project_name) + ' ' + escHtml(t.project_name || '') : escHtml(t.project_name || '-');
+  var stageName = escHtml(t.stage_name || t.execution_name || '-');
 
-  var row2 = 'display:grid;grid-template-columns:1fr 1fr;gap:10px';
   var html = '';
 
+  // ── CSS for inline editing ──
+  html += '<style>' +
+    '.task-detail-body .dkpi-val{font-size:14px;font-weight:510}' +
+    '.task-detail-body .dkpi-lbl{font-size:11px}' +
+    '.editable-field{cursor:pointer;display:inline-block;border-radius:5px;padding:2px 8px;margin:-2px -8px;transition:background 0.15s,border-color 0.15s;border:2px solid transparent}' +
+    '.editable-field:hover{background:var(--accent-lt);border-color:var(--accent)}' +
+    '.editable-field.editing{cursor:default;padding:0;margin:0;border:none;display:block}' +
+    '.editable-field.editing:hover{background:transparent;border-color:transparent}' +
+    '.ef-display{display:inline-block;min-width:8px}' +
+    '.ef-save-btn{background:var(--accent-lt);border-color:var(--accent);color:var(--accent);transition:background 0.15s,color 0.15s,border-color 0.15s}' +
+    '.ef-save-btn:hover{background:var(--accent);color:#fff;border-color:var(--accent)}' +
+    '.ef-cancel-btn{background:var(--warn-lt);border-color:var(--warn);color:var(--warn);transition:background 0.15s,color 0.15s,border-color 0.15s}' +
+    '.ef-cancel-btn:hover{background:var(--warn);color:#fff;border-color:var(--warn)}' +
+    '</style>';
+
   // ── Row 1: 基本信息 + 状态与进度 side by side ──
-  html += '<div style="' + row2 + '">' +
+  html += '<div style="display:flex;gap:16px">' +
     // ── 基本信息 ──
-    '<div style="' + _card + '">' +
-      '<div style="' + _cardHd + '">基本信息</div>' +
-      '<div style="' + _grid2 + '">' +
-        '<div><span style="' + _lbl + '">项目</span><div style="' + _val + '">' + projHtml + '</div></div>' +
-        '<div><span style="' + _lbl + '">阶段</span><div style="' + _val + '">' + escHtml(t.stage_name || t.execution_name || '-') + '</div></div>' +
-        '<div><span style="' + _lbl + '">创建人 → 负责人</span><div style="' + _val + '">' + escHtml(t.reporter_name || '-') + ' → ' + escHtml(t.assignee_name || t.assignee_username || '-') + '</div></div>' +
-        '<div><span style="' + _lbl + '">截止日期</span><div style="' + _val + ';color:' + (overdue ? 'var(--danger)' : '') + '">' + (t.due_date || '-') + '<span style="font-size:11px;color:' + (overdue ? 'var(--danger)' : 'var(--muted)') + '">' + daysInfo + '</span></div></div>' +
+    '<div class="card info-glass-card" style="flex:1;min-width:0;padding:20px">' +
+      '<div class="section-hd"><span class="section-title">基本信息</span></div>' +
+      '<div class="delivery-kpi" style="grid-template-columns:1fr 1fr">' +
+        // Title
+        '<div class="dkpi"><div class="dkpi-lbl">标题</div>' +
+          _buildEditableField(t.id, 'title', 'text', '<span class="dkpi-val">' + escHtml(t.title || '—') + '</span>', t.title || '') + '</div>' +
+        // Project (read-only)
+        '<div class="dkpi"><div class="dkpi-lbl">项目</div><div class="dkpi-val">' + projHtml + '</div></div>' +
+        // Stage (editable)
+        '<div class="dkpi"><div class="dkpi-lbl">阶段</div>' +
+          _buildEditableField(t.id, 'stage_name', 'stage-select', '<span class="dkpi-val">' + stageName + '</span>', t.stage_name || t.execution_name || '', {v:'',l:''}, ' data-project-id="' + (t.project_id || '') + '" data-project-code="' + escHtml(t.project_code || '') + '"') + '</div>' +
+        // Reporter (read-only)
+        '<div class="dkpi"><div class="dkpi-lbl">创建人</div><div class="dkpi-val">' + escHtml(t.reporter_name || '—') + '</div></div>' +
+        // Assignee (editable)
+        '<div class="dkpi"><div class="dkpi-lbl">负责人</div>' +
+          _buildEditableField(t.id, 'assignee_id', 'user-select', '<span class="dkpi-val">' + escHtml(t.assignee_name || t.assignee_username || '—') + '</span>', t.assignee_id || '') + '</div>' +
+        // Reviewer (editable, only if approval enabled)
+        (window._approvalEnabled ?
+          '<div class="dkpi"><div class="dkpi-lbl">审批人</div>' +
+            _buildEditableField(t.id, 'reviewer_id', 'user-select', '<span class="dkpi-val">' + escHtml(t.reviewer_name || '—') + '</span>', t.reviewer_id || '') + '</div>'
+          : '') +
+        // Start date (editable)
+        '<div class="dkpi"><div class="dkpi-lbl">计划开始</div>' +
+          _buildEditableField(t.id, 'start_date', 'date', '<span class="dkpi-val">' + (t.start_date || '—') + '</span>', t.start_date || '') + '</div>' +
+        // Due date (editable)
+        '<div class="dkpi"><div class="dkpi-lbl">截止日期</div>' +
+          _buildEditableField(t.id, 'due_date', 'date', '<span class="dkpi-val" style="color:' + (overdue ? 'var(--danger)' : '') + '">' + (t.due_date || '—') + '<span style="font-size:11px;color:' + (overdue ? 'var(--danger)' : 'var(--muted)') + '">' + daysInfo + '</span></span>', t.due_date || '') + '</div>' +
       '</div>' +
     '</div>' +
     // ── 状态与进度 ──
-    '<div style="' + _card + '">' +
-      '<div style="' + _cardHd + '">状态与进度</div>' +
-      '<div style="' + _grid2 + '">' +
-        '<div><span style="' + _lbl + '">状态</span><div style="margin-top:3px">' + renderPill(t.status || 'todo') +
-          (t.status === 'review' && t.reviewer_name ? '<div style="font-size:10px;color:var(--muted);margin-top:2px">审批人: ' + escHtml(t.reviewer_name) + '</div>' : '') + '</div></div>' +
-        '<div><span style="' + _lbl + '">优先级</span><div style="margin-top:3px">' + _renderPriority(t.priority || 'medium') + '</div></div>' +
-        '<div><span style="' + _lbl + '">进度</span><div style="margin-top:2px">' + renderProgressCircle(t.progress || 0, 30, {label:''}) + '</div></div>' +
+    '<div class="card info-glass-card" style="flex:1;min-width:0;padding:20px">' +
+      '<div class="section-hd"><span class="section-title">状态与进度</span></div>' +
+      '<div class="delivery-kpi" style="grid-template-columns:1fr 1fr">' +
+        // Status (editable)
+        '<div class="dkpi"><div class="dkpi-lbl">状态</div>' + _buildEditableField(t.id, 'status', 'select',
+          '<div style="margin-top:6px">' + renderPill(t.status || 'todo') +
+          (t.status === 'review' && t.reviewer_name ? '<div style="font-size:10px;color:var(--muted);margin-top:2px">审批人: ' + escHtml(t.reviewer_name) + '</div>' : '') + '</div>',
+          t.status || 'todo', _STATUS_OPTS) + '</div>' +
+        // Priority (editable)
+        '<div class="dkpi"><div class="dkpi-lbl">优先级</div><div style="margin-top:6px">' + _buildEditableField(t.id, 'priority', 'select', _renderPriority(t.priority || 'medium'), t.priority || 'medium', _PRIORITY_OPTS) + '</div></div>' +
+        // Progress (editable)
+        '<div class="dkpi"><div class="dkpi-lbl">进度(%)</div>' + _buildEditableField(t.id, 'progress', 'number', '<div style="margin-top:6px">' + renderProgressCircle(t.progress || 0, 30, {label:''}) + '</div>', String(t.progress || 0), {min:0,max:100,step:5}) + '</div>' +
+        // Estimate hours (editable)
+        '<div class="dkpi"><div class="dkpi-lbl">预估工时(h)</div>' + _buildEditableField(t.id, 'estimate_hours', 'number', '<span class="dkpi-val">' + (t.estimate_hours || 0).toFixed(1) + 'h</span>', String(t.estimate_hours || 0), {min:0,step:0.5}) + '</div>' +
+        // Hours display (read-only)
         (function() {
-        var orig = t.original_estimate_hours || t.estimate_hours || 0;
-        var est = t.estimate_hours || 0;
-        var cons = t.consumed_hours || 0;
-        var overtime = cons - orig;
-        var h = '<div><span style="' + _lbl + '">工时</span><div style="' + _val + '">';
-        h += '预估 ' + est.toFixed(1) + 'h / 实际 ' + cons.toFixed(1) + 'h';
-        if (overtime > 0 && t.status !== 'done' && t.status !== 'closed') {
-          h += '<br><span style="color:var(--warn);font-size:11px">超时 ' + overtime.toFixed(1) + 'h (原计划 ' + orig.toFixed(1) + 'h)</span>';
-        }
-        h += '</div></div>';
-        return h;
-      })() +
+          var orig = t.original_estimate_hours || t.estimate_hours || 0;
+          var est = t.estimate_hours || 0;
+          var cons = t.consumed_hours || 0;
+          var overtime = cons - orig;
+          var h = '<div class="dkpi"><div class="dkpi-lbl">工时</div><div class="dkpi-val">';
+          h += '预估 ' + est.toFixed(1) + 'h / 实际 ' + cons.toFixed(1) + 'h';
+          if (overtime > 0 && t.status !== 'done' && t.status !== 'closed') {
+            h += '<br><span style="color:var(--warn);font-size:11px">超时 ' + overtime.toFixed(1) + 'h (原计划 ' + orig.toFixed(1) + 'h)</span>';
+          }
+          h += '</div></div>';
+          return h;
+        })() +
       '</div>' +
     '</div>' +
   '</div>';
 
   // ── Section 3: 描述 ──
-  if (t.description) {
-    html += '<div style="' + _card + '">' +
-      '<div style="' + _cardHd + '">描述</div>' +
-      '<div style="font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word">' + escHtml(t.description) + '</div>' +
-    '</div>';
-  }
+  html += '<div class="card info-glass-card" style="margin-top:16px;padding:20px">' +
+    '<div class="section-hd"><span class="section-title">描述</span></div>' +
+    _buildEditableField(t.id, 'description', 'textarea',
+      '<div style="font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word;min-height:20px">' + (t.description ? escHtml(t.description) : '<span style="color:var(--muted)">暂无描述，点击编辑</span>') + '</div>',
+      t.description || '') +
+    '<div id="ef-desc-img-preview" style="margin-top:4px;min-height:0;max-height:50vh;overflow-y:auto"></div>' +
+  '</div>';
 
   // ── Section 4: 产出物 ──
   if (t.output_items && t.output_items.length) {
-    html += '<div style="' + _card + '">' +
-      '<div style="' + _cardHd + '">产出物</div>' +
+    html += '<div class="card info-glass-card" style="margin-top:16px;padding:20px">' +
+      '<div class="section-hd"><span class="section-title">产出物</span></div>' +
       t.output_items.map(function(o) {
         return '<div style="margin-bottom:4px"><a href="' + escHtml(o.url) + '" target="_blank" style="color:var(--accent);font-size:13px">' + escHtml(o.name) + '</a></div>';
       }).join('') +
@@ -666,32 +978,45 @@ function _showTaskView(t) {
   }
 
   // ── Section 5: 工时日志 ──
-  html += '<div style="' + _card + '">' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
-      '<span style="' + _cardHd + ';margin-bottom:0">工时日志 (' + (t.consumed_hours || 0).toFixed(1) + 'h)</span>' +
-      '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px;flex-shrink:0" onclick="openWorklogDialog(' + t.id + ')">+ 记录工时</button>' +
-    '</div>' +
+  html += '<div class="card info-glass-card" style="margin-top:16px;padding:20px">' +
+    '<div class="section-hd"><span class="section-title">工时日志 (' + (t.consumed_hours || 0).toFixed(1) + 'h)</span>' +
+      '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openWorklogDialog(' + t.id + ')">+ 记录工时</button></div>' +
     '<div id="tv-worklogs">加载中...</div>' +
   '</div>';
 
   // ── Section 6: 评论 ──
-  html += '<div style="' + _card + '">' +
-    '<div style="' + _cardHd + '">评论</div>' +
-    '<div id="tv-comments" style="margin-bottom:8px">加载中...</div>' +
+  html += '<div class="card info-glass-card" style="margin-top:16px;padding:20px">' +
+    '<div class="section-hd"><span class="section-title">评论</span></div>' +
+    '<div class="task-detail-comments" style="margin-bottom:8px">加载中...</div>' +
     '<div style="display:flex;gap:8px">' +
-      '<input class="search-inp" id="tv-comment-input" placeholder="添加评论..." style="flex:1">' +
-      '<button class="btn-sm btn-primary" onclick="_submitViewComment(' + t.id + ')">发送</button>' +
+      '<input class="search-inp task-detail-comment-input" placeholder="添加评论..." style="flex:1">' +
+      '<button class="btn-sm btn-primary" onclick="_submitDetailComment(' + t.id + ')">发送</button>' +
     '</div>' +
   '</div>';
 
+  return html;
+}
+
+function _showTaskDetail(t) {
+  var html = '<div class="task-detail-body" style="max-height:75vh;overflow-y:auto;padding-right:4px">' +
+    _renderTaskDetailBody(t) +
+    '</div>';
+
   openDialog(escHtml(t.title), html, [
-    {text: '编辑', cls: 'btn-primary', onclick: '_closeTaskDialog();openTaskDialog(' + t.id + ')'},
     {text: '关闭', onclick: '_closeTaskDialog()'}
   ], {maxWidth: '60%'});
 
   // Async load worklogs and comments (DOM exists after openDialog)
   _refreshTaskWorklogs(t.id);
-  _loadViewComments(t.id);
+  _loadDetailComments(t.id);
+
+  // Init image paste for description if available
+  setTimeout(function() {
+    var descField = document.querySelector('.editable-field[data-field="description"]');
+    if (descField && t.description) {
+      initNoteImagePaste('ef-desc');
+    }
+  }, 200);
 }
 
 function _loadViewComments(taskId) {
@@ -720,6 +1045,7 @@ function _submitViewComment(taskId) {
 }
 
 function openTaskDialog(taskId) {
+  if (taskId) { openTaskDetail(taskId); return; } // route edit to unified detail view
   var isEdit = !!taskId;
   var title = isEdit ? '编辑任务' : '新建任务';
   _tfProjectId = _taskProjectId || window._taskProjectId; _tfProjectCode = _taskProjectCode || window._taskProjectCode || _taskProjectId; // default to page context
@@ -1550,7 +1876,7 @@ async function deleteTask(taskId, taskName) {
     // Fallback DOM search if title not passed
     var rows = document.querySelectorAll('#task-content tr[data-task-id="' + taskId + '"]:not(.task-stage-row), #pma-tasks-content tr[data-task-id="' + taskId + '"]:not(.task-stage-row)');
     for (var i = 0; i < rows.length; i++) {
-      var link = rows[i].querySelector('[onclick*="openTaskViewDialog"]');
+      var link = rows[i].querySelector('[onclick*="openTaskViewDialog"],[onclick*="openTaskDetail"]');
       if (link) { taskTitle = link.textContent.trim(); break; }
     }
   }
