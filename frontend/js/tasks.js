@@ -445,7 +445,7 @@ function _renderTaskRowCompact(t, stageStart) {
   var startDateStr = effectiveStart || '—';
   var startTitle = effectiveStart ? escHtml(effectiveStart) : (stageStart ? '默认取阶段开始时间' : '未设置');
   return '<td style="text-align:left;cursor:pointer" onclick="openTaskViewDialog(' + t.id + ')" title="查看任务详情">' + escHtml(t.title) + '</td>' +
-    '<td style="text-align:center;cursor:pointer" onclick="event.stopPropagation();openReviewerDialog(' + t.id + ')" title="' + (t.status === 'review' && t.reviewer_name ? '审批人: ' + escHtml(t.reviewer_name) + ' — 点击修改' : '点击修改审批人') + '">' + renderPill(t.status || 'todo') + '</td>' +
+    '<td style="text-align:center' + (window._approvalEnabled ? ';cursor:pointer' : '') + '"' + (window._approvalEnabled ? ' onclick="event.stopPropagation();openReviewerDialog(' + t.id + ')" title="' + (t.status === 'review' && t.reviewer_name ? '审批人: ' + escHtml(t.reviewer_name) + ' — 点击修改' : '点击修改审批人') + '"' : '') + '>' + renderPill(t.status || 'todo') + '</td>' +
     '<td style="text-align:center">' + (typeof renderPriority === 'function' ? renderPriority(t.priority) : escHtml(t.priority || 'medium')) + '</td>' +
     '<td style="font-size:12px;cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();openAssignDialog(' + t.id + ')" title="指派任务">' + escHtml(assigneeName) + '</td>' +
     '<td style="text-align:center">' + progressHtml + '</td>' +
@@ -522,7 +522,7 @@ function _renderTaskRow(t, stageMap) {
     '<td style="text-align:left;font-size:12px">' + escHtml(t.project_name || '-') + '</td>' +
     '<td style="text-align:left"><a href="javascript:void(0)" onclick="openTaskViewDialog(' + t.id + ')" style="color:var(--accent)">' + escHtml(t.title) + '</a></td>' +
     '<td>' + (stageName ? '<span style="font-size:11px;color:var(--muted)">' + escHtml(stageName) + '</span>' : '-') + '</td>' +
-    '<td style="cursor:pointer" onclick="event.stopPropagation();openReviewerDialog(' + t.id + ')" title="' + (t.reviewer_name ? '审批人: ' + escHtml(t.reviewer_name) + ' — 点击修改' : '点击设置审批人') + '">' + renderPill(t.status || 'todo') + '</td>' +
+    '<td style="' + (window._approvalEnabled ? 'cursor:pointer' : '') + '"' + (window._approvalEnabled ? ' onclick="event.stopPropagation();openReviewerDialog(' + t.id + ')" title="' + (t.reviewer_name ? '审批人: ' + escHtml(t.reviewer_name) + ' — 点击修改' : '点击设置审批人') + '"' : '') + '>' + renderPill(t.status || 'todo') + '</td>' +
     '<td>' + _renderPriority(t.priority) + '</td>' +
     '<td>' + renderProgressCircle(progressPct, 26, {label:''}) + '</td>' +
     '<td style="color:' + (overdue ? 'var(--danger)' : '') + '">' + (t.due_date || '-') + '</td>' +
@@ -775,11 +775,11 @@ function _showTaskForm(title, task) {
           selectedIdFn: function() { return _tfAssigneeId; },
           onSelect: function(u) { _tfAssigneeId = u.id; }
         }) + '<div id="tf-assignee-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择负责人</div></div></div>' +
-        '<div><label style="' + _lbl + '">审批人</label><div style="margin-top:2px">' + createUserCombo({
+        (window._approvalEnabled ? '<div><label style="' + _lbl + '">审批人</label><div style="margin-top:2px">' + createUserCombo({
           comboId: 'tf-reviewer-combo', inputId: 'tf-reviewer-input', dropdownId: 'tf-reviewer-dropdown',
           selectedIdFn: function() { return _tfReviewerId; },
           onSelect: function(u) { _tfReviewerId = u.id; }
-        }) + '</div></div>' +
+        }) + '</div></div>' : '') +
       '</div>' +
     '</div>' +
     // ── 状态与进度 ──
@@ -874,7 +874,7 @@ function _showTaskForm(title, task) {
         if (ai) ai.value = t.assignee_name;
       }
       // Pre-fill reviewer name
-      if (_tfReviewerId && t.reviewer_name) {
+      if (window._approvalEnabled && _tfReviewerId && t.reviewer_name) {
         var ri = document.getElementById('tf-reviewer-input');
         if (ri) ri.value = t.reviewer_name;
       }
@@ -958,7 +958,7 @@ async function submitTask(taskId) {
     status: document.getElementById('tf-status').value,
     priority: document.getElementById('tf-priority').value,
     assignee_id: _tfAssigneeId,
-    reviewer_id: _tfReviewerId,
+    reviewer_id: window._approvalEnabled ? _tfReviewerId : null,
     progress: parseInt(document.getElementById('tf-progress').value) || 0,
     estimate_hours: parseFloat(document.getElementById('tf-estimate').value) || 0,
     start_date: document.getElementById('tf-start-date').value || null,
@@ -997,8 +997,8 @@ async function submitTask(taskId) {
 
   // Bidirectional sync: progress ↔ status
   if (data.progress >= 100 && data.status !== 'review' && data.status !== 'done') {
-    data.status = 'review';
-    document.getElementById('tf-status').value = 'review';
+    data.status = window._approvalEnabled ? 'review' : 'done';
+    document.getElementById('tf-status').value = data.status;
   }
   if (data.status === 'done' && data.progress < 100) {
     data.progress = 100;

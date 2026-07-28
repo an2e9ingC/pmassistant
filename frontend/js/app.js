@@ -1277,6 +1277,7 @@ async function init() {
   // Load public settings (debug_perm + role-permission mapping)
   API.get('/admin/settings/public').then(function(d) {
     window._debugPermEnabled = d && d.debug_perm;
+    window._approvalEnabled = d && d.approval_enabled !== false;
     if (d && d.perm_roles) window._permRoles = d.perm_roles;
     if (d && d.role_labels) window._roleLabels = d.role_labels;
   }).catch(function() {});
@@ -1481,7 +1482,7 @@ async function initUserCenter(viewUserId) {
       '<div class="profile-tabs">' +
         '<button class="profile-tab-btn tab-tasks active" id="btn-my-tasks" onclick="_ucSwitchTab(\'tasks\')"><span>' + (isViewingOther ? escHtml(user.display_name||user.username) + '的任务' : '我的任务') + '</span><span class="profile-tab-count" id="uc-tasks-count">...</span></button>' +
         '<button class="profile-tab-btn tab-bugs" id="btn-my-bugs" onclick="_ucSwitchTab(\'bugs\')"><span>' + (isViewingOther ? escHtml(user.display_name||user.username) + '的Bug' : '我的Bug') + '</span><span class="profile-tab-count" id="uc-bugs-count">...</span></button>' +
-        '<button class="profile-tab-btn tab-approvals" id="btn-my-approvals" onclick="_ucSwitchTab(\'approvals\')"><span>' + (isViewingOther ? escHtml(user.display_name||user.username) + '的审批' : '我的审批') + '</span><span class="profile-tab-count" id="uc-approvals-count">...</span></button>' +
+        (window._approvalEnabled ? '<button class="profile-tab-btn tab-approvals" id="btn-my-approvals" onclick="_ucSwitchTab(\'approvals\')"><span>' + (isViewingOther ? escHtml(user.display_name||user.username) + '的审批' : '我的审批') + '</span><span class="profile-tab-count" id="uc-approvals-count">...</span></button>' : '') +
       '</div>' +
     '</div>';
 
@@ -1507,9 +1508,9 @@ async function initUserCenter(viewUserId) {
           '<div class="table-scroll" id="uc-bugs-table-wrap"><table class="proj-table clickable"><thead id="uc-bugs-table-head"></thead><tbody id="uc-bugs-table-tbody"></tbody></table></div>' +
         '</div>' +
         // Approvals section (hidden by default)
-        '<div id="uc-approvals-section" style="flex:1;flex-direction:column;min-height:0;display:none">' +
+        (window._approvalEnabled ? '<div id="uc-approvals-section" style="flex:1;flex-direction:column;min-height:0;display:none">' +
           '<div class="table-scroll" id="uc-approvals-table-wrap"><table class="proj-table clickable"><thead id="uc-approvals-table-head"></thead><tbody id="uc-approvals-table-tbody"></tbody></table></div>' +
-        '</div>' +
+        '</div>' : '') +
       '</div>' +
     '</div>' +
     '</div>';
@@ -1545,7 +1546,7 @@ async function initUserCenter(viewUserId) {
   // Preload bug count for the tab button, stats hidden (bugs section not active)
   _ucLoadBugs();
   // Preload approvals count for the tab button
-  _ucLoadApprovals();
+  if (window._approvalEnabled) _ucLoadApprovals();
 }
 
 var _ucTasks = [];
@@ -1608,7 +1609,7 @@ function _ucSwitchTab(tab) {
   } else if (tab === 'bugs') {
     _ucLoadBugs();
   } else if (tab === 'approvals') {
-    _ucLoadApprovals();
+    if (window._approvalEnabled) _ucLoadApprovals();
   }
 }
 
@@ -1716,7 +1717,9 @@ function _renderUcFilterBar() {
   });
   var projs = Object.keys(projSet).sort();
   var projs = Object.keys(projSet).sort();
-  var tabs = [{k:'all',l:'全部',c:_ucTasks.length},{k:'todo',l:'待办',c:counts.todo||0},{k:'in_progress',l:'进行中',c:counts.in_progress||0},{k:'review',l:'评审中',c:counts.review||0},{k:'done',l:'已完成',c:counts.done||0}];
+  var tabs = [{k:'all',l:'全部',c:_ucTasks.length},{k:'todo',l:'待办',c:counts.todo||0},{k:'in_progress',l:'进行中',c:counts.in_progress||0}];
+  if (window._approvalEnabled) tabs.push({k:'review',l:'评审中',c:counts.review||0});
+  tabs.push({k:'done',l:'已完成',c:counts.done||0});
   var prodSelHtml = createProductCombo({
     comboId: 'uc-task-prod-filter', inputId: 'uc-task-prod-filter-input', dropdownId: 'uc-task-prod-filter-dropdown',
     placeholder: '全部产品',
@@ -1794,7 +1797,7 @@ function _renderUcTaskTable() {
       '<td style="text-align:center;font-size:12px">' + prodTag + '</td>' +
       '<td style="font-size:12px">' + escHtml(t.stage_name||'') + '</td>' +
       '<td style="text-align:left;font-weight:530">' + escHtml(t.title) + '</td>' +
-      '<td style="text-align:center;cursor:pointer" onclick="event.stopPropagation();openReviewerDialog(' + t.id + ')" title="' + (t.reviewer_name ? '审批人: ' + escHtml(t.reviewer_name) + ' — 点击修改' : '点击设置审批人') + '">' + renderPill(t.status||'todo') + '</td>' +
+      '<td style="text-align:center' + (window._approvalEnabled ? ';cursor:pointer' : '') + '"' + (window._approvalEnabled ? ' onclick="event.stopPropagation();openReviewerDialog(' + t.id + ')" title="' + (t.reviewer_name ? '审批人: ' + escHtml(t.reviewer_name) + ' — 点击修改' : '点击设置审批人') + '"' : '') + '>' + renderPill(t.status||'todo') + '</td>' +
       '<td style="text-align:center"><span class="prio-tag '+(t.priority||'medium')+'">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[t.priority]||t.priority)+'</span></td>' +
       '<td style="text-align:center">'+renderProgressCircle(pct,36,{label:''})+'</td>' +
       '<td style="text-align:center;font-size:12px;color:'+(overdue?'var(--danger)':'')+'">'+(t.due_date||'-')+'</td>' +

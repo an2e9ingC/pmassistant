@@ -275,21 +275,28 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
     # Auto review flow: progress >= 100 → review (or auto-done if self-review)
     new_progress = data.get("progress")
     if new_progress is not None and new_progress >= 100 and old_status not in ("review", "done"):
-        reviewer_id = None
-        if t.stage_id:
-            from backend.models.project_stage import ProjectStage
-            stage = db.query(ProjectStage).filter(ProjectStage.id == t.stage_id).first()
-            if stage and stage.owner_id:
-                reviewer_id = stage.owner_id
-        if reviewer_id and reviewer_id == t.assignee_id:
-            # Self-review: skip approval, auto-complete
+        approval_enabled = PmaSetting.get(db, "approval_enabled", "1") == "1"
+        if not approval_enabled:
+            # Approval disabled: auto-complete directly
             t.status = "done"
             t.completed_at = datetime.now(timezone.utc)
-            auto_messages.append("审批人与责任人相同，任务已自动完成")
+            auto_messages.append("进度已达100%，任务已自动完成")
         else:
-            t.status = "review"
-            t.reviewer_id = reviewer_id
-            auto_messages.append("进度已达100%，任务已进入评审中")
+            reviewer_id = None
+            if t.stage_id:
+                from backend.models.project_stage import ProjectStage
+                stage = db.query(ProjectStage).filter(ProjectStage.id == t.stage_id).first()
+                if stage and stage.owner_id:
+                    reviewer_id = stage.owner_id
+            if reviewer_id and reviewer_id == t.assignee_id:
+                # Self-review: skip approval, auto-complete
+                t.status = "done"
+                t.completed_at = datetime.now(timezone.utc)
+                auto_messages.append("审批人与责任人相同，任务已自动完成")
+            else:
+                t.status = "review"
+                t.reviewer_id = reviewer_id
+                auto_messages.append("进度已达100%，任务已进入评审中")
         changes.append(f"状态: {old_status} -> {t.status}")
 
     db.commit()

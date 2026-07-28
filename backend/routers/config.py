@@ -339,6 +339,7 @@ PMA_SETTINGS = {
     "pw_verify_product_node_edit": ("产品节点编辑操作确认", "1"),
     "pw_verify_db_delete_backup": ("备份删除操作确认", "1"),
     "debug_perm": ("权限调试信息显示", "0"),
+    "approval_enabled": ("任务审批流程", "1"),
 }
 
 
@@ -367,6 +368,7 @@ def get_public_settings(db: Session = Depends(get_db)):
         "code": 0,
         "data": {
             "debug_perm": PmaSetting.get(db, "debug_perm", "0") == "1",
+            "approval_enabled": PmaSetting.get(db, "approval_enabled", "1") == "1",
             "perm_roles": perm_roles,
             "role_labels": ROLE_LABELS,
         },
