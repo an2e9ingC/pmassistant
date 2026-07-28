@@ -1,5 +1,7 @@
+import json as _json
 import os as _os
 import logging
+import uuid as _uuid
 from datetime import datetime as _datetime
 from urllib.parse import quote as _urlquote
 
@@ -473,6 +475,7 @@ def init_db():
     _migrate_product_hierarchy()
     _migrate_to_sqlcipher()  # Convert unencrypted DB to SQLCipher if key configured
     _clear_gitlab_tokens()   # Force re-auth on server restart
+    _ensure_db_instance_id()  # Ensure instance UUID for DB fingerprint detection
 
     # Seed document templates on first startup
     from backend.services.document_service import seed_document_templates
@@ -542,3 +545,121 @@ def init_db():
         logger.info("User role assignments synced")
     finally:
         db.close()
+
+
+def _ensure_db_instance_id():
+    """Ensure a unique instance UUID is stored in pma_settings.
+
+    Called during init_db() on every startup. If no UUID exists (first run
+    or DB was replaced), generates a new one.
+    """
+    from backend.models.local import PmaSetting
+    db = next(get_db())
+    try:
+        existing = db.query(PmaSetting).filter(PmaSetting.key == "db_instance_id").first()
+        if not existing:
+            inst_id = str(_uuid.uuid4())
+            db.add(PmaSetting(key="db_instance_id", value=inst_id))
+            db.commit()
+            logger.info(f"DB instance ID initialized: {inst_id}")
+    finally:
+        db.close()
+
+
+def _check_db_fingerprint():
+    """Detect if the database file has been replaced since last startup.
+
+    Uses dual fingerprint:
+      - inode (detects file replacement via mv/rm+cp)
+      - UUID stored in pma_settings (detects in-place overwrite via cp)
+
+    Returns a dict with 'replaced'=True if the DB was replaced, None otherwise.
+    """
+    sidecar = _os.path.join(_os.path.dirname(_db_path), ".db-fingerprint")
+
+    # Read previous fingerprint
+    prev = {}
+    if _os.path.exists(sidecar):
+        try:
+            with open(sidecar) as f:
+                prev = _json.load(f)
+        except Exception:
+            pass
+
+    # Current file stats
+    try:
+        st = _os.stat(_db_path)
+        cur_inode = st.st_ino
+    except OSError:
+        return None  # DB not accessible yet
+
+    # Query UUID from DB
+    cur_uuid = None
+    try:
+        from backend.models.local import PmaSetting
+        db = next(get_db())
+        row = db.query(PmaSetting).filter(PmaSetting.key == "db_instance_id").first()
+        if row:
+            cur_uuid = row.value
+        db.close()
+    except Exception:
+        pass
+
+    # First run: no previous fingerprint, store baseline
+    if not prev:
+        _write_db_fingerprint(sidecar, cur_inode, cur_uuid)
+        return None
+
+    replaced = False
+    reason = ""
+
+    # Check 1: inode changed → file was replaced via mv/rm+cp
+    if prev.get("inode") != cur_inode:
+        replaced = True
+        reason = f"inode changed ({prev.get('inode')} → {cur_inode})"
+    # Check 2: UUID mismatch → file was replaced via cp (in-place overwrite)
+    elif prev.get("uuid") != cur_uuid:
+        replaced = True
+        reason = f"db uuid mismatch ({prev.get('uuid')} → {cur_uuid})"
+
+    if replaced:
+        logger.warning(f"Database file replaced: {reason}")
+        return {"replaced": True, "reason": reason, "cur_inode": cur_inode, "cur_uuid": cur_uuid}
+
+    # Normal restart: update fingerprint
+    _write_db_fingerprint(sidecar, cur_inode, cur_uuid)
+    return None
+
+
+def _write_db_fingerprint(sidecar, inode, db_uuid):
+    """Write fingerprint sidecar file."""
+    try:
+        with open(sidecar, "w") as f:
+            _json.dump({"inode": inode, "uuid": db_uuid}, f)
+    except Exception:
+        pass
+
+
+def _log_db_change_if_replaced():
+    """Check fingerprint and log audit entry if DB was replaced.
+
+    Called from main.py startup event after init_db().
+    """
+    result = _check_db_fingerprint()
+    if not result or not result.get("replaced"):
+        return
+
+    try:
+        from backend.routers.logs import log_audit
+        from backend.audit_categories import AUDIT_CAT_SYSTEM
+        from backend.models.local import LocalUser
+        db = next(get_db())
+        # Find an admin user to attribute the log entry
+        admin_user = db.query(LocalUser).filter(LocalUser.role == "admin").first()
+        if admin_user:
+            log_audit(db, admin_user, "db_file_replaced",
+                      f"数据库文件已被替换（{result.get('reason', '')}）",
+                      AUDIT_CAT_SYSTEM, "high")
+        db.close()
+    except Exception as e:
+        logger.warning(f"Failed to log DB replacement: {e}")

@@ -338,7 +338,14 @@ async function deleteBackup(name) {
 }
 
 async function restoreBackup(name) {
-  if (!confirm('确认从备份 ' + name + ' 恢复数据库？\n\n当前数据库将被替换为备份的数据。恢复前会自动备份当前数据库。\n恢复后请刷新页面以加载恢复后的数据。')) return;
+  // Double confirmation: native confirm + type-to-confirm
+  if (!confirm('确认从备份 ' + name + ' 恢复数据库？\n\n当前数据库将被替换为备份的数据。恢复前会自动备份当前数据库。\n恢复后服务器将自动重启，所有用户将被登出。')) return;
+
+  // Type-to-confirm using existing verifyPassword pattern
+  try {
+    var confirmed = await verifyPassword('恢复数据库: ' + name, 'pw_verify_db_restore');
+    if (!confirmed) return;
+  } catch(e) { return; }
 
   // Inline progress toast
   var progEl = document.createElement('div');
