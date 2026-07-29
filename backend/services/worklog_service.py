@@ -1,6 +1,6 @@
 """WorkLog CRUD + calendar aggregation + multi-dimensional summary."""
 from __future__ import annotations
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Optional, List
 
 from sqlalchemy.orm import Session
@@ -8,12 +8,13 @@ from sqlalchemy.sql import func as sa_func
 
 from backend.models.task import WorkLog, Task
 from backend.models.bug import BugWorkLog, PmaBug
+from backend.models.local import PmaSetting
 from backend.database import to_local_str
 
 
 def _auto_update_task_status(db: Session, task_id: int):
-    """Auto-transition task status: todo→in_progress, over-budget→review.
-    Over-budget tasks go to 'review' for user decision instead of auto-completing.
+    """Auto-transition task status: todo→in_progress, over-budget→review/done.
+    When approval is disabled, auto-complete over-budget tasks instead of entering review.
     """
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task or not task.estimate_hours or task.estimate_hours <= 0:
@@ -23,10 +24,16 @@ def _auto_update_task_status(db: Session, task_id: int):
     status = task.status
 
     if consumed >= estimate and status not in ('done', 'closed', 'review'):
-        # Over budget: flag for user decision instead of auto-completing
-        task.status = 'review'
         if not task.original_estimate_hours:
             task.original_estimate_hours = estimate
+        approval_enabled = PmaSetting.get(db, "approval_enabled", "1") == "1"
+        if not approval_enabled:
+            # Approval disabled: auto-complete directly
+            task.status = 'done'
+            task.completed_at = datetime.now(timezone.utc)
+        else:
+            # Approval enabled: flag for user decision
+            task.status = 'review'
         db.commit()
     elif consumed > 0 and status == 'todo':
         task.status = 'in_progress'
