@@ -9,6 +9,7 @@ from sqlalchemy import or_
 from sqlalchemy.sql import func as sa_func
 
 from backend.models.task import Task, WorkLog, TaskComment
+from backend.models.local import PmaSetting
 from backend.database import to_local_str
 from backend.audit_categories import FIELD_LABEL
 
@@ -274,16 +275,18 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
         t.completed_at = datetime.now(timezone.utc)
 
     auto_messages = []
-    # Auto review flow: progress >= 100 → review (or auto-done if self-review)
+    # Auto review flow: progress >= 100 → review (or auto-done if self-review/approval disabled)
     new_progress = data.get("progress")
-    if new_progress is not None and new_progress >= 100 and old_status not in ("review", "done"):
+    if new_progress is not None and new_progress >= 100 and old_status != "done":
         approval_enabled = PmaSetting.get(db, "approval_enabled", "1") == "1"
         if not approval_enabled:
-            # Approval disabled: auto-complete directly
-            t.status = "done"
-            t.completed_at = datetime.now(timezone.utc)
-            auto_messages.append("进度已达100%，任务已自动完成")
-        else:
+            # Approval disabled: auto-complete directly (including from 'review' state)
+            if old_status != "done":
+                t.status = "done"
+                t.completed_at = datetime.now(timezone.utc)
+                auto_messages.append("进度已达100%，任务已自动完成")
+        elif old_status not in ("review",):
+            # Approval enabled and not yet in review: enter review or auto-complete for self-review
             reviewer_id = None
             if t.stage_id:
                 from backend.models.project_stage import ProjectStage
@@ -299,7 +302,8 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
                 t.status = "review"
                 t.reviewer_id = reviewer_id
                 auto_messages.append("进度已达100%，任务已进入评审中")
-        changes.append(f"状态: {old_status} -> {t.status}")
+        if old_status != t.status:
+            changes.append(f"状态: {old_status} -> {t.status}")
 
     db.commit()
     db.refresh(t)
