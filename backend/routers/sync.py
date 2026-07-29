@@ -4,32 +4,47 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
+import logging
+
 from backend.config import settings
 from backend.database import get_db, to_local_str
 from backend.middleware.auth import get_current_user, require_admin, require_perm
 from backend.models.local import SyncLog
+from backend.routers.config import _load_config
+from backend.routers.logs import log_audit
+from backend.audit_categories import AUDIT_CAT_SYSTEM
 from backend.services.sync_service import SyncService
 
 router = APIRouter(prefix="/api/sync", tags=["sync"])
+_logger = logging.getLogger(__name__)
 
 
 @router.post("/trigger", response_model=dict)
-async def trigger_sync(_=Depends(require_perm("sync"))):
+async def trigger_sync(db: Session = Depends(get_db), user: dict = Depends(get_current_user), _=Depends(require_perm("sync"))):
+    _logger.info("全量同步: 手动触发")
+    log_audit(db, user, "trigger_full_sync", "手动触发全量同步", AUDIT_CAT_SYSTEM, "medium")
     svc = SyncService()
     result = await svc.full_sync()
+    summary = result.get("message", "完成")
+    _logger.info(f"全量同步: {summary}")
+    log_audit(db, user, "full_sync_done", f"全量同步完成: {summary}", AUDIT_CAT_SYSTEM, "low")
     return result
 
 
 @router.post("/trigger/{source}", response_model=dict)
-async def trigger_single_sync(source: str, db: Session = Depends(get_db), _=Depends(require_perm("sync"))):
-    """Trigger sync for a single data source (zentao/gitlab/nas/svn)."""
+async def trigger_single_sync(source: str, db: Session = Depends(get_db), user: dict = Depends(get_current_user), _=Depends(require_perm("sync"))):
+    """Trigger sync for a single data source."""
     import time as _time, os as _os
     from datetime import datetime as _dt, timezone as _tz
 
     if source == "svn":
+        _logger.info("SVN 单源同步: 手动触发")
+        log_audit(db, user, "trigger_svn_sync", "手动触发SVN文档扫描", AUDIT_CAT_SYSTEM, "medium")
         from backend.services.doc_scanner import check_product_docs
         from backend.models.zentao import PmaProduct
         from backend.models.document import ProductDocument
+        from backend.services.sync_service import _log_sync as _svn_log_sync, _finish_log as _svn_finish_log
+        svn_sync_log = _svn_log_sync(db, "svn")
         # Clear all document locations before scanning — rely on latest SVN data
         db.query(ProductDocument).filter(
             ProductDocument.location.isnot(None), ProductDocument.location != ""
@@ -38,28 +53,41 @@ async def trigger_single_sync(source: str, db: Session = Depends(get_db), _=Depe
         products = db.query(PmaProduct).all()
         t0 = _time.time()
         total_scanned, total_submitted, total_reverted, total_location, total_matched = 0, 0, 0, 0, 0
-        for prod in products:
-            r = await check_product_docs(db, prod.id)
-            total_scanned += r.get("scanned", 0)
-            total_submitted += r.get("auto_submitted", 0)
-            total_reverted += r.get("reverted", 0)
-            total_location += r.get("location_filled", 0)
-            total_matched += r.get("total_matched", 0)
-        elapsed = round(_time.time() - t0, 1)
-        summary_parts = [f"总匹配{total_matched}个", f"新匹配{total_submitted}个"]
-        if total_reverted: summary_parts.append(f"回退{total_reverted}个")
-        if total_location: summary_parts.append(f"补填路径{total_location}个")
-        return {"code": 0, "data": {
-            "svn_summary": {"status": "success", "summary": " / ".join(summary_parts),
-                             "scanned": total_scanned, "total_matched": total_matched, "auto_submitted": total_submitted,
-                             "reverted": total_reverted, "location_filled": total_location, "products": len(products)},
-            "timings": {"total": elapsed},
-        }, "message": "ok"}
+        try:
+            for prod in products:
+                r = await check_product_docs(db, prod.id, skip_gitlab=True)
+                total_scanned += r.get("scanned", 0)
+                total_submitted += r.get("auto_submitted", 0)
+                total_reverted += r.get("reverted", 0)
+                total_location += r.get("location_filled", 0)
+                total_matched += r.get("total_matched", 0)
+            elapsed = round(_time.time() - t0, 1)
+            summary_parts = [f"总匹配{total_matched}个", f"新匹配{total_submitted}个"]
+            if total_reverted: summary_parts.append(f"回退{total_reverted}个")
+            if total_location: summary_parts.append(f"补填路径{total_location}个")
+            summary = " / ".join(summary_parts)
+            _svn_finish_log(db, svn_sync_log, "success", total_scanned, total_submitted, total_matched)
+            _logger.info(f"SVN 单源同步完成: {summary}")
+            log_audit(db, user, "svn_sync_done", f"SVN同步完成: {summary}", AUDIT_CAT_SYSTEM, "low")
+            return {"code": 0, "data": {
+                "svn_summary": {"status": "success", "summary": summary,
+                                 "scanned": total_scanned, "total_matched": total_matched, "auto_submitted": total_submitted,
+                                 "reverted": total_reverted, "location_filled": total_location, "products": len(products)},
+                "timings": {"total": elapsed},
+            }, "message": "ok"}
+        except Exception as e:
+            _svn_finish_log(db, svn_sync_log, "failed", total_scanned, total_submitted, 0)
+            _logger.error(f"SVN 单源同步失败: {e}")
+            raise
 
     if source == "pdm":
+        _logger.info("PDM 单源同步: 手动触发")
+        log_audit(db, user, "trigger_pdm_sync", "手动触发PDM文档扫描", AUDIT_CAT_SYSTEM, "medium")
         from backend.services.doc_scanner import check_product_docs, check_project_docs
         from backend.models.zentao import PmaProduct, CachedProject
         from backend.models.document import ProductDocument, ProjectDocument
+        from backend.services.sync_service import _log_sync as _pdm_log_sync, _finish_log as _pdm_finish_log
+        pdm_sync_log = _pdm_log_sync(db, "pdm")
         # Clear all solidworks document locations before scanning
         db.query(ProductDocument).filter(
             ProductDocument.doc_type == "solidworks",
@@ -72,35 +100,46 @@ async def trigger_single_sync(source: str, db: Session = Depends(get_db), _=Depe
         db.commit()
         t0 = _time.time()
         total_scanned, total_submitted, total_reverted, total_location, total_matched = 0, 0, 0, 0, 0
-        # Scan product documents
-        for prod in db.query(PmaProduct).all():
-            r = await check_product_docs(db, prod.id)
-            total_scanned += r.get("scanned", 0)
-            total_submitted += r.get("auto_submitted", 0)
-            total_reverted += r.get("reverted", 0)
-            total_location += r.get("location_filled", 0)
-            total_matched += r.get("total_matched", 0)
-        # Scan project documents
-        for proj in db.query(CachedProject).all():
-            r = check_project_docs(db, proj.id)
-            total_scanned += r.get("scanned", 0)
-            total_submitted += r.get("auto_submitted", 0)
-            total_reverted += r.get("reverted", 0)
-            total_location += r.get("location_filled", 0)
-            total_matched += r.get("total_matched", 0)
-        elapsed = round(_time.time() - t0, 1)
-        summary_parts = [f"总匹配{total_matched}个", f"新匹配{total_submitted}个"]
-        if total_reverted: summary_parts.append(f"回退{total_reverted}个")
-        if total_location: summary_parts.append(f"补填路径{total_location}个")
-        return {"code": 0, "data": {
-            "pdm_summary": {"status": "success", "summary": " / ".join(summary_parts),
-                            "scanned": total_scanned, "total_matched": total_matched,
-                            "auto_submitted": total_submitted,
-                            "reverted": total_reverted, "location_filled": total_location},
-            "timings": {"total": elapsed},
-        }, "message": "ok"}
+        try:
+            # Scan product documents
+            for prod in db.query(PmaProduct).all():
+                r = await check_product_docs(db, prod.id, skip_gitlab=True)
+                total_scanned += r.get("scanned", 0)
+                total_submitted += r.get("auto_submitted", 0)
+                total_reverted += r.get("reverted", 0)
+                total_location += r.get("location_filled", 0)
+                total_matched += r.get("total_matched", 0)
+            # Scan project documents
+            for proj in db.query(CachedProject).all():
+                r = check_project_docs(db, proj.id)
+                total_scanned += r.get("scanned", 0)
+                total_submitted += r.get("auto_submitted", 0)
+                total_reverted += r.get("reverted", 0)
+                total_location += r.get("location_filled", 0)
+                total_matched += r.get("total_matched", 0)
+            elapsed = round(_time.time() - t0, 1)
+            summary_parts = [f"总匹配{total_matched}个", f"新匹配{total_submitted}个"]
+            if total_reverted: summary_parts.append(f"回退{total_reverted}个")
+            if total_location: summary_parts.append(f"补填路径{total_location}个")
+            summary = " / ".join(summary_parts)
+            _pdm_finish_log(db, pdm_sync_log, "success", total_scanned, total_submitted, total_matched)
+            _logger.info(f"PDM 单源同步完成: {summary}")
+            log_audit(db, user, "pdm_sync_done", f"PDM同步完成: {summary}", AUDIT_CAT_SYSTEM, "low")
+            return {"code": 0, "data": {
+                "pdm_summary": {"status": "success", "summary": summary,
+                                "scanned": total_scanned, "total_matched": total_matched,
+                                "auto_submitted": total_submitted,
+                                "reverted": total_reverted, "location_filled": total_location},
+                "timings": {"total": elapsed},
+            }, "message": "ok"}
+        except Exception as e:
+            _pdm_finish_log(db, pdm_sync_log, "failed", 0, 0, 0)
+            _logger.error(f"PDM 单源同步失败: {e}")
+            raise
 
     if source == "gitlab":
+        _logger.info("GitLab 单源同步: 手动触发")
+        log_audit(db, user, "trigger_gitlab_sync", "手动触发GitLab文档扫描", AUDIT_CAT_SYSTEM, "medium")
         from backend.config import settings
         if not settings.GITLAB_TOKEN:
             return {"code": 0, "data": {"gitlab_summary": {"status": "skipped", "summary": "未配置Token"}}, "message": "ok"}
@@ -119,6 +158,8 @@ async def trigger_single_sync(source: str, db: Session = Depends(get_db), _=Depe
             if gl_new: summary_parts.append(f"新提交{gl_new}个")
             summary = " / ".join(summary_parts)
             _finish_log(db, gitlab_sync_log, "success", gl_checked, gl_matched, gl_valid)
+            _logger.info(f"GitLab 单源同步完成: {summary}")
+            log_audit(db, user, "gitlab_sync_done", f"GitLab同步完成: {summary}", AUDIT_CAT_SYSTEM, "low")
             return {"code": 0, "data": {
                 "gitlab_summary": {"status": "success", "summary": summary,
                                    "gl_checked": gl_checked, "gl_matched": gl_matched,
@@ -127,6 +168,7 @@ async def trigger_single_sync(source: str, db: Session = Depends(get_db), _=Depe
             }, "message": "ok"}
         except Exception as e:
             _finish_log(db, gitlab_sync_log, "failed", 0, 0, 0)
+            _logger.error(f"GitLab 单源同步失败: {e}")
             raise
 
     if source in ("zentao", "nas"):
@@ -136,24 +178,33 @@ async def trigger_single_sync(source: str, db: Session = Depends(get_db), _=Depe
         }, "message": "ok"}
 
     if source == "wecom":
+        _logger.info("企业微信 单源同步: 手动触发")
+        log_audit(db, user, "trigger_wecom_sync", "手动触发企业微信同步", AUDIT_CAT_SYSTEM, "medium")
         from backend.config import settings
         if not settings.WECOM_CORP_ID or not settings.WECOM_SECRET:
             return {"code": 0, "data": {"wecom_summary": {"status": "skipped", "summary": "未配置企业微信"}}, "message": "ok"}
         from backend.services import wecom_service as _wecom_svc
-        import logging
-        _wc_logger = logging.getLogger(__name__)
+        from backend.services.sync_service import _log_sync as _wc_log_sync, _finish_log as _wc_finish_log
         t0 = _time.time()
+        wc_sync_log = _wc_log_sync(db, "wecom")
         try:
             wc_result = await _wecom_svc.sync_wecom_data(db)
             elapsed = round(_time.time() - t0, 1)
-            _wc_logger.info(f"[企业微信] 单源同步完成: 打卡{wc_result.get('fetched',0)}条 / 新增{wc_result.get('created',0)} / 更新{wc_result.get('updated',0)}")
+            fetched = wc_result.get('fetched', 0)
+            created = wc_result.get('created', 0)
+            updated = wc_result.get('updated', 0)
+            summary = f"打卡{fetched}条 / 新增{created} / 更新{updated}"
+            _wc_finish_log(db, wc_sync_log, "success", fetched, created, updated)
+            _logger.info(f"企业微信 单源同步完成: {summary}")
+            log_audit(db, user, "wecom_sync_done", f"企业微信同步完成: {summary}", AUDIT_CAT_SYSTEM, "low")
             return {"code": 0, "data": {
-                "wecom_summary": {"status": "success",
-                                   "summary": f"打卡{wc_result.get('fetched',0)}条 / 新增{wc_result.get('created',0)} / 更新{wc_result.get('updated',0)}"},
+                "wecom_summary": {"status": "success", "summary": summary},
                 "timings": {"total": elapsed},
             }, "message": "ok"}
         except Exception as e:
-            _wc_logger.error(f"[企业微信] 单源同步失败: {e}")
+            _wc_finish_log(db, wc_sync_log, "failed", 0, 0, 0)
+            _logger.error(f"企业微信 单源同步失败: {e}")
+            log_audit(db, user, "wecom_sync_failed", f"企业微信同步失败: {e}", AUDIT_CAT_SYSTEM, "high")
             return {"code": 0, "data": {
                 "wecom_summary": {"status": "failed", "summary": str(e)[:120]},
                 "timings": {"total": round(_time.time() - t0, 1)},
@@ -261,9 +312,74 @@ def auto_sync_notify(_=Depends(get_current_user)):
 @router.get("/sources", response_model=dict)
 def sync_sources(db: Session = Depends(get_db), _=Depends(get_current_user)):
     """Return configuration and sync status for all data sources."""
+    cfg = _load_config()
     sources = []
 
-    # Zentao — always configured (required)
+    # Helper to build a source entry
+    def _enabled(key: str) -> bool:
+        return cfg.get(key, {}).get("enabled", True)
+
+    # WeCom: configured if corp_id + secret are set
+    wecom_cfg = cfg.get("wecom", {})
+    wecom_configured = bool(wecom_cfg.get("corp_id") and wecom_cfg.get("secret"))
+    wecom_log = (
+        db.query(SyncLog)
+        .filter(SyncLog.entity_type == "wecom")
+        .order_by(SyncLog.started_at.desc())
+        .first()
+    )
+    wecom_detail = "未配置企微"
+    if wecom_configured:
+        if wecom_log and wecom_log.items_fetched is not None:
+            parts = [f"检查{wecom_log.items_fetched}人"]
+            if wecom_log.items_created:
+                parts.append(f"新增{wecom_log.items_created}人")
+            wecom_detail = " / ".join(parts)
+        else:
+            wecom_detail = "已配置，待首次同步"
+    sources.append({
+        "key": "wecom",
+        "name": "企微",
+        "configured": wecom_configured,
+        "enabled": _enabled("wecom"),
+        "sync_status": wecom_log.status if wecom_log else "pending",
+        "last_sync": to_local_str(wecom_log.finished_at) if (wecom_log and wecom_log.finished_at) else None,
+        "description": "企业微信通讯录同步",
+        "detail": wecom_detail,
+    })
+
+    # PDM — SolidWorks PDM vault access
+    pdm_cfg = cfg.get("pdm", {})
+    pdm_configured = bool(pdm_cfg.get("ssh_host") and pdm_cfg.get("base_url"))
+    pdm_log = (
+        db.query(SyncLog)
+        .filter(SyncLog.entity_type == "pdm")
+        .order_by(SyncLog.started_at.desc())
+        .first()
+    )
+    pdm_detail = "未配置PDM"
+    if pdm_configured:
+        if pdm_log and pdm_log.items_fetched is not None:
+            parts = [f"扫描{pdm_log.items_fetched}个", f"匹配{pdm_log.items_created or 0}个"]
+            if pdm_log.items_updated:
+                parts.append(f"有效{pdm_log.items_updated}个")
+            pdm_detail = " / ".join(parts)
+        else:
+            pdm_detail = "已配置，待首次同步"
+    sources.append({
+        "key": "pdm",
+        "name": "PDM",
+        "configured": pdm_configured,
+        "enabled": _enabled("pdm"),
+        "sync_status": pdm_log.status if pdm_log else "pending",
+        "last_sync": to_local_str(pdm_log.finished_at) if (pdm_log and pdm_log.finished_at) else None,
+        "description": "SolidWorks PDM（文档自动检测）",
+        "detail": pdm_detail,
+    })
+
+    # Zentao
+    zentao_cfg = cfg.get("zentao", {})
+    zentao_configured = bool(zentao_cfg.get("base_url") and zentao_cfg.get("account"))
     zentao_log = (
         db.query(SyncLog)
         .filter(SyncLog.entity_type == "projects")
@@ -273,7 +389,6 @@ def sync_sources(db: Session = Depends(get_db), _=Depends(get_current_user)):
     zentao_status = "pending"
     if zentao_log:
         zentao_status = zentao_log.status if zentao_log.status != "running" else "ok"
-    # Build sync result detail from latest SyncLog entries
     zentao_detail = "暂无同步数据"
     if zentao_log:
         entity_types = ["users", "projects", "executions", "tasks", "bugs"]
@@ -288,15 +403,17 @@ def sync_sources(db: Session = Depends(get_db), _=Depends(get_current_user)):
     sources.append({
         "key": "zentao",
         "name": "禅道",
-        "configured": True,
+        "configured": zentao_configured,
+        "enabled": _enabled("zentao"),
         "sync_status": zentao_status,
         "last_sync": to_local_str(zentao_log.finished_at) if (zentao_log and zentao_log.finished_at) else None,
         "description": "项目管理（项目/迭代/任务/Bug/发布版本）",
         "detail": zentao_detail,
     })
 
-    # GitLab — configured if token is set; show product doc scan results
-    gitlab_configured = bool(settings.GITLAB_TOKEN)
+    # GitLab
+    gitlab_cfg = cfg.get("gitlab", {})
+    gitlab_configured = bool(gitlab_cfg.get("token"))
     gitlab_log = (
         db.query(SyncLog)
         .filter(SyncLog.entity_type == "gitlab")
@@ -309,7 +426,6 @@ def sync_sources(db: Session = Depends(get_db), _=Depends(get_current_user)):
         gitlab_sync_status = gitlab_log.status if gitlab_log.status != "running" else "ok"
         gitlab_last_sync = to_local_str(gitlab_log.finished_at) if gitlab_log.finished_at else None
 
-    # Show product doc scan summary
     gitlab_detail = "未配置Token"
     if gitlab_configured:
         if gitlab_log and gitlab_log.items_fetched is not None:
@@ -330,28 +446,33 @@ def sync_sources(db: Session = Depends(get_db), _=Depends(get_current_user)):
         "key": "gitlab",
         "name": "GitLab",
         "configured": gitlab_configured,
+        "enabled": _enabled("gitlab"),
         "sync_status": gitlab_sync_status,
         "last_sync": gitlab_last_sync,
         "description": "代码仓库（产品文档GitLab扫描）" if gitlab_configured else "代码仓库（未配置Token）",
         "detail": gitlab_detail,
     })
 
-    # NAS — not yet integrated
-    nas_host = os.environ.get("NAS_HOST", "")
+    # NAS
+    nas_cfg = cfg.get("nas", {})
+    nas_configured = bool(nas_cfg.get("host"))
+    nas_detail = "未配置NAS路径"
+    if nas_configured:
+        nas_detail = "已配置，待首次同步"
     sources.append({
         "key": "nas",
         "name": "NAS",
-        "configured": bool(nas_host),
+        "configured": nas_configured,
+        "enabled": _enabled("nas"),
         "sync_status": "pending",
         "last_sync": None,
         "description": "文件存储（售前项目检测、交付文档）",
-        "detail": "未配置NAS路径" if not nas_host else "已配置，待首次同步",
+        "detail": nas_detail,
     })
 
-    # SVN — document scanning
-    svn_url = os.environ.get("SVN_BASE_URL", "")
-    svn_configured = bool(svn_url)
-    # Get last SVN scan result from sync log
+    # SVN
+    svn_cfg = cfg.get("svn", {})
+    svn_configured = bool(svn_cfg.get("base_url"))
     svn_sync_log = (
         db.query(SyncLog)
         .filter(SyncLog.entity_type == "svn")
@@ -368,6 +489,7 @@ def sync_sources(db: Session = Depends(get_db), _=Depends(get_current_user)):
         "key": "svn",
         "name": "SVN",
         "configured": svn_configured,
+        "enabled": _enabled("svn"),
         "sync_status": svn_sync_log.status if svn_sync_log else "pending",
         "last_sync": to_local_str(svn_sync_log.finished_at) if (svn_sync_log and svn_sync_log.finished_at) else None,
         "description": "版本管理（产品文档自动扫描）",

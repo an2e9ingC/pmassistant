@@ -88,6 +88,9 @@ do_start() {
         fi
     fi
 
+    echo "[PMA:$PORT] 配置文件: $SCRIPT_DIR/.env"
+    echo "[PMA:$PORT] 数据源配置: $SCRIPT_DIR/data/source_config-$PORT.json"
+    echo "[PMA:$PORT] 数据库:     $SCRIPT_DIR/data/pma-$PORT.db"
     echo -n "[PMA:$PORT] 启动服务器..."
     # Clear shutdown notice on fresh start
     rm -f "$NOTICE_FILE"

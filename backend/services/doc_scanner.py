@@ -968,12 +968,14 @@ async def check_all_product_docs(db, product_ids: list = None, skip_svn: bool = 
     }
 
 
-async def check_product_docs(db, product_id: int) -> dict:
+async def check_product_docs(db, product_id: int, skip_gitlab: bool = False) -> dict:
     """Scan all docs for a product and auto-update statuses.
 
     For GitLab-type docs: uses GitLab Release API to validate release URLs.
     For SVN/NAS-type docs: uses HTTP scanning (SVN PROPFIND / directory listing).
 
+    Args:
+        skip_gitlab: if True, skip GitLab release scanning (e.g. SVN-only sync)
     Returns:
         dict with scanned_count, auto_submitted_count, and per-doc results.
     """
@@ -1018,7 +1020,8 @@ async def check_product_docs(db, product_id: int) -> dict:
                 doc_type = "solidworks"
 
         if _is_gitlab_doc(doc_type, template_path):
-            gitlab_docs.append((doc, template_path))
+            if not skip_gitlab:
+                gitlab_docs.append((doc, template_path))
         else:
             svn_docs.append(doc)
 

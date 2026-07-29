@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="app-version" content="v2026.07.29-beta5">
+<meta name="app-version" content="v2026.07.29-beta7">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>PM Assistant · 集成禅道 & GitLab</title>
 <script>
@@ -233,10 +233,12 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
     </div>
     <div class="topbar-right">
       <div class="src-tags" id="topbar-sources">
-        <span class="src-tag pending" id="src-zentao" onclick="showSrcMenu('zentao',event)"><span class="src-tag-label">禅道</span><span class="src-tag-tip" id="src-zentao-tip"></span></span>
-        <span class="src-tag pending" id="src-gitlab" onclick="showSrcMenu('gitlab',event)"><span class="src-tag-label">GitLab</span><span class="src-tag-tip" id="src-gitlab-tip"></span></span>
-        <span class="src-tag pending" id="src-nas" onclick="showSrcMenu('nas',event)"><span class="src-tag-label">NAS</span><span class="src-tag-tip" id="src-nas-tip"></span></span>
-        <span class="src-tag pending" id="src-svn" onclick="showSrcMenu('svn',event)"><span class="src-tag-label">SVN</span><span class="src-tag-tip" id="src-svn-tip"></span></span>
+        <span class="src-tag pending src-tag-hidden" id="src-zentao" onclick="showSrcMenu('zentao',event)"><span class="src-tag-label">禅道</span><span class="src-tag-tip" id="src-zentao-tip"></span></span>
+        <span class="src-tag pending src-tag-hidden" id="src-gitlab" onclick="showSrcMenu('gitlab',event)"><span class="src-tag-label">GitLab</span><span class="src-tag-tip" id="src-gitlab-tip"></span></span>
+        <span class="src-tag pending src-tag-hidden" id="src-nas" onclick="showSrcMenu('nas',event)"><span class="src-tag-label">NAS</span><span class="src-tag-tip" id="src-nas-tip"></span></span>
+        <span class="src-tag pending src-tag-hidden" id="src-svn" onclick="showSrcMenu('svn',event)"><span class="src-tag-label">SVN</span><span class="src-tag-tip" id="src-svn-tip"></span></span>
+        <span class="src-tag pending src-tag-hidden" id="src-wecom" onclick="showSrcMenu('wecom',event)"><span class="src-tag-label">企微</span><span class="src-tag-tip" id="src-wecom-tip"></span></span>
+        <span class="src-tag pending src-tag-hidden" id="src-pdm" onclick="showSrcMenu('pdm',event)"><span class="src-tag-label">PDM</span><span class="src-tag-tip" id="src-pdm-tip"></span></span>
         <div class="src-sync-wrap" id="src-sync-btn" style="display:none">
           <button class="src-sync-btn" onclick="toggleSyncMenu(event)" title="数据源配置">
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -258,7 +260,7 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
               </svg>
               数据同步
             </button>
-            <button class="src-sync-menu-item" onclick="event.stopPropagation();toggleSyncMenu();openProjectFilterDialog()">
+            <button class="src-sync-menu-item" id="src-sync-filter" onclick="event.stopPropagation();toggleSyncMenu();openProjectFilterDialog()">
               <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polygon points="14 2 6 2 3 6 3 14 14 14"/>
                 <line x1="3" y1="6" x2="6" y2="6"/>
@@ -1091,8 +1093,11 @@ async function triggerSync() {
   var btn = document.querySelector('.src-sync-btn');
   if (btn) { btn.disabled = true; btn.style.opacity = '0.4'; }
 
-  var ztag = document.getElementById('src-zentao');
-  if (ztag) { var zlbl = ztag.querySelector('.src-tag-label'); if (zlbl) zlbl.textContent = '禅道 同步中...'; ztag.className = 'src-tag warn'; }
+  // Only show zentao syncing tag if zentao is enabled
+  if (_srcEnabled && _srcEnabled['zentao']) {
+    var ztag = document.getElementById('src-zentao');
+    if (ztag) { var zlbl = ztag.querySelector('.src-tag-label'); if (zlbl) zlbl.textContent = '禅道 同步中...'; ztag.className = 'src-tag warn'; }
+  }
 
   // Show sync progress with compact inline toast
   var _syncStartTime = Date.now();

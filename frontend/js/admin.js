@@ -12,6 +12,19 @@ async function initAdmin() {
     _adminFormData = data;
     renderConfigForm(_adminFormData);
     loadPmaSettingsUI();
+    // Auto-open config dialog if triggered from topbar dropdown
+    var autoOpen = typeof _getSrcConfigOpenDialog === 'function' ? _getSrcConfigOpenDialog() : undefined;
+    if (autoOpen !== undefined) {
+      setTimeout(function() {
+        if (autoOpen) {
+          openSourceConfigDialog(autoOpen);
+        } else {
+          // No specific key — open first configured section
+          var first = _configSections[0];
+          if (first) openSourceConfigDialog(first.key);
+        }
+      }, 200);
+    }
   } catch(e) {
     container.innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '<br><button onclick="initAdmin()">重试</button></div>';
   }

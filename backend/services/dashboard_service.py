@@ -358,29 +358,33 @@ def _detect_alerts_internal(db: Session) -> list[dict]:
             "stage_name": r.name,
         })
 
-    # Data source unconfigured alerts
-    from backend.config import settings
-    import os
+    # Data source unconfigured alerts (only for enabled sources)
+    from backend.routers.config import _load_config
+    cfg = _load_config()
 
-    if not settings.GITLAB_TOKEN:
-        alert_id += 1
-        alerts.append({
-            "id": alert_id, "severity": "yellow",
-            "message": "GitLab 数据源未配置",
-            "sub_message": "请在「管理 → 数据源配置」中填写 GitLab Token",
-            "project_id": None, "product_id": None,
-            "stage_name": "GitLab",
-        })
-
-    nas_host = os.environ.get("NAS_HOST", "")
-    if not nas_host:
-        alert_id += 1
-        alerts.append({
-            "id": alert_id, "severity": "yellow",
-            "message": "NAS 数据源未配置",
-            "sub_message": "请在「管理 → 数据源配置」中填写 NAS 连接信息",
-            "project_id": None, "product_id": None,
-            "stage_name": "NAS",
-        })
+    _source_checks = [
+        ("zentao", "禅道", "base_url", "禅道 URL 和账号", "zentao"),
+        ("gitlab", "GitLab", "token", "GitLab Token", "GitLab"),
+        ("nas", "NAS", "host", "NAS 连接信息", "NAS"),
+        ("svn", "SVN", "base_url", "SVN 地址", "SVN"),
+        ("pdm", "PDM", "ssh_host", "PDM SSH 连接信息", "PDM"),
+        ("wecom", "企微", "corp_id", "企业微信 Corp ID 和 Secret", "企微"),
+    ]
+    for key, name, check_field, sub_msg, stage in _source_checks:
+        section = cfg.get(key, {})
+        enabled = section.get("enabled", True)
+        if not enabled:
+            continue
+        # Check if the source is configured (has the key credential field)
+        configured = bool(section.get(check_field, "").strip())
+        if not configured:
+            alert_id += 1
+            alerts.append({
+                "id": alert_id, "severity": "yellow",
+                "message": f"{name} 数据源未配置",
+                "sub_message": f"请在「管理 → 数据源配置」中填写 {sub_msg}",
+                "project_id": None, "product_id": None,
+                "stage_name": stage,
+            })
 
     return alerts
