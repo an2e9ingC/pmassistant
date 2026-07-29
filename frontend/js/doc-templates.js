@@ -29,18 +29,34 @@ function _sortStageTypes(types) {
   });
 }
 
-// Role options for responsible_role dropdown
-var ROLE_OPTIONS = [
-  '销售及售前', 'CTO', 'CEO', '项目经理',
-  '硬件开发', '硬件测试', '结构设计及装配',
-  'BSP开发', '业务软件开发', '测试交付',
-  '采购', '质检', '库房管理',
-];
+// Role options for responsible_role dropdown — loaded dynamically from server.
+// Falls back to built-in defaults (matching backend ROLE_LABELS) before the first API response.
+var _DEFAULT_ROLE_LABELS = {
+  'public': '普通用户', 'admin': '管理员', 'ceo': 'CEO', 'cto': 'CTO', 'pm': '项目经理',
+  'sales': '销售及售前', 'hw_dev': '硬件开发', 'structure': '结构设计及装配',
+  'hw_test': '硬件测试', 'bsp_dev': 'BSP开发', 'sw_dev': '业务软件开发',
+  'test_delivery': '测试交付', 'procurement': '采购', 'quality': '质检',
+  'warehouse': '库房管理', 'viewer': '只读用户',
+};
+
+function _getRoleLabels() {
+  return window._roleLabels || _DEFAULT_ROLE_LABELS;
+}
 
 function _roleSelect(selected) {
+  var labels = _getRoleLabels();
+  // Use label text as both option value and display for backward compatibility
+  // (responsible_role column stores labels, not keys).
+  var options = [];
+  var seen = {};
+  Object.keys(labels).forEach(function(k) {
+    var v = labels[k];
+    if (!seen[v]) { seen[v] = true; options.push(v); }
+  });
+  options.sort();
   return '<select class="search-inp" id="dt-role" style="margin-top:4px;padding:7px 8px">' +
     '<option value="">— 请选择 —</option>' +
-    ROLE_OPTIONS.map(function(r) {
+    options.map(function(r) {
       return '<option value="' + r + '"' + (r === selected ? ' selected' : '') + '>' + r + '</option>';
     }).join('') +
   '</select>';

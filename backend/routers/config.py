@@ -360,9 +360,14 @@ def get_public_settings(db: Session = Depends(get_db)):
     from backend.models.local import Role
 
     roles = db.query(Role).all()
+    # Merge ROLE_LABELS (built-in defaults) with DB roles — custom roles added via
+    # admin panel (e.g. FPGA) are only in the DB, not in the hardcoded dict.
+    role_labels = dict(ROLE_LABELS)
+    for r in roles:
+        role_labels[r.key] = r.label
     perm_roles = {}
     for p in ALL_PERMISSIONS:
-        perm_roles[p] = [ROLE_LABELS.get(r.key, r.key) for r in roles if p in (r.permissions or "").split(",")]
+        perm_roles[p] = [role_labels.get(r.key, r.key) for r in roles if p in (r.permissions or "").split(",")]
 
     return {
         "code": 0,
@@ -370,7 +375,7 @@ def get_public_settings(db: Session = Depends(get_db)):
             "debug_perm": PmaSetting.get(db, "debug_perm", "0") == "1",
             "approval_enabled": PmaSetting.get(db, "approval_enabled", "1") == "1",
             "perm_roles": perm_roles,
-            "role_labels": ROLE_LABELS,
+            "role_labels": role_labels,
         },
         "message": "ok",
     }
