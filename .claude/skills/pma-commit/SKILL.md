@@ -69,10 +69,10 @@ Co-Authored-By: <model-name> / <tool-name>
 
 ### 3. 停服 → Commit → 重启
 
-1. `./server.sh -p <PORT> stop`
+1. `./server.sh stop -p <PORT>`
 2. `git add ...`（**只添加本次会话修改的文件**，不含会话前工作区已有改动；**必须包含步骤 1 中更新的版本信息文件**：`frontend/index.html`、`frontend/login.html`、`docs/dev-plan.md`；add 后 `git diff --cached --stat` 确认暂存范围无误）
 3. `git commit -m "..."`（AI 生成 commit 必须加 `Co-Authored-By:`）
-4. `./server.sh -p <PORT> restart`
+4. `./server.sh restart -p <PORT>`
 5. `index_repository(repo_path="/home/xuchuan/workspace/pma", mode="moderate")`
 6. **GitLab Issue 评论**：如果 commit message 中包含 `Closes #N`，使用 `scripts/gitlab_issue_comment.py` 发布评论：
 

@@ -139,7 +139,7 @@ PYEOF
   - Div 配对检查（前端改动时）：`grep -c '<div ' <file>` vs `grep -c '</div>' <file>`
   - 残留引用检查：删除的 id/class/函数名用 grep 确认无残留
   - 后端改动：确认 audit log + `to_iso_str` 规范
-- 后端 `.py` 修改后 `./server.sh -p <PORT> restart`
+- 后端 `.py` 修改后 `./server.sh restart -p <PORT>`
 
 ### 6. 用户反馈迭代
 - 告知问题原因

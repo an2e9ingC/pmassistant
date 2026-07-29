@@ -45,9 +45,9 @@ export PMA_WORKTREE_DIR="<EnterWorktree 返回的实际路径>"
 | Read / Write / Edit 代码文件 | `$PMA_WORKTREE_DIR/path/to/file` | `Write(file_path="$PMA_WORKTREE_DIR/frontend/js/app.js")` |
 | Bash 中修改/创建/删除文件 | `$PMA_WORKTREE_DIR/...` | `rm $PMA_WORKTREE_DIR/data/temp.txt` |
 | Bash 中执行 git 命令 | `cd $PMA_WORKTREE_DIR && git ...` | `cd $PMA_WORKTREE_DIR && git status` |
-| 启动/停止 worktree 服务 | `cd $PMA_WORKTREE_DIR && ./server.sh ...` | `cd $PMA_WORKTREE_DIR && ./server.sh -p $PORT restart` |
+| 启动/停止 worktree 服务 | `cd $PMA_WORKTREE_DIR && ./server.sh ...` | `cd $PMA_WORKTREE_DIR && ./server.sh restart -p $PORT` |
 | 读取 trunk 配置文件（只读） | `$PMA_TRUNK_DIR/...` | `cp $PMA_TRUNK_DIR/.env $PMA_WORKTREE_DIR/.env` |
-| 操作 trunk 服务（启动/停止） | `cd $PMA_TRUNK_DIR && ./server.sh ...` | `cd $PMA_TRUNK_DIR && ./server.sh -p 8000 stop` |
+| 操作 trunk 服务（启动/停止） | `cd $PMA_TRUNK_DIR && ./server.sh ...` | `cd $PMA_TRUNK_DIR && ./server.sh stop -p 8000` |
 
 ### 禁止事项
 
@@ -60,7 +60,7 @@ export PMA_WORKTREE_DIR="<EnterWorktree 返回的实际路径>"
 
 - ✅ **只读**：`cat`、`cp <trunk> <worktree>`（从 trunk 拷贝到 worktree）、`ls`、`git log` 等
 - ✅ **git 读写**：`git fetch`、`git push`、`git merge` 等（git 操作的是仓库元数据，不直接修改 trunk 文件）
-- ✅ **服务管理**：`cd $PMA_TRUNK_DIR && ./server.sh -p 8000 stop/start/restart`
+- ✅ **服务管理**：`cd $PMA_TRUNK_DIR && ./server.sh stop -p 8000/start/restart`
 
 ---
 
@@ -122,9 +122,9 @@ export PMA_WORKTREE_DIR="<EnterWorktree 返回的实际路径>"
        echo "使用备份数据库: $(basename $LATEST_BACKUP)"
    else
        echo "无备份可用，停服拷贝..."
-       cd $PMA_TRUNK_DIR && ./server.sh -p 8000 stop
+       cd $PMA_TRUNK_DIR && ./server.sh stop -p 8000
        cp $PMA_TRUNK_DIR/data/pma-8000.db $PMA_WORKTREE_DIR/data/pma-$PORT.db
-       cd $PMA_TRUNK_DIR && ./server.sh -p 8000 start
+       cd $PMA_TRUNK_DIR && ./server.sh start -p 8000
    fi
    ```
    > - 备份文件位于 `data/backups/pma-backup-YYYYMMDD-HHMMSS.db`
@@ -140,7 +140,7 @@ export PMA_WORKTREE_DIR="<EnterWorktree 返回的实际路径>"
 
    c. **启动 worktree 服务**：
    ```bash
-   cd $PMA_WORKTREE_DIR && ./server.sh -p $PORT restart
+   cd $PMA_WORKTREE_DIR && ./server.sh restart -p $PORT
    ```
 
 ### 完成后强制输出（fork 返回前必须显示）
@@ -166,9 +166,9 @@ export PMA_WORKTREE_DIR="<EnterWorktree 返回的实际路径>"
 ## 资源隔离
 
 ```
-主 session (trunk):  cd $PMA_TRUNK_DIR && ./server.sh -p 8000 restart
-Worktree A:         cd $PMA_WORKTREE_DIR && ./server.sh -p 8001 restart
-Worktree B:         cd $PMA_WORKTREE_DIR && ./server.sh -p 8002 restart
+主 session (trunk):  cd $PMA_TRUNK_DIR && ./server.sh restart -p 8000
+Worktree A:         cd $PMA_WORKTREE_DIR && ./server.sh restart -p 8001
+Worktree B:         cd $PMA_WORKTREE_DIR && ./server.sh restart -p 8002
 ```
 
 | 文件 | 说明 |
