@@ -254,29 +254,39 @@ def _pdm_path_to_windows(template_path: str) -> str:
     return p.replace("/", "\\")
 
 
-def _resolve_pdm_path(template_path: str):  # -> Optional[str]
-    """Resolve a PDM template path (with wildcards) to a specific file URL.
+def _resolve_pdm_path(template_path: str):  # -> Tuple[Optional[str], int, bool]
+    """Resolve a PDM template path (with wildcards) to a file or folder URL.
 
     Uses SSH to list directories and match wildcard patterns.
-    Returns the full PDM Web2 URL of the first matching file, or None.
+    Folder-level: when the last segment is exactly '*', check if the parent
+    folder has any content (not matching individual files).
+    Returns (url, file_count, is_folder):
+      - url: resolved PDM Web2 URL (file or folder), or None
+      - file_count: number of entries in folder (>0 for folder-level), 0 otherwise
+      - is_folder: True when template path's last segment is exactly '*'
     """
     ssh, base_path = _pdm_ssh_client()
     if not ssh:
-        return None
+        return None, 0, False
     try:
         rel_path = _pdm_path_to_windows(template_path)
         # Safety: reject paths that try to escape via ..
         if ".." in rel_path:
             logger.warning(f"[pdm] unsafe path: {rel_path!r}")
-            return None
+            return None, 0, False
 
-        # Parse wildcards using _parse_doc_path
-        # For Windows paths, convert to file:// URL for _parse_doc_path
-        # Actually, _parse_doc_path expects a URL, let's handle wildcards manually
         from urllib.parse import unquote
 
         # Split into segments and resolve wildcards level by level
         segments = rel_path.split("\\")
+
+        # Folder-level template: last segment is literally "*" (not "*.pdf" etc.)
+        is_folder = len(segments) > 0 and segments[-1] == "*"
+        if is_folder:
+            segments = segments[:-1]  # strip the "*" — target is the parent folder
+            if not segments:
+                return None, 0, True  # path was just "*" — nothing to resolve
+
         resolved = []
 
         for seg_idx, seg in enumerate(segments):
@@ -287,27 +297,38 @@ def _resolve_pdm_path(template_path: str):  # -> Optional[str]
                 matched = [e for e in entries if re.match(regex_str, e, re.IGNORECASE)]
                 if matched:
                     resolved.append(matched[0])
-                    if seg_idx == len(segments) - 1:
-                        return _build_pdm_url("\\".join([base_path] + resolved))
+                    if not is_folder and seg_idx == len(segments) - 1:
+                        full_path = "\\".join([base_path] + resolved)
+                        return _build_pdm_url(full_path), 1, False
                 else:
                     remaining = "\\".join(segments[len(resolved):])
                     file_regex = _glob_to_regex(remaining) if ("*" in remaining or "?" in remaining) else re.escape(remaining)
                     matched_files = [e for e in entries if re.match(file_regex, e, re.IGNORECASE)]
                     if matched_files:
-                        return _build_pdm_url("\\".join([base_path] + resolved + [matched_files[0]]))
-                    return None
+                        full_path = "\\".join([base_path] + resolved + [matched_files[0]])
+                        return _build_pdm_url(full_path), 1, False
+                    if is_folder:
+                        return None, 0, True
+                    return None, 0, False
             else:
                 resolved.append(seg)
 
-        # All segments resolved (no wildcards at end)
+        # All segments resolved
         current_dir = "\\".join([base_path] + resolved)
         entries = _list_directory_pdm(ssh, current_dir)
+        if is_folder:
+            # Folder-level: return folder URL + entry count if non-empty
+            if entries:
+                return _build_pdm_url(current_dir), len(entries), True
+            return None, 0, True
+        # File-level (no wildcards): return first entry as the resolved file
         if entries:
-            return _build_pdm_url("\\".join([base_path] + resolved + [entries[0]]))
-        return None
+            full_path = "\\".join([base_path] + resolved + [entries[0]])
+            return _build_pdm_url(full_path), 1, False
+        return None, 0, False
     except Exception as e:
         logger.warning(f"[pdm] resolve failed for {template_path!r}: {e}")
-        return None
+        return None, 0, False
     finally:
         try:
             ssh.close()
@@ -1097,14 +1118,16 @@ async def check_product_docs(db, product_id: int) -> dict:
 
         exists = False
         mismatch = ""
+        file_count = 0
 
         # PDM (solidworks) docs: use SSH-based directory listing
         if doc.doc_type == "solidworks":
             try:
-                matched_url = _resolve_pdm_path(template_path or check_path)
+                matched_url, file_count, is_folder = _resolve_pdm_path(template_path or check_path)
                 exists = matched_url is not None
             except Exception as e:
                 matched_url = None
+                file_count = 0
                 exists = False
                 logger.warning(f"[pdm] Scan failed for doc {doc.id} ({doc.doc_name}): {e}")
         # If a location was previously resolved, just check if it still exists
@@ -1154,6 +1177,7 @@ async def check_product_docs(db, product_id: int) -> dict:
             "mismatch": mismatch,
             "prev_status": doc.status,
             "doc_type": doc_type,
+            "file_count": file_count,
         })
 
         now = _dt.utcnow()
@@ -1163,6 +1187,8 @@ async def check_product_docs(db, product_id: int) -> dict:
             if not doc.location or doc.location != loc_url:
                 doc.location = loc_url
                 location_filled += 1
+            if file_count and doc.file_count != file_count:
+                doc.file_count = file_count
             if doc.status != "submitted":
                 doc.status = "submitted"
                 doc.completed_at = now
@@ -1263,6 +1289,7 @@ def check_project_docs(db, project_id: int) -> dict:
         scanned += 1
         exists = False
         mismatch = ""
+        file_count = 0
         matched_url = None
 
         logger.warning(f"[project-doc-scan] #{doc.id} '{doc.doc_name}' path={check_path[:120]}")
@@ -1270,10 +1297,11 @@ def check_project_docs(db, project_id: int) -> dict:
         # PDM (solidworks) docs: use SSH-based directory listing
         if doc.doc_type == "solidworks":
             try:
-                matched_url = _resolve_pdm_path(template_path or check_path)
+                matched_url, file_count, is_folder = _resolve_pdm_path(template_path or check_path)
                 exists = matched_url is not None
             except Exception as e:
                 matched_url = None
+                file_count = 0
                 exists = False
                 logger.warning(f"[pdm] Scan failed for doc {doc.id} ({doc.doc_name}): {e}")
         # If a location was previously resolved, just check if it still exists
@@ -1325,6 +1353,7 @@ def check_project_docs(db, project_id: int) -> dict:
             "mismatch": mismatch,
             "prev_status": doc.status,
             "doc_type": doc_type,
+            "file_count": file_count,
         })
 
         now = _dt.utcnow()
@@ -1335,6 +1364,8 @@ def check_project_docs(db, project_id: int) -> dict:
             if not doc.location or doc.location != loc_url:
                 doc.location = loc_url
                 location_filled += 1
+            if file_count and doc.file_count != file_count:
+                doc.file_count = file_count
             if doc.status != "submitted":
                 doc.status = "submitted"
                 doc.completed_at = now

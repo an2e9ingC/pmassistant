@@ -650,6 +650,7 @@ def _query_project_documents(db: Session, project_id: int, include_removed: bool
             "updated_at": to_local_str(pd_doc.updated_at) if pd_doc.updated_at else None,
             "is_optional": bool(pd_doc.is_optional),
             "is_removed": bool(pd_doc.is_removed),
+            "file_count": pd_doc.file_count or 0,
         })
     return docs
 
@@ -703,6 +704,7 @@ def _doc_dict(pd: ProjectDocument) -> dict:
         "updated_at": to_local_str(pd.updated_at) if pd.updated_at else None,
         "is_removed": bool(pd.is_removed),
         "is_optional": bool(pd.is_optional),
+        "file_count": pd.file_count or 0,
     }
 
 
@@ -1260,6 +1262,7 @@ def get_or_init_product_documents(db: Session, product_id: int) -> list[dict]:
                 "warn": warn,
                 "is_optional": bool(existing.is_optional),
                 "is_removed": bool(existing.is_removed),
+                "file_count": existing.file_count or 0,
                 "location": existing.location or "",
                 "mismatch": mismatch,
                 "uploaded_by": existing.uploaded_by or "",

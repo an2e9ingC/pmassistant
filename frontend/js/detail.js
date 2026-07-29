@@ -1113,6 +1113,10 @@ function buildDocs(data) {
           locHtml = '<span style="font-size:11px;color:var(--muted);font-style:italic">' + escHtml(d.location) + '</span>';
         } else if (d.mismatch) {
           locHtml = '<span style="color:var(--danger)">' + escHtml((d.location||'').replace(/^请提交到：/,'')) + '</span><br><span style="font-size:10px;color:var(--danger)">' + escHtml(d.mismatch) + '</span>';
+        } else if (d.file_count && d.file_count > 0 && d.done && d.location) {
+          // PDM folder-level: file count badge before path
+          locHtml = '<span style="display:inline-block;background:var(--accent-lt);color:var(--accent);font-size:10px;padding:1px 6px;border-radius:10px;font-weight:500;white-space:nowrap;border:1px solid var(--accent);margin-right:4px">' + d.file_count + ' 文件</span>' +
+            '<a href="' + escHtml(d.location) + '" target="_blank" style="color:var(--accent);text-decoration:none;word-break:break-all" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">' + escHtml(d.location) + '</a>';
         } else if (d.done && d.location) {
           locHtml = '<a href="' + escHtml(d.location) + '" target="_blank" style="color:var(--accent);text-decoration:none;word-break:break-all" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">' + escHtml(d.location) + '</a>';
         } else if (hasError && d.location) {

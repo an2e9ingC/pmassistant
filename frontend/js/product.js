@@ -1105,11 +1105,14 @@ function _renderProdDocsInline(docs) {
         '<td style="font-size:11px;' + cellStyle + '">' + escHtml(typeLabels[d.doc_type] || '—') + '</td>' +
         '<td style="font-size:12px;text-align:left;word-break:break-all;' + cellStyle + '">' + (d.mismatch
           ? '<span style="color:var(--danger)">' + escHtml((d.location||'').replace(/^请提交到：/,'')) + '</span><br><span style="font-size:10px;color:var(--danger)">' + escHtml(d.mismatch) + '</span>'
-          : (d.location
+          : (d.file_count && d.file_count > 0 && d.done && d.location
+            ? '<span style="display:inline-block;background:var(--accent-lt);color:var(--accent);font-size:10px;padding:1px 6px;border-radius:10px;font-weight:500;white-space:nowrap;border:1px solid var(--accent);margin-right:4px">' + d.file_count + ' 文件</span>' +
+              '<a href="' + escHtml(d.location) + '" target="_blank" style="color:var(--accent);text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">' + escHtml(d.location) + '</a>'
+            : (d.location
             ? (hasError
               ? '<span style="color:var(--danger)">' + escHtml((d.location||'').replace(/^请提交到：/,'')) + '</span><br><span style="font-size:10px;color:var(--danger)">文件不存在或无法访问</span>'
               : '<a href="' + escHtml(d.location) + '" target="_blank" style="color:var(--accent);text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">' + escHtml(d.location) + '</a>')
-            : (d.doc_path ? '<span style="color:var(--muted);font-style:italic">请提交到：' + escHtml(d.doc_path) + '</span>' : '—'))) +
+            : (d.doc_path ? '<span style="color:var(--muted);font-style:italic">请提交到：' + escHtml(d.doc_path) + '</span>' : '—')))) +
           // Show template path only when not yet submitted (helps user verify match)
           (d.doc_path && d.location && !d.done ? '<br><span style="font-size:10px;color:var(--muted)">模板: ' + escHtml(d.doc_path) + '</span>' : '') +
         '</td>' +

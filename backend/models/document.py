@@ -49,6 +49,7 @@ class ProjectDocument(Base):
     updated_by = Column(String(64), nullable=True)
     is_optional = Column(Integer, default=0)  # 0=必选 1=可选（从模板复制）
     is_removed = Column(Integer, default=0)  # 0=正常 1=已删除（可选项被项目移除）
+    file_count = Column(Integer, default=0)  # 文件夹内条目数（0=单文件/不适用，>0=PDM文件夹级模板）
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
@@ -152,6 +153,7 @@ class ProductDocument(Base):
     updated_by = Column(String(64), nullable=True)
     is_optional = Column(Integer, default=0)  # 0=必选 1=可选（从模板复制）
     is_removed = Column(Integer, default=0)  # 0=正常 1=已删除（可选项被移除）
+    file_count = Column(Integer, default=0)  # 文件夹内条目数（0=单文件/不适用，>0=PDM文件夹级模板）
     svn_author = Column(String(128), nullable=True)  # SVN 最后提交人
     svn_last_modified = Column(String(128), nullable=True)  # SVN 最后修改时间（北京时间 YYYY-MM-DD HH:MM:SS）
     svn_rev = Column(String(32), nullable=True)  # SVN 最后提交版本号（version-name）
