@@ -3,8 +3,13 @@ import os
 
 def _load_dotenv(path: str = ".env") -> None:
     """Load KEY=VALUE pairs from a .env file into os.environ (if not already set)."""
+    _abs = os.path.abspath(path)
     if not os.path.exists(path):
+        print(f"[config] .env missing at {_abs}, using env defaults", flush=True)
         return
+    print(f"[config] Loading .env from {_abs} ({os.path.getsize(path)} bytes)", flush=True)
+    _loaded = 0
+    _skipped = 0
     with open(path) as f:
         for line in f:
             line = line.strip()
@@ -13,8 +18,13 @@ def _load_dotenv(path: str = ".env") -> None:
             key, _, val = line.partition("=")
             key = key.strip()
             val = val.strip().strip('"').strip("'")
-            if key and key not in os.environ:
-                os.environ[key] = val
+            if key:
+                if key not in os.environ:
+                    os.environ[key] = val
+                    _loaded += 1
+                else:
+                    _skipped += 1
+    print(f"[config] .env loaded {_loaded} vars, skipped {_skipped} (already set)", flush=True)
 
 
 _load_dotenv()

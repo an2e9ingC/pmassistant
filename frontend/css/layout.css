@@ -259,6 +259,8 @@
   border-color: var(--border) !important;
 }
 .topbar .src-tag.pending::before { background: var(--muted) !important; }
+/* hidden: overrides display:inline-flex!important when source is disabled/unconfigured */
+.topbar .src-tag.src-tag-hidden { display: none !important; }
 
 /* Sync button */
 .topbar .src-sync-btn {

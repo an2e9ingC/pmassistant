@@ -45,6 +45,15 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting PMA backend...")
+    _env_path = _os.path.abspath(".env")
+    _db_path = _os.path.abspath(getattr(_db_module, "_db_path", "data/pma-8800.db"))
+    _cfg_path = _os.path.abspath(f"data/source_config-{_port}.json") if _port else _os.path.abspath("data/source_config-8800.json")
+    _env_exists = _os.path.isfile(_env_path)
+    _cfg_exists = _os.path.isfile(_cfg_path)
+    _db_exists = _os.path.isfile(_db_path)
+    logger.info(f"配置文件: {_env_path}" + (" (存在)" if _env_exists else " (缺失)"))
+    logger.info(f"数据源配置: {_cfg_path}" + (" (存在)" if _cfg_exists else " (未创建)"))
+    logger.info(f"数据库:   {_db_path}" + (" (存在)" if _db_exists else " (新建)"))
     init_db()
     logger.info("Database initialized")
     from backend.database import _log_db_change_if_replaced

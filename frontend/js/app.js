@@ -564,8 +564,9 @@ function toggleTheme() {
 
 /* Data Source Status — topbar tags */
 
-var _srcStates = { zentao: 'pending', gitlab: 'pending', nas: 'pending', svn: 'pending', wecom: 'pending' };
-var _srcDetails = { zentao: '', gitlab: '', nas: '', svn: '', wecom: '' };
+var _srcStates = { zentao: 'pending', gitlab: 'pending', nas: 'pending', svn: 'pending', wecom: 'pending', pdm: 'pending' };
+var _srcDetails = { zentao: '', gitlab: '', nas: '', svn: '', wecom: '', pdm: '' };
+var _srcEnabled = { zentao: false, gitlab: false, nas: false, svn: false, wecom: false, pdm: false };
 var _srcSyncMsg = {};
 
 function updateLinkStatus() {
@@ -574,9 +575,12 @@ function updateLinkStatus() {
     sources.forEach(function(s) {
       var key = s.key;
       if (!_srcStates.hasOwnProperty(key)) return;
+      _srcEnabled[key] = s.enabled === true;
       _srcDetails[key] = s.detail || '';
-      if (!s.configured) {
+      if (!s.enabled) {
         _srcStates[key] = 'pending';
+      } else if (!s.configured) {
+        _srcStates[key] = 'warn';
       } else if (s.sync_status === 'success') {
         _srcStates[key] = 'ok';
       } else if (s.sync_status === 'failed') {
@@ -613,7 +617,7 @@ function showSrcMenu(key, e) {
   var tag = document.getElementById('src-' + key);
   if (!tag) return;
   var rect = tag.getBoundingClientRect();
-  var names = { zentao: '禅道', gitlab: 'GitLab', nas: 'NAS', svn: 'SVN', wecom: '企微' };
+  var names = { zentao: '禅道', gitlab: 'GitLab', nas: 'NAS', svn: 'SVN', wecom: '企微', pdm: 'PDM' };
   var name = names[key] || key;
   var menu = document.createElement('div');
   menu.id = 'src-popup-menu';
@@ -625,7 +629,7 @@ function showSrcMenu(key, e) {
     '<button onclick="triggerSingleSync(\'' + key + '\');var m=document.getElementById(\'src-popup-menu\');if(m)m.remove()" style="display:block;width:100%;padding:8px 14px;border:none;background:var(--surface);color:var(--fg);font-size:13px;text-align:left;cursor:pointer;transition:background 0.1s" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'var(--surface)\'">' +
       '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:8px;vertical-align:middle"><polyline points="1.5,5.5 3.5,2.5 1.5,2.5"/><polyline points="14.5,10.5 12.5,13.5 14.5,13.5"/><path d="M2.5 8a5.5 5.5 0 0 1 10-2.5"/><path d="M13.5 8a5.5 5.5 0 0 1-10 2.5"/></svg>同步此数据源' +
     '</button>' +
-    '<button onclick="gotoSrcConfig(\'' + key + '\');var m=document.getElementById(\'src-popup-menu\');if(m)m.remove()" style="display:block;width:100%;padding:8px 14px;border:none;background:var(--surface);color:var(--fg);font-size:13px;text-align:left;cursor:pointer;transition:background 0.1s" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'var(--surface)\'">' +
+    '<button onclick="openConfigDialog(\'' + key + '\');var m=document.getElementById(\'src-popup-menu\');if(m)m.remove()" style="display:block;width:100%;padding:8px 14px;border:none;background:var(--surface);color:var(--fg);font-size:13px;text-align:left;cursor:pointer;transition:background 0.1s" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'var(--surface)\'">' +
       '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-right:8px;vertical-align:middle"><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v2M8 12.5v2M2.5 8h2M11.5 8h2"/></svg>配置此数据源' +
     '</button>' +
     (key === 'svn' ? '<button onclick="clearSVNSync();var m=document.getElementById(\'src-popup-menu\');if(m)m.remove()" style="display:block;width:100%;padding:8px 14px;border:none;background:var(--surface);color:var(--danger);font-size:13px;text-align:left;cursor:pointer;transition:background 0.1s" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'var(--surface)\'">' +
@@ -649,8 +653,14 @@ async function clearSVNSync() {
 }
 
 async function triggerSingleSync(key) {
-  var names = { zentao: '禅道', gitlab: 'GitLab', nas: 'NAS', svn: 'SVN', wecom: '企业微信' };
+  var names = { zentao: '禅道', gitlab: 'GitLab', nas: 'NAS', svn: 'SVN', wecom: '企业微信', pdm: 'PDM' };
   var name = names[key] || key;
+  // Show syncing state on tag label + tooltip
+  _srcSyncMsg[key] = '同步中...';
+  var el = document.getElementById('src-' + key);
+  var labelEl = el ? el.querySelector('.src-tag-label') : null;
+  if (labelEl) labelEl.textContent = name + ' 同步中...';
+  renderSourceTags();
   showToast(name + ' 同步中...', 'info');
   try {
     var result = await API.post('/sync/trigger/' + key);
@@ -666,6 +676,10 @@ async function triggerSingleSync(key) {
       var ws = d.wecom_summary || {};
       summary = ws.summary || '完成';
       status = ws.status === 'failed' ? 'error' : 'success';
+    } else if (key === 'pdm') {
+      var ps = d.pdm_summary || {};
+      summary = ps.summary || '完成';
+      status = ps.status === 'failed' ? 'error' : 'success';
     } else {
       summary = '已触发（请使用完整同步）';
     }
@@ -673,6 +687,8 @@ async function triggerSingleSync(key) {
     showToast(name + ' 同步完成: ' + summary, status);
     updateLinkStatus();
   } catch(e) {
+    _srcSyncMsg[key] = '同步失败';
+    if (labelEl) labelEl.textContent = name;
     showToast(name + ' 同步失败: ' + (e.message || '未知错误'), 'error');
   }
 }
@@ -683,6 +699,12 @@ function gotoSrcConfig(key) {
   window._srcConfigHighlight = key;
 }
 
+// Open the config edit dialog directly for a source (or all)
+function openConfigDialog(key) {
+  window._srcConfigOpenDialog = key || null;  // null = open first section
+  gotoView('config');
+}
+
 // Called by renderConfigForm to add highlight
 function _getSrcConfigHighlight() {
   var k = window._srcConfigHighlight;
@@ -690,21 +712,32 @@ function _getSrcConfigHighlight() {
   return k;
 }
 
-function renderSourceTags() {
-  var names = { zentao: '禅道', gitlab: 'GitLab', nas: 'NAS', svn: 'SVN', wecom: '企微' };
+// Called by initAdmin to auto-open dialog
+function _getSrcConfigOpenDialog() {
+  var k = window._srcConfigOpenDialog;
+  window._srcConfigOpenDialog = null;
+  return k;
+}
 
-  ['zentao', 'gitlab', 'nas', 'svn', 'wecom'].forEach(function(key) {
+function renderSourceTags() {
+  var names = { zentao: '禅道', gitlab: 'GitLab', nas: 'NAS', svn: 'SVN', wecom: '企微', pdm: 'PDM' };
+
+  Object.keys(_srcStates).forEach(function(key) {
     var el = document.getElementById('src-' + key);
     if (!el) return;
+    var enabled = _srcEnabled[key] === true;
+    el.classList.toggle('src-tag-hidden', !enabled);
+    if (!enabled) return;
     var state = _srcStates[key] || 'pending';
     el.className = 'src-tag ' + state;
-    // Label: source name only; status/details in hover tooltip
     var label = el.querySelector('.src-tag-label');
     if (label) label.textContent = names[key];
-    // Tooltip: sync overview > config detail > fallback
     var tip = el.querySelector('.src-tag-tip');
     if (tip) tip.textContent = _srcSyncMsg[key] || _srcDetails[key] || names[key] + ' 连接状态未知';
   });
+  // Hide project filter menu item when zentao is disabled
+  var filterBtn = document.getElementById('src-sync-filter');
+  if (filterBtn) filterBtn.style.display = (_srcEnabled['zentao'] ? '' : 'none');
 }
 
 /* Notification Dropdown — shows recent toasts + system alerts */

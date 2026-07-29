@@ -152,7 +152,7 @@ NAS 文件 ───────────┘
 |---------|-----------|
 | `./server.sh status` | 查看所有运行实例概览 |
 | `./server.sh stop` | 停止所有实例 |
-| 后端 .py 修改 | `Skill("code-review")` → 修复 → `./server.sh -p <PORT> restart` |
+| 后端 .py 修改 | `Skill("code-review")` → 修复 → `./server.sh restart -p <PORT>` |
 
 ---
 
@@ -177,7 +177,7 @@ NAS 文件 ───────────┘
 2. 修复 review 发现的问题
 3. 重启服务器验证：
 ```bash
-./server.sh -p <PORT> restart
+./server.sh restart -p <PORT>
 ```
 
 **纯前端修改（`frontend/**`）**：

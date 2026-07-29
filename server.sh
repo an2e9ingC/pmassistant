@@ -17,10 +17,7 @@ detect_ip() {
 usage() {
     echo "PMA Server Management"
     echo ""
-    echo "Usage: $0 [-p <port>] <command>"
-    echo ""
-    echo "Options:"
-    echo "  -p <port>  指定端口号（默认 8800，也支持 PMA_PORT 环境变量）"
+    echo "Usage: $0 <command> [-p <port>]"
     echo ""
     echo "Commands:"
     echo "  start    启动服务器（后台运行）"
@@ -31,11 +28,14 @@ usage() {
     echo "  tail     实时跟踪系统日志"
     echo "  help     显示此帮助"
     echo ""
+    echo "Options:"
+    echo "  -p <port>  指定端口号（默认 8000，也支持 PMA_PORT 环境变量）"
+    echo ""
     echo "Examples:"
     echo "  $0 status             # 查看所有运行实例"
-    echo "  $0 -p 8800 status     # 查看 8800 端口详细状态"
-    echo "  $0 -p 8801 start      # 在 8801 端口启动"
-    echo "  $0 -p 8801 restart    # 重启 8801 端口服务"
+    echo "  $0 status -p 8000     # 查看 8000 端口详细状态"
+    echo "  $0 start -p 8001      # 在 8001 端口启动"
+    echo "  $0 restart -p 8001    # 重启 8001 端口服务"
     exit 0
 }
 
@@ -88,6 +88,9 @@ do_start() {
         fi
     fi
 
+    echo "[PMA:$PORT] 配置文件: $SCRIPT_DIR/.env"
+    echo "[PMA:$PORT] 数据源配置: $SCRIPT_DIR/data/source_config-$PORT.json"
+    echo "[PMA:$PORT] 数据库:     $SCRIPT_DIR/data/pma-$PORT.db"
     echo -n "[PMA:$PORT] 启动服务器..."
     # Clear shutdown notice on fresh start
     rm -f "$NOTICE_FILE"
@@ -429,22 +432,26 @@ do_tail() {
 
 # ── Dispatch ──
 
-# Parse -p <port> argument
+# Parse arguments in any order: ./server.sh [-p <port>] <command>
+CMD=""
 PORT_ARG=""
 PORT_EXPLICIT=0
 while [ $# -gt 0 ]; do
     case "$1" in
         -p) PORT_ARG="$2"; PORT_EXPLICIT=1; shift 2 ;;
-        *)  break ;;
+        start|stop|restart|status|logs|tail|help) CMD="$1"; shift ;;
+        *)  echo "未知参数: $1"; usage ;;
     esac
 done
-# Determine default port before -p override
+CMD="${CMD:-help}"
+
+# Determine default port
 DEFAULT_PORT="${PMA_PORT:-8000}"
 PORT="${PORT_ARG:-$DEFAULT_PORT}"
 # Trunk branch: force default port for start/restart, ignore -p
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 if [ "$CURRENT_BRANCH" = "trunk" ] && [ "$PORT_EXPLICIT" -eq 1 ]; then
-    case "${1:-help}" in
+    case "$CMD" in
         start|restart)
             echo "[PMA] trunk 分支仅允许使用默认端口 $DEFAULT_PORT，忽略 -p $PORT_ARG"
             PORT="$DEFAULT_PORT"
@@ -457,7 +464,7 @@ SERVER_LOG="$SCRIPT_DIR/data/server-$PORT.log"
 NOTICE_FILE="$SCRIPT_DIR/data/.shutdown-notice-$PORT.json"
 BASE_URL="${PMA_URL:-http://$(detect_ip):$PORT}"
 
-case "${1:-help}" in
+case "$CMD" in
     start)   do_start ;;
     stop)
         if [ "$PORT_EXPLICIT" -eq 1 ]; then
