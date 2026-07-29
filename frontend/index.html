@@ -1144,6 +1144,25 @@ async function triggerSync() {
         if (p.tasks_total) parts.push('任务 ' + p.tasks_total);
         statsEl.textContent = parts.join(' · ') || '';
       }
+      // Update source tag labels to show which source is syncing
+      var phaseMap = { 'GitLab文档扫描': 'gitlab', 'SVN文档扫描': 'svn', 'PDM文档扫描': 'pdm', '企业微信同步': 'wecom' };
+      var activeKey = phaseMap[p.phase];
+      ['zentao','gitlab','svn','pdm','wecom'].forEach(function(k) {
+        var el = document.getElementById('src-' + k);
+        if (!el || !_srcEnabled || !_srcEnabled[k]) return;
+        var lbl = el.querySelector('.src-tag-label');
+        if (!lbl) return;
+        if (k === activeKey) {
+          lbl.textContent = lbl.textContent.replace(' 同步中...', '') + ' 同步中...';
+          el.className = 'src-tag warn';
+        } else if (!activeKey && (p.phase === '用户' || p.phase === '项目' || p.phase === '执行与任务' || p.phase === 'Bug')) {
+          // zentao phases
+          if (k === 'zentao' && _srcEnabled['zentao']) {
+            lbl.textContent = '禅道 同步中...';
+            el.className = 'src-tag warn';
+          }
+        }
+      });
       var elapsed = Math.round((Date.now() - _syncStartTime) / 1000);
       var et = document.getElementById('sync-elapsed');
       if (et) et.textContent = elapsed + 's';
@@ -1157,49 +1176,53 @@ async function triggerSync() {
     clearInterval(progTimer);
     if (progEl.parentElement) progEl.remove();
 
-    // Build 3-part result message
+    // Already running
+    if (result && result.data && result.data.skipped) {
+      showToast('系统正在自动同步...', 'warn');
+      if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+      return;
+    }
+
+    // Build per-source result lines
     var d = result || {};
     var msgLines = [];
+
+    function _srcLine(name, summary, status) {
+      var icon = status === 'success' ? '✓' : (status === 'failed' ? '✗' : (status === 'skipped' ? '⊘' : '—'));
+      var detail = summary || '未执行';
+      return icon + ' ' + name + ': ' + detail;
+    }
+
     // Zentao
     var zs = d.zentao_summary || {};
-    var parts = [];
-    if (zs.status === 'failed') {
-      msgLines.push('禅道 同步失败: ' + (zs.summary || '未知错误'));
-    } else {
-      if (d.users) parts.push('用户' + d.users.fetched);
-      if (d.products) parts.push('产品' + d.products.fetched);
-      if (d.projects) parts.push('项目' + d.projects.fetched);
-      if (d.executions_tasks) {
-        parts.push('执行' + (d.executions_tasks.executions_fetched || 0));
-        parts.push('任务' + (d.executions_tasks.tasks_fetched || 0));
-      }
-      if (d.bugs) parts.push('Bug' + (d.bugs.fetched || 0));
-      var timingMsg = result.timings ? '（' + result.timings.total + 's）' : '';
-      msgLines.push('禅道 ' + timingMsg + '（' + parts.join(' / ') + '）');
+    var zParts = [];
+    if (d.users) zParts.push('用户' + d.users.fetched);
+    if (d.products) zParts.push('产品' + d.products.fetched);
+    if (d.projects) zParts.push('项目' + d.projects.fetched);
+    if (d.executions_tasks) {
+      zParts.push('执行' + (d.executions_tasks.executions_fetched || 0));
+      zParts.push('任务' + (d.executions_tasks.tasks_fetched || 0));
     }
+    if (d.bugs) zParts.push('Bug' + (d.bugs.fetched || 0));
+    var zIcon = zs.status === 'failed' ? '✗' : (zs.status === 'skipped' ? '⊘' : '✓');
+    var zDetail = zParts.length > 0 ? (': ' + zParts.join(' / ')) : (zs.summary ? ': ' + zs.summary : '');
+    msgLines.push(zIcon + ' 禅道' + zDetail);
 
     // GitLab
     var gs = d.gitlab_summary || {};
-    var gIcon = gs.status === 'success' ? '✓' : (gs.status === 'failed' ? '✗' : '—');
-    var rel = d.releases || {};
-    var relSummary = gs.summary || gs.status || '未执行';
-    if (rel.failed_products && rel.failed_products > 0) {
-      relSummary += '（' + rel.failed_products + ' 个产品获取失败）';
-    }
-    msgLines.push('GitLab ' + gIcon + ' ' + relSummary);
+    msgLines.push(_srcLine('GitLab', gs.summary || gs.status, gs.status || '—'));
 
     // NAS
     var ns = d.nas_summary || {};
-    var nIcon = ns.status === 'skipped' ? '⊘' : '—';
-    msgLines.push('NAS ' + nIcon + ' ' + (ns.summary || ns.status || '未执行'));
+    msgLines.push(_srcLine('NAS', ns.summary || ns.status, ns.status || '—'));
 
     // SVN
     var ss = d.svn_summary || {};
-    var sIcon = ss.status === 'success' ? '✓' : (ss.status === 'failed' ? '✗' : (ss.status === 'skipped' ? '⊘' : '—'));
-    msgLines.push('SVN ' + sIcon + ' ' + (ss.summary || ss.status || '未执行'));
+    msgLines.push(_srcLine('SVN', ss.summary || ss.status, ss.status || '—'));
 
-    var toastType = (d.zentao_summary && d.zentao_summary.status === 'failed') ? 'error' : 'success';
-    showToast('数据同步完成\n' + msgLines.join('\n'), toastType);
+    var timingSuffix = result.timings ? ' (' + result.timings.total + 's)' : '';
+    var toastType = (zs.status === 'failed') ? 'error' : 'success';
+    showToast('数据同步完成' + timingSuffix + '\n' + msgLines.join('\n'), toastType);
     if (_srcStates) {
       var zs2 = d.zentao_summary || {};
       _srcStates.zentao = zs2.status === 'success' ? 'ok' : (zs2.status === 'failed' ? 'err' : 'warn');

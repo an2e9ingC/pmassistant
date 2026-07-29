@@ -21,6 +21,10 @@ _logger = logging.getLogger(__name__)
 
 @router.post("/trigger", response_model=dict)
 async def trigger_sync(db: Session = Depends(get_db), user: dict = Depends(get_current_user), _=Depends(require_perm("sync"))):
+    from backend.services.sync_service import get_sync_progress
+    if get_sync_progress().get("running"):
+        _logger.info("全量同步: 已有同步正在运行，拒绝重复触发")
+        return {"code": 0, "data": {"skipped": True}, "message": "系统正在自动同步..."}
     _logger.info("全量同步: 手动触发")
     log_audit(db, user, "trigger_full_sync", "手动触发全量同步", AUDIT_CAT_SYSTEM, "medium")
     svc = SyncService()
