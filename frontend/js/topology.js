@@ -11,7 +11,7 @@ function _initTopoDt() {
   _topoDt = new DataTable({
     container: document.getElementById('topo-table'),
     columns: [
-      { key: 'project_code', title: '项目编号', width: '10%', render: function(v, row) { return v ? projCodeTag(v, null, row.project_name) : '—'; } },
+      { key: 'project_code', title: '项目编号', width: '10%', render: function(v, row) { return v ? projCodeTag(v, 'event.stopPropagation();openProject(\'' + escHtml(v).replace(/'/g, "\\'") + '\')', row.project_name) : '—'; } },
       { key: 'project_name', title: '项目名', render: function(v) { return '<div class="proj-name">' + escHtml(v || '') + '</div>'; } },
       { key: 'customer_name', title: '客户', width: '10%', render: function(v) { return '<span onclick="event.stopPropagation();openCustomerByName(\'' + escHtml(v || '') + '\')" style="cursor:pointer">' + renderCustomerBadge(v) + '</span>'; } },
       { key: 'products', title: '关联产品', render: function(v) {
@@ -22,7 +22,8 @@ function _initTopoDt() {
     ],
     maxHeight: 'calc(100vh - 260px)',
     resizable: false,
-    emptyText: '输入关键字开始搜索...'
+    emptyText: '输入关键字开始搜索...',
+    clickable: false
   });
 }
 

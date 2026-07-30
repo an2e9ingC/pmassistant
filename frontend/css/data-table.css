@@ -16,10 +16,10 @@
 /* ── Base table ── */
 .dt-table {
   width: 100%;
+  min-width: 0;
   border-collapse: separate;
   border-spacing: 0;
   font-size: 13px;
-  table-layout: fixed; /* required for col resize to work predictably */
 }
 
 /* ── Header ── */
@@ -98,6 +98,7 @@
 }
 
 /* ── Empty state ── */
+.dt-table td.dt-wrap { white-space: normal; word-break: break-word; overflow: visible; }
 .dt-empty { text-align: center; padding: 30px; color: var(--muted); font-style: italic; }
 
 /* ── Spacer row (bottom fill) ── */

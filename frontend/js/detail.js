@@ -43,7 +43,7 @@ async function loadProjectDetail(code) {
   document.getElementById('gantt-root').innerHTML = '<div class="loading-spinner">加载甘特图...</div>';
   var stagesTbody = document.getElementById('stages-tbody');
   if (stagesTbody) stagesTbody.innerHTML = '<tr><td colspan="8"><div class="loading-spinner">加载阶段数据...</div></td></tr>';
-  document.getElementById('docs-tbody').innerHTML = '<tr><td colspan="6"><div class="loading-spinner">加载文档数据...</div></td></tr>';
+  document.getElementById('docs-table-wrap').innerHTML = '<div class="loading-spinner">加载文档数据...</div>'; _docsDt = null;
   document.getElementById('delivery-content').innerHTML = '<div class="loading-spinner">加载交付数据...</div>';
   document.getElementById('resources-content').innerHTML = '<div class="loading-spinner">加载产品文档...</div>';
 
@@ -1052,7 +1052,7 @@ function buildDocs(data) {
   // New format: { documents: [...], standard_stages: [...] }
   var stageList = (data && data.documents) ? data.documents : data;
   if (!stageList || !stageList.length) {
-    document.getElementById('docs-tbody').innerHTML = '<tr><td colspan="10"><div style="text-align:center;padding:30px;font-style:italic;color:var(--muted)">暂无文档清单<br><span style="font-size:11px">项目阶段尚未匹配到文档模板，请先配置文档模板</span></div></td></tr>';
+    document.getElementById('docs-table-wrap').innerHTML = '<div style="text-align:center;padding:30px;font-style:italic;color:var(--muted)">暂无文档清单<br><span style="font-size:11px">项目阶段尚未匹配到文档模板，请先配置文档模板</span></div>'; _docsDt = null;
     return;
   }
 
@@ -1062,101 +1062,72 @@ function buildDocs(data) {
     ? ['var(--accent-lt)', '#283528', '#353020', '#2a3340', '#283530', '#2c2c30', '#353028', '#2a2e3a']
     : ['var(--accent-lt)', '#e8f5e9', '#fff3e0', '#e3f2fd', '#e0f2f1', '#f5f5f5', '#fff8e1', '#e8eaf6'];
 
-  var rows = '';
+  // Flatten into rows for DataTable
+  var flatRows = [];
   stageList.forEach(function(stage, stageIdx) {
     var stageName = stage.stage_name || '未分类';
     var items = stage.documents || [];
     var hasDocs = stage.has_documents;
     var bg = stageColors[stageIdx % stageColors.length];
-    var cellStyle = 'background:' + bg + ';';
-
-    // Calculate stage progress
     var doneCount = 0, totalCount = 0;
-    if (hasDocs) {
-      var stageItems = stage.documents || [];
-      stageItems.forEach(function(d) { totalCount++; if (d.done) doneCount++; });
-    }
+    if (hasDocs) { items.forEach(function(d) { totalCount++; if (d.done) doneCount++; }); }
     var progressPct = totalCount > 0 ? Math.round(doneCount / totalCount * 100) : 0;
     var progressColor = progressPct >= 100 ? 'var(--success)' : (progressPct > 0 ? 'var(--warn)' : 'var(--muted)');
-    var progressRing = totalCount > 0 ? '<span style="display:inline-flex;align-items:center;gap:4px;vertical-align:middle">' +
-      renderProgressCircle(progressPct, 28, { label: '', color: progressColor }) +
-      '<span style="font-size:9px;color:var(--muted);font-weight:400">' + doneCount + '/' + totalCount + '</span></span>' : '';
+    var progressRing = totalCount > 0 ? '<span style="display:inline-flex;align-items:center;gap:4px;vertical-align:middle">' + renderProgressCircle(progressPct, 28, { label: '', color: progressColor }) + '<span style="font-size:9px;color:var(--muted);font-weight:400">' + doneCount + '/' + totalCount + '</span></span>' : '';
 
     if (!hasDocs) {
-      rows += '<tr style="opacity:0.5">' +
-        '<td style="vertical-align:middle;text-align:center;font-weight:600;white-space:nowrap;word-break:keep-all;' + cellStyle + 'color:var(--accent);font-size:12px">' + escHtml(stageName) + ' <sup style="font-size:10px;color:var(--muted);font-weight:400">0</sup></td>' +
-        '<td style="text-align:center;color:var(--muted);' + cellStyle + '">-</td>' +
-        '<td style="color:var(--muted);' + cellStyle + '">-</td>' +
-        '<td style="color:var(--muted);' + cellStyle + '">-</td>' +
-        '<td style="color:var(--muted);' + cellStyle + '">-</td>' +
-        '<td style="color:var(--muted);' + cellStyle + '">-</td>' +
-        '<td style="font-size:12px;color:var(--muted);font-style:italic;text-align:left;' + cellStyle + '">暂无文档模板，请先配置文档模板 @CTO</td>' +
-        '<td style="color:var(--muted);' + cellStyle + '">-</td>' +
-        '<td style="color:var(--muted);' + cellStyle + '">-</td>' +
-        '<td style="color:var(--muted);' + cellStyle + '">-</td>' +
-      '</tr>';
+      flatRows.push({ _stage: stageName, _empty: true, _bg: bg, _progressRing: '', _seq: '', _docName: '', responsible_role: '', _statusHtml: '', _docType: '', _locHtml: '暂无文档模板，请先配置文档模板 @CTO', updated_at: '', updated_by: '', _actions: '' });
     } else {
       items.sort(function(a, b) { return (a.sort_order || 0) - (b.sort_order || 0); });
       items.forEach(function(d, i) {
         var hasError = (!d.done && d.location) || d.mismatch;
-        var statusHtml;
-        if (d.done && !d.mismatch) {
-          statusHtml = '<span class="pill completed">已提交</span>';
-        } else if (hasError) {
-          statusHtml = '<span class="pill" style="background:var(--danger-lt);color:var(--danger)">×错误</span>';
-        } else {
-          statusHtml = '<span class="pill blocked">未提交</span>';
-        }
-
-        var locHtml = '';
-        if (d.location === '无需文档' || d.location === '已删除') {
-          locHtml = '<span style="font-size:11px;color:var(--muted);font-style:italic">' + escHtml(d.location) + '</span>';
-        } else if (d.mismatch) {
-          locHtml = '<span style="color:var(--danger)">' + escHtml((d.location||'').replace(/^请提交到：/,'')) + '</span><br><span style="font-size:10px;color:var(--danger)">' + escHtml(d.mismatch) + '</span>';
-        } else if (d.file_count && d.file_count > 0 && d.done && d.location) {
-          // PDM folder-level: file count badge before path
-          locHtml = '<span style="display:inline-block;background:var(--accent-lt);color:var(--accent);font-size:10px;padding:1px 6px;border-radius:10px;font-weight:500;white-space:nowrap;border:1px solid var(--accent);margin-right:4px">' + d.file_count + ' 文件</span>' +
-            '<a href="' + escHtml(d.location) + '" target="_blank" style="color:var(--accent);text-decoration:none;word-break:break-all" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">' + escHtml(d.location) + '</a>';
-        } else if (d.done && d.location) {
-          locHtml = '<a href="' + escHtml(d.location) + '" target="_blank" style="color:var(--accent);text-decoration:none;word-break:break-all" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">' + escHtml(d.location) + '</a>';
-        } else if (hasError && d.location) {
-          locHtml = '<span style="color:var(--danger)">' + escHtml((d.location||'').replace(/^请提交到：/,'')) + '</span><br><span style="font-size:10px;color:var(--danger)">文件不存在或无法访问</span>';
-        } else if (d.doc_path) {
-          locHtml = '<span style="color:var(--muted);font-style:italic">请提交到：<span style="word-break:break-all">' + escHtml(d.doc_path) + '</span></span>';
-        } else {
-          locHtml = '<span style="font-size:11.5px;color:var(--muted);font-style:italic">待提交</span>';
-        }
-
-        var docTypeLabel = typeLabels[d.doc_type] || d.doc_type || '—';
-        var updatedAt = fmtISODateTime(d.updated_at) || formatDate(d.completed_at);
-        var updatedBy = d.updated_by || '';
-
-        rows += '<tr id="doc-row-' + d.id + '">' +
-          (i === 0 ? '<td rowspan="' + items.length + '" style="vertical-align:middle;text-align:center;font-weight:600;' + cellStyle + 'color:var(--accent);font-size:12px">' + escHtml(stageName) + ' <sup style="font-size:10px;color:var(--muted);font-weight:400">' + items.length + '</sup><div style="margin-top:4px">' + progressRing + '</div></td>' : '') +
-          '<td style="font-family:var(--mono);color:var(--muted);text-align:center;' + cellStyle + '">' + (i + 1) + '</td>' +
-          '<td style="font-weight:500;width:180px;word-break:break-all;' + cellStyle + '" title="' + escHtml(d.description || '') + '">' + escHtml(d.doc_name) +
-            (d.is_optional ? ' <span style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:3px" title="可选项">可选</span>' : '') + '</td>' +
-          '<td style="font-size:12px;white-space:nowrap;word-break:keep-all;' + cellStyle + '">' + escHtml(d.responsible_role || '—') + '</td>' +
-          '<td style="white-space:nowrap;word-break:keep-all;' + cellStyle + '">' + statusHtml + '</td>' +
-          '<td style="font-size:11px;' + cellStyle + '">' + escHtml(docTypeLabel) + '</td>' +
-          '<td style="font-size:12px;word-break:break-all;text-align:left;' + cellStyle + '" id="doc-loc-cell-' + d.id + '">' + locHtml + '</td>' +
-          '<td style="font-size:11px;color:var(--muted);white-space:nowrap;word-break:keep-all;' + cellStyle + '">' + escHtml(updatedAt) + '</td>' +
-          '<td style="font-size:12px;color:var(--muted);' + cellStyle + '">' + escHtml(getDisplayName(updatedBy)) + '</td>' +
-          '<td style="white-space:nowrap;word-break:keep-all;text-align:center;' + cellStyle + '">' +
-            (d.location && !d.location.startsWith('@') && isPreviewableUrl(d.location)
-              ? iconEye('previewDocument(\'' + encodeURIComponent(d.location) + '\',\'' + escJs(d.doc_name || '') + '\')', '预览')
-              : (d.location && d.location !== '无需文档' && d.location !== '已删除'
-              ? '<a href="' + escHtml(d.location) + '" target="_blank" title="打开链接" style="text-decoration:none;font-size:15px">&#x1F517;</a>'
-              : '')) +
-            (d.is_optional && canEdit ? iconDelete('removeOptionalDoc(' + d.id + ',\x27' + escJs(d.doc_name) + '\x27)', '移除此文档') : '') +
-            (canEdit ? iconEdit('openDocEditDialog(' + d.id + ')', '编辑') : '') +
-          '</td>' +
-        '</tr>';
+        if (d.done && !d.mismatch) d._statusHtml = '<span class="pill completed">已提交</span>';
+        else if (hasError) d._statusHtml = '<span class="pill" style="background:var(--danger-lt);color:var(--danger)">×错误</span>';
+        else d._statusHtml = '<span class="pill blocked">未提交</span>';
+        if (d.location === '无需文档' || d.location === '已删除') d._locHtml = '<span style="font-size:11px;color:var(--muted);font-style:italic">' + escHtml(d.location) + '</span>';
+        else if (d.mismatch) d._locHtml = '<span style="color:var(--danger)">' + escHtml((d.location||'').replace(/^请提交到：/,'')) + '</span><br><span style="font-size:10px;color:var(--danger)">' + escHtml(d.mismatch) + '</span>';
+        else if (d.file_count && d.file_count > 0 && d.done && d.location) d._locHtml = '<span style="display:inline-block;background:var(--accent-lt);color:var(--accent);font-size:10px;padding:1px 6px;border-radius:10px;font-weight:500;white-space:nowrap;border:1px solid var(--accent);margin-right:4px">' + d.file_count + ' 文件</span><a href="' + escHtml(d.location) + '" target="_blank" style="color:var(--accent);text-decoration:none;word-break:break-all" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">' + escHtml(d.location) + '</a>';
+        else if (d.done && d.location) d._locHtml = '<a href="' + escHtml(d.location) + '" target="_blank" style="color:var(--accent);text-decoration:none;word-break:break-all" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">' + escHtml(d.location) + '</a>';
+        else if (hasError && d.location) d._locHtml = '<span style="color:var(--danger)">' + escHtml((d.location||'').replace(/^请提交到：/,'')) + '</span><br><span style="font-size:10px;color:var(--danger)">文件不存在或无法访问</span>';
+        else if (d.doc_path) d._locHtml = '<span style="color:var(--muted);font-style:italic">请提交到：<span style="word-break:break-all">' + escHtml(d.doc_path) + '</span></span>';
+        else d._locHtml = '<span style="font-size:11.5px;color:var(--muted);font-style:italic">待提交</span>';
+        d._stage = stageName; d._empty = false; d._bg = bg; d._progressRing = progressRing; d._seq = i + 1;
+        d._docName = escHtml(d.doc_name) + (d.is_optional ? ' <span style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:3px" title="可选项">可选</span>' : '');
+        d._docType = typeLabels[d.doc_type] || d.doc_type || '—';
+        d._updatedAt = fmtISODateTime(d.updated_at) || formatDate(d.completed_at);
+        d._updatedBy = d.updated_by || '';
+        var loc = d.location, dn = d.doc_name;
+        d._actions = (loc && !loc.startsWith('@') && isPreviewableUrl(loc) ? iconEye('previewDocument(\'' + encodeURIComponent(loc) + '\',\'' + escJs(dn||'') + '\')', '预览') : (loc && loc !== '无需文档' && loc !== '已删除' ? '<a href="' + escHtml(loc) + '" target="_blank" title="打开链接" style="text-decoration:none;font-size:15px">&#x1F517;</a>' : '')) + (d.is_optional && canEdit ? iconDelete('removeOptionalDoc(' + d.id + ',\x27' + escJs(dn) + '\x27)', '移除此文档') : '') + (canEdit ? iconEdit('openDocEditDialog(' + d.id + ')', '编辑') : '');
+        flatRows.push(d);
       });
     }
   });
-  document.getElementById('docs-tbody').innerHTML = rows;
+
+  var container = document.getElementById('docs-table-wrap');
+  if (_docsDt) { _docsDt.setData(flatRows); return; }
+  container.innerHTML = '<div style="width:100%"><div id="docs-table"></div></div>';
+  _docsDt = new DataTable({
+    container: document.getElementById('docs-table'),
+    columns: [
+      { key: '_stage', title: '阶段', width: '11%', rowspan: true, render: function(v, row, idx, count) { return '<span style="font-weight:600;color:var(--accent);font-size:12px">'+escHtml(v||'')+' <sup style="font-size:10px;color:var(--muted);font-weight:400">'+(count||(row._empty?0:1))+'</sup>'+(row._empty?'':'<div style="margin-top:4px">'+row._progressRing+'</div>')+'</span>'; } },
+      { key: '_seq', title: '序号', width: '40px', render: function(v, row) { return row._empty?'<span style="color:var(--muted)">-</span>':'<span style="font-family:var(--mono);color:var(--muted)">'+(v||'')+'</span>'; } },
+      { key: '_docName', title: '文档名称', width: '14%', className: 'dt-wrap', render: function(v, row) { return row._empty?'<span style="color:var(--muted)">-</span>':'<span style="font-weight:500;word-break:break-all" title="'+escHtml(row.description||'')+'">'+(v||'')+'</span>'; } },
+      { key: 'responsible_role', title: '责任人', width: '8%', render: function(v, row) { return row._empty?'<span style="color:var(--muted)">-</span>':'<span style="font-size:12px;white-space:nowrap">'+escHtml(v||'—')+'</span>'; } },
+      { key: '_statusHtml', title: '状态', width: '70px', render: function(v, row) { return row._empty?'<span style="color:var(--muted)">-</span>':(v||''); } },
+      { key: '_docType', title: '类型', width: '60px', render: function(v, row) { return row._empty?'<span style="color:var(--muted)">-</span>':'<span style="font-size:11px">'+escHtml(v||'')+'</span>'; } },
+      { key: '_locHtml', title: '路径', align: 'left', className: 'dt-wrap', render: function(v, row) { return '<span style="font-size:12px;word-break:break-all">'+(v||'')+'</span>'; } },
+      { key: '_updatedAt', title: '最后修改时间', width: '12%', render: function(v) { return '<span style="font-size:11px;color:var(--muted);white-space:nowrap">'+escHtml(v||'—')+'</span>'; } },
+      { key: '_updatedBy', title: '修改人', width: '7%', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(getDisplayName(v)||'')+'</span>'; } },
+      { key: '_actions', title: '操作', width: '80px', render: function(v, row) { return '<span style="white-space:nowrap">'+(v||'')+'</span>'; } }
+    ],
+    data: flatRows,
+    maxHeight: 'calc(100vh - 320px)',
+    resizable: false,
+    rowClassFn: function(row) { return row._bg ? { background: row._bg } : null; }
+  });
 }
+
+var _docsDt = null;
 
 /* ── Document Status Edit Dialog ── */
 
@@ -3254,30 +3225,19 @@ function buildActivities(items, opts) {
   }
 
   var html = filterBadge;
-  html += '<div class="table-scroll" style="max-height:calc(100vh - 330px)">';
-  html += '<table class="stage-table activity-table">';
-  html += '<thead><tr>' +
-    '<th style="cursor:pointer;user-select:none;white-space:nowrap" onclick="toggleActivitySort()">时间 ' + sortIcon + '</th>' +
-    '<th style="white-space:nowrap">用户名 ' + userFilter + '</th>' +
-    '<th style="white-space:nowrap">操作类型 ' + actionFilter + '</th>' +
-    '<th>具体明细</th>' +
-    '</tr></thead><tbody>';
-
-  items.forEach(function(a) {
-    var time = fmtISODateTime(a.created_at);
-    html += '<tr>' +
-      '<td class="act-td-time">' + escHtml(time) + '</td>' +
-      '<td class="act-td-user">' + escHtml(getDisplayName(a.display_name || a.username)) + '</td>' +
-      '<td style="white-space:nowrap"><span class="activity-action pill">' + escHtml(a.action) + '</span></td>' +
-      '<td class="act-td-detail">' + (a.detail ? escHtml(a.detail) : '') + '</td>' +
-      '</tr>';
+  container.innerHTML = filterBadge + '<div id="act-table"></div>';
+  new DataTable({
+    container: document.getElementById('act-table'),
+    columns: [
+      { key: 'created_at', title: '时间 <span id="act-sort-ind" style="cursor:pointer" onclick="toggleActivitySort()">' + sortIcon + '</span>', width: '160px', render: function(v) { return '<span class="act-td-time">'+escHtml(fmtISODateTime(v))+'</span>'; } },
+      { key: 'display_name', title: '用户名 ' + userFilter, width: '100px', render: function(v, row) { return '<span class="act-td-user">'+escHtml(getDisplayName(v||row.username))+'</span>'; } },
+      { key: 'action', title: '操作类型 ' + actionFilter, width: '120px', render: function(v) { return '<span class="activity-action pill">'+escHtml(v||'')+'</span>'; } },
+      { key: 'detail', title: '具体明细', render: function(v) { return '<span class="act-td-detail">'+(v?escHtml(v):'')+'</span>'; } }
+    ],
+    data: items,
+    maxHeight: 'calc(100vh - 330px)',
+    resizable: false
   });
-
-  html += '</tbody></table></div>';
-  container.innerHTML = html;
-
-  // Update sort indicator after render
-  updateActivitySortInd();
 }
 
 function updateActivitySortInd() {

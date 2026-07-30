@@ -28,7 +28,8 @@ var DataTable = (function() {
         resizable: col.resizable !== false,
         render: col.render || null,
         headerRender: col.headerRender || null,
-        className: col.className || ''
+        className: col.className || '',
+        rowspan: col.rowspan || false
       };
     });
 
@@ -45,7 +46,8 @@ var DataTable = (function() {
     this._checkboxPosition = opts.checkboxPosition || 'left';
     this._onSelectChange = opts.onSelectChange || null;
     this._emptyText = opts.emptyText || '暂无数据';
-    this._clickable = opts.clickable !== false;
+    this._clickable = opts.clickable === true;
+    this._onRowClick = opts.onRowClick || null;
 
     // ── Sort state ──
     this._sortCol = null;
@@ -75,6 +77,7 @@ var DataTable = (function() {
     // Table
     this._tableEl = document.createElement('table');
     this._tableEl.className = 'dt-table';
+    if (this._resizable) this._tableEl.style.tableLayout = 'fixed';
     if (this._rowStriped) this._tableEl.classList.add('dt-striped');
     if (this._hoverHighlight) this._tableEl.classList.add('dt-hover');
     if (this._clickable) this._tableEl.classList.add('dt-clickable');
@@ -108,6 +111,7 @@ var DataTable = (function() {
     this._attachSort();
     this._attachResize();
     if (this._selectable) this._attachSelect();
+    if (this._onRowClick) this._attachRowClick();
   };
 
   DataTable.prototype._renderHeader = function() {
@@ -212,13 +216,26 @@ var DataTable = (function() {
       else cbIdx = 0;
     }
 
+    // Pre-compute rowspan for columns with rowspan: true
+    var rowspanMap = {};
+    self._columns.forEach(function(col, i) {
+      if (!col.rowspan) return;
+      var spans = [], count = 0;
+      for (var r = 0; r < self._data.length; r++) {
+        count++;
+        var nextVal = r + 1 < self._data.length ? self._data[r + 1][col.key] : null;
+        var curVal = self._data[r][col.key];
+        if (nextVal !== curVal) { spans.push({start: r - count + 1, count: count}); count = 0; }
+      }
+      rowspanMap[i] = spans;
+    });
+
     this._data.forEach(function(row, rowIdx) {
       var tr = document.createElement('tr');
       tr.setAttribute('data-row-idx', rowIdx);
       var rowId = row[self._idKey];
       if (rowId != null) tr.setAttribute('data-row-id', rowId);
 
-      // Row class
       if (self._rowClassFn) {
         var cls = self._rowClassFn(row, rowIdx);
         if (typeof cls === 'string') tr.className = cls;
@@ -227,32 +244,35 @@ var DataTable = (function() {
         }
       }
 
-      // Selected state
-      if (rowId != null && self._selected.has(rowId)) {
-        tr.classList.add('selected');
-      }
+      if (rowId != null && self._selected.has(rowId)) tr.classList.add('selected');
 
       self._columns.forEach(function(col, i) {
-        // Checkbox
-        if (cbIdx === i) {
-          var cbTd = self._buildCheckboxCell(row, rowId);
-          tr.appendChild(cbTd);
+        if (cbIdx === i) { tr.appendChild(self._buildCheckboxCell(row, rowId)); }
+
+        // Rowspan: skip cell if covered by a previous row's rowspan
+        if (rowspanMap[i]) {
+          for (var s = 0; s < rowspanMap[i].length; s++) {
+            var span = rowspanMap[i][s];
+            if (rowIdx >= span.start && rowIdx < span.start + span.count) {
+              if (rowIdx === span.start) {
+                var td = document.createElement('td'); td.rowSpan = span.count; td.style.verticalAlign = 'middle';
+                var val = row[col.key];
+                td.innerHTML = col.render ? col.render(val, row, rowIdx, span.count) : (val != null ? escHtml(String(val)) : '');
+                td.style.textAlign = col.align; if (col.className) td.className = col.className;
+                tr.appendChild(td);
+              }
+              return;
+            }
+          }
         }
 
-        var td = document.createElement('td');
-        var val = row[col.key];
+        var td = document.createElement('td'); var val = row[col.key];
         td.innerHTML = col.render ? col.render(val, row, rowIdx) : (val != null ? escHtml(String(val)) : '');
-        td.style.textAlign = col.align;
-        if (col.className) td.className = col.className;
+        td.style.textAlign = col.align; if (col.className) td.className = col.className;
         tr.appendChild(td);
       });
 
-      // Checkbox at end
-      if (cbIdx >= self._columns.length) {
-        var cbTdEnd = self._buildCheckboxCell(row, rowId);
-        tr.appendChild(cbTdEnd);
-      }
-
+      if (cbIdx >= self._columns.length) { tr.appendChild(self._buildCheckboxCell(row, rowId)); }
       self._tbodyEl.appendChild(tr);
     });
   };
@@ -437,6 +457,19 @@ var DataTable = (function() {
   };
 
   /* ── Selection attach (click on row) ── */
+
+  DataTable.prototype._attachRowClick = function() {
+    var self = this;
+    this._tbodyEl.addEventListener('click', function(e) {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'A' || e.target.tagName === 'BUTTON' || e.target.closest('a') || e.target.closest('button')) return;
+      var tr = e.target.closest('tr[data-row-idx]');
+      if (!tr) return;
+      var idx = parseInt(tr.getAttribute('data-row-idx'));
+      if (idx >= 0 && idx < self._data.length) {
+        if (self._onRowClick) self._onRowClick(self._data[idx], idx);
+      }
+    });
+  };
 
   DataTable.prototype._attachSelect = function() {
     var self = this;
