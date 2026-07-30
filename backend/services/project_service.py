@@ -280,12 +280,31 @@ def get_project_documents(db: Session, project_id: int, include_removed: bool = 
     unnec_val = PmaSetting.get(db, unnec_key, "")
     unnec_stages = set(s.strip() for s in unnec_val.split(",") if s.strip())
 
+    # Query ALL docs (including removed) to detect stages where every doc is
+    # optional AND removed — such stages should not be displayed at all.
+    from backend.models.document import ProjectDocument
+    all_stage_docs = db.query(
+        ProjectDocument.stage_type, ProjectDocument.is_optional, ProjectDocument.is_removed
+    ).filter(ProjectDocument.project_id == project_id).all()
+    # stages_with_real_content: stages that have at least one non-optional
+    # or non-removed doc → these stages have "real" content and should show.
+    stages_with_real_content: set[str] = set()
+    stages_with_any_docs: set[str] = set()  # stages that have at least one doc record
+    for st, is_opt, is_rem in all_stage_docs:
+        stage = st or "未分类"
+        stages_with_any_docs.add(stage)
+        if not is_opt or not is_rem:
+            stages_with_real_content.add(stage)
+
     # Build result: one entry per standard stage (in order), skip unnecessary stages
     result = []
     for st in standard_stages:
         if st in unnec_stages:
             continue
         items = grouped.get(st, [])
+        # Skip stage if it has no visible docs AND has doc records BUT all are optional+removed
+        if not items and st in stages_with_any_docs and st not in stages_with_real_content:
+            continue
         scd = items[0].get("stage_completed_date") if items else None
         result.append({
             "stage_name": st,
