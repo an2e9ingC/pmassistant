@@ -609,60 +609,61 @@ function renderTaskTableCompact(tasks, execs) {
   }
   var stageKeys = allStages.filter(function(sn) { return grouped[sn] !== undefined; });
 
-  _selectedTasks = new Set();
-  var html = '<div class="table-scroll" style="max-height:calc(100vh - 340px)"><table class="stage-table"><thead><tr>' +
-    '<th style="width:10%">阶段</th>' +
-    '<th style="width:15%">任务标题</th>' +
-    '<th style="width:6%">状态</th>' +
-    '<th style="width:5%">优先级</th>' +
-    '<th style="width:7%">负责人</th>' +
-    '<th style="width:7%">进度</th>' +
-    '<th style="width:7%">计划开始</th>' +
-    '<th style="width:7%">截止日期</th>' +
-    '<th style="width:7%">完成日期</th>' +
-    '<th style="width:10%">最新动态</th>' +
-    '<th style="width:6%">时间</th>' +
-    '<th style="width:22px"><input type="checkbox" id="task-select-all" onchange="_toggleSelectAllTasks(this)" title="全选/取消全选"></th>' +
-    '<th style="width:1%;white-space:nowrap">操作</th>' +
-    '</tr></thead><tbody>';
-
+  // Flatten into DataTable rows
+  var flatRows = [];
   stageKeys.forEach(function(stageName) {
     var stageTasks = grouped[stageName] || [];
-    var rowCount = stageTasks.length || 1;
-    for (var i = 0; i < rowCount; i++) {
-      var t = stageTasks[i];
-      html += '<tr class="task-stage-row" data-stage="' + escHtml(stageName) + '"' + (t ? ' data-task-id="' + t.id + '"' : '') + ' id="' + (i === 0 ? 'task-stage-' + escHtml(stageName) : '') + '">';
-      if (i === 0) {
-        var stageId = stageIdMap[stageName] || null;
-        var stageCellContent = stageId
-          ? '<button class="gs-btn" onclick="openStageDialog(' + stageId + ');event.stopPropagation()" title="查看/编辑阶段信息">' + escHtml(stageName) + '</button>'
-          : escHtml(stageName);
-        html += '<td rowspan="' + rowCount + '" data-stage-cell="' + escHtml(stageName) + '" style="vertical-align:middle;background:var(--bg);border-right:2px solid var(--border);text-align:center">' +
-          '<div>' + stageCellContent + ' <sup style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:8px">' + stageTasks.length + '</sup></div>' +
-          '</td>';
-      }
-      if (t) {
-        html += _renderTaskRowCompact(t, stageStartMap[stageName] || null);
-      } else {
-        html += '<td style="color:var(--muted);font-size:12px">—</td>' +
-          '<td style="color:var(--muted);font-size:12px">—</td>' +
-          '<td style="color:var(--muted);font-size:12px">—</td>' +
-          '<td style="color:var(--muted);font-size:12px">—</td>' +
-          '<td style="color:var(--muted);font-size:12px">—</td>' +
-          '<td style="color:var(--muted);font-size:12px">—</td>' +
-          '<td style="color:var(--muted);font-size:12px">—</td>' +
-          '<td style="color:var(--muted);font-size:12px">—</td>' +
-          '<td style="color:var(--muted);font-size:12px">—</td>' +
-          '<td style="color:var(--muted);font-size:12px">—</td>' +
-          '<td style="width:22px"></td>' +
-          '<td style="color:var(--muted);font-size:12px">—</td>';
-      }
-      html += '</tr>';
+    if (!stageTasks.length) {
+      flatRows.push({ _stage: stageName, _empty: true, id: 0 });
+    } else {
+      stageTasks.forEach(function(t, i) {
+        t._stage = stageName;
+        t._stageId = stageIdMap[stageName] || null;
+        t._stageCount = stageTasks.length;
+        t._isFirstInStage = i === 0;
+        t._stageStart = stageStartMap[stageName] || null;
+        flatRows.push(t);
+      });
     }
   });
 
-  html += '</tbody></table></div>';
-  content.innerHTML = html;
+  _selectedTasks = new Set();
+  content.innerHTML = '<div id="task-compact-table"></div>';
+  new DataTable({
+    container: document.getElementById('task-compact-table'),
+    columns: [
+      { key: '_stage', title: '阶段', width: '10%', rowspan: true, render: function(v, row, idx, count) {
+        if (row._empty) return escHtml(v||'');
+        var stageId = row._stageId;
+        var cell = stageId
+          ? '<button class="gs-btn" onclick="openStageDialog(' + stageId + ');event.stopPropagation()" title="查看/编辑阶段信息">' + escHtml(v||'') + '</button>'
+          : escHtml(v||'');
+        return '<div>' + cell + ' <sup style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:8px">' + (count||row._stageCount||1) + '</sup></div>';
+      }},
+      { key: 'title', title: '任务标题', width: '15%', align: 'left', render: function(v, row) { return row._empty?'—':'<span style="cursor:pointer" onclick="openTaskDetail('+row.id+')" title="查看任务详情">'+escHtml(v||'')+'</span>'; } },
+      { key: 'status', title: '状态', width: '6%', render: function(v, row) { return row._empty?'—':renderPill(v||'todo'); } },
+      { key: 'priority', title: '优先级', width: '5%', render: function(v, row) { return row._empty?'—':(typeof _renderPriority==='function'?_renderPriority(v):escHtml(v||'medium')); } },
+      { key: 'assignee_name', title: '负责人', width: '7%', render: function(v, row) { return row._empty?'—':'<span style="font-size:12px;cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();openAssignDialog('+row.id+')" title="指派任务">'+escHtml(v||'—')+'</span>'; } },
+      { key: 'progress', title: '进度', width: '7%', render: function(v, row) { return row._empty?'—':(typeof renderProgressRing==='function'?'<div style="display:inline-block;vertical-align:middle">'+renderProgressRing(v||0)+'</div>':'<span>'+(v||0)+'%</span>'); } },
+      { key: 'start_date', title: '计划开始', width: '7%', render: function(v, row) {
+        if (row._empty) return '—';
+        var s = v || row._stageStart || null;
+        return '<span style="font-size:12px;color:'+(s?'var(--fg)':'var(--muted)')+'" title="'+(s?escHtml(s):'默认取阶段开始时间')+'">'+escHtml(s||'—')+'</span>';
+      }},
+      { key: 'due_date', title: '截止日期', width: '7%', render: function(v, row) { return row._empty?'—':'<span style="font-size:12px">'+(v||'—')+'</span>'; } },
+      { key: 'completed_at', title: '完成日期', width: '7%', render: function(v, row) { return row._empty?'—':'<span style="font-size:12px">'+(v?formatDate(v):'—')+'</span>'; } },
+      { key: 'latest_activity', title: '最新动态', width: '10%', render: function(v, row) { return row._empty?'—':(typeof _renderLatestActivity==='function'?_renderLatestActivity(row):'<span style="font-size:11px;color:var(--muted)">—</span>'); } },
+      { key: 'latest_time', title: '时间', width: '6%', render: function(v, row) { return row._empty?'—':''; } },
+      { key: 'actions', title: '操作', render: function(v, row) { return row._empty?'<span style="color:var(--muted);font-size:12px">—</span>':'<span style="white-space:nowrap" onclick="event.stopPropagation()">'+iconEdit('openTaskDialog('+row.id+')')+iconDelete('deleteTask('+row.id+',\''+escJs(row.title)+'\')')+'</span>'; } }
+    ],
+    data: flatRows,
+    maxHeight: 'calc(100vh - 340px)',
+    resizable: false,
+    selectable: true,
+    checkboxPosition: 11,
+    onSelectChange: function(rows) { _selectedTasks = new Set(rows.map(function(r) { return r.id; })); _ensureBatchToolbar(); }
+  });
+  _ensureBatchToolbar();
   _ensureBatchToolbar();
 
   // Group hover: hovering the stage-name cell highlights all rows of that stage

@@ -1771,16 +1771,7 @@ function renderProductTreePage() {
     // L1 → show L2 list
     rightHtml += '<div class="section-hd"><div class="section-title">二级产品 · 产品系列 (' + children.length + ')</div></div>';
     if (children.length) {
-      rightHtml += '<div class="table-scroll"><table class="stage-table"><thead><tr>' +
-        '<th>产品系列名称</th><th style="width:80px">模板数</th>' +
-        '</tr></thead><tbody>';
-      children.forEach(function(l2) {
-        rightHtml += '<tr style="cursor:pointer" onclick="selectProductNode(' + l2.id + ')">' +
-          '<td style="font-weight:500">📂 ' + escHtml(l2.name) + '</td>' +
-          '<td style="text-align:center">' + (l2.template_count || 0) + '</td>' +
-        '</tr>';
-      });
-      rightHtml += '</tbody></table></div>';
+      rightHtml += '<div id="tpl-l2-table"></div>';
     } else {
       rightHtml += '<div class="empty-state" style="padding:16px;font-size:13px">暂无二级产品（产品系列）</div>';
     }
@@ -1841,6 +1832,18 @@ function renderProductTreePage() {
       '<div class="dt-left">' + leftHtml + '</div>' +
       rightHtml +
     '</div>';
+
+  if (isL1 && children.length) {
+    new DataTable({
+      container: document.getElementById('tpl-l2-table'),
+      columns: [
+        { key: 'name', title: '产品系列名称', render: function(v, row) { return '<span style="cursor:pointer;font-weight:500" onclick="selectProductNode('+row.id+')">📂 '+escHtml(v||'')+'</span>'; } },
+        { key: 'template_count', title: '模板数', width: '80px', render: function(v) { return '<span style="text-align:center">'+(v||0)+'</span>'; } }
+      ],
+      data: children,
+      resizable: false
+    });
+  }
 }
 
 /* ── Left Nav Rendering (2 levels only) ── */
