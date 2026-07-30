@@ -1632,7 +1632,7 @@ function buildNotes(notes) {
         { key: 'created_at', title: '记录时间', width: '140px', render: function(v, row) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">'+(fmtISODateTime(v)||'—')+'</span>'+(row.updated_at?'<div style="font-size:9px;color:var(--warn)">编辑过</div>':''); } },
         { key: 'stage_name', title: '涉及阶段', width: '90px', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'项目整体')+'</span>'; } },
         { key: 'recorded_by', title: '记录人', width: '70px', render: function(v) { return '<span style="font-size:12.5px;font-weight:540">'+escHtml(v||'')+'</span>'; } },
-        { key: 'content', title: '内容', render: function(v, row) {
+        { key: 'content', title: '内容', align: 'left', className: 'dt-wrap', render: function(v, row) {
           var plainText = stripHtml(renderMarkdown?renderMarkdown(v):v).substring(0,80);
           var replyMark = row.parent_id?'<span style="font-size:10px;color:var(--accent);margin-right:4px">↳ 回复</span>':'';
           var imgBadge = /!\[.*\]\(.*\)/.test(v)?' <span style="font-size:10px">📷</span>':'';

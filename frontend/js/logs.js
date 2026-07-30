@@ -354,10 +354,18 @@ async function loadAuditLogs() {
       var totalPages = Math.ceil(total / 50);
       if (totalPages > 1) {
         html += '<div style="display:flex;justify-content:center;gap:4px;margin-top:10px">';
-        for (var p = 1; p <= totalPages; p++) {
-          var pCls = p === _auditPage ? 'tab active' : 'tab';
-          html += '<span class="' + pCls + '" onclick="_auditPage=' + p + ';loadAuditLogs()">' + p + '</span>';
+        var pages = [];
+        pages.push(1);
+        for (var p = Math.max(2, _auditPage - 2); p <= Math.min(totalPages - 1, _auditPage + 2); p++) {
+          if (pages[pages.length - 1] < p - 1) pages.push('...');
+          pages.push(p);
         }
+        if (pages[pages.length - 1] < totalPages - 1) pages.push('...');
+        if (totalPages > 1) pages.push(totalPages);
+        pages.forEach(function(p) {
+          if (p === '...') html += '<span style="padding:2px 6px;color:var(--muted)">...</span>';
+          else html += '<span class="tab' + (p === _auditPage ? ' active' : '') + '" onclick="_auditPage=' + p + ';loadAuditLogs()">' + p + '</span>';
+        });
         html += '</div>';
       }
     }
