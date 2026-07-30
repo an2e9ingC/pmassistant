@@ -129,32 +129,29 @@ function renderDbManage() {
   if (!_dbBackups.length) {
     html += '<div class="config-fields" style="padding:12px 16px;font-size:12px;color:var(--muted);font-style:italic">暂无备份文件</div>';
   } else {
-    html += '<div class="table-scroll" style="max-height:400px">' +
-      '<table class="stage-table" style="font-size:12px;width:100%">' +
-        '<thead><tr>' +
-          '<th style="width:50px;text-align:center">序号</th><th>文件名</th><th style="width:90px">大小</th><th style="width:160px">时间</th><th style="width:120px">操作</th>' +
-        '</tr></thead><tbody>';
-    _dbBackups.forEach(function(b, i) {
-      var isPermanent = b.permanent;
-      html += '<tr' + (isPermanent ? ' style="background:var(--accent-lt)"' : '') + '>' +
-        '<td style="text-align:center;font-family:var(--mono);color:var(--muted);font-size:11px">' + (i + 1) + '</td>' +
-        '<td style="font-family:monospace;font-size:11px">' + escHtml(b.name) +
-          (isPermanent ? ' <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:var(--success-lt);color:var(--success);font-weight:540">永久</span>' : '') +
-        '</td>' +
-        '<td style="font-size:11px">' + escHtml(b.size_display) + '</td>' +
-        '<td style="font-size:11px">' + escHtml(fmtISODateTime(b.created_at)) + '</td>' +
-        '<td style="white-space:nowrap">' +
-          iconRestore('restoreBackup(\'' + escHtml(b.name) + '\')', '恢复到此备份') +
-          iconDelete('deleteBackup(\'' + escHtml(b.name) + '\')', '删除此备份') +
-        '</td>' +
-      '</tr>';
-    });
-    html += '</tbody></table></div>';
+    html += '<div class="card" style="padding:0;max-height:400px"><div id="db-backup-table"></div></div>';
   }
 
   html += '</div></div>';  // .db-manage-grid
 
   document.getElementById('view-db-manage').innerHTML = html;
+
+  // Build backup table via DataTable
+  if (_dbBackups.length) {
+    new DataTable({
+      container: document.getElementById('db-backup-table'),
+      columns: [
+        { key: 'idx', title: '序号', width: '50px', render: function(v) { return '<span style="font-family:var(--mono);color:var(--muted);font-size:11px">' + v + '</span>'; } },
+        { key: 'name', title: '文件名', render: function(v, row) { return '<span style="font-family:monospace;font-size:11px">' + escHtml(v) + '</span>' + (row.permanent ? ' <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:var(--success-lt);color:var(--success);font-weight:540">永久</span>' : ''); } },
+        { key: 'size_display', title: '大小', width: '90px', render: function(v) { return '<span style="font-size:11px">' + escHtml(v||'') + '</span>'; } },
+        { key: 'created_at', title: '时间', width: '160px', render: function(v) { return '<span style="font-size:11px">' + escHtml(fmtISODateTime(v)||'') + '</span>'; } },
+        { key: 'actions', title: '操作', width: '120px', render: function(v, row) { return '<span style="white-space:nowrap">' + iconRestore('restoreBackup(\'' + escHtml(row.name) + '\')', '恢复到此备份') + iconDelete('deleteBackup(\'' + escHtml(row.name) + '\')', '删除此备份') + '</span>'; } }
+      ],
+      maxHeight: '400px',
+      resizable: false,
+      rowClassFn: function(row) { return row.permanent ? { background: 'var(--accent-lt)' } : null; }
+    });
+  }
 }
 
 // ── Actions ──

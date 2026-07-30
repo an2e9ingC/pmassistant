@@ -348,25 +348,7 @@ async function loadAuditLogs() {
     if (!items.length) {
       html += '<div class="empty-state" style="padding:20px">暂无操作日志</div>';
     } else {
-      html += '<div class="table-scroll" style="max-height:calc(100vh - 280px)"><table class="stage-table"><thead><tr>' +
-        '<th style="width:140px">时间</th>' +
-        '<th style="width:70px">用户</th>' +
-        '<th style="width:80px">分类</th>' +
-        '<th style="width:140px">操作</th>' +
-        '<th style="width:50px">等级</th>' +
-        '<th>详情</th>' +
-      '</tr></thead><tbody>' +
-      items.map(function(e) {
-        return '<tr>' +
-          '<td style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">' + escHtml(fmtISODateTime(e.created_at)) + '</td>' +
-          '<td style="font-size:12px">' + escHtml(getDisplayName(e.username)) + '</td>' +
-          '<td style="font-size:11px">' + escHtml(e.category || '—') + '</td>' +
-          '<td style="font-size:11px">' + escHtml(ACTION_LABEL[e.action] || e.action) + '</td>' +
-          '<td>' + levelPill(e.level) + '</td>' +
-          '<td style="font-size:11px;color:var(--muted)">' + escHtml(e.detail) + '</td>' +
-        '</tr>';
-      }).join('') +
-      '</tbody></table></div>';
+      html += '<div class="card" style="padding:0"><div id="audit-table"></div></div>';
 
       // Pagination
       var totalPages = Math.ceil(total / 50);
@@ -381,6 +363,24 @@ async function loadAuditLogs() {
     }
 
     container.innerHTML = html;
+
+    // Build DataTable for audit items
+    if (items.length) {
+      new DataTable({
+        container: document.getElementById('audit-table'),
+        columns: [
+          { key: 'created_at', title: '时间', width: '140px', render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">' + escHtml(fmtISODateTime(v)) + '</span>'; } },
+          { key: 'username', title: '用户', width: '70px', render: function(v) { return '<span style="font-size:12px">' + escHtml(getDisplayName(v)) + '</span>'; } },
+          { key: 'category', title: '分类', width: '80px', render: function(v) { return '<span style="font-size:11px">' + escHtml(v||'—') + '</span>'; } },
+          { key: 'action', title: '操作', width: '140px', render: function(v) { return '<span style="font-size:11px">' + escHtml(ACTION_LABEL[v]||v) + '</span>'; } },
+          { key: 'level', title: '等级', width: '50px', render: function(v) { return levelPill(v); } },
+          { key: 'detail', title: '详情', render: function(v) { return '<span style="font-size:11px;color:var(--muted)">' + escHtml(v||'') + '</span>'; } }
+        ],
+        data: items,
+        maxHeight: 'calc(100vh - 280px)',
+        resizable: false
+      });
+    }
   } catch(e) {
     container.innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '</div>';
   }

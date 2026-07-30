@@ -1193,36 +1193,45 @@ function initNotifManage() {
   loadNotifManage();
 }
 
+var _notifDt = null;
+
 function loadNotifManage() {
   var scope = document.getElementById('notif-manage-scope');
   var scopeVal = scope ? scope.value : 'mine';
-  var tbody = document.getElementById('notif-manage-tbody');
-  if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="6"><div class="loading-spinner">加载中...</div></td></tr>';
+  var container = document.getElementById('notif-manage-table');
+  if (!container) return;
+
+  if (!_notifDt) {
+    _notifDt = new DataTable({
+      container: container,
+      columns: [
+        { key: 'level', title: '级别', width: '60px', render: function(v) {
+          var labels = { general: '一般', important: '重要', severe: '严重' };
+          var colors = { general: '#3b82f6', important: '#e6a817', severe: '#e53e3e' };
+          return '<span style="display:inline-block;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:600;color:#fff;background:' + (colors[v]||'#3b82f6') + '">' + escHtml(labels[v]||v) + '</span>';
+        }},
+        { key: 'content', title: '内容', align: 'left' },
+        { key: 'created_by', title: '发布者', width: '100px', render: function(v) { return '<span style="font-family:var(--mono);font-size:12px">@' + escHtml(v) + '</span>'; } },
+        { key: 'is_active', title: '状态', width: '60px', render: function(v, row) { return toggleSwitch(v, 'toggleNotifStatus(' + row.id + ')', {id: 'notif-tgl-' + row.id}); } },
+        { key: 'created_at', title: '发布时间', width: '130px', render: function(v) { return '<span style="color:var(--muted);font-size:12px">' + escHtml(fmtISODateTime(v) || '—') + '</span>'; } },
+        { key: 'actions', title: '操作', width: '60px', render: function(v, row) { return '<span style="white-space:nowrap">' + iconEdit('editNotifDialog(' + row.id + ',\'' + escJs(row.content) + '\')') + iconDelete('deleteNotif(' + row.id + ')') + '</span>'; } }
+      ],
+      maxHeight: 'calc(100vh - 260px)',
+      resizable: false
+    });
+  }
+
+  _notifDt.setData([{ content: '加载中...', level: 'general', created_by: '', is_active: false, created_at: '', id: 0, actions: '' }]);
 
   API.get('/notifications/manage?scope=' + scopeVal).then(function(data) {
     if (!data || data.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">暂无通知</div></td></tr>';
+      _notifDt.setData([]);
       return;
     }
-    var levelLabels = { general: '一般', important: '重要', severe: '严重' };
-    var levelColors = { general: '#3b82f6', important: '#e6a817', severe: '#e53e3e' };
-    tbody.innerHTML = data.map(function(n) {
-      var color = levelColors[n.level] || '#3b82f6';
-      return '<tr>' +
-        '<td><span style="display:inline-block;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:600;color:#fff;background:' + color + '">' + escHtml(levelLabels[n.level] || n.level) + '</span></td>' +
-        '<td style="font-size:13px">' + escHtml(n.content) + '</td>' +
-        '<td style="font-size:12px;font-family:var(--mono)">@' + escHtml(n.created_by) + '</td>' +
-        '<td>' + toggleSwitch(n.is_active, 'toggleNotifStatus(' + n.id + ')', {id: 'notif-tgl-' + n.id}) + '</td>' +
-        '<td style="font-size:12px;color:var(--muted)">' + escHtml(fmtISODateTime(n.created_at) || '—') + '</td>' +
-        '<td style="white-space:nowrap">' +
-          iconEdit('editNotifDialog(' + n.id + ',\'' + escJs(n.content) + '\')') +
-          iconDelete('deleteNotif(' + n.id + ')') +
-        '</td>' +
-      '</tr>';
-    }).join('');
+    _notifDt.setData(data);
   }).catch(function(e) {
-    tbody.innerHTML = '<tr><td colspan="6"><div class="error-state">加载失败: ' + escHtml(e.message) + '</div></td></tr>';
+    _notifDt.setData([]);
+    showToast('加载失败: ' + e.message, 'error');
   });
 }
 
@@ -1579,7 +1588,7 @@ async function initUserCenter(viewUserId) {
 
   // Container: profile bar at top + tab-switched content below
   container.innerHTML =
-    '<div id="uc-inner" style="display:flex;flex-direction:column;height:calc(100vh - 54px - 48px);overflow:hidden">' +
+    '<div id="uc-inner" style="display:flex;flex-direction:column;height:100%;overflow:hidden">' +
     // Profile bar — inline, not floating; reserve space for right panel
     '<div id="uc-profile-bar-wrap" style="margin-right:358px">' + profileBarHtml + '</div>' +
     // Expand panel
@@ -1620,16 +1629,17 @@ async function initUserCenter(viewUserId) {
   // Dynamic table scroll heights (like dashboard's _resizeProjTable)
   window._ucUpdateLayout = function() {
     var bottomH = typeof _getBottomBarHeight === 'function' ? _getBottomBarHeight() : 0;
-    // Adjust the inner flex container height to leave room for bottom bars
     var inner = document.getElementById('uc-inner');
-    if (inner) { inner.style.height = 'calc(100vh - 54px - 48px - ' + bottomH + 'px)'; }
-    // Adjust table scroll heights
-    var tw = document.getElementById('uc-tasks-table-wrap');
-    if (tw) { var tr = tw.getBoundingClientRect(); tw.style.maxHeight = Math.max(200, window.innerHeight - tr.top - 16 - bottomH) + 'px'; }
-    var bw = document.getElementById('uc-bugs-table-wrap');
-    if (bw) { var br = bw.getBoundingClientRect(); bw.style.maxHeight = Math.max(200, window.innerHeight - br.top - 16 - bottomH) + 'px'; }
-    var aw = document.getElementById('uc-approvals-table-wrap');
-    if (aw) { var ar = aw.getBoundingClientRect(); aw.style.maxHeight = Math.max(200, window.innerHeight - ar.top - 16 - bottomH) + 'px'; }
+    if (inner) { inner.style.height = 'calc(100% - ' + bottomH + 'px)'; }
+    // Defer maxHeight until after browser re-layout
+    requestAnimationFrame(function() {
+      var tw = document.getElementById('uc-tasks-table-wrap');
+      if (tw) { var ts = document.getElementById('uc-tasks-section'); if (ts) { var fb = document.getElementById('uc-tasks-filter-bar'); var fbH = fb ? fb.offsetHeight + (parseInt(getComputedStyle(fb).marginBottom)||0) : 0; tw.style.maxHeight = Math.max(200, ts.clientHeight - fbH) + 'px'; } }
+      var bw = document.getElementById('uc-bugs-table-wrap');
+      if (bw) { var bs = document.getElementById('uc-bugs-section'); if (bs) { var bfb = document.getElementById('uc-bugs-filter-bar'); var bfbH = bfb ? bfb.offsetHeight + (parseInt(getComputedStyle(bfb).marginBottom)||0) : 0; bw.style.maxHeight = Math.max(200, bs.clientHeight - bfbH) + 'px'; } }
+      var aw = document.getElementById('uc-approvals-table-wrap');
+      if (aw) { var as = document.getElementById('uc-approvals-section'); if (as) { aw.style.maxHeight = Math.max(200, as.clientHeight) + 'px'; } }
+    });
   }
   setTimeout(window._ucUpdateLayout, 80);
   // Re-apply on window resize
@@ -1919,7 +1929,7 @@ function _renderUcTableHead() {
   var dueInd = _ucSortCol === 'due_date'
     ? (_ucSortDir === 'asc' ? '▲' : '▼')
     : '<span style="color:var(--muted)">⇅</span>';
-  document.getElementById('uc-tasks-table-head').innerHTML = '<tr><th style="width:22px"><input type="checkbox" id="task-select-all" onchange="_toggleSelectAllTasks(this)" title="全选/取消全选"></th><th style="width:8%">项目编号</th><th style="width:100px">产品编号</th><th>阶段</th><th style="width:6%">任务编号</th><th>任务标题</th><th style="width:70px">状态</th><th style="width:6%;cursor:pointer;user-select:none" onclick="_ucSortBy(\'priority\')">优先级 ' + prioInd + '</th><th style="width:6%">进度</th><th style="width:7%;cursor:pointer;user-select:none" onclick="_ucSortBy(\'due_date\')">截止 ' + dueInd + '</th><th style="width:1%;white-space:nowrap">操作</th></tr>';
+  document.getElementById('uc-tasks-table-head').innerHTML = '<tr><th style="width:8%">项目编号</th><th style="width:100px">产品编号</th><th>阶段</th><th style="width:22px"><input type="checkbox" id="task-select-all" onchange="_toggleSelectAllTasks(this)" title="全选/取消全选"></th><th style="width:6%">任务编号</th><th>任务标题</th><th style="width:70px">状态</th><th style="width:6%;cursor:pointer;user-select:none" onclick="_ucSortBy(\'priority\')">优先级 ' + prioInd + '</th><th style="width:6%">进度</th><th style="width:7%;cursor:pointer;user-select:none" onclick="_ucSortBy(\'due_date\')">截止 ' + dueInd + '</th><th style="width:1%;white-space:nowrap">操作</th></tr>';
 }
 
 function _ucSortBy(col) {
@@ -1965,14 +1975,14 @@ function _ucTaskRow(t, opts) {
 
   var trClass = opts.projFirst ? ' class="uc-proj-first"' : '';
   return '<tr style="cursor:pointer" onclick="_ucOpenTask('+t.id+')"' + trClass + '>' +
-    // checkbox
-    '<td style="text-align:center;width:22px" onclick="event.stopPropagation();if(event.target!==this.firstElementChild){var cb=this.firstElementChild;if(cb){cb.checked=!cb.checked;cb.onchange()}}"><input type="checkbox" value="' + t.id + '" onchange="_onTaskCheckbox(this)" class="task-checkbox"></td>' +
     // project code (rowspan)
     projCell +
     // product code (rowspan)
     prodCell +
     // stage (rowspan)
     stageCell +
+    // checkbox
+    '<td style="text-align:center;width:22px" onclick="event.stopPropagation();if(event.target!==this.firstElementChild){var cb=this.firstElementChild;if(cb){cb.checked=!cb.checked;cb.onchange()}}"><input type="checkbox" value="' + t.id + '" onchange="_onTaskCheckbox(this)" class="task-checkbox"></td>' +
     // task id
     '<td style="text-align:center;font-size:11px;font-family:var(--mono);color:var(--muted)">#' + t.id + '</td>' +
     // title
