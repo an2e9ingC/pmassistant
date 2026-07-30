@@ -384,6 +384,66 @@ function renderTemplatesPage() {
       '</div>' +
       rightHtml +
     '</div>';
+
+  // Build DataTables for doc and task template sections
+  var docs = _templatesGrouped[_selectedStage] || [];
+  var tasks = _taskTemplatesGrouped[_selectedStage] || [];
+  var stageKey = escHtml(_selectedStage).replace(/[^a-zA-Z0-9]/g,'_');
+  var typeLabels = DOC_TYPE_LABELS;
+
+  if (docs.length) {
+    var dtDocs = new DataTable({
+      container: document.getElementById('tpl-docs-' + stageKey),
+      columns: (function() {
+        var cols = [
+          { key: 'sort_order', title: '序号', width: '50px', render: function(v, row, idx) { return '<span data-drag-index="'+idx+'" style="font-family:var(--mono);color:var(--muted);cursor:grab" title="拖动排序">'+(v!=null?v:'—')+'</span>'; } },
+          { key: 'doc_name', title: '文档名称', render: function(v) { return '<span style="font-weight:500">'+escHtml(v||'')+'</span>'; } },
+          { key: 'responsible_role', title: '责任人', width: '80px', render: function(v) { return '<span style="font-size:12px;white-space:nowrap">'+escHtml(v||'—')+'</span>'; } },
+          { key: 'doc_type', title: '类型', width: '60px', render: function(v) { return '<span style="font-size:11px">'+escHtml(typeLabels[v]||'—')+'</span>'; } },
+          { key: 'path_info', title: '路径', render: function(v, row) { return '<span style="font-size:11px">'+(row.base_path||row.file_pattern?(row.base_path?'<div style="color:var(--muted)">'+escHtml(row.base_path)+'</div>':'')+(row.file_pattern?'<div style="font-family:var(--mono);color:var(--accent)">'+escHtml(row.file_pattern)+'</div>':''):(row.doc_path?'<a href="'+escHtml(row.doc_path)+'" target="_blank" style="color:var(--accent);text-decoration:none">'+escHtml(row.doc_path)+' ↗</a>':'—'))+'</span>'; } },
+          { key: 'description', title: '说明', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(v||'')+'</span>'; } }
+        ];
+        if (canEdit) cols.push({ key: 'actions', title: '操作', width: '90px', render: function(v, row) {
+          var h = '<span style="white-space:nowrap;text-align:center">';
+          if (row.is_unnecessary) h += '<span style="font-size:10px;color:var(--warn);margin-right:4px" title="已标记为无需文档">无需</span>';
+          h += '<span style="font-size:10px;color:'+(row.is_optional?'var(--accent)':'var(--muted)')+';margin-right:4px;cursor:pointer" onclick="event.stopPropagation();toggleDocOptional(\''+escHtml(_selectedStage)+'\','+row.id+','+(row.is_optional?'1':'0')+')">'+(row.is_optional?'可选':'必选')+'</span>';
+          h += iconCopy('copyTemplate('+row.id+')')+iconEdit('showEditTemplateForm('+row.id+')')+iconDelete('deleteTemplate('+row.id+')');
+          h += '</span>'; return h;
+        }});
+        return cols;
+      })(),
+      data: docs,
+      resizable: false
+    });
+    dtDocs.enableDragReorder(_templatesGrouped[_selectedStage] || [], function() {
+      _pendingOps.push({ stage: _selectedStage, type: 'docs', items: (_templatesGrouped[_selectedStage]||[]).map(function(d,i) { return {id:d.id, sort_order:i+1}; }) });
+      renderTemplatesPage();
+    });
+  }
+
+  if (tasks.length) {
+    var dtTasks = new DataTable({
+      container: document.getElementById('tpl-tasks-' + stageKey),
+      columns: (function() {
+        var cols = [
+          { key: 'sort_order', title: '序号', width: '50px', render: function(v, row, idx) { return '<span data-drag-index="'+idx+'" style="font-family:var(--mono);color:var(--muted);cursor:grab" title="拖动排序">'+(v!=null?v:'—')+'</span>'; } },
+          { key: 'task_name', title: '任务名称', render: function(v) { return '<span style="font-weight:500">'+escHtml(v||'')+'</span>'; } },
+          { key: 'responsible_role', title: '责任人', width: '100px', render: function(v) { return '<span style="font-size:12px;white-space:nowrap">'+escHtml(v||'—')+'</span>'; } },
+          { key: 'description', title: '说明', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(v||'')+'</span>'; } }
+        ];
+        if (canEdit) cols.push({ key: 'actions', title: '操作', width: '90px', render: function(v, row) {
+          return '<span style="white-space:nowrap;text-align:center">'+(row.is_unnecessary?'<span style="font-size:10px;color:var(--warn);margin-right:4px">无需</span>':'')+'<span style="font-size:10px;color:'+(row.is_optional?'var(--accent)':'var(--muted)')+';margin-right:4px;cursor:pointer" onclick="event.stopPropagation();toggleTaskOptional(\''+escHtml(_selectedStage)+'\','+row.id+','+(row.is_optional?'1':'0')+')">'+(row.is_optional?'可选':'必选')+'</span>'+iconCopy('copyTaskTemplate('+row.id+')')+iconEdit('showEditTaskTemplateForm('+row.id+')')+iconDelete('deleteTaskTemplate('+row.id+')')+'</span>';
+        }});
+        return cols;
+      })(),
+      data: tasks,
+      resizable: false
+    });
+    dtTasks.enableDragReorder(_taskTemplatesGrouped[_selectedStage] || [], function() {
+      _taskPendingOps.push({ stage: _selectedStage, type: 'tasks', items: (_taskTemplatesGrouped[_selectedStage]||[]).map(function(t,i) { return {id:t.id, sort_order:i+1}; }) });
+      renderTemplatesPage();
+    });
+  }
 }
 
 function selectDocTemplateStage(stageType) {
@@ -433,43 +493,7 @@ function _renderDocTemplateSection(stageName, canEdit) {
 
   // Table or empty state
   if (docs.length) {
-    html += '<div class="table-scroll"><table class="stage-table"><thead><tr>' +
-      '<th style="width:50px">序号</th>' +
-      '<th>文档名称</th>' +
-      '<th style="width:80px">责任人</th>' +
-      '<th style="width:60px">类型</th>' +
-      '<th>路径</th>' +
-      '<th>说明</th>' +
-      (canEdit ? '<th style="width:90px;white-space:nowrap">操作</th>' : '') +
-    '</tr></thead><tbody>';
-    var typeLabels = DOC_TYPE_LABELS;
-    docs.forEach(function(d, i) {
-      html += '<tr>' +
-        '<td data-drag-index="' + i + '" draggable="true"' +
-        ' ondragstart="_trDragStart.call(this,event)" ondragend="_trDragEnd.call(this,event)"' +
-        ' ondragover="_trDragOver.call(this,event)" ondragleave="_trDragLeave.call(this,event)"' +
-        ' ondrop="_trDrop.call(this,event,_templatesGrouped[_selectedStage] || [],renderTemplatesAfterReorder)"' +
-        ' style="font-family:var(--mono);color:var(--muted);text-align:center;cursor:grab" title="拖动排序">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
-        '<td style="font-weight:500">' + escHtml(d.doc_name) + '</td>' +
-        '<td style="font-size:12px;white-space:nowrap;width:80px">' + escHtml(d.responsible_role || '—') + '</td>' +
-        '<td style="font-size:11px">' + escHtml(typeLabels[d.doc_type] || '—') + '</td>' +
-        '<td style="font-size:11px">' + (d.base_path || d.file_pattern
-          ? (d.base_path ? '<div style="color:var(--muted)">' + escHtml(d.base_path) + '</div>' : '') +
-            (d.file_pattern ? '<div style="font-family:var(--mono);color:var(--accent)">' + escHtml(d.file_pattern) + '</div>' : '')
-          : (d.doc_path ? '<a href="' + escHtml(d.doc_path) + '" target="_blank" style="color:var(--accent);text-decoration:none">' + escHtml(d.doc_path) + ' ↗</a>' : '—')) + '</td>' +
-        '<td style="font-size:12px;color:var(--muted)">' + escHtml(d.description || '') + '</td>' +
-        (canEdit
-          ? '<td style="white-space:nowrap;text-align:center" ondragover="event.stopPropagation()" ondrop="event.stopPropagation()">' +
-              (d.is_unnecessary ? '<span style="font-size:10px;color:var(--warn);margin-right:4px" title="已标记为无需文档">无需</span>' : '') +
-              '<span style="font-size:10px;color:' + (d.is_optional ? 'var(--accent)' : 'var(--muted)') + ';margin-right:4px;cursor:pointer" onclick="event.stopPropagation();toggleDocOptional(\'' + escHtml(_selectedStage) + '\',' + d.id + ',' + (d.is_optional ? '1' : '0') + ')" title="' + (d.is_optional ? '可选项（点击取消）' : '非可选项（点击设为可选）') + '">' + (d.is_optional ? '可选' : '必选') + '</span>' +
-              iconCopy('copyTemplate(' + d.id + ')') +
-              iconEdit('showEditTemplateForm(' + d.id + ')') +
-              iconDelete('deleteTemplate(' + d.id + ')') +
-            '</td>'
-          : '') +
-      '</tr>';
-    });
-    html += '</tbody></table></div>';
+    html += '<div id="tpl-docs-' + escHtml(stageName).replace(/[^a-zA-Z0-9]/g,'_') + '"></div>';
     html += '<div style="font-size:10.5px;color:var(--muted);margin-top:4px">💡 拖动序号列可调整文档顺序</div>';
   } else {
     html += '<div class="empty-state" style="padding:16px">暂无文档模板</div>';
@@ -517,40 +541,11 @@ function _renderTaskTemplateSection(stageName, canEdit) {
 
   // Table or empty state
   if (tasks.length) {
-    html += '<div class="table-scroll"><table class="stage-table"><thead><tr>' +
-      '<th style="width:50px">序号</th>' +
-      '<th>任务名称</th>' +
-      '<th style="width:100px">责任人</th>' +
-      '<th>说明</th>' +
-      (canEdit ? '<th style="width:90px;white-space:nowrap">操作</th>' : '') +
-    '</tr></thead><tbody>';
-    tasks.forEach(function(t, i) {
-      html += '<tr>' +
-        '<td data-drag-index="' + i + '" draggable="true"' +
-        ' ondragstart="_trDragStart.call(this,event)" ondragend="_trDragEnd.call(this,event)"' +
-        ' ondragover="_trDragOver.call(this,event)" ondragleave="_trDragLeave.call(this,event)"' +
-        ' ondrop="_trDrop.call(this,event,_taskTemplatesGrouped[_selectedStage] || [],renderTaskTemplatesAfterReorder)"' +
-        ' style="font-family:var(--mono);color:var(--muted);text-align:center;cursor:grab" title="拖动排序">' + (t.sort_order != null ? t.sort_order : '—') + '</td>' +
-        '<td style="font-weight:500">' + escHtml(t.task_name) + '</td>' +
-        '<td style="font-size:12px;white-space:nowrap">' + escHtml(t.responsible_role || '—') + '</td>' +
-        '<td style="font-size:12px;color:var(--muted)">' + escHtml(t.description || '') + '</td>' +
-        (canEdit
-          ? '<td style="white-space:nowrap;text-align:center" ondragover="event.stopPropagation()" ondrop="event.stopPropagation()">' +
-              (t.is_unnecessary ? '<span style="font-size:10px;color:var(--warn);margin-right:4px" title="已标记为无需任务">无需</span>' : '') +
-              '<span style="font-size:10px;color:' + (t.is_optional ? 'var(--accent)' : 'var(--muted)') + ';margin-right:4px;cursor:pointer" onclick="event.stopPropagation();toggleTaskOptional(\'' + escHtml(_selectedStage) + '\',' + t.id + ',' + (t.is_optional ? '1' : '0') + ')" title="' + (t.is_optional ? '可选项（点击取消）' : '非可选项（点击设为可选）') + '">' + (t.is_optional ? '可选' : '必选') + '</span>' +
-              iconCopy('copyTaskTemplate(' + t.id + ')') +
-              iconEdit('showEditTaskTemplateForm(' + t.id + ')') +
-              iconDelete('deleteTaskTemplate(' + t.id + ')') +
-            '</td>'
-          : '') +
-      '</tr>';
-    });
-    html += '</tbody></table></div>';
+    html += '<div id="tpl-tasks-' + escHtml(stageName).replace(/[^a-zA-Z0-9]/g,'_') + '"></div>';
     html += '<div style="font-size:10.5px;color:var(--muted);margin-top:4px">💡 拖动序号列可调整任务顺序</div>';
   } else {
     html += '<div class="empty-state" style="padding:16px">暂无任务模板</div>';
   }
-
   html += '</div>';
   return html;
 }
@@ -1792,34 +1787,7 @@ function renderProductTreePage() {
 
     rightHtml += '<div class="section-hd"><div class="section-title">' + escHtml(_productStage) + ' — 文档清单 (' + _productStageDocs.length + ')</div></div>';
     if (_productStageDocs.length) {
-      rightHtml += '<div class="table-scroll"><table class="stage-table"><thead><tr>' +
-        '<th>序号</th><th>文档名称</th><th style="width:80px">责任人</th><th style="width:60px">类型</th><th>路径</th><th>说明</th>' +
-        (canEdit ? '<th style="white-space:nowrap">操作</th>' : '') +
-      '</tr></thead><tbody>';
-      var typeLabels = DOC_TYPE_LABELS;
-      _productStageDocs.forEach(function(d, i) {
-        rightHtml += '<tr>' +
-          '<td data-drag-index="' + i + '" draggable="true"' +
-          ' ondragstart="_trDragStart.call(this,event)" ondragend="_trDragEnd.call(this,event)"' +
-          ' ondragover="_trDragOver.call(this,event)" ondragleave="_trDragLeave.call(this,event)"' +
-          ' ondrop="_trDrop.call(this,event,_productStageDocs,renderProductAfterReorder)"' +
-          ' style="font-family:var(--mono);color:var(--muted);text-align:center;cursor:grab" title="拖动排序">' + (d.sort_order != null ? d.sort_order : '—') + '</td>' +
-          '<td style="font-weight:500">' + escHtml(d.doc_name) + '</td>' +
-          '<td style="font-size:12px;white-space:nowrap;width:80px">' + escHtml(d.responsible_role || '—') + '</td>' +
-          '<td style="font-size:11px">' + escHtml(typeLabels[d.doc_type] || '—') + '</td>' +
-          '<td style="font-size:12px">' + (d.doc_path
-            ? '<a href="' + escHtml(d.doc_path) + '" target="_blank" style="color:var(--accent);text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'" title="点击打开路径">' + escHtml(d.doc_path) + ' ↗</a>'
-            : '—') + '</td>' +
-          '<td style="font-size:12px;color:var(--muted)">' + escHtml(d.description || '') + '</td>' +
-          (canEdit ? '<td style="white-space:nowrap;text-align:center" ondragover="event.stopPropagation()" ondrop="event.stopPropagation()">' +
-            '<span style="font-size:10px;color:' + (d.is_optional ? 'var(--accent)' : 'var(--muted)') + ';cursor:pointer;margin-right:4px" onclick="event.stopPropagation();toggleProductDocOptional(' + d.id + ',' + (d.is_optional ? '1' : '0') + ')" title="' + (d.is_optional ? '可选项（点击取消）' : '非可选项（点击设为可选）') + '">' + (d.is_optional ? '可选' : '必选') + '</span>' +
-            iconCopy('copyProductTemplate(' + d.id + ')') +
-            iconEdit('showEditProductTemplateForm(' + d.id + ')') +
-            iconDelete('deleteProductTemplate(' + d.id + ')') +
-          '</td>' : '') +
-        '</tr>';
-      });
-      rightHtml += '</tbody></table></div>';
+      rightHtml += '<div id="tpl-prod-stage-docs"></div>';
       rightHtml += '<div style="font-size:10.5px;color:var(--muted);margin-top:4px">💡 拖动序号列可调整文档顺序</div>';
     } else {
       rightHtml += '<div class="empty-state" style="padding:20px">暂无文档模板</div>';
@@ -1832,6 +1800,31 @@ function renderProductTreePage() {
       '<div class="dt-left">' + leftHtml + '</div>' +
       rightHtml +
     '</div>';
+
+  // Product stage docs DataTable (with drag-reorder)
+  if (isL2 && _productStageDocs.length) {
+    var typeLabels = DOC_TYPE_LABELS;
+    var dtProdDocs = new DataTable({
+      container: document.getElementById('tpl-prod-stage-docs'),
+      columns: (function() {
+        var cols = [
+          { key: 'sort_order', title: '序号', render: function(v, row, idx) { return '<span data-drag-index="'+idx+'" style="font-family:var(--mono);color:var(--muted);cursor:grab" title="拖动排序">'+(v!=null?v:'—')+'</span>'; } },
+          { key: 'doc_name', title: '文档名称', render: function(v) { return '<span style="font-weight:500">'+escHtml(v||'')+'</span>'; } },
+          { key: 'responsible_role', title: '责任人', width: '80px', render: function(v) { return '<span style="font-size:12px;white-space:nowrap">'+escHtml(v||'—')+'</span>'; } },
+          { key: 'doc_type', title: '类型', width: '60px', render: function(v) { return '<span style="font-size:11px">'+escHtml(typeLabels[v]||'—')+'</span>'; } },
+          { key: 'doc_path', title: '路径', render: function(v) { return '<span style="font-size:12px">'+(v?'<a href="'+escHtml(v)+'" target="_blank" style="color:var(--accent);text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'" title="点击打开路径">'+escHtml(v)+' ↗</a>':'—')+'</span>'; } },
+          { key: 'description', title: '说明', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(v||'')+'</span>'; } }
+        ];
+        if (canEdit) cols.push({ key: 'actions', title: '操作', render: function(v, row) {
+          return '<span style="white-space:nowrap;text-align:center"><span style="font-size:10px;color:'+(row.is_optional?'var(--accent)':'var(--muted)')+';cursor:pointer;margin-right:4px" onclick="event.stopPropagation();toggleProductDocOptional('+row.id+','+(row.is_optional?'1':'0')+')">'+(row.is_optional?'可选':'必选')+'</span>'+iconCopy('copyProductTemplate('+row.id+')')+iconEdit('showEditProductTemplateForm('+row.id+')')+iconDelete('deleteProductTemplate('+row.id+')')+'</span>';
+        }});
+        return cols;
+      })(),
+      data: _productStageDocs,
+      resizable: false
+    });
+    dtProdDocs.enableDragReorder(_productStageDocs, renderProductAfterReorder);
+  }
 
   if (isL1 && children.length) {
     new DataTable({

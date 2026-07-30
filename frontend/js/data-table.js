@@ -519,6 +519,55 @@ var DataTable = (function() {
     this.refresh();
   };
 
+  DataTable.prototype.enableDragReorder = function(listRef, renderFn) {
+    var self = this;
+    var tbody = this._tbodyEl;
+    // Attach drag handlers to index cells
+    tbody.querySelectorAll('td[data-drag-index]').forEach(function(td) {
+      td.setAttribute('draggable', 'true');
+      td.style.cursor = 'grab';
+    });
+    // Use event delegation on tbody
+    tbody._dragHandler = function(e) {
+      var td = e.target.closest('td[data-drag-index]');
+      if (!td) return;
+      var idx = parseInt(td.getAttribute('data-drag-index'));
+      if (e.type === 'dragstart') {
+        self._dragSourceIdx = idx;
+        td.style.opacity = '0.4';
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', '');
+      } else if (e.type === 'dragend') {
+        td.style.opacity = '';
+        tbody.querySelectorAll('.dt-drag-over').forEach(function(r) { r.classList.remove('dt-drag-over'); });
+      } else if (e.type === 'dragover') {
+        e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+        td.parentElement.classList.add('dt-drag-over');
+      } else if (e.type === 'dragleave') {
+        td.parentElement.classList.remove('dt-drag-over');
+      } else if (e.type === 'drop') {
+        e.preventDefault(); e.stopPropagation();
+        td.parentElement.classList.remove('dt-drag-over');
+        var targetIdx = idx;
+        if (self._dragSourceIdx < 0 || self._dragSourceIdx === targetIdx) return;
+        var moved = listRef.splice(self._dragSourceIdx, 1)[0];
+        listRef.splice(targetIdx, 0, moved);
+        for (var i = 0; i < listRef.length; i++) { listRef[i].sort_order = i + 1; }
+        self._dragSourceIdx = -1;
+        // Update DataTable data and refresh
+        self._data = listRef.slice();
+        self.refresh();
+        self.enableDragReorder(listRef, renderFn);
+        if (typeof renderFn === 'function') setTimeout(renderFn, 50);
+      }
+    };
+    tbody.addEventListener('dragstart', tbody._dragHandler);
+    tbody.addEventListener('dragend', tbody._dragHandler);
+    tbody.addEventListener('dragover', tbody._dragHandler);
+    tbody.addEventListener('dragleave', tbody._dragHandler);
+    tbody.addEventListener('drop', tbody._dragHandler);
+  };
+
   DataTable.prototype.destroy = function() {
     this._scrollEl.removeEventListener('mousedown', null);
     this._container.innerHTML = '';
