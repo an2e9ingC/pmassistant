@@ -364,7 +364,7 @@ function renderTasksPage() {
         '<button class="btn btn-primary" onclick="openTaskDialog()" style="font-size:12px;padding:5px 14px">＋ 新建任务</button>' +
       '</div>' +
     '</div>') +
-    '<div id="task-content" style="flex:1;overflow:auto;padding:16px">加载中...</div>' +
+    '<div id="task-content" style="flex:1;overflow:hidden;padding:16px">加载中...</div>' +
   '</div>';
 
   container.innerHTML = html;
@@ -561,6 +561,7 @@ function renderTaskTable(tasks, execs) {
       { key: 'actions', title: '操作', render: function(v, row) { return iconEdit('openTaskDialog('+row.id+')','编辑任务')+iconCopy('openCopyTaskDialog('+row.id+')','复制任务')+iconDelete('deleteTask('+row.id+',\''+escJs(row.title)+'\')','删除任务'); } }
     ],
     data: tasks,
+    maxHeight: 'calc(100vh - 220px)',
     resizable: false,
     selectable: true,
     checkboxPosition: 3,

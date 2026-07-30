@@ -1600,16 +1600,16 @@ async function initUserCenter(viewUserId) {
         // Tasks section (default visible)
         '<div id="uc-tasks-section" style="flex:1;display:flex;flex-direction:column;min-height:0">' +
           '<div class="task-filter-bar" id="uc-tasks-filter-bar"></div>' +
-          '<div class="table-scroll" id="uc-tasks-table-wrap"><table class="proj-table clickable"><thead id="uc-tasks-table-head"></thead><tbody id="uc-tasks-table-tbody"></tbody></table></div>' +
+          '<div id="uc-tasks-table-wrap"></div>' +
         '</div>' +
         // Bugs section (hidden by default)
         '<div id="uc-bugs-section" style="flex:1;flex-direction:column;min-height:0;display:none">' +
           '<div class="task-filter-bar" id="uc-bugs-filter-bar"></div>' +
-          '<div class="table-scroll" id="uc-bugs-table-wrap"><table class="proj-table clickable"><thead id="uc-bugs-table-head"></thead><tbody id="uc-bugs-table-tbody"></tbody></table></div>' +
+          '<div id="uc-bugs-table-wrap"></div>' +
         '</div>' +
         // Approvals section (hidden by default)
         (window._approvalEnabled ? '<div id="uc-approvals-section" style="flex:1;flex-direction:column;min-height:0;display:none">' +
-          '<div class="table-scroll" id="uc-approvals-table-wrap"><table class="proj-table clickable"><thead id="uc-approvals-table-head"></thead><tbody id="uc-approvals-table-tbody"></tbody></table></div>' +
+          '<div id="uc-approvals-table-wrap"></div>' +
         '</div>' : '') +
       '</div>' +
     '</div>' +
@@ -1633,12 +1633,13 @@ async function initUserCenter(viewUserId) {
     if (inner) { inner.style.height = 'calc(100% - ' + bottomH + 'px)'; }
     // Defer maxHeight until after browser re-layout
     requestAnimationFrame(function() {
-      var tw = document.getElementById('uc-tasks-table-wrap');
-      if (tw) { var ts = document.getElementById('uc-tasks-section'); if (ts) { var fb = document.getElementById('uc-tasks-filter-bar'); var fbH = fb ? fb.offsetHeight + (parseInt(getComputedStyle(fb).marginBottom)||0) : 0; tw.style.maxHeight = Math.max(200, ts.clientHeight - fbH) + 'px'; } }
-      var bw = document.getElementById('uc-bugs-table-wrap');
-      if (bw) { var bs = document.getElementById('uc-bugs-section'); if (bs) { var bfb = document.getElementById('uc-bugs-filter-bar'); var bfbH = bfb ? bfb.offsetHeight + (parseInt(getComputedStyle(bfb).marginBottom)||0) : 0; bw.style.maxHeight = Math.max(200, bs.clientHeight - bfbH) + 'px'; } }
-      var aw = document.getElementById('uc-approvals-table-wrap');
-      if (aw) { var as = document.getElementById('uc-approvals-section'); if (as) { aw.style.maxHeight = Math.max(200, as.clientHeight) + 'px'; } }
+      var bottomH = typeof _getBottomBarHeight === 'function' ? _getBottomBarHeight() : 0;
+      var tw = document.querySelector('#uc-tasks-table-wrap .dt-scroll');
+      if (tw) { var tr = tw.getBoundingClientRect(); tw.style.maxHeight = Math.max(200, window.innerHeight - tr.top - 32 - bottomH) + 'px'; }
+      var bw = document.querySelector('#uc-bugs-table-wrap .dt-scroll');
+      if (bw) { var br = bw.getBoundingClientRect(); bw.style.maxHeight = Math.max(200, window.innerHeight - br.top - 32 - bottomH) + 'px'; }
+      var aw = document.querySelector('#uc-approvals-table-wrap .dt-scroll');
+      if (aw) { var ar = aw.getBoundingClientRect(); aw.style.maxHeight = Math.max(200, window.innerHeight - ar.top - 32 - bottomH) + 'px'; }
     });
   }
   setTimeout(window._ucUpdateLayout, 80);
@@ -2068,7 +2069,9 @@ function _renderUcTaskTable() {
         { key: 'actions', title: '操作', render: function(v, row) { return '<span style="white-space:nowrap" onclick="event.stopPropagation()">'+iconEdit('_ucOpenTask('+row.id+')','查看/编辑')+iconDelete('_ucDeleteTask('+row.id+')','删除')+'</span>'; } }
       ],
       data: flatRows,
+      maxHeight: '400px',
       resizable: false,
+      stickyHeader: true,
       selectable: true,
       checkboxPosition: 3,
       onSelectChange: function(rows) { _selectedTasks = new Set(rows.map(function(r) { return r.id; })); if (typeof _ensureBatchToolbar==='function') _ensureBatchToolbar(); },

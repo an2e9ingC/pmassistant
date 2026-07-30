@@ -78,6 +78,7 @@ var DataTable = (function() {
     this._tableEl = document.createElement('table');
     this._tableEl.className = 'dt-table';
     if (this._resizable) this._tableEl.style.tableLayout = 'fixed';
+    if (this._stickyHeader) this._tableEl.classList.add('dt-sticky');
     if (this._rowStriped) this._tableEl.classList.add('dt-striped');
     if (this._hoverHighlight) this._tableEl.classList.add('dt-hover');
     if (this._clickable) this._tableEl.classList.add('dt-clickable');
@@ -110,7 +111,6 @@ var DataTable = (function() {
     // ── Attach event handlers ──
     this._attachSort();
     this._attachResize();
-    if (this._selectable) this._attachSelect();
     if (this._onRowClick) this._attachRowClick();
   };
 
