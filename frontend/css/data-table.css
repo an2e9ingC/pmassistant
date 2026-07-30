@@ -1,0 +1,120 @@
+/* ═══════════════════════════════════════════════════
+   DataTable — standardized table component
+   Replaces .proj-table and .stage-table
+═══════════════════════════════════════════════════ */
+
+/* ── Scroll container ── */
+.dt-scroll {
+  overflow-y: auto;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+.dt-scroll.no-border { border: none; border-radius: 0; }
+
+/* ── Base table ── */
+.dt-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+  table-layout: fixed; /* required for col resize to work predictably */
+}
+
+/* ── Header ── */
+.dt-table thead th {
+  position: sticky; top: 0; z-index: 5;
+  text-align: center; white-space: nowrap;
+  padding: 7px 10px;
+  font-size: 12.5px; font-weight: 620;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--fg);
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  user-select: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dt-table thead th:last-child { border-right: none; }
+
+/* Sortable header */
+.dt-table thead th.dt-sortable { cursor: pointer; }
+.dt-table thead th.dt-sortable:hover { background: var(--border); }
+.dt-table .dt-sort-ind { margin-left: 4px; color: var(--muted); font-size: 10px; }
+.dt-table .dt-sort-ind.asc { color: var(--accent); }
+.dt-table .dt-sort-ind.desc { color: var(--accent); }
+
+/* ── Column resize handle ── */
+.dt-resize-handle {
+  position: absolute; right: 0; top: 0; bottom: 0;
+  width: 5px; cursor: col-resize; z-index: 10;
+  background: transparent;
+  transition: background 0.15s;
+}
+.dt-resize-handle:hover,
+.dt-resize-handle.active { background: var(--accent); opacity: 0.4; }
+
+
+/* ── Body cells ── */
+.dt-table tbody td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+.dt-table tbody td:last-child { border-right: none; }
+.dt-table tbody tr:last-child td { border-bottom: none; }
+
+/* ── Row striping ── */
+.dt-striped tbody tr:nth-child(odd) td { background: var(--surface); }
+.dt-striped tbody tr:nth-child(even) td { background: var(--bg); }
+
+/* ── Hover ── */
+.dt-hover tbody tr:hover td { background: var(--surface2); }
+
+/* ── Clickable rows ── */
+.dt-clickable tbody tr { cursor: pointer; }
+
+/* ── Selected rows ── */
+.dt-table tbody tr.selected td { filter: brightness(0.7); }
+[data-theme="dark"] .dt-table tbody tr.selected td { filter: brightness(1.3); }
+
+/* ── Row transition ── */
+.dt-table tbody tr { transition: background 0.1s; }
+.dt-table tbody tr td { transition: filter 0.1s; }
+
+/* ── Checkbox column ── */
+.dt-table .dt-cb-cell {
+  text-align: center; width: 24px; padding: 4px 2px;
+}
+.dt-table .dt-cb-cell input[type="checkbox"] {
+  width: 15px; height: 15px; cursor: pointer; accent-color: var(--accent);
+}
+
+/* ── Empty state ── */
+.dt-empty { text-align: center; padding: 30px; color: var(--muted); font-style: italic; }
+
+/* ── Spacer row (bottom fill) ── */
+.dt-table .dt-spacer-row td { border-bottom: none; }
+
+/* ── Header color variants ── */
+.dt-header-accent thead th { background: var(--accent); color: #fff; }
+.dt-header-success thead th { background: var(--success); color: #fff; }
+.dt-header-danger thead th { background: var(--danger); color: #fff; }
+.dt-header-warn thead th { background: var(--warn); color: #fff; }
+
+/* ── Dark theme striping ── */
+[data-theme="dark"] .dt-striped tbody tr:nth-child(odd) td { background: #2a3340; }
+[data-theme="dark"] .dt-striped tbody tr:nth-child(even) td { background: #222a35; }
+[data-theme="dark"] .dt-hover tbody tr:hover td { background: #334050; }
+
+/* ═══════════════════════════════════════════════════
+   Compatibility — keep old .table-scroll sticky working
+   until all tables are migrated
+═══════════════════════════════════════════════════ */

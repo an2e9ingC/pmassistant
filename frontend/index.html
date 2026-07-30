@@ -28,6 +28,7 @@ document.write('<link rel="stylesheet" href="/css/layout.css?v=' + v + '">');
 document.write('<link rel="stylesheet" href="/css/components.css?v=' + v + '">');
 document.write('<link rel="stylesheet" href="/css/gantt.css?v=' + v + '">');
 document.write('<link rel="stylesheet" href="/css/detail.css?v=' + v + '">');
+document.write('<link rel="stylesheet" href="/css/data-table.css?v=' + v + '">');
 document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '">');
 })();
 </script>
@@ -627,14 +628,7 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
         </div>
         <button class="btn btn-primary" onclick="openPublishNotifDialog()" style="font-size:12px;padding:5px 16px">发布通知</button>
       </div>
-      <div class="card table-scroll">
-        <table class="proj-table">
-          <thead><tr>
-            <th style="width:60px">级别</th><th>内容</th><th style="width:100px">发布者</th><th style="width:60px">状态</th><th style="width:130px">发布时间</th><th style="width:60px">操作</th>
-          </tr></thead>
-          <tbody id="notif-manage-tbody"><tr><td colspan="6"><div class="loading-spinner">加载中...</div></td></tr></tbody>
-        </table>
-      </div>
+      <div class="card" style="padding:0"><div id="notif-manage-table"></div></div>
     </div>
 
     <!-- ══════════════════════ VIEW — USER-CENTER ══════════════════════ -->
@@ -656,48 +650,21 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
       <div id="usec-users">
         <div class="kpi-grid" style="margin-bottom:12px" id="user-kpi-grid"></div>
         <div style="margin-bottom:12px"><button class="btn" onclick="resetAllGuides()" style="font-size:12px;padding:5px 16px">重置新手引导</button></div>
-        <div class="card table-scroll" style="max-height:calc(100vh - 340px)">
-          <table class="proj-table">
-            <thead><tr>
-              <th style="width:40px">序号</th><th>用户名</th><th width="6%">企微姓名</th><th width="6%">来源</th><th width="18%">角色组</th><th width="5%">状态</th><th width="7%">企业微信</th><th width="8%">登录状态</th><th width="10%">上次登录</th><th width="8%">创建时间</th><th width="12%">操作</th>
-            </tr></thead>
-            <tbody id="users-tbody">
-              <tr><td colspan="9"><div class="loading-spinner">加载中...</div></td></tr>
-            </tbody>
-          </table>
-        </div>
+        <div class="card" style="padding:0"><div id="users-table"></div></div>
       </div>
       <div id="usec-roles" style="display:none">
         <div class="kpi-grid" style="margin-bottom:12px" id="role-kpi-grid"></div>
         <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
           <button class="btn btn-primary" onclick="openRoleCreateDialog()" style="font-size:12px;padding:5px 16px">+ 添加角色</button>
         </div>
-        <div class="card table-scroll" style="max-height:calc(100vh - 340px)">
-          <table class="proj-table">
-            <thead><tr>
-              <th style="width:40px">序号</th><th>角色Key</th><th>显示名</th><th>特殊权限</th><th>用户数</th><th style="width:12%">操作</th>
-            </tr></thead>
-            <tbody id="roles-tbody">
-              <tr><td colspan="6"><div class="loading-spinner">加载中...</div></td></tr>
-            </tbody>
-          </table>
-        </div>
+        <div class="card" style="padding:0"><div id="roles-table"></div></div>
       </div>
       <div id="usec-wecom" style="display:none">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
           <span style="font-size:12px;color:var(--muted)" id="wecom-users-count"></span>
           <button class="btn btn-xs" onclick="refreshWecomUsers()" style="font-size:10px;padding:2px 8px">从企业微信同步</button>
         </div>
-        <div class="card table-scroll" style="max-height:calc(100vh - 300px)">
-          <table class="proj-table">
-            <thead><tr>
-              <th style="width:40px">序号</th><th>userid</th><th>姓名</th><th>部门</th><th width="12%">关联PMA用户</th><th width="10%">同步时间</th>
-            </tr></thead>
-            <tbody id="wecom-users-tbody">
-              <tr><td colspan="6"><div class="loading-spinner">加载中...</div></td></tr>
-            </tbody>
-          </table>
-        </div>
+        <div class="card" style="padding:0"><div id="wecom-table"></div></div>
       </div>
     </div>
 
@@ -794,20 +761,7 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
           </div>
         </div>
       </div>
-      <div class="card table-scroll" style="max-height:calc(100vh - 260px);margin-top:12px">
-        <table class="proj-table">
-          <thead><tr>
-            <th width="10%">项目编号</th>
-            <th>项目名</th>
-            <th width="10%">客户</th>
-            <th>关联产品</th>
-            <th width="10%">状态</th>
-          </tr></thead>
-          <tbody id="topo-tbody">
-            <tr><td colspan="5"><div class="loading-spinner">输入关键字开始搜索...</div></td></tr>
-          </tbody>
-        </table>
-      </div>
+      <div class="card" style="padding:0"><div id="topo-table"></div></div>
     </div>
 
     <!-- ══════════════════════ VIEW — GITLAB RELEASES ══════════════════════ -->
@@ -864,23 +818,7 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
           </div>
         </div>
       </div>
-      <div class="card table-scroll" style="max-height:calc(100vh - 360px)">
-        <table class="proj-table">
-          <thead>
-            <tr>
-              <th width="12%">产品</th>
-              <th width="10%">发布版本</th>
-              <th width="30%">GitLab 链接</th>
-              <th width="8%">校验</th>
-              <th width="8%">发布日期</th>
-              <th width="20%">描述（来源）</th>
-            </tr>
-          </thead>
-          <tbody id="glr-tbody">
-            <tr><td colspan="6"><div class="loading-spinner">加载中...</div></td></tr>
-          </tbody>
-        </table>
-      </div>
+      <div class="card" style="padding:0"><div id="glr-table"></div></div>
     </div>
 
     <!-- ══════════════════════ VIEW 6 — PRODUCT LIST ══════════════════════ -->
@@ -960,16 +898,7 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
       <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
         <button class="btn btn-primary" onclick="openCustCreateDialog()" style="font-size:12px;padding:5px 16px">+ 添加客户</button>
       </div>
-      <div class="card table-scroll" style="max-height:calc(100vh - 200px)">
-        <table class="proj-table">
-          <thead><tr>
-            <th>客户名称</th><th width="18%">全称</th><th width="10%">关联项目</th><th width="10%">关联产品</th><th width="18%">操作</th>
-          </tr></thead>
-          <tbody id="cust-tbody">
-            <tr><td colspan="5"><div class="loading-spinner">加载中...</div></td></tr>
-          </tbody>
-        </table>
-      </div>
+      <div class="card" style="padding:0"><div id="cust-table"></div></div>
     </div>
 
     <!-- ══════════════════════ VIEW — CUSTOMER DETAIL ══════════════════════ -->
@@ -986,21 +915,11 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
       <div class="two-col" style="grid-template-columns:1fr 1fr;gap:18px">
         <div>
           <div class="section-hd"><div class="section-title">关联项目</div></div>
-          <div class="card table-scroll" style="max-height:400px">
-            <table class="proj-table tbl-accent">
-              <thead><tr><th width="6%">序号</th><th width="14%">项目编号</th><th>项目名称</th><th width="10%">状态</th><th>产品信息</th></tr></thead>
-              <tbody id="cust-det-proj-tbody"></tbody>
-            </table>
-          </div>
+          <div class="card" style="padding:0"><div id="cust-det-proj-table"></div></div>
         </div>
         <div>
           <div class="section-hd"><div class="section-title">关联产品</div></div>
-          <div class="card table-scroll" style="max-height:400px">
-            <table class="proj-table tbl-success">
-              <thead><tr><th width="6%">序号</th><th width="14%">产品编号</th><th>产品名称</th><th width="10%">状态</th><th>项目信息</th></tr></thead>
-              <tbody id="cust-det-prod-tbody"></tbody>
-            </table>
-          </div>
+          <div class="card" style="padding:0"><div id="cust-det-prod-table"></div></div>
         </div>
       </div>
     </div>
@@ -1022,6 +941,7 @@ document.write('<script src="/js/api.js?v=' + v + '"><\/script>');
 var v = window.APP_VERSION;
 document.write('<script src="/js/auth.js?v=' + v + '"><\/script>');
 document.write('<script src="/js/components.js?v=' + v + '"><\/script>');
+document.write('<script src="/js/data-table.js?v=' + v + '"><\/script>');
 document.write('<script src="/js/dashboard.js?v=' + v + '"><\/script>');
 document.write('<script src="/js/product.js?v=' + v + '"><\/script>');
 document.write('<script src="/js/app.js?v=' + v + '"><\/script>');
