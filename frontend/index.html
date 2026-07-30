@@ -759,6 +759,7 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
         <div class="map-tab" id="dttab-tags" onclick="switchDocTemplateTab('tags',this)">标签模板</div>
         <div class="map-tab" id="dttab-naming" onclick="switchDocTemplateTab('naming',this)">产品命名规范</div>
         <div class="map-tab" id="dttab-bugtpl" onclick="switchDocTemplateTab('bugtpl',this)">Bug提交模板</div>
+        <button id="btn-sync-all-templates" class="btn btn-sm" style="color:var(--accent);border-color:var(--accent);font-size:11px;padding:2px 10px;margin-left:auto;white-space:nowrap;align-self:center" onclick="syncAllProjectsAndTasks()" title="将当前模板配置（含重命名和顺序调整）应用到全部项目和产品">↻ 应用到全部项目/产品</button>
       </div>
       <div id="dtsec-project"><div class="loading-spinner">加载中...</div></div>
       <div id="dtsec-product" style="display:none"></div>

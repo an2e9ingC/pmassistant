@@ -301,6 +301,67 @@ def _migrate_product_hierarchy():
         sqlite_conn.close()
 
 
+def _migrate_project_doc_template_id():
+    """Add and backfill template_id column on project_documents.
+
+    Steps:
+    1. _migrate_sqlite() auto-adds the column from the model. This function backfills.
+    2. For each project_document, find matching document_template by:
+       - Matching project_type (look up from zenta_projects)
+       - Matching stage_type
+       - Matching doc_name
+    3. If exactly one match, set template_id.
+    4. Log results.
+    """
+    import sqlite3
+
+    sqlite_conn = sqlite3.connect(_db_path)
+    cursor = sqlite_conn.cursor()
+
+    try:
+        # Check if column exists
+        cursor.execute("PRAGMA table_info(`project_documents`)")
+        cols = {row[1] for row in cursor.fetchall()}
+        if "template_id" not in cols:
+            return  # _migrate_sqlite will add it next restart; backfill on next run
+
+        # Check if already backfilled
+        cursor.execute("SELECT COUNT(*) FROM `project_documents` WHERE `template_id` IS NOT NULL")
+        already = cursor.fetchone()[0]
+        if already > 0:
+            return  # Already done
+
+        # Backfill: match by project_type + stage_type + doc_name
+        cursor.execute("""
+            UPDATE project_documents
+            SET template_id = (
+                SELECT dt.id FROM document_templates dt
+                JOIN zenta_projects zp ON zp.id = project_documents.project_id
+                WHERE dt.doc_name = project_documents.doc_name
+                  AND dt.stage_type = project_documents.stage_type
+                  AND dt.project_type = COALESCE(zp.project_type, 'RD')
+                LIMIT 1
+            )
+            WHERE template_id IS NULL
+        """)
+        matched = cursor.rowcount
+
+        # Count remaining NULLs
+        cursor.execute("SELECT COUNT(*) FROM `project_documents` WHERE `template_id` IS NULL")
+        remaining = cursor.fetchone()[0]
+
+        sqlite_conn.commit()
+        logger.info(
+            f"ProjectDocument template_id backfill: {matched} matched, "
+            f"{remaining} remaining (NULL)"
+        )
+    except Exception as e:
+        logger.warning(f"ProjectDocument template_id migration error: {e}")
+    finally:
+        sqlite_conn.close()
+        sqlite_conn.close()
+
+
 def _migrate_to_sqlcipher():
     """Convert an existing unencrypted SQLite DB to SQLCipher-encrypted.
 
@@ -473,6 +534,7 @@ def init_db():
     _migrate_sqlite()
     _migrate_password_hash_nullable()
     _migrate_product_hierarchy()
+    _migrate_project_doc_template_id()  # backfill template_id on project_documents
     _migrate_to_sqlcipher()  # Convert unencrypted DB to SQLCipher if key configured
     _clear_gitlab_tokens()   # Force re-auth on server restart
     _ensure_db_instance_id()  # Ensure instance UUID for DB fingerprint detection

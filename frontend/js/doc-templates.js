@@ -325,9 +325,6 @@ function renderTemplatesPage() {
   if (canEdit) {
     ptypeTabs += '<div class="map-tab" onclick="showAddProjectTypeDialog()" style="color:var(--accent);font-weight:600" title="新增项目类型">+</div>';
   }
-  if (canEdit) {
-    ptypeTabs += '<button class="btn btn-sm" style="color:var(--accent);border-color:var(--accent);font-size:11px;padding:2px 10px;margin-left:12px;white-space:nowrap" onclick="syncAllProjectsAndTasks()" title="将当前项目类型的文档模板和任务模板应用到全部项目">↻ 应用到全部项目</button>';
-  }
   ptypeTabs += '</div>';
 
   if (!stageTypes.length) {
@@ -1487,18 +1484,23 @@ function discardChanges() {
 }
 
 async function syncAllProjectsAndTasks() {
-  if (!confirm('将当前项目类型的文档模板和任务模板应用到全部项目？\n\n文档：同步所有项目的文档清单\n任务：为所有项目创建模板任务（不重复）\n\n此操作不可撤销，确认继续？')) return;
+  if (!confirm('将当前模板配置（含重命名和顺序调整）应用到全部项目和产品？\n\n文档模板 → 全部项目\n任务模板 → 全部项目\n产品文档模板 → 全部产品\n\n此操作不可撤销，确认继续？')) return;
   var btn = event.target;
   btn.disabled = true; btn.textContent = '⏳ 同步中...';
   try {
-    var docResult = await API.post('/doc-templates/sync-all');
-    var taskResult = await API.post('/task-templates/sync-all');
-    var msg = '文档: ' + docResult.synced + '/' + docResult.total + ' | 任务: ' + taskResult.synced + '/' + taskResult.total;
+    var [docResult, taskResult, prodResult] = await Promise.all([
+      API.post('/doc-templates/sync-all'),
+      API.post('/task-templates/sync-all'),
+      API.post('/product-doc-templates/sync-all'),
+    ]);
+    var msg = '文档: ' + docResult.synced + '/' + docResult.total
+      + ' | 任务: ' + taskResult.synced + '/' + taskResult.total
+      + ' | 产品: ' + prodResult.synced + '/' + prodResult.total;
     showToast(msg, 'success');
   } catch(e) {
     showToast('同步失败: ' + (e.message || ''), 'error');
   }
-  btn.disabled = false; btn.textContent = '↻ 应用到全部项目';
+  btn.disabled = false; btn.textContent = '↻ 应用到全部项目/产品';
 }
 
 async function syncAllProjects() {
