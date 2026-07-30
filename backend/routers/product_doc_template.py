@@ -290,6 +290,24 @@ def import_templates(
     }
 
 
+# ── Batch Sync (apply to all products) ──
+
+@router.post("/sync-all", response_model=dict)
+def sync_all_products(
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("doc_template")),
+):
+    """Apply current product doc templates to all products — add/update/cleanup docs."""
+    result = document_service.sync_all_products(db)
+    log_audit(
+        db, user, "product_doc_template_sync_all",
+        f"{result['synced']}/{result['total']} 个产品已同步"
+        + (f", {result['failed']} 个失败" if result['failed'] else ""),
+        AUDIT_CAT_TEMPLATE, "medium",
+    )
+    return {"code": 0, "data": result, "message": "ok"}
+
+
 # ── Product Naming Convention Options ──
 
 class NamingOptionCreate(BaseModel):

@@ -225,7 +225,7 @@ def rename_stage_type(
     db: Session = Depends(get_db),
     user=Depends(require_perm("doc_template")),
 ):
-    count = document_service.rename_stage_type(db, body.old_name, body.new_name)
+    result = document_service.rename_stage_type(db, body.old_name, body.new_name)
     # Also update custom stage types if the old name is a custom stage
     from backend.services.document_service import _DEFAULT_RD_STAGES, _DEFAULT_SC_STAGES, _get_custom_stage_types, _save_custom_stage_types, _get_custom_project_types, PROJECT_TYPE_DEFS
     all_types = list(PROJECT_TYPE_DEFS.keys()) + list(_get_custom_project_types(db).keys())
@@ -234,8 +234,12 @@ def rename_stage_type(
         if body.old_name in customs:
             customs[customs.index(body.old_name)] = body.new_name
             _save_custom_stage_types(db, pt, customs)
-    log_audit(db, user, "doc_stage_rename", f"{body.old_name} -> {body.new_name} ({count} docs)", AUDIT_CAT_TEMPLATE, "medium")
-    return {"code": 0, "data": {"updated": count}, "message": "ok"}
+    total = sum(result.values())
+    log_audit(db, user, "doc_stage_rename",
+              f"{body.old_name} -> {body.new_name} ({total} total: "
+              + ", ".join(f"{k}={v}" for k, v in result.items() if v) + ")",
+              AUDIT_CAT_TEMPLATE, "medium")
+    return {"code": 0, "data": result, "message": "ok"}
 
 
 @router.post("/sync-all", response_model=dict)
@@ -330,15 +334,46 @@ def reorder_stage_types(
     db: Session = Depends(get_db),
     user=Depends(require_perm("doc_template")),
 ):
-    """Persist the new order of stage types for a project type."""
+    """Persist the new order of stage types for a project type.
+
+    Cascades to ProjectStage.sort_order for all projects of this type,
+    so Gantt charts and task views show stages in the updated order.
+    """
     from backend.services.document_service import _DEFAULT_RD_STAGES, _DEFAULT_SC_STAGES, _save_custom_stage_types, PROJECT_TYPE_DEFS
+    from backend.models.project_stage import ProjectStage
+    from backend.models.zentao import CachedProject
     import logging
     logger = logging.getLogger(__name__)
+
     # Save ALL stages' order (not just custom), so predefined stages can be reordered too
     _save_custom_stage_types(db, body.project_type, body.stages)
-    log_audit(db, user, "doc_stage_reorder", f"[{body.project_type}] {' → '.join(body.stages)}", AUDIT_CAT_TEMPLATE, "medium")
-    logger.info("doc_stage_reorder: [%s] %s stages by %s", body.project_type, len(body.stages), user.username)
-    return {"code": 0, "data": {"stages": body.stages}, "message": "ok"}
+
+    # Cascade to ProjectStage.sort_order for all projects of this type
+    stage_rank = {name: idx for idx, name in enumerate(body.stages, start=1)}
+    project_ids = db.query(CachedProject.id).filter(
+        CachedProject.project_type == body.project_type
+    ).all()
+    updated_stages = 0
+    for (pid,) in project_ids:
+        pstages = db.query(ProjectStage).filter(
+            ProjectStage.project_id == pid,
+            ProjectStage.name.in_(body.stages)
+        ).all()
+        for ps in pstages:
+            new_order = stage_rank.get(ps.name)
+            if new_order is not None and ps.sort_order != new_order:
+                ps.sort_order = new_order
+                updated_stages += 1
+    if updated_stages > 0:
+        db.commit()
+
+    log_audit(db, user, "doc_stage_reorder",
+              f"[{body.project_type}] {' → '.join(body.stages)}"
+              + (f" (cascaded to {updated_stages} project stages)" if updated_stages else ""),
+              AUDIT_CAT_TEMPLATE, "medium")
+    logger.info("doc_stage_reorder: [%s] %s stages by %s (cascaded to %s project stages)",
+                body.project_type, len(body.stages), user.username, updated_stages)
+    return {"code": 0, "data": {"stages": body.stages, "project_stages_updated": updated_stages}, "message": "ok"}
 
 
 class ResetProjectDocsRequest(BaseModel):

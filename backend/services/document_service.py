@@ -394,15 +394,77 @@ def delete_template(db: Session, template_id: int) -> bool:
     return True
 
 
-def rename_stage_type(db: Session, old_name: str, new_name: str) -> int:
-    """Rename a stage type — update all templates with the old name."""
+def rename_stage_type(db: Session, old_name: str, new_name: str) -> dict:
+    """Rename a stage type — cascade to all templates and project/product data.
+
+    Updates: DocumentTemplate, TaskTemplate, ProjectDocument, Task,
+    ProjectStage, ProductDocTemplate, ProductDocument, ProjectNote.
+    """
     if not new_name.strip():
-        return 0
-    count = db.query(DocumentTemplate).filter(
+        return {"doc_templates": 0, "task_templates": 0, "project_docs": 0,
+                "tasks": 0, "project_stages": 0, "product_doc_templates": 0,
+                "product_docs": 0, "project_notes": 0}
+
+    new_name = new_name.strip()
+
+    # 1. Document templates
+    doc_tpl_count = db.query(DocumentTemplate).filter(
         DocumentTemplate.stage_type == old_name
-    ).update({"stage_type": new_name.strip()})
+    ).update({"stage_type": new_name})
+
+    # 2. Task templates
+    task_tpl_count = db.query(TaskTemplate).filter(
+        TaskTemplate.stage_type == old_name
+    ).update({"stage_type": new_name})
+
+    # 3. Project documents
+    from backend.models.document import ProjectDocument
+    proj_doc_count = db.query(ProjectDocument).filter(
+        ProjectDocument.stage_type == old_name
+    ).update({"stage_type": new_name})
+
+    # 4. Tasks
+    from backend.models.task import Task
+    task_count = db.query(Task).filter(
+        Task.stage_name == old_name
+    ).update({"stage_name": new_name})
+
+    # 5. Project stages
+    from backend.models.project_stage import ProjectStage
+    stage_count = db.query(ProjectStage).filter(
+        ProjectStage.name == old_name
+    ).update({"name": new_name})
+
+    # 6. Product doc templates
+    from backend.models.document import ProductDocTemplate
+    prod_tpl_count = db.query(ProductDocTemplate).filter(
+        ProductDocTemplate.stage_type == old_name
+    ).update({"stage_type": new_name})
+
+    # 7. Product documents
+    from backend.models.document import ProductDocument
+    prod_doc_count = db.query(ProductDocument).filter(
+        ProductDocument.stage_type == old_name
+    ).update({"stage_type": new_name})
+
+    # 8. Project notes
+    from backend.models.local import ProjectNote
+    note_count = db.query(ProjectNote).filter(
+        ProjectNote.stage_name == old_name
+    ).update({"stage_name": new_name})
+
     db.commit()
-    return count
+
+    return {
+        "doc_templates": doc_tpl_count,
+        "task_templates": task_tpl_count,
+        "project_docs": proj_doc_count,
+        "tasks": task_count,
+        "project_stages": stage_count,
+        "product_doc_templates": prod_tpl_count,
+        "product_docs": prod_doc_count,
+        "project_notes": note_count,
+    }
 
 
 def delete_stage_type(db: Session, stage_type: str, project_type: str = "") -> int:
@@ -447,6 +509,9 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
 
     Directly iterates standard stages — no longer depends on Zentao executions.
     All documents use execution_id=0 since we no longer track Zentao executions.
+
+    Matching priority: template_id (FK) > doc_name (legacy fallback).
+    Always updates matched docs so renames and reorders propagate.
     """
     standard_stages = get_stage_types_for_project_type(db, project_type)
     changed = False
@@ -473,6 +538,7 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
                 db.delete(pd)
                 changed = True
             continue
+
         templates = (
             db.query(DocumentTemplate)
             .filter(DocumentTemplate.stage_type == st,
@@ -481,7 +547,10 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
             .order_by(DocumentTemplate.sort_order)
             .all()
         )
-        template_names = {t.doc_name: t for t in templates}
+
+        # Build lookup dictionaries for templates
+        template_by_id = {t.id: t for t in templates}
+        template_by_name = {t.doc_name: t for t in templates}
 
         existing_docs = (
             db.query(ProjectDocument)
@@ -490,37 +559,72 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
             .all()
         )
 
-        # Deduplicate
-        seen = {}
-        duplicates = []
+        # Build lookup dictionaries for existing docs
+        existing_by_template_id = {}
+        existing_by_name = {}
         for pd in existing_docs:
-            if pd.doc_name in seen:
-                duplicates.append(pd)
-            else:
-                seen[pd.doc_name] = pd
-        for pd in duplicates:
-            db.delete(pd)
-            changed = True
-        existing_names = seen
-
-        # Add new docs from template
-        for doc_name, tpl in template_names.items():
-            if doc_name not in existing_names:
-                # Build doc_path from base_path + file_pattern with {code} substitution
-                if tpl.base_path and tpl.file_pattern:
-                    base = tpl.base_path.replace("{code}", project_code) if project_code else tpl.base_path
-                    pattern = tpl.file_pattern.replace("{code}", project_code) if project_code else tpl.file_pattern
-                    doc_path = base.rstrip("/") + "/" + pattern.lstrip("/")
+            if pd.template_id and pd.template_id in template_by_id:
+                # If duplicate template_id exists (shouldn't happen), keep first
+                if pd.template_id not in existing_by_template_id:
+                    existing_by_template_id[pd.template_id] = pd
                 else:
-                    doc_path = tpl.doc_path.replace("{code}", project_code) if (tpl.doc_path and project_code) else (tpl.doc_path or "")
-                # Normalize common URL typo: http:/ → http:// (but not http:// → http:///)
-                if doc_path:
-                    import re
-                    doc_path = re.sub(r'^(https?:)/(?!/)', r'\1//', doc_path)
+                    db.delete(pd)
+                    changed = True
+            elif pd.doc_name in existing_by_name:
+                # Deduplicate by name
+                db.delete(pd)
+                changed = True
+            else:
+                existing_by_name[pd.doc_name] = pd
+
+        # Track which template IDs are matched this pass
+        matched_template_ids = set()
+
+        # Process each template in sorted order for sequential sort_order
+        for seq_idx, tpl in enumerate(templates, start=1):
+            # Match: first try template_id, then fall back to doc_name
+            pd = existing_by_template_id.get(tpl.id)
+            if not pd:
+                pd = existing_by_name.get(tpl.doc_name)
+
+            if pd:
+                # Existing doc found — update all fields from template
+                if pd.is_removed:
+                    matched_template_ids.add(tpl.id)
+                    continue
+                if (pd.doc_name != tpl.doc_name or
+                        pd.sort_order != seq_idx or
+                        pd.stage_type != tpl.stage_type or
+                        pd.responsible_role != tpl.responsible_role or
+                        pd.description != tpl.description or
+                        pd.doc_type != tpl.doc_type or
+                        pd.is_optional != bool(tpl.is_optional) or
+                        pd.template_id != tpl.id):
+                    pd.doc_name = tpl.doc_name
+                    pd.sort_order = seq_idx
+                    pd.stage_type = tpl.stage_type
+                    pd.responsible_role = tpl.responsible_role
+                    pd.description = tpl.description
+                    pd.doc_type = tpl.doc_type
+                    pd.is_optional = bool(tpl.is_optional)
+                    pd.template_id = tpl.id
+                    changed = True
+                # Update doc_path
+                expected_path = _build_doc_path(tpl, project_code)
+                if pd.doc_path != expected_path or pd.base_path != tpl.base_path or pd.file_pattern != tpl.file_pattern:
+                    pd.doc_path = expected_path
+                    pd.base_path = tpl.base_path
+                    pd.file_pattern = tpl.file_pattern
+                    changed = True
+                matched_template_ids.add(tpl.id)
+            else:
+                # New doc from template
+                doc_path = _build_doc_path(tpl, project_code)
                 pd = ProjectDocument(
                     project_id=project_id, execution_id=0,
+                    template_id=tpl.id,
                     stage_type=st, doc_name=tpl.doc_name,
-                    sort_order=tpl.sort_order, status="pending",
+                    sort_order=seq_idx, status="pending",
                     responsible_role=tpl.responsible_role, description=tpl.description,
                     doc_type=tpl.doc_type, doc_path=doc_path,
                     base_path=tpl.base_path, file_pattern=tpl.file_pattern,
@@ -529,47 +633,38 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
                 db.add(pd)
                 changed = True
 
-        # NOTE: Don't delete docs not in template — may be custom-added.
-        # (No template_id column to distinguish custom vs template origin.)
-
-        # Update existing docs (skip removed — user explicitly removed them)
-        for doc_name, pd in existing_names.items():
+        # Custom-added docs (no template match) get sequential sort_order after templates
+        custom_docs = []
+        for pd in existing_docs:
+            if pd.template_id and pd.template_id in matched_template_ids:
+                continue
+            if pd.template_id is None and pd.doc_name in template_by_name:
+                continue
             if pd.is_removed:
                 continue
-            tpl = template_names.get(doc_name)
-            if not tpl:
-                continue
-            # Compute expected doc_path from template
-            if tpl.base_path and tpl.file_pattern:
-                base = tpl.base_path.replace("{code}", project_code) if project_code else tpl.base_path
-                pattern = tpl.file_pattern.replace("{code}", project_code) if project_code else tpl.file_pattern
-                expected_path = base.rstrip("/") + "/" + pattern.lstrip("/")
-            else:
-                expected_path = tpl.doc_path.replace("{code}", project_code) if (tpl.doc_path and project_code) else (tpl.doc_path or "")
-            # Normalize common URL typo: http:/ → http:// (but not http:// → http:///)
-            if expected_path:
-                import re as _re
-                expected_path = _re.sub(r'^(https?:)/(?!/)', r'\1//', expected_path)
-            if (pd.sort_order != tpl.sort_order or
-                    pd.responsible_role != tpl.responsible_role or
-                    pd.description != tpl.description or
-                    pd.doc_path != expected_path or
-                    pd.base_path != tpl.base_path or
-                    pd.file_pattern != tpl.file_pattern or
-                    pd.doc_type != tpl.doc_type or
-                    pd.is_optional != bool(tpl.is_optional)):
-                pd.sort_order = tpl.sort_order
-                pd.responsible_role = tpl.responsible_role
-                pd.description = tpl.description
-                pd.doc_path = expected_path
-                pd.base_path = tpl.base_path
-                pd.file_pattern = tpl.file_pattern
-                pd.doc_type = tpl.doc_type
-                pd.is_optional = bool(tpl.is_optional)
+            custom_docs.append(pd)
+
+        for offset, pd in enumerate(custom_docs, start=len(templates) + 1):
+            if pd.sort_order != offset:
+                pd.sort_order = offset
                 changed = True
 
     if changed:
         db.commit()
+
+
+def _build_doc_path(tpl, project_code: str) -> str:
+    """Build doc_path from template's base_path + file_pattern with {code} substitution."""
+    import re
+    if tpl.base_path and tpl.file_pattern:
+        base = tpl.base_path.replace("{code}", project_code) if project_code else tpl.base_path
+        pattern = tpl.file_pattern.replace("{code}", project_code) if project_code else tpl.file_pattern
+        doc_path = base.rstrip("/") + "/" + pattern.lstrip("/")
+    else:
+        doc_path = tpl.doc_path.replace("{code}", project_code) if (tpl.doc_path and project_code) else (tpl.doc_path or "")
+    if doc_path:
+        doc_path = re.sub(r'^(https?:)/(?!/)', r'\1//', doc_path)
+    return doc_path
 
 
 # ── Removed: _STAGE_KEYWORD_MAP and _match_stage_type (Zentao fuzzy matching) ──
@@ -708,11 +803,52 @@ def _doc_dict(pd: ProjectDocument) -> dict:
     }
 
 
+def _sync_project_stages(db: Session, project_id: int, project_type: str) -> int:
+    """Ensure ProjectStage rows match current template stages.
+
+    Creates missing stages, updates names and sort_order to match template.
+    Returns number of stages created or updated.
+    """
+    from backend.models.project_stage import ProjectStage
+
+    standard_stages = get_stage_types_for_project_type(db, project_type)
+    stage_rank = {name: idx for idx, name in enumerate(standard_stages, start=1)}
+    changed = 0
+
+    existing_stages = db.query(ProjectStage).filter(
+        ProjectStage.project_id == project_id
+    ).all()
+    existing_by_name = {s.name: s for s in existing_stages}
+
+    # Update existing stages and create missing ones
+    for stage_name, sort_order in stage_rank.items():
+        ps = existing_by_name.get(stage_name)
+        if ps:
+            if ps.sort_order != sort_order:
+                ps.sort_order = sort_order
+                changed += 1
+        else:
+            ps = ProjectStage(
+                project_id=project_id,
+                name=stage_name,
+                sort_order=sort_order,
+            )
+            db.add(ps)
+            changed += 1
+
+    # NOTE: Don't delete stages not in template — may be custom-added.
+    # Stages removed from the template are left in-place as custom stages.
+
+    if changed:
+        db.commit()
+    return changed
+
+
 def sync_all_projects(db: Session) -> dict:
-    """Sync all projects' documents with current templates.
+    """Sync all projects' documents AND stages with current templates.
 
     Iterates every project in zenta_projects, calls _sync_from_templates
-    for each, and returns success/fail counts with per-project details.
+    and _sync_project_stages for each, and returns success/fail counts.
     """
     projects = db.query(CachedProject).order_by(CachedProject.id).all()
     synced: list[str] = []
@@ -721,6 +857,7 @@ def sync_all_projects(db: Session) -> dict:
     for p in projects:
         ptype = (p.project_type or "RD").strip()
         try:
+            _sync_project_stages(db, p.id, ptype)
             _sync_from_templates(db, p.id, ptype)
             synced.append(f"{p.id}:{p.name}")
         except Exception as exc:
@@ -836,7 +973,8 @@ def _sync_tasks_from_templates(db: Session, project_id: int, project_type: str =
     No longer depends on Zentao executions. All tasks use execution_id=0.
     Deduplication key: (template_id, project_id, stage_name).
 
-    Returns count of newly created tasks.
+    Updates existing tasks (title, sort_order, description) from template,
+    respecting is_diverged flag. Returns count of newly created tasks.
     """
     import logging
     _log = logging.getLogger(__name__)
@@ -846,6 +984,7 @@ def _sync_tasks_from_templates(db: Session, project_id: int, project_type: str =
     standard_stages = get_stage_types_for_project_type(db, project_type)
     _log.info(f"[task-sync] project_id={project_id} type={project_type} stages={standard_stages}")
     created_count = 0
+    updated_count = 0
 
     for st in standard_stages:
         templates = (
@@ -858,14 +997,34 @@ def _sync_tasks_from_templates(db: Session, project_id: int, project_type: str =
         )
         _log.info(f"[task-sync] stage={st} templates={len(templates)}")
 
-        for tpl in templates:
-            # Already imported from this template — skip entirely
+        for seq_idx, tpl in enumerate(templates, start=1):
             existing = db.query(Task).filter(
                 Task.template_id == tpl.id,
                 Task.project_id == project_id,
                 Task.stage_name == st,
             ).first()
+
             if existing:
+                # Update existing task from template (unless user diverged it)
+                if existing.is_diverged:
+                    continue
+                updated = False
+                if existing.title != tpl.task_name:
+                    existing.title = tpl.task_name
+                    updated = True
+                if existing.sort_order != seq_idx:
+                    existing.sort_order = seq_idx
+                    updated = True
+                if existing.description != (tpl.description or None):
+                    existing.description = tpl.description or None
+                    updated = True
+                if tpl.responsible_role and not existing.assignee_id:
+                    assignee_id = _resolve_user_for_role(db, tpl.responsible_role)
+                    if assignee_id:
+                        existing.assignee_id = assignee_id
+                        updated = True
+                if updated:
+                    updated_count += 1
                 continue
 
             assignee_id = None
@@ -894,13 +1053,15 @@ def _sync_tasks_from_templates(db: Session, project_id: int, project_type: str =
                 reviewer_id=reviewer_id,
                 reporter_id=1,
                 template_id=tpl.id,
-                sort_order=tpl.sort_order,
+                sort_order=seq_idx,
             )
             db.add(task)
             created_count += 1
 
-    if created_count > 0:
+    if created_count > 0 or updated_count > 0:
         db.commit()
+    if updated_count > 0:
+        _log.info(f"[task-sync] project_id={project_id} updated {updated_count} existing tasks")
     return created_count
 
 
@@ -920,6 +1081,35 @@ def sync_all_projects_tasks(db: Session) -> dict:
 
     return {
         "total": len(projects),
+        "synced": len(synced),
+        "failed": len(failed),
+        "synced_list": synced,
+        "failed_list": failed,
+    }
+
+
+def sync_all_products(db: Session) -> dict:
+    """Sync all products' document instances with current product doc templates.
+
+    Iterates every product in pma_products, calls get_or_init_product_documents
+    for each (which handles rename/reorder via template_id matching), and returns
+    success/fail counts.
+    """
+    from backend.models.zentao import PmaProduct
+
+    products = db.query(PmaProduct).order_by(PmaProduct.id).all()
+    synced: list[str] = []
+    failed: list[str] = []
+
+    for prod in products:
+        try:
+            get_or_init_product_documents(db, prod.id)
+            synced.append(f"{prod.id}:{prod.name}")
+        except Exception as exc:
+            failed.append(f"{prod.id}:{prod.name} ({exc})")
+
+    return {
+        "total": len(products),
         "synced": len(synced),
         "failed": len(failed),
         "synced_list": synced,
