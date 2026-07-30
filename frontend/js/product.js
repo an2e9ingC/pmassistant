@@ -290,6 +290,7 @@ var _prodDetailCurId = null;
 var _prodDetailCurCode = null;
 var _prodDocScanning = false;
 var _prodDetailTargetTab = null;  // set before navigation to jump to a specific tab
+var _prodDocCache = {};  // { docId: docData } for product doc edit lookup
 var _prodComboAll = [];
 
 async function initProductDetail(code, tabId) {
@@ -614,8 +615,13 @@ function renderProdDocs(p, preDocs) {
   if (nodeIds.length) {
     templateLink = '<a id="prod-docs-template-link" href="javascript:void(0)" onclick="gotoView(\'doc-templates\',{params:[\'product\',String(' + nodeIds[0] + ')]})" style="font-size:11px;color:var(--accent);text-decoration:none;margin-left:8px">查看文档模板详情 →</a>';
   }
+  // Add custom doc button
+  var user = getCurrentUser();
+  var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+  var canEdit = user && (user.role === 'admin' || perms.indexOf('admin') >= 0 || perms.indexOf('product_link') >= 0);
+  var addBtn = canEdit ? '<button class="btn btn-primary btn-sm" onclick="showAddCustomProductDoc()" style="margin-left:auto;font-size:11px;padding:4px 10px;white-space:nowrap">+ 新增自定义文档</button>' : '';
   document.getElementById('prodsec-docs').innerHTML =
-    '<div class="section-hd"><div class="section-title">产品文档</div>' + templateLink + '</div>' +
+    '<div class="section-hd"><div class="section-title">产品文档</div>' + templateLink + addBtn + '</div>' +
     '<div id="prod-docs-inline"><div class="loading-spinner" style="padding:20px">加载中...</div></div>';
 
   // Use pre-loaded docs if available, otherwise fetch
@@ -1040,14 +1046,17 @@ function _renderProdDocsInline(docs) {
     }
   }
 
-  if (!docs.length) {
-    el.innerHTML = '<div class="card" style="padding:20px"><div class="empty-state">该产品暂未关联文档模板。请先在「文档模板配置」页面为对应产品系列添加文档模板。</div></div>';
-    return;
-  }
-
   var user = getCurrentUser();
   var perms = (user && user.permissions) ? user.permissions.split(',') : [];
   var canEdit = user && (user.role === 'admin' || perms.indexOf('admin') >= 0 || perms.indexOf('product_link') >= 0);
+
+  // "新增自定义文档" button in header
+  var addBtnHtml = canEdit ? '<button class="btn btn-primary btn-sm" onclick="showAddCustomProductDoc()" style="margin-left:auto;font-size:11px;padding:4px 10px;white-space:nowrap">+ 新增自定义文档</button>' : '';
+
+  if (!docs.length) {
+    el.innerHTML = '<div class="card" style="padding:16px;display:flex;align-items:center;gap:12px"><div class="empty-state" style="text-align:left">该产品暂未关联文档模板。<br>请先在「文档模板配置」页面为对应产品系列添加文档模板，或手动添加自定义文档。</div>' + addBtnHtml + '</div>';
+    return;
+  }
 
   // Group by stage_type
   var stageOrder = ['硬件开发', '结构设计', 'BSP开发', '软件开发', '测试', '通用'];
@@ -1067,7 +1076,7 @@ function _renderProdDocsInline(docs) {
     '测试': isDark ? '#352830' : '#fce4ec',
     '通用': 'var(--surface)'
   };
-  var typeLabels = { gitlab: 'GitLab', svn: 'SVN', nas: 'NAS', solidworks: '结构设计', pma: 'PMA' };
+  var typeLabels = { gitlab: 'GitLab', svn: 'SVN', nas: 'NAS', solidworks: '结构设计', pma: 'PMA内部' };
   var html = '<div class="card" style="padding:0;overflow:hidden">';
   html += '<div class="table-scroll" id="prod-docs-table-wrap"><table class="stage-table"><thead><tr>' +
     '<th style="width:100px">分类</th><th style="width:50px">序号</th><th>文档名称</th><th style="width:80px">责任人</th><th style="width:80px">状态</th><th style="width:50px">类型</th><th>路径</th><th style="width:100px">最后修改时间</th><th style="width:80px">修改人</th><th style="width:100px">操作</th>' +
@@ -1080,6 +1089,9 @@ function _renderProdDocsInline(docs) {
     var bg = colorMap[st] || 'var(--surface)';
     var cellStyle = 'background:' + bg + ';';
     items.forEach(function(d, i) {
+      // Cache doc data for edit dialog lookup
+      _prodDocCache[d.id] = d;
+      var isCustom = (d.template_id === null || d.template_id === 0 || d.template_id === undefined);
       var isLast = i === items.length - 1;
       html += '<tr>';
       if (i === 0) {
@@ -1099,7 +1111,8 @@ function _renderProdDocsInline(docs) {
       }
 
       html += '<td style="font-family:var(--mono);color:var(--muted);text-align:center;' + cellStyle + '">' + (i + 1) + '</td>' +
-        '<td style="font-weight:500;width:180px;word-break:break-all;' + cellStyle + '">' + escHtml(d.doc_name) + '</td>' +
+        '<td style="font-weight:500;width:180px;word-break:break-all;' + cellStyle + '">' + escHtml(d.doc_name) +
+          (isCustom ? ' <span style="font-size:9px;color:var(--success);background:var(--success-lt);padding:1px 4px;border-radius:3px" title="自定义文档">自定义</span>' : '') + '</td>' +
         '<td style="font-size:12px;white-space:nowrap;' + cellStyle + '">' + escHtml(d.responsible_role || '—') + '</td>' +
         '<td style="white-space:nowrap;' + cellStyle + '">' + statusHtml + '</td>' +
         '<td style="font-size:11px;' + cellStyle + '">' + escHtml(typeLabels[d.doc_type] || '—') + '</td>' +
@@ -1124,7 +1137,10 @@ function _renderProdDocsInline(docs) {
               ? iconEye("previewDocument('" + encodeURIComponent(d.location) + "','" + escJs(d.doc_name || '') + "')")
               : '<a href="' + escHtml(d.location) + '" target="_blank" title="打开链接" style="text-decoration:none;font-size:15px">&#x1F517;</a>')
             : '') +
-          (d.is_optional && canEdit ? iconDelete('removeOptionalProductDoc(' + d.id + ')', '移除此文档') : '') +
+          // Custom docs: show edit + delete; template optional: show remove
+          (isCustom && canEdit ? iconEdit('showAddCustomProductDoc({id:' + d.id + ',doc_name:\x27' + escJs(d.doc_name) + '\x27,stage_type:\x27' + escJs(d.stage_type) + '\x27,responsible_role:\x27' + escJs(d.responsible_role || '') + '\x27,doc_type:\x27' + escJs(d.doc_type || '') + '\x27,location:\x27' + escJs(d.location || '') + '\x27})', '编辑') : '') +
+          (isCustom && canEdit ? iconDelete('deleteCustomProductDoc(' + d.id + ',\x27' + escJs(d.doc_name) + '\x27)', '删除此文档') : '') +
+          (!isCustom && d.is_optional && canEdit ? iconDelete('removeOptionalProductDoc(' + d.id + ')', '移除此文档') : '') +
         '</td>' +
       '</tr>';
     });
@@ -1134,6 +1150,102 @@ function _renderProdDocsInline(docs) {
   el.innerHTML = html;
   // Dynamic table height: fill available viewport space
   _resizeProdDocsTable();
+}
+
+// ── Add / Edit Custom Product Document ──
+
+function showAddCustomProductDoc(editData) {
+  var isEdit = !!editData;
+  if (!_prodDetailCurCode) return;
+  var inp = 'width:100%;box-sizing:border-box;margin-top:2px';
+  var html = '<div style="display:flex;flex-direction:column;gap:10px">' +
+    '<div><label style="font-size:11px;color:var(--muted)">文档名称</label><input class="search-inp" id="prod-custom-doc-name" style="' + inp + '" placeholder="如：硬件测试报告"></div>' +
+    '<div><label style="font-size:11px;color:var(--muted)">所属阶段</label><select class="search-inp" id="prod-custom-doc-stage" style="' + inp + '"><option value="硬件开发">硬件开发</option><option value="结构设计">结构设计</option><option value="BSP开发">BSP开发</option><option value="软件开发">软件开发</option><option value="测试">测试</option><option value="通用">通用</option></select></div>' +
+    '<div><label style="font-size:11px;color:var(--muted)">责任人</label><input class="search-inp" id="prod-custom-doc-role" style="' + inp + '" placeholder="如：硬件工程师"></div>' +
+    '<div><label style="font-size:11px;color:var(--muted)">文档类型</label><select class="search-inp" id="prod-custom-doc-type" style="' + inp + '"><option value="pma">PMA内部</option><option value="gitlab">GitLab</option><option value="svn">SVN</option><option value="nas">NAS</option><option value="solidworks">结构设计</option></select></div>' +
+    '<div><label style="font-size:11px;color:var(--muted)">文档路径/链接</label><input class="search-inp" id="prod-custom-doc-location" style="' + inp + '" placeholder="如：http://..."></div>' +
+  '</div>';
+
+  var title = isEdit ? '编辑自定义文档' : '新增自定义文档';
+  var submitBtn = isEdit
+    ? {text: '保存', cls: 'btn-primary', onclick: 'submitEditProductDoc(' + editData.id + ')'}
+    : {text: '添加', cls: 'btn-primary', onclick: 'submitCustomProductDoc()'};
+  openDialog(title, html, [
+    {text: '取消', onclick: 'closeSharedDialog()'},
+    submitBtn
+  ], {maxWidth: 500});
+
+  if (isEdit) {
+    setTimeout(function() {
+      var nameEl = document.getElementById('prod-custom-doc-name');
+      var stageEl = document.getElementById('prod-custom-doc-stage');
+      var roleEl = document.getElementById('prod-custom-doc-role');
+      var typeEl = document.getElementById('prod-custom-doc-type');
+      var locEl = document.getElementById('prod-custom-doc-location');
+      if (nameEl) nameEl.value = editData.doc_name || '';
+      if (stageEl) stageEl.value = editData.stage_type || '';
+      if (roleEl) roleEl.value = editData.responsible_role || '';
+      if (typeEl) typeEl.value = editData.doc_type || 'pma';
+      if (locEl) locEl.value = editData.location || '';
+    }, 0);
+  }
+}
+
+async function submitCustomProductDoc() {
+  var name = document.getElementById('prod-custom-doc-name').value.trim();
+  var stage = document.getElementById('prod-custom-doc-stage').value;
+  var role = document.getElementById('prod-custom-doc-role').value.trim();
+  var docType = document.getElementById('prod-custom-doc-type').value;
+  var location = document.getElementById('prod-custom-doc-location').value.trim();
+  if (!name) { showToast('请输入文档名称', 'error'); return; }
+  if (!stage) { showToast('请选择所属阶段', 'error'); return; }
+  try {
+    var r = await API.post('/products/' + _prodDetailCurCode + '/documents/add', {
+      doc_name: name, stage_type: stage, responsible_role: role, doc_type: docType, location: location
+    });
+    showToast(r.message || '文档已添加', 'success');
+    closeSharedDialog();
+    // Re-fetch and re-render docs
+    var docs = await API.get('/products/' + _prodDetailCurCode + '/documents');
+    _renderProdDocsInline(docs);
+  } catch(e) { showToast('添加失败: ' + (e.message || ''), 'error'); }
+}
+
+async function submitEditProductDoc(docId) {
+  var name = document.getElementById('prod-custom-doc-name').value.trim();
+  var stage = document.getElementById('prod-custom-doc-stage').value;
+  var role = document.getElementById('prod-custom-doc-role').value.trim();
+  var docType = document.getElementById('prod-custom-doc-type').value;
+  var location = document.getElementById('prod-custom-doc-location').value.trim();
+  if (!name) { showToast('请输入文档名称', 'error'); return; }
+  if (!stage) { showToast('请选择所属阶段', 'error'); return; }
+  try {
+    var r = await API.put('/products/' + _prodDetailCurCode + '/documents/' + docId, {
+      doc_name: name, stage_type: stage, responsible_role: role, doc_type: docType, location: location
+    });
+    showToast(r.message || '文档已更新', 'success');
+    closeSharedDialog();
+    var docs = await API.get('/products/' + _prodDetailCurCode + '/documents');
+    _renderProdDocsInline(docs);
+  } catch(e) { showToast('更新失败: ' + (e.message || ''), 'error'); }
+}
+
+function deleteCustomProductDoc(docId, docName) {
+  var label = docName || ('#' + docId);
+  openDialog('删除自定义文档',
+    '<div class="confirm-dlg">确认删除自定义文档 <b>' + escHtml(label) + '</b>？<br><br>删除后将不再显示。如需恢复，可手动重新添加。</div>',
+    [{text: '取消', onclick: 'closeSharedDialog()'},
+     {text: '确认删除', cls: 'btn-danger', onclick: 'closeSharedDialog();_confirmRemoveProductDoc(' + docId + ',\x27' + escJs(label) + '\x27)'}],
+    {hideClose: true});
+}
+
+async function _confirmRemoveProductDoc(docId, docName) {
+  try {
+    await API.put('/products/' + _prodDetailCurCode + '/documents/' + docId, { is_removed: 1 });
+    showToast('已删除自定义文档', 'success');
+    var docs = await API.get('/products/' + _prodDetailCurCode + '/documents');
+    _renderProdDocsInline(docs);
+  } catch(e) { showToast('删除失败: ' + (e.message || ''), 'error'); }
 }
 
 async function removeOptionalProductDoc(docId) {

@@ -323,6 +323,53 @@ def get_product_documents(identifier: str, db: Session = Depends(get_db), _=Depe
     return {"code": 0, "data": docs, "message": "ok"}
 
 
+class CustomDocCreate(BaseModel):
+    doc_name: str
+    stage_type: str
+    doc_type: str = ""
+    location: str = ""
+    description: str = ""
+    responsible_role: str = ""
+
+
+@router.post("/{identifier}/documents/add", response_model=dict)
+def add_custom_product_document(
+    identifier: str,
+    body: CustomDocCreate,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("product_link")),
+):
+    """Add a custom product document (not from a template)."""
+    product = resolve_product(db, identifier)
+    from backend.models.document import ProductDocument
+    from sqlalchemy import or_
+
+    # Check for duplicate active doc with same name
+    existing = db.query(ProductDocument).filter(
+        ProductDocument.product_id == product.id,
+        ProductDocument.doc_name == body.doc_name,
+        or_(ProductDocument.is_removed == 0, ProductDocument.is_removed == None),
+    ).first()
+    if existing:
+        raise HTTPException(status_code=409, detail=f"文档「{body.doc_name}」已存在")
+
+    pd = ProductDocument(
+        product_id=product.id,
+        stage_type=body.stage_type,
+        doc_name=body.doc_name,
+        sort_order=99,
+        status="pending",
+        doc_type=body.doc_type or "",
+        location=body.location or "",
+        description=body.description or "",
+        responsible_role=body.responsible_role or "",
+    )
+    db.add(pd)
+    db.commit()
+    log_audit(db, user, "doc_add", f"产品={product.code} 新增自定义文档「{body.doc_name}」", AUDIT_CAT_PRODUCT, "medium")
+    return {"code": 0, "data": {"id": pd.id}, "message": f"文档「{body.doc_name}」已添加"}
+
+
 class DocUpdate(BaseModel):
     status: Optional[str] = None  # "pending" | "submitted"
     location: Optional[str] = None
@@ -330,6 +377,11 @@ class DocUpdate(BaseModel):
     uploaded_by: Optional[str] = None
     uploaded_at: Optional[str] = None
     is_removed: Optional[int] = None  # 0=正常 1=已删除（可选项移除）
+    # Custom document fields (editable for manually added docs)
+    doc_name: Optional[str] = None
+    stage_type: Optional[str] = None
+    description: Optional[str] = None
+    responsible_role: Optional[str] = None
 
 
 @router.put("/{identifier}/documents/{doc_id}", response_model=dict)
@@ -395,11 +447,15 @@ def update_product_document(
             doc.uploaded_at = _dt.fromisoformat(body.uploaded_at)
         except ValueError:
             pass
-    if body.uploaded_at is not None:
-        try:
-            doc.uploaded_at = _dt.fromisoformat(body.uploaded_at)
-        except ValueError:
-            pass
+    # Custom document fields (editable for manually added docs)
+    if body.doc_name is not None:
+        doc.doc_name = body.doc_name
+    if body.stage_type is not None:
+        doc.stage_type = body.stage_type
+    if body.description is not None:
+        doc.description = body.description
+    if body.responsible_role is not None:
+        doc.responsible_role = body.responsible_role
     doc.updated_by = user.username
     db.commit()
     detail = "; ".join(doc_changes) if doc_changes else "无变更"

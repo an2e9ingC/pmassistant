@@ -388,6 +388,7 @@ class CustomDocCreate(BaseModel):
     doc_type: str = ""
     location: str = ""
     description: str = ""
+    responsible_role: str = ""
     is_optional: bool = False
 
 
@@ -401,6 +402,17 @@ def add_custom_document(
     """Add a custom project document (not from a template)."""
     project = resolve_project(db, identifier)
     from backend.models.document import ProjectDocument
+
+    # Check for duplicate active doc with same name
+    from sqlalchemy import or_
+    existing = db.query(ProjectDocument).filter(
+        ProjectDocument.project_id == project.id,
+        ProjectDocument.doc_name == body.doc_name,
+        or_(ProjectDocument.is_removed == 0, ProjectDocument.is_removed == None),
+    ).first()
+    if existing:
+        raise HTTPException(status_code=409, detail=f"文档「{body.doc_name}」已存在")
+
     pd = ProjectDocument(
         project_id=project.id,
         execution_id=0,
@@ -412,6 +424,7 @@ def add_custom_document(
         doc_path=body.location or "",
         location=body.location or "",
         description=body.description or "",
+        responsible_role=body.responsible_role or "",
         is_optional=body.is_optional,
     )
     db.add(pd)
@@ -425,6 +438,13 @@ class DocumentUpdate(BaseModel):
     location: Optional[str] = None
     completed_at: Optional[str] = None
     is_removed: Optional[int] = None  # 0=正常 1=已删除（可选项）
+    # Custom document fields (editable for manually added docs, template_id is None)
+    doc_name: Optional[str] = None
+    stage_type: Optional[str] = None
+    doc_type: Optional[str] = None
+    doc_path: Optional[str] = None
+    description: Optional[str] = None
+    responsible_role: Optional[str] = None
 
 
 @router.put("/{identifier}/documents/{doc_id}", response_model=dict)

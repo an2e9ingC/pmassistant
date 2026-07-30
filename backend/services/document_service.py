@@ -562,7 +562,21 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
         # Build lookup dictionaries for existing docs
         existing_by_template_id = {}
         existing_by_name = {}
+        # Removed template docs (with template_id) need to stay in lookups so
+        # the template processor finds them and skips re-creation via
+        # `matched_template_ids.add(tpl.id); continue`.
+        # Removed custom docs (template_id is None) are skipped — they shouldn't
+        # block re-adding a new custom doc with the same name.
+        removed_template_ids = set()
         for pd in existing_docs:
+            if pd.is_removed:
+                if pd.template_id is not None:
+                    # Keep removed template doc in lookups for template matching
+                    if pd.template_id in template_by_id:
+                        if pd.template_id not in existing_by_template_id:
+                            existing_by_template_id[pd.template_id] = pd
+                            removed_template_ids.add(pd.template_id)
+                continue  # skip removed docs from name-based lookups
             if pd.template_id and pd.template_id in template_by_id:
                 # If duplicate template_id exists (shouldn't happen), keep first
                 if pd.template_id not in existing_by_template_id:
@@ -722,6 +736,7 @@ def _query_project_documents(db: Session, project_id: int, include_removed: bool
             "id": pd_doc.id,
             "project_id": pd_doc.project_id,
             "execution_id": pd_doc.execution_id,
+            "template_id": pd_doc.template_id,
             "stage_name": exec_names.get(pd_doc.execution_id, ""),
             "stage_status": exec_status,
             "stage_completed_date": (
@@ -753,7 +768,7 @@ def _query_project_documents(db: Session, project_id: int, include_removed: bool
 def update_project_document(
     db: Session, doc_id: int, data: dict, username: str
 ) -> Optional[dict]:
-    """Update a project document's status/location."""
+    """Update a project document's status/location/metadata."""
     pd = db.query(ProjectDocument).filter(ProjectDocument.id == doc_id).first()
     if not pd:
         return None
@@ -770,6 +785,19 @@ def update_project_document(
         pd.completed_at = data["completed_at"]
     if "is_removed" in data and data["is_removed"] is not None:
         pd.is_removed = data["is_removed"]
+    # Custom document fields (editable for manually added docs)
+    if "doc_name" in data and data["doc_name"] is not None:
+        pd.doc_name = data["doc_name"]
+    if "stage_type" in data and data["stage_type"] is not None:
+        pd.stage_type = data["stage_type"]
+    if "doc_type" in data and data["doc_type"] is not None:
+        pd.doc_type = data["doc_type"]
+    if "doc_path" in data and data["doc_path"] is not None:
+        pd.doc_path = data["doc_path"]
+    if "description" in data and data["description"] is not None:
+        pd.description = data["description"]
+    if "responsible_role" in data and data["responsible_role"] is not None:
+        pd.responsible_role = data["responsible_role"]
 
     pd.updated_by = username
     db.commit()
@@ -784,6 +812,7 @@ def _doc_dict(pd: ProjectDocument) -> dict:
         "id": pd.id,
         "project_id": pd.project_id,
         "execution_id": pd.execution_id,
+        "template_id": pd.template_id,
         "stage_type": pd.stage_type,
         "doc_name": pd.doc_name,
         "sort_order": pd.sort_order,
@@ -1344,13 +1373,48 @@ def get_or_init_product_documents(db: Session, product_id: int) -> list[dict]:
 
     # Find which L2 nodes this product is linked to
     links = db.query(ProductNodeLink).filter(ProductNodeLink.product_id == product_id).all()
-    if not links:
-        return []
 
     product = db.query(PmaProduct).filter(PmaProduct.id == product_id).first()
     product_code = (product.code or "") if product else ""
 
     results = []
+    if not links:
+        # No template links — still return custom docs if any
+        custom_docs = db.query(ProductDocument).filter(
+            ProductDocument.product_id == product_id,
+            ProductDocument.template_id.is_(None),
+            or_(ProductDocument.is_removed == 0, ProductDocument.is_removed == None),
+        ).order_by(ProductDocument.sort_order).all()
+        for cd in custom_docs:
+            results.append({
+                "id": cd.id,
+                "template_id": None,
+                "doc_name": cd.doc_name,
+                "sort_order": cd.sort_order,
+                "stage_type": cd.stage_type or "通用",
+                "description": cd.description or "",
+                "responsible_role": cd.responsible_role or "",
+                "doc_path": cd.doc_path or "",
+                "doc_type": cd.doc_type or "",
+                "status": cd.status,
+                "done": cd.status == "submitted",
+                "warn": cd.status == "pending",
+                "is_optional": bool(cd.is_optional),
+                "is_removed": bool(cd.is_removed),
+                "file_count": cd.file_count or 0,
+                "location": cd.location or "",
+                "mismatch": "",
+                "uploaded_by": cd.uploaded_by or "",
+                "uploaded_at": to_local_str(cd.uploaded_at) if cd.uploaded_at else "",
+                "completed_at": to_local_str(cd.completed_at) if cd.completed_at else "",
+                "updated_by": cd.updated_by or "",
+                "updated_at": to_local_str(cd.updated_at) if cd.updated_at else "",
+                "svn_author": cd.svn_author or "",
+                "svn_last_modified": cd.svn_last_modified or "",
+                "svn_rev": cd.svn_rev or "",
+                "node_name": "",
+            })
+        return results
     for link in links:
         templates = db.query(ProductDocTemplate).filter(
             ProductDocTemplate.product_id == link.product_node_id
@@ -1467,6 +1531,7 @@ def get_or_init_product_documents(db: Session, product_id: int) -> list[dict]:
             })
 
     # Cleanup: remove doc instances for templates that no longer exist
+    # (skip custom docs where template_id is NULL — they were added manually)
     if links:
         all_template_ids = set()
         for link in links:
@@ -1478,8 +1543,45 @@ def get_or_init_product_documents(db: Session, product_id: int) -> list[dict]:
         if all_template_ids:
             stale = db.query(ProductDocument).filter(
                 ProductDocument.product_id == product_id,
+                ProductDocument.template_id.isnot(None),
                 ~ProductDocument.template_id.in_(all_template_ids),
             ).delete()
+
+    # Include custom docs (template_id is NULL, not is_removed)
+    custom_docs = db.query(ProductDocument).filter(
+        ProductDocument.product_id == product_id,
+        ProductDocument.template_id.is_(None),
+        or_(ProductDocument.is_removed == 0, ProductDocument.is_removed == None),
+    ).order_by(ProductDocument.sort_order).all()
+    for cd in custom_docs:
+        results.append({
+            "id": cd.id,
+            "template_id": None,
+            "doc_name": cd.doc_name,
+            "sort_order": cd.sort_order,
+            "stage_type": cd.stage_type or "通用",
+            "description": cd.description or "",
+            "responsible_role": cd.responsible_role or "",
+            "doc_path": cd.doc_path or "",
+            "doc_type": cd.doc_type or "",
+            "status": cd.status,
+            "done": cd.status == "submitted",
+            "warn": cd.status == "pending",
+            "is_optional": bool(cd.is_optional),
+            "is_removed": bool(cd.is_removed),
+            "file_count": cd.file_count or 0,
+            "location": cd.location or "",
+            "mismatch": "",
+            "uploaded_by": cd.uploaded_by or "",
+            "uploaded_at": to_local_str(cd.uploaded_at) if cd.uploaded_at else "",
+            "completed_at": to_local_str(cd.completed_at) if cd.completed_at else "",
+            "updated_by": cd.updated_by or "",
+            "updated_at": to_local_str(cd.updated_at) if cd.updated_at else "",
+            "svn_author": cd.svn_author or "",
+            "svn_last_modified": cd.svn_last_modified or "",
+            "svn_rev": cd.svn_rev or "",
+            "node_name": "",
+        })
 
     db.commit()
     return results

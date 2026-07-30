@@ -11,6 +11,7 @@ var _projectProducts = [];
 var _userNames = [];
 var _customerNames = [];
 var _detailTargetTab = null;
+var _docCache = {};  // { docId: docData } for edit dialog lookup
 
 function setDetailTargetTab(tabId) { _detailTargetTab = tabId; }
 
@@ -1056,7 +1057,7 @@ function buildDocs(data) {
     return;
   }
 
-  var typeLabels = { gitlab: 'GitLab', svn: 'SVN', nas: 'NAS', solidworks: '结构设计', pma: 'PMA' };
+  var typeLabels = { gitlab: 'GitLab', svn: 'SVN', nas: 'NAS', solidworks: '结构设计', pma: 'PMA内部' };
   var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
   var stageColors = isDark
     ? ['var(--accent-lt)', '#283528', '#353020', '#2a3340', '#283530', '#2c2c30', '#353028', '#2a2e3a']
@@ -1098,6 +1099,9 @@ function buildDocs(data) {
     } else {
       items.sort(function(a, b) { return (a.sort_order || 0) - (b.sort_order || 0); });
       items.forEach(function(d, i) {
+        // Cache doc data for edit dialog lookup
+        _docCache[d.id] = d;
+        var isCustom = (d.template_id === null || d.template_id === 0 || d.template_id === undefined);
         var hasError = (!d.done && d.location) || d.mismatch;
         var statusHtml;
         if (d.done && !d.mismatch) {
@@ -1135,7 +1139,8 @@ function buildDocs(data) {
           (i === 0 ? '<td rowspan="' + items.length + '" style="vertical-align:middle;text-align:center;font-weight:600;' + cellStyle + 'color:var(--accent);font-size:12px">' + escHtml(stageName) + ' <sup style="font-size:10px;color:var(--muted);font-weight:400">' + items.length + '</sup><div style="margin-top:4px">' + progressRing + '</div></td>' : '') +
           '<td style="font-family:var(--mono);color:var(--muted);text-align:center;' + cellStyle + '">' + (i + 1) + '</td>' +
           '<td style="font-weight:500;width:180px;word-break:break-all;' + cellStyle + '" title="' + escHtml(d.description || '') + '">' + escHtml(d.doc_name) +
-            (d.is_optional ? ' <span style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:3px" title="可选项">可选</span>' : '') + '</td>' +
+            (isCustom ? ' <span style="font-size:9px;color:var(--success);background:var(--success-lt);padding:1px 4px;border-radius:3px" title="自定义文档">自定义</span>' : '') +
+            (!isCustom && d.is_optional ? ' <span style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:3px" title="可选项">可选</span>' : '') + '</td>' +
           '<td style="font-size:12px;white-space:nowrap;word-break:keep-all;' + cellStyle + '">' + escHtml(d.responsible_role || '—') + '</td>' +
           '<td style="white-space:nowrap;word-break:keep-all;' + cellStyle + '">' + statusHtml + '</td>' +
           '<td style="font-size:11px;' + cellStyle + '">' + escHtml(docTypeLabel) + '</td>' +
@@ -1148,7 +1153,9 @@ function buildDocs(data) {
               : (d.location && d.location !== '无需文档' && d.location !== '已删除'
               ? '<a href="' + escHtml(d.location) + '" target="_blank" title="打开链接" style="text-decoration:none;font-size:15px">&#x1F517;</a>'
               : '')) +
-            (d.is_optional && canEdit ? iconDelete('removeOptionalDoc(' + d.id + ',\x27' + escJs(d.doc_name) + '\x27)', '移除此文档') : '') +
+            // Custom docs: show delete button; template docs: delete only for optional
+            (isCustom && canEdit ? iconDelete('deleteCustomDoc(' + d.id + ',\x27' + escJs(d.doc_name) + '\x27)', '删除此文档') : '') +
+            (!isCustom && d.is_optional && canEdit ? iconDelete('removeOptionalDoc(' + d.id + ',\x27' + escJs(d.doc_name) + '\x27)', '移除此文档') : '') +
             (canEdit ? iconEdit('openDocEditDialog(' + d.id + ')', '编辑') : '') +
           '</td>' +
         '</tr>';
@@ -1161,6 +1168,13 @@ function buildDocs(data) {
 /* ── Document Status Edit Dialog ── */
 
 function openDocEditDialog(docId) {
+  // Custom docs (template_id is null/0/undefined): open full edit form
+  var docData = _docCache[docId];
+  if (docData && (docData.template_id === null || docData.template_id === 0 || docData.template_id === undefined)) {
+    addCustomDoc({ id: docId, doc_name: docData.doc_name, stage_type: docData.stage_type, doc_type: docData.doc_type, location: docData.location, description: docData.description, responsible_role: docData.responsible_role });
+    return;
+  }
+  // Template docs: status-only edit dialog
   var inp = 'width:100%;box-sizing:border-box;margin-top:1px';
   openDialog('编辑文档状态',
     '<div style="margin-bottom:10px">' +
@@ -1189,6 +1203,15 @@ async function _confirmDeleteDoc(docId, docName) {
   var ok = await verifyPassword('删除文档: ' + (docName || '#' + docId), 'skip_doc_delete');
   if (!ok) return;
   saveDocStatus(docId, 'deleted');
+}
+
+function deleteCustomDoc(docId, docName) {
+  var label = docName || ('#' + docId);
+  openDialog('删除自定义文档',
+    '<div class="confirm-dlg">确认删除自定义文档 <b>' + escHtml(label) + '</b>？<br><br>删除后将不再显示。如需恢复，可手动重新添加。</div>',
+    [{text: '取消', onclick: 'closeSharedDialog()'},
+     {text: '确认删除', cls: 'btn-danger', onclick: 'closeSharedDialog();_confirmRemoveDoc(' + docId + ',\x27' + escJs(label) + '\x27)'}],
+    {hideClose: true});
 }
 
 function removeOptionalDoc(docId, docName) {
@@ -1290,50 +1313,99 @@ function doImportTemplateDocs() {
 
 /* ── Add Custom Document ── */
 
-function addCustomDoc() {
-  if (!_comboCurCode) return;
-  var stages = [];
-  // Get standard stages from last loaded docs data
+function addCustomDoc(editData) {
+  // editData: { id, doc_name, stage_type, doc_type, location } for edit mode, undefined for add mode
+  var isEdit = !!editData;
+  if (!_comboCurCode && !isEdit) return;
   var inp = 'width:100%;box-sizing:border-box;margin-top:2px';
   var html = '<div style="display:flex;flex-direction:column;gap:10px">' +
     '<div><label style="font-size:11px;color:var(--muted)">文档名称</label><input class="search-inp" id="custom-doc-name" style="' + inp + '" placeholder="如：硬件测试报告"></div>' +
     '<div><label style="font-size:11px;color:var(--muted)">所属阶段</label><select class="search-inp" id="custom-doc-stage" style="' + inp + '"></select></div>' +
-    '<div><label style="font-size:11px;color:var(--muted)">文档类型</label><select class="search-inp" id="custom-doc-type" style="' + inp + '"><option value="">PMA内部</option><option value="gitlab">GitLab</option><option value="svn">SVN</option><option value="nas">NAS</option><option value="solidworks">结构设计</option></select></div>' +
+    '<div><label style="font-size:11px;color:var(--muted)">责任人</label><input class="search-inp" id="custom-doc-role" list="custom-role-list" style="' + inp + '" placeholder="选择或输入责任人"><datalist id="custom-role-list"></datalist></div>' +
+    '<div><label style="font-size:11px;color:var(--muted)">文档类型</label><select class="search-inp" id="custom-doc-type" style="' + inp + '"><option value="pma">PMA内部</option><option value="gitlab">GitLab</option><option value="svn">SVN</option><option value="nas">NAS</option><option value="solidworks">结构设计</option></select></div>' +
     '<div><label style="font-size:11px;color:var(--muted)">文档路径/链接</label><input class="search-inp" id="custom-doc-location" style="' + inp + '" placeholder="如：http://..."></div>' +
-    '<div><label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="custom-doc-optional" style="width:16px;height:16px">可选项（可按需删除）</label></div>' +
   '</div>';
 
-  openDialog('新增文档', html, [
+  var title = isEdit ? '编辑文档' : '新增文档';
+  var submitBtn = isEdit
+    ? {text: '保存', cls: 'btn-primary', onclick: 'submitEditDoc(' + editData.id + ')'}
+    : {text: '添加', cls: 'btn-primary', onclick: 'submitCustomDoc()'};
+  openDialog(title, html, [
     {text: '取消', onclick: 'closeSharedDialog()'},
-    {text: '添加', cls: 'btn-primary', onclick: 'submitCustomDoc()'}
+    submitBtn
   ], {maxWidth: 500});
 
-  // Load stage options
+  // Load stage options + role suggestions from existing docs
   API.get('/projects/' + _comboCurCode + '/documents').then(function(data) {
     var sel = document.getElementById('custom-doc-stage');
+    var roleList = document.getElementById('custom-role-list');
     var stageList = (data && data.documents) ? data.documents : [];
+    var seenRoles = {};
     stageList.forEach(function(stage) {
-      sel.innerHTML += '<option value="' + escHtml(stage.stage_name || '') + '">' + escHtml(stage.stage_name || '') + '</option>';
+      var opt = '<option value="' + escHtml(stage.stage_name || '') + '">' + escHtml(stage.stage_name || '') + '</option>';
+      sel.innerHTML += opt;
+      // Collect unique responsible_role values from existing docs
+      var items = stage.documents || [];
+      items.forEach(function(d) {
+        var role = d.responsible_role;
+        if (role && !seenRoles[role]) {
+          seenRoles[role] = true;
+          roleList.innerHTML += '<option value="' + escHtml(role) + '">';
+        }
+      });
     });
+    // Pre-fill for edit mode
+    if (isEdit) {
+      setTimeout(function() {
+        var nameEl = document.getElementById('custom-doc-name');
+        var stageEl = document.getElementById('custom-doc-stage');
+        var roleEl = document.getElementById('custom-doc-role');
+        var typeEl = document.getElementById('custom-doc-type');
+        var locEl = document.getElementById('custom-doc-location');
+        if (nameEl) nameEl.value = editData.doc_name || '';
+        if (stageEl) stageEl.value = editData.stage_type || '';
+        if (roleEl) roleEl.value = editData.responsible_role || '';
+        if (typeEl) typeEl.value = editData.doc_type || 'pma';
+        if (locEl) locEl.value = editData.location || '';
+      }, 0);
+    }
   });
 }
 
 function submitCustomDoc() {
   var name = document.getElementById('custom-doc-name').value.trim();
   var stage = document.getElementById('custom-doc-stage').value;
+  var role = document.getElementById('custom-doc-role').value.trim();
   var docType = document.getElementById('custom-doc-type').value;
   var location = document.getElementById('custom-doc-location').value.trim();
-  var isOptional = document.getElementById('custom-doc-optional').checked;
   if (!name) { showToast('请输入文档名称', 'error'); return; }
   if (!stage) { showToast('请选择所属阶段', 'error'); return; }
   API.post('/projects/' + _comboCurCode + '/documents/add', {
-    doc_name: name, stage_type: stage, doc_type: docType,
-    location: location, is_optional: isOptional
+    doc_name: name, stage_type: stage, responsible_role: role, doc_type: docType,
+    location: location
   }).then(function(r) {
     showToast(r.message || '文档已添加', 'success');
     closeSharedDialog();
     refreshDocs();
   }).catch(function(e) { showToast('添加失败: ' + (e.message || ''), 'error'); });
+}
+
+function submitEditDoc(docId) {
+  var name = document.getElementById('custom-doc-name').value.trim();
+  var stage = document.getElementById('custom-doc-stage').value;
+  var role = document.getElementById('custom-doc-role').value.trim();
+  var docType = document.getElementById('custom-doc-type').value;
+  var location = document.getElementById('custom-doc-location').value.trim();
+  if (!name) { showToast('请输入文档名称', 'error'); return; }
+  if (!stage) { showToast('请选择所属阶段', 'error'); return; }
+  API.put('/projects/' + _comboCurCode + '/documents/' + docId, {
+    doc_name: name, stage_type: stage, responsible_role: role, doc_type: docType,
+    doc_path: location, location: location
+  }).then(function(r) {
+    showToast(r.message || '文档已更新', 'success');
+    closeSharedDialog();
+    refreshDocs();
+  }).catch(function(e) { showToast('更新失败: ' + (e.message || ''), 'error'); });
 }
 
 /* Delivery */
