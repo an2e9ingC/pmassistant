@@ -1043,7 +1043,7 @@ function startNotifPoll() {
 var _tickerEnabled = localStorage.getItem('pma_ticker_enabled') !== '0';  // default ON
 var _tickerSpeed = localStorage.getItem('pma_ticker_speed') || 'normal';  // slow|normal|fast
 var _tickerSpeeds = {slow: 300, normal: 210, fast: 140};
-var _tickerContentMode = localStorage.getItem('pma_ticker_mode') || 'alerts';  // alerts|activities
+var _tickerContentMode = localStorage.getItem('pma_ticker_mode') || 'activities';  // activities|alerts
 var _tickerTimer = null;
 
 function initAlertTicker() {
@@ -2410,7 +2410,7 @@ function _renderPreferencesPanel(content) {
   if (!content) content = document.getElementById('pref-dialog-content') || document.getElementById('uc-expand-content');
   var tickerOn = localStorage.getItem('pma_ticker_enabled') !== '0';
   var tickerSpeed = localStorage.getItem('pma_ticker_speed') || 'normal';
-  var tickerMode = localStorage.getItem('pma_ticker_mode') || 'alerts';
+  var tickerMode = localStorage.getItem('pma_ticker_mode') || 'activities';
   var themeMode = localStorage.getItem('pm_theme_mode') || 'auto';
   var speedLabels = {slow: '慢速', normal: '正常', fast: '快速'};
   var speedBtns = '';
@@ -2421,7 +2421,7 @@ function _renderPreferencesPanel(content) {
   });
   var modeLabels = {alerts: '告警信息', activities: '任务动态'};
   var modeBtns = '';
-  ['alerts', 'activities'].forEach(function(m) {
+  ['activities', 'alerts'].forEach(function(m) {
     modeBtns += '<button class="btn btn-xs" style="margin-right:4px;' +
       (tickerMode === m ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : '') +
       '" onclick="toggleTickerContentMode()">' + modeLabels[m] + '</button>';
