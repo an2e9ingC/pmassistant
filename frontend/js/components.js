@@ -1534,7 +1534,9 @@ function editWorklogEntry(t, dateStr) {
             document.getElementById('wl-edit-task-id').value = tsk.id;
             document.getElementById('wl-edit-progress').value = tsk.progress || 0;
           }}) + '</div></div>' +
-    '<input type="hidden" id="wl-edit-task-id" value="' + (t.task_id||'') + '">';
+    '<input type="hidden" id="wl-edit-task-id" value="' + (t.task_id||'') + '">' +
+    '<input type="hidden" id="wl-edit-reviewer-name" value="' + escHtml(t.reviewer_name || '') + '">' +
+    '<input type="hidden" id="wl-edit-reviewer-id" value="' + (t.reviewer_id || '') + '">';
   var html = '<div>' + projectHtml + stageTaskHtml +
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">日期 *</label>' +
       '<input class="search-inp" id="wl-edit-date" type="date" required value="'+dateStr+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
@@ -1589,6 +1591,8 @@ function _wlEditOnStageChange() {
   if (loadFn) loadFn();
 }
 
+var _wlEditEntryPending = null;
+
 async function saveWorklogEntry(wlId, isBug) {
   var hours = parseFloat(document.getElementById('wl-edit-hours').value);
   var desc = document.getElementById('wl-edit-desc').value.trim();
@@ -1598,12 +1602,67 @@ async function saveWorklogEntry(wlId, isBug) {
   var newTaskId = taskIdEl ? (parseInt(taskIdEl.value) || 0) : 0;
   var progress = progressEl ? (parseInt(progressEl.value) || 0) : 0;
   if (!date || !hours || hours <= 0) { showToast('请填写日期和工时', 'error'); return; }
+
+  // If progress >= 100 and not a bug, show confirmation before saving
+  if (!isBug && progress >= 100) {
+    _wlEditEntryPending = { wlId: wlId, isBug: isBug, newTaskId: newTaskId, hours: hours, progress: progress, desc: desc, date: date };
+    var approvalEnabled = window._approvalEnabled;
+    var reviewerName = document.getElementById('wl-edit-reviewer-name');
+    var rname = reviewerName ? reviewerName.value.trim() : '';
+    if (approvalEnabled) {
+      var reviewMsg = rname ? '，评审人: <b>' + escHtml(rname) + '</b>' : '，评审人: <b>待分配</b>';
+      openDialog('确认保存工时',
+        '<div style="font-size:13px;margin-bottom:8px">进度 <b>100%</b>，任务将进入<b>评审中</b>状态' + reviewMsg + '。</div>' +
+        '<div style="font-size:11px;color:var(--muted)">确认后工时记录将保存，任务状态将自动更新。</div>',
+        [
+          {text: '取消', onclick: '_wlEditEntryCancel()'},
+          {text: '确认', cls: 'btn-primary', onclick: '_wlEditEntryConfirm()'},
+        ],
+        {hideClose: true, overlayClass: 'wl-edit-entry-confirm-overlay', keepExisting: true}
+      );
+    } else {
+      openDialog('确认保存工时',
+        '<div style="font-size:13px;margin-bottom:8px">进度 <b>100%</b>，任务将自动切换为<b>已完成</b>状态。</div>' +
+        '<div style="font-size:11px;color:var(--muted)">确认后工时记录将保存，任务状态将自动更新。</div>',
+        [
+          {text: '取消', onclick: '_wlEditEntryCancel()'},
+          {text: '确认', cls: 'btn-primary', onclick: '_wlEditEntryConfirm()'},
+        ],
+        {hideClose: true, overlayClass: 'wl-edit-entry-confirm-overlay', keepExisting: true}
+      );
+    }
+    return;
+  }
+
+  await _doSaveWorklogEntry(wlId, isBug, newTaskId, hours, progress, desc, date);
+}
+
+function _wlEditEntryCancel() {
+  var d = document.querySelector('.wl-edit-entry-confirm-overlay'); if (d) d.remove();
+  _wlEditEntryPending = null;
+  // Edit dialog stays open with data preserved
+}
+
+async function _wlEditEntryConfirm() {
+  var d = document.querySelector('.wl-edit-entry-confirm-overlay'); if (d) d.remove();
+  if (!_wlEditEntryPending) return;
+  var p = _wlEditEntryPending;
+  _wlEditEntryPending = null;
+  await _doSaveWorklogEntry(p.wlId, p.isBug, p.newTaskId, p.hours, p.progress, p.desc, p.date);
+}
+
+async function _doSaveWorklogEntry(wlId, isBug, newTaskId, hours, progress, desc, date) {
   var url = (isBug ? '/bug-worklogs/' : '/worklogs/') + wlId;
   try {
     var payload = {hours: hours, date: date, description: desc};
     if (newTaskId && !isBug) payload.task_id = newTaskId;
     await API.put(url, payload);
-    if (newTaskId && !isBug) await API.put('/tasks/' + newTaskId, {progress: progress});
+    if (newTaskId && !isBug) {
+      var taskRes = await API.put('/tasks/' + newTaskId, {progress: progress});
+      if (taskRes && taskRes.auto_messages && taskRes.auto_messages.length) {
+        taskRes.auto_messages.forEach(function(msg) { showToast(msg, 'success'); });
+      }
+    }
     closeSharedDialog();
     showToast('工时已更新', 'success');
     if (typeof _ucLoadCalendar === 'function') { var u = getCurrentUser(); if (u) _ucLoadCalendar(u); }

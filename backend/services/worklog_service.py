@@ -17,13 +17,21 @@ def _auto_update_task_status(db: Session, task_id: int):
     When approval is disabled, auto-complete over-budget tasks instead of entering review.
     """
     task = db.query(Task).filter(Task.id == task_id).first()
-    if not task or not task.estimate_hours or task.estimate_hours <= 0:
+    if not task:
         return
     consumed = task.consumed_hours or 0.0
-    estimate = task.estimate_hours
+    estimate = task.estimate_hours or 0.0
     status = task.status
 
-    if consumed >= estimate and status not in ('done', 'closed', 'review'):
+    # todo → in_progress: any consumed hours, regardless of estimate
+    if consumed > 0 and status == 'todo':
+        task.status = 'in_progress'
+        db.commit()
+        # Reload status after commit for the over-budget check below
+        status = task.status
+
+    # over-budget → review/done: only when estimate is set and consumed >= estimate
+    if estimate > 0 and consumed >= estimate and status not in ('done', 'closed', 'review'):
         if not task.original_estimate_hours:
             task.original_estimate_hours = estimate
         approval_enabled = PmaSetting.get(db, "approval_enabled", "1") == "1"
@@ -34,9 +42,6 @@ def _auto_update_task_status(db: Session, task_id: int):
         else:
             # Approval enabled: flag for user decision
             task.status = 'review'
-        db.commit()
-    elif consumed > 0 and status == 'todo':
-        task.status = 'in_progress'
         db.commit()
 
 

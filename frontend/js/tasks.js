@@ -840,6 +840,30 @@ function _resolveProjectId() {
   return p ? p.id : null;
 }
 
+async function _refreshTaskDetailContent(taskId) {
+  try {
+    var freshTask = await API.get('/tasks/' + taskId);
+    var bodyEl = document.querySelector('.task-detail-body');
+    if (bodyEl) {
+      bodyEl.innerHTML = _renderTaskDetailBody(freshTask);
+    }
+    // Re-refresh worklogs (updates worklog table and consumed-hours header)
+    _refreshTaskWorklogs(taskId);
+    // Re-load comments
+    _loadDetailComments(taskId);
+    // Re-init image paste for description
+    setTimeout(function() {
+      var descField = document.querySelector('.editable-field[data-field="description"]');
+      if (descField && freshTask.description) {
+        initNoteImagePaste('ef-desc');
+      }
+    }, 200);
+  } catch(e) {
+    // Fallback: still refresh worklogs
+    _refreshTaskWorklogs(taskId);
+  }
+}
+
 function _closeTaskDialog() {
   document.querySelectorAll('.note-dialog-overlay').forEach(function(ov) { ov.remove(); });
 }
@@ -1705,6 +1729,8 @@ function openWorklogDialog(taskId) {
       '<input class="search-inp" id="wl-remaining" type="number" step="0.5" min="0" style="width:100%;box-sizing:border-box;margin-top:2px" placeholder="还需多少小时完成？">' +
     '</div>';
     var html = '<div>' +
+      '<input type="hidden" id="wl-reviewer-name" value="' + escHtml(task.reviewer_name || '') + '">' +
+      '<input type="hidden" id="wl-reviewer-id" value="' + (task.reviewer_id || '') + '">' +
       overBudgetHint +
       '<div style="margin-bottom:4px;font-size:11px;color:var(--muted)">项目: <span style="color:var(--fg);font-weight:500">' + escHtml(task.project_code||'？') + '</span> ' + escHtml(task.project_name||'') + '</div>' +
       '<div style="margin-bottom:8px;font-size:11px;color:var(--muted)">任务: <span style="color:var(--fg);font-weight:500">' + escHtml(task.name||task.title||'？') + '</span></div>' +
@@ -1740,6 +1766,7 @@ function openWorklogEditDialog(wlId, taskId) {
       project_id: task.project_id, project_code: task.project_code, project_name: task.project_name,
       stage_name: task.stage_name, title: task.title || task.name,
       hours: w.hours, description: w.description, progress: task.progress,
+      reviewer_name: task.reviewer_name, reviewer_id: task.reviewer_id,
       source: 'task'
     }, w.date || '');
   }).catch(function(e){showToast('加载失败: '+(e.message||''),'error');});
@@ -1760,6 +1787,8 @@ function _wlCheckOverBudget(taskId) {
   }).catch(function(){});
 }
 
+var _wlPendingSubmit = null;
+
 async function submitWorklog(taskId) {
   var hours = parseFloat(document.getElementById('wl-hours').value);
   var progress = parseInt(document.getElementById('wl-progress').value);
@@ -1776,9 +1805,64 @@ async function submitWorklog(taskId) {
   if (isNaN(progress) || progress < 0 || progress > 100) { var h = document.getElementById('wl-progress-hint'); if (h) h.style.display = ''; valid = false; }
   if (!desc) { var h = document.getElementById('wl-desc-hint'); if (h) h.style.display = ''; valid = false; }
   if (!valid) return;
+
+  // If progress >= 100, show confirmation before saving
+  if (progress >= 100) {
+    _wlPendingSubmit = { taskId: taskId, hours: hours, progress: progress, desc: desc, date: date };
+    var approvalEnabled = window._approvalEnabled;
+    var reviewerName = document.getElementById('wl-reviewer-name');
+    var rname = reviewerName ? reviewerName.value.trim() : '';
+    if (approvalEnabled) {
+      var reviewMsg = rname ? '，评审人: <b>' + escHtml(rname) + '</b>' : '，评审人: <b>待分配</b>';
+      openDialog('确认提交工时',
+        '<div style="font-size:13px;margin-bottom:8px">进度 <b>100%</b>，任务将进入<b>评审中</b>状态' + reviewMsg + '。</div>' +
+        '<div style="font-size:11px;color:var(--muted)">确认后工时记录将保存，任务状态将自动更新。</div>',
+        [
+          {text: '取消', onclick: '_wlCancelSubmit()'},
+          {text: '确认', cls: 'btn-primary', onclick: '_wlConfirmSubmit()'},
+        ],
+        {hideClose: true, overlayClass: 'wl-submit-confirm-overlay', keepExisting: true}
+      );
+    } else {
+      openDialog('确认提交工时',
+        '<div style="font-size:13px;margin-bottom:8px">进度 <b>100%</b>，任务将自动切换为<b>已完成</b>状态。</div>' +
+        '<div style="font-size:11px;color:var(--muted)">确认后工时记录将保存，任务状态将自动更新。</div>',
+        [
+          {text: '取消', onclick: '_wlCancelSubmit()'},
+          {text: '确认', cls: 'btn-primary', onclick: '_wlConfirmSubmit()'},
+        ],
+        {hideClose: true, overlayClass: 'wl-submit-confirm-overlay', keepExisting: true}
+      );
+    }
+    return;
+  }
+
+  await _doSubmitWorklog(taskId, hours, progress, desc, date);
+}
+
+function _wlCancelSubmit() {
+  var d = document.querySelector('.wl-submit-confirm-overlay'); if (d) d.remove();
+  _wlPendingSubmit = null;
+  // Worklog dialog stays open with data preserved
+}
+
+async function _wlConfirmSubmit() {
+  var d = document.querySelector('.wl-submit-confirm-overlay'); if (d) d.remove();
+  if (!_wlPendingSubmit) return;
+  var p = _wlPendingSubmit;
+  _wlPendingSubmit = null;
+  await _doSubmitWorklog(p.taskId, p.hours, p.progress, p.desc, p.date);
+}
+
+async function _doSubmitWorklog(taskId, hours, progress, desc, date) {
+  var remainingEl = document.getElementById('wl-remaining');
   try {
     await API.post('/worklogs', {task_id:taskId, hours:hours, date:date, description:desc});
-    await API.put('/tasks/'+taskId, {progress:progress});
+    var taskRes = await API.put('/tasks/'+taskId, {progress:progress});
+    // Show auto-status-change hints (e.g. "进度已达100%，任务已自动完成")
+    if (taskRes && taskRes.auto_messages && taskRes.auto_messages.length) {
+      taskRes.auto_messages.forEach(function(msg) { showToast(msg, 'success'); });
+    }
     // If over budget and remaining hours specified, extend estimate
     if (remainingEl && remainingEl.value) {
       var remaining = parseFloat(remainingEl.value);
@@ -1791,10 +1875,12 @@ async function submitWorklog(taskId) {
     }
     showToast('工时已记录', 'success');
     _closeWorklogDialog();
-    _refreshTaskWorklogs(taskId);
+    _refreshTaskDetailContent(taskId);
     loadTaskData();
   } catch(e) { showToast('记录失败: '+(e.message||'未知错误'), 'error'); }
 }
+
+var _wlEditPendingSubmit = null;
 
 async function _submitWorklogEdit(wlId, taskId) {
   var hours = parseFloat(document.getElementById('wl-hours').value);
@@ -1811,12 +1897,66 @@ async function _submitWorklogEdit(wlId, taskId) {
   if (isNaN(progress) || progress < 0 || progress > 100) { var h = document.getElementById('wl-progress-hint'); if (h) h.style.display = ''; valid = false; }
   if (!desc) { var h = document.getElementById('wl-desc-hint'); if (h) h.style.display = ''; valid = false; }
   if (!valid) return;
+
+  // If progress >= 100, show confirmation before saving
+  if (progress >= 100) {
+    _wlEditPendingSubmit = { wlId: wlId, taskId: taskId, hours: hours, progress: progress, desc: desc, date: date };
+    var approvalEnabled = window._approvalEnabled;
+    var reviewerName = document.getElementById('wl-reviewer-name');
+    var rname = reviewerName ? reviewerName.value.trim() : '';
+    if (approvalEnabled) {
+      var reviewMsg = rname ? '，评审人: <b>' + escHtml(rname) + '</b>' : '，评审人: <b>待分配</b>';
+      openDialog('确认提交工时',
+        '<div style="font-size:13px;margin-bottom:8px">进度 <b>100%</b>，任务将进入<b>评审中</b>状态' + reviewMsg + '。</div>' +
+        '<div style="font-size:11px;color:var(--muted)">确认后工时记录将保存，任务状态将自动更新。</div>',
+        [
+          {text: '取消', onclick: '_wlEditCancelSubmit()'},
+          {text: '确认', cls: 'btn-primary', onclick: '_wlEditConfirmSubmit()'},
+        ],
+        {hideClose: true, overlayClass: 'wl-edit-confirm-overlay', keepExisting: true}
+      );
+    } else {
+      openDialog('确认提交工时',
+        '<div style="font-size:13px;margin-bottom:8px">进度 <b>100%</b>，任务将自动切换为<b>已完成</b>状态。</div>' +
+        '<div style="font-size:11px;color:var(--muted)">确认后工时记录将保存，任务状态将自动更新。</div>',
+        [
+          {text: '取消', onclick: '_wlEditCancelSubmit()'},
+          {text: '确认', cls: 'btn-primary', onclick: '_wlEditConfirmSubmit()'},
+        ],
+        {hideClose: true, overlayClass: 'wl-edit-confirm-overlay', keepExisting: true}
+      );
+    }
+    return;
+  }
+
+  await _doSubmitWorklogEdit(wlId, taskId, hours, progress, desc, date);
+}
+
+function _wlEditCancelSubmit() {
+  var d = document.querySelector('.wl-edit-confirm-overlay'); if (d) d.remove();
+  _wlEditPendingSubmit = null;
+  // Worklog edit dialog stays open with data preserved
+}
+
+async function _wlEditConfirmSubmit() {
+  var d = document.querySelector('.wl-edit-confirm-overlay'); if (d) d.remove();
+  if (!_wlEditPendingSubmit) return;
+  var p = _wlEditPendingSubmit;
+  _wlEditPendingSubmit = null;
+  await _doSubmitWorklogEdit(p.wlId, p.taskId, p.hours, p.progress, p.desc, p.date);
+}
+
+async function _doSubmitWorklogEdit(wlId, taskId, hours, progress, desc, date) {
   try {
     await API.put('/worklogs/'+wlId, {hours:hours, date:date, description:desc});
-    await API.put('/tasks/'+taskId, {progress:progress});
+    var taskRes = await API.put('/tasks/'+taskId, {progress:progress});
+    // Show auto-status-change hints (e.g. "进度已达100%，任务已自动完成")
+    if (taskRes && taskRes.auto_messages && taskRes.auto_messages.length) {
+      taskRes.auto_messages.forEach(function(msg) { showToast(msg, 'success'); });
+    }
     showToast('工时已更新', 'success');
     _closeWorklogDialog();
-    _refreshTaskWorklogs(taskId);
+    _refreshTaskDetailContent(taskId);
     loadTaskData();
   } catch(e) { showToast('更新失败: '+(e.message||'未知错误'), 'error'); }
 }
@@ -1825,7 +1965,7 @@ function deleteWorklogById(wlId, taskId) {
   if (!confirm('确认删除此工时记录？')) return;
   API.del('/worklogs/' + wlId).then(function() {
     showToast('已删除', 'success');
-    _refreshTaskWorklogs(taskId);
+    _refreshTaskDetailContent(taskId);
     loadTaskData();
   }).catch(function(e) { showToast('删除失败: ' + (e.message || ''), 'error'); });
 }
@@ -1835,6 +1975,14 @@ function _refreshTaskWorklogs(taskId) {
     var el = document.getElementById('tv-worklogs');
     if (!el) el = document.getElementById('tf-worklogs');
     if (el) el.innerHTML = _renderWorklogTable(logs || [], taskId);
+    // Update consumed hours in section header (both detail and edit dialogs)
+    var totalHours = (logs || []).reduce(function(sum, l) { return sum + (l.hours || 0); }, 0);
+    var headers = document.querySelectorAll('.section-title');
+    headers.forEach(function(h) {
+      if (h.textContent.indexOf('工时日志') === 0) {
+        h.textContent = '工时日志 (' + totalHours.toFixed(1) + 'h)';
+      }
+    });
   }).catch(function() {});
 }
 
