@@ -2477,20 +2477,25 @@ async function initNamingOptions() {
           '<span style="font-weight:600;font-size:13px">' + escHtml(_namingFieldLabels[fk] || fk) + '</span>' +
           '<button class="btn btn-sm btn-primary" onclick="_namingShowAdd(\'' + fk + '\')">+ 添加</button>' +
         '</div>' +
-        '<table class="proj-table" style="font-size:12px"><thead><tr><th>编号</th><th>描述</th><th>操作</th></tr></thead><tbody>';
-      opts.forEach(function(o) {
-        html += '<tr>' +
-          '<td style="font-family:var(--mono);font-weight:600">' + escHtml(o.code) + '</td>' +
-          '<td>' + escHtml(o.description) + '</td>' +
-          '<td>' + iconEdit('_namingShowEdit(' + o.id + ',\'' + fk + '\',\'' + escHtml(o.code).replace(/'/g,"\\'") + '\',\'' + escHtml(o.description).replace(/'/g,"\\'") + '\')', '编辑') +
-            iconDelete('_namingDelete(' + o.id + ',\'' + fk + '\')', '删除') +
-          '</td>' +
-        '</tr>';
-      });
-      html += '</tbody></table></div>';
+        '<div id="naming-table-' + fk + '"></div></div>';
     });
     html += '</div>';
     container.innerHTML = html;
+    // Build DataTables for each field
+    fields.forEach(function(fk) {
+      var opts = (data[fk] || []).sort(function(a, b) { return a.code < b.code ? -1 : a.code > b.code ? 1 : 0; });
+      if (!opts.length) return;
+      new DataTable({
+        container: document.getElementById('naming-table-' + fk),
+        columns: [
+          { key: 'code', title: '编号', render: function(v) { return '<span style="font-family:var(--mono);font-weight:600">'+escHtml(v||'')+'</span>'; } },
+          { key: 'description', title: '描述', render: function(v) { return escHtml(v||''); } },
+          { key: 'actions', title: '操作', render: function(v, row) { return iconEdit('_namingShowEdit('+row.id+',\''+fk+'\',\''+escHtml(row.code||'').replace(/'/g,"\\'")+'\',\''+escHtml(row.description||'').replace(/'/g,"\\'")+'\')','编辑')+iconDelete('_namingDelete('+row.id+',\''+fk+'\')','删除'); } }
+        ],
+        data: opts,
+        resizable: false
+      });
+    });
   } catch(e) {
     container.innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '</div>';
   }
@@ -2581,17 +2586,22 @@ async function initBugTemplates() {
         '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="_bugTplShowEdit(0)">+ 添加模板</button>' +
       '</div>';
     if (!tpls.length) { html += '<div class="empty-state">暂无模板</div>'; }
-    else {
-      html += '<table class="proj-table"><thead><tr><th>名称</th><th>内容预览</th><th>操作</th></tr></thead><tbody>';
-      tpls.forEach(function(t) {
-        html += '<tr><td style="font-weight:500">'+escHtml(t.name)+(t.is_default?' <span style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:3px">默认</span>':'')+'</td>' +
-          '<td style="font-size:11px;color:var(--muted);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHtml((t.content||'').substring(0,80))+'</td>' +
-          '<td>'+(t.is_default?'':iconBtn('⭐','设为默认','_bugTplSetDefault('+t.id+')'))+iconEdit('_bugTplShowEdit('+t.id+')','编辑')+iconDelete('_bugTplDelete('+t.id+')','删除')+'</td></tr>';
-      });
-      html += '</tbody></table>';
-    }
+    else { html += '<div id="bug-tpl-table"></div>'; }
     html += '</div>';
     c.innerHTML = html;
+
+    if (tpls.length) {
+      new DataTable({
+        container: document.getElementById('bug-tpl-table'),
+        columns: [
+          { key: 'name', title: '名称', render: function(v, row) { return '<span style="font-weight:500">'+escHtml(v||'')+'</span>'+(row.is_default?' <span style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:3px">默认</span>':''); } },
+          { key: 'content', title: '内容预览', render: function(v) { return '<span style="font-size:11px;color:var(--muted);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHtml((v||'').substring(0,80))+'</span>'; } },
+          { key: 'actions', title: '操作', render: function(v, row) { return (row.is_default?'':iconBtn('⭐','设为默认','_bugTplSetDefault('+row.id+')'))+iconEdit('_bugTplShowEdit('+row.id+')','编辑')+iconDelete('_bugTplDelete('+row.id+')','删除'); } }
+        ],
+        data: tpls,
+        resizable: false
+      });
+    }
   } catch(e) { c.innerHTML = '<div class="error-state">加载失败: '+escHtml(e.message)+'</div>'; }
 }
 

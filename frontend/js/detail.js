@@ -1387,20 +1387,7 @@ function buildDelivery(data) {
   var recHtml = '' +
     '<div class="card col-span" style="padding:20px;margin-top:16px">' +
       sectionHeader('交付记录明细', records.length + ' 条', '+ 添加记录', 'showDeliveryForm()') +
-      (records.length ? '<div class="table-scroll"><table class="stage-table"><thead><tr><th>交付日期</th><th>产品名</th><th>数量</th><th>产品编号</th><th>责任人</th><th>收货方</th><th>备注</th><th style="width:50px"></th></tr></thead><tbody>' +
-      records.map(function(r) {
-        return '<tr>' +
-          '<td style="font-family:var(--mono);font-size:12px;color:var(--success);font-weight:540;white-space:nowrap">' + formatDate(r.date) + '</td>' +
-          '<td style="font-size:12.5px;font-weight:500">' + escHtml(r.product_name || '') + '</td>' +
-          '<td style="font-variant-numeric:tabular-nums;font-weight:600">' + r.qty + ' 台</td>' +
-          '<td style="font-family:var(--mono);font-size:11.5px">' + escHtml(r.items || '') + '</td>' +
-          '<td style="font-size:12px">' + escHtml(r.responsible_person || '—') + '</td>' +
-          '<td style="font-size:12.5px">' + escHtml(r.receiver || '—') + '</td>' +
-          '<td style="font-size:12px;color:var(--muted)">' + escHtml(r.note || '') + '</td>' +
-          '<td><button class="btn btn-xs" style="color:var(--danger)" onclick="deleteDeliveryRecord(' + r.id + ')">删除</button></td>' +
-        '</tr>';
-      }).join('') +
-      '</tbody></table></div>' : '<div class="empty-state" style="padding:20px">暂无交付记录，点击上方按钮添加</div>') +
+      (records.length ? '<div id="delivery-table"></div>' : '<div class="empty-state" style="padding:20px">暂无交付记录，点击上方按钮添加</div>') +
     '</div>';
 
   document.getElementById('delivery-content').innerHTML =
@@ -1413,6 +1400,24 @@ function buildDelivery(data) {
     '</div>' +
     planFormHtml +
     '<div id="delivery-form-container"></div>';
+
+  if (records.length) {
+    new DataTable({
+      container: document.getElementById('delivery-table'),
+      columns: [
+        { key: 'date', title: '交付日期', render: function(v) { return '<span style="font-family:var(--mono);font-size:12px;color:var(--success);font-weight:540;white-space:nowrap">'+formatDate(v)+'</span>'; } },
+        { key: 'product_name', title: '产品名', render: function(v) { return '<span style="font-size:12.5px;font-weight:500">'+escHtml(v||'')+'</span>'; } },
+        { key: 'qty', title: '数量', render: function(v) { return '<span style="font-variant-numeric:tabular-nums;font-weight:600">'+v+' 台</span>'; } },
+        { key: 'items', title: '产品编号', render: function(v) { return '<span style="font-family:var(--mono);font-size:11.5px">'+escHtml(v||'')+'</span>'; } },
+        { key: 'responsible_person', title: '责任人', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'—')+'</span>'; } },
+        { key: 'receiver', title: '收货方', render: function(v) { return '<span style="font-size:12.5px">'+escHtml(v||'—')+'</span>'; } },
+        { key: 'note', title: '备注', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(v||'')+'</span>'; } },
+        { key: 'actions', title: '', width: '50px', render: function(v, row) { return '<button class="btn btn-xs" style="color:var(--danger)" onclick="deleteDeliveryRecord('+row.id+')">删除</button>'; } }
+      ],
+      data: records,
+      resizable: false
+    });
+  }
 }
 
 function toggleDeliveryPlanForm() {
@@ -1647,43 +1652,36 @@ function buildResources(resources, detail) {
 
 function buildNotes(notes) {
   var container = document.getElementById('notes-content');
-  var tableHtml;
   var currentUser = (getCurrentUser() || {}).username || '';
   if (notes && notes.length) {
-    tableHtml = '<div class="table-scroll"><table class="stage-table"><thead><tr>' +
-      '<th style="width:140px">记录时间</th><th style="width:90px">涉及阶段</th><th style="width:70px">记录人</th><th>内容</th><th style="width:90px">操作</th>' +
-    '</tr></thead><tbody>';
-    notes.forEach(function(n) {
-      var isMine = n.recorded_by === currentUser;
-      var isReply = !!n.parent_id;
-      var hasImage = /!\[.*\]\(.*\)/.test(n.content);
-      var plainText = stripHtml(renderMarkdown ? renderMarkdown(n.content) : n.content).substring(0, 80);
-      var actions = '';
-      actions += '<span style="cursor:pointer;font-size:12px;color:var(--accent);margin-right:4px" onclick="openViewNoteDialog(' + n.id + ')" title="查看">👁</span>';
-      if (isMine) {
-        actions += iconEdit('openEditNoteDialog(' + n.id + ')', '编辑') +
-                   iconDelete('deleteProjectNote(' + n.id + ')', '删除');
-      } else {
-        actions += '<span style="cursor:pointer;font-size:12px;color:var(--accent)" onclick="openReplyNoteDialog(' + n.id + ')" title="回复">💬</span>';
-      }
-      var indentStyle = isReply ? 'padding-left:28px;border-left:3px solid var(--accent-lt)' : '';
-      var replyMark = isReply ? '<span style="font-size:10px;color:var(--accent);margin-right:4px">↳ 回复</span>' : '';
-      var imgBadge = hasImage ? ' <span style="font-size:10px">📷</span>' : '';
-      var timeCell = (fmtISODateTime(n.created_at) || '—') + (n.updated_at ? '<div style="font-size:9px;color:var(--warn)">编辑过</div>' : '');
-      tableHtml += '<tr style="' + indentStyle + '">' +
-        '<td style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">' + timeCell + '</td>' +
-        '<td style="font-size:12px">' + escHtml(n.stage_name || '项目整体') + '</td>' +
-        '<td style="font-size:12.5px;font-weight:540">' + escHtml(n.recorded_by || '') + '</td>' +
-        '<td style="font-size:13px;line-height:1.5;text-align:left">' + replyMark + escHtml(plainText) + (n.content.length > 80 ? '...' : '') + imgBadge + '</td>' +
-        '<td style="white-space:nowrap">' + actions + '</td>' +
-      '</tr>';
+    container.innerHTML = '<div id="notes-table"></div>';
+    new DataTable({
+      container: document.getElementById('notes-table'),
+      columns: [
+        { key: 'created_at', title: '记录时间', width: '140px', render: function(v, row) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">'+(fmtISODateTime(v)||'—')+'</span>'+(row.updated_at?'<div style="font-size:9px;color:var(--warn)">编辑过</div>':''); } },
+        { key: 'stage_name', title: '涉及阶段', width: '90px', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'项目整体')+'</span>'; } },
+        { key: 'recorded_by', title: '记录人', width: '70px', render: function(v) { return '<span style="font-size:12.5px;font-weight:540">'+escHtml(v||'')+'</span>'; } },
+        { key: 'content', title: '内容', render: function(v, row) {
+          var plainText = stripHtml(renderMarkdown?renderMarkdown(v):v).substring(0,80);
+          var replyMark = row.parent_id?'<span style="font-size:10px;color:var(--accent);margin-right:4px">↳ 回复</span>':'';
+          var imgBadge = /!\[.*\]\(.*\)/.test(v)?' <span style="font-size:10px">📷</span>':'';
+          return '<span style="font-size:13px;line-height:1.5">'+replyMark+escHtml(plainText)+(v&&v.length>80?'...':'')+imgBadge+'</span>';
+        }},
+        { key: 'actions', title: '操作', width: '90px', render: function(v, row) {
+          var isMine = row.recorded_by === currentUser;
+          var a = '<span style="cursor:pointer;font-size:12px;color:var(--accent);margin-right:4px" onclick="openViewNoteDialog('+row.id+')" title="查看">👁</span>';
+          if (isMine) a += iconEdit('openEditNoteDialog('+row.id+')','编辑')+iconDelete('deleteProjectNote('+row.id+')','删除');
+          else a += '<span style="cursor:pointer;font-size:12px;color:var(--accent)" onclick="openReplyNoteDialog('+row.id+')" title="回复">💬</span>';
+          return a;
+        }}
+      ],
+      data: notes,
+      resizable: false,
+      rowClassFn: function(row) { return row.parent_id ? { paddingLeft: '28px', borderLeft: '3px solid var(--accent-lt)' } : null; }
     });
-    tableHtml += '</tbody></table></div>';
   } else {
-    tableHtml = '<div class="empty-state" style="padding:12px">暂无笔记</div>';
+    container.innerHTML = '<div class="empty-state" style="padding:12px">暂无笔记</div>';
   }
-
-  container.innerHTML = tableHtml;
 }
 
 async function openNoteDialog() {
@@ -3159,54 +3157,36 @@ function loadMaintProjectStages() {
   });
 }
 
+var _maintStagesDt = null;
+
 function _renderMaintStages(stages, container, canEditStage) {
   if (!stages.length) {
     container.innerHTML = '<div class="empty-state" style="padding:12px">暂无阶段数据 — 请在任务详情页点击"初始化阶段"按钮</div>';
-    return;
+    _maintStagesDt = null; return;
   }
-
   var riskLabels = { active: '进行中', completed: '已完成', blocked: '已阻塞' };
-  var html = '<table class="proj-table" style="width:100%"><thead><tr>' +
-    '<th style="width:5%">#</th>' +
-    '<th style="width:16%">阶段名称</th>' +
-    '<th style="width:10%">状态</th>' +
-    '<th style="width:10%">责任人</th>' +
-    '<th style="width:12%">计划开始</th>' +
-    '<th style="width:12%">计划结束</th>' +
-    '<th style="width:7%">任务数</th>' +
-    '<th style="width:7%">进度</th>' +
-    '<th style="width:8%">完成日期</th>' +
-    '<th>操作</th>' +
-    '</tr></thead><tbody>';
-
-  stages.forEach(function(s, i) {
-    var riskLabel = riskLabels[s.status] || s.status || '进行中';
-    var riskColor = s.status === 'blocked' ? 'var(--danger)' : (s.status === 'completed' ? 'var(--success)' : 'var(--accent)');
-    var ownerName = s.owner_name || s.who || '—';
-    var startStr = s.start || '—';
-    var endStr = s.end || '—';
-    var taskCount = s.task_count || 0;
-    var progress = s.progress || 0;
-    var completedDate = s.completed_date || '—';
-
-    html += '<tr>' +
-      '<td style="text-align:center;color:var(--muted)">' + (i + 1) + '</td>' +
-      '<td style="font-weight:500">' + escHtml(s.name) + '</td>' +
-      '<td><span style="font-size:11px;padding:2px 8px;border-radius:10px;background:' + riskColor + '15;color:' + riskColor + ';font-weight:500">' + escHtml(riskLabel) + '</span></td>' +
-      '<td style="font-size:12px">' + escHtml(ownerName) + '</td>' +
-      '<td style="font-size:12px">' + escHtml(startStr) + '</td>' +
-      '<td style="font-size:12px">' + escHtml(endStr) + '</td>' +
-      '<td style="text-align:center;cursor:pointer;color:var(--accent);font-weight:500" onclick="gotoStageTasksFromMaint(\'' + escHtml(s.name).replace(/'/g, "\\'") + '\')" title="跳转到任务详情">' + taskCount + '</td>' +
-      '<td style="text-align:center;cursor:pointer" onclick="gotoStageTasksFromMaint(\'' + escHtml(s.name).replace(/'/g, "\\'") + '\')" title="跳转到任务详情">' + (typeof renderProgressRing === 'function' ? '<div style="display:inline-block">' + renderProgressRing(progress) + '</div>' : progress + '%') + '</td>' +
-      '<td style="font-size:12px">' + escHtml(completedDate) + '</td>' +
-      '<td style="white-space:nowrap">' +
-        (s.id && canEditStage ? iconEdit('openStageDialog(' + s.id + ')', '编辑阶段') + iconDelete('deleteMaintStage(' + s.id + ',\'' + escHtml(s.name).replace(/'/g, "\\'") + '\')', '删除阶段') : '') +
-      '</td>' +
-    '</tr>';
-  });
-
-  html += '</tbody></table>';
-  container.innerHTML = html;
+  if (!_maintStagesDt) {
+    container.innerHTML = '<div id="maint-stages-table"></div>';
+    _maintStagesDt = new DataTable({
+      container: document.getElementById('maint-stages-table'),
+      columns: [
+        { key: 'idx', title: '#', width: '5%', render: function(v) { return '<span style="color:var(--muted)">'+v+'</span>'; } },
+        { key: 'name', title: '阶段名称', width: '16%', render: function(v) { return '<span style="font-weight:500">'+escHtml(v||'')+'</span>'; } },
+        { key: 'status', title: '状态', width: '10%', render: function(v) { var l=riskLabels[v]||v||'进行中'; var c=v==='blocked'?'var(--danger)':(v==='completed'?'var(--success)':'var(--accent)'); return '<span style="font-size:11px;padding:2px 8px;border-radius:10px;background:'+c+'15;color:'+c+';font-weight:500">'+escHtml(l)+'</span>'; } },
+        { key: 'owner', title: '责任人', width: '10%', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'—')+'</span>'; } },
+        { key: 'start', title: '计划开始', width: '12%', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'—')+'</span>'; } },
+        { key: 'end', title: '计划结束', width: '12%', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'—')+'</span>'; } },
+        { key: 'task_count', title: '任务数', width: '7%', render: function(v, row) { var n=escHtml(row.name||'').replace(/'/g,"\\'"); return '<span style="cursor:pointer;color:var(--accent);font-weight:500" onclick="gotoStageTasksFromMaint(\''+n+'\')" title="跳转到任务详情">'+(v||0)+'</span>'; } },
+        { key: 'progress', title: '进度', width: '7%', render: function(v, row) { var n=escHtml(row.name||'').replace(/'/g,"\\'"); return '<span style="cursor:pointer" onclick="gotoStageTasksFromMaint(\''+n+'\')" title="跳转到任务详情">'+(typeof renderProgressRing==='function'?'<div style="display:inline-block">'+renderProgressRing(v||0)+'</div>':(v||0)+'%')+'</span>'; } },
+        { key: 'completed_date', title: '完成日期', width: '8%', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'—')+'</span>'; } },
+        { key: 'actions', title: '操作', render: function(v, row) { return '<span style="white-space:nowrap">'+(row.id&&canEditStage?iconEdit('openStageDialog('+row.id+')','编辑阶段')+iconDelete('deleteMaintStage('+row.id+',\''+escHtml(row.name||'').replace(/'/g,"\\'")+'\')','删除阶段'):'')+'</span>'; } }
+      ],
+      resizable: false,
+      maxHeight: 'calc(100vh - 400px)'
+    });
+  }
+  stages.forEach(function(s, i) { s.idx = i+1; s.owner = s.owner_name || s.who; });
+  _maintStagesDt.setData(stages);
 }
 
 /* ── Project Activities (进度明细) ── */

@@ -397,29 +397,7 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
           </div>
         </div>
       </div>
-      <div class="card table-scroll" id="proj-table-wrap" style="margin-bottom:8px">
-        <table class="proj-table clickable">
-          <thead>
-            <tr>
-              <th width="20px"></th>
-              <th width="6%" style="cursor:pointer;user-select:none" onclick="dashFilter.toggleSortCode()">项目编号 <span id="sort-code-ind" style="color:var(--muted)">⇅</span></th>
-              <th width="28%">项目名</th>
-              <th width="5%">客户</th>
-              <th width="5%">类型</th>
-              <th width="12%">当前阶段</th>
-              <th width="10%" style="cursor:pointer;user-select:none" onclick="dashFilter.toggleSortEnd()">计划完成 <span id="sort-end-ind" style="color:var(--muted)">⇅</span></th>
-              <th width="5%">状态</th>
-              <th width="10%">进度</th>
-              <th width="5%">风险</th>
-              <th width="10%">关联项目</th>
-              <th width="9%">项目标签</th>
-            </tr>
-          </thead>
-          <tbody id="proj-tbody">
-            <tr><td colspan="12"><div class="loading-spinner">加载中...</div></td></tr>
-          </tbody>
-        </table>
-      </div>
+      <div class="card" style="padding:0;margin-bottom:8px"><div id="proj-table"></div></div>
 
       <div class="section-hd" style="cursor:pointer" onclick="toggleAlertSection()">
         <div class="section-title">需关注告警 <span id="alert-toggle-icon" style="font-size:14px;vertical-align:middle">▶</span></div>

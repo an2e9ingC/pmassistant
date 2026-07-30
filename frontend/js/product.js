@@ -1538,43 +1538,25 @@ function loadProductBugs() {
 }
 
 function _renderProdBugs(bugs, container) {
-  if (!bugs.length) {
-    container.innerHTML = '<div class="card" style="padding:20px"><div class="empty-state">暂无Bug</div></div>';
-    return;
-  }
-  var html = '<div class="table-scroll" style="max-height:calc(100vh - 280px)"><table class="proj-table"><thead><tr>' +
-    '<th style="width:6%">#</th>' +
-    '<th style="width:24%;text-align:left">标题</th>' +
-    '<th style="width:6%">状态</th>' +
-    '<th style="width:5%">严重程度</th>' +
-    '<th style="width:5%">优先级</th>' +
-    '<th style="width:8%">负责人</th>' +
-    '<th style="width:8%">项目编号</th>' +
-    '<th style="width:10%">创建时间</th>' +
-    '<th style="width:1%;white-space:nowrap">操作</th>' +
-    '</tr></thead><tbody>';
-
+  if (!bugs.length) { container.innerHTML = '<div class="card" style="padding:20px"><div class="empty-state">暂无Bug</div></div>'; return; }
   var sevLabels = {1:'致命',2:'严重',3:'一般',4:'建议'};
   var sevColors = {1:'var(--danger)',2:'var(--warn)',3:'var(--accent)',4:'var(--muted)'};
-  bugs.forEach(function(b) {
-    var sev = sevLabels[b.severity] || b.severity;
-    var sevColor = sevColors[b.severity] || 'var(--muted)';
-    var projCode = b.project_code || '';
-    var projCell = projCode
-      ? '<span class="proj-code-btn" onclick="event.stopPropagation();openProject(\'' + escHtml(projCode) + '\')" title="' + escHtml(b.project_name || '') + '">' + escHtml(projCode) + '</span>'
-      : '<span style="font-size:12px;color:var(--muted)">—</span>';
-    html += '<tr style="cursor:pointer">' +
-      '<td style="font-size:11px;font-family:var(--mono)" onclick="openBugDetail(' + b.id + ')">#' + b.id + '</td>' +
-      '<td style="text-align:left;font-weight:530;cursor:pointer" onclick="openBugDetail(' + b.id + ')" title="查看Bug详情">' + escHtml(b.title) + '</td>' +
-      '<td onclick="openBugDetail(' + b.id + ')">' + renderPill(b.status || 'open') + '</td>' +
-      '<td style="color:' + sevColor + ';font-weight:500;font-size:12px" onclick="openBugDetail(' + b.id + ')">' + sev + '</td>' +
-      '<td onclick="openBugDetail(' + b.id + ')"><span class="prio-tag '+(b.priority||'medium')+'">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[b.priority]||b.priority)+'</span></td>' +
-      '<td style="font-size:12px" onclick="openBugDetail(' + b.id + ')">' + escHtml(b.assignee_name || '—') + '</td>' +
-      '<td>' + projCell + '</td>' +
-      '<td style="font-size:11px;color:var(--muted)" onclick="openBugDetail(' + b.id + ')">' + formatDate(b.created_at) + '</td>' +
-      '<td style="white-space:nowrap" onclick="event.stopPropagation()">' + iconEdit('openBugDialog(' + b.id + ')', '编辑Bug') + '</td>' +
-    '</tr>';
+  container.innerHTML = '<div id="prod-bugs-table"></div>';
+  new DataTable({
+    container: document.getElementById('prod-bugs-table'),
+    columns: [
+      { key: 'id', title: '#', width: '6%', render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);cursor:pointer" onclick="openBugDetail('+v+')">#'+v+'</span>'; } },
+      { key: 'title', title: '标题', width: '24%', align: 'left', render: function(v, row) { return '<span style="font-weight:530;cursor:pointer" onclick="openBugDetail('+row.id+')" title="查看Bug详情">'+escHtml(v||'')+'</span>'; } },
+      { key: 'status', title: '状态', width: '6%', render: function(v, row) { return '<span onclick="openBugDetail('+row.id+')">'+renderPill(v||'open')+'</span>'; } },
+      { key: 'severity', title: '严重程度', width: '5%', render: function(v, row) { var c=sevColors[v]||'var(--muted)'; return '<span style="color:'+c+';font-weight:500;font-size:12px;cursor:pointer" onclick="openBugDetail('+row.id+')">'+(sevLabels[v]||v)+'</span>'; } },
+      { key: 'priority', title: '优先级', width: '5%', render: function(v, row) { return '<span onclick="openBugDetail('+row.id+')"><span class="prio-tag '+(v||'medium')+'">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[v]||v)+'</span></span>'; } },
+      { key: 'assignee_name', title: '负责人', width: '8%', render: function(v, row) { return '<span style="font-size:12px;cursor:pointer" onclick="openBugDetail('+row.id+')">'+escHtml(v||'—')+'</span>'; } },
+      { key: 'project_code', title: '项目编号', width: '8%', render: function(v, row) { return v?'<span class="proj-code-btn" onclick="event.stopPropagation();openProject(\''+escHtml(v)+'\')" title="'+escHtml(row.project_name||'')+'">'+escHtml(v)+'</span>':'<span style="font-size:12px;color:var(--muted)">—</span>'; } },
+      { key: 'created_at', title: '创建时间', width: '10%', render: function(v, row) { return '<span style="font-size:11px;color:var(--muted);cursor:pointer" onclick="openBugDetail('+row.id+')">'+formatDate(v)+'</span>'; } },
+      { key: 'actions', title: '操作', render: function(v, row) { return '<span style="white-space:nowrap" onclick="event.stopPropagation()">'+iconEdit('openBugDialog('+row.id+')','编辑Bug')+'</span>'; } }
+    ],
+    data: bugs,
+    maxHeight: 'calc(100vh - 280px)',
+    resizable: false
   });
-  html += '</tbody></table></div>';
-  container.innerHTML = html;
 }

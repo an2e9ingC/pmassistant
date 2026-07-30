@@ -259,14 +259,17 @@ function _loadDetailComments(taskId) {
     var el = document.querySelector('.task-detail-comments');
     if (!el) return;
     if (!comments || !comments.length) { el.innerHTML = '<div style="color:var(--muted);font-size:12px">暂无评论</div>'; return; }
-    el.innerHTML = '<table class="stage-table" style="width:100%;font-size:12px"><thead><tr>' +
-      '<th style="width:130px">时间</th><th style="width:80px">用户</th><th>内容</th></tr></thead><tbody>' +
-      comments.map(function(c) {
-        return '<tr>' +
-          '<td style="font-size:10px;color:var(--muted);white-space:nowrap">' + (fmtISODateTime(c.created_at) || '') + '</td>' +
-          '<td style="font-size:12px">' + escHtml(c.display_name || c.username) + '</td>' +
-          '<td style="font-size:13px">' + escHtml(c.content) + '</td></tr>';
-      }).join('') + '</tbody></table>';
+    el.innerHTML = '<div id="task-comments-table"></div>';
+    new DataTable({
+      container: document.getElementById('task-comments-table'),
+      columns: [
+        { key: 'created_at', title: '时间', width: '130px', render: function(v) { return '<span style="font-size:10px;color:var(--muted);white-space:nowrap">'+(fmtISODateTime(v)||'')+'</span>'; } },
+        { key: 'display_name', title: '用户', width: '80px', render: function(v, row) { return '<span style="font-size:12px">'+escHtml(v||row.username)+'</span>'; } },
+        { key: 'content', title: '内容', align: 'left', render: function(v) { return '<span style="font-size:13px">'+escHtml(v||'')+'</span>'; } }
+      ],
+      data: comments,
+      resizable: false
+    });
   }).catch(function() {});
 }
 
@@ -537,24 +540,37 @@ function renderTaskTable(tasks, execs) {
     });
   }
 
-  var html = '<table class="proj-table"><thead><tr>' +
-    '<th style="width:7%">任务编号</th>' +
-    '<th style="width:8%">项目编号</th>' +
-    '<th style="width:10%;text-align:left">项目名称</th>' +
-    '<th style="width:22px"><input type="checkbox" id="task-select-all" onchange="_toggleSelectAllTasks(this)" title="全选/取消全选"></th>' +
-    '<th style="width:18%;text-align:left">标题</th>' +
-    '<th style="width:9%">阶段</th>' +
-    '<th style="width:6%">状态</th>' +
-    '<th style="width:5%">优先级</th>' +
-    '<th style="width:6%">进度</th>' +
-    '<th style="width:6%">截止日期</th>' +
-    '<th>操作</th>' +
-    '</tr></thead><tbody>';
-
   _selectedTasks = new Set();
-  tasks.forEach(function(t) { html += _renderTaskRow(t, stageMap); });
-  html += '</tbody></table>';
-  content.innerHTML = html;
+  content.innerHTML = '<div id="task-full-table"></div>';
+  var dt = new DataTable({
+    container: document.getElementById('task-full-table'),
+    columns: [
+      { key: 'id', title: '任务编号', width: '7%', render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted)">#' + v + '</span>'; } },
+      { key: 'project_code', title: '项目编号', width: '8%', render: function(v, row) { return v ? projCodeTag(v, 'openProject(\''+escHtml(v).replace(/'/g,"\\'")+'\')', row.project_name) : '-'; } },
+      { key: 'project_name', title: '项目名称', width: '10%', align: 'left', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'-')+'</span>'; } },
+      { key: 'title', title: '标题', width: '18%', align: 'left', render: function(v, row) { return '<a href="javascript:void(0)" onclick="openTaskDetail('+row.id+')" style="color:var(--accent)">'+escHtml(v||'')+'</a>'; } },
+      { key: 'stage_name', title: '阶段', width: '9%', render: function(v) { return v ? '<span style="font-size:11px;color:var(--muted)">'+escHtml(v)+'</span>' : '-'; } },
+      { key: 'status', title: '状态', width: '6%', render: function(v, row) {
+        var h = renderPill(v||'todo');
+        if (window._approvalEnabled) h = '<span style="cursor:pointer" onclick="event.stopPropagation();openReviewerDialog('+row.id+')" title="'+(row.reviewer_name?'审批人: '+escHtml(row.reviewer_name)+' — 点击修改':'点击设置审批人')+'">'+h+'</span>';
+        return h;
+      }},
+      { key: 'priority', title: '优先级', width: '5%', render: function(v) { return _renderPriority(v); } },
+      { key: 'progress', title: '进度', width: '6%', render: function(v) { return renderProgressCircle(v||0, 26, {label:''}); } },
+      { key: 'due_date', title: '截止日期', width: '6%', render: function(v, row) { return '<span style="color:'+(v&&row.status!=='done'&&row.status!=='closed'&&v<fmtLocalDate()?'var(--danger)':'')+'">'+(v||'-')+'</span>'; } },
+      { key: 'actions', title: '操作', render: function(v, row) { return iconEdit('openTaskDialog('+row.id+')','编辑任务')+iconCopy('openCopyTaskDialog('+row.id+')','复制任务')+iconDelete('deleteTask('+row.id+',\''+escJs(row.title)+'\')','删除任务'); } }
+    ],
+    data: tasks,
+    resizable: false,
+    selectable: true,
+    checkboxPosition: 3,
+    onSelectChange: function(rows) {
+      _selectedTasks = new Set(rows.map(function(r) { return r.id; }));
+      _ensureBatchToolbar();
+    }
+  });
+  // Wire up existing select-all / checkbox handlers for batch toolbar compat
+  window._taskFullDt = dt;
   _ensureBatchToolbar();
 }
 
@@ -1281,7 +1297,7 @@ function _loadTfExecutions(projectId, selectedId) {
   if (isEdit) {
     API.get('/worklogs?task_id=' + t.id).then(function(logs) {
       var el = document.getElementById('tf-worklogs');
-      if (el) el.innerHTML = _renderWorklogTable(logs || [], t.id);
+      if (el) { el.innerHTML = _renderWorklogTable(logs || [], t.id); _initWorklogDt(logs || [], t.id); }
     }).catch(function() {});
     _loadComments(t.id);
   }
@@ -1702,19 +1718,22 @@ async function _submitImportTasks() {
 
 function _renderWorklogTable(logs, taskId) {
   if (!logs || !logs.length) return '<div style="color:var(--muted);font-size:12px">暂无工时记录</div>';
-  var html = '<div style="overflow-x:auto;max-width:100%"><table class="proj-table" style="font-size:12px;width:100%"><thead><tr>' +
-    '<th>日期</th><th>用户</th><th>工时(h)</th><th>描述</th><th>操作</th></tr></thead><tbody>';
-  logs.forEach(function(w) {
-    html += '<tr>' +
-      '<td>' + (w.date || '?') + '</td>' +
-      '<td style="font-size:11px">' + escHtml(w.display_name || w.username || '?') + '</td>' +
-      '<td>' + w.hours.toFixed(1) + '</td>' +
-      '<td style="text-align:left;white-space:normal;word-break:break-word">' + escHtml(w.description || '') + '</td>' +
-      '<td>' + iconEdit('openWorklogEditDialog(' + w.id + ',' + taskId + ')', '编辑') +
-        iconDelete('deleteWorklogById(' + w.id + ',' + taskId + ')', '删除') + '</td>' +
-    '</tr>';
+  return '<div id="worklog-table-' + taskId + '"></div>';
+}
+
+function _initWorklogDt(logs, taskId) {
+  new DataTable({
+    container: document.getElementById('worklog-table-' + taskId),
+    columns: [
+      { key: 'date', title: '日期', render: function(v) { return v||'?'; } },
+      { key: 'user', title: '用户', render: function(v, row) { return '<span style="font-size:11px">'+escHtml(v||row.username||'?')+'</span>'; } },
+      { key: 'hours', title: '工时(h)', render: function(v) { return (v||0).toFixed(1); } },
+      { key: 'description', title: '描述', align: 'left', render: function(v) { return '<span style="white-space:normal;word-break:break-word">'+escHtml(v||'')+'</span>'; } },
+      { key: 'actions', title: '操作', render: function(v, row) { return iconEdit('openWorklogEditDialog('+row.id+','+taskId+')','编辑')+iconDelete('deleteWorklogById('+row.id+','+taskId+')','删除'); } }
+    ],
+    data: logs,
+    resizable: false
   });
-  return html + '</tbody></table></div>';
 }
 
 function openWorklogDialog(taskId) {
@@ -1974,7 +1993,7 @@ function _refreshTaskWorklogs(taskId) {
   API.get('/worklogs?task_id=' + taskId).then(function(logs) {
     var el = document.getElementById('tv-worklogs');
     if (!el) el = document.getElementById('tf-worklogs');
-    if (el) el.innerHTML = _renderWorklogTable(logs || [], taskId);
+    if (el) { el.innerHTML = _renderWorklogTable(logs || [], taskId); _initWorklogDt(logs || [], taskId); }
     // Update consumed hours in section header (both detail and edit dialogs)
     var totalHours = (logs || []).reduce(function(sum, l) { return sum + (l.hours || 0); }, 0);
     var headers = document.querySelectorAll('.section-title');
