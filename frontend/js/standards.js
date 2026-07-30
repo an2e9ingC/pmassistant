@@ -27,26 +27,11 @@ function renderStandards() {
   }
 
   var html = '';
-  categories.forEach(function(cat) {
+  categories.forEach(function(cat, idx) {
     var items = _standardsGrouped[cat] || [];
     html += '<div class="card" style="padding:16px;margin-bottom:16px">' +
       '<div class="section-title" style="margin-bottom:12px">' + escHtml(cat) + '</div>' +
-      '<table class="stage-table"><thead><tr>' +
-        '<th style="width:200px">规则键</th>' +
-        '<th>规则值</th>' +
-        '<th style="width:300px">说明</th>' +
-        (canEdit ? '<th style="width:70px">操作</th>' : '') +
-      '</tr></thead><tbody>';
-
-    items.forEach(function(s) {
-      html += '<tr id="std-row-' + s.id + '">' +
-        '<td style="font-family:var(--mono);font-size:12px;font-weight:500">' + escHtml(s.key) + '</td>' +
-        '<td><code style="font-size:12px;color:var(--accent);word-break:break-all">' + escHtml(s.value || '（未设置）') + '</code></td>' +
-        '<td style="font-size:12px;color:var(--muted)">' + escHtml(s.description || '') + '</td>' +
-        (canEdit ? '<td><button class="btn btn-xs" onclick="showStdEdit(' + s.id + ')">编辑</button></td>' : '') +
-      '</tr>';
-    });
-    html += '</tbody></table></div>';
+      '<div id="std-table-' + idx + '"></div></div>';
   });
 
     if (isPageDirty()) {
@@ -56,14 +41,19 @@ function renderStandards() {
       '<button class="btn" style="color:var(--warn);border-color:var(--warn)" onclick="discardStandardsChanges()">放弃</button>' +
     '</div>';
   }
-  // Show change indicator dot for modified items
-  if (isPageDirty()) {
-    html = html.replace(/<td><code style="font-size:12px;color:var\(--accent\);word-break:break-all">([^<]+)<\/code><\/td>/g, function(match, val) {
-      // Check if this item was modified by comparing with original
-      return match.replace('</code></td>', ' <span style="font-size:8px;color:var(--warn);vertical-align:super">●</span></code></td>');
-    });
-  }
   document.getElementById('view-standards').innerHTML = html;
+
+  // Build DataTable for each category
+  categories.forEach(function(cat, idx) {
+    var items = _standardsGrouped[cat] || [];
+    var cols = [
+      { key: 'key', title: '规则键', width: '200px', render: function(v) { return '<span style="font-family:var(--mono);font-size:12px;font-weight:500">' + escHtml(v||'') + '</span>'; } },
+      { key: 'value', title: '规则值', render: function(v) { return '<code style="font-size:12px;color:var(--accent);word-break:break-all">' + escHtml(v||'（未设置）') + '</code>'; } },
+      { key: 'description', title: '说明', width: '300px', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">' + escHtml(v||'') + '</span>'; } }
+    ];
+    if (canEdit) cols.push({ key: 'actions', title: '操作', width: '70px', render: function(v, row) { return '<button class="btn btn-xs" onclick="showStdEdit(' + row.id + ')">编辑</button>'; } });
+    new DataTable({ container: document.getElementById('std-table-' + idx), columns: cols, data: items, resizable: false });
+  });
 }
 
 function showStdEdit(id) {

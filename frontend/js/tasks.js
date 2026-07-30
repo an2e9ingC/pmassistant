@@ -259,14 +259,17 @@ function _loadDetailComments(taskId) {
     var el = document.querySelector('.task-detail-comments');
     if (!el) return;
     if (!comments || !comments.length) { el.innerHTML = '<div style="color:var(--muted);font-size:12px">暂无评论</div>'; return; }
-    el.innerHTML = '<table class="stage-table" style="width:100%;font-size:12px"><thead><tr>' +
-      '<th style="width:130px">时间</th><th style="width:80px">用户</th><th>内容</th></tr></thead><tbody>' +
-      comments.map(function(c) {
-        return '<tr>' +
-          '<td style="font-size:10px;color:var(--muted);white-space:nowrap">' + (fmtISODateTime(c.created_at) || '') + '</td>' +
-          '<td style="font-size:12px">' + escHtml(c.display_name || c.username) + '</td>' +
-          '<td style="font-size:13px">' + escHtml(c.content) + '</td></tr>';
-      }).join('') + '</tbody></table>';
+    el.innerHTML = '<div id="task-comments-table"></div>';
+    new DataTable({
+      container: document.getElementById('task-comments-table'),
+      columns: [
+        { key: 'created_at', title: '时间', width: '130px', render: function(v) { return '<span style="font-size:10px;color:var(--muted);white-space:nowrap">'+(fmtISODateTime(v)||'')+'</span>'; } },
+        { key: 'display_name', title: '用户', width: '80px', render: function(v, row) { return '<span style="font-size:12px">'+escHtml(v||row.username)+'</span>'; } },
+        { key: 'content', title: '内容', align: 'left', render: function(v) { return '<span style="font-size:13px">'+escHtml(v||'')+'</span>'; } }
+      ],
+      data: comments,
+      resizable: false
+    });
   }).catch(function() {});
 }
 
@@ -361,7 +364,7 @@ function renderTasksPage() {
         '<button class="btn btn-primary" onclick="openTaskDialog()" style="font-size:12px;padding:5px 14px">＋ 新建任务</button>' +
       '</div>' +
     '</div>') +
-    '<div id="task-content" style="flex:1;overflow:auto;padding:16px">加载中...</div>' +
+    '<div id="task-content" style="flex:1;overflow:hidden;padding:16px">加载中...</div>' +
   '</div>';
 
   container.innerHTML = html;
@@ -537,24 +540,38 @@ function renderTaskTable(tasks, execs) {
     });
   }
 
-  var html = '<table class="proj-table"><thead><tr>' +
-    '<th style="width:22px"><input type="checkbox" id="task-select-all" onchange="_toggleSelectAllTasks(this)" title="全选/取消全选"></th>' +
-    '<th style="width:7%">任务编号</th>' +
-    '<th style="width:8%">项目编号</th>' +
-    '<th style="width:10%;text-align:left">项目名称</th>' +
-    '<th style="width:18%;text-align:left">标题</th>' +
-    '<th style="width:9%">阶段</th>' +
-    '<th style="width:6%">状态</th>' +
-    '<th style="width:5%">优先级</th>' +
-    '<th style="width:6%">进度</th>' +
-    '<th style="width:6%">截止日期</th>' +
-    '<th>操作</th>' +
-    '</tr></thead><tbody>';
-
   _selectedTasks = new Set();
-  tasks.forEach(function(t) { html += _renderTaskRow(t, stageMap); });
-  html += '</tbody></table>';
-  content.innerHTML = html;
+  content.innerHTML = '<div id="task-full-table"></div>';
+  var dt = new DataTable({
+    container: document.getElementById('task-full-table'),
+    columns: [
+      { key: 'id', title: '任务编号', width: '7%', render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted)">#' + v + '</span>'; } },
+      { key: 'project_code', title: '项目编号', width: '8%', render: function(v, row) { return v ? projCodeTag(v, 'openProject(\''+escHtml(v).replace(/'/g,"\\'")+'\')', row.project_name) : '-'; } },
+      { key: 'project_name', title: '项目名称', width: '10%', align: 'left', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'-')+'</span>'; } },
+      { key: 'title', title: '标题', align: 'left', className: 'dt-wrap', render: function(v, row) { return '<a href="javascript:void(0)" onclick="openTaskDetail('+row.id+')" style="color:var(--accent)">'+escHtml(v||'')+'</a>'; } },
+      { key: 'stage_name', title: '阶段', width: '9%', render: function(v) { return v ? '<span style="font-size:11px;color:var(--muted)">'+escHtml(v)+'</span>' : '-'; } },
+      { key: 'status', title: '状态', width: '6%', render: function(v, row) {
+        var h = renderPill(v||'todo');
+        if (window._approvalEnabled) h = '<span style="cursor:pointer" onclick="event.stopPropagation();openReviewerDialog('+row.id+')" title="'+(row.reviewer_name?'审批人: '+escHtml(row.reviewer_name)+' — 点击修改':'点击设置审批人')+'">'+h+'</span>';
+        return h;
+      }},
+      { key: 'priority', title: '优先级', width: '5%', render: function(v) { return _renderPriority(v); } },
+      { key: 'progress', title: '进度', width: '6%', render: function(v) { return renderProgressCircle(v||0, 26, {label:''}); } },
+      { key: 'due_date', title: '截止日期', width: '6%', render: function(v, row) { return '<span style="color:'+(v&&row.status!=='done'&&row.status!=='closed'&&v<fmtLocalDate()?'var(--danger)':'')+'">'+(v||'-')+'</span>'; } },
+      { key: 'actions', title: '操作', render: function(v, row) { return iconEdit('openTaskDialog('+row.id+')','编辑任务')+iconCopy('openCopyTaskDialog('+row.id+')','复制任务')+iconDelete('deleteTask('+row.id+',\''+escJs(row.title)+'\')','删除任务'); } }
+    ],
+    data: tasks,
+    maxHeight: 'calc(100vh - 220px)',
+    resizable: false,
+    selectable: true,
+    checkboxPosition: 3,
+    onSelectChange: function(rows) {
+      _selectedTasks = new Set(rows.map(function(r) { return r.id; }));
+      _ensureBatchToolbar();
+    }
+  });
+  // Wire up existing select-all / checkbox handlers for batch toolbar compat
+  window._taskFullDt = dt;
   _ensureBatchToolbar();
 }
 
@@ -593,60 +610,61 @@ function renderTaskTableCompact(tasks, execs) {
   }
   var stageKeys = allStages.filter(function(sn) { return grouped[sn] !== undefined; });
 
-  _selectedTasks = new Set();
-  var html = '<div class="table-scroll" style="max-height:calc(100vh - 340px)"><table class="stage-table"><thead><tr>' +
-    '<th style="width:10%">阶段</th>' +
-    '<th style="width:15%">任务标题</th>' +
-    '<th style="width:6%">状态</th>' +
-    '<th style="width:5%">优先级</th>' +
-    '<th style="width:7%">负责人</th>' +
-    '<th style="width:7%">进度</th>' +
-    '<th style="width:7%">计划开始</th>' +
-    '<th style="width:7%">截止日期</th>' +
-    '<th style="width:7%">完成日期</th>' +
-    '<th style="width:10%">最新动态</th>' +
-    '<th style="width:6%">时间</th>' +
-    '<th style="width:22px"><input type="checkbox" id="task-select-all" onchange="_toggleSelectAllTasks(this)" title="全选/取消全选"></th>' +
-    '<th style="width:1%;white-space:nowrap">操作</th>' +
-    '</tr></thead><tbody>';
-
+  // Flatten into DataTable rows
+  var flatRows = [];
   stageKeys.forEach(function(stageName) {
     var stageTasks = grouped[stageName] || [];
-    var rowCount = stageTasks.length || 1;
-    for (var i = 0; i < rowCount; i++) {
-      var t = stageTasks[i];
-      html += '<tr class="task-stage-row" data-stage="' + escHtml(stageName) + '"' + (t ? ' data-task-id="' + t.id + '"' : '') + ' id="' + (i === 0 ? 'task-stage-' + escHtml(stageName) : '') + '">';
-      if (i === 0) {
-        var stageId = stageIdMap[stageName] || null;
-        var stageCellContent = stageId
-          ? '<button class="gs-btn" onclick="openStageDialog(' + stageId + ');event.stopPropagation()" title="查看/编辑阶段信息">' + escHtml(stageName) + '</button>'
-          : escHtml(stageName);
-        html += '<td rowspan="' + rowCount + '" data-stage-cell="' + escHtml(stageName) + '" style="vertical-align:middle;background:var(--bg);border-right:2px solid var(--border);text-align:center">' +
-          '<div>' + stageCellContent + ' <sup style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:8px">' + stageTasks.length + '</sup></div>' +
-          '</td>';
-      }
-      if (t) {
-        html += _renderTaskRowCompact(t, stageStartMap[stageName] || null);
-      } else {
-        html += '<td style="color:var(--muted);font-size:12px">—</td>' +
-          '<td style="color:var(--muted);font-size:12px">—</td>' +
-          '<td style="color:var(--muted);font-size:12px">—</td>' +
-          '<td style="color:var(--muted);font-size:12px">—</td>' +
-          '<td style="color:var(--muted);font-size:12px">—</td>' +
-          '<td style="color:var(--muted);font-size:12px">—</td>' +
-          '<td style="color:var(--muted);font-size:12px">—</td>' +
-          '<td style="color:var(--muted);font-size:12px">—</td>' +
-          '<td style="color:var(--muted);font-size:12px">—</td>' +
-          '<td style="color:var(--muted);font-size:12px">—</td>' +
-          '<td style="width:22px"></td>' +
-          '<td style="color:var(--muted);font-size:12px">—</td>';
-      }
-      html += '</tr>';
+    if (!stageTasks.length) {
+      flatRows.push({ _stage: stageName, _empty: true, id: 0 });
+    } else {
+      stageTasks.forEach(function(t, i) {
+        t._stage = stageName;
+        t._stageId = stageIdMap[stageName] || null;
+        t._stageCount = stageTasks.length;
+        t._isFirstInStage = i === 0;
+        t._stageStart = stageStartMap[stageName] || null;
+        flatRows.push(t);
+      });
     }
   });
 
-  html += '</tbody></table></div>';
-  content.innerHTML = html;
+  _selectedTasks = new Set();
+  content.innerHTML = '<div id="task-compact-table"></div>';
+  new DataTable({
+    container: document.getElementById('task-compact-table'),
+    columns: [
+      { key: '_stage', title: '阶段', width: '10%', rowspan: true, render: function(v, row, idx, count) {
+        if (row._empty) return escHtml(v||'');
+        var stageId = row._stageId;
+        var cell = stageId
+          ? '<button class="gs-btn" onclick="openStageDialog(' + stageId + ');event.stopPropagation()" title="查看/编辑阶段信息">' + escHtml(v||'') + '</button>'
+          : escHtml(v||'');
+        return '<div>' + cell + ' <sup style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:8px">' + (count||row._stageCount||1) + '</sup></div>';
+      }},
+      { key: 'title', title: '任务标题', align: 'left', className: 'dt-wrap', render: function(v, row) { return row._empty?'—':'<span style="cursor:pointer" onclick="openTaskDetail('+row.id+')" title="查看任务详情">'+escHtml(v||'')+'</span>'; } },
+      { key: 'status', title: '状态', width: '6%', render: function(v, row) { return row._empty?'—':renderPill(v||'todo'); } },
+      { key: 'priority', title: '优先级', width: '5%', render: function(v, row) { return row._empty?'—':(typeof _renderPriority==='function'?_renderPriority(v):escHtml(v||'medium')); } },
+      { key: 'assignee_name', title: '负责人', width: '7%', render: function(v, row) { return row._empty?'—':'<span style="font-size:12px;cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();openAssignDialog('+row.id+')" title="指派任务">'+escHtml(v||'—')+'</span>'; } },
+      { key: 'progress', title: '进度', width: '7%', render: function(v, row) { return row._empty?'—':(typeof renderProgressRing==='function'?'<div style="display:inline-block;vertical-align:middle">'+renderProgressRing(v||0)+'</div>':'<span>'+(v||0)+'%</span>'); } },
+      { key: 'start_date', title: '计划开始', width: '7%', render: function(v, row) {
+        if (row._empty) return '—';
+        var s = v || row._stageStart || null;
+        return '<span style="font-size:12px;color:'+(s?'var(--fg)':'var(--muted)')+'" title="'+(s?escHtml(s):'默认取阶段开始时间')+'">'+escHtml(s||'—')+'</span>';
+      }},
+      { key: 'due_date', title: '截止日期', width: '7%', render: function(v, row) { return row._empty?'—':'<span style="font-size:12px">'+(v||'—')+'</span>'; } },
+      { key: 'completed_at', title: '完成日期', width: '7%', render: function(v, row) { return row._empty?'—':'<span style="font-size:12px">'+(v?formatDate(v):'—')+'</span>'; } },
+      { key: 'latest_activity', title: '最新动态', width: '10%', render: function(v, row) { return row._empty?'—':(typeof _renderLatestActivity==='function'?_renderLatestActivity(row):'<span style="font-size:11px;color:var(--muted)">—</span>'); } },
+      { key: 'latest_time', title: '时间', width: '6%', render: function(v, row) { return row._empty?'—':''; } },
+      { key: 'actions', title: '操作', render: function(v, row) { return row._empty?'<span style="color:var(--muted);font-size:12px">—</span>':'<span style="white-space:nowrap" onclick="event.stopPropagation()">'+iconEdit('openTaskDialog('+row.id+')')+iconDelete('deleteTask('+row.id+',\''+escJs(row.title)+'\')')+'</span>'; } }
+    ],
+    data: flatRows,
+    maxHeight: 'calc(100vh - 340px)',
+    resizable: false,
+    selectable: true,
+    checkboxPosition: 11,
+    onSelectChange: function(rows) { _selectedTasks = new Set(rows.map(function(r) { return r.id; })); _ensureBatchToolbar(); }
+  });
+  _ensureBatchToolbar();
   _ensureBatchToolbar();
 
   // Group hover: hovering the stage-name cell highlights all rows of that stage
@@ -785,10 +803,10 @@ function _renderTaskRow(t, stageMap) {
   var overdue = t.due_date && t.status !== 'done' && t.status !== 'closed' && t.due_date < fmtLocalDate();
   var projCode = t.project_code || '';
   return '<tr class="clickable">' +
-    '<td style="text-align:center;width:22px" onclick="event.stopPropagation();if(event.target!==this.firstElementChild){var cb=this.firstElementChild;if(cb){cb.checked=!cb.checked;cb.onchange()}}"><input type="checkbox" value="' + t.id + '" onchange="_onTaskCheckbox(this)" class="task-checkbox"></td>' +
     '<td style="font-size:11px;font-family:var(--mono);color:var(--muted)">#' + t.id + '</td>' +
     '<td>' + (projCode ? projCodeTag(projCode, 'openProject(\'' + escHtml(projCode).replace(/'/g, "\\'") + '\')', t.project_name) : '-') + '</td>' +
     '<td style="text-align:left;font-size:12px">' + escHtml(t.project_name || '-') + '</td>' +
+    '<td style="text-align:center;width:22px" onclick="event.stopPropagation();if(event.target!==this.firstElementChild){var cb=this.firstElementChild;if(cb){cb.checked=!cb.checked;cb.onchange()}}"><input type="checkbox" value="' + t.id + '" onchange="_onTaskCheckbox(this)" class="task-checkbox"></td>' +
     '<td style="text-align:left"><a href="javascript:void(0)" onclick="openTaskDetail(' + t.id + ')" style="color:var(--accent)">' + escHtml(t.title) + '</a></td>' +
     '<td>' + (stageName ? '<span style="font-size:11px;color:var(--muted)">' + escHtml(stageName) + '</span>' : '-') + '</td>' +
     '<td style="' + (window._approvalEnabled ? 'cursor:pointer' : '') + '"' + (window._approvalEnabled ? ' onclick="event.stopPropagation();openReviewerDialog(' + t.id + ')" title="' + (t.reviewer_name ? '审批人: ' + escHtml(t.reviewer_name) + ' — 点击修改' : '点击设置审批人') + '"' : '') + '>' + renderPill(t.status || 'todo') + '</td>' +
@@ -1281,7 +1299,7 @@ function _loadTfExecutions(projectId, selectedId) {
   if (isEdit) {
     API.get('/worklogs?task_id=' + t.id).then(function(logs) {
       var el = document.getElementById('tf-worklogs');
-      if (el) el.innerHTML = _renderWorklogTable(logs || [], t.id);
+      if (el) { el.innerHTML = _renderWorklogTable(logs || [], t.id); _initWorklogDt(logs || [], t.id); }
     }).catch(function() {});
     _loadComments(t.id);
   }
@@ -1702,19 +1720,22 @@ async function _submitImportTasks() {
 
 function _renderWorklogTable(logs, taskId) {
   if (!logs || !logs.length) return '<div style="color:var(--muted);font-size:12px">暂无工时记录</div>';
-  var html = '<div style="overflow-x:auto;max-width:100%"><table class="proj-table" style="font-size:12px;width:100%"><thead><tr>' +
-    '<th>日期</th><th>用户</th><th>工时(h)</th><th>描述</th><th>操作</th></tr></thead><tbody>';
-  logs.forEach(function(w) {
-    html += '<tr>' +
-      '<td>' + (w.date || '?') + '</td>' +
-      '<td style="font-size:11px">' + escHtml(w.display_name || w.username || '?') + '</td>' +
-      '<td>' + w.hours.toFixed(1) + '</td>' +
-      '<td style="text-align:left;white-space:normal;word-break:break-word">' + escHtml(w.description || '') + '</td>' +
-      '<td>' + iconEdit('openWorklogEditDialog(' + w.id + ',' + taskId + ')', '编辑') +
-        iconDelete('deleteWorklogById(' + w.id + ',' + taskId + ')', '删除') + '</td>' +
-    '</tr>';
+  return '<div id="worklog-table-' + taskId + '"></div>';
+}
+
+function _initWorklogDt(logs, taskId) {
+  new DataTable({
+    container: document.getElementById('worklog-table-' + taskId),
+    columns: [
+      { key: 'date', title: '日期', render: function(v) { return v||'?'; } },
+      { key: 'user', title: '用户', render: function(v, row) { return '<span style="font-size:11px">'+escHtml(v||row.username||'?')+'</span>'; } },
+      { key: 'hours', title: '工时(h)', render: function(v) { return (v||0).toFixed(1); } },
+      { key: 'description', title: '描述', align: 'left', render: function(v) { return '<span style="white-space:normal;word-break:break-word">'+escHtml(v||'')+'</span>'; } },
+      { key: 'actions', title: '操作', render: function(v, row) { return iconEdit('openWorklogEditDialog('+row.id+','+taskId+')','编辑')+iconDelete('deleteWorklogById('+row.id+','+taskId+')','删除'); } }
+    ],
+    data: logs,
+    resizable: false
   });
-  return html + '</tbody></table></div>';
 }
 
 function openWorklogDialog(taskId) {
@@ -1974,7 +1995,7 @@ function _refreshTaskWorklogs(taskId) {
   API.get('/worklogs?task_id=' + taskId).then(function(logs) {
     var el = document.getElementById('tv-worklogs');
     if (!el) el = document.getElementById('tf-worklogs');
-    if (el) el.innerHTML = _renderWorklogTable(logs || [], taskId);
+    if (el) { el.innerHTML = _renderWorklogTable(logs || [], taskId); _initWorklogDt(logs || [], taskId); }
     // Update consumed hours in section header (both detail and edit dialogs)
     var totalHours = (logs || []).reduce(function(sum, l) { return sum + (l.hours || 0); }, 0);
     var headers = document.querySelectorAll('.section-title');

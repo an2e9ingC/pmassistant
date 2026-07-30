@@ -11,7 +11,6 @@ var _projectProducts = [];
 var _userNames = [];
 var _customerNames = [];
 var _detailTargetTab = null;
-var _docCache = {};  // { docId: docData } for edit dialog lookup
 
 function setDetailTargetTab(tabId) { _detailTargetTab = tabId; }
 
@@ -44,7 +43,7 @@ async function loadProjectDetail(code) {
   document.getElementById('gantt-root').innerHTML = '<div class="loading-spinner">加载甘特图...</div>';
   var stagesTbody = document.getElementById('stages-tbody');
   if (stagesTbody) stagesTbody.innerHTML = '<tr><td colspan="8"><div class="loading-spinner">加载阶段数据...</div></td></tr>';
-  document.getElementById('docs-tbody').innerHTML = '<tr><td colspan="6"><div class="loading-spinner">加载文档数据...</div></td></tr>';
+  document.getElementById('docs-table-wrap').innerHTML = '<div class="loading-spinner">加载文档数据...</div>'; _docsDt = null;
   document.getElementById('delivery-content').innerHTML = '<div class="loading-spinner">加载交付数据...</div>';
   document.getElementById('resources-content').innerHTML = '<div class="loading-spinner">加载产品文档...</div>';
 
@@ -1053,128 +1052,86 @@ function buildDocs(data) {
   // New format: { documents: [...], standard_stages: [...] }
   var stageList = (data && data.documents) ? data.documents : data;
   if (!stageList || !stageList.length) {
-    document.getElementById('docs-tbody').innerHTML = '<tr><td colspan="10"><div style="text-align:center;padding:30px;font-style:italic;color:var(--muted)">暂无文档清单<br><span style="font-size:11px">项目阶段尚未匹配到文档模板，请先配置文档模板</span></div></td></tr>';
+    document.getElementById('docs-table-wrap').innerHTML = '<div style="text-align:center;padding:30px;font-style:italic;color:var(--muted)">暂无文档清单<br><span style="font-size:11px">项目阶段尚未匹配到文档模板，请先配置文档模板</span></div>'; _docsDt = null;
     return;
   }
 
-  var typeLabels = { gitlab: 'GitLab', svn: 'SVN', nas: 'NAS', solidworks: '结构设计', pma: 'PMA内部' };
+  var typeLabels = { gitlab: 'GitLab', svn: 'SVN', nas: 'NAS', solidworks: '结构设计', pma: 'PMA' };
   var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
   var stageColors = isDark
     ? ['var(--accent-lt)', '#283528', '#353020', '#2a3340', '#283530', '#2c2c30', '#353028', '#2a2e3a']
     : ['var(--accent-lt)', '#e8f5e9', '#fff3e0', '#e3f2fd', '#e0f2f1', '#f5f5f5', '#fff8e1', '#e8eaf6'];
 
-  var rows = '';
+  // Flatten into rows for DataTable
+  var flatRows = [];
   stageList.forEach(function(stage, stageIdx) {
     var stageName = stage.stage_name || '未分类';
     var items = stage.documents || [];
     var hasDocs = stage.has_documents;
     var bg = stageColors[stageIdx % stageColors.length];
-    var cellStyle = 'background:' + bg + ';';
-
-    // Calculate stage progress
     var doneCount = 0, totalCount = 0;
-    if (hasDocs) {
-      var stageItems = stage.documents || [];
-      stageItems.forEach(function(d) { totalCount++; if (d.done) doneCount++; });
-    }
+    if (hasDocs) { items.forEach(function(d) { totalCount++; if (d.done) doneCount++; }); }
     var progressPct = totalCount > 0 ? Math.round(doneCount / totalCount * 100) : 0;
     var progressColor = progressPct >= 100 ? 'var(--success)' : (progressPct > 0 ? 'var(--warn)' : 'var(--muted)');
-    var progressRing = totalCount > 0 ? '<span style="display:inline-flex;align-items:center;gap:4px;vertical-align:middle">' +
-      renderProgressCircle(progressPct, 28, { label: '', color: progressColor }) +
-      '<span style="font-size:9px;color:var(--muted);font-weight:400">' + doneCount + '/' + totalCount + '</span></span>' : '';
+    var progressRing = totalCount > 0 ? '<span style="display:inline-flex;align-items:center;gap:4px;vertical-align:middle">' + renderProgressCircle(progressPct, 28, { label: '', color: progressColor }) + '<span style="font-size:9px;color:var(--muted);font-weight:400">' + doneCount + '/' + totalCount + '</span></span>' : '';
 
     if (!hasDocs) {
-      rows += '<tr style="opacity:0.5">' +
-        '<td style="vertical-align:middle;text-align:center;font-weight:600;white-space:nowrap;word-break:keep-all;' + cellStyle + 'color:var(--accent);font-size:12px">' + escHtml(stageName) + ' <sup style="font-size:10px;color:var(--muted);font-weight:400">0</sup></td>' +
-        '<td style="text-align:center;color:var(--muted);' + cellStyle + '">-</td>' +
-        '<td style="color:var(--muted);' + cellStyle + '">-</td>' +
-        '<td style="color:var(--muted);' + cellStyle + '">-</td>' +
-        '<td style="color:var(--muted);' + cellStyle + '">-</td>' +
-        '<td style="color:var(--muted);' + cellStyle + '">-</td>' +
-        '<td style="font-size:12px;color:var(--muted);font-style:italic;text-align:left;' + cellStyle + '">暂无文档模板，请先配置文档模板 @CTO</td>' +
-        '<td style="color:var(--muted);' + cellStyle + '">-</td>' +
-        '<td style="color:var(--muted);' + cellStyle + '">-</td>' +
-        '<td style="color:var(--muted);' + cellStyle + '">-</td>' +
-      '</tr>';
+      flatRows.push({ _stage: stageName, _empty: true, _bg: bg, _progressRing: '', _seq: '', _docName: '', responsible_role: '', _statusHtml: '', _docType: '', _locHtml: '暂无文档模板，请先配置文档模板 @CTO', updated_at: '', updated_by: '', _actions: '' });
     } else {
       items.sort(function(a, b) { return (a.sort_order || 0) - (b.sort_order || 0); });
       items.forEach(function(d, i) {
-        // Cache doc data for edit dialog lookup
-        _docCache[d.id] = d;
-        var isCustom = (d.template_id === null || d.template_id === 0 || d.template_id === undefined);
         var hasError = (!d.done && d.location) || d.mismatch;
-        var statusHtml;
-        if (d.done && !d.mismatch) {
-          statusHtml = '<span class="pill completed">已提交</span>';
-        } else if (hasError) {
-          statusHtml = '<span class="pill" style="background:var(--danger-lt);color:var(--danger)">×错误</span>';
-        } else {
-          statusHtml = '<span class="pill blocked">未提交</span>';
-        }
-
-        var locHtml = '';
-        if (d.location === '无需文档' || d.location === '已删除') {
-          locHtml = '<span style="font-size:11px;color:var(--muted);font-style:italic">' + escHtml(d.location) + '</span>';
-        } else if (d.mismatch) {
-          locHtml = '<span style="color:var(--danger)">' + escHtml((d.location||'').replace(/^请提交到：/,'')) + '</span><br><span style="font-size:10px;color:var(--danger)">' + escHtml(d.mismatch) + '</span>';
-        } else if (d.file_count && d.file_count > 0 && d.done && d.location) {
-          // PDM folder-level: file count badge before path
-          locHtml = '<span style="display:inline-block;background:var(--accent-lt);color:var(--accent);font-size:10px;padding:1px 6px;border-radius:10px;font-weight:500;white-space:nowrap;border:1px solid var(--accent);margin-right:4px">' + d.file_count + ' 文件</span>' +
-            '<a href="' + escHtml(d.location) + '" target="_blank" style="color:var(--accent);text-decoration:none;word-break:break-all" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">' + escHtml(d.location) + '</a>';
-        } else if (d.done && d.location) {
-          locHtml = '<a href="' + escHtml(d.location) + '" target="_blank" style="color:var(--accent);text-decoration:none;word-break:break-all" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">' + escHtml(d.location) + '</a>';
-        } else if (hasError && d.location) {
-          locHtml = '<span style="color:var(--danger)">' + escHtml((d.location||'').replace(/^请提交到：/,'')) + '</span><br><span style="font-size:10px;color:var(--danger)">文件不存在或无法访问</span>';
-        } else if (d.doc_path) {
-          locHtml = '<span style="color:var(--muted);font-style:italic">请提交到：<span style="word-break:break-all">' + escHtml(d.doc_path) + '</span></span>';
-        } else {
-          locHtml = '<span style="font-size:11.5px;color:var(--muted);font-style:italic">待提交</span>';
-        }
-
-        var docTypeLabel = typeLabels[d.doc_type] || d.doc_type || '—';
-        var updatedAt = fmtISODateTime(d.updated_at) || formatDate(d.completed_at);
-        var updatedBy = d.updated_by || '';
-
-        rows += '<tr id="doc-row-' + d.id + '">' +
-          (i === 0 ? '<td rowspan="' + items.length + '" style="vertical-align:middle;text-align:center;font-weight:600;' + cellStyle + 'color:var(--accent);font-size:12px">' + escHtml(stageName) + ' <sup style="font-size:10px;color:var(--muted);font-weight:400">' + items.length + '</sup><div style="margin-top:4px">' + progressRing + '</div></td>' : '') +
-          '<td style="font-family:var(--mono);color:var(--muted);text-align:center;' + cellStyle + '">' + (i + 1) + '</td>' +
-          '<td style="font-weight:500;width:180px;word-break:break-all;' + cellStyle + '" title="' + escHtml(d.description || '') + '">' + escHtml(d.doc_name) +
-            (isCustom ? ' <span style="font-size:9px;color:var(--success);background:var(--success-lt);padding:1px 4px;border-radius:3px" title="自定义文档">自定义</span>' : '') +
-            (!isCustom && d.is_optional ? ' <span style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:3px" title="可选项">可选</span>' : '') + '</td>' +
-          '<td style="font-size:12px;white-space:nowrap;word-break:keep-all;' + cellStyle + '">' + escHtml(d.responsible_role || '—') + '</td>' +
-          '<td style="white-space:nowrap;word-break:keep-all;' + cellStyle + '">' + statusHtml + '</td>' +
-          '<td style="font-size:11px;' + cellStyle + '">' + escHtml(docTypeLabel) + '</td>' +
-          '<td style="font-size:12px;word-break:break-all;text-align:left;' + cellStyle + '" id="doc-loc-cell-' + d.id + '">' + locHtml + '</td>' +
-          '<td style="font-size:11px;color:var(--muted);white-space:nowrap;word-break:keep-all;' + cellStyle + '">' + escHtml(updatedAt) + '</td>' +
-          '<td style="font-size:12px;color:var(--muted);' + cellStyle + '">' + escHtml(getDisplayName(updatedBy)) + '</td>' +
-          '<td style="white-space:nowrap;word-break:keep-all;text-align:center;' + cellStyle + '">' +
-            (d.location && !d.location.startsWith('@') && isPreviewableUrl(d.location)
-              ? iconEye('previewDocument(\'' + encodeURIComponent(d.location) + '\',\'' + escJs(d.doc_name || '') + '\')', '预览')
-              : (d.location && d.location !== '无需文档' && d.location !== '已删除'
-              ? '<a href="' + escHtml(d.location) + '" target="_blank" title="打开链接" style="text-decoration:none;font-size:15px">&#x1F517;</a>'
-              : '')) +
-            // Custom docs: show delete button; template docs: delete only for optional
-            (isCustom && canEdit ? iconDelete('deleteCustomDoc(' + d.id + ',\x27' + escJs(d.doc_name) + '\x27)', '删除此文档') : '') +
-            (!isCustom && d.is_optional && canEdit ? iconDelete('removeOptionalDoc(' + d.id + ',\x27' + escJs(d.doc_name) + '\x27)', '移除此文档') : '') +
-            (canEdit ? iconEdit('openDocEditDialog(' + d.id + ')', '编辑') : '') +
-          '</td>' +
-        '</tr>';
+        if (d.done && !d.mismatch) d._statusHtml = '<span class="pill completed">已提交</span>';
+        else if (hasError) d._statusHtml = '<span class="pill" style="background:var(--danger-lt);color:var(--danger)">×错误</span>';
+        else d._statusHtml = '<span class="pill blocked">未提交</span>';
+        if (d.location === '无需文档' || d.location === '已删除') d._locHtml = '<span style="font-size:11px;color:var(--muted);font-style:italic">' + escHtml(d.location) + '</span>';
+        else if (d.mismatch) d._locHtml = '<span style="color:var(--danger)">' + escHtml((d.location||'').replace(/^请提交到：/,'')) + '</span><br><span style="font-size:10px;color:var(--danger)">' + escHtml(d.mismatch) + '</span>';
+        else if (d.file_count && d.file_count > 0 && d.done && d.location) d._locHtml = '<span style="display:inline-block;background:var(--accent-lt);color:var(--accent);font-size:10px;padding:1px 6px;border-radius:10px;font-weight:500;white-space:nowrap;border:1px solid var(--accent);margin-right:4px">' + d.file_count + ' 文件</span><a href="' + escHtml(d.location) + '" target="_blank" style="color:var(--accent);text-decoration:none;word-break:break-all" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">' + escHtml(d.location) + '</a>';
+        else if (d.done && d.location) d._locHtml = '<a href="' + escHtml(d.location) + '" target="_blank" style="color:var(--accent);text-decoration:none;word-break:break-all" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">' + escHtml(d.location) + '</a>';
+        else if (hasError && d.location) d._locHtml = '<span style="color:var(--danger)">' + escHtml((d.location||'').replace(/^请提交到：/,'')) + '</span><br><span style="font-size:10px;color:var(--danger)">文件不存在或无法访问</span>';
+        else if (d.doc_path) d._locHtml = '<span style="color:var(--muted);font-style:italic">请提交到：<span style="word-break:break-all">' + escHtml(d.doc_path) + '</span></span>';
+        else d._locHtml = '<span style="font-size:11.5px;color:var(--muted);font-style:italic">待提交</span>';
+        d._stage = stageName; d._empty = false; d._bg = bg; d._progressRing = progressRing; d._seq = i + 1;
+        d._docName = escHtml(d.doc_name) + (d.is_optional ? ' <span style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:3px" title="可选项">可选</span>' : '');
+        d._docType = typeLabels[d.doc_type] || d.doc_type || '—';
+        d._updatedAt = fmtISODateTime(d.updated_at) || formatDate(d.completed_at);
+        d._updatedBy = d.updated_by || '';
+        var loc = d.location, dn = d.doc_name;
+        d._actions = (loc && !loc.startsWith('@') && isPreviewableUrl(loc) ? iconEye('previewDocument(\'' + encodeURIComponent(loc) + '\',\'' + escJs(dn||'') + '\')', '预览') : (loc && loc !== '无需文档' && loc !== '已删除' ? '<a href="' + escHtml(loc) + '" target="_blank" title="打开链接" style="text-decoration:none;font-size:15px">&#x1F517;</a>' : '')) + (d.is_optional && canEdit ? iconDelete('removeOptionalDoc(' + d.id + ',\x27' + escJs(dn) + '\x27)', '移除此文档') : '') + (canEdit ? iconEdit('openDocEditDialog(' + d.id + ')', '编辑') : '');
+        flatRows.push(d);
       });
     }
   });
-  document.getElementById('docs-tbody').innerHTML = rows;
+
+  var container = document.getElementById('docs-table-wrap');
+  if (_docsDt) { _docsDt.setData(flatRows); return; }
+  container.innerHTML = '<div style="width:100%"><div id="docs-table"></div></div>';
+  _docsDt = new DataTable({
+    container: document.getElementById('docs-table'),
+    columns: [
+      { key: '_stage', title: '阶段', width: '11%', rowspan: true, render: function(v, row, idx, count) { return '<span style="font-weight:600;color:var(--accent);font-size:12px">'+escHtml(v||'')+' <sup style="font-size:10px;color:var(--muted);font-weight:400">'+(count||(row._empty?0:1))+'</sup>'+(row._empty?'':'<div style="margin-top:4px">'+row._progressRing+'</div>')+'</span>'; } },
+      { key: '_seq', title: '序号', width: '40px', render: function(v, row) { return row._empty?'<span style="color:var(--muted)">-</span>':'<span style="font-family:var(--mono);color:var(--muted)">'+(v||'')+'</span>'; } },
+      { key: '_docName', title: '文档名称', width: '14%', className: 'dt-wrap', render: function(v, row) { return row._empty?'<span style="color:var(--muted)">-</span>':'<span style="font-weight:500;word-break:break-all" title="'+escHtml(row.description||'')+'">'+(v||'')+'</span>'; } },
+      { key: 'responsible_role', title: '责任人', width: '8%', render: function(v, row) { return row._empty?'<span style="color:var(--muted)">-</span>':'<span style="font-size:12px;white-space:nowrap">'+escHtml(v||'—')+'</span>'; } },
+      { key: '_statusHtml', title: '状态', width: '70px', render: function(v, row) { return row._empty?'<span style="color:var(--muted)">-</span>':(v||''); } },
+      { key: '_docType', title: '类型', width: '60px', render: function(v, row) { return row._empty?'<span style="color:var(--muted)">-</span>':'<span style="font-size:11px">'+escHtml(v||'')+'</span>'; } },
+      { key: '_locHtml', title: '路径', align: 'left', className: 'dt-wrap', render: function(v, row) { return '<span style="font-size:12px;word-break:break-all">'+(v||'')+'</span>'; } },
+      { key: '_updatedAt', title: '最后修改时间', width: '12%', render: function(v) { return '<span style="font-size:11px;color:var(--muted);white-space:nowrap">'+escHtml(v||'—')+'</span>'; } },
+      { key: '_updatedBy', title: '修改人', width: '7%', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(getDisplayName(v)||'')+'</span>'; } },
+      { key: '_actions', title: '操作', width: '80px', render: function(v, row) { return '<span style="white-space:nowrap">'+(v||'')+'</span>'; } }
+    ],
+    data: flatRows,
+    maxHeight: 'calc(100vh - 320px)',
+    resizable: false,
+    rowClassFn: function(row) { return row._bg ? { background: row._bg } : null; }
+  });
 }
+
+var _docsDt = null;
 
 /* ── Document Status Edit Dialog ── */
 
 function openDocEditDialog(docId) {
-  // Custom docs (template_id is null/0/undefined): open full edit form
-  var docData = _docCache[docId];
-  if (docData && (docData.template_id === null || docData.template_id === 0 || docData.template_id === undefined)) {
-    addCustomDoc({ id: docId, doc_name: docData.doc_name, stage_type: docData.stage_type, doc_type: docData.doc_type, location: docData.location, description: docData.description, responsible_role: docData.responsible_role });
-    return;
-  }
-  // Template docs: status-only edit dialog
   var inp = 'width:100%;box-sizing:border-box;margin-top:1px';
   openDialog('编辑文档状态',
     '<div style="margin-bottom:10px">' +
@@ -1203,15 +1160,6 @@ async function _confirmDeleteDoc(docId, docName) {
   var ok = await verifyPassword('删除文档: ' + (docName || '#' + docId), 'skip_doc_delete');
   if (!ok) return;
   saveDocStatus(docId, 'deleted');
-}
-
-function deleteCustomDoc(docId, docName) {
-  var label = docName || ('#' + docId);
-  openDialog('删除自定义文档',
-    '<div class="confirm-dlg">确认删除自定义文档 <b>' + escHtml(label) + '</b>？<br><br>删除后将不再显示。如需恢复，可手动重新添加。</div>',
-    [{text: '取消', onclick: 'closeSharedDialog()'},
-     {text: '确认删除', cls: 'btn-danger', onclick: 'closeSharedDialog();_confirmRemoveDoc(' + docId + ',\x27' + escJs(label) + '\x27)'}],
-    {hideClose: true});
 }
 
 function removeOptionalDoc(docId, docName) {
@@ -1313,99 +1261,50 @@ function doImportTemplateDocs() {
 
 /* ── Add Custom Document ── */
 
-function addCustomDoc(editData) {
-  // editData: { id, doc_name, stage_type, doc_type, location } for edit mode, undefined for add mode
-  var isEdit = !!editData;
-  if (!_comboCurCode && !isEdit) return;
+function addCustomDoc() {
+  if (!_comboCurCode) return;
+  var stages = [];
+  // Get standard stages from last loaded docs data
   var inp = 'width:100%;box-sizing:border-box;margin-top:2px';
   var html = '<div style="display:flex;flex-direction:column;gap:10px">' +
     '<div><label style="font-size:11px;color:var(--muted)">文档名称</label><input class="search-inp" id="custom-doc-name" style="' + inp + '" placeholder="如：硬件测试报告"></div>' +
     '<div><label style="font-size:11px;color:var(--muted)">所属阶段</label><select class="search-inp" id="custom-doc-stage" style="' + inp + '"></select></div>' +
-    '<div><label style="font-size:11px;color:var(--muted)">责任人</label><input class="search-inp" id="custom-doc-role" list="custom-role-list" style="' + inp + '" placeholder="选择或输入责任人"><datalist id="custom-role-list"></datalist></div>' +
-    '<div><label style="font-size:11px;color:var(--muted)">文档类型</label><select class="search-inp" id="custom-doc-type" style="' + inp + '"><option value="pma">PMA内部</option><option value="gitlab">GitLab</option><option value="svn">SVN</option><option value="nas">NAS</option><option value="solidworks">结构设计</option></select></div>' +
+    '<div><label style="font-size:11px;color:var(--muted)">文档类型</label><select class="search-inp" id="custom-doc-type" style="' + inp + '"><option value="">PMA内部</option><option value="gitlab">GitLab</option><option value="svn">SVN</option><option value="nas">NAS</option><option value="solidworks">结构设计</option></select></div>' +
     '<div><label style="font-size:11px;color:var(--muted)">文档路径/链接</label><input class="search-inp" id="custom-doc-location" style="' + inp + '" placeholder="如：http://..."></div>' +
+    '<div><label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="custom-doc-optional" style="width:16px;height:16px">可选项（可按需删除）</label></div>' +
   '</div>';
 
-  var title = isEdit ? '编辑文档' : '新增文档';
-  var submitBtn = isEdit
-    ? {text: '保存', cls: 'btn-primary', onclick: 'submitEditDoc(' + editData.id + ')'}
-    : {text: '添加', cls: 'btn-primary', onclick: 'submitCustomDoc()'};
-  openDialog(title, html, [
+  openDialog('新增文档', html, [
     {text: '取消', onclick: 'closeSharedDialog()'},
-    submitBtn
+    {text: '添加', cls: 'btn-primary', onclick: 'submitCustomDoc()'}
   ], {maxWidth: 500});
 
-  // Load stage options + role suggestions from existing docs
+  // Load stage options
   API.get('/projects/' + _comboCurCode + '/documents').then(function(data) {
     var sel = document.getElementById('custom-doc-stage');
-    var roleList = document.getElementById('custom-role-list');
     var stageList = (data && data.documents) ? data.documents : [];
-    var seenRoles = {};
     stageList.forEach(function(stage) {
-      var opt = '<option value="' + escHtml(stage.stage_name || '') + '">' + escHtml(stage.stage_name || '') + '</option>';
-      sel.innerHTML += opt;
-      // Collect unique responsible_role values from existing docs
-      var items = stage.documents || [];
-      items.forEach(function(d) {
-        var role = d.responsible_role;
-        if (role && !seenRoles[role]) {
-          seenRoles[role] = true;
-          roleList.innerHTML += '<option value="' + escHtml(role) + '">';
-        }
-      });
+      sel.innerHTML += '<option value="' + escHtml(stage.stage_name || '') + '">' + escHtml(stage.stage_name || '') + '</option>';
     });
-    // Pre-fill for edit mode
-    if (isEdit) {
-      setTimeout(function() {
-        var nameEl = document.getElementById('custom-doc-name');
-        var stageEl = document.getElementById('custom-doc-stage');
-        var roleEl = document.getElementById('custom-doc-role');
-        var typeEl = document.getElementById('custom-doc-type');
-        var locEl = document.getElementById('custom-doc-location');
-        if (nameEl) nameEl.value = editData.doc_name || '';
-        if (stageEl) stageEl.value = editData.stage_type || '';
-        if (roleEl) roleEl.value = editData.responsible_role || '';
-        if (typeEl) typeEl.value = editData.doc_type || 'pma';
-        if (locEl) locEl.value = editData.location || '';
-      }, 0);
-    }
   });
 }
 
 function submitCustomDoc() {
   var name = document.getElementById('custom-doc-name').value.trim();
   var stage = document.getElementById('custom-doc-stage').value;
-  var role = document.getElementById('custom-doc-role').value.trim();
   var docType = document.getElementById('custom-doc-type').value;
   var location = document.getElementById('custom-doc-location').value.trim();
+  var isOptional = document.getElementById('custom-doc-optional').checked;
   if (!name) { showToast('请输入文档名称', 'error'); return; }
   if (!stage) { showToast('请选择所属阶段', 'error'); return; }
   API.post('/projects/' + _comboCurCode + '/documents/add', {
-    doc_name: name, stage_type: stage, responsible_role: role, doc_type: docType,
-    location: location
+    doc_name: name, stage_type: stage, doc_type: docType,
+    location: location, is_optional: isOptional
   }).then(function(r) {
     showToast(r.message || '文档已添加', 'success');
     closeSharedDialog();
     refreshDocs();
   }).catch(function(e) { showToast('添加失败: ' + (e.message || ''), 'error'); });
-}
-
-function submitEditDoc(docId) {
-  var name = document.getElementById('custom-doc-name').value.trim();
-  var stage = document.getElementById('custom-doc-stage').value;
-  var role = document.getElementById('custom-doc-role').value.trim();
-  var docType = document.getElementById('custom-doc-type').value;
-  var location = document.getElementById('custom-doc-location').value.trim();
-  if (!name) { showToast('请输入文档名称', 'error'); return; }
-  if (!stage) { showToast('请选择所属阶段', 'error'); return; }
-  API.put('/projects/' + _comboCurCode + '/documents/' + docId, {
-    doc_name: name, stage_type: stage, responsible_role: role, doc_type: docType,
-    doc_path: location, location: location
-  }).then(function(r) {
-    showToast(r.message || '文档已更新', 'success');
-    closeSharedDialog();
-    refreshDocs();
-  }).catch(function(e) { showToast('更新失败: ' + (e.message || ''), 'error'); });
 }
 
 /* Delivery */
@@ -1459,20 +1358,7 @@ function buildDelivery(data) {
   var recHtml = '' +
     '<div class="card col-span" style="padding:20px;margin-top:16px">' +
       sectionHeader('交付记录明细', records.length + ' 条', '+ 添加记录', 'showDeliveryForm()') +
-      (records.length ? '<div class="table-scroll"><table class="stage-table"><thead><tr><th>交付日期</th><th>产品名</th><th>数量</th><th>产品编号</th><th>责任人</th><th>收货方</th><th>备注</th><th style="width:50px"></th></tr></thead><tbody>' +
-      records.map(function(r) {
-        return '<tr>' +
-          '<td style="font-family:var(--mono);font-size:12px;color:var(--success);font-weight:540;white-space:nowrap">' + formatDate(r.date) + '</td>' +
-          '<td style="font-size:12.5px;font-weight:500">' + escHtml(r.product_name || '') + '</td>' +
-          '<td style="font-variant-numeric:tabular-nums;font-weight:600">' + r.qty + ' 台</td>' +
-          '<td style="font-family:var(--mono);font-size:11.5px">' + escHtml(r.items || '') + '</td>' +
-          '<td style="font-size:12px">' + escHtml(r.responsible_person || '—') + '</td>' +
-          '<td style="font-size:12.5px">' + escHtml(r.receiver || '—') + '</td>' +
-          '<td style="font-size:12px;color:var(--muted)">' + escHtml(r.note || '') + '</td>' +
-          '<td><button class="btn btn-xs" style="color:var(--danger)" onclick="deleteDeliveryRecord(' + r.id + ')">删除</button></td>' +
-        '</tr>';
-      }).join('') +
-      '</tbody></table></div>' : '<div class="empty-state" style="padding:20px">暂无交付记录，点击上方按钮添加</div>') +
+      (records.length ? '<div id="delivery-table"></div>' : '<div class="empty-state" style="padding:20px">暂无交付记录，点击上方按钮添加</div>') +
     '</div>';
 
   document.getElementById('delivery-content').innerHTML =
@@ -1485,6 +1371,24 @@ function buildDelivery(data) {
     '</div>' +
     planFormHtml +
     '<div id="delivery-form-container"></div>';
+
+  if (records.length) {
+    new DataTable({
+      container: document.getElementById('delivery-table'),
+      columns: [
+        { key: 'date', title: '交付日期', render: function(v) { return '<span style="font-family:var(--mono);font-size:12px;color:var(--success);font-weight:540;white-space:nowrap">'+formatDate(v)+'</span>'; } },
+        { key: 'product_name', title: '产品名', render: function(v) { return '<span style="font-size:12.5px;font-weight:500">'+escHtml(v||'')+'</span>'; } },
+        { key: 'qty', title: '数量', render: function(v) { return '<span style="font-variant-numeric:tabular-nums;font-weight:600">'+v+' 台</span>'; } },
+        { key: 'items', title: '产品编号', render: function(v) { return '<span style="font-family:var(--mono);font-size:11.5px">'+escHtml(v||'')+'</span>'; } },
+        { key: 'responsible_person', title: '责任人', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'—')+'</span>'; } },
+        { key: 'receiver', title: '收货方', render: function(v) { return '<span style="font-size:12.5px">'+escHtml(v||'—')+'</span>'; } },
+        { key: 'note', title: '备注', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(v||'')+'</span>'; } },
+        { key: 'actions', title: '', width: '50px', render: function(v, row) { return '<button class="btn btn-xs" style="color:var(--danger)" onclick="deleteDeliveryRecord('+row.id+')">删除</button>'; } }
+      ],
+      data: records,
+      resizable: false
+    });
+  }
 }
 
 function toggleDeliveryPlanForm() {
@@ -1719,43 +1623,36 @@ function buildResources(resources, detail) {
 
 function buildNotes(notes) {
   var container = document.getElementById('notes-content');
-  var tableHtml;
   var currentUser = (getCurrentUser() || {}).username || '';
   if (notes && notes.length) {
-    tableHtml = '<div class="table-scroll"><table class="stage-table"><thead><tr>' +
-      '<th style="width:140px">记录时间</th><th style="width:90px">涉及阶段</th><th style="width:70px">记录人</th><th>内容</th><th style="width:90px">操作</th>' +
-    '</tr></thead><tbody>';
-    notes.forEach(function(n) {
-      var isMine = n.recorded_by === currentUser;
-      var isReply = !!n.parent_id;
-      var hasImage = /!\[.*\]\(.*\)/.test(n.content);
-      var plainText = stripHtml(renderMarkdown ? renderMarkdown(n.content) : n.content).substring(0, 80);
-      var actions = '';
-      actions += '<span style="cursor:pointer;font-size:12px;color:var(--accent);margin-right:4px" onclick="openViewNoteDialog(' + n.id + ')" title="查看">👁</span>';
-      if (isMine) {
-        actions += iconEdit('openEditNoteDialog(' + n.id + ')', '编辑') +
-                   iconDelete('deleteProjectNote(' + n.id + ')', '删除');
-      } else {
-        actions += '<span style="cursor:pointer;font-size:12px;color:var(--accent)" onclick="openReplyNoteDialog(' + n.id + ')" title="回复">💬</span>';
-      }
-      var indentStyle = isReply ? 'padding-left:28px;border-left:3px solid var(--accent-lt)' : '';
-      var replyMark = isReply ? '<span style="font-size:10px;color:var(--accent);margin-right:4px">↳ 回复</span>' : '';
-      var imgBadge = hasImage ? ' <span style="font-size:10px">📷</span>' : '';
-      var timeCell = (fmtISODateTime(n.created_at) || '—') + (n.updated_at ? '<div style="font-size:9px;color:var(--warn)">编辑过</div>' : '');
-      tableHtml += '<tr style="' + indentStyle + '">' +
-        '<td style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">' + timeCell + '</td>' +
-        '<td style="font-size:12px">' + escHtml(n.stage_name || '项目整体') + '</td>' +
-        '<td style="font-size:12.5px;font-weight:540">' + escHtml(n.recorded_by || '') + '</td>' +
-        '<td style="font-size:13px;line-height:1.5;text-align:left">' + replyMark + escHtml(plainText) + (n.content.length > 80 ? '...' : '') + imgBadge + '</td>' +
-        '<td style="white-space:nowrap">' + actions + '</td>' +
-      '</tr>';
+    container.innerHTML = '<div id="notes-table"></div>';
+    new DataTable({
+      container: document.getElementById('notes-table'),
+      columns: [
+        { key: 'created_at', title: '记录时间', width: '140px', render: function(v, row) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">'+(fmtISODateTime(v)||'—')+'</span>'+(row.updated_at?'<div style="font-size:9px;color:var(--warn)">编辑过</div>':''); } },
+        { key: 'stage_name', title: '涉及阶段', width: '90px', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'项目整体')+'</span>'; } },
+        { key: 'recorded_by', title: '记录人', width: '70px', render: function(v) { return '<span style="font-size:12.5px;font-weight:540">'+escHtml(v||'')+'</span>'; } },
+        { key: 'content', title: '内容', align: 'left', className: 'dt-wrap', render: function(v, row) {
+          var plainText = stripHtml(renderMarkdown?renderMarkdown(v):v).substring(0,80);
+          var replyMark = row.parent_id?'<span style="font-size:10px;color:var(--accent);margin-right:4px">↳ 回复</span>':'';
+          var imgBadge = /!\[.*\]\(.*\)/.test(v)?' <span style="font-size:10px">📷</span>':'';
+          return '<span style="font-size:13px;line-height:1.5">'+replyMark+escHtml(plainText)+(v&&v.length>80?'...':'')+imgBadge+'</span>';
+        }},
+        { key: 'actions', title: '操作', width: '90px', render: function(v, row) {
+          var isMine = row.recorded_by === currentUser;
+          var a = '<span style="cursor:pointer;font-size:12px;color:var(--accent);margin-right:4px" onclick="openViewNoteDialog('+row.id+')" title="查看">👁</span>';
+          if (isMine) a += iconEdit('openEditNoteDialog('+row.id+')','编辑')+iconDelete('deleteProjectNote('+row.id+')','删除');
+          else a += '<span style="cursor:pointer;font-size:12px;color:var(--accent)" onclick="openReplyNoteDialog('+row.id+')" title="回复">💬</span>';
+          return a;
+        }}
+      ],
+      data: notes,
+      resizable: false,
+      rowClassFn: function(row) { return row.parent_id ? { paddingLeft: '28px', borderLeft: '3px solid var(--accent-lt)' } : null; }
     });
-    tableHtml += '</tbody></table></div>';
   } else {
-    tableHtml = '<div class="empty-state" style="padding:12px">暂无笔记</div>';
+    container.innerHTML = '<div class="empty-state" style="padding:12px">暂无笔记</div>';
   }
-
-  container.innerHTML = tableHtml;
 }
 
 async function openNoteDialog() {
@@ -3231,54 +3128,36 @@ function loadMaintProjectStages() {
   });
 }
 
+var _maintStagesDt = null;
+
 function _renderMaintStages(stages, container, canEditStage) {
   if (!stages.length) {
     container.innerHTML = '<div class="empty-state" style="padding:12px">暂无阶段数据 — 请在任务详情页点击"初始化阶段"按钮</div>';
-    return;
+    _maintStagesDt = null; return;
   }
-
   var riskLabels = { active: '进行中', completed: '已完成', blocked: '已阻塞' };
-  var html = '<table class="proj-table" style="width:100%"><thead><tr>' +
-    '<th style="width:5%">#</th>' +
-    '<th style="width:16%">阶段名称</th>' +
-    '<th style="width:10%">状态</th>' +
-    '<th style="width:10%">责任人</th>' +
-    '<th style="width:12%">计划开始</th>' +
-    '<th style="width:12%">计划结束</th>' +
-    '<th style="width:7%">任务数</th>' +
-    '<th style="width:7%">进度</th>' +
-    '<th style="width:8%">完成日期</th>' +
-    '<th>操作</th>' +
-    '</tr></thead><tbody>';
-
-  stages.forEach(function(s, i) {
-    var riskLabel = riskLabels[s.status] || s.status || '进行中';
-    var riskColor = s.status === 'blocked' ? 'var(--danger)' : (s.status === 'completed' ? 'var(--success)' : 'var(--accent)');
-    var ownerName = s.owner_name || s.who || '—';
-    var startStr = s.start || '—';
-    var endStr = s.end || '—';
-    var taskCount = s.task_count || 0;
-    var progress = s.progress || 0;
-    var completedDate = s.completed_date || '—';
-
-    html += '<tr>' +
-      '<td style="text-align:center;color:var(--muted)">' + (i + 1) + '</td>' +
-      '<td style="font-weight:500">' + escHtml(s.name) + '</td>' +
-      '<td><span style="font-size:11px;padding:2px 8px;border-radius:10px;background:' + riskColor + '15;color:' + riskColor + ';font-weight:500">' + escHtml(riskLabel) + '</span></td>' +
-      '<td style="font-size:12px">' + escHtml(ownerName) + '</td>' +
-      '<td style="font-size:12px">' + escHtml(startStr) + '</td>' +
-      '<td style="font-size:12px">' + escHtml(endStr) + '</td>' +
-      '<td style="text-align:center;cursor:pointer;color:var(--accent);font-weight:500" onclick="gotoStageTasksFromMaint(\'' + escHtml(s.name).replace(/'/g, "\\'") + '\')" title="跳转到任务详情">' + taskCount + '</td>' +
-      '<td style="text-align:center;cursor:pointer" onclick="gotoStageTasksFromMaint(\'' + escHtml(s.name).replace(/'/g, "\\'") + '\')" title="跳转到任务详情">' + (typeof renderProgressRing === 'function' ? '<div style="display:inline-block">' + renderProgressRing(progress) + '</div>' : progress + '%') + '</td>' +
-      '<td style="font-size:12px">' + escHtml(completedDate) + '</td>' +
-      '<td style="white-space:nowrap">' +
-        (s.id && canEditStage ? iconEdit('openStageDialog(' + s.id + ')', '编辑阶段') + iconDelete('deleteMaintStage(' + s.id + ',\'' + escHtml(s.name).replace(/'/g, "\\'") + '\')', '删除阶段') : '') +
-      '</td>' +
-    '</tr>';
-  });
-
-  html += '</tbody></table>';
-  container.innerHTML = html;
+  if (!_maintStagesDt) {
+    container.innerHTML = '<div id="maint-stages-table"></div>';
+    _maintStagesDt = new DataTable({
+      container: document.getElementById('maint-stages-table'),
+      columns: [
+        { key: 'idx', title: '#', width: '5%', render: function(v) { return '<span style="color:var(--muted)">'+v+'</span>'; } },
+        { key: 'name', title: '阶段名称', width: '16%', render: function(v) { return '<span style="font-weight:500">'+escHtml(v||'')+'</span>'; } },
+        { key: 'status', title: '状态', width: '10%', render: function(v) { var l=riskLabels[v]||v||'进行中'; var c=v==='blocked'?'var(--danger)':(v==='completed'?'var(--success)':'var(--accent)'); return '<span style="font-size:11px;padding:2px 8px;border-radius:10px;background:'+c+'15;color:'+c+';font-weight:500">'+escHtml(l)+'</span>'; } },
+        { key: 'owner', title: '责任人', width: '10%', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'—')+'</span>'; } },
+        { key: 'start', title: '计划开始', width: '12%', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'—')+'</span>'; } },
+        { key: 'end', title: '计划结束', width: '12%', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'—')+'</span>'; } },
+        { key: 'task_count', title: '任务数', width: '7%', render: function(v, row) { var n=escHtml(row.name||'').replace(/'/g,"\\'"); return '<span style="cursor:pointer;color:var(--accent);font-weight:500" onclick="gotoStageTasksFromMaint(\''+n+'\')" title="跳转到任务详情">'+(v||0)+'</span>'; } },
+        { key: 'progress', title: '进度', width: '7%', render: function(v, row) { var n=escHtml(row.name||'').replace(/'/g,"\\'"); return '<span style="cursor:pointer" onclick="gotoStageTasksFromMaint(\''+n+'\')" title="跳转到任务详情">'+(typeof renderProgressRing==='function'?'<div style="display:inline-block">'+renderProgressRing(v||0)+'</div>':(v||0)+'%')+'</span>'; } },
+        { key: 'completed_date', title: '完成日期', width: '8%', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'—')+'</span>'; } },
+        { key: 'actions', title: '操作', render: function(v, row) { return '<span style="white-space:nowrap">'+(row.id&&canEditStage?iconEdit('openStageDialog('+row.id+')','编辑阶段')+iconDelete('deleteMaintStage('+row.id+',\''+escHtml(row.name||'').replace(/'/g,"\\'")+'\')','删除阶段'):'')+'</span>'; } }
+      ],
+      resizable: false,
+      maxHeight: 'calc(100vh - 400px)'
+    });
+  }
+  stages.forEach(function(s, i) { s.idx = i+1; s.owner = s.owner_name || s.who; });
+  _maintStagesDt.setData(stages);
 }
 
 /* ── Project Activities (进度明细) ── */
@@ -3346,30 +3225,19 @@ function buildActivities(items, opts) {
   }
 
   var html = filterBadge;
-  html += '<div class="table-scroll" style="max-height:calc(100vh - 330px)">';
-  html += '<table class="stage-table activity-table">';
-  html += '<thead><tr>' +
-    '<th style="cursor:pointer;user-select:none;white-space:nowrap" onclick="toggleActivitySort()">时间 ' + sortIcon + '</th>' +
-    '<th style="white-space:nowrap">用户名 ' + userFilter + '</th>' +
-    '<th style="white-space:nowrap">操作类型 ' + actionFilter + '</th>' +
-    '<th>具体明细</th>' +
-    '</tr></thead><tbody>';
-
-  items.forEach(function(a) {
-    var time = fmtISODateTime(a.created_at);
-    html += '<tr>' +
-      '<td class="act-td-time">' + escHtml(time) + '</td>' +
-      '<td class="act-td-user">' + escHtml(getDisplayName(a.display_name || a.username)) + '</td>' +
-      '<td style="white-space:nowrap"><span class="activity-action pill">' + escHtml(a.action) + '</span></td>' +
-      '<td class="act-td-detail">' + (a.detail ? escHtml(a.detail) : '') + '</td>' +
-      '</tr>';
+  container.innerHTML = filterBadge + '<div id="act-table"></div>';
+  new DataTable({
+    container: document.getElementById('act-table'),
+    columns: [
+      { key: 'created_at', title: '时间 <span id="act-sort-ind" style="cursor:pointer" onclick="toggleActivitySort()">' + sortIcon + '</span>', width: '160px', render: function(v) { return '<span class="act-td-time">'+escHtml(fmtISODateTime(v))+'</span>'; } },
+      { key: 'display_name', title: '用户名 ' + userFilter, width: '100px', render: function(v, row) { return '<span class="act-td-user">'+escHtml(getDisplayName(v||row.username))+'</span>'; } },
+      { key: 'action', title: '操作类型 ' + actionFilter, width: '120px', render: function(v) { return '<span class="activity-action pill">'+escHtml(v||'')+'</span>'; } },
+      { key: 'detail', title: '具体明细', render: function(v) { return '<span class="act-td-detail">'+(v?escHtml(v):'')+'</span>'; } }
+    ],
+    data: items,
+    maxHeight: 'calc(100vh - 330px)',
+    resizable: false
   });
-
-  html += '</tbody></table></div>';
-  container.innerHTML = html;
-
-  // Update sort indicator after render
-  updateActivitySortInd();
 }
 
 function updateActivitySortInd() {

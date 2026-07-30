@@ -310,10 +310,43 @@ async function saveRiskConfig() {
 
 // ── Project Table ──
 
+var _dashDt = null;
+
+function _initDashDt() {
+  if (_dashDt) return;
+  _dashDt = new DataTable({
+    container: document.getElementById('proj-table'),
+    columns: [
+      { key: 'fav', title: '', width: '28px', render: function(v, row) { return favStar('project', row.id, {stopPropagation: true}); } },
+      { key: 'code', title: '项目编号', width: '6%', headerRender: function() { return '<span style="cursor:pointer" onclick="dashFilter.toggleSortCode()">项目编号</span> <span id="sort-code-ind" style="color:var(--muted)">⇅</span>'; }, render: function(v, row) { return v ? projCodeTag(v, 'event.stopPropagation();openProject(\'' + escHtml(v||'').replace(/'/g, "\\'") + '\')', row.name) : projCodeTag('RD'); } },
+      { key: 'name', title: '项目名', width: '28%', render: function(v) { return '<div class="proj-name">' + escHtml(v||'') + '</div>'; } },
+      { key: 'customer_name', title: '客户', width: '5%', render: function(v) { return renderCustomerBadge(v); } },
+      { key: 'type', title: '类型', width: '5%', render: function(v) { return renderTypeBadge(v); } },
+      { key: 'current_stage', title: '当前阶段', width: '12%', render: function(v) { return '<span style="font-size:13px">'+escHtml(v||'—')+'</span>'; } },
+      { key: 'end', title: '计划完成', width: '10%', headerRender: function() { return '<span style="cursor:pointer" onclick="dashFilter.toggleSortEnd()">计划完成</span> <span id="sort-end-ind" style="color:var(--muted)">⇅</span>'; }, render: function(v) { return '<span style="font-size:12.5px;color:'+(v?'var(--muted)':'var(--warn)')+'">'+(v?formatDate(v):'长期')+'</span>'; } },
+      { key: 'status', title: '状态', width: '5%', render: function(v) { return renderPill(v); } },
+      { key: 'progress', title: '进度', width: '10%', render: function(v) { return renderProgressCircle(parseFloat(v)||0, 32, {label:''}); } },
+      { key: 'risk', title: '风险', width: '5%', render: function(v, row) { var rl=row.risk_level||'normal'; var labels={normal:'正常',low:'较低',medium:'中等',high:'高',overdue:'已超期',incomplete:'资料不全'}; var colors={normal:'var(--success)',low:'var(--muted)',medium:'var(--warn)',high:'var(--danger)',overdue:'var(--danger)',incomplete:'var(--warn)'}; var bgs={normal:'var(--success-lt)',low:'var(--bg)',medium:'var(--warn-lt)',high:'var(--danger-lt)',overdue:'var(--danger-lt)',incomplete:'var(--warn-lt)'}; return '<span class="risk-tag" style="--risk-color:'+(colors[rl]||colors.normal)+';background:'+(bgs[rl]||bgs.normal)+';font-size:11px">'+(labels[rl]||'正常')+'</span>'; } },
+      { key: 'linked', title: '关联项目', width: '10%', render: function(v, row) { var lp=row.linked_projects; return (lp&&lp.length)?lp.map(function(x){return '<span class="proj-code-btn" style="font-size:10px" onclick="event.stopPropagation();openProject(\''+escHtml(x.code||String(x.id))+'\')" title="'+escHtml(x.name||'')+'">'+escHtml(x.code||x.name)+'</span>';}).join(' '):'<span style="color:var(--muted)">—</span>'; } },
+      { key: 'tags', title: '项目标签', width: '9%', render: function(v, row) { var tl=row.tags_list||[]; return (tl.length&&tl[0]!=='')?tl.slice(0,3).map(function(t){return '<span class="tag-badge tag-'+(t.length%5)+'">#'+escHtml(t)+'</span>';}).join(' '):'<span style="font-size:11.5px;color:var(--muted)">无</span>'; } }
+    ],
+    resizable: false,
+    clickable: true
+  });
+  // Delegate row clicks to filterAlertsByProject
+  _dashDt._tbodyEl.addEventListener('click', function(e) {
+    var tr = e.target.closest('tr[data-row-id]');
+    if (!tr) return;
+    var rowId = tr.getAttribute('data-row-id');
+    var row = _dashDt._data.find(function(r) { return String(r.id) === rowId; });
+    if (row) filterAlertsByProject(row.id, escHtml((row.code||'') + ' ' + (row.name||'')).replace(/'/g, "\\'"));
+  });
+}
+
 async function loadProjectTable() {
   var params = dashFilter.buildParams();
-  var tbody = document.getElementById('proj-tbody');
-  tbody.innerHTML = '<tr><td colspan="12"><div class="loading-spinner">加载中...</div></td></tr>';
+  _initDashDt();
+  _dashDt.setData([{code:'',name:'加载中...',customer_name:'',type:'',current_stage:'',end:'',status:'',progress:0,risk_level:'normal',linked_projects:[],tags_list:[],id:0}]);
 
   try {
     var query = Object.keys(params).map(function(k) {
@@ -321,56 +354,17 @@ async function loadProjectTable() {
     }).join('&');
     var data = await API.get('/dashboard/projects?' + query);
     var list = data.items || [];
-
-    // Filter by favorites (client-side), skip when searching globally
     if (dashFilter.type === 'fav' && !dashFilter.search) {
       list = list.filter(function(p) { return isFav('project', p.id); });
     }
-
-    if (!list.length) {
-      tbody.innerHTML = '<tr><td colspan="12"><div class="empty-state">未找到匹配项目</div></td></tr>';
-      return;
-    }
-
-    tbody.innerHTML = list.map(function(p) {
-      var projCode = p.code || '';
-      var coreName = p.name || '';
-      // Tags
-      var tagsList = p.tags_list || [];
-      var tagsHtml = '';
-      if (tagsList.length > 0 && tagsList[0] !== '') {
-        tagsHtml = tagsList.slice(0, 3).map(function(t) {
-          return '<span class="tag-badge tag-' + (t.length % 5) + '">#' + escHtml(t) + '</span>';
-        }).join(' ');
-      } else {
-        tagsHtml = '<span style="font-size:11.5px;color:var(--muted)">无</span>';
-      }
-      var rowClick = 'onclick="filterAlertsByProject(\'' + p.id + '\', \'' + escHtml(projCode + ' ' + coreName).replace(/'/g, "\\'") + '\')"';
-      var projIconHtml = projCode ? projCodeTag(projCode, 'event.stopPropagation();openProject(\'' + escHtml(p.code || String(p.id)).replace(/'/g, "\\'") + '\')', p.name) : projCodeTag('RD');
-      var riskLevel = p.risk_level || 'normal';
-      var riskLabel = { normal: '正常', low: '较低', medium: '中等', high: '高', overdue: '已超期', incomplete: '资料不全' }[riskLevel] || '正常';
-      var riskColor = { normal: 'var(--success)', low: 'var(--muted)', medium: 'var(--warn)', high: 'var(--danger)', overdue: 'var(--danger)', incomplete: 'var(--warn)' }[riskLevel] || 'var(--muted)';
-      var riskBg = { normal: 'var(--success-lt)', low: 'var(--bg)', medium: 'var(--warn-lt)', high: 'var(--danger-lt)', overdue: 'var(--danger-lt)', incomplete: 'var(--warn-lt)' }[riskLevel] || 'var(--bg)';
-
-      return '<tr id="proj-row-' + p.id + '" ' + rowClick + '>' +
-        '<td style="width:28px;text-align:center;padding-center:0">' + favStar('project', p.id, {stopPropagation: true}) + '</td>' +
-        '<td>' + projIconHtml + '</td>' +
-        '<td><div class="proj-name">' + escHtml(coreName) + '</div></td>' +
-        '<td>' + renderCustomerBadge(p.customer_name) + '</td>' +
-        '<td>' + renderTypeBadge(p.type) + '</td>' +
-        '<td style="font-size:13px">' + escHtml(p.current_stage || '—') + '</td>' +
-        '<td style="font-size:12.5px;color:' + (p.end ? 'var(--muted)' : 'var(--warn)') + '">' + (p.end ? formatDate(p.end) : '长期') + '</td>' +
-        '<td>' + renderPill(p.status) + '</td>' +
-        '<td style="text-align:center">' + renderProgressCircle(parseFloat(p.progress) || 0, 32, { label: '' }) + '</td>' +
-        '<td><span class="risk-tag" style="--risk-color:' + riskColor + ';background:' + riskBg + ';font-size:11px">' + riskLabel + '</span></td>' +
-        '<td style="font-size:11px">' + (p.linked_projects && p.linked_projects.length
-          ? p.linked_projects.map(function(lp) { return '<span class="proj-code-btn" style="font-size:10px" onclick="event.stopPropagation();openProject(\'' + escHtml(lp.code || String(lp.id)) + '\')" title="' + escHtml(lp.name || '') + '">' + escHtml(lp.code || lp.name) + '</span>'; }).join(' ')
-          : '<span style="color:var(--muted)">—</span>') + '</td>' +
-        '<td>' + tagsHtml + '</td>' +
-      '</tr>';
-    }).join('');
+    // Add fav marker
+    list.forEach(function(p) { p.fav = isFav('project', p.id); });
+    // Set category for left-border CSS
+    _dashDt._tableEl.setAttribute('data-category', dashFilter.type === 'high_risk' ? 'high_risk' : (dashFilter.type === 'completed' ? 'completed' : 'active'));
+    _dashDt.setData(list);
   } catch(e) {
-    tbody.innerHTML = '<tr><td colspan="12"><div class="error-state">加载失败: ' + escHtml(e.message) + '<br><button onclick="loadProjectTable()">重试</button></div></td></tr>';
+    _dashDt.setData([]);
+    showToast('加载失败: ' + e.message, 'error');
   }
 }
 
@@ -380,11 +374,10 @@ async function loadProjectTable() {
 var _alertProjectFilter = null;
 
 async function _resizeProjTable() {
-  var wrap = document.getElementById('proj-table-wrap');
-  if (!wrap) return;
-  var top = wrap.getBoundingClientRect().top;
+  if (!_dashDt || !_dashDt._scrollEl) return;
+  var top = _dashDt._scrollEl.getBoundingClientRect().top;
   var avail = window.innerHeight - top - 32;
-  wrap.style.maxHeight = Math.max(200, avail) + 'px';
+  _dashDt._scrollEl.style.maxHeight = Math.max(200, avail) + 'px';
 }
 
 function toggleAlertSection() {

@@ -29,6 +29,7 @@ function initBugs() {
 
 function switchBugView(mode) {
   _bugKanbanMode = (mode === 'kanban');
+  if (_bugKanbanMode) _bugDt = null;
   document.getElementById('bug-view-list').style.background = mode==='list' ? 'var(--accent)' : '';
   document.getElementById('bug-view-list').style.color = mode==='list' ? '#fff' : '';
   document.getElementById('bug-view-kanban').style.background = mode==='kanban' ? 'var(--accent)' : '';
@@ -88,28 +89,31 @@ async function loadBugs() {
   }
 }
 
+var _bugDt = null;
+
 function _renderBugTable(container, bugs) {
-  if (!bugs.length) { container.innerHTML = '<div class="empty-state">暂无Bug</div>'; return; }
-  var labels = {open:'待确认',confirmed:'已确认',in_progress:'处理中',gitlab_submitted:'GitLab已提交',resolved:'已解决',closed:'已关闭'};
+  if (!bugs.length) { container.innerHTML = '<div class="empty-state">暂无Bug</div>'; _bugDt = null; return; }
   var sevs = {1:'致命',2:'严重',3:'一般',4:'建议'};
-  var html = '<div class="table-scroll"><table class="proj-table clickable"><thead><tr>' +
-    '<th>编号</th><th>标题</th><th>产品</th><th>项目</th><th>组件</th><th>严重</th><th>优先级</th><th>状态</th><th>负责人</th><th>操作</th></tr></thead><tbody>';
-  bugs.forEach(function(b) {
-    html += '<tr onclick="openBugDetail('+b.id+')">' +
-      '<td style="font-family:var(--mono);font-size:11px">#' + b.id + '</td>' +
-      '<td style="text-align:left;font-weight:530">' + escHtml(b.title) + '</td>' +
-      '<td style="font-size:12px">' + escHtml(b.product_name||'-') + '</td>' +
-      '<td style="font-size:12px">' + escHtml(b.project_name||'-') + '</td>' +
-      '<td style="font-size:11px">' + escHtml(b.component_name||'-') + '</td>' +
-      '<td>' + _renderSev(sevs[b.severity]||'一般', b.severity) + '</td>' +
-      '<td>' + _renderPriority(b.priority) + '</td>' +
-      '<td>' + renderPill(b.status||'open') + '</td>' +
-      '<td style="font-size:12px">' + escHtml(b.assignee_name||'-') + '</td>' +
-      '<td onclick="event.stopPropagation()">' + iconEdit('openBugDialog('+b.id+')','编辑') + iconDelete('deleteBugById('+b.id+')','删除') + '</td>' +
-    '</tr>';
-  });
-  html += '</tbody></table></div>';
-  container.innerHTML = html;
+  if (!_bugDt) {
+    container.innerHTML = '<div id="bug-table"></div>';
+    _bugDt = new DataTable({
+      container: document.getElementById('bug-table'),
+      columns: [
+        { key: 'id', title: '编号', render: function(v) { return '<span style="font-family:var(--mono);font-size:11px">#' + v + '</span>'; } },
+        { key: 'title', title: '标题', align: 'left', render: function(v) { return '<span style="font-weight:530">'+escHtml(v||'')+'</span>'; } },
+        { key: 'product_name', title: '产品', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'-')+'</span>'; } },
+        { key: 'project_name', title: '项目', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'-')+'</span>'; } },
+        { key: 'component_name', title: '组件', render: function(v) { return '<span style="font-size:11px">'+escHtml(v||'-')+'</span>'; } },
+        { key: 'severity', title: '严重', render: function(v) { return _renderSev(sevs[v]||'一般', v); } },
+        { key: 'priority', title: '优先级', render: function(v) { return _renderPriority(v); } },
+        { key: 'status', title: '状态', render: function(v) { return renderPill(v||'open'); } },
+        { key: 'assignee_name', title: '负责人', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'-')+'</span>'; } },
+        { key: 'actions', title: '操作', render: function(v, row) { return '<span onclick="event.stopPropagation()">'+iconEdit('openBugDialog('+row.id+')','编辑')+iconDelete('deleteBugById('+row.id+')','删除')+'</span>'; } }
+      ],
+      resizable: false
+    });
+  }
+  _bugDt.setData(bugs);
 }
 
 function _renderKanban(container, bugs) {
@@ -215,7 +219,7 @@ async function openBugDetail(bugId) {
   // Load worklogs + analyses
   API.get('/bugs/'+bugId+'/worklogs').then(function(logs) {
     var el = document.getElementById('bv-worklogs');
-    if (el) el.innerHTML = _renderWorklogTable(logs||[], bugId);
+    if (el) { el.innerHTML = _renderWorklogTable(logs||[], bugId); _initBugWorklogDt(logs||[], bugId); }
   });
   _loadBugAnalyses(bugId);
 }
@@ -471,27 +475,21 @@ async function _submitBugWorklog(bugId) {
 
 function _renderWorklogTable(logs, bugId) {
   if (!logs||!logs.length) return '<div style="color:var(--muted);font-size:12px">暂无工时记录</div>';
-  var h = '<table style="font-size:12px;width:100%;table-layout:fixed;border-collapse:collapse">' +
-    '<thead><tr style="background:var(--surface2);border-bottom:2px solid var(--border)">' +
-      '<th style="width:68px;padding:5px 4px;text-align:center;white-space:nowrap">日期</th>' +
-      '<th style="width:44px;padding:5px 4px;text-align:center;white-space:nowrap">用户</th>' +
-      '<th style="width:42px;padding:5px 4px;text-align:center;white-space:nowrap">工时(h)</th>' +
-      '<th style="padding:5px 4px;text-align:center;white-space:nowrap">描述</th>' +
-      '<th style="width:34px;padding:5px 2px;white-space:nowrap"></th>' +
-    '</tr></thead><tbody>';
-  logs.forEach(function(w, i) {
-    var bg = i % 2 === 1 ? 'background:var(--surface2)' : '';
-    h += '<tr style="border-bottom:1px solid var(--border);' + bg + '">' +
-      '<td style="padding:4px;text-align:center;font-size:11px">'+(w.date||'?')+'</td>' +
-      '<td style="padding:4px;text-align:center;font-size:11px">'+escHtml(getDisplayName(w.display_name||w.username||''))+'</td>' +
-      '<td style="padding:4px;text-align:center">'+w.hours.toFixed(1)+'</td>' +
-      '<td style="padding:4px;text-align:left;white-space:normal;word-break:break-word">'+escHtml(w.description||'')+'</td>' +
-      '<td style="padding:2px;text-align:center;white-space:nowrap">' +
-        iconEdit('openBugWorklogEditDialog('+bugId+','+w.id+')') +
-        iconDelete('deleteBugWorklog('+bugId+','+w.id+')') +
-      '</td></tr>';
+  return '<div id="bug-worklog-table-'+bugId+'"></div>';
+}
+function _initBugWorklogDt(logs, bugId) {
+  new DataTable({
+    container: document.getElementById('bug-worklog-table-'+bugId),
+    columns: [
+      { key: 'date', title: '日期', width: '68px', render: function(v) { return '<span style="font-size:11px">'+(v||'?')+'</span>'; } },
+      { key: 'user', title: '用户', width: '44px', render: function(v, row) { return '<span style="font-size:11px">'+escHtml(getDisplayName(v||row.username||''))+'</span>'; } },
+      { key: 'hours', title: '工时(h)', width: '42px', render: function(v) { return (v||0).toFixed(1); } },
+      { key: 'description', title: '描述', align: 'left', render: function(v) { return '<span style="white-space:normal;word-break:break-word">'+escHtml(v||'')+'</span>'; } },
+      { key: 'actions', title: '', width: '34px', render: function(v, row) { return iconEdit('openBugWorklogEditDialog('+bugId+','+row.id+')')+iconDelete('deleteBugWorklog('+bugId+','+row.id+')'); } }
+    ],
+    data: logs,
+    resizable: false
   });
-  return h + '</tbody></table>';
 }
 
 function openBugWorklogEditDialog(bugId, wlId) {

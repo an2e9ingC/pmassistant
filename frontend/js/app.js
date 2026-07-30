@@ -1193,36 +1193,45 @@ function initNotifManage() {
   loadNotifManage();
 }
 
+var _notifDt = null;
+
 function loadNotifManage() {
   var scope = document.getElementById('notif-manage-scope');
   var scopeVal = scope ? scope.value : 'mine';
-  var tbody = document.getElementById('notif-manage-tbody');
-  if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="6"><div class="loading-spinner">加载中...</div></td></tr>';
+  var container = document.getElementById('notif-manage-table');
+  if (!container) return;
+
+  if (!_notifDt) {
+    _notifDt = new DataTable({
+      container: container,
+      columns: [
+        { key: 'level', title: '级别', width: '60px', render: function(v) {
+          var labels = { general: '一般', important: '重要', severe: '严重' };
+          var colors = { general: '#3b82f6', important: '#e6a817', severe: '#e53e3e' };
+          return '<span style="display:inline-block;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:600;color:#fff;background:' + (colors[v]||'#3b82f6') + '">' + escHtml(labels[v]||v) + '</span>';
+        }},
+        { key: 'content', title: '内容', align: 'left' },
+        { key: 'created_by', title: '发布者', width: '100px', render: function(v) { return '<span style="font-family:var(--mono);font-size:12px">@' + escHtml(v) + '</span>'; } },
+        { key: 'is_active', title: '状态', width: '60px', render: function(v, row) { return toggleSwitch(v, 'toggleNotifStatus(' + row.id + ')', {id: 'notif-tgl-' + row.id}); } },
+        { key: 'created_at', title: '发布时间', width: '130px', render: function(v) { return '<span style="color:var(--muted);font-size:12px">' + escHtml(fmtISODateTime(v) || '—') + '</span>'; } },
+        { key: 'actions', title: '操作', width: '60px', render: function(v, row) { return '<span style="white-space:nowrap">' + iconEdit('editNotifDialog(' + row.id + ',\'' + escJs(row.content) + '\')') + iconDelete('deleteNotif(' + row.id + ')') + '</span>'; } }
+      ],
+      maxHeight: 'calc(100vh - 260px)',
+      resizable: false
+    });
+  }
+
+  _notifDt.setData([{ content: '加载中...', level: 'general', created_by: '', is_active: false, created_at: '', id: 0, actions: '' }]);
 
   API.get('/notifications/manage?scope=' + scopeVal).then(function(data) {
     if (!data || data.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">暂无通知</div></td></tr>';
+      _notifDt.setData([]);
       return;
     }
-    var levelLabels = { general: '一般', important: '重要', severe: '严重' };
-    var levelColors = { general: '#3b82f6', important: '#e6a817', severe: '#e53e3e' };
-    tbody.innerHTML = data.map(function(n) {
-      var color = levelColors[n.level] || '#3b82f6';
-      return '<tr>' +
-        '<td><span style="display:inline-block;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:600;color:#fff;background:' + color + '">' + escHtml(levelLabels[n.level] || n.level) + '</span></td>' +
-        '<td style="font-size:13px">' + escHtml(n.content) + '</td>' +
-        '<td style="font-size:12px;font-family:var(--mono)">@' + escHtml(n.created_by) + '</td>' +
-        '<td>' + toggleSwitch(n.is_active, 'toggleNotifStatus(' + n.id + ')', {id: 'notif-tgl-' + n.id}) + '</td>' +
-        '<td style="font-size:12px;color:var(--muted)">' + escHtml(fmtISODateTime(n.created_at) || '—') + '</td>' +
-        '<td style="white-space:nowrap">' +
-          iconEdit('editNotifDialog(' + n.id + ',\'' + escJs(n.content) + '\')') +
-          iconDelete('deleteNotif(' + n.id + ')') +
-        '</td>' +
-      '</tr>';
-    }).join('');
+    _notifDt.setData(data);
   }).catch(function(e) {
-    tbody.innerHTML = '<tr><td colspan="6"><div class="error-state">加载失败: ' + escHtml(e.message) + '</div></td></tr>';
+    _notifDt.setData([]);
+    showToast('加载失败: ' + e.message, 'error');
   });
 }
 
@@ -1579,7 +1588,7 @@ async function initUserCenter(viewUserId) {
 
   // Container: profile bar at top + tab-switched content below
   container.innerHTML =
-    '<div id="uc-inner" style="display:flex;flex-direction:column;height:calc(100vh - 54px - 48px);overflow:hidden">' +
+    '<div id="uc-inner" style="display:flex;flex-direction:column;height:100%;overflow:hidden">' +
     // Profile bar — inline, not floating; reserve space for right panel
     '<div id="uc-profile-bar-wrap" style="margin-right:358px">' + profileBarHtml + '</div>' +
     // Expand panel
@@ -1591,16 +1600,16 @@ async function initUserCenter(viewUserId) {
         // Tasks section (default visible)
         '<div id="uc-tasks-section" style="flex:1;display:flex;flex-direction:column;min-height:0">' +
           '<div class="task-filter-bar" id="uc-tasks-filter-bar"></div>' +
-          '<div class="table-scroll" id="uc-tasks-table-wrap"><table class="proj-table clickable"><thead id="uc-tasks-table-head"></thead><tbody id="uc-tasks-table-tbody"></tbody></table></div>' +
+          '<div id="uc-tasks-table-wrap"></div>' +
         '</div>' +
         // Bugs section (hidden by default)
         '<div id="uc-bugs-section" style="flex:1;flex-direction:column;min-height:0;display:none">' +
           '<div class="task-filter-bar" id="uc-bugs-filter-bar"></div>' +
-          '<div class="table-scroll" id="uc-bugs-table-wrap"><table class="proj-table clickable"><thead id="uc-bugs-table-head"></thead><tbody id="uc-bugs-table-tbody"></tbody></table></div>' +
+          '<div id="uc-bugs-table-wrap"></div>' +
         '</div>' +
         // Approvals section (hidden by default)
         (window._approvalEnabled ? '<div id="uc-approvals-section" style="flex:1;flex-direction:column;min-height:0;display:none">' +
-          '<div class="table-scroll" id="uc-approvals-table-wrap"><table class="proj-table clickable"><thead id="uc-approvals-table-head"></thead><tbody id="uc-approvals-table-tbody"></tbody></table></div>' +
+          '<div id="uc-approvals-table-wrap"></div>' +
         '</div>' : '') +
       '</div>' +
     '</div>' +
@@ -1620,16 +1629,18 @@ async function initUserCenter(viewUserId) {
   // Dynamic table scroll heights (like dashboard's _resizeProjTable)
   window._ucUpdateLayout = function() {
     var bottomH = typeof _getBottomBarHeight === 'function' ? _getBottomBarHeight() : 0;
-    // Adjust the inner flex container height to leave room for bottom bars
     var inner = document.getElementById('uc-inner');
-    if (inner) { inner.style.height = 'calc(100vh - 54px - 48px - ' + bottomH + 'px)'; }
-    // Adjust table scroll heights
-    var tw = document.getElementById('uc-tasks-table-wrap');
-    if (tw) { var tr = tw.getBoundingClientRect(); tw.style.maxHeight = Math.max(200, window.innerHeight - tr.top - 16 - bottomH) + 'px'; }
-    var bw = document.getElementById('uc-bugs-table-wrap');
-    if (bw) { var br = bw.getBoundingClientRect(); bw.style.maxHeight = Math.max(200, window.innerHeight - br.top - 16 - bottomH) + 'px'; }
-    var aw = document.getElementById('uc-approvals-table-wrap');
-    if (aw) { var ar = aw.getBoundingClientRect(); aw.style.maxHeight = Math.max(200, window.innerHeight - ar.top - 16 - bottomH) + 'px'; }
+    if (inner) { inner.style.height = 'calc(100% - ' + bottomH + 'px)'; }
+    // Defer maxHeight until after browser re-layout
+    requestAnimationFrame(function() {
+      var bottomH = typeof _getBottomBarHeight === 'function' ? _getBottomBarHeight() : 0;
+      var tw = document.querySelector('#uc-tasks-table-wrap .dt-scroll');
+      if (tw) { var tr = tw.getBoundingClientRect(); tw.style.maxHeight = Math.max(200, window.innerHeight - tr.top - 32 - bottomH) + 'px'; }
+      var bw = document.querySelector('#uc-bugs-table-wrap .dt-scroll');
+      if (bw) { var br = bw.getBoundingClientRect(); bw.style.maxHeight = Math.max(200, window.innerHeight - br.top - 32 - bottomH) + 'px'; }
+      var aw = document.querySelector('#uc-approvals-table-wrap .dt-scroll');
+      if (aw) { var ar = aw.getBoundingClientRect(); aw.style.maxHeight = Math.max(200, window.innerHeight - ar.top - 32 - bottomH) + 'px'; }
+    });
   }
   setTimeout(window._ucUpdateLayout, 80);
   // Re-apply on window resize
@@ -1741,32 +1752,34 @@ function _ucLoadApprovals() {
 var _ucApproveIcon = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3,8 6,11 13,4"/></svg>';
 var _ucRejectIcon = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>';
 
+var _ucApprovalsDt = null;
+
 function _renderUcApprovalTable() {
-  var tbody = document.getElementById('uc-approvals-table-tbody');
-  if (!tbody) return;
-  // Render table head
-  var head = document.getElementById('uc-approvals-table-head');
-  if (head) head.innerHTML = '<tr><th style="width:6%">任务编号</th><th style="width:8%">项目编号</th><th>阶段</th><th>任务标题</th><th style="width:70px">状态</th><th style="width:6%">进度</th><th style="width:8%">责任人</th><th style="width:7%">截止</th><th style="width:1%;white-space:nowrap">操作</th></tr>';
-  if (!_ucApprovals || !_ucApprovals.length) {
-    tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state">暂无需要审批的任务</div></td></tr>';
-    return;
+  var container = document.getElementById('uc-approvals-table-wrap');
+  if (!container) return;
+  if (!_ucApprovals || !_ucApprovals.length) { container.innerHTML = '<div class="empty-state">暂无需要审批的任务</div>'; _ucApprovalsDt = null; return; }
+  if (!_ucApprovalsDt) {
+    container.innerHTML = '<div id="uc-approvals-dt"></div>';
+    _ucApprovalsDt = new DataTable({
+      container: document.getElementById('uc-approvals-dt'),
+      columns: [
+        { key: 'id', title: '任务编号', width: '6%', render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted)">#'+v+'</span>'; } },
+        { key: 'project_code', title: '项目编号', width: '8%', render: function(v, row) { return v ? projCodeTag(v, 'event.stopPropagation();openProject(\''+escHtml(v).replace(/'/g,"\\'")+'\')', row.project_name) : '-'; } },
+        { key: 'stage_name', title: '阶段', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'')+'</span>'; } },
+        { key: 'title', title: '任务标题', render: function(v) { return '<span style="font-weight:530">'+escHtml(v||'')+'</span>'; } },
+        { key: 'status', title: '状态', width: '70px', render: function(v, row) { return '<span style="cursor:pointer" onclick="event.stopPropagation();openReviewerDialog('+row.id+')" title="'+(row.reviewer_name?'审批人: '+escHtml(row.reviewer_name)+' — 点击修改':'点击设置审批人')+'">'+renderPill(v||'review')+'</span>'; } },
+        { key: 'progress', title: '进度', width: '6%', render: function(v) { return renderProgressCircle(v||0, 30, {label:''}); } },
+        { key: 'assignee_name', title: '责任人', width: '8%', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'')+'</span>'; } },
+        { key: 'due_date', title: '截止', width: '7%', render: function(v, row) { var overdue = v && row.status!=='done' && row.status!=='closed' && v<fmtLocalDate(); return '<span style="font-size:12px;color:'+(overdue?'var(--danger)':'')+'">'+(v||'-')+'</span>'; } },
+        { key: 'actions', title: '操作', render: function(v, row) { return '<span style="white-space:nowrap" onclick="event.stopPropagation()"><button class="btn-icon" onclick="_ucApproveTask('+row.id+',\''+escJs(row.title)+'\')" title="批准" style="color:var(--success)">'+_ucApproveIcon+'</button><button class="btn-icon" onclick="_ucRejectTask('+row.id+',\''+escJs(row.title)+'\')" title="驳回" style="color:var(--danger);margin-left:2px">'+_ucRejectIcon+'</button></span>'; } }
+      ],
+      data: _ucApprovals,
+      resizable: false,
+      onRowClick: function(row) { _ucOpenTask(row.id); }
+    });
+  } else {
+    _ucApprovalsDt.setData(_ucApprovals);
   }
-  tbody.innerHTML = _ucApprovals.map(function(t) {
-    var overdue = t.due_date && t.status !== 'done' && t.status !== 'closed' && t.due_date < fmtLocalDate();
-    return '<tr style="cursor:pointer" onclick="_ucOpenTask(' + t.id + ')">' +
-      '<td style="text-align:center;font-size:11px;font-family:var(--mono);color:var(--muted)">#' + t.id + '</td>' +
-      '<td style="text-align:center">' + (t.project_code ? projCodeTag(t.project_code, 'event.stopPropagation();openProject(\'' + escHtml(t.project_code).replace(/'/g, "\\'") + '\')', t.project_name) : '-') + '</td>' +
-      '<td style="font-size:12px">' + escHtml(t.stage_name || '') + '</td>' +
-      '<td style="font-weight:530">' + escHtml(t.title) + '</td>' +
-      '<td style="text-align:center;cursor:pointer" onclick="event.stopPropagation();openReviewerDialog(' + t.id + ')" title="' + (t.reviewer_name ? '审批人: ' + escHtml(t.reviewer_name) + ' — 点击修改' : '点击设置审批人') + '">' + renderPill(t.status || 'review') + '</td>' +
-      '<td style="text-align:center">' + renderProgressCircle(t.progress || 0, 30, {label: ''}) + '</td>' +
-      '<td style="font-size:12px">' + escHtml(t.assignee_name || '') + '</td>' +
-      '<td style="text-align:center;font-size:12px;color:' + (overdue ? 'var(--danger)' : '') + '">' + (t.due_date || '-') + '</td>' +
-      '<td style="text-align:center;white-space:nowrap" onclick="event.stopPropagation()">' +
-        '<button class="btn-icon" onclick="_ucApproveTask(' + t.id + ',\'' + escJs(t.title) + '\')" title="批准" style="color:var(--success)">' + _ucApproveIcon + '</button>' +
-        '<button class="btn-icon" onclick="_ucRejectTask(' + t.id + ',\'' + escJs(t.title) + '\')" title="驳回" style="color:var(--danger);margin-left:2px">' + _ucRejectIcon + '</button>' +
-      '</td></tr>';
-  }).join('');
 }
 
 function _ucApproveTask(taskId, taskTitle) {
@@ -1912,25 +1925,18 @@ function _ucOpenTask(taskId) {
   else if (typeof loadViewScript === 'function') { loadViewScript('/js/tasks.js?v=' + APP_VERSION, function() { openTaskDetail(taskId); }); }
 }
 
-function _renderUcTableHead() {
-  var prioInd = _ucSortCol === 'priority'
-    ? (_ucSortDir === 'asc' ? '▲' : '▼')
-    : '<span style="color:var(--muted)">⇅</span>';
-  var dueInd = _ucSortCol === 'due_date'
-    ? (_ucSortDir === 'asc' ? '▲' : '▼')
-    : '<span style="color:var(--muted)">⇅</span>';
-  document.getElementById('uc-tasks-table-head').innerHTML = '<tr><th style="width:22px"><input type="checkbox" id="task-select-all" onchange="_toggleSelectAllTasks(this)" title="全选/取消全选"></th><th style="width:8%">项目编号</th><th style="width:100px">产品编号</th><th>阶段</th><th style="width:6%">任务编号</th><th>任务标题</th><th style="width:70px">状态</th><th style="width:6%;cursor:pointer;user-select:none" onclick="_ucSortBy(\'priority\')">优先级 ' + prioInd + '</th><th style="width:6%">进度</th><th style="width:7%;cursor:pointer;user-select:none" onclick="_ucSortBy(\'due_date\')">截止 ' + dueInd + '</th><th style="width:1%;white-space:nowrap">操作</th></tr>';
-}
+function _renderUcTableHead() {}  // DataTable handles header now
 
 function _ucSortBy(col) {
-  if (_ucSortCol === col) {
-    _ucSortDir = _ucSortDir === 'asc' ? 'desc' : _ucSortDir === 'desc' ? '' : 'asc';
-  } else {
-    _ucSortCol = col; _ucSortDir = 'asc';
-  }
+  if (_ucSortCol === col) { _ucSortDir = _ucSortDir === 'asc' ? 'desc' : _ucSortDir === 'desc' ? '' : 'asc'; }
+  else { _ucSortCol = col; _ucSortDir = 'asc'; }
   if (!_ucSortDir) { _ucSortCol = ''; _ucSortDir = 'asc'; }
-  _renderUcTableHead();
-  if (_ucSortCol) _renderUcTaskTable();
+  // Update sort indicators
+  var prioEl = document.getElementById('uc-sort-prio');
+  var dueEl = document.getElementById('uc-sort-due');
+  if (prioEl) { prioEl.textContent = _ucSortCol==='priority' ? (_ucSortDir==='asc'?'▲':'▼') : '⇅'; prioEl.style.color = _ucSortCol==='priority' ? '' : 'var(--muted)'; }
+  if (dueEl) { dueEl.textContent = _ucSortCol==='due_date' ? (_ucSortDir==='asc'?'▲':'▼') : '⇅'; dueEl.style.color = _ucSortCol==='due_date' ? '' : 'var(--muted)'; }
+  _renderUcTaskTable();
 }
 
 function _ucTaskRow(t, opts) {
@@ -1965,14 +1971,14 @@ function _ucTaskRow(t, opts) {
 
   var trClass = opts.projFirst ? ' class="uc-proj-first"' : '';
   return '<tr style="cursor:pointer" onclick="_ucOpenTask('+t.id+')"' + trClass + '>' +
-    // checkbox
-    '<td style="text-align:center;width:22px" onclick="event.stopPropagation();if(event.target!==this.firstElementChild){var cb=this.firstElementChild;if(cb){cb.checked=!cb.checked;cb.onchange()}}"><input type="checkbox" value="' + t.id + '" onchange="_onTaskCheckbox(this)" class="task-checkbox"></td>' +
     // project code (rowspan)
     projCell +
     // product code (rowspan)
     prodCell +
     // stage (rowspan)
     stageCell +
+    // checkbox
+    '<td style="text-align:center;width:22px" onclick="event.stopPropagation();if(event.target!==this.firstElementChild){var cb=this.firstElementChild;if(cb){cb.checked=!cb.checked;cb.onchange()}}"><input type="checkbox" value="' + t.id + '" onchange="_onTaskCheckbox(this)" class="task-checkbox"></td>' +
     // task id
     '<td style="text-align:center;font-size:11px;font-family:var(--mono);color:var(--muted)">#' + t.id + '</td>' +
     // title
@@ -1993,6 +1999,8 @@ function _ucTaskRow(t, opts) {
   '</tr>';
 }
 
+var _ucTasksDt = null;
+
 function _renderUcTaskTable() {
   var filtered = _ucTasks.filter(function(t) {
     if (!_ucMatchFilter(t.status || 'todo')) return false;
@@ -2000,104 +2008,79 @@ function _renderUcTaskTable() {
     if (_ucFilterProj && t.project_name !== _ucFilterProj) return false;
     return true;
   });
-  // Sort
   if (_ucSortCol) {
     var prioOrder = {critical:4, high:3, medium:2, low:1};
     var dir = _ucSortDir === 'asc' ? 1 : -1;
     filtered.sort(function(a, b) {
-      if (_ucSortCol === 'priority') {
-        return ((prioOrder[a.priority] || 0) - (prioOrder[b.priority] || 0)) * dir;
-      } else if (_ucSortCol === 'due_date') {
-        var da = a.due_date || '9999-99-99', db = b.due_date || '9999-99-99';
-        return da.localeCompare(db) * dir;
-      }
+      if (_ucSortCol === 'priority') return ((prioOrder[a.priority]||0) - (prioOrder[b.priority]||0)) * dir;
+      else if (_ucSortCol === 'due_date') { var da = a.due_date||'9999-99-99', db = b.due_date||'9999-99-99'; return da.localeCompare(db) * dir; }
       return 0;
     });
   }
 
-  var tbody = document.getElementById('uc-tasks-table-tbody');
-  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state">暂无匹配任务</div></td></tr>'; return; }
-
-  // Group tasks: project → product → stage → tasks
-  var projGroups = [];
+  // Flatten: sort projects, then products, then stages, then tasks
   var projMap = {};
   filtered.forEach(function(t) {
-    var projKey = t.project_code || t.project_name || '__unknown__';
-    var prodKey = t.product_code || t.product_name || '__unknown__';
-    var stageKey = t.stage_name || '未分类';
-    if (!projMap[projKey]) {
-      projMap[projKey] = {
-        code: t.project_code || '',
-        name: t.project_name || '未知项目',
-        prodMap: {},
-        prods: []
-      };
-      projGroups.push(projMap[projKey]);
-    }
-    var pg = projMap[projKey];
-    if (!pg.prodMap[prodKey]) {
-      pg.prodMap[prodKey] = {
-        code: t.product_code || '',
-        name: t.product_name || '',
-        stageMap: {},
-        stages: []
-      };
-      pg.prods.push(pg.prodMap[prodKey]);
-    }
-    var pd = pg.prodMap[prodKey];
-    if (!pd.stageMap[stageKey]) {
-      pd.stageMap[stageKey] = { name: stageKey, tasks: [] };
-      pd.stages.push(pd.stageMap[stageKey]);
-    }
-    pd.stageMap[stageKey].tasks.push(t);
+    var pk = t.project_code || t.project_name || '__unknown__';
+    var dk = t.product_code || t.product_name || '__unknown__';
+    var sk = t.stage_name || '未分类';
+    if (!projMap[pk]) projMap[pk] = { code: t.project_code||'', name: t.project_name||'未知项目', prodMap: {} };
+    if (!projMap[pk].prodMap[dk]) projMap[pk].prodMap[dk] = { code: t.product_code||'', name: t.product_name||'', stageMap: {} };
+    if (!projMap[pk].prodMap[dk].stageMap[sk]) projMap[pk].prodMap[dk].stageMap[sk] = [];
+    projMap[pk].prodMap[dk].stageMap[sk].push(t);
   });
-  // Sort groups
-  projGroups.sort(function(a, b) {
-    if (a.code === '' && a.name === '未知项目') return 1;
-    if (b.code === '' && b.name === '未知项目') return -1;
-    return a.name.localeCompare(b.name);
+  var projKeys = Object.keys(projMap).sort(function(a,b) {
+    if (!projMap[a].code) return 1; if (!projMap[b].code) return -1;
+    return projMap[a].name.localeCompare(projMap[b].name);
   });
 
-  // Build HTML with rowspan for project code, product code, and stage
-  var rowsHtml = '';
-  projGroups.forEach(function(pg) {
-    var projRowspan = pg.prods.reduce(function(s, pd) { return s + pd.stages.reduce(function(ss, st) { return ss + st.tasks.length; }, 0); }, 0);
-    var isFirstProjTask = true;
-    pg.prods.forEach(function(pd) {
-      var prodRowspan = pd.stages.reduce(function(s, st) { return s + st.tasks.length; }, 0);
-      var isFirstProdTask = true;
-      pd.stages.forEach(function(st) {
-        var stageRowspan = st.tasks.length;
-        var isFirstStageTask = true;
-        st.tasks.forEach(function(t) {
-          var opts = {};
-          if (isFirstProjTask) {
-            opts.projRowspan = projRowspan;
-            opts.projFirst = true;
-            isFirstProjTask = false;
-          } else {
-            opts.skipProj = true;
-          }
-          if (isFirstProdTask) {
-            opts.prodRowspan = prodRowspan;
-            isFirstProdTask = false;
-          } else {
-            opts.skipProd = true;
-          }
-          if (isFirstStageTask) {
-            opts.stageRowspan = stageRowspan;
-            isFirstStageTask = false;
-          } else {
-            opts.skipStage = true;
-          }
-          rowsHtml += _ucTaskRow(t, opts);
+  var flatRows = [];
+  projKeys.forEach(function(pk) {
+    var pg = projMap[pk];
+    Object.keys(pg.prodMap).forEach(function(dk) {
+      var pd = pg.prodMap[dk];
+      Object.keys(pd.stageMap).forEach(function(sk) {
+        pd.stageMap[sk].forEach(function(t) {
+          t._projCode = pg.code || pk; t._prodName = pd.name || dk; t._stageName = sk;
+          flatRows.push(t);
         });
       });
     });
   });
-  tbody.innerHTML = rowsHtml;
 
   _selectedTasks = new Set();
+  var wrap = document.getElementById('uc-tasks-table-wrap');
+  if (!flatRows.length) { wrap.innerHTML = '<div class="empty-state">暂无匹配任务</div>'; _ucTasksDt = null; return; }
+
+  if (!_ucTasksDt) {
+    wrap.innerHTML = '<div id="uc-tasks-dt"></div>';
+    _ucTasksDt = new DataTable({
+      container: document.getElementById('uc-tasks-dt'),
+      columns: [
+        { key: '_projCode', title: '项目编号', width: '8%', rowspan: true, render: function(v, row) { return v ? projCodeTag(row.project_code||v, 'event.stopPropagation();openProject(\''+escHtml(row.project_code||v).replace(/'/g,"\\'")+'\')', row.project_name) : '-'; } },
+        { key: '_prodName', title: '产品编号', width: '100px', rowspan: true, render: function(v, row) { return row.product_code ? '<span class="proj-code-btn" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="event.stopPropagation();openProductDetail(\''+escHtml(row.product_code)+'\')" title="'+escHtml(row.product_code)+' '+escHtml(row.product_name||'')+'">'+escHtml(row.product_code)+'</span>' : '<span style="font-size:12px;color:var(--muted)">—</span>'; } },
+        { key: '_stageName', title: '阶段', rowspan: true, render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'')+'</span>'; } },
+        { key: 'id', title: '任务编号', width: '6%', render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted)">#'+v+'</span>'; } },
+        { key: 'title', title: '任务标题', align: 'left', render: function(v) { return '<span style="font-weight:530">'+escHtml(v||'')+'</span>'; } },
+        { key: 'status', title: '状态', width: '70px', render: function(v, row) { var h = renderPill(v||'todo'); if (window._approvalEnabled) h = '<span style="cursor:pointer" onclick="event.stopPropagation();openReviewerDialog('+row.id+')" title="'+(row.reviewer_name?'审批人: '+escHtml(row.reviewer_name)+' — 点击修改':'点击设置审批人')+'">'+h+'</span>'; return h; } },
+        { key: 'priority', title: '<span style="cursor:pointer" onclick="_ucSortBy(\'priority\')">优先级</span> <span id="uc-sort-prio" style="color:var(--muted);font-size:10px">⇅</span>', width: '6%', render: function(v) { return '<span class="prio-tag '+(v||'medium')+'">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[v]||v)+'</span>'; } },
+        { key: 'progress', title: '进度', width: '6%', render: function(v) { return renderProgressCircle(v||0, 36, {label:''}); } },
+        { key: 'due_date', title: '<span style="cursor:pointer" onclick="_ucSortBy(\'due_date\')">截止</span> <span id="uc-sort-due" style="color:var(--muted);font-size:10px">⇅</span>', width: '7%', render: function(v, row) { var overdue = v && row.status!=='done' && row.status!=='closed' && v<fmtLocalDate(); return '<span style="font-size:12px;color:'+(overdue?'var(--danger)':'')+'">'+(v||'-')+'</span>'; } },
+        { key: 'actions', title: '操作', render: function(v, row) { return '<span style="white-space:nowrap" onclick="event.stopPropagation()">'+iconEdit('_ucOpenTask('+row.id+')','查看/编辑')+iconDelete('_ucDeleteTask('+row.id+')','删除')+'</span>'; } }
+      ],
+      data: flatRows,
+      maxHeight: '400px',
+      resizable: false,
+      stickyHeader: true,
+      selectable: true,
+      checkboxPosition: 3,
+      onSelectChange: function(rows) { _selectedTasks = new Set(rows.map(function(r) { return r.id; })); if (typeof _ensureBatchToolbar==='function') _ensureBatchToolbar(); },
+      onRowClick: function(row) { _ucOpenTask(row.id); }
+    });
+  } else {
+    _ucTasksDt.setData(flatRows);
+  }
+
   if (typeof _ensureBatchToolbar === 'function') _ensureBatchToolbar();
   setTimeout(function() { if (typeof window._ucUpdateLayout === 'function') window._ucUpdateLayout(); }, 50);
 }
@@ -2147,8 +2130,9 @@ function _ucRenderBugFilter(bugs, uid) {
   return result;
 }
 
+var _ucBugsDt = null;
+
 async function _ucLoadBugs() {
-  document.getElementById('uc-bugs-table-head').innerHTML = '<tr><th style="width:6%">Bug编号</th><th style="width:8%">项目编号</th><th style="width:100px">产品编号</th><th>Bug标题</th><th style="width:70px">状态</th><th style="width:6%">优先级</th><th style="width:6%">进度</th><th style="width:7%">截止</th><th style="width:1%;white-space:nowrap">操作</th></tr>';
   try {
     var user = getCurrentUser();
     var viewUid = window._ucViewUserId || (user ? user.id : null);
@@ -2157,30 +2141,29 @@ async function _ucLoadBugs() {
     bugs = Array.isArray(bugs) ? bugs : (bugs && bugs.items ? bugs.items : []);
     _ucUpdateBugCount((bugs || []).filter(function(b) { return b.assignee_id === viewUid; }).length);
     var filtered = _ucRenderBugFilter(bugs, viewUid);
-    var tbody = document.getElementById('uc-bugs-table-tbody');
-    if (!filtered.length) {
-      var label = _ucBugTab === 'assignee' ? '暂无待处理的Bug' : '暂无创建的Bug';
-      tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state">' + label + '</div></td></tr>';
-      if (_ucActiveTab === 'bugs') _ucLoadBugStats();
-      return;
-    }
-    tbody.innerHTML = filtered.map(function(b) {
-      var prodTag = b.product_code ? '<span class="proj-code-btn" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="event.stopPropagation();openProductDetail(\'' + escHtml(b.product_code) + '\')" title="' + escHtml(b.product_code) + ' ' + escHtml(b.product_name || '') + '">' + escHtml(b.product_code) + '</span>' : '<span style="font-size:12px;color:var(--muted)">—</span>';
-      var projTag = b.project_code ? projCodeTag(b.project_code, 'event.stopPropagation();openProject(\'' + escHtml(b.project_code) + '\')', b.project_name) : escHtml(b.project_name || '-');
-      var progressPct = b.progress || 0;
-      return '<tr style="cursor:pointer" onclick="' + _ucEnsureBugsJs('openBugDetail('+b.id+')') + '">' +
-        '<td style="text-align:center;font-family:var(--mono);font-size:11px">#' + b.id + '</td>' +
-        '<td style="text-align:center;font-size:12px">' + projTag + '</td>' +
-        '<td style="text-align:center;font-size:12px">' + prodTag + '</td>' +
-        '<td style="text-align:left;font-weight:530;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(b.title) + '</td>' +
-        '<td style="text-align:center">' + renderPill(b.status||'open') + '</td>' +
-        '<td style="text-align:center"><span class="prio-tag '+(b.priority||'medium')+'">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[b.priority]||b.priority)+'</span></td>' +
-        '<td style="text-align:center">' + (typeof renderProgressCircle === 'function' ? renderProgressCircle(progressPct, 36, {label:''}) : progressPct+'%') + '</td>' +
-        '<td style="text-align:center;font-size:12px">' + (b.due_date||'—') + '</td>' +
-        '<td style="text-align:center;white-space:nowrap" onclick="event.stopPropagation()">' + iconEdit(_ucEnsureBugsJs('openBugDialog('+b.id+')'),'编辑') + iconDelete(_ucEnsureBugsJs('deleteBugById('+b.id+')'),'删除') + '</td>' +
-      '</tr>';
-    }).join('');
-  } catch(e) { document.getElementById('uc-bugs-table-tbody').innerHTML = '<tr><td colspan="11"><div class="error-state">加载失败</div></td></tr>'; }
+    var container = document.getElementById('uc-bugs-table-wrap');
+    if (!filtered.length) { container.innerHTML = '<div class="empty-state">' + (_ucBugTab==='assignee'?'暂无待处理的Bug':'暂无创建的Bug') + '</div>'; _ucBugsDt = null; if (_ucActiveTab==='bugs') _ucLoadBugStats(); return; }
+    if (!_ucBugsDt) {
+      container.innerHTML = '<div id="uc-bugs-dt"></div>';
+      _ucBugsDt = new DataTable({
+        container: document.getElementById('uc-bugs-dt'),
+        columns: [
+          { key: 'id', title: 'Bug编号', width: '6%', render: function(v) { return '<span style="font-family:var(--mono);font-size:11px">#'+v+'</span>'; } },
+          { key: 'project_code', title: '项目编号', width: '8%', render: function(v, row) { return v ? projCodeTag(v, 'event.stopPropagation();openProject(\''+escHtml(v)+'\')', row.project_name) : escHtml(row.project_name||'-'); } },
+          { key: 'product_code', title: '产品编号', width: '100px', render: function(v, row) { return v ? '<span class="proj-code-btn" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="event.stopPropagation();openProductDetail(\''+escHtml(v)+'\')" title="'+escHtml(v)+' '+escHtml(row.product_name||'')+'">'+escHtml(v)+'</span>' : '<span style="font-size:12px;color:var(--muted)">—</span>'; } },
+          { key: 'title', title: 'Bug标题', align: 'left', render: function(v) { return '<span style="font-weight:530">'+escHtml(v||'')+'</span>'; } },
+          { key: 'status', title: '状态', width: '70px', render: function(v) { return renderPill(v||'open'); } },
+          { key: 'priority', title: '优先级', width: '6%', render: function(v) { return '<span class="prio-tag '+(v||'medium')+'">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[v]||v)+'</span>'; } },
+          { key: 'progress', title: '进度', width: '6%', render: function(v) { return typeof renderProgressCircle==='function'?renderProgressCircle(v||0,36,{label:''}):(v||0)+'%'; } },
+          { key: 'due_date', title: '截止', width: '7%', render: function(v) { return '<span style="font-size:12px">'+(v||'—')+'</span>'; } },
+          { key: 'actions', title: '操作', render: function(v, row) { return '<span style="white-space:nowrap" onclick="event.stopPropagation()">'+iconEdit(_ucEnsureBugsJs('openBugDialog('+row.id+')'),'编辑')+iconDelete(_ucEnsureBugsJs('deleteBugById('+row.id+')'),'删除')+'</span>'; } }
+        ],
+        data: filtered,
+        resizable: false,
+        onRowClick: function(row) { _ucEnsureBugsJs('openBugDetail('+row.id+')'); eval('openBugDetail('+row.id+')'); }
+      });
+    } else { _ucBugsDt.setData(filtered); }
+  } catch(e) { document.getElementById('uc-bugs-table-wrap').innerHTML = '<div class="error-state">加载失败</div>'; _ucBugsDt = null; }
   if (_ucActiveTab === 'bugs') _ucLoadBugStats();
   setTimeout(function() { if (typeof window._ucUpdateLayout === "function") window._ucUpdateLayout(); }, 50);
 }

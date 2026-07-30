@@ -61,14 +61,6 @@ async function loadReportMonthly() {
   try {
     var data = await API.get('/reports/monthly');
     var s = data.summary || {};
-    var projRows = (data.projects || []).map(function(p) {
-      return '<tr>' +
-        '<td><span style="font-family:var(--mono);font-size:11.5px;color:var(--accent)">' + escHtml(p.code || '') + '</span> ' + escHtml(p.name || '') + '</td>' +
-        '<td>' + renderPill(p.status) + '</td>' +
-        '<td style="font-variant-numeric:tabular-nums">' + p.progress + '%</td>' +
-        '<td style="font-variant-numeric:tabular-nums">' + p.tasks_done + '/' + p.tasks_total + '</td>' +
-      '</tr>';
-    }).join('');
 
     container.innerHTML =
       '<div class="section-title" style="margin-bottom:14px">月报 ' + escHtml(data.period) + '</div>' +
@@ -79,10 +71,20 @@ async function loadReportMonthly() {
         '<div class="kpi-card"><div class="kpi-label">新增/解决Bug</div><div class="kpi-value" style="font-size:26px;color:var(--warn)">' + data.new_bugs_this_month + '<span style="font-size:16px;color:var(--muted)">/' + data.resolved_bugs_this_month + '</span></div></div>' +
         '<div class="kpi-card"><div class="kpi-label">本月交付</div><div class="kpi-value" style="font-size:26px;color:var(--success)">' + data.delivery_quantity_this_month + ' 台</div></div>' +
       '</div>' +
-      '<div class="card table-scroll" style="margin-bottom:16px">' +
-        '<table class="proj-table"><thead><tr><th>项目</th><th>状态</th><th>进度</th><th>任务(完成/总数)</th></tr></thead><tbody>' + projRows + '</tbody></table>' +
-      '</div>' +
+      '<div class="card" style="padding:0;margin-bottom:16px"><div id="rpt-monthly-table"></div></div>' +
       '<div style="font-size:11px;color:var(--muted)">生成时间: ' + data.generated_at + '</div>';
+
+    new DataTable({
+      container: document.getElementById('rpt-monthly-table'),
+      columns: [
+        { key: 'name', title: '项目', render: function(v, row) { return '<span style="font-family:var(--mono);font-size:11.5px;color:var(--accent)">' + escHtml(row.code||'') + '</span> ' + escHtml(v||''); } },
+        { key: 'status', title: '状态', render: function(v) { return renderPill(v); } },
+        { key: 'progress', title: '进度', render: function(v) { return '<span style="font-variant-numeric:tabular-nums">' + (v||0) + '%</span>'; } },
+        { key: 'tasks_info', title: '任务(完成/总数)', render: function(v, row) { return '<span style="font-variant-numeric:tabular-nums">' + (row.tasks_done||0) + '/' + (row.tasks_total||0) + '</span>'; } }
+      ],
+      data: data.projects || [],
+      resizable: false
+    });
   } catch(e) {
     container.innerHTML = '<div class="error-state">加载月报失败: ' + escHtml(e.message) + '</div>';
   }
@@ -102,16 +104,6 @@ async function loadBugStats() {
       return '<div class="kpi-card" style="padding:12px 14px"><div class="kpi-label" style="margin-bottom:4px">' + k + '</div><div class="kpi-value" style="font-size:22px">' + stats.by_severity[k] + '</div></div>';
     }).join('');
 
-    var bugRows = bugs.map(function(b) {
-      var sevColors = {1:'var(--danger)',2:'var(--warn)',3:'var(--accent)',4:'var(--muted)'};
-      return '<tr>' +
-        '<td><span style="font-size:10px;padding:1px 5px;border-radius:3px;background:' + (sevColors[b.severity] || 'var(--bg)') + '20;color:' + (sevColors[b.severity] || 'var(--fg)') + ';font-weight:600">' + escHtml(b.severity_label) + '</span></td>' +
-        '<td style="font-size:12.5px">' + escHtml(b.title) + '</td>' +
-        '<td>' + renderPill(b.status) + '</td>' +
-        '<td style="font-size:11.5px;color:var(--muted)">' + escHtml(b.assigned_to || '') + '</td>' +
-        '<td style="font-size:11.5px;font-family:var(--mono);color:var(--muted)">' + formatDate(b.opened_date) + '</td>' +
-      '</tr>';
-    }).join('');
 
     container.innerHTML =
       '<div class="section-title" style="margin-bottom:14px">Bug 统计</div>' +
@@ -122,9 +114,22 @@ async function loadBugStats() {
         '<div class="kpi-card"><div class="kpi-label">近30天新增</div><div class="kpi-value" style="font-size:26px;color:var(--warn)">' + (stats.recent_30d || 0) + '</div></div>' +
       '</div>' +
       '<div class="kpi-grid" style="grid-template-columns:repeat(' + Object.keys(stats.by_severity || {}).length + ',1fr);margin-bottom:16px">' + sevHtml + '</div>' +
-      '<div class="card table-scroll">' +
-        '<table class="proj-table"><thead><tr><th style="width:60px">严重度</th><th>标题</th><th style="width:80px">状态</th><th style="width:90px">指派</th><th style="width:100px">创建日期</th></tr></thead><tbody>' + (bugRows || '<tr><td colspan="5"><div class="empty-state">暂无Bug数据</div></td></tr>') + '</tbody></table>' +
-      '</div>';
+      '<div class="card" style="padding:0"><div id="rpt-bugs-table"></div></div>';
+
+    if (bugs.length) {
+      new DataTable({
+        container: document.getElementById('rpt-bugs-table'),
+        columns: [
+          { key: 'severity_label', title: '严重度', width: '60px', render: function(v, row) { var sc = {1:'var(--danger)',2:'var(--warn)',3:'var(--accent)',4:'var(--muted)'}; return '<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:'+(sc[row.severity]||'var(--bg)')+'20;color:'+(sc[row.severity]||'var(--fg)')+';font-weight:600">'+escHtml(v||'')+'</span>'; } },
+          { key: 'title', title: '标题', align: 'left', render: function(v) { return '<span style="font-size:12.5px">'+escHtml(v||'')+'</span>'; } },
+          { key: 'status', title: '状态', width: '80px', render: function(v) { return renderPill(v); } },
+          { key: 'assigned_to', title: '指派', width: '90px', render: function(v) { return '<span style="font-size:11.5px;color:var(--muted)">'+escHtml(v||'')+'</span>'; } },
+          { key: 'opened_date', title: '创建日期', width: '100px', render: function(v) { return '<span style="font-size:11.5px;font-family:var(--mono);color:var(--muted)">'+formatDate(v)+'</span>'; } }
+        ],
+        data: bugs,
+        resizable: false
+      });
+    }
   } catch(e) {
     container.innerHTML = '<div class="error-state">加载Bug统计失败: ' + escHtml(e.message) + '</div>';
   }

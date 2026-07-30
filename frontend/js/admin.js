@@ -433,28 +433,35 @@ function switchUserTab(tab) {
   if (tab === 'wecom') loadWecomUserList();
 }
 
+var _wecomDt = null;
+function _initWecomDt() {
+  if (_wecomDt) return;
+  _wecomDt = new DataTable({
+    container: document.getElementById('wecom-table'),
+    columns: [
+      { key: 'idx', title: '序号', width: '40px', render: function(v) { return '<span style="color:var(--muted)">' + v + '</span>'; } },
+      { key: 'userid', title: 'userid', render: function(v) { return '<span style="font-family:var(--mono);font-size:12px">' + escHtml(v||'') + '</span>'; } },
+      { key: 'name', title: '姓名', render: function(v) { return escHtml(v||''); } },
+      { key: 'department', title: '部门', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">' + escHtml(v||'') + '</span>'; } },
+      { key: 'pma_user', title: '关联PMA用户', width: '12%', render: function(v) { return '<span style="font-size:12px;color:' + (v?'var(--success)':'var(--muted)') + '">' + escHtml(v||'—') + '</span>'; } },
+      { key: 'synced_at', title: '同步时间', width: '10%', render: function(v) { return '<span style="font-size:11px;color:var(--muted)">' + (v ? v.substring(11,19) : '—') + '</span>'; } }
+    ],
+    maxHeight: 'calc(100vh - 300px)',
+    resizable: false
+  });
+}
+
 async function loadWecomUserList() {
-  var tbody = document.getElementById('wecom-users-tbody');
-  tbody.innerHTML = '<tr><td colspan="6"><div class="loading-spinner">加载中...</div></td></tr>';
+  _initWecomDt();
   try {
     var users = await API.get('/wecom/users/list');
     document.getElementById('wecom-users-count').textContent = '共 ' + (users || []).length + ' 人';
-    if (!users || !users.length) {
-      tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">暂无数据，点击"从企业微信同步"获取</div></td></tr>';
-      return;
-    }
-    tbody.innerHTML = users.map(function(u, i) {
-      return '<tr>' +
-        '<td style="text-align:center;color:var(--muted)">' + (i + 1) + '</td>' +
-        '<td style="font-family:var(--mono);font-size:12px">' + escHtml(u.userid) + '</td>' +
-        '<td>' + escHtml(u.name) + '</td>' +
-        '<td style="font-size:12px;color:var(--muted)">' + escHtml(u.department) + '</td>' +
-        '<td style="font-size:12px">' + (u.pma_user ? '<span style="color:var(--success)">' + escHtml(u.pma_user) + '</span>' : '<span style="color:var(--muted)">—</span>') + '</td>' +
-        '<td style="font-size:11px;color:var(--muted)">' + (u.synced_at ? u.synced_at.substring(11, 19) : '—') + '</td>' +
-      '</tr>';
-    }).join('');
+    if (!users || !users.length) { _wecomDt.setData([]); return; }
+    users.forEach(function(u, i) { u.idx = i + 1; });
+    _wecomDt.setData(users);
   } catch(e) {
-    tbody.innerHTML = '<tr><td colspan="6"><div class="error-state">加载失败: ' + escHtml(e.message) + '</div></td></tr>';
+    _wecomDt.setData([]);
+    showToast('加载失败: ' + e.message, 'error');
   }
 }
 
@@ -473,8 +480,8 @@ async function refreshWecomUsers() {
 
 async function initUserManagement() {
   _userList = [];
-  document.getElementById('users-tbody').innerHTML = '<tr><td colspan="10"><div class="loading-spinner">加载中...</div></td></tr>';
-  document.getElementById('roles-tbody').innerHTML = '<tr><td colspan="7"><div class="loading-spinner">加载中...</div></td></tr>';
+  _initUsersDt(); _usersDt.setData([]);
+  _initRolesDt(); _rolesDt.setData([]);
   try {
     var rolesPromise = API.get('/admin/users/roles');
     var usersPromise = API.get('/admin/users');
@@ -486,7 +493,7 @@ async function initUserManagement() {
     renderUserKPIs();
     renderRoleKPIs();
   } catch(e) {
-    document.getElementById('users-tbody').innerHTML = '<tr><td colspan="10"><div class="error-state">加载失败: ' + escHtml(e.message) + '</div></td></tr>';
+    showToast('加载失败: ' + e.message, 'error');
   }
 }
 
@@ -528,41 +535,39 @@ function renderRoleKPIs() {
   if (grid) grid.innerHTML = html;
 }
 
+var _rolesDt = null;
+function _initRolesDt() {
+  if (_rolesDt) return;
+  _rolesDt = new DataTable({
+    container: document.getElementById('roles-table'),
+    columns: [
+      { key: 'idx', title: '序号', width: '40px', render: function(v) { return '<span style="font-family:var(--mono);color:var(--muted)">' + v + '</span>'; } },
+      { key: 'key', title: '角色Key', render: function(v) { return '<span style="font-family:var(--mono);font-size:12px;font-weight:500">' + escHtml(v||'') + '</span>'; } },
+      { key: 'label', title: '显示名', render: function(v) { return '<span style="font-size:13px">' + escHtml(v||'') + '</span>'; } },
+      { key: 'perm_badges', title: '特殊权限', render: function(v) { return v || '<span style="font-size:11px;color:var(--muted)">无</span>'; } },
+      { key: 'user_count_btn', title: '用户数', render: function(v) { return v; } },
+      { key: 'actions', title: '操作', width: '12%', render: function(v) { return v; } }
+    ],
+    maxHeight: 'calc(100vh - 340px)',
+    resizable: false
+  });
+}
+
 function renderRoleTable() {
-  var tbody = document.getElementById('roles-tbody');
-  // Apply filter
   var roles = _permRoles.slice();
   if (_roleFilter === 'withPerms') roles = roles.filter(function(r) { return (r.permissions || []).length > 0; });
   else if (_roleFilter === 'public') roles = roles.filter(function(r) { return (r.permissions || []).length === 0; });
-  if (!roles.length) {
-    tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state" style="padding:16px">暂无匹配角色</div></td></tr>';
-    return;
-  }
-  // Sort: public first, then alphabetically by key
-  var sorted = roles.slice().sort(function(a, b) {
-    if (a.key === 'public') return -1;
-    if (b.key === 'public') return 1;
-    return (a.key < b.key) ? -1 : 1;
-  });
-  tbody.innerHTML = sorted.map(function(r, idx) {
+  var sorted = roles.slice().sort(function(a, b) { if (a.key==='public') return -1; if (b.key==='public') return 1; return (a.key<b.key)?-1:1; });
+  _initRolesDt();
+  _rolesDt.setData(sorted.map(function(r, idx) {
     var perms = r.permissions || [];
-    var permBadges = perms.map(function(p) {
-      return '<span style="display:inline-block;margin:1px 2px;padding:1px 6px;border-radius:3px;font-size:10px;background:var(--accent-lt);color:var(--accent)">' + escHtml(p) + '</span>';
-    }).join('') || '<span style="font-size:11px;color:var(--muted)">无</span>';
-    var userCount = _userList.filter(function(u) { return (u.role_ids || []).indexOf(r.id) >= 0; }).length;
-    return '<tr>' +
-      '<td style="font-family:var(--mono);color:var(--muted);text-align:center">' + (idx + 1) + '</td>' +
-      '<td style="font-family:var(--mono);font-size:12px;font-weight:500">' + escHtml(r.key) + '</td>' +
-      '<td style="font-size:13px">' + escHtml(r.label) + '</td>' +
-      '<td>' + permBadges + '</td>' +
-      '<td><button class="btn btn-sm"' +
-        ' onclick="showRoleUsers(' + r.id + ',\'' + escHtml(r.label) + '\')">' + userCount + ' 人</button></td>' +
-      '<td style="white-space:nowrap">' +
-        (r.key === 'admin' ? '<span style="font-size:11px;color:var(--muted)">系统内置</span>' :
-          iconEdit('openRoleCreateDialog(' + r.id + ')') + iconDelete('deleteRole(' + r.id + ',\'' + escHtml(r.label) + '\')')) +
-      '</td>' +
-    '</tr>';
-  }).join('');
+    r.perm_badges = perms.map(function(p) { return '<span style="display:inline-block;margin:1px 2px;padding:1px 6px;border-radius:3px;font-size:10px;background:var(--accent-lt);color:var(--accent)">'+escHtml(p)+'</span>'; }).join('') || null;
+    var uc = _userList.filter(function(u) { return (u.role_ids||[]).indexOf(r.id)>=0; }).length;
+    r.user_count_btn = '<button class="btn btn-sm" onclick="showRoleUsers('+r.id+',\''+escHtml(r.label)+'\')">'+uc+' 人</button>';
+    r.actions = '<span style="white-space:nowrap">' + (r.key==='admin' ? '<span style="font-size:11px;color:var(--muted)">系统内置</span>' : iconEdit('openRoleCreateDialog('+r.id+')') + iconDelete('deleteRole('+r.id+',\''+escHtml(r.label)+'\')')) + '</span>';
+    r.idx = idx + 1;
+    return r;
+  }));
 }
 
 function openRoleCreateDialog(editId) {
@@ -689,72 +694,65 @@ async function deleteRole(id, label) {
   }
 }
 
+var _usersDt = null;
+function _initUsersDt() {
+  if (_usersDt) return;
+  _usersDt = new DataTable({
+    container: document.getElementById('users-table'),
+    columns: [
+      { key: 'idx', title: '序号', width: '40px', render: function(v) { return '<span style="font-family:var(--mono);color:var(--muted)">' + v + '</span>'; } },
+      { key: 'username', title: '用户名', render: function(v, row) { return '<span style="font-size:13px;font-weight:500;cursor:pointer;color:var(--accent)" onclick="gotoView(\'user-center\',{params:[' + row.id + ']})" title="查看用户中心">' + escHtml(v||'') + '</span>'; } },
+      { key: 'wecom_name', title: '企微姓名', width: '6%', render: function(v) { return '<span style="font-size:12px">' + escHtml(v||'—') + '</span>'; } },
+      { key: 'auth_source', title: '来源', width: '6%', render: function(v) { var isGL = v==='gitlab'; return '<span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;background:'+(isGL?'var(--accent-lt)':'var(--muted-lt)')+';color:'+(isGL?'var(--accent)':'var(--muted)')+'">'+(isGL?'GitLab':'本地')+'</span>'; } },
+      { key: 'role_badges', title: '角色组', width: '18%', render: function(v) { return v || '<span style="font-size:11px;color:var(--muted)">未分配</span>'; } },
+      { key: 'status_html', title: '状态', width: '5%', render: function(v) { return v; } },
+      { key: 'wecom_btn', title: '企业微信', width: '7%', render: function(v) { return v; } },
+      { key: 'login_html', title: '登录状态', width: '8%', render: function(v) { return v; } },
+      { key: 'last_login', title: '上次登录', width: '10%', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(fmtISODateTime(v)||'—')+'</span>'; } },
+      { key: 'created_at', title: '创建时间', width: '8%', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(fmtISODateTime(v)||'')+'</span>'; } },
+      { key: 'actions', title: '操作', width: '12%', render: function(v, row) { return v; } }
+    ],
+    maxHeight: 'calc(100vh - 340px)',
+    resizable: false
+  });
+}
+
 function renderUserTable() {
-  var tbody = document.getElementById('users-tbody');
-  // Apply filter
   var users = _userList.slice();
   if (_userFilter === 'active') users = users.filter(function(u) { return u.is_active; });
   else if (_userFilter === 'disabled') users = users.filter(function(u) { return !u.is_active; });
-  if (!users.length) {
-    tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state" style="padding:16px">暂无匹配用户</div></td></tr>';
-    return;
-  }
-  tbody.innerHTML = users.map(function(u, idx) {
-    var statusHtml = u.is_active
-      ? '<span class="pill" style="background:var(--success-lt);color:var(--success)">正常</span>'
-      : '<span class="pill" style="background:var(--danger-lt);color:var(--danger)">已禁用</span>';
-    var toggleLabel = u.is_active ? '禁用' : '启用';
-    // Role group badges from user_roles
-    var roleIds = u.role_ids || [];
-    // Sort: public role badge first
+
+  _initUsersDt();
+  _usersDt.setData(users.map(function(u, idx) {
+    // Pre-compute complex cell HTML
+    var roleIds = (u.role_ids || []).slice();
     roleIds.sort(function(a, b) {
       var ra = _permRoles.find(function(x) { return x.id === a; });
       var rb = _permRoles.find(function(x) { return x.id === b; });
-      if (ra && ra.key === 'public') return -1;
-      if (rb && rb.key === 'public') return 1;
-      return 0;
+      if (ra && ra.key === 'public') return -1; if (rb && rb.key === 'public') return 1; return 0;
     });
-    var roleBadges = roleIds.map(function(rid) {
+    u.role_badges = roleIds.map(function(rid) {
       var r = _permRoles.find(function(x) { return x.id === rid; });
       return r ? '<span style="display:inline-block;margin:1px 2px;padding:1px 6px;border-radius:3px;font-size:10.5px;background:var(--accent-lt);color:var(--accent)">' + escHtml(r.label) + '</span>' : '';
-    }).join('');
-    var authSourceHtml = '<span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;background:' +
-      (u.auth_source === 'gitlab' ? 'var(--accent-lt)' : 'var(--muted-lt)') + ';color:' +
-      (u.auth_source === 'gitlab' ? 'var(--accent)' : 'var(--muted)') + '">' +
-      (u.auth_source === 'gitlab' ? 'GitLab' : '本地') + '</span>';
-    // Login status column
-    var loginHtml = '';
+    }).join('') || null;
+    u.status_html = u.is_active
+      ? '<span class="pill" style="background:var(--success-lt);color:var(--success)">正常</span>'
+      : '<span class="pill" style="background:var(--danger-lt);color:var(--danger)">已禁用</span>';
+    u.wecom_btn = u.wecom_userid
+      ? '<button class="btn btn-xs" onclick="openWecomLinkDialog(' + u.id + ')" title="已关联企业微信" style="font-size:10px;padding:2px 6px;color:var(--success);background:var(--success-lt);border-color:var(--success)">' + escHtml(u.wecom_userid) + '</button>'
+      : '<button class="btn btn-xs" onclick="openWecomLinkDialog(' + u.id + ')" title="关联企业微信" style="font-size:10px;padding:2px 6px;color:var(--muted)">关联</button>';
     if (u.is_online) {
-      var tooltip = (u.last_login_ua || '') + ' / ' + (u.last_login_ip || '') + ' / ' + (u.last_login_at || '');
-      loginHtml = '<span class="pill" style="background:var(--success-lt);color:var(--success);cursor:default" title="' + escHtml(tooltip) + '">在线</span>';
+      var tt = (u.last_login_ua||'') + ' / ' + (u.last_login_ip||'') + ' / ' + (u.last_login_at||'');
+      u.login_html = '<span class="pill" style="background:var(--success-lt);color:var(--success);cursor:default" title="' + escHtml(tt) + '">在线</span>';
     } else if (u.last_login_at) {
-      var tip2 = '最后登录: ' + (u.last_login_at || '') + '\n' + (u.last_login_ua || '') + ' / ' + (u.last_login_ip || '');
-      loginHtml = '<span style="font-size:11px;color:var(--muted);cursor:default" title="' + escHtml(tip2) + '">离线</span>';
-    } else {
-      loginHtml = '<span style="font-size:11px;color:var(--muted)">从未登录</span>';
-    }
-    return '<tr>' +
-      '<td style="font-family:var(--mono);color:var(--muted);text-align:center">' + (idx + 1) + '</td>' +
-      '<td style="font-size:13px;font-weight:500;cursor:pointer;color:var(--accent)" onclick="gotoView(\x27user-center\x27,{params:[' + u.id + ']})" title="查看用户中心">' + escHtml(u.username) + '</td>' +
-      '<td style="font-size:12px">' + escHtml(u.wecom_name || '—') + '</td>' +
-      '<td style="font-size:12px">' + authSourceHtml + '</td>' +
-      '<td>' + (roleBadges || '<span style="font-size:11px;color:var(--muted)">未分配</span>') + '</td>' +
-      '<td>' + statusHtml + '</td>' +
-      '<td style="font-size:12px;white-space:nowrap">' +
-        (u.wecom_userid
-          ? '<button class="btn btn-xs" onclick="openWecomLinkDialog(' + u.id + ')" title="已关联企业微信" style="font-size:10px;padding:2px 6px;color:var(--success);background:var(--success-lt);border-color:var(--success)">' + escHtml(u.wecom_userid) + '</button>'
-          : '<button class="btn btn-xs" onclick="openWecomLinkDialog(' + u.id + ')" title="关联企业微信" style="font-size:10px;padding:2px 6px;color:var(--muted)">关联</button>') +
-      '</td>' +
-      '<td style="font-size:11px">' + loginHtml + '</td>' +
-      '<td style="font-size:12px;color:var(--muted)">' + escHtml(fmtISODateTime(u.last_login_at) || '—') + '</td>' +
-      '<td style="font-size:12px;color:var(--muted)">' + escHtml(fmtISODateTime(u.created_at) || '') + '</td>' +
-      '<td style="white-space:nowrap">' +
-        iconEdit('openUserEditDialog(' + u.id + ')') +
-        iconToggle('toggleUserActive(' + u.id + ',' + u.is_active + ')', toggleLabel) +
-        iconDelete('deleteUser(' + u.id + ',\'' + escHtml(u.username) + '\')') +
-      '</td>' +
-    '</tr>';
-  }).join('');
+      var tt2 = '最后登录: ' + (u.last_login_at||'') + '\n' + (u.last_login_ua||'') + ' / ' + (u.last_login_ip||'');
+      u.login_html = '<span style="font-size:11px;color:var(--muted);cursor:default" title="' + escHtml(tt2) + '">离线</span>';
+    } else { u.login_html = '<span style="font-size:11px;color:var(--muted)">从未登录</span>'; }
+    var toggleLabel = u.is_active ? '禁用' : '启用';
+    u.actions = '<span style="white-space:nowrap">' + iconEdit('openUserEditDialog(' + u.id + ')') + iconToggle('toggleUserActive(' + u.id + ',' + u.is_active + ')', toggleLabel) + iconDelete('deleteUser(' + u.id + ',\'' + escHtml(u.username) + '\')') + '</span>';
+    u.idx = idx + 1;
+    return u;
+  }));
 }
 
 var _udRowCount = 0;

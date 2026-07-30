@@ -290,7 +290,6 @@ var _prodDetailCurId = null;
 var _prodDetailCurCode = null;
 var _prodDocScanning = false;
 var _prodDetailTargetTab = null;  // set before navigation to jump to a specific tab
-var _prodDocCache = {};  // { docId: docData } for product doc edit lookup
 var _prodComboAll = [];
 
 async function initProductDetail(code, tabId) {
@@ -615,13 +614,8 @@ function renderProdDocs(p, preDocs) {
   if (nodeIds.length) {
     templateLink = '<a id="prod-docs-template-link" href="javascript:void(0)" onclick="gotoView(\'doc-templates\',{params:[\'product\',String(' + nodeIds[0] + ')]})" style="font-size:11px;color:var(--accent);text-decoration:none;margin-left:8px">查看文档模板详情 →</a>';
   }
-  // Add custom doc button
-  var user = getCurrentUser();
-  var perms = (user && user.permissions) ? user.permissions.split(',') : [];
-  var canEdit = user && (user.role === 'admin' || perms.indexOf('admin') >= 0 || perms.indexOf('product_link') >= 0);
-  var addBtn = canEdit ? '<button class="btn btn-primary btn-sm" onclick="showAddCustomProductDoc()" style="margin-left:auto;font-size:11px;padding:4px 10px;white-space:nowrap">+ 新增自定义文档</button>' : '';
   document.getElementById('prodsec-docs').innerHTML =
-    '<div class="section-hd"><div class="section-title">产品文档</div>' + templateLink + addBtn + '</div>' +
+    '<div class="section-hd"><div class="section-title">产品文档</div>' + templateLink + '</div>' +
     '<div id="prod-docs-inline"><div class="loading-spinner" style="padding:20px">加载中...</div></div>';
 
   // Use pre-loaded docs if available, otherwise fetch
@@ -647,41 +641,30 @@ function renderProdDocs(p, preDocs) {
 function renderProductNotes(notes) {
   var el = document.getElementById('prod-notes-list');
   if (!el) return;
-  if (!notes.length) {
-    el.innerHTML = '<div class="empty-state" style="padding:20px">暂无笔记</div>';
-    return;
-  }
+  if (!notes.length) { el.innerHTML = '<div class="empty-state" style="padding:20px">暂无笔记</div>'; return; }
   var currentUser = (getCurrentUser() || {}).username || '';
-  var html = '<div class="table-scroll"><table class="stage-table"><thead><tr>' +
-    '<th style="width:140px">记录时间</th><th style="width:90px">涉及领域</th><th style="width:70px">记录人</th><th>内容</th><th style="width:90px">操作</th>' +
-    '</tr></thead><tbody>';
-  notes.forEach(function(n) {
-    var isMine = n.recorded_by === currentUser;
-    var isReply = !!n.parent_id;
-    var hasImage = /!\[.*\]\(.*\)/.test(n.content);
-    var plainText = stripHtml(renderMarkdown ? renderMarkdown(n.content) : n.content).substring(0, 80);
-    var actions = '';
-    actions += '<span style="cursor:pointer;font-size:12px;color:var(--accent);margin-right:4px" onclick="openViewProdNoteDialog(' + n.id + ')" title="查看">👁</span>';
-    if (isMine) {
-      actions += iconEdit('openEditProdNoteDialog(' + n.id + ')', '编辑') +
-                 iconDelete('deleteProductNote(' + n.id + ')', '删除');
-    } else {
-      actions += '<span style="cursor:pointer;font-size:12px;color:var(--accent)" onclick="openReplyProdNoteDialog(' + n.id + ')" title="回复">💬</span>';
-    }
-    var indentStyle = isReply ? 'padding-left:28px;border-left:3px solid var(--accent-lt)' : '';
-    var replyMark = isReply ? '<span style="font-size:10px;color:var(--accent);margin-right:4px">↳ 回复</span>' : '';
-    var imgBadge = hasImage ? ' <span style="font-size:10px">📷</span>' : '';
-    var timeCell = (fmtISODateTime(n.created_at) || '—') + (n.updated_at ? '<div style="font-size:9px;color:var(--warn)">编辑过</div>' : '');
-    html += '<tr style="' + indentStyle + '">' +
-      '<td style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">' + timeCell + '</td>' +
-      '<td style="font-size:12px">' + escHtml(n.category || '不涉及') + '</td>' +
-      '<td style="font-size:12.5px;font-weight:540">' + escHtml(n.recorded_by || '') + '</td>' +
-      '<td style="font-size:13px;line-height:1.5;text-align:left">' + replyMark + escHtml(plainText) + (n.content.length > 80 ? '...' : '') + imgBadge + '</td>' +
-      '<td style="white-space:nowrap">' + actions + '</td>' +
-    '</tr>';
+  el.innerHTML = '<div id="prod-notes-table"></div>';
+  new DataTable({
+    container: document.getElementById('prod-notes-table'),
+    columns: [
+      { key: 'created_at', title: '记录时间', width: '140px', render: function(v, row) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">'+(fmtISODateTime(v)||'—')+'</span>'+(row.updated_at?'<div style="font-size:9px;color:var(--warn)">编辑过</div>':''); } },
+      { key: 'category', title: '涉及领域', width: '90px', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'不涉及')+'</span>'; } },
+      { key: 'recorded_by', title: '记录人', width: '70px', render: function(v) { return '<span style="font-size:12.5px;font-weight:540">'+escHtml(v||'')+'</span>'; } },
+      { key: 'content', title: '内容', render: function(v, row) {
+        var plainText = stripHtml(renderMarkdown?renderMarkdown(v):v).substring(0,80);
+        return '<span style="font-size:13px;line-height:1.5">'+(row.parent_id?'<span style="font-size:10px;color:var(--accent);margin-right:4px">↳ 回复</span>':'')+escHtml(plainText)+(v&&v.length>80?'...':'')+(/!\[.*\]\(.*\)/.test(v)?' <span style="font-size:10px">📷</span>':'')+'</span>';
+      }},
+      { key: 'actions', title: '操作', width: '90px', render: function(v, row) {
+        var isMine = row.recorded_by === currentUser;
+        var a = '<span style="cursor:pointer;font-size:12px;color:var(--accent);margin-right:4px" onclick="openViewProdNoteDialog('+row.id+')" title="查看">👁</span>';
+        a += isMine ? iconEdit('openEditProdNoteDialog('+row.id+')','编辑')+iconDelete('deleteProductNote('+row.id+')','删除') : '<span style="cursor:pointer;font-size:12px;color:var(--accent)" onclick="openReplyProdNoteDialog('+row.id+')" title="回复">💬</span>';
+        return a;
+      }}
+    ],
+    data: notes,
+    resizable: false,
+    rowClassFn: function(row) { return row.parent_id ? { paddingLeft: '28px', borderLeft: '3px solid var(--accent-lt)' } : null; }
   });
-  html += '</tbody></table></div>';
-  el.innerHTML = html;
 }
 
 function openViewProdNoteDialog(noteId) {
@@ -1046,17 +1029,14 @@ function _renderProdDocsInline(docs) {
     }
   }
 
+  if (!docs.length) {
+    el.innerHTML = '<div class="card" style="padding:20px"><div class="empty-state">该产品暂未关联文档模板。请先在「文档模板配置」页面为对应产品系列添加文档模板。</div></div>';
+    return;
+  }
+
   var user = getCurrentUser();
   var perms = (user && user.permissions) ? user.permissions.split(',') : [];
   var canEdit = user && (user.role === 'admin' || perms.indexOf('admin') >= 0 || perms.indexOf('product_link') >= 0);
-
-  // "新增自定义文档" button in header
-  var addBtnHtml = canEdit ? '<button class="btn btn-primary btn-sm" onclick="showAddCustomProductDoc()" style="margin-left:auto;font-size:11px;padding:4px 10px;white-space:nowrap">+ 新增自定义文档</button>' : '';
-
-  if (!docs.length) {
-    el.innerHTML = '<div class="card" style="padding:16px;display:flex;align-items:center;gap:12px"><div class="empty-state" style="text-align:left">该产品暂未关联文档模板。<br>请先在「文档模板配置」页面为对应产品系列添加文档模板，或手动添加自定义文档。</div>' + addBtnHtml + '</div>';
-    return;
-  }
 
   // Group by stage_type
   var stageOrder = ['硬件开发', '结构设计', 'BSP开发', '软件开发', '测试', '通用'];
@@ -1076,176 +1056,62 @@ function _renderProdDocsInline(docs) {
     '测试': isDark ? '#352830' : '#fce4ec',
     '通用': 'var(--surface)'
   };
-  var typeLabels = { gitlab: 'GitLab', svn: 'SVN', nas: 'NAS', solidworks: '结构设计', pma: 'PMA内部' };
-  var html = '<div class="card" style="padding:0;overflow:hidden">';
-  html += '<div class="table-scroll" id="prod-docs-table-wrap"><table class="stage-table"><thead><tr>' +
-    '<th style="width:100px">分类</th><th style="width:50px">序号</th><th>文档名称</th><th style="width:80px">责任人</th><th style="width:80px">状态</th><th style="width:50px">类型</th><th>路径</th><th style="width:100px">最后修改时间</th><th style="width:80px">修改人</th><th style="width:100px">操作</th>' +
-    '</tr></thead><tbody>';
+  var typeLabels = { gitlab: 'GitLab', svn: 'SVN', nas: 'NAS', solidworks: '结构设计', pma: 'PMA' };
+  var html = '<div class="card" style="padding:0;overflow:hidden"><div id="prod-docs-table"></div></div>';
+
+  el.innerHTML = html;
+
+  // Flatten into DataTable rows
+  var flatRows = [];
   stageOrder.forEach(function(st) {
     var items = grouped[st];
     if (!items || !items.length) return;
     items.sort(function(a, b) { return (a.sort_order || 0) - (b.sort_order || 0); });
-
     var bg = colorMap[st] || 'var(--surface)';
-    var cellStyle = 'background:' + bg + ';';
     items.forEach(function(d, i) {
-      // Cache doc data for edit dialog lookup
-      _prodDocCache[d.id] = d;
-      var isCustom = (d.template_id === null || d.template_id === 0 || d.template_id === undefined);
-      var isLast = i === items.length - 1;
-      html += '<tr>';
-      if (i === 0) {
-        html += '<td rowspan="' + items.length + '" style="vertical-align:middle;text-align:center;font-weight:600;white-space:nowrap;' + cellStyle + 'color:var(--accent);font-size:12px" id="doc-stage-' + escHtml(st) + '">' + escHtml(st) + ' <sup style="font-size:10px;color:var(--muted);font-weight:400">' + items.length + '</sup></td>';
-      }
-      // Status pill — system auto-detects
+      d._cat = st; d._bg = bg; d._seq = i + 1; d._catCount = items.length;
+      d._docName = escHtml(d.doc_name);
+      d._docType = typeLabels[d.doc_type] || '—';
       var hasError = (!d.done && d.location) || d.mismatch;
-      var statusHtml;
-      if (d.done && !d.mismatch) {
-        statusHtml = '<span class="pill completed">已提交</span>';
-      } else if (_prodDocScanning) {
-        statusHtml = '<span class="pill" style="background:var(--warn-lt);color:var(--warn);animation:pulse 1s infinite">验证中</span>';
-      } else if (hasError) {
-        statusHtml = '<span class="pill" style="background:var(--danger-lt);color:var(--danger)">×错误</span>';
-      } else {
-        statusHtml = '<span class="pill blocked">未提交</span>';
-      }
-
-      html += '<td style="font-family:var(--mono);color:var(--muted);text-align:center;' + cellStyle + '">' + (i + 1) + '</td>' +
-        '<td style="font-weight:500;width:180px;word-break:break-all;' + cellStyle + '">' + escHtml(d.doc_name) +
-          (isCustom ? ' <span style="font-size:9px;color:var(--success);background:var(--success-lt);padding:1px 4px;border-radius:3px" title="自定义文档">自定义</span>' : '') + '</td>' +
-        '<td style="font-size:12px;white-space:nowrap;' + cellStyle + '">' + escHtml(d.responsible_role || '—') + '</td>' +
-        '<td style="white-space:nowrap;' + cellStyle + '">' + statusHtml + '</td>' +
-        '<td style="font-size:11px;' + cellStyle + '">' + escHtml(typeLabels[d.doc_type] || '—') + '</td>' +
-        '<td style="font-size:12px;text-align:left;word-break:break-all;' + cellStyle + '">' + (d.mismatch
-          ? '<span style="color:var(--danger)">' + escHtml((d.location||'').replace(/^请提交到：/,'')) + '</span><br><span style="font-size:10px;color:var(--danger)">' + escHtml(d.mismatch) + '</span>'
-          : (d.file_count && d.file_count > 0 && d.done && d.location
-            ? '<span style="display:inline-block;background:var(--accent-lt);color:var(--accent);font-size:10px;padding:1px 6px;border-radius:10px;font-weight:500;white-space:nowrap;border:1px solid var(--accent);margin-right:4px">' + d.file_count + ' 文件</span>' +
-              '<a href="' + escHtml(d.location) + '" target="_blank" style="color:var(--accent);text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">' + escHtml(d.location) + '</a>'
-            : (d.location
-            ? (hasError
-              ? '<span style="color:var(--danger)">' + escHtml((d.location||'').replace(/^请提交到：/,'')) + '</span><br><span style="font-size:10px;color:var(--danger)">文件不存在或无法访问</span>'
-              : '<a href="' + escHtml(d.location) + '" target="_blank" style="color:var(--accent);text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">' + escHtml(d.location) + '</a>')
-            : (d.doc_path ? '<span style="color:var(--muted);font-style:italic">请提交到：' + escHtml(d.doc_path) + '</span>' : '—')))) +
-          // Show template path only when not yet submitted (helps user verify match)
-          (d.doc_path && d.location && !d.done ? '<br><span style="font-size:10px;color:var(--muted)">模板: ' + escHtml(d.doc_path) + '</span>' : '') +
-        '</td>' +
-        '<td style="font-size:11px;color:var(--muted);white-space:nowrap;' + cellStyle + '">' + escHtml(fmtISODateTime(d.svn_last_modified) || '—') + '</td>' +
-        '<td style="font-size:12px;color:var(--muted);' + cellStyle + '">' + escHtml(d.svn_author || '—') + '</td>' +
-        '<td style="white-space:nowrap;text-align:center;' + cellStyle + '">' +
-          (d.location
-            ? (isPreviewableUrl(d.location)
-              ? iconEye("previewDocument('" + encodeURIComponent(d.location) + "','" + escJs(d.doc_name || '') + "')")
-              : '<a href="' + escHtml(d.location) + '" target="_blank" title="打开链接" style="text-decoration:none;font-size:15px">&#x1F517;</a>')
-            : '') +
-          // Custom docs: show edit + delete; template optional: show remove
-          (isCustom && canEdit ? iconEdit('showAddCustomProductDoc({id:' + d.id + ',doc_name:\x27' + escJs(d.doc_name) + '\x27,stage_type:\x27' + escJs(d.stage_type) + '\x27,responsible_role:\x27' + escJs(d.responsible_role || '') + '\x27,doc_type:\x27' + escJs(d.doc_type || '') + '\x27,location:\x27' + escJs(d.location || '') + '\x27})', '编辑') : '') +
-          (isCustom && canEdit ? iconDelete('deleteCustomProductDoc(' + d.id + ',\x27' + escJs(d.doc_name) + '\x27)', '删除此文档') : '') +
-          (!isCustom && d.is_optional && canEdit ? iconDelete('removeOptionalProductDoc(' + d.id + ')', '移除此文档') : '') +
-        '</td>' +
-      '</tr>';
+      if (d.done && !d.mismatch) d._statusHtml = '<span class="pill completed">已提交</span>';
+      else if (_prodDocScanning) d._statusHtml = '<span class="pill" style="background:var(--warn-lt);color:var(--warn);animation:pulse 1s infinite">验证中</span>';
+      else if (hasError) d._statusHtml = '<span class="pill" style="background:var(--danger-lt);color:var(--danger)">×错误</span>';
+      else d._statusHtml = '<span class="pill blocked">未提交</span>';
+      if (d.location) {
+        if (d.mismatch) d._locHtml = '<span style="color:var(--danger)">' + escHtml((d.location||'').replace(/^请提交到：/,'')) + '</span><br><span style="font-size:10px;color:var(--danger)">' + escHtml(d.mismatch) + '</span>';
+        else if (d.file_count && d.file_count > 0 && d.done) d._locHtml = '<span style="display:inline-block;background:var(--accent-lt);color:var(--accent);font-size:10px;padding:1px 6px;border-radius:10px;font-weight:500;white-space:nowrap;border:1px solid var(--accent);margin-right:4px">' + d.file_count + ' 文件</span><a href="' + escHtml(d.location) + '" target="_blank" style="color:var(--accent);text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">' + escHtml(d.location) + '</a>';
+        else if (hasError) d._locHtml = '<span style="color:var(--danger)">' + escHtml((d.location||'').replace(/^请提交到：/,'')) + '</span><br><span style="font-size:10px;color:var(--danger)">文件不存在或无法访问</span>';
+        else d._locHtml = '<a href="' + escHtml(d.location) + '" target="_blank" style="color:var(--accent);text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">' + escHtml(d.location) + '</a>';
+      } else { d._locHtml = d.doc_path ? '<span style="color:var(--muted);font-style:italic">请提交到：' + escHtml(d.doc_path) + '</span>' : '—'; }
+      if (d.doc_path && d.location && !d.done) d._locHtml += '<br><span style="font-size:10px;color:var(--muted)">模板: ' + escHtml(d.doc_path) + '</span>';
+      d._updatedAt = fmtISODateTime(d.svn_last_modified) || '—';
+      d._updatedBy = d.svn_author || '—';
+      d._actions = (d.location ? (isPreviewableUrl(d.location) ? iconEye("previewDocument('" + encodeURIComponent(d.location) + "','" + escJs(d.doc_name||'') + "')") : '<a href="' + escHtml(d.location) + '" target="_blank" title="打开链接" style="text-decoration:none;font-size:15px">&#x1F517;</a>') : '') + (d.is_optional && canEdit ? iconDelete('removeOptionalProductDoc(' + d.id + ')', '移除此文档') : '');
+      flatRows.push(d);
     });
   });
-  html += '</tbody></table></div></div>';
 
-  el.innerHTML = html;
-  // Dynamic table height: fill available viewport space
+  new DataTable({
+    container: document.getElementById('prod-docs-table'),
+    columns: [
+      { key: '_cat', title: '分类', width: '100px', rowspan: true, render: function(v, row, idx, count) { return '<span style="font-weight:600;color:var(--accent);font-size:12px">'+escHtml(v||'')+' <sup style="font-size:10px;color:var(--muted);font-weight:400">'+(count||(row._catCount||1))+'</sup></span>'; } },
+      { key: '_seq', title: '序号', width: '50px', render: function(v) { return '<span style="font-family:var(--mono);color:var(--muted)">'+(v||'')+'</span>'; } },
+      { key: '_docName', title: '文档名称', className: 'dt-wrap', render: function(v) { return '<span style="font-weight:500;word-break:break-all">'+(v||'')+'</span>'; } },
+      { key: 'responsible_role', title: '责任人', width: '80px', render: function(v) { return '<span style="font-size:12px;white-space:nowrap">'+escHtml(v||'—')+'</span>'; } },
+      { key: '_statusHtml', title: '状态', width: '80px', render: function(v) { return v||''; } },
+      { key: '_docType', title: '类型', width: '50px', render: function(v) { return '<span style="font-size:11px">'+escHtml(v||'')+'</span>'; } },
+      { key: '_locHtml', title: '路径', align: 'left', className: 'dt-wrap', render: function(v) { return '<span style="font-size:12px;word-break:break-all">'+(v||'')+'</span>'; } },
+      { key: '_updatedAt', title: '最后修改时间', width: '100px', render: function(v) { return '<span style="font-size:11px;color:var(--muted);white-space:nowrap">'+escHtml(v||'—')+'</span>'; } },
+      { key: '_updatedBy', title: '修改人', width: '80px', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(v||'')+'</span>'; } },
+      { key: '_actions', title: '操作', width: '100px', render: function(v) { return v||''; } }
+    ],
+    data: flatRows,
+    resizable: false,
+    rowClassFn: function(row) { return row._bg ? { background: row._bg } : null; }
+  });
+
+  // Dynamic table height
   _resizeProdDocsTable();
-}
-
-// ── Add / Edit Custom Product Document ──
-
-function showAddCustomProductDoc(editData) {
-  var isEdit = !!editData;
-  if (!_prodDetailCurCode) return;
-  var inp = 'width:100%;box-sizing:border-box;margin-top:2px';
-  var html = '<div style="display:flex;flex-direction:column;gap:10px">' +
-    '<div><label style="font-size:11px;color:var(--muted)">文档名称</label><input class="search-inp" id="prod-custom-doc-name" style="' + inp + '" placeholder="如：硬件测试报告"></div>' +
-    '<div><label style="font-size:11px;color:var(--muted)">所属阶段</label><select class="search-inp" id="prod-custom-doc-stage" style="' + inp + '"><option value="硬件开发">硬件开发</option><option value="结构设计">结构设计</option><option value="BSP开发">BSP开发</option><option value="软件开发">软件开发</option><option value="测试">测试</option><option value="通用">通用</option></select></div>' +
-    '<div><label style="font-size:11px;color:var(--muted)">责任人</label><input class="search-inp" id="prod-custom-doc-role" style="' + inp + '" placeholder="如：硬件工程师"></div>' +
-    '<div><label style="font-size:11px;color:var(--muted)">文档类型</label><select class="search-inp" id="prod-custom-doc-type" style="' + inp + '"><option value="pma">PMA内部</option><option value="gitlab">GitLab</option><option value="svn">SVN</option><option value="nas">NAS</option><option value="solidworks">结构设计</option></select></div>' +
-    '<div><label style="font-size:11px;color:var(--muted)">文档路径/链接</label><input class="search-inp" id="prod-custom-doc-location" style="' + inp + '" placeholder="如：http://..."></div>' +
-  '</div>';
-
-  var title = isEdit ? '编辑自定义文档' : '新增自定义文档';
-  var submitBtn = isEdit
-    ? {text: '保存', cls: 'btn-primary', onclick: 'submitEditProductDoc(' + editData.id + ')'}
-    : {text: '添加', cls: 'btn-primary', onclick: 'submitCustomProductDoc()'};
-  openDialog(title, html, [
-    {text: '取消', onclick: 'closeSharedDialog()'},
-    submitBtn
-  ], {maxWidth: 500});
-
-  if (isEdit) {
-    setTimeout(function() {
-      var nameEl = document.getElementById('prod-custom-doc-name');
-      var stageEl = document.getElementById('prod-custom-doc-stage');
-      var roleEl = document.getElementById('prod-custom-doc-role');
-      var typeEl = document.getElementById('prod-custom-doc-type');
-      var locEl = document.getElementById('prod-custom-doc-location');
-      if (nameEl) nameEl.value = editData.doc_name || '';
-      if (stageEl) stageEl.value = editData.stage_type || '';
-      if (roleEl) roleEl.value = editData.responsible_role || '';
-      if (typeEl) typeEl.value = editData.doc_type || 'pma';
-      if (locEl) locEl.value = editData.location || '';
-    }, 0);
-  }
-}
-
-async function submitCustomProductDoc() {
-  var name = document.getElementById('prod-custom-doc-name').value.trim();
-  var stage = document.getElementById('prod-custom-doc-stage').value;
-  var role = document.getElementById('prod-custom-doc-role').value.trim();
-  var docType = document.getElementById('prod-custom-doc-type').value;
-  var location = document.getElementById('prod-custom-doc-location').value.trim();
-  if (!name) { showToast('请输入文档名称', 'error'); return; }
-  if (!stage) { showToast('请选择所属阶段', 'error'); return; }
-  try {
-    var r = await API.post('/products/' + _prodDetailCurCode + '/documents/add', {
-      doc_name: name, stage_type: stage, responsible_role: role, doc_type: docType, location: location
-    });
-    showToast(r.message || '文档已添加', 'success');
-    closeSharedDialog();
-    // Re-fetch and re-render docs
-    var docs = await API.get('/products/' + _prodDetailCurCode + '/documents');
-    _renderProdDocsInline(docs);
-  } catch(e) { showToast('添加失败: ' + (e.message || ''), 'error'); }
-}
-
-async function submitEditProductDoc(docId) {
-  var name = document.getElementById('prod-custom-doc-name').value.trim();
-  var stage = document.getElementById('prod-custom-doc-stage').value;
-  var role = document.getElementById('prod-custom-doc-role').value.trim();
-  var docType = document.getElementById('prod-custom-doc-type').value;
-  var location = document.getElementById('prod-custom-doc-location').value.trim();
-  if (!name) { showToast('请输入文档名称', 'error'); return; }
-  if (!stage) { showToast('请选择所属阶段', 'error'); return; }
-  try {
-    var r = await API.put('/products/' + _prodDetailCurCode + '/documents/' + docId, {
-      doc_name: name, stage_type: stage, responsible_role: role, doc_type: docType, location: location
-    });
-    showToast(r.message || '文档已更新', 'success');
-    closeSharedDialog();
-    var docs = await API.get('/products/' + _prodDetailCurCode + '/documents');
-    _renderProdDocsInline(docs);
-  } catch(e) { showToast('更新失败: ' + (e.message || ''), 'error'); }
-}
-
-function deleteCustomProductDoc(docId, docName) {
-  var label = docName || ('#' + docId);
-  openDialog('删除自定义文档',
-    '<div class="confirm-dlg">确认删除自定义文档 <b>' + escHtml(label) + '</b>？<br><br>删除后将不再显示。如需恢复，可手动重新添加。</div>',
-    [{text: '取消', onclick: 'closeSharedDialog()'},
-     {text: '确认删除', cls: 'btn-danger', onclick: 'closeSharedDialog();_confirmRemoveProductDoc(' + docId + ',\x27' + escJs(label) + '\x27)'}],
-    {hideClose: true});
-}
-
-async function _confirmRemoveProductDoc(docId, docName) {
-  try {
-    await API.put('/products/' + _prodDetailCurCode + '/documents/' + docId, { is_removed: 1 });
-    showToast('已删除自定义文档', 'success');
-    var docs = await API.get('/products/' + _prodDetailCurCode + '/documents');
-    _renderProdDocsInline(docs);
-  } catch(e) { showToast('删除失败: ' + (e.message || ''), 'error'); }
 }
 
 async function removeOptionalProductDoc(docId) {
@@ -1260,9 +1126,8 @@ async function removeOptionalProductDoc(docId) {
 }
 
 function _resizeProdDocsTable() {
-  ['prod-docs-table-wrap', 'proj-docs-table-wrap'].forEach(function(id) {
-    var wrap = document.getElementById(id);
-    if (!wrap) return;
+  var tables = document.querySelectorAll('#prod-docs-table .dt-scroll, #proj-docs-table .dt-scroll');
+  tables.forEach(function(wrap) {
     var top = wrap.getBoundingClientRect().top;
     wrap.style.maxHeight = Math.max(200, window.innerHeight - top - 24) + 'px';
   });
@@ -1305,23 +1170,7 @@ function renderProdMaintenance(p) {
     html += '<div style="padding:12px 16px 0"><div class="section-hd"><div class="section-title">关联项目 (' + projects.length + ')</div></div></div>';
   }
   if (projects.length) {
-    html += '<div class="table-scroll" id="proj-docs-table-wrap"><table class="stage-table"><thead><tr>' +
-      '<th>项目编号</th><th>项目名</th><th>客户</th><th>类型</th><th>状态</th><th>进度</th><th>计划完成</th>' +
-      '</tr></thead><tbody>';
-    projects.forEach(function(proj) {
-      var projCode = proj.code || '';
-      var coreName = proj.name || '';
-      html += '<tr style="cursor:pointer">' +
-        '<td style="cursor:pointer" onclick="openProject(\'' + escHtml(proj.code || String(proj.id)).replace(/'/g, "\\'") + '\')">' + (projCode ? projCodeTag(projCode, 'event.stopPropagation();openProject(\'' + escHtml(projCode).replace(/'/g, "\\'") + '\')', proj.name) : '—') + '</td>' +
-        '<td onclick="openProject(\'' + escHtml(proj.code || String(proj.id)).replace(/'/g, "\\'") + '\')"><div class="proj-name">' + escHtml(coreName) + '</div></td>' +
-        '<td>' + (proj.customer_name ? renderCustomerBadge(proj.customer_name) : '—') + '</td>' +
-        '<td>' + renderTypeBadge(proj.project_type) + '</td>' +
-        '<td>' + renderPill(proj.status) + '</td>' +
-        '<td class="prog-cell">' + renderProgressCircle(parseFloat(proj.progress) || 0, 26, {label:''}) + '</td>' +
-        '<td style="font-size:12px;color:' + (proj.end ? 'var(--muted)' : 'var(--yellow)') + '">' + (proj.end ? formatDate(proj.end) : '长期') + '</td>' +
-      '</tr>';
-    });
-    html += '</tbody></table></div>';
+    html += '<div id="prod-linked-proj-table"></div>';
   } else {
     html += '<div class="empty-state" style="padding:20px">暂无关联项目</div>';
   }
@@ -1368,6 +1217,24 @@ function renderProdMaintenance(p) {
   html += '</div>';
 
   document.getElementById('prodsec-maintenance').innerHTML = html;
+
+  if (projects.length) {
+    new DataTable({
+      container: document.getElementById('prod-linked-proj-table'),
+      columns: [
+        { key: 'code', title: '项目编号', render: function(v, row) { return v ? projCodeTag(v, 'event.stopPropagation();openProject(\''+escHtml(v).replace(/'/g,"\\'")+'\')', row.name) : '—'; } },
+        { key: 'name', title: '项目名', render: function(v, row) { return '<div class="proj-name">'+escHtml(v||'')+'</div>'; } },
+        { key: 'customer_name', title: '客户', render: function(v) { return v ? renderCustomerBadge(v) : '—'; } },
+        { key: 'project_type', title: '类型', render: function(v) { return renderTypeBadge(v); } },
+        { key: 'status', title: '状态', render: function(v) { return renderPill(v); } },
+        { key: 'progress', title: '进度', render: function(v) { return renderProgressCircle(parseFloat(v)||0, 26, {label:''}); } },
+        { key: 'end', title: '计划完成', render: function(v) { return '<span style="font-size:12px;color:'+(v?'var(--muted)':'var(--yellow)')+'">'+(v?formatDate(v):'长期')+'</span>'; } }
+      ],
+      data: projects,
+      resizable: false,
+      onRowClick: function(row) { openProject(row.code || String(row.id)); }
+    });
+  }
 }
 
 function hasPerm(perm) {
@@ -1576,31 +1443,19 @@ function buildProdActivities(items, opts) {
     container.innerHTML = filterBadge + '<div class="empty-state" style="padding:20px">暂无活动记录</div>';
     return;
   }
-
-  var html = filterBadge;
-  html += '<div class="table-scroll" style="max-height:calc(100vh - 330px)">';
-  html += '<table class="stage-table activity-table">';
-  html += '<thead><tr>' +
-    '<th style="cursor:pointer;user-select:none;white-space:nowrap" onclick="toggleProdActivitySort()">时间 ' + sortIcon + '</th>' +
-    '<th style="white-space:nowrap">用户名 ' + userFilter + '</th>' +
-    '<th style="white-space:nowrap">操作类型 ' + actionFilter + '</th>' +
-    '<th>具体明细</th>' +
-    '</tr></thead><tbody>';
-
-  items.forEach(function(a) {
-    var time = fmtISODateTime(a.created_at);
-    html += '<tr>' +
-      '<td class="act-td-time">' + escHtml(time) + '</td>' +
-      '<td class="act-td-user">' + escHtml(getDisplayName(a.display_name || a.username)) + '</td>' +
-      '<td style="white-space:nowrap"><span class="activity-action pill">' + escHtml(a.action) + '</span></td>' +
-      '<td class="act-td-detail">' + (a.detail ? escHtml(a.detail) : '') + '</td>' +
-      '</tr>';
+  container.innerHTML = filterBadge + '<div id="prod-act-table"></div>';
+  new DataTable({
+    container: document.getElementById('prod-act-table'),
+    columns: [
+      { key: 'created_at', title: '时间 <span id="prod-act-sort-ind" style="cursor:pointer" onclick="toggleProdActivitySort()">' + sortIcon + '</span>', width: '160px', render: function(v) { return '<span class="act-td-time">'+escHtml(fmtISODateTime(v))+'</span>'; } },
+      { key: 'display_name', title: '用户名 ' + userFilter, width: '100px', render: function(v, row) { return '<span class="act-td-user">'+escHtml(getDisplayName(v||row.username))+'</span>'; } },
+      { key: 'action', title: '操作类型 ' + actionFilter, width: '120px', render: function(v) { return '<span class="activity-action pill">'+escHtml(v||'')+'</span>'; } },
+      { key: 'detail', title: '具体明细', render: function(v) { return '<span class="act-td-detail">'+(v?escHtml(v):'')+'</span>'; } }
+    ],
+    data: items,
+    maxHeight: 'calc(100vh - 330px)',
+    resizable: false
   });
-
-  html += '</tbody></table></div>';
-  container.innerHTML = html;
-
-  updateProdActivitySortInd();
 }
 
 function updateProdActivitySortInd() {
@@ -1650,43 +1505,25 @@ function loadProductBugs() {
 }
 
 function _renderProdBugs(bugs, container) {
-  if (!bugs.length) {
-    container.innerHTML = '<div class="card" style="padding:20px"><div class="empty-state">暂无Bug</div></div>';
-    return;
-  }
-  var html = '<div class="table-scroll" style="max-height:calc(100vh - 280px)"><table class="proj-table"><thead><tr>' +
-    '<th style="width:6%">#</th>' +
-    '<th style="width:24%;text-align:left">标题</th>' +
-    '<th style="width:6%">状态</th>' +
-    '<th style="width:5%">严重程度</th>' +
-    '<th style="width:5%">优先级</th>' +
-    '<th style="width:8%">负责人</th>' +
-    '<th style="width:8%">项目编号</th>' +
-    '<th style="width:10%">创建时间</th>' +
-    '<th style="width:1%;white-space:nowrap">操作</th>' +
-    '</tr></thead><tbody>';
-
+  if (!bugs.length) { container.innerHTML = '<div class="card" style="padding:20px"><div class="empty-state">暂无Bug</div></div>'; return; }
   var sevLabels = {1:'致命',2:'严重',3:'一般',4:'建议'};
   var sevColors = {1:'var(--danger)',2:'var(--warn)',3:'var(--accent)',4:'var(--muted)'};
-  bugs.forEach(function(b) {
-    var sev = sevLabels[b.severity] || b.severity;
-    var sevColor = sevColors[b.severity] || 'var(--muted)';
-    var projCode = b.project_code || '';
-    var projCell = projCode
-      ? '<span class="proj-code-btn" onclick="event.stopPropagation();openProject(\'' + escHtml(projCode) + '\')" title="' + escHtml(b.project_name || '') + '">' + escHtml(projCode) + '</span>'
-      : '<span style="font-size:12px;color:var(--muted)">—</span>';
-    html += '<tr style="cursor:pointer">' +
-      '<td style="font-size:11px;font-family:var(--mono)" onclick="openBugDetail(' + b.id + ')">#' + b.id + '</td>' +
-      '<td style="text-align:left;font-weight:530;cursor:pointer" onclick="openBugDetail(' + b.id + ')" title="查看Bug详情">' + escHtml(b.title) + '</td>' +
-      '<td onclick="openBugDetail(' + b.id + ')">' + renderPill(b.status || 'open') + '</td>' +
-      '<td style="color:' + sevColor + ';font-weight:500;font-size:12px" onclick="openBugDetail(' + b.id + ')">' + sev + '</td>' +
-      '<td onclick="openBugDetail(' + b.id + ')"><span class="prio-tag '+(b.priority||'medium')+'">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[b.priority]||b.priority)+'</span></td>' +
-      '<td style="font-size:12px" onclick="openBugDetail(' + b.id + ')">' + escHtml(b.assignee_name || '—') + '</td>' +
-      '<td>' + projCell + '</td>' +
-      '<td style="font-size:11px;color:var(--muted)" onclick="openBugDetail(' + b.id + ')">' + formatDate(b.created_at) + '</td>' +
-      '<td style="white-space:nowrap" onclick="event.stopPropagation()">' + iconEdit('openBugDialog(' + b.id + ')', '编辑Bug') + '</td>' +
-    '</tr>';
+  container.innerHTML = '<div id="prod-bugs-table"></div>';
+  new DataTable({
+    container: document.getElementById('prod-bugs-table'),
+    columns: [
+      { key: 'id', title: '#', width: '6%', render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);cursor:pointer" onclick="openBugDetail('+v+')">#'+v+'</span>'; } },
+      { key: 'title', title: '标题', width: '24%', align: 'left', render: function(v, row) { return '<span style="font-weight:530;cursor:pointer" onclick="openBugDetail('+row.id+')" title="查看Bug详情">'+escHtml(v||'')+'</span>'; } },
+      { key: 'status', title: '状态', width: '6%', render: function(v, row) { return '<span onclick="openBugDetail('+row.id+')">'+renderPill(v||'open')+'</span>'; } },
+      { key: 'severity', title: '严重程度', width: '5%', render: function(v, row) { var c=sevColors[v]||'var(--muted)'; return '<span style="color:'+c+';font-weight:500;font-size:12px;cursor:pointer" onclick="openBugDetail('+row.id+')">'+(sevLabels[v]||v)+'</span>'; } },
+      { key: 'priority', title: '优先级', width: '5%', render: function(v, row) { return '<span onclick="openBugDetail('+row.id+')"><span class="prio-tag '+(v||'medium')+'">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[v]||v)+'</span></span>'; } },
+      { key: 'assignee_name', title: '负责人', width: '8%', render: function(v, row) { return '<span style="font-size:12px;cursor:pointer" onclick="openBugDetail('+row.id+')">'+escHtml(v||'—')+'</span>'; } },
+      { key: 'project_code', title: '项目编号', width: '8%', render: function(v, row) { return v?'<span class="proj-code-btn" onclick="event.stopPropagation();openProject(\''+escHtml(v)+'\')" title="'+escHtml(row.project_name||'')+'">'+escHtml(v)+'</span>':'<span style="font-size:12px;color:var(--muted)">—</span>'; } },
+      { key: 'created_at', title: '创建时间', width: '10%', render: function(v, row) { return '<span style="font-size:11px;color:var(--muted);cursor:pointer" onclick="openBugDetail('+row.id+')">'+formatDate(v)+'</span>'; } },
+      { key: 'actions', title: '操作', render: function(v, row) { return '<span style="white-space:nowrap" onclick="event.stopPropagation()">'+iconEdit('openBugDialog('+row.id+')','编辑Bug')+'</span>'; } }
+    ],
+    data: bugs,
+    maxHeight: 'calc(100vh - 280px)',
+    resizable: false
   });
-  html += '</tbody></table></div>';
-  container.innerHTML = html;
 }
