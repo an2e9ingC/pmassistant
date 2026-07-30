@@ -2074,7 +2074,7 @@ function _renderUcTaskTable() {
       stickyHeader: true,
       selectable: true,
       checkboxPosition: 3,
-      onSelectChange: function(rows) { _selectedTasks = new Set(rows.map(function(r) { return r.id; })); if (typeof _ensureBatchToolbar==='function') _ensureBatchToolbar(); },
+      onSelectChange: function(rows) { _selectedTasks = new Set(rows.map(function(r) { return r.id; })); if (typeof _ensureBatchToolbar==='function') _ensureBatchToolbar(); if (typeof _updateBatchToolbar==='function') _updateBatchToolbar(); },
       onRowClick: function(row) { _ucOpenTask(row.id); }
     });
   } else {

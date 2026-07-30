@@ -568,9 +568,9 @@ function renderTaskTable(tasks, execs) {
     onSelectChange: function(rows) {
       _selectedTasks = new Set(rows.map(function(r) { return r.id; }));
       _ensureBatchToolbar();
+      if (typeof _updateBatchToolbar === 'function') _updateBatchToolbar();
     }
   });
-  // Wire up existing select-all / checkbox handlers for batch toolbar compat
   window._taskFullDt = dt;
   _ensureBatchToolbar();
 }
@@ -641,7 +641,7 @@ function renderTaskTableCompact(tasks, execs) {
           : escHtml(v||'');
         return '<div>' + cell + ' <sup style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:8px">' + (count||row._stageCount||1) + '</sup></div>';
       }},
-      { key: 'title', title: '任务标题', align: 'left', className: 'dt-wrap', render: function(v, row) { return row._empty?'—':'<span style="cursor:pointer" onclick="openTaskDetail('+row.id+')" title="查看任务详情">'+escHtml(v||'')+'</span>'; } },
+      { key: 'title', title: '任务标题', align: 'left', render: function(v, row) { return row._empty?'—':'<span style="cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" onclick="openTaskDetail('+row.id+')" title="查看任务详情">'+escHtml(v||'')+'</span>'; } },
       { key: 'status', title: '状态', width: '6%', render: function(v, row) { return row._empty?'—':renderPill(v||'todo'); } },
       { key: 'priority', title: '优先级', width: '5%', render: function(v, row) { return row._empty?'—':(typeof _renderPriority==='function'?_renderPriority(v):escHtml(v||'medium')); } },
       { key: 'assignee_name', title: '负责人', width: '7%', render: function(v, row) { return row._empty?'—':'<span style="font-size:12px;cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();openAssignDialog('+row.id+')" title="指派任务">'+escHtml(v||'—')+'</span>'; } },
@@ -653,7 +653,7 @@ function renderTaskTableCompact(tasks, execs) {
       }},
       { key: 'due_date', title: '截止日期', width: '7%', render: function(v, row) { return row._empty?'—':'<span style="font-size:12px">'+(v||'—')+'</span>'; } },
       { key: 'completed_at', title: '完成日期', width: '7%', render: function(v, row) { return row._empty?'—':'<span style="font-size:12px">'+(v?formatDate(v):'—')+'</span>'; } },
-      { key: 'latest_activity', title: '最新动态', width: '10%', render: function(v, row) { return row._empty?'—':(typeof _renderLatestActivity==='function'?_renderLatestActivity(row):'<span style="font-size:11px;color:var(--muted)">—</span>'); } },
+      { key: 'latest_activity', title: '最新动态', width: '10%', align: 'left', render: function(v, row) { return row._empty?'—':(typeof _renderLatestActivity==='function'?_renderLatestActivity(row):'<span style="font-size:11px;color:var(--muted)">—</span>'); } },
       { key: 'latest_time', title: '时间', width: '6%', render: function(v, row) { return row._empty?'—':''; } },
       { key: 'actions', title: '操作', render: function(v, row) { return row._empty?'<span style="color:var(--muted);font-size:12px">—</span>':'<span style="white-space:nowrap" onclick="event.stopPropagation()">'+iconEdit('openTaskDialog('+row.id+')')+iconDelete('deleteTask('+row.id+',\''+escJs(row.title)+'\')')+'</span>'; } }
     ],
@@ -661,10 +661,9 @@ function renderTaskTableCompact(tasks, execs) {
     maxHeight: 'calc(100vh - 340px)',
     resizable: false,
     selectable: true,
-    checkboxPosition: 11,
-    onSelectChange: function(rows) { _selectedTasks = new Set(rows.map(function(r) { return r.id; })); _ensureBatchToolbar(); }
+    checkboxPosition: 1,
+    onSelectChange: function(rows) { _selectedTasks = new Set(rows.map(function(r) { return r.id; })); _ensureBatchToolbar(); if (typeof _updateBatchToolbar === 'function') _updateBatchToolbar(); }
   });
-  _ensureBatchToolbar();
   _ensureBatchToolbar();
 
   // Group hover: hovering the stage-name cell highlights all rows of that stage
