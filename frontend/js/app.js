@@ -1036,7 +1036,7 @@ function startNotifPoll() {
 
 var _tickerEnabled = localStorage.getItem('pma_ticker_enabled') !== '0';  // default ON
 var _tickerSpeed = localStorage.getItem('pma_ticker_speed') || 'normal';  // slow|normal|fast
-var _tickerSpeeds = {slow: 300, normal: 210, fast: 140};
+var _tickerSpeeds = {slow: 30, normal: 50, fast: 80};  // px/s
 var _tickerContentMode = localStorage.getItem('pma_ticker_mode') || 'activities';  // activities|alerts
 var _tickerTimer = null;
 
@@ -1053,7 +1053,15 @@ function initAlertTicker() {
 
 function applyTickerSpeed() {
   var inner = document.getElementById('alert-ticker-inner');
-  if (inner) inner.style.animationDuration = _tickerSpeeds[_tickerSpeed] + 's';
+  if (!inner) return;
+  var pxPerSec = _tickerSpeeds[_tickerSpeed] || 50;
+  // Use requestAnimationFrame so the browser has laid out the new content
+  requestAnimationFrame(function() {
+    var contentWidth = inner.scrollWidth;
+    // Animation is translateX(-50%) — scrolls half the content width
+    var duration = Math.max(contentWidth / 2 / pxPerSec, 10);  // minimum 10s
+    inner.style.animationDuration = duration + 's';
+  });
 }
 
 function toggleAlertTicker() {
@@ -1100,7 +1108,6 @@ async function loadAlertTicker() {
       if (!acts.length) { ticker.style.display = 'none'; document.body.classList.remove('has-ticker'); _syncBottomLayout(); return; }
       ticker.style.display = '';
       document.body.classList.add('has-ticker');
-      applyTickerSpeed();
       _syncBottomLayout();
       var actItems = acts.concat(acts);
       var actHtml = '';
@@ -1120,13 +1127,13 @@ async function loadAlertTicker() {
         '</span>';
       });
       document.getElementById('alert-ticker-inner').innerHTML = actHtml;
+      applyTickerSpeed();
     } else {
       var data = await API.get('/dashboard/alerts?limit=30');
       var alerts = data.items || [];
       if (!alerts.length) { ticker.style.display = 'none'; document.body.classList.remove('has-ticker'); _syncBottomLayout(); return; }
       ticker.style.display = '';
       document.body.classList.add('has-ticker');
-      applyTickerSpeed();
       _syncBottomLayout();
       // Duplicate items for seamless scrolling
       var items = alerts.concat(alerts);
@@ -1141,6 +1148,7 @@ async function loadAlertTicker() {
         '</span>';
       });
       document.getElementById('alert-ticker-inner').innerHTML = html;
+      applyTickerSpeed();
     }
   } catch(e) { /* non-critical */ }
 }
