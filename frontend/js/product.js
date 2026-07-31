@@ -358,11 +358,15 @@ async function loadProductDetail(code) {
   }
 
   document.getElementById('prod-detail-header').innerHTML = '<div class="loading-spinner">加载中...</div>';
-  ['prodsec-info', 'prodsec-docs', 'prodsec-activities', 'prodsec-maintenance', 'prodsec-bugs'].forEach(function(s) {
+  ['prodsec-info', 'prodsec-docs', 'prodsec-maintenance', 'prodsec-bugs'].forEach(function(s) {
     document.getElementById(s).innerHTML = '<div class="card" style="padding:20px"><div class="loading-spinner">加载中...</div></div>';
   });
   var actContainer = document.getElementById('prod-activities-content');
   if (actContainer) actContainer.innerHTML = '<div class="loading-spinner">加载活动记录...</div>';
+  else {
+    var actSec = document.getElementById('prodsec-activities');
+    if (actSec) actSec.innerHTML = '<div id="prod-activities-content"><div class="loading-spinner">加载活动记录...</div></div>';
+  }
 
   try {
     var detail = await API.get('/products/' + code);
