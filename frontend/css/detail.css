@@ -636,7 +636,7 @@ body.has-ticker .view.active { padding-bottom: 28px; }
   text-decoration: underline;
 }
 
-/* ── Activity Table (项目/产品进度明细) ── */
+/* ── Activity Table (项目/产品日志) ── */
 
 .activity-header-filter {
   font-family: var(--font);

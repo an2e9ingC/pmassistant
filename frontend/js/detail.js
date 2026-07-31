@@ -1665,7 +1665,27 @@ function buildNotes(notes) {
 }
 
 function buildProjectActivity(code) {
-  var TASK_ACTIONS = ['任务创建', '批量创建任务', '导入任务', '任务更新', '任务删除'];
+  var TASK_ACTIONS = ['任务创建', '批量创建任务', '导入任务', '任务更新', '任务删除', '工时记录', '工时更新', '工时删除'];
+
+  // Strip redundant task-name prefix from detail since task_name column already shows it
+  function _cleanDetail(v, action) {
+    var text = v || '';
+    // "更新任务「xxx」: changes" → "changes"
+    var m = text.match(/^更新任务「[^」]*」:\s*/);
+    if (m) return text.substring(m[0].length);
+    // "创建任务 #N: title" → "#N: title" — keep #N as task reference
+    m = text.match(/^创建任务\s+(#\d+):\s*/);
+    if (m) return m[1];
+    // "批量创建任务 [CODE] #N: title" → "#N: title"
+    m = text.match(/^批量创建任务\s*\[[^\]]*\]\s*(#\d+):\s*/);
+    if (m) return m[1];
+    // "导入任务 #N: title" → "#N: title"
+    m = text.match(/^导入任务\s+(#\d+):\s*/);
+    if (m) return m[1];
+    // "删除任务「xxx」" → "已删除"
+    if (/^删除任务「[^」]*」$/.test(text)) return '已删除';
+    return text;
+  }
   API.get('/projects/' + code + '/activities?sort=desc&limit=50').then(function(data) {
     var items = (data && data.items) ? data.items : [];
     // Filter task-related activities only
@@ -1683,10 +1703,17 @@ function buildProjectActivity(code) {
       container: document.getElementById('project-activity-table'),
       columns: [
         { key: 'created_at', title: '时间', width: '130px', render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">' + (fmtISODateTime(v) || '—') + '</span>'; } },
-        { key: 'task_name', title: '任务名', width: 'auto', render: function(v) { return '<span style="font-size:12px;font-weight:500">' + escHtml(v || '—') + '</span>'; } },
+        { key: 'task_name', title: '任务名', width: 'auto', render: function(v, row) {
+          var name = escHtml(v || '—');
+          if (row.task_id && v) {
+            return '<a href="javascript:void(0)" onclick="openProjectActivityTask(' + row.task_id + ')" style="font-size:12px;font-weight:500;color:var(--accent);text-decoration:none" title="查看任务详情">' + name + '</a>';
+          }
+          return '<span style="font-size:12px;font-weight:500">' + name + '</span>';
+        } },
         { key: 'task_assignee', title: '责任人', width: '70px', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">' + escHtml(v || '—') + '</span>'; } },
         { key: 'detail', title: '动态内容', align: 'left', className: 'dt-wrap', render: function(v, row) {
-          return '<span style="font-size:12px;line-height:1.5">' + escHtml(row.display_name || row.username || '') + ' ' + escHtml(row.action || '') + ': ' + escHtml((v || '').length > 100 ? (v || '').substring(0, 100) + '...' : (v || '')) + '</span>';
+          var text = _cleanDetail(v, row.action);
+          return '<span style="font-size:12px;line-height:1.5">' + escHtml(text.length > 100 ? text.substring(0, 100) + '...' : text) + '</span>';
         }}
       ],
       data: taskItems,
@@ -1697,6 +1724,11 @@ function buildProjectActivity(code) {
     var container = document.getElementById('project-activity-content');
     if (container) container.innerHTML = '<div class="empty-state" style="padding:12px">加载失败</div>';
   });
+}
+
+function openProjectActivityTask(taskId) {
+  if (typeof openTaskDetail === 'function') { openTaskDetail(taskId); }
+  else if (typeof loadViewScript === 'function') { loadViewScript('/js/tasks.js?v=' + APP_VERSION, function() { openTaskDetail(taskId); }); }
 }
 
 async function openNoteDialog() {
@@ -3276,7 +3308,7 @@ function buildActivities(items, opts) {
       { key: 'created_at', title: '时间 <span id="act-sort-ind" style="cursor:pointer" onclick="toggleActivitySort()">' + sortIcon + '</span>', width: '160px', render: function(v) { return '<span class="act-td-time">'+escHtml(fmtISODateTime(v))+'</span>'; } },
       { key: 'display_name', title: '用户名 ' + userFilter, width: '100px', render: function(v, row) { return '<span class="act-td-user">'+escHtml(getDisplayName(v||row.username))+'</span>'; } },
       { key: 'action', title: '操作类型 ' + actionFilter, width: '120px', render: function(v) { return '<span class="activity-action pill">'+escHtml(v||'')+'</span>'; } },
-      { key: 'detail', title: '具体明细', render: function(v) { return '<span class="act-td-detail">'+(v?escHtml(v):'')+'</span>'; } }
+      { key: 'detail', title: '具体明细', width: 'auto', align: 'left', className: 'dt-wrap', render: function(v) { return '<span class="act-td-detail">'+(v?escHtml(v):'')+'</span>'; } }
     ],
     data: items,
     maxHeight: 'calc(100vh - 330px)',

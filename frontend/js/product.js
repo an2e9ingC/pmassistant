@@ -1407,7 +1407,7 @@ async function saveProdTags() {
   }
 }
 
-// ── Tab: 产品进度明细 ──
+// ── Tab: 产品日志 ──
 
 var _prodActivitySort = 'desc';
 var _prodActivityFilterUser = '';
@@ -1483,7 +1483,7 @@ function buildProdActivities(items, opts) {
       { key: 'created_at', title: '时间 <span id="prod-act-sort-ind" style="cursor:pointer" onclick="toggleProdActivitySort()">' + sortIcon + '</span>', width: '160px', render: function(v) { return '<span class="act-td-time">'+escHtml(fmtISODateTime(v))+'</span>'; } },
       { key: 'display_name', title: '用户名 ' + userFilter, width: '100px', render: function(v, row) { return '<span class="act-td-user">'+escHtml(getDisplayName(v||row.username))+'</span>'; } },
       { key: 'action', title: '操作类型 ' + actionFilter, width: '120px', render: function(v) { return '<span class="activity-action pill">'+escHtml(v||'')+'</span>'; } },
-      { key: 'detail', title: '具体明细', render: function(v) { return '<span class="act-td-detail">'+(v?escHtml(v):'')+'</span>'; } }
+      { key: 'detail', title: '具体明细', width: 'auto', align: 'left', className: 'dt-wrap', render: function(v) { return '<span class="act-td-detail">'+(v?escHtml(v):'')+'</span>'; } }
     ],
     data: items,
     maxHeight: 'calc(100vh - 330px)',

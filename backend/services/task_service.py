@@ -148,7 +148,7 @@ def create_task(db: Session, data: dict, user) -> dict:
     db.refresh(t)
     _link_task_to_stage(db, t)
     _log_audit(db, t.project_id, uname, "task_create", f"创建任务 #{t.id}: {t.title}",
-               task_name=t.title, task_assignee=_resolve_assignee_name(db, t.assignee_id))
+               task_name=t.title, task_assignee=_resolve_assignee_name(db, t.assignee_id), task_id=t.id)
     auto_messages = []
     if t.stage_id:
         auto_messages = _recalc_stage_progress(db, t.stage_id)
@@ -188,7 +188,7 @@ def create_tasks_batch(db: Session, tasks_data: list, user) -> List[dict]:
         proj = db.query(CachedProject).filter(CachedProject.id == t.project_id).first()
         proj_info = f"[{proj.code}]" if proj and proj.code else f"项目#{t.project_id}"
         _log_audit(db, t.project_id, uname, "task_create_batch", f"批量创建任务 {proj_info} #{t.id}: {t.title}",
-                   task_name=t.title, task_assignee=_resolve_assignee_name(db, t.assignee_id))
+                   task_name=t.title, task_assignee=_resolve_assignee_name(db, t.assignee_id), task_id=t.id)
     return [_task_dict(t, db) for t in created]
 
 
@@ -328,7 +328,7 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
 
     if changes:
         _log_audit(db, t.project_id, uname, "task_update", f"更新任务「{t.title}」: " + "; ".join(changes[:3]),
-                   task_name=t.title, task_assignee=_resolve_assignee_name(db, t.assignee_id))
+                   task_name=t.title, task_assignee=_resolve_assignee_name(db, t.assignee_id), task_id=t.id)
         # Also record as task comment for user-visible change history
         comment_text = "; ".join(changes)
         if not comment_text:
@@ -431,7 +431,7 @@ def delete_task(db: Session, task_id: int, user=None) -> bool:
         if stage_id:
             _recalc_stage_progress(db, stage_id)
         _log_audit(db, project_id, uname, "task_delete", f"移除模板任务 #{task_id}: {title}",
-                   task_name=title, task_assignee=assignee_name)
+                   task_name=title, task_assignee=assignee_name, task_id=task_id)
     else:
         # Hard delete manual task
         db.query(WorkLog).filter(WorkLog.task_id == task_id).delete()
@@ -441,7 +441,7 @@ def delete_task(db: Session, task_id: int, user=None) -> bool:
         if stage_id:
             _recalc_stage_progress(db, stage_id)
         _log_audit(db, project_id, uname, "task_delete", f"删除任务 #{task_id}: {title}",
-                   task_name=title, task_assignee=assignee_name)
+                   task_name=title, task_assignee=assignee_name, task_id=task_id)
     return True
 
 
@@ -589,7 +589,7 @@ def _parse_date(val) -> Optional[date]:
 
 
 def _log_audit(db: Session, project_id: int, username: Optional[str], action: str, detail: str,
-               task_name: str = "", task_assignee: str = ""):
+               task_name: str = "", task_assignee: str = "", task_id: int = None):
     """Record task operation to audit log + project activity."""
     if not username:
         return
@@ -618,6 +618,7 @@ def _log_audit(db: Session, project_id: int, username: Optional[str], action: st
                 username=username,
                 action=_TASK_ACTION_CN.get(action, action),
                 detail=detail,
+                task_id=task_id,
                 task_name=task_name or "",
                 task_assignee=task_assignee or "",
             )

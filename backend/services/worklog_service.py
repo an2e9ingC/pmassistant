@@ -8,7 +8,7 @@ from sqlalchemy.sql import func as sa_func
 
 from backend.models.task import WorkLog, Task
 from backend.models.bug import BugWorkLog, PmaBug
-from backend.models.local import PmaSetting
+from backend.models.local import PmaSetting, LocalUser, ProjectActivity
 from backend.database import to_local_str
 
 
@@ -77,6 +77,30 @@ def get_worklogs(
     return [_worklog_dict(w, task_map.get(w.task_id), db) for w in logs]
 
 
+def _log_worklog_activity(db: Session, task_id: int, user_id: int, action: str, detail: str):
+    """Log worklog operation to ProjectActivity for project timeline."""
+    try:
+        task = db.query(Task).filter(Task.id == task_id).first()
+        if not task or not task.project_id:
+            return
+        user = db.query(LocalUser).filter(LocalUser.id == user_id).first()
+        username = user.username if user else "unknown"
+        from backend.services.task_service import _resolve_assignee_name
+        act = ProjectActivity(
+            project_id=task.project_id,
+            username=username,
+            action=action,
+            detail=detail,
+            task_id=task.id,
+            task_name=task.title or "",
+            task_assignee=_resolve_assignee_name(db, task.assignee_id),
+        )
+        db.add(act)
+        db.commit()
+    except Exception:
+        pass  # never fail the main operation
+
+
 def create_worklog(db: Session, data: dict, user_id: int) -> dict:
     """Create a worklog entry and recalc task consumed_hours."""
     w = WorkLog(
@@ -99,6 +123,9 @@ def create_worklog(db: Session, data: dict, user_id: int) -> dict:
             _recalc_stage_progress(db, task.stage_id)
 
     task = db.query(Task).filter(Task.id == w.task_id).first()
+    # Log to project activity timeline
+    _log_worklog_activity(db, w.task_id, user_id, "工时记录",
+        f"记录工时 {w.hours}h: {w.description or ''}")
     return _worklog_dict(w, task, db)
 
 
@@ -108,12 +135,22 @@ def update_worklog(db: Session, worklog_id: int, data: dict) -> Optional[dict]:
     if not w:
         return None
 
+    changes = []
     if "hours" in data:
-        w.hours = float(data["hours"] or 0)
+        new_hours = float(data["hours"] or 0)
+        if new_hours != w.hours:
+            changes.append(f"{w.hours}h → {new_hours}h")
+        w.hours = new_hours
     if "date" in data:
-        w.date = _parse_date(data["date"]) or w.date
+        new_date = _parse_date(data["date"]) or w.date
+        if new_date != w.date:
+            changes.append(f"日期 → {new_date}")
+        w.date = new_date
     if "description" in data:
-        w.description = data["description"]
+        new_desc = data["description"]
+        if new_desc != w.description:
+            changes.append(f"描述更新")
+        w.description = new_desc
 
     db.commit()
     db.refresh(w)
@@ -127,6 +164,10 @@ def update_worklog(db: Session, worklog_id: int, data: dict) -> Optional[dict]:
             _recalc_stage_progress(db, task.stage_id)
 
     task = db.query(Task).filter(Task.id == w.task_id).first()
+    # Log to project activity timeline
+    if changes:
+        _log_worklog_activity(db, w.task_id, w.user_id, "工时更新",
+            f"更新工时: {'; '.join(changes)}")
     return _worklog_dict(w, task, db)
 
 
@@ -136,6 +177,8 @@ def delete_worklog(db: Session, worklog_id: int) -> bool:
     if not w:
         return False
     task_id = w.task_id
+    user_id = w.user_id
+    detail = f"删除工时 {w.hours}h: {w.description or ''}"
     db.delete(w)
     db.commit()
 
@@ -145,6 +188,8 @@ def delete_worklog(db: Session, worklog_id: int) -> bool:
     t = db.query(Task).filter(Task.id == task_id).first()
     if t and t.stage_id:
         _recalc_stage_progress(db, t.stage_id)
+    # Log to project activity timeline
+    _log_worklog_activity(db, task_id, user_id, "工时删除", detail)
     return True
 
 
