@@ -34,9 +34,11 @@ def resolve_product(db: Session, code: str) -> PmaProduct:
     return p
 
 
-def resolve_customer(db: Session, name: str) -> PmaCustomer:
-    """Look up a PmaCustomer by its name field (which serves as the public code)."""
-    c = db.query(PmaCustomer).filter(PmaCustomer.name == name).first()
+def resolve_customer(db: Session, code: str) -> PmaCustomer:
+    """Look up a PmaCustomer by name or numeric ID."""
+    c = db.query(PmaCustomer).filter(PmaCustomer.name == code).first()
+    if not c and code.isdigit():
+        c = db.query(PmaCustomer).filter(PmaCustomer.id == int(code)).first()
     if not c:
-        raise HTTPException(status_code=404, detail=f"客户不存在: {name}")
+        raise HTTPException(status_code=404, detail=f"客户不存在: {code}")
     return c

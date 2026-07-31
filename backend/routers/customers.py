@@ -70,7 +70,7 @@ def list_customers(
 
 
 @router.post("", response_model=dict)
-def create_customer(payload: CustomerCreate, db: Session = Depends(get_db), user=Depends(require_perm("customer_link"))):
+def create_customer(payload: CustomerCreate, db: Session = Depends(get_db), user=Depends(require_perm("customer_link")), cu = Depends(get_current_user)):
     existing = db.query(PmaCustomer).filter(PmaCustomer.name == payload.name).first()
     if existing:
         raise HTTPException(status_code=400, detail="客户名称已存在")
@@ -78,17 +78,23 @@ def create_customer(payload: CustomerCreate, db: Session = Depends(get_db), user
     db.add(c)
     db.commit()
     db.refresh(c)
+    log_audit(db, cu, "create_customer", f"name={payload.name!r} full_name={payload.full_name!r}", AUDIT_CAT_CUSTOMER, "medium")
     return {"code": 0, "data": {"id": c.id, "name": c.name}, "message": "客户已创建"}
 
 
 @router.put("/{identifier}", response_model=dict)
-def update_customer(identifier: str, payload: CustomerUpdate, db: Session = Depends(get_db), user=Depends(require_perm("customer_link"))):
+def update_customer(identifier: str, payload: CustomerUpdate, db: Session = Depends(get_db), user=Depends(require_perm("customer_link")), cu = Depends(get_current_user)):
     customer = resolve_customer(db, identifier)
-    if payload.name is not None:
+    changes = []
+    if payload.name is not None and payload.name != customer.name:
+        changes.append(f"name:'{customer.name}'->'{payload.name}'")
         customer.name = payload.name
-    if payload.full_name is not None:
+    if payload.full_name is not None and payload.full_name != customer.full_name:
+        changes.append(f"full_name:'{customer.full_name}'->'{payload.full_name}'")
         customer.full_name = payload.full_name
     db.commit()
+    if changes:
+        log_audit(db, cu, "update_customer", f"name={customer.name!r} " + "; ".join(changes), AUDIT_CAT_CUSTOMER, "medium")
     return {"code": 0, "message": "客户已更新"}
 
 
