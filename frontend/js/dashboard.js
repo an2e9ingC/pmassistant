@@ -363,7 +363,8 @@ async function loadProjectTable() {
     _dashDt._tableEl.setAttribute('data-category', dashFilter.type === 'high_risk' ? 'high_risk' : (dashFilter.type === 'completed' ? 'completed' : 'active'));
     _dashDt.setData(list);
   } catch(e) {
-    _dashDt.setData([]);
+    _dashDt = null;
+    document.getElementById('proj-table').innerHTML = '<div class="error-state" style="padding:20px">加载失败: ' + escHtml(e.message) + '<br><button class="btn" style="margin-top:8px" onclick="loadProjectTable()">重试</button></div>';
     showToast('加载失败: ' + e.message, 'error');
   }
 }

@@ -72,7 +72,8 @@ async function initGitLabReleases() {
     _glrKpi = data.kpi || { total: 0, valid: 0, invalid: 0, unchecked: 0, missing_url: 0 };
     _glrAllItems = data.items || [];
   } catch (e) {
-    _glrDt.setData([]);
+    _glrDt = null;
+    document.getElementById('glr-table').innerHTML = '<div class="error-state" style="padding:20px">加载失败: ' + escHtml(e.message) + '<br><button class="btn" style="margin-top:8px" onclick="initGitLabReleases()">重试</button></div>';
     showToast('加载失败: ' + e.message, 'error');
     return;
   }

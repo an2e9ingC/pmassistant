@@ -429,7 +429,7 @@ def add_custom_document(
     )
     db.add(pd)
     db.commit()
-    log_audit(db, user, "doc_add", f"项目={project.code} 新增自定义文档「{body.doc_name}」", AUDIT_CAT_TASK, "medium")
+    log_audit(db, user, "doc_add", f"项目={project.code} 新增自定义文档「{body.doc_name}」", AUDIT_CAT_PROJECT, "medium")
     return {"code": 0, "data": {"id": pd.id}, "message": f"文档「{body.doc_name}」已添加"}
 
 

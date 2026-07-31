@@ -471,19 +471,6 @@ var DataTable = (function() {
     });
   };
 
-  DataTable.prototype._attachSelect = function() {
-    var self = this;
-    this._tbodyEl.addEventListener('click', function(e) {
-      // Checkbox clicks are handled directly on the input
-      if (e.target.tagName === 'INPUT') return;
-      // Click on row: toggle selection via the row's checkbox
-      var tr = e.target.closest('tr[data-row-id]');
-      if (!tr) return;
-      var cb = tr.querySelector('input[type="checkbox"]');
-      if (cb) { cb.checked = !cb.checked; cb.onchange({ target: cb }); }
-    });
-  };
-
   /* ── Public API ── */
 
   DataTable.prototype.setData = function(data) {

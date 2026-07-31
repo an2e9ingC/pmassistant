@@ -1230,7 +1230,8 @@ function loadNotifManage() {
     }
     _notifDt.setData(data);
   }).catch(function(e) {
-    _notifDt.setData([]);
+    _notifDt = null;
+    document.getElementById('notif-manage-table').innerHTML = '<div class="error-state" style="padding:20px">加载失败: ' + escHtml(e.message) + '</div>';
     showToast('加载失败: ' + e.message, 'error');
   });
 }

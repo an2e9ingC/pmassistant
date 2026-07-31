@@ -76,7 +76,8 @@ async function doFuzzySearch() {
     var data = await API.get('/topology?q=' + encodeURIComponent(q));
     _topoShowResult((data && data.items) ? data.items : []);
   } catch(e) {
-    _topoDt.setData([]);
+    _topoDt = null;
+    document.getElementById('topo-table').innerHTML = '<div class="error-state" style="padding:20px">搜索失败: ' + escHtml(e.message) + '<br><button class="btn" style="margin-top:8px" onclick="onFuzzySearch()">重试</button></div>';
     showToast('搜索失败: ' + e.message, 'error');
   }
 }
@@ -103,7 +104,8 @@ async function doTopoSearch() {
     var data = await API.get('/topology?' + params.join('&'));
     _topoShowResult((data && data.items) ? data.items : []);
   } catch(e) {
-    _topoDt.setData([]);
+    _topoDt = null;
+    document.getElementById('topo-table').innerHTML = '<div class="error-state" style="padding:20px">搜索失败: ' + escHtml(e.message) + '<br><button class="btn" style="margin-top:8px" onclick="onTopoSearch()">重试</button></div>';
     showToast('搜索失败: ' + e.message, 'error');
   }
 }
