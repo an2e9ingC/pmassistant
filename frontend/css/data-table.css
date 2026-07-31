@@ -111,7 +111,7 @@
 .dt-header-warn thead th { background: var(--warn); color: #fff; }
 
 /* ── Dark theme striping ── */
-[data-theme="dark"] .dt-striped tbody tr:nth-child(odd) td { background: #2a3340; }
+[data-theme="dark"] .dt-striped tbody tr:nth-child(odd) td { background: #2a3340; } /* Also defined in components.css:245; keep in sync */
 [data-theme="dark"] .dt-striped tbody tr:nth-child(even) td { background: #222a35; }
 [data-theme="dark"] .dt-hover tbody tr:hover td { background: #334050; }
 

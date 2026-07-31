@@ -693,12 +693,6 @@ async function triggerSingleSync(key) {
   }
 }
 
-function gotoSrcConfig(key) {
-  gotoView('config');
-  // Set highlight target for config page to flash
-  window._srcConfigHighlight = key;
-}
-
 // Open the config edit dialog directly for a source (or all)
 function openConfigDialog(key) {
   window._srcConfigOpenDialog = key || null;  // null = open first section
@@ -1812,9 +1806,7 @@ function _ucLoadTasks(user) {
     _ucUpdateTaskCount();
     _ucRenderTaskStats();
     _renderUcFilterBar();
-    _renderUcTableHead();
     _renderUcTaskTable();
-    _renderUcStats();
     // Re-render calendar with pie charts once task data is available
     _ucLoadCalendar(user);
     _ucLoadWecomCalendar(user);
@@ -1933,7 +1925,6 @@ function _ucOpenTask(taskId) {
   else if (typeof loadViewScript === 'function') { loadViewScript('/js/tasks.js?v=' + APP_VERSION, function() { openTaskDetail(taskId); }); }
 }
 
-function _renderUcTableHead() {}  // DataTable handles header now
 
 function _ucSortBy(col) {
   if (_ucSortCol === col) { _ucSortDir = _ucSortDir === 'asc' ? 'desc' : _ucSortDir === 'desc' ? '' : 'asc'; }
@@ -2094,10 +2085,6 @@ function _renderUcTaskTable() {
   setTimeout(function() { if (typeof window._ucUpdateLayout === 'function') window._ucUpdateLayout(); }, 20);
   // Double-call to ensure layout has settled
   setTimeout(function() { if (typeof window._ucUpdateLayout === 'function') window._ucUpdateLayout(); }, 100);
-}
-
-function _renderUcStats() {
-  // Stats (待办/进行中/本周工时) moved to floating card; uc-stats div removed
 }
 
 function _ucEnsureBugsJs(fn) {

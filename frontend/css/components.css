@@ -68,8 +68,7 @@
 .pill.review { background: var(--warn-lt); color: var(--warn); border: 1px solid var(--warn); }
 .pill.done { background: var(--success-lt); color: var(--success); }
 
-/* ── Priority tag ── */
-.prio-tag { font-size: 11px; font-weight: 600; white-space: nowrap; }
+/* ── Priority tag (full definition below at ~line 981) ── */
 
 /* ── Confirm dialog (first-level) ── */
 .confirm-dlg { font-size: 14px; line-height: 1.6; }
@@ -243,7 +242,7 @@
 .proj-table tbody tr:nth-child(even) td { background: var(--bg); }
 .proj-table tbody tr:hover td { background: var(--surface2); }
 /* Dark theme: Gantt month palette — ice gray-blue / dark green alternating */
-[data-theme="dark"] .proj-table tbody tr:nth-child(odd) td { background: #2a3340; }
+[data-theme="dark"] .proj-table tbody tr:nth-child(odd) td { background: #2a3340; } /* Also defined in data-table.css:114; keep in sync */
 [data-theme="dark"] .proj-table tbody tr:nth-child(even) td { background: #222a35; }
 [data-theme="dark"] .proj-table tbody tr:hover td { background: #334050; }
 /* Within .table-scroll, use separate border model for sticky to work */
@@ -325,7 +324,6 @@ input[type="checkbox"] { accent-color: var(--accent); }
   0%   { opacity: 1; transform: translate(0,0) scale(1); }
   100% { opacity: 0; transform: translate(var(--dx),var(--dy)) scale(0); }
 }
-.fav-anim { animation: fav-sparkle 0.5s ease-out; }
 .fav-burst { position: absolute; pointer-events: none; }
 .fav-burst-dot { position: absolute; width: 3px; height: 3px; border-radius: 50%; background: var(--warn); animation: fav-burst-dot 0.6s ease-out forwards; }
 .alert-list { }
@@ -415,66 +413,6 @@ input[type="checkbox"] { accent-color: var(--accent); }
 /* ═══════════════════════════════════════════════════
    PRODUCT LIST
 ═══════════════════════════════════════════════════ */
-
-/* Product line sidebar — reuses .prod-sidebar-layout from detail.css */
-.product-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 14px;
-  padding: 0;
-}
-
-.product-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: 18px 20px;
-  box-shadow: var(--sh);
-  cursor: pointer;
-  transition: border-color 0.15s, box-shadow 0.15s, transform 0.12s;
-}
-.product-card:hover {
-  border-color: var(--accent);
-  box-shadow: var(--sh-md);
-  transform: translateY(-1px);
-}
-
-.product-card-name {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--fg);
-  margin-bottom: 4px;
-  line-height: 1.3;
-}
-.product-card-code {
-  font-size: 11.5px;
-  color: var(--muted);
-  font-family: var(--mono);
-  margin-bottom: 8px;
-}
-.product-card-desc {
-  font-size: 12.5px;
-  color: var(--muted);
-  line-height: 1.45;
-  margin-bottom: 10px;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.product-card-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin-bottom: 10px;
-}
-.product-card-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
-}
 
 /* ═══════════════════════════════════════════════════
    TAG BADGES (product tags from #keyword format)
@@ -635,9 +573,6 @@ input[type="checkbox"] { accent-color: var(--accent); }
 }
 @media (max-width: 768px) {
   .prod-info-grid {
-    grid-template-columns: 1fr;
-  }
-  .product-grid {
     grid-template-columns: 1fr;
   }
 }

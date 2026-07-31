@@ -15,21 +15,8 @@ async function initProjectTypeLabels() {
   } catch(e) { /* use defaults */ }
 }
 
-const G_START = new Date('2025-01-01');
-const G_END   = new Date('2027-01-01');
-const G_SPAN  = G_END - G_START;
-
-function d2pct(ds) {
-  const t = new Date(ds) - G_START;
-  return Math.max(0, Math.min(100, (t / G_SPAN) * 100));
-}
-
 function fmtLocalDate(d) { d=d||new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function fmtHours(h) { if (!h || h <= 0) return "0h"; var hrs = Math.floor(h); var mins = Math.round((h - hrs) * 60); if (mins === 60) { hrs++; mins = 0; } return hrs + "h" + (mins > 0 ? mins + "m" : ""); }
-
-function todayPct() {
-  return d2pct(fmtLocalDate());
-}
 
 function clearSearch(inputId, callback) {
   var inp = document.getElementById(inputId);
@@ -61,17 +48,6 @@ function formatDate(d) {
   if (!d) return '';
   const s = String(d);
   return s.length >= 10 ? s.substring(0, 10) : s;
-}
-
-function formatShortDate(d) {
-  if (!d) return '';
-  var s = String(d);
-  if (s.length < 10) return s;
-  // YYYY-MM-DD → M月D日
-  var parts = s.substring(0, 10).split('-');
-  var m = parseInt(parts[1], 10);
-  var day = parseInt(parts[2], 10);
-  return m + '月' + day + '日';
 }
 
 var _pmaSettings = null; // cached settings from API
@@ -165,6 +141,31 @@ function escHtml(str) {
 function escJs(str) {
   if (!str) return '';
   return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n');
+}
+
+function renderPriorityBadge(p) {
+  // Unified priority badge (badge style with background, from tasks.js impl)
+  var colors = {low: 'var(--success)', medium: 'var(--warn)', high: 'var(--warn)', critical: 'var(--danger)'};
+  var labels = {low: '低', medium: '中', high: '高', critical: '紧急'};
+  return '<span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:600;color:#fff;background:' + (colors[p] || 'var(--muted)') + '">' + (labels[p] || p) + '</span>';
+}
+
+function _filterSearchableItems(input) {
+  // Shared: filter dropdown items by data-search-text attribute
+  var q = (input.value || '').toLowerCase();
+  var list = input.nextElementSibling;
+  if (!list) return;
+  list.querySelectorAll('.searchable-item').forEach(function(item) {
+    item.style.display = q ? (item.getAttribute('data-search-text').indexOf(q) >= 0 ? '' : 'none') : '';
+  });
+}
+
+function _hasProjectEditPerm() {
+  // Shared: check if current user can edit projects
+  if (typeof getCurrentUser !== 'function') return false;
+  var user = getCurrentUser();
+  var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+  return perms.indexOf('project_edit') !== -1 || perms.indexOf('admin') >= 0;
 }
 
 /* ── Confirm dialog helpers ── */
@@ -288,12 +289,8 @@ function renderCustomerBadge(customerName) {
   return '<span class="cust-badge" onclick="event.stopPropagation();openCustomerByName(\''+escHtml(customerName).replace(/'/g,"\\'")+'\')" title="查看客户详情">' + escHtml(customerName) + '</span>';
 }
 
-// Navigate to customer detail (replaces old topology redirect)
+// Used by topology.js to pre-fill customer search
 var _pendingCustSelect = null;
-function gotoCustomerProjects(custName) {
-  if (!custName) return;
-  openCustomerByName(custName);
-}
 
 // Render project code tag — clickable to project detail by default
 // Usage: projCodeTag(code, handler) or projCodeTag(code, handler, projectName)

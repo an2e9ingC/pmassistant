@@ -4,12 +4,7 @@
 
 var _taskViewMode = 'table';  // 'table' | 'board' | 'calendar'
 
-function _hasProjectEditPerm() {
-  if (typeof getCurrentUser !== 'function') return false;
-  var user = getCurrentUser();
-  var perms = (user && user.permissions) ? user.permissions.split(',') : [];
-  return perms.indexOf('project_edit') !== -1 || perms.indexOf('admin') >= 0;
-}
+// _hasProjectEditPerm moved to utils.js
 
 function _hasTaskEditPerm() {
   if (typeof getCurrentUser !== 'function') return false;
@@ -555,7 +550,7 @@ function renderTaskTable(tasks, execs) {
         if (window._approvalEnabled) h = '<span style="cursor:pointer" onclick="event.stopPropagation();openReviewerDialog('+row.id+')" title="'+(row.reviewer_name?'审批人: '+escHtml(row.reviewer_name)+' — 点击修改':'点击设置审批人')+'">'+h+'</span>';
         return h;
       }},
-      { key: 'priority', title: '优先级', width: '5%', render: function(v) { return _renderPriority(v); } },
+      { key: 'priority', title: '优先级', width: '5%', render: function(v) { return renderPriorityBadge(v); } },
       { key: 'progress', title: '进度', width: '6%', render: function(v) { return renderProgressCircle(v||0, 26, {label:''}); } },
       { key: 'due_date', title: '截止日期', width: '6%', render: function(v, row) { return '<span style="color:'+(v&&row.status!=='done'&&row.status!=='closed'&&v<fmtLocalDate()?'var(--danger)':'')+'">'+(v||'-')+'</span>'; } },
       { key: 'actions', title: '操作', render: function(v, row) { return iconEdit('openTaskDialog('+row.id+')','编辑任务')+iconCopy('openCopyTaskDialog('+row.id+')','复制任务')+iconDelete('deleteTask('+row.id+',\''+escJs(row.title)+'\')','删除任务'); } }
@@ -643,7 +638,7 @@ function renderTaskTableCompact(tasks, execs) {
       }},
       { key: 'title', title: '任务标题', align: 'left', render: function(v, row) { return row._empty?'—':'<span style="cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" onclick="openTaskDetail('+row.id+')" title="查看任务详情">'+escHtml(v||'')+'</span>'; } },
       { key: 'status', title: '状态', width: '6%', render: function(v, row) { return row._empty?'—':renderPill(v||'todo'); } },
-      { key: 'priority', title: '优先级', width: '5%', render: function(v, row) { return row._empty?'—':(typeof _renderPriority==='function'?_renderPriority(v):escHtml(v||'medium')); } },
+      { key: 'priority', title: '优先级', width: '5%', render: function(v, row) { return row._empty?'—':(typeof renderPriorityBadge==='function'?renderPriorityBadge(v):escHtml(v||'medium')); } },
       { key: 'assignee_name', title: '负责人', width: '7%', render: function(v, row) { return row._empty?'—':'<span style="font-size:12px;cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();openAssignDialog('+row.id+')" title="指派任务">'+escHtml(v||'—')+'</span>'; } },
       { key: 'progress', title: '进度', width: '7%', render: function(v, row) { return row._empty?'—':(typeof renderProgressRing==='function'?'<div style="display:inline-block;vertical-align:middle">'+renderProgressRing(v||0)+'</div>':'<span>'+(v||0)+'%</span>'); } },
       { key: 'start_date', title: '计划开始', width: '7%', render: function(v, row) {
@@ -809,7 +804,7 @@ function _renderTaskRow(t, stageMap) {
     '<td style="text-align:left"><a href="javascript:void(0)" onclick="openTaskDetail(' + t.id + ')" style="color:var(--accent)">' + escHtml(t.title) + '</a></td>' +
     '<td>' + (stageName ? '<span style="font-size:11px;color:var(--muted)">' + escHtml(stageName) + '</span>' : '-') + '</td>' +
     '<td style="' + (window._approvalEnabled ? 'cursor:pointer' : '') + '"' + (window._approvalEnabled ? ' onclick="event.stopPropagation();openReviewerDialog(' + t.id + ')" title="' + (t.reviewer_name ? '审批人: ' + escHtml(t.reviewer_name) + ' — 点击修改' : '点击设置审批人') + '"' : '') + '>' + renderPill(t.status || 'todo') + '</td>' +
-    '<td>' + _renderPriority(t.priority) + '</td>' +
+    '<td>' + renderPriorityBadge(t.priority) + '</td>' +
     '<td>' + renderProgressCircle(progressPct, 26, {label:''}) + '</td>' +
     '<td style="color:' + (overdue ? 'var(--danger)' : '') + '">' + (t.due_date || '-') + '</td>' +
     '<td>' +
@@ -818,12 +813,6 @@ function _renderTaskRow(t, stageMap) {
       iconDelete('deleteTask(' + t.id + ',\'' + escJs(t.title) + '\')', '删除任务') +
     '</td>' +
   '</tr>';
-}
-
-function _renderPriority(p) {
-  var colors = {low: 'var(--success)', medium: 'var(--warn)', high: '#f97316', critical: 'var(--danger)'};
-  var labels = {low: '低', medium: '中', high: '高', critical: '紧急'};
-  return '<span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:600;color:#fff;background:' + (colors[p] || 'var(--muted)') + '">' + (labels[p] || p) + '</span>';
 }
 
 /* ── Board View (simplified — drag-and-drop in later iteration) ── */
@@ -982,7 +971,7 @@ function _renderTaskDetailBody(t) {
           (t.status === 'review' && t.reviewer_name ? '<div style="font-size:10px;color:var(--muted);margin-top:2px">审批人: ' + escHtml(t.reviewer_name) + '</div>' : '') + '</div>',
           t.status || 'todo', _STATUS_OPTS) + '</div>' +
         // Priority (editable)
-        '<div class="dkpi"><div class="dkpi-lbl">优先级</div><div style="margin-top:6px">' + _buildEditableField(t.id, 'priority', 'select', _renderPriority(t.priority || 'medium'), t.priority || 'medium', _PRIORITY_OPTS) + '</div></div>' +
+        '<div class="dkpi"><div class="dkpi-lbl">优先级</div><div style="margin-top:6px">' + _buildEditableField(t.id, 'priority', 'select', renderPriorityBadge(t.priority || 'medium'), t.priority || 'medium', _PRIORITY_OPTS) + '</div></div>' +
         // Progress (editable)
         '<div class="dkpi"><div class="dkpi-lbl">进度(%)</div>' + _buildEditableField(t.id, 'progress', 'number', '<div style="margin-top:6px">' + renderProgressCircle(t.progress || 0, 30, {label:''}) + '</div>', String(t.progress || 0), {min:0,max:100,step:5}) + '</div>' +
         // Estimate hours (editable)
@@ -1298,7 +1287,7 @@ function _loadTfExecutions(projectId, selectedId) {
   if (isEdit) {
     API.get('/worklogs?task_id=' + t.id).then(function(logs) {
       var el = document.getElementById('tf-worklogs');
-      if (el) { el.innerHTML = _renderWorklogTable(logs || [], t.id); _initWorklogDt(logs || [], t.id); }
+      if (el) { el.innerHTML = _renderTaskWorklogTable(logs || [], t.id); _initWorklogDt(logs || [], t.id); }
     }).catch(function() {});
     _loadComments(t.id);
   }
@@ -1717,7 +1706,7 @@ async function _submitImportTasks() {
 
 /* ── Worklog Dialog ── */
 
-function _renderWorklogTable(logs, taskId) {
+function _renderTaskWorklogTable(logs, taskId) {
   if (!logs || !logs.length) return '<div style="color:var(--muted);font-size:12px">暂无工时记录</div>';
   return '<div id="worklog-table-' + taskId + '"></div>';
 }
@@ -1994,7 +1983,7 @@ function _refreshTaskWorklogs(taskId) {
   API.get('/worklogs?task_id=' + taskId).then(function(logs) {
     var el = document.getElementById('tv-worklogs');
     if (!el) el = document.getElementById('tf-worklogs');
-    if (el) { el.innerHTML = _renderWorklogTable(logs || [], taskId); _initWorklogDt(logs || [], taskId); }
+    if (el) { el.innerHTML = _renderTaskWorklogTable(logs || [], taskId); _initWorklogDt(logs || [], taskId); }
     // Update consumed hours in section header (both detail and edit dialogs)
     var totalHours = (logs || []).reduce(function(sum, l) { return sum + (l.hours || 0); }, 0);
     var headers = document.querySelectorAll('.section-title');

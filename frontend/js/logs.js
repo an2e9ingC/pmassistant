@@ -156,9 +156,10 @@ async function fetchLogs(forceFull) {
     var lines = text.split('\n');
     var pre = container.querySelector('.log-pre');
 
+    var wasAtBottom;
     if (forceFull || !pre || _logSearch) {
       _logRenderFull(container, lines);
-      var wasAtBottom = true;
+      wasAtBottom = true;
     } else {
       // Check if content actually changed
       var oldText = pre.textContent || '';
@@ -185,7 +186,7 @@ async function fetchLogs(forceFull) {
           _logRenderFull(container, lines);
         }
       }
-      var wasAtBottom = isLogAtBottom();
+      wasAtBottom = isLogAtBottom();
     }
 
     document.getElementById('log-status').textContent =

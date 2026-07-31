@@ -342,11 +342,7 @@ function buildInfo(p, notes, delivery, docs) {
   buildNotes(notes || []);
 }
 
-function _hasProjectEditPerm() {
-  var user = getCurrentUser();
-  var perms = (user && user.permissions) ? user.permissions.split(',') : [];
-  return perms.indexOf('project_edit') !== -1 || perms.indexOf('admin') >= 0;
-}
+// _hasProjectEditPerm moved to utils.js
 
 function editProjectBackground() {
   if (!_comboCurCode || !_projDetail) return;
