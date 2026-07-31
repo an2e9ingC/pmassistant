@@ -21,11 +21,13 @@ logger = logging.getLogger(__name__)
 
 def log_project_activity(db: Session, project_id: int, username: str, action: str, detail: str = ""):
     """Log a project activity (non-deletable audit trail)."""
+    import logging
+    _logger = logging.getLogger(__name__)
     try:
         db.add(ProjectActivity(project_id=project_id, username=username, action=action, detail=detail or ""))
         db.commit()
-    except Exception:
-        pass  # never fail the main operation
+    except Exception as e:
+        _logger.error(f"log_project_activity failed: project_id={project_id} action={action} error={e}", exc_info=True)
 
 
 def _get_pending_doc_counts(db: Session, project_ids: list[int]) -> dict:

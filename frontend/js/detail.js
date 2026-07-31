@@ -9,8 +9,12 @@ var _comboCurCode = null;
 var _projDetail = null;
 var _projectProducts = [];
 var _userNames = [];
+var _userOptions = [];
+var _userDisplayMap = {};
 var _customerNames = [];
 var _detailTargetTab = null;
+var _deliveryData = null;
+var _deliveryProgress = 0;
 
 function setDetailTargetTab(tabId) { _detailTargetTab = tabId; }
 
@@ -60,6 +64,7 @@ async function loadProjectDetail(code) {
       // Load user names + customer names for delivery form dropdown
       API.get('/users/names').catch(function() { return []; }),
       API.get('/users/customers/names').catch(function() { return []; }),
+      API.get('/users/options').catch(function() { return []; }),
     ]);
 
     var detail = results[0];
@@ -79,13 +84,24 @@ async function loadProjectDetail(code) {
     var notes = results[6];
     var userNames = results[7] || [];
     var customerNames = results[8] || [];
+    var userOptions = results[9] || [];
 
     // Store linked products for delivery form dropdown
     _projectProducts = (detail && detail.products) ? detail.products : [];
     // Cache user/customer names for delivery form dropdown
     if (userNames.length) _userNames = userNames;
     if (customerNames.length) _customerNames = customerNames;
+    // Build username -> display_name map for table rendering
+    _userOptions = userOptions;
+    _userDisplayMap = {};
+    userOptions.forEach(function(u) {
+      var uname = u.code || '';
+      var dname = u.name || uname;
+      _userDisplayMap[uname] = dname;
+    });
 
+    _deliveryData = delivery;
+    _deliveryProgress = (delivery && delivery.progress) || 0;
     buildDetailHeader(detail);
     buildDelivery(delivery);
     buildInfo(detail, notes, delivery, docs);
@@ -156,7 +172,10 @@ function buildDetailHeader(p) {
           : (p.zentao_url ? ' <a href="' + p.zentao_url + '" target="_blank" class="zentao-link" title="在禅道中查看">&#x2197; 禅道</a>' : '')) +
       '</div>' +
     '</div>' +
-    renderProgressCircle(progress, 56, { label: "整体进度" });
+    '<div style="display:flex;align-items:flex-start;gap:24px;flex-shrink:0">' +
+      renderProgressCircle(progress, 56, { label: "整体进度" }) +
+      renderProgressCircle(_deliveryProgress, 56, { label: "交付进度" }) +
+    '</div>';
 }
 
 /* Info Tab — Basic Info */
@@ -1318,51 +1337,62 @@ function submitCustomDoc() {
 
 /* Delivery */
 
-var _deliveryData = null;
+function _hasProjectEditPerm() {
+  var user = getCurrentUser();
+  var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+  return perms.indexOf('admin') >= 0 || perms.indexOf('project_edit') >= 0;
+}
 
 function buildDelivery(data) {
   _deliveryData = data;
   var planned = data.planned || 0;
-  var delivered = data.total || 0;  // total = delivered qty sum from records
-  var remaining = data.remaining || 0;
+  var delivered = data.total || 0;
   var progress = data.progress || 0;
-  var note = data.delivery_note || '';
   var records = data.records || [];
-  var hasPlan = planned > 0;
-  var user = getCurrentUser();
-  var perms = (user && user.permissions) ? user.permissions.split(',') : [];
-  var canEdit = perms.indexOf('doc_template') >= 0 || perms.indexOf('admin') >= 0 || perms.indexOf('project_edit') >= 0;
+  var productStats = data.product_stats || [];
+  var canEdit = _hasProjectEditPerm();
 
-  var kpiHtml =
-    '<div class="delivery-kpi">' +
-      '<div class="dkpi"><div class="dkpi-lbl">应交付总数</div><div class="dkpi-val">' + (hasPlan ? planned : '—') + '</div></div>' +
-      '<div class="dkpi"><div class="dkpi-lbl">已交付数量</div><div class="dkpi-val" style="color:var(--success)">' + delivered + '</div></div>' +
-      '<div class="dkpi"><div class="dkpi-lbl">剩余未交付</div><div class="dkpi-val" style="color:' + (remaining > 0 ? 'var(--warn)' : 'var(--muted)') + '">' + remaining + '</div></div>' +
-    '</div>' +
-    (hasPlan
-      ? '<div class="progress-bar" style="height:8px;margin-bottom:6px"><div class="progress-fill ' + (progress >= 100 ? 'green' : 'blue') + '" style="width:' + Math.min(100, progress) + '%"></div></div>' +
-        '<div style="font-size:12px;color:var(--muted)">交付进度 ' + progress + '%（' + delivered + ' / ' + planned + '）</div>'
-      : '<div style="font-size:11px;color:var(--muted);font-style:italic">提示：尚未设置应交付总数，请通过下方设置</div>') +
-    (note ? '<div style="margin-top:8px;padding:8px 12px;background:var(--warn-lt);border:1px solid var(--warn);border-radius:7px;font-size:12px;color:var(--warn)">备注：' + escHtml(note) + '</div>' : '') +
-    (delivered === 0 ? '<div style="margin-top:14px;padding:12px 14px;background:var(--warn-lt);border:1px solid var(--warn);border-radius:8px;font-size:13px;color:var(--warn)">暂无交付记录</div>' : '');
+  // Big ring: manual n/m, arc progress from product aggregation
+  var bigManualDelivered = data.delivered_manual || 0;
+  var bigRingHtml = renderDeliveryRing(bigManualDelivered, planned, 120, {
+    label: "总套数",
+    showEdit: canEdit,
+    editOnclick: "inlineEditPlanQty('total')",
+    arcProgress: progress,  // computed from sum(product delivered) / sum(product planned)
+  });
 
-  // Delivery plan settings (collapsible, for PM/admin/test_delivery)
-  var planFormHtml = '';
-  if (canEdit) {
-    planFormHtml =
-      '<div class="card" style="padding:16px;margin-top:12px">' +
-        '<div class="section-title" style="margin-bottom:10px;cursor:pointer" onclick="toggleDeliveryPlanForm()">' +
-          '交付计划设置 <span style="font-size:10px;color:var(--muted)">（点击展开/收起）</span>' +
-        '</div>' +
-        '<div id="delivery-plan-form" style="display:none">' +
-          '<div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">' +
-            '<div><label style="font-size:11px;color:var(--muted)">应交付总数</label><input class="search-inp" id="del-plan-qty" type="number" min="0" value="' + planned + '" style="width:120px;margin-top:4px"></div>' +
-            '<div style="flex:1;min-width:200px"><label style="font-size:11px;color:var(--muted)">备注/延迟原因</label><input class="search-inp" id="del-plan-note" value="' + escHtml(note) + '" style="margin-top:4px"></div>' +
-            '<button class="btn btn-primary" onclick="saveDeliveryPlan()" style="height:34px;font-size:12px;white-space:nowrap">保存计划</button>' +
-          '</div>' +
-        '</div>' +
-      '</div>';
+  // Small rings: per-product
+  // If no product stats yet, auto-initialize from linked products
+  var products = _projectProducts || [];
+  if (!productStats.length && products.length) {
+    // Compute delivered per product from actual records
+    var deliveredByProduct = {};
+    records.forEach(function(r) {
+      if (r.product_code) {
+        deliveredByProduct[r.product_code] = (deliveredByProduct[r.product_code] || 0) + (r.qty || 0);
+      }
+    });
+    productStats = products.map(function(p) {
+      var d = deliveredByProduct[p.code] || 0;
+      var planQty = p.quantity || 0;
+      return { product_code: p.code, product_name: p.name, planned_qty: planQty, delivered_qty: d,
+        progress: planQty > 0 ? Math.min(100, Math.round(d / planQty * 100)) : 0 };
+    });
   }
+  var smallRingsHtml = '';
+  productStats.forEach(function(ps) {
+    smallRingsHtml += renderDeliveryRing(ps.delivered_qty, ps.planned_qty, 74, {
+      label: ps.product_code || ps.product_name,
+      showEdit: canEdit,
+      editOnclick: "inlineEditPlanQty('" + escHtml(ps.product_code) + "')",
+    });
+  });
+
+  var ringsHtml =
+    '<div class="delivery-rings">' +
+      bigRingHtml +
+      '<div class="delivery-small-rings">' + smallRingsHtml + '</div>' +
+    '</div>';
 
   var recHtml = '' +
     '<div class="card col-span" style="padding:20px;margin-top:16px">' +
@@ -1374,119 +1404,192 @@ function buildDelivery(data) {
     '<div class="two-col">' +
       '<div class="card" style="padding:20px">' +
         '<div class="section-title" style="margin-bottom:14px">交付概要</div>' +
-        kpiHtml +
+        ringsHtml +
       '</div>' +
       recHtml +
     '</div>' +
-    planFormHtml +
     '<div id="delivery-form-container"></div>';
 
   if (records.length) {
+    var cols = [
+      { key: 'date', title: '交付日期', render: function(v) { return '<span style="font-family:var(--mono);font-size:12px;color:var(--success);font-weight:540;white-space:nowrap">'+formatDate(v)+'</span>'; } },
+      { key: 'product_code', title: '产品编号', render: function(v, row) {
+        if (v) return '<span class="proj-code-btn" onclick="event.stopPropagation();openProductDetail(\'' + escHtml(v) + '\')" title="' + escHtml(v) + ' ' + escHtml(row.product_name || '') + '">' + escHtml(v) + '</span>';
+        return '<span style="font-size:12px;color:var(--muted)">—</span>';
+      }},
+      { key: 'product_name', title: '产品名称', render: function(v) { return '<span style="font-size:12.5px;font-weight:500">'+escHtml(v||'')+'</span>'; } },
+      { key: 'material_code', title: '物料编码', render: function(v) { return '<span style="font-family:var(--mono);font-size:11.5px">'+escHtml(v||'')+'</span>'; } },
+      { key: 'responsible_person', title: '交付人', render: function(v) { return '<span style="font-size:12px">'+escHtml(_userDisplayMap[v] || v || '—')+'</span>'; } },
+      { key: 'receiver', title: '收货方', render: function(v) { return '<span style="font-size:12.5px">'+escHtml(v||'—')+'</span>'; } },
+      { key: 'delivery_method', title: '交付形式', render: function(v) { return '<span style="font-size:12px">'+(v||'—')+'</span>'; } },
+      { key: 'note', title: '备注', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(v||'')+'</span>'; } },
+    ];
+    if (canEdit) {
+      cols.push({ key: 'actions', title: '', width: '64px', render: function(v, row) {
+        return iconEdit('editDeliveryRecord(' + row.id + ')', '编辑') +
+               iconDelete('deleteDeliveryRecord(' + row.id + ')', '删除');
+      }});
+    }
     new DataTable({
       container: document.getElementById('delivery-table'),
-      columns: [
-        { key: 'date', title: '交付日期', render: function(v) { return '<span style="font-family:var(--mono);font-size:12px;color:var(--success);font-weight:540;white-space:nowrap">'+formatDate(v)+'</span>'; } },
-        { key: 'product_name', title: '产品名', render: function(v) { return '<span style="font-size:12.5px;font-weight:500">'+escHtml(v||'')+'</span>'; } },
-        { key: 'qty', title: '数量', render: function(v) { return '<span style="font-variant-numeric:tabular-nums;font-weight:600">'+v+' 台</span>'; } },
-        { key: 'items', title: '产品编号', render: function(v) { return '<span style="font-family:var(--mono);font-size:11.5px">'+escHtml(v||'')+'</span>'; } },
-        { key: 'responsible_person', title: '责任人', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'—')+'</span>'; } },
-        { key: 'receiver', title: '收货方', render: function(v) { return '<span style="font-size:12.5px">'+escHtml(v||'—')+'</span>'; } },
-        { key: 'note', title: '备注', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(v||'')+'</span>'; } },
-        { key: 'actions', title: '', width: '50px', render: function(v, row) { return '<button class="btn btn-xs" style="color:var(--danger)" onclick="deleteDeliveryRecord('+row.id+')">删除</button>'; } }
-      ],
+      columns: cols,
       data: records,
       resizable: false
     });
   }
 }
 
-function toggleDeliveryPlanForm() {
-  var el = document.getElementById('delivery-plan-form');
-  if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+function editDeliveryRecord(recordId) {
+  var records = (_deliveryData && _deliveryData.records) ? _deliveryData.records : [];
+  var record = records.find(function(r) { return r.id === recordId; });
+  if (record) showDeliveryForm(record);
 }
 
-async function saveDeliveryPlan() {
-  var qty = parseInt(document.getElementById('del-plan-qty').value) || 0;
-  var note = document.getElementById('del-plan-note').value.trim();
-  try {
-    await API.put('/projects/' + _comboCurCode + '/delivery-plan', {
-      planned_delivery_qty: qty,
-      delivery_note: note
+function inlineEditPlanQty(type) {
+  if (type === 'total') {
+    // Big ring: show dialog with both delivered (n) and planned (m)
+    var curDelivered = (_deliveryData && _deliveryData.delivered_manual) || 0;
+    var curPlanned = (_deliveryData && _deliveryData.planned) || 0;
+    var html =
+      '<div class="note-dialog-overlay" id="ring-edit-overlay">' +
+      '<div class="note-dialog" style="max-width:360px">' +
+        '<div class="note-dialog-head"><span class="note-dialog-title">设置总套数</span>' +
+          '<button class="note-dialog-close" onclick="document.getElementById(\'ring-edit-overlay\').remove()">&times;</button></div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:8px 0">' +
+          '<div><label style="font-size:11px;color:var(--muted)">已交付 (n)</label><input class="search-inp" id="ring-edit-delivered" type="number" min="0" value="' + curDelivered + '" style="margin-top:4px"></div>' +
+          '<div><label style="font-size:11px;color:var(--muted)">应交付 (m)</label><input class="search-inp" id="ring-edit-planned" type="number" min="0" value="' + curPlanned + '" style="margin-top:4px"></div>' +
+        '</div>' +
+        '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">' +
+          '<button class="btn" onclick="document.getElementById(\'ring-edit-overlay\').remove()">取消</button>' +
+          '<button class="btn btn-primary" id="ring-edit-save" onclick="saveRingEdit()">保存</button>' +
+        '</div>' +
+      '</div></div>';
+    document.body.insertAdjacentHTML('beforeend', html);
+  } else {
+    // Small ring: prompt for product planned_qty
+    var plans = (_deliveryData && _deliveryData.product_delivery_plans) || [];
+    var match = plans.find(function(p) { return p.product_code === type; });
+    var currentVal = match ? (match.planned_qty || 0) : 0;
+    var newVal = prompt(type + ' 计划数量:', currentVal);
+    if (newVal === null) return;
+    newVal = parseInt(newVal) || 0;
+    if (newVal === currentVal) return;
+    var plans = (_deliveryData && _deliveryData.product_delivery_plans) ? JSON.parse(JSON.stringify(_deliveryData.product_delivery_plans)) : [];
+    var found = false;
+    plans.forEach(function(p) {
+      if (p.product_code === type) { p.planned_qty = newVal; found = true; }
     });
-    showToast('交付计划已保存', 'success');
-    // Refresh delivery data
+    if (!found) {
+      var ps = (_deliveryData && _deliveryData.product_stats) || [];
+      var match = ps.find(function(s) { return s.product_code === type; });
+      plans.push({ product_code: type, planned_qty: newVal, product_name: match ? match.product_name : '' });
+    }
+    _savePlanInline({ product_delivery_plans: JSON.stringify(plans) });
+  }
+}
+
+function saveRingEdit() {
+  var newDelivered = parseInt(document.getElementById('ring-edit-delivered').value) || 0;
+  var newPlanned = parseInt(document.getElementById('ring-edit-planned').value) || 0;
+  var curDelivered = (_deliveryData && _deliveryData.delivered_manual) || 0;
+  var curPlanned = (_deliveryData && _deliveryData.planned) || 0;
+  if (newDelivered === curDelivered && newPlanned === curPlanned) {
+    document.getElementById('ring-edit-overlay').remove();
+    return;
+  }
+  // Disable save button during request
+  var btn = document.getElementById('ring-edit-save');
+  if (btn) { btn.disabled = true; btn.textContent = '保存中...'; }
+  _savePlanInline({ delivered_sets_qty: newDelivered, planned_delivery_qty: newPlanned });
+  document.getElementById('ring-edit-overlay').remove();
+}
+
+async function _savePlanInline(updates) {
+  try {
+    await API.put('/projects/' + _comboCurCode + '/delivery-plan', updates);
+    showToast('计划已更新', 'success');
     var data = await API.get('/projects/' + _comboCurCode + '/delivery');
+    _deliveryData = data;
+    _deliveryProgress = data.progress || 0;
     buildDelivery(data);
+    // Refresh header ring
+    if (_projDetail) buildDetailHeader(_projDetail);
   } catch(e) {
-    showToast('保存失败: ' + (e.message || '未知错误'), 'error');
+    showToast('更新失败: ' + (e.message || ''), 'error');
   }
 }
 
 function showDeliveryForm(record) {
   var r = record || {};
   var isEdit = !!record;
-  // Build product dropdown from linked products
   var products = (typeof _projectProducts !== 'undefined' && _projectProducts) ? _projectProducts : [];
+
+  // Product code dropdown from linked products
   var prodOptions = products.map(function(p) {
-    var sel = (r.product_name === p.name) ? ' selected' : '';
-    var label = (p.code ? p.code + ' ' : '') + p.name;
-    return '<option value="' + escHtml(p.name) + '"' + sel + '>' + escHtml(label) + '</option>';
+    var sel = (r.product_code === p.code) ? ' selected' : '';
+    return '<option value="' + escHtml(p.code || '') + '"' + sel + '>' + escHtml((p.code ? p.code + ' ' : '') + (p.name || '')) + '</option>';
   }).join('');
   if (!prodOptions) prodOptions = '<option value="">— 无关联产品 —</option>';
-  if (r.product_name && products.length === 0) {
-    var rLabel = (p && p.code ? p.code + ' ' : '') + r.product_name;
-    prodOptions = '<option value="' + escHtml(r.product_name) + '" selected>' + escHtml(rLabel) + '</option>';
+  if (r.product_code && products.length === 0) {
+    prodOptions = '<option value="' + escHtml(r.product_code || '') + '" selected>' + escHtml((r.product_code || '') + ' ' + (r.product_name || '')) + '</option>';
   }
 
-  // Build user/customer dropdown
-  function _selectHtml(id, options, selected) {
+  // Build user/customer dropdown with optional valueKey/labelKey for objects
+  function _selectHtml(id, options, selected, valueKey, labelKey) {
     return '<select class="search-inp" id="' + id + '" style="margin-top:4px;padding:8px 10px">' +
       '<option value="">— 请选择 —</option>' +
-      options.map(function(u) {
-        return '<option value="' + u + '"' + (u === selected ? ' selected' : '') + '>' + u + '</option>';
+      options.map(function(opt) {
+        var val, label;
+        if (valueKey && typeof opt === 'object') {
+          val = opt[valueKey] || '';
+          label = opt[labelKey || valueKey] || '';
+        } else {
+          val = opt;
+          label = opt;
+        }
+        return '<option value="' + escHtml(val) + '"' + (val === selected ? ' selected' : '') + '>' + escHtml(label) + '</option>';
       }).join('') +
     '</select>';
   }
 
-  var noProducts = products.length === 0;
-  var prodLabel = noProducts ? '产品名称 <span style="color:var(--warn);font-size:10px">请在项目中关联产品</span>' : '产品名称';
+  // Default receiver to project customer, default responsible to current user
+  var currentUser = getCurrentUser();
+  var defReceiver = isEdit ? (r.receiver || '') : (_projDetail && _projDetail.customer_name ? _projDetail.customer_name : '');
+  var defResponsible = isEdit ? (r.responsible_person || '') : (currentUser ? currentUser.username : '');
 
-  // Build serial number rows (default 2, or from existing records)
-  var serials = (r.serial_numbers && r.serial_numbers.length) ? r.serial_numbers : (r.items ? r.items.split(/[,，]/).map(function(s){return s.trim();}).filter(Boolean) : []);
-  if (!serials.length) serials = ['', ''];  // default 2 empty
-  var serialRows = serials.map(function(s, idx) {
+  // Build material code rows
+  var mcs = (r.material_codes && r.material_codes.length) ? r.material_codes : [];
+  if (!mcs.length) mcs = ['', ''];  // default 2 empty
+  var mcRows = mcs.map(function(mc, idx) {
     return '<div class="df-serial-row" style="display:flex;gap:6px;margin-bottom:6px;align-items:center">' +
       '<span class="df-serial-seq" style="width:28px;text-align:center;font-family:var(--mono);font-size:12px;color:var(--muted);flex-shrink:0">' + (idx + 1) + '</span>' +
-      '<input class="search-inp df-serial-inp" value="' + escHtml(s) + '" placeholder="产品编号 ' + (idx + 1) + '" style="flex:1;margin-top:0" oninput="updateSerialCount()">' +
-      (serials.length > 2 ? '<button class="btn" onclick="removeSerialRow(this)" style="font-size:14px;padding:2px 8px;color:var(--danger);flex-shrink:0">&times;</button>' : '') +
+      '<input class="search-inp df-serial-inp" value="' + escHtml(mc) + '" placeholder="物料编码 ' + (idx + 1) + '" style="flex:1;margin-top:0">' +
+      (mcs.length > 1 ? '<button class="btn" onclick="removeSerialRow(this)" style="font-size:14px;padding:2px 8px;color:var(--danger);flex-shrink:0">&times;</button>' : '') +
     '</div>';
   }).join('');
 
-  var qtyDisabled = isEdit ? '' : 'disabled';
-  var autoQty = serials.filter(function(s) { return s && s.trim(); }).length || 0;
-
   var html =
     '<div class="note-dialog-overlay">' +
-    '<div class="note-dialog" style="max-width:520px;max-height:85vh;overflow-y:auto">' +
+    '<div class="note-dialog" style="max-width:560px;max-height:85vh;overflow-y:auto">' +
       '<div class="note-dialog-head"><span class="note-dialog-title">' + (isEdit ? '编辑交付记录' : '添加交付记录') + '</span>' +
         '<button class="note-dialog-close" onclick="cancelDeliveryForm()">&times;</button></div>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">' +
-        '<div><label style="font-size:11px;color:var(--muted)">' + prodLabel + '</label><select class="search-inp" id="df-product" style="margin-top:4px;padding:8px 10px">' + prodOptions + '</select></div>' +
-        '<div><label style="font-size:11px;color:var(--muted)">交付日期</label><input class="search-inp" id="df-date" type="date" value="' + (r.date || fmtLocalDate()) + '" style="margin-top:4px"></div>' +
-        '<div><label style="font-size:11px;color:var(--muted)">交付责任人（PMA用户）</label>' + _selectHtml('df-responsible', _userNames, r.responsible_person || '') + '</div>' +
-        '<div><label style="font-size:11px;color:var(--muted)">收货方（客户）</label>' + _selectHtml('df-receiver', _customerNames, r.receiver || '') + '</div>' +
+        '<div><label style="font-size:11px;color:var(--muted)">产品编号</label><select class="search-inp" id="df-product" style="margin-top:4px;padding:8px 10px">' + prodOptions + '</select></div>' +
+        '<div><label style="font-size:11px;color:var(--muted)">交付日期</label><input class="search-inp" id="df-date" type="date" value="' + (r.date || (isEdit ? (r.date || '') : fmtLocalDate())) + '" style="margin-top:4px"></div>' +
+        '<div><label style="font-size:11px;color:var(--muted)">交付人</label>' + _selectHtml('df-responsible', _userOptions.length ? _userOptions : _userNames, defResponsible, _userOptions.length ? 'code' : null, _userOptions.length ? 'name' : null) + '</div>' +
+        '<div><label style="font-size:11px;color:var(--muted)">收货方</label>' + _selectHtml('df-receiver', _customerNames, defReceiver, 'name', 'full_name') + '</div>' +
+        '<div><label style="font-size:11px;color:var(--muted)">交付形式</label>' +
+          '<select class="search-inp" id="df-method" style="margin-top:4px;padding:8px 10px">' +
+            '<option value="">— 请选择 —</option>' +
+            '<option value="快递"' + (r.delivery_method === '快递' ? ' selected' : '') + '>快递</option>' +
+            '<option value="人工携带"' + (r.delivery_method === '人工携带' ? ' selected' : '') + '>人工携带</option>' +
+          '</select></div>' +
+        '<div></div>' +
       '</div>' +
       '<div style="margin-bottom:10px">' +
-        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
-          '<label style="font-size:11px;color:var(--muted)">产品编号（每行一个）</label>' +
-          '<button class="btn btn-xs" onclick="addSerialRow()">+ 添加编号</button>' +
-        '</div>' +
-        '<div id="df-serial-rows">' + serialRows + '</div>' +
-      '</div>' +
-      '<div style="margin-bottom:12px;display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg);border-radius:6px">' +
-        '<label style="font-size:11px;color:var(--muted);white-space:nowrap">交付数量：</label>' +
-        '<span id="df-qty-display" style="font-size:16px;font-weight:700;color:var(--accent)">' + autoQty + ' 台</span>' +
-        '<span style="font-size:11px;color:var(--muted)">（根据有效编号自动计算）</span>' +
+        '<label style="font-size:11px;color:var(--muted);margin-bottom:4px;display:block">物料编码（每行一个）</label>' +
+        '<div id="df-serial-rows">' + mcRows + '</div>' +
+        '<button class="btn btn-xs" onclick="addSerialRow()" style="margin-top:4px">+ 添加物料编码</button>' +
       '</div>' +
       '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--muted)">备注</label><input class="search-inp" id="df-note" value="' + escHtml(r.note || '') + '" style="margin-top:4px"></div>' +
       '<div style="display:flex;justify-content:flex-end;gap:8px">' +
@@ -1495,7 +1598,6 @@ function showDeliveryForm(record) {
       '</div>' +
     '</div></div>';
   document.body.insertAdjacentHTML('beforeend', html);
-  updateSerialCount();
 }
 
 function addSerialRow() {
@@ -1506,17 +1608,16 @@ function addSerialRow() {
   div.className = 'df-serial-row';
   div.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;align-items:center';
   div.innerHTML = '<span class="df-serial-seq" style="width:28px;text-align:center;font-family:var(--mono);font-size:12px;color:var(--muted);flex-shrink:0">' + idx + '</span>' +
-    '<input class="search-inp df-serial-inp" placeholder="产品编号 ' + idx + '" style="flex:1;margin-top:0" oninput="updateSerialCount()">' +
+    '<input class="search-inp df-serial-inp" placeholder="物料编码 ' + idx + '" style="flex:1;margin-top:0">' +
     '<button class="btn" onclick="removeSerialRow(this)" style="font-size:14px;padding:2px 8px;color:var(--danger);flex-shrink:0">&times;</button>';
   container.appendChild(div);
-  updateSerialCount();
 }
 
 function removeSerialRow(btn) {
   var row = btn.closest('.df-serial-row');
   if (row) {
     var container = document.getElementById('df-serial-rows');
-    if (container && container.querySelectorAll('.df-serial-row').length <= 2) return;
+    if (container && container.querySelectorAll('.df-serial-row').length <= 1) return;
     row.remove();
     // Renumber remaining rows
     var rows = container.querySelectorAll('.df-serial-row');
@@ -1524,54 +1625,56 @@ function removeSerialRow(btn) {
       var seq = r.querySelector('.df-serial-seq');
       if (seq) seq.textContent = i + 1;
       var inp = r.querySelector('.df-serial-inp');
-      if (inp) inp.placeholder = '产品编号 ' + (i + 1);
+      if (inp) inp.placeholder = '物料编码 ' + (i + 1);
     });
-    updateSerialCount();
   }
-}
-
-function updateSerialCount() {
-  var inputs = document.querySelectorAll('.df-serial-inp');
-  var count = 0;
-  inputs.forEach(function(inp) { if (inp.value.trim()) count++; });
-  var display = document.getElementById('df-qty-display');
-  if (display) display.textContent = count + ' 台';
-  // Enable/disable save based on count
-  var btn = document.getElementById('df-save-btn');
-  if (btn) btn.disabled = count === 0;
 }
 
 function cancelDeliveryForm() {
   var overlay = document.querySelector('.note-dialog-overlay');
   if (overlay) overlay.remove();
-  // Also clean up old inline form container
   var container = document.getElementById('delivery-form-container');
   if (container) container.innerHTML = '';
 }
 
 async function saveDeliveryRecord(recordId) {
-  var productEl = document.getElementById('df-product');
-  var product = productEl.value.trim();
+  var productCode = document.getElementById('df-product').value.trim();
   var date = document.getElementById('df-date').value;
   var responsible = document.getElementById('df-responsible').value;
   var receiver = document.getElementById('df-receiver').value;
+  var method = document.getElementById('df-method').value;
   var note = document.getElementById('df-note').value.trim();
 
-  // Collect serial numbers from dynamic inputs
-  var serials = [];
+  // Collect material codes
+  var mcs = [];
   document.querySelectorAll('.df-serial-inp').forEach(function(inp) {
     var v = inp.value.trim();
-    if (v) serials.push(v);
+    if (v) mcs.push(v);
   });
 
-  if (!product) { showToast('请选择产品名称', 'error'); return; }
-  if (serials.length === 0) { showToast('请至少填写一个产品编号', 'error'); return; }
+  if (!productCode) { showToast('请选择产品编号', 'error'); return; }
+  if (mcs.length === 0) { showToast('请至少填写一个物料编码', 'error'); return; }
 
-  var body = { product_name: product, quantity: serials.length, delivery_date: date, responsible_person: responsible, receiver: receiver, note: note, serial_numbers: serials };
+  // Resolve product name from linked products
+  var products = _projectProducts || [];
+  var prodMatch = products.find(function(p) { return p.code === productCode; });
+  var productName = prodMatch ? prodMatch.name : productCode;
 
-  // Disable form buttons during save
-  var btns = document.querySelectorAll('#delivery-form-card button');
-  btns.forEach(function(b) { b.disabled = true; });
+  var body = {
+    product_code: productCode,
+    product_name: productName,
+    quantity: mcs.length,
+    delivery_date: date,
+    responsible_person: responsible,
+    receiver: receiver,
+    delivery_method: method,
+    note: note,
+    material_codes: mcs,
+  };
+
+  // Disable save button during request
+  var saveBtn = document.getElementById('df-save-btn');
+  if (saveBtn) saveBtn.disabled = true;
 
   try {
     if (recordId) {
@@ -1582,10 +1685,13 @@ async function saveDeliveryRecord(recordId) {
     showToast(recordId ? '修改成功' : '添加成功', 'success');
     cancelDeliveryForm();
     var data = await API.get('/projects/' + _comboCurCode + '/delivery');
+    _deliveryData = data;
+    _deliveryProgress = data.progress || 0;
     buildDelivery(data);
+    if (_projDetail) buildDetailHeader(_projDetail);
   } catch(e) {
     showToast('操作失败: ' + (e.message || '未知错误'), 'error');
-    btns.forEach(function(b) { b.disabled = false; });
+    if (saveBtn) saveBtn.disabled = false;
   }
 }
 
@@ -1597,7 +1703,10 @@ async function deleteDeliveryRecord(id) {
     await API.del('/delivery/records/' + id);
     showToast('删除成功', 'success');
     var data = await API.get('/projects/' + _comboCurCode + '/delivery');
+    _deliveryData = data;
+    _deliveryProgress = data.progress || 0;
     buildDelivery(data);
+    if (_projDetail) buildDetailHeader(_projDetail);
   } catch(e) {
     showToast('删除失败: ' + (e.message || '未知错误'), 'error');
   }
@@ -1640,7 +1749,7 @@ function buildNotes(notes) {
       columns: [
         { key: 'created_at', title: '记录时间', width: '140px', render: function(v, row) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">'+(fmtISODateTime(v)||'—')+'</span>'+(row.updated_at?'<div style="font-size:9px;color:var(--warn)">编辑过</div>':''); } },
         { key: 'stage_name', title: '涉及阶段', width: '90px', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'项目整体')+'</span>'; } },
-        { key: 'recorded_by', title: '记录人', width: '70px', render: function(v) { return '<span style="font-size:12.5px;font-weight:540">'+escHtml(v||'')+'</span>'; } },
+        { key: 'recorded_by', title: '记录人', width: '70px', render: function(v) { return '<span style="font-size:12.5px;font-weight:540">'+escHtml(_userDisplayMap[v] || v || '')+'</span>'; } },
         { key: 'content', title: '内容', align: 'left', className: 'dt-wrap', render: function(v, row) {
           var plainText = stripHtml(renderMarkdown?renderMarkdown(v):v).substring(0,80);
           var replyMark = row.parent_id?'<span style="font-size:10px;color:var(--accent);margin-right:4px">↳ 回复</span>':'';

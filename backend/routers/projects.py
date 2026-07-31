@@ -513,7 +513,9 @@ def get_delivery(identifier: str, db: Session = Depends(get_db), _=Depends(get_c
 
 class DeliveryPlanUpdate(BaseModel):
     planned_delivery_qty: Optional[int] = None
+    delivered_sets_qty: Optional[int] = None
     delivery_note: Optional[str] = None
+    product_delivery_plans: Optional[str] = None  # JSON string from frontend
 
 
 @router.put("/{identifier}/delivery-plan", response_model=dict)
@@ -532,11 +534,21 @@ def update_delivery_plan(
         if old_qty != body.planned_delivery_qty:
             plan_changes.append(f"planned_delivery_qty:'{old_qty}'->'{body.planned_delivery_qty}'")
         project.planned_delivery_qty = body.planned_delivery_qty
+    if body.delivered_sets_qty is not None:
+        old_qty = project.delivered_sets_qty or 0
+        if old_qty != body.delivered_sets_qty:
+            plan_changes.append(f"delivered_sets_qty:'{old_qty}'->'{body.delivered_sets_qty}'")
+        project.delivered_sets_qty = body.delivered_sets_qty
     if body.delivery_note is not None:
         old_note = project.delivery_note or ""
         if old_note != body.delivery_note:
             plan_changes.append(f"delivery_note:'{old_note}'->'{body.delivery_note}'")
         project.delivery_note = body.delivery_note
+    if body.product_delivery_plans is not None:
+        old_plans = project.product_delivery_plans or ""
+        if old_plans != body.product_delivery_plans:
+            plan_changes.append("product_delivery_plans:更新")
+        project.product_delivery_plans = body.product_delivery_plans
     # Build audit-friendly change description with Chinese field labels
     audit_changes = []
     if plan_changes:
@@ -556,7 +568,9 @@ def update_delivery_plan(
         "code": 0,
         "data": {
             "planned_delivery_qty": project.planned_delivery_qty,
+            "delivered_sets_qty": project.delivered_sets_qty,
             "delivery_note": project.delivery_note,
+            "product_delivery_plans": project.product_delivery_plans,
         },
         "message": "ok",
     }

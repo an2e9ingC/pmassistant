@@ -289,6 +289,7 @@ function openProductDetail(code, tabId) {
 var _prodDetailCurId = null;
 var _prodDetailCurCode = null;
 var _prodDocScanning = false;
+var _prodUserDisplayMap = {};
 var _prodDetailTargetTab = null;  // set before navigation to jump to a specific tab
 var _prodComboAll = [];
 
@@ -371,6 +372,14 @@ async function loadProductDetail(code) {
   try {
     var detail = await API.get('/products/' + code);
     _prodDetail = detail;
+    // Load user display names
+    try {
+      var userOpts = await API.get('/users/options') || [];
+      _prodUserDisplayMap = {};
+      userOpts.forEach(function(u) {
+        _prodUserDisplayMap[u.code || u.name] = u.name || u.code || '';
+      });
+    } catch(e) { _prodUserDisplayMap = {}; }
     // Load docs first so header can show per-stage completion rings
     var docs = [];
     try { docs = await API.get('/products/' + code + '/documents') || []; } catch(e) {}
@@ -663,7 +672,7 @@ function renderProductNotes(notes) {
     columns: [
       { key: 'created_at', title: '记录时间', width: '140px', render: function(v, row) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">'+(fmtISODateTime(v)||'—')+'</span>'+(row.updated_at?'<div style="font-size:9px;color:var(--warn)">编辑过</div>':''); } },
       { key: 'category', title: '涉及领域', width: '90px', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'不涉及')+'</span>'; } },
-      { key: 'recorded_by', title: '记录人', width: '70px', render: function(v) { return '<span style="font-size:12.5px;font-weight:540">'+escHtml(v||'')+'</span>'; } },
+      { key: 'recorded_by', title: '记录人', width: '70px', render: function(v) { return '<span style="font-size:12.5px;font-weight:540">'+escHtml(_prodUserDisplayMap[v] || v || '')+'</span>'; } },
       { key: 'content', title: '内容', render: function(v, row) {
         var plainText = stripHtml(renderMarkdown?renderMarkdown(v):v).substring(0,80);
         return '<span style="font-size:13px;line-height:1.5">'+(row.parent_id?'<span style="font-size:10px;color:var(--accent);margin-right:4px">↳ 回复</span>':'')+escHtml(plainText)+(v&&v.length>80?'...':'')+(/!\[.*\]\(.*\)/.test(v)?' <span style="font-size:10px">📷</span>':'')+'</span>';

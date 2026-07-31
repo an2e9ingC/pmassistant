@@ -207,6 +207,11 @@
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .col-span { grid-column: 1 / -1; }
 
+/* Delivery rings */
+.delivery-rings { display: flex; align-items: flex-end; gap: 24px; flex-wrap: wrap; }
+.delivery-small-rings { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; }
+.ring-edit-btn:hover { opacity: 1 !important; border-color: var(--accent) !important; }
+
 /* Search */
 .search-wrap { position: relative; flex: 1; max-width: 380px; }
 .search-ico { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
