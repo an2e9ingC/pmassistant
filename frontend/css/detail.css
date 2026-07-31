@@ -366,6 +366,9 @@
   padding: 6px 16px; font-size: 13px; font-weight: 500; line-height: 1.4;
   border-bottom: 1px solid rgba(255,255,255,0.15);
 }
+.notif-bar-general  { background: #3b82f6; color: #fff; }
+.notif-bar-important { background: #e6a817; color: #fff; }
+.notif-bar-severe    { background: #e53e3e; color: #fff; }
 .notif-bar-item .notif-close {
   flex-shrink: 0; cursor: pointer; opacity: 0.7; background: none; border: none;
   color: inherit; font-size: 16px; padding: 0 4px; line-height: 1;
