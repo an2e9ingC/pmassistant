@@ -141,6 +141,8 @@ class ProjectActivity(Base):
     username = Column(String(64), nullable=False)
     action = Column(String(128), nullable=False)   # e.g. 交付计划, 文档状态, 阶段映射, 项目笔记
     detail = Column(String(512), nullable=True)     # e.g. "设置应交付总数 10 → 20"
+    task_name = Column(String(256), nullable=True)      # 任务名（任务相关操作时填充）
+    task_assignee = Column(String(64), nullable=True)   # 责任人 display_name（任务相关操作时填充）
     created_at = Column(DateTime, default=func.now())
 
 
@@ -153,6 +155,8 @@ class ProductActivity(Base):
     username = Column(String(64), nullable=False)
     action = Column(String(128), nullable=False)   # e.g. 编辑产品, 关联项目, 文档更新, 框图
     detail = Column(String(512), nullable=True)
+    task_name = Column(String(256), nullable=True)      # 任务名（任务相关操作时填充）
+    task_assignee = Column(String(64), nullable=True)   # 责任人 display_name（任务相关操作时填充）
     created_at = Column(DateTime, default=func.now())
 
 

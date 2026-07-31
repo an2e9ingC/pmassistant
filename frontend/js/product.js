@@ -437,12 +437,29 @@ function renderProdDetailHeader(p, docs) {
 function renderProdInfo(p, docs) {
   var productType = p.tree_path || p.category || p.program_name || '未分类';
 
-  var html = '<div style="display:flex;gap:20px;align-items:flex-start">';
+  // Resolve block doc options upfront
+  var blockDocs = docs || [];
+  var blockOptions = ['产品规格书', '设计框图'];
+  var findBlockDoc = function(name) {
+    var found = null;
+    blockDocs.forEach(function(d) {
+      if (!found && d.doc_name && d.doc_name.indexOf(name) >= 0 && d.location) found = d;
+    });
+    return found;
+  };
+  var defaultDoc = findBlockDoc('产品规格书') || findBlockDoc('设计框图');
+  var currentBlockName = defaultDoc ? (findBlockDoc('产品规格书') ? '产品规格书' : '设计框图') : null;
 
-  // Left column — main card
-  html += '<div class="card info-glass-card" style="flex:1.618;min-width:0;padding:20px">';
+  // 2-column layout: Left (info + notes + activity), Right (block doc, full height)
+  var html = '<div style="display:flex;gap:20px">';
 
-  // Info row — 4 columns, consistent style
+  // === LEFT COLUMN (50%) ===
+  html += '<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:20px">';
+
+  // --- info-glass-card ---
+  html += '<div class="card info-glass-card" style="padding:20px">';
+
+  // Info row — 4 columns
   html += '<div class="delivery-kpi" style="grid-template-columns:repeat(4, 1fr);margin-bottom:16px">' +
     '<div class="dkpi" style="cursor:pointer" onclick="' +
       (p.linked_node_ids && p.linked_node_ids.length ? '_pmSelectedNodeId=' + p.linked_node_ids[0] + ';gotoView(\'product-management\')' : '') +
@@ -452,9 +469,8 @@ function renderProdInfo(p, docs) {
     '<div class="dkpi"><div class="dkpi-lbl">描述</div><div class="dkpi-val" style="font-size:12px;line-height:1.6">' + (p.tags_list && p.tags_list[0] ? p.tags_list.filter(function(t){return t;}).map(function(t){return '<span class="tag-badge tag-' + (t.length % 5) + '">#' + escHtml(t) + '</span>';}).join(' ') : '<span style="color:var(--muted)">—</span>') + '</div></div>' +
   '</div>';
 
-  // Stats row — KPI numbers with status colors; Bug card uses donut ring
+  // Stats row
   html += '<div class="delivery-kpi" style="grid-template-columns:repeat(4, 1fr)">';
-  // 关联项目 — bubble animation sliding right-to-left
   var projectsList = p.projects || [];
   html += '<div class="dkpi" style="cursor:pointer;position:relative;overflow:hidden" onclick="switchToProdMaintenance()" title="点击查看关联项目">' +
     '<div class="dkpi-lbl">🔗 关联项目</div>' +
@@ -463,11 +479,9 @@ function renderProdInfo(p, docs) {
     if (!document.getElementById('proj-bubble-style')) {
       var style = document.createElement('style');
       style.id = 'proj-bubble-style';
-      // 0-30% visible slide-and-fade, 30-100% invisible tail — clean gap between bubbles
       style.textContent = '@keyframes projBubbleSlide{0%{transform:translateX(0);opacity:0}5%{opacity:0.7}20%{opacity:0.2}30%{transform:translateX(-200px);opacity:0}100%{transform:translateX(-200px);opacity:0}}.proj-bubble{position:absolute;right:8px;font-size:11px;white-space:nowrap;color:var(--accent);pointer-events:none;animation-name:projBubbleSlide;animation-iteration-count:infinite;animation-timing-function:linear;animation-fill-mode:backwards}';
       document.head.appendChild(style);
     }
-    // Per-layer accumulator: ensure previous bubble is invisible before next starts
     var layerNext = [0, 0, 0, 0];
     projectsList.forEach(function(proj, i) {
       var name = proj.name || proj.code || '';
@@ -476,13 +490,11 @@ function renderProdInfo(p, docs) {
       var topPct = 30 + layer * 18;
       var dur = nameLen * 0.5 + 3;
       var delay = layerNext[layer];
-      // Minimum 5s gap ensures previous bubble fully invisible before next appears
       layerNext[layer] += Math.max(dur * 0.5, 5);
       html += '<span class="proj-bubble" style="top:' + topPct + '%;animation-duration:' + dur.toFixed(1) + 's;animation-delay:' + delay.toFixed(1) + 's">' + escHtml(name) + '</span>';
     });
   }
   html += '</div>';
-  // Other stats
   var stats = [
     { label: '发布次数', value: p.releases || 0, color: 'var(--warn)', icon: '🚀' },
     { label: '需求总数', value: p.total_stories || 0, color: 'var(--success)', icon: '📋' },
@@ -492,13 +504,12 @@ function renderProdInfo(p, docs) {
       '<div class="dkpi-lbl">' + s.icon + ' ' + s.label + '</div>' +
       '<div class="dkpi-val" style="color:' + s.color + '">' + s.value + '</div></div>';
   });
-  // Bug KPI — donut ring with source breakdown
+  // Bug KPI
   var zentaoBugs = p.total_bugs || 0;
   var pmaBugs = p.pma_bugs || 0;
   var totalBugs = zentaoBugs + pmaBugs;
   var bugPctZentao = totalBugs > 0 ? Math.round(zentaoBugs / totalBugs * 100) : 0;
   var bugPctPma = totalBugs > 0 ? Math.round(pmaBugs / totalBugs * 100) : 0;
-  // Build conic-gradient: Zentao=var(--danger) PMA=#EAB308
   var ringParts = [];
   if (zentaoBugs > 0) ringParts.push('var(--yellow) 0% ' + bugPctZentao + '%');
   if (pmaBugs > 0) ringParts.push('var(--accent) ' + bugPctZentao + '% ' + (bugPctZentao + bugPctPma) + '%');
@@ -520,52 +531,50 @@ function renderProdInfo(p, docs) {
   html += bugRingHtml;
   html += '</div>';
 
+  html += '</div>'; // .info-glass-card
 
-  html += '</div>'; // .card
+  // Creator info
+  if (p.reporter_name) {
+    html += '<div style="font-size:11px;color:var(--muted);margin:-12px 0 -8px">创建者: ' + escHtml(p.reporter_name) + '</div>';
+  }
 
-  // Right column — product notes (independent card)
-  html += '<div style="flex:1;min-width:0">';
+  // --- 产品笔记 ---
   html += '<div class="card card-clip" style="padding:0;overflow:hidden" id="prod-notes-card">';
   html += '<div style="padding:8px 12px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">';
   html += '<span style="font-size:12px;font-weight:600">产品笔记</span>';
   html += '<button class="btn-xs" onclick="showAddProductNoteDialog()">+ 添加笔记</button>';
   html += '</div>';
   html += '<div style="max-height:400px;overflow-y:auto"><div id="prod-notes-list"><div class="loading-spinner" style="padding:20px">加载中...</div></div></div>';
-  html += '</div></div>';
+  html += '</div>';
 
-  html += '</div>'; // flex row
+  // --- 产品动态 ---
+  html += '<div class="card card-clip" style="padding:0;overflow:hidden">';
+  html += '<div style="padding:8px 12px;background:var(--surface2);border-bottom:1px solid var(--border)">';
+  html += '<span style="font-size:12px;font-weight:600">产品动态</span>';
+  html += '</div>';
+  html += '<div style="max-height:400px;overflow-y:auto" id="product-activity-content"><div style="padding:12px;text-align:center;color:var(--muted);font-size:12px">加载中...</div></div>';
+  html += '</div>';
 
-  // Creator info
-  if (p.reporter_name) {
-    html += '<div style="font-size:11px;color:var(--muted);margin:8px 0 4px">创建者: ' + escHtml(p.reporter_name) + '</div>';
-  }
+  html += '</div>'; // LEFT COLUMN
 
-  // Product Spec Sheet — default to 产品规格书, dropdown to switch to 设计框图
-  var blockDocs = docs || [];
-  var blockOptions = ['产品规格书', '设计框图'];
-  var findBlockDoc = function(name) {
-    var found = null;
-    blockDocs.forEach(function(d) {
-      if (!found && d.doc_name && d.doc_name.indexOf(name) >= 0 && d.location) found = d;
-    });
-    return found;
-  };
-  var defaultDoc = findBlockDoc('产品规格书') || findBlockDoc('设计框图');
-  var currentBlockName = defaultDoc ? (findBlockDoc('产品规格书') ? '产品规格书' : '设计框图') : null;
-
-  html += '<div style="margin-top:20px;display:flex;align-items:center;justify-content:space-between">' +
-    sectionHeader(currentBlockName || '产品规格书') +
-    '<div style="display:flex;align-items:center;gap:6px">' +
-    '<select id="block-doc-select" style="font-size:12px;padding:2px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--fg);cursor:pointer" onchange="switchBlockDoc(this.value)">';
+  // === RIGHT COLUMN (50%) — 产品规格书/设计框图, full height ===
+  html += '<div style="flex:1;min-width:0;display:flex;flex-direction:column">';
+  html += '<div class="card card-clip" style="padding:0;overflow:hidden;flex:1;display:flex;flex-direction:column">';
+  html += '<div style="padding:8px 12px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">';
+  html += '<span style="font-size:12px;font-weight:600">' + escHtml(currentBlockName || '产品规格书') + '</span>';
+  html += '<div style="display:flex;align-items:center;gap:4px">';
+  html += '<select id="block-doc-select" style="font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--fg);cursor:pointer" onchange="switchBlockDoc(this.value)">';
   blockOptions.forEach(function(opt) {
     html += '<option value="' + escHtml(opt) + '"' + (currentBlockName === opt ? ' selected' : '') + '>' + escHtml(opt) + '</option>';
   });
-  html += '</select>' +
-    '<button class="btn btn-sm" title="全屏查看" style="font-size:12px;padding:2px 6px" onclick="openBlockDocFullscreen()">⛶</button>' +
-    '</div></div>';
-  html += '<div class="card" style="padding:0;overflow:hidden" id="prod-block-card">';
-  html += '<div id="prod-block-content"></div>';
-  html += '</div>';
+  html += '</select>';
+  html += '<button class="btn-xs" title="全屏查看" onclick="openBlockDocFullscreen()">⛶</button>';
+  html += '</div></div>';
+  html += '<div style="flex:1;overflow:hidden" id="prod-block-card">';
+  html += '<div id="prod-block-content" style="height:100%"></div>';
+  html += '</div></div></div>';
+
+  html += '</div>'; // main flex row
 
   document.getElementById('prodsec-info').innerHTML = html;
 
@@ -577,16 +586,14 @@ function renderProdInfo(p, docs) {
     if (doc) {
       var token = localStorage.getItem('pma_token') || '';
       var fetchUrl = '/api/documents/fetch?url=' + encodeURIComponent(doc.location) + '&token=' + encodeURIComponent(token);
-      el.innerHTML = '<iframe src="' + fetchUrl + '" style="width:100%;min-height:500px;border:none"></iframe>';
+      el.innerHTML = '<iframe src="' + fetchUrl + '" style="width:100%;height:100%;border:none"></iframe>';
     } else {
       el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">未找到' + docName + '，请按要求提交</div>';
     }
   };
   renderBlockDoc(currentBlockName || '产品规格书');
 
-  // Expose switch function globally for the onchange handler
   window.switchBlockDoc = function(docName) {
-    // Update section header text
     var hdr = document.querySelector('#prodsec-info .section-hd .section-title');
     if (hdr) hdr.textContent = docName;
     renderBlockDoc(docName);
@@ -606,6 +613,9 @@ function renderProdInfo(p, docs) {
   }).catch(function() {
     renderProductNotes([]);
   });
+
+  // Load product activity
+  buildProductActivity(p.code);
 }
 
 function renderProdDocs(p, preDocs) {
@@ -664,6 +674,36 @@ function renderProductNotes(notes) {
     data: notes,
     resizable: false,
     rowClassFn: function(row) { return row.parent_id ? { paddingLeft: '28px', borderLeft: '3px solid var(--accent-lt)' } : null; }
+  });
+}
+
+function buildProductActivity(code) {
+  API.get('/products/' + code + '/activities?sort=desc&limit=50').then(function(data) {
+    var items = (data && data.items) ? data.items : [];
+    var container = document.getElementById('product-activity-content');
+    if (!container) return;
+    if (items.length === 0) {
+      container.innerHTML = '<div class="empty-state" style="padding:12px">暂无动态</div>';
+      return;
+    }
+    container.innerHTML = '<div id="product-activity-table"></div>';
+    new DataTable({
+      container: document.getElementById('product-activity-table'),
+      columns: [
+        { key: 'created_at', title: '时间', width: '130px', render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">' + (fmtISODateTime(v) || '—') + '</span>'; } },
+        { key: 'action', title: '操作', width: '100px', render: function(v) { return '<span style="font-size:12px">' + escHtml(v || '') + '</span>'; } },
+        { key: 'display_name', title: '操作人', width: '70px', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">' + escHtml(v || '') + '</span>'; } },
+        { key: 'detail', title: '内容', align: 'left', className: 'dt-wrap', render: function(v) {
+          return '<span style="font-size:12px;line-height:1.5">' + escHtml((v || '').length > 100 ? (v || '').substring(0, 100) + '...' : (v || '')) + '</span>';
+        }}
+      ],
+      data: items,
+      resizable: false,
+      maxHeight: '400px'
+    });
+  }).catch(function() {
+    var container = document.getElementById('product-activity-content');
+    if (container) container.innerHTML = '<div class="empty-state" style="padding:12px">加载失败</div>';
   });
 }
 

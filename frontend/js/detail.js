@@ -176,10 +176,34 @@ function buildInfo(p, notes, delivery, docs) {
   };
   var st = statusMap[p.status] || { label: p.status || '—', color: 'var(--muted)' };
 
-  var html = '<div style="display:flex;gap:20px;align-items:flex-start">';
+  // Flatten docs from API response for agreement lookup
+  var projDocs = [];
+  if (docs && docs.documents) {
+    docs.documents.forEach(function(stage) {
+      if (stage.documents) projDocs = projDocs.concat(stage.documents);
+    });
+  }
+  var agreementOptions = ['对外销售-技术协议', '研发内部-技术协议'];
+  var findAgreementDoc = function(name) {
+    var found = null;
+    projDocs.forEach(function(d) {
+      if (!found && d.doc_name && d.doc_name.indexOf(name) >= 0 && d.location) found = d;
+    });
+    return found;
+  };
+  var defaultAgreement = findAgreementDoc('对外销售-技术协议') || findAgreementDoc('研发内部-技术协议');
+  var currentAgreementName = defaultAgreement
+    ? (findAgreementDoc('对外销售-技术协议') ? '对外销售-技术协议' : '研发内部-技术协议')
+    : null;
 
-  // Left column — main card (golden ratio ~61.8%)
-  html += '<div class="card info-glass-card" style="flex:1.618;min-width:0;padding:20px">';
+  // 2-column layout: Left (info + notes + activity), Right (agreement doc, full height)
+  var html = '<div style="display:flex;gap:20px">';
+
+  // === LEFT COLUMN (50%) ===
+  html += '<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:20px">';
+
+  // --- info-glass-card ---
+  html += '<div class="card info-glass-card" style="padding:20px">';
 
   // KPI row 1 — 4 columns
   html += '<div class="delivery-kpi" style="grid-template-columns:repeat(4, 1fr);margin-bottom:16px">' +
@@ -192,7 +216,6 @@ function buildInfo(p, notes, delivery, docs) {
   '</div>';
 
   var allLinked = p.linked_projects || [];
-  // Split: 关联商机 = code starts with LSJ; 关联项目 = everything else
   var linkedOpportunities = allLinked.filter(function(lp) { return lp.code && /^LSJ/i.test(lp.code); });
   var linkedPeers = allLinked.filter(function(lp) { return !lp.code || !/^LSJ/i.test(lp.code); });
 
@@ -203,7 +226,6 @@ function buildInfo(p, notes, delivery, docs) {
       '<span style="color:var(--success)">' + (del.done || 0) + '</span>' +
       '<span style="color:var(--muted);font-weight:400"> / ' + (del.planned || 0) + '</span>' +
     '</div></div>' +
-    // Linked opportunities (商机) — only LSJ-type projects
     '<div class="dkpi" style="grid-column:span 2"><div class="dkpi-lbl">关联商机（' + linkedOpportunities.length + '）' +
       (_hasProjectEditPerm() ? '<a href="javascript:void(0)" onclick="event.stopPropagation();editLinkedProjects()" title="编辑关联商机" style="text-decoration:none;font-size:14px">&#x1F517;</a>' : '') +
     '</div><div class="dkpi-val" style="font-size:12px;line-height:1.6">' +
@@ -233,7 +255,6 @@ function buildInfo(p, notes, delivery, docs) {
     html += '<div style="font-size:12px;color:var(--muted);font-style:italic">暂无</div>';
   }
   html += '</div>' +
-    // 关联项目 (non-LSJ linked projects)
     '<div class="card card-pad" style="flex:1;min-width:0">' +
       '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">关联项目（' + linkedPeers.length + '）' +
         (isOpportunity && _hasProjectEditPerm() ? ' <a href="javascript:void(0)" onclick="event.stopPropagation();showLsjConvertDialog()" title="商机转化" style="text-decoration:none;font-size:14px">&#x1F504;</a>' : '') +
@@ -258,54 +279,45 @@ function buildInfo(p, notes, delivery, docs) {
     '</div>';
   }
 
-  html += '</div>'; // .card
+  html += '</div>'; // .info-glass-card
 
-  // Right column — project notes (independent card)
-  html += '<div style="flex:1;min-width:0">';
+  // --- 项目笔记 ---
   html += '<div class="card card-clip" style="padding:0;overflow:hidden">';
   html += '<div style="padding:8px 12px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">';
   html += '<span style="font-size:12px;font-weight:600">项目笔记</span>';
   html += '<button class="btn-xs" onclick="openNoteDialog()">+ 添加笔记</button>';
   html += '</div>';
   html += '<div style="max-height:400px;overflow-y:auto"><div id="notes-content"></div></div>';
-  html += '</div></div>';
+  html += '</div>';
 
-  html += '</div>'; // flex row
+  // --- 项目动态 ---
+  html += '<div class="card card-clip" style="padding:0;overflow:hidden">';
+  html += '<div style="padding:8px 12px;background:var(--surface2);border-bottom:1px solid var(--border)">';
+  html += '<span style="font-size:12px;font-weight:600">项目动态</span>';
+  html += '</div>';
+  html += '<div style="max-height:400px;overflow-y:auto" id="project-activity-content"><div style="padding:12px;text-align:center;color:var(--muted);font-size:12px">加载中...</div></div>';
+  html += '</div>';
 
-  // 技术协议 — dropdown to switch, default 对外销售-技术协议, fallback 研发内部-技术协议
-  // Flatten docs from API response: { documents: [{ stage_name, documents: [...] }] }
-  var projDocs = [];
-  if (docs && docs.documents) {
-    docs.documents.forEach(function(stage) {
-      if (stage.documents) projDocs = projDocs.concat(stage.documents);
-    });
-  }
-  var agreementOptions = ['对外销售-技术协议', '研发内部-技术协议'];
-  var findAgreementDoc = function(name) {
-    var found = null;
-    projDocs.forEach(function(d) {
-      if (!found && d.doc_name && d.doc_name.indexOf(name) >= 0 && d.location) found = d;
-    });
-    return found;
-  };
-  var defaultAgreement = findAgreementDoc('对外销售-技术协议') || findAgreementDoc('研发内部-技术协议');
-  var currentAgreementName = defaultAgreement
-    ? (findAgreementDoc('对外销售-技术协议') ? '对外销售-技术协议' : '研发内部-技术协议')
-    : null;
+  html += '</div>'; // LEFT COLUMN
 
-  html += '<div style="margin-top:20px;display:flex;align-items:center;justify-content:space-between">' +
-    sectionHeader(currentAgreementName || '技术协议') +
-    '<div style="display:flex;align-items:center;gap:6px">' +
-    '<select id="agreement-doc-select" style="font-size:12px;padding:2px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--fg);cursor:pointer" onchange="switchAgreementDoc(this.value)">';
+  // === RIGHT COLUMN (50%) — 技术协议, full height ===
+  html += '<div style="flex:1;min-width:0;display:flex;flex-direction:column">';
+  html += '<div class="card card-clip" style="padding:0;overflow:hidden;flex:1;display:flex;flex-direction:column">';
+  html += '<div style="padding:8px 12px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">';
+  html += '<span style="font-size:12px;font-weight:600">' + escHtml(currentAgreementName || '技术协议') + '</span>';
+  html += '<div style="display:flex;align-items:center;gap:4px">';
+  html += '<select id="agreement-doc-select" style="font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--fg);cursor:pointer" onchange="switchAgreementDoc(this.value)">';
   agreementOptions.forEach(function(opt) {
     html += '<option value="' + escHtml(opt) + '"' + (currentAgreementName === opt ? ' selected' : '') + '>' + escHtml(opt) + '</option>';
   });
-  html += '</select>' +
-    '<button class="btn btn-sm" title="全屏查看" style="font-size:12px;padding:2px 6px" onclick="openAgreementDocFullscreen()">⛶</button>' +
-    '</div></div>';
-  html += '<div class="card" style="padding:0;overflow:hidden" id="proj-agreement-card">';
-  html += '<div id="proj-agreement-content"></div>';
-  html += '</div>';
+  html += '</select>';
+  html += '<button class="btn-xs" title="全屏查看" onclick="openAgreementDocFullscreen()">⛶</button>';
+  html += '</div></div>';
+  html += '<div style="flex:1;overflow:hidden" id="proj-agreement-card">';
+  html += '<div id="proj-agreement-content" style="height:100%"></div>';
+  html += '</div></div></div>';
+
+  html += '</div>'; // main flex row
 
   document.getElementById('info-content').innerHTML = html;
 
@@ -317,7 +329,7 @@ function buildInfo(p, notes, delivery, docs) {
     if (doc) {
       var token = localStorage.getItem('pma_token') || '';
       var fetchUrl = '/api/documents/fetch?url=' + encodeURIComponent(doc.location) + '&token=' + encodeURIComponent(token);
-      el.innerHTML = '<iframe src="' + fetchUrl + '" style="width:100%;min-height:500px;border:none"></iframe>';
+      el.innerHTML = '<iframe src="' + fetchUrl + '" style="width:100%;height:100%;border:none"></iframe>';
     } else {
       el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">未找到' + docName + '，请按要求提交</div>';
     }
@@ -340,6 +352,9 @@ function buildInfo(p, notes, delivery, docs) {
 
   // Populate notes
   buildNotes(notes || []);
+
+  // Load project activity
+  buildProjectActivity(p.code);
 }
 
 // _hasProjectEditPerm moved to utils.js
@@ -1647,6 +1662,41 @@ function buildNotes(notes) {
   } else {
     container.innerHTML = '<div class="empty-state" style="padding:12px">暂无笔记</div>';
   }
+}
+
+function buildProjectActivity(code) {
+  var TASK_ACTIONS = ['任务创建', '批量创建任务', '导入任务', '任务更新', '任务删除'];
+  API.get('/projects/' + code + '/activities?sort=desc&limit=50').then(function(data) {
+    var items = (data && data.items) ? data.items : [];
+    // Filter task-related activities only
+    var taskItems = items.filter(function(r) {
+      return TASK_ACTIONS.indexOf(r.action) >= 0;
+    });
+    var container = document.getElementById('project-activity-content');
+    if (!container) return;
+    if (taskItems.length === 0) {
+      container.innerHTML = '<div class="empty-state" style="padding:12px">暂无任务动态</div>';
+      return;
+    }
+    container.innerHTML = '<div id="project-activity-table"></div>';
+    new DataTable({
+      container: document.getElementById('project-activity-table'),
+      columns: [
+        { key: 'created_at', title: '时间', width: '130px', render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">' + (fmtISODateTime(v) || '—') + '</span>'; } },
+        { key: 'task_name', title: '任务名', width: 'auto', render: function(v) { return '<span style="font-size:12px;font-weight:500">' + escHtml(v || '—') + '</span>'; } },
+        { key: 'task_assignee', title: '责任人', width: '70px', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">' + escHtml(v || '—') + '</span>'; } },
+        { key: 'detail', title: '动态内容', align: 'left', className: 'dt-wrap', render: function(v, row) {
+          return '<span style="font-size:12px;line-height:1.5">' + escHtml(row.display_name || row.username || '') + ' ' + escHtml(row.action || '') + ': ' + escHtml((v || '').length > 100 ? (v || '').substring(0, 100) + '...' : (v || '')) + '</span>';
+        }}
+      ],
+      data: taskItems,
+      resizable: false,
+      maxHeight: '400px'
+    });
+  }).catch(function() {
+    var container = document.getElementById('project-activity-content');
+    if (container) container.innerHTML = '<div class="empty-state" style="padding:12px">加载失败</div>';
+  });
 }
 
 async function openNoteDialog() {

@@ -648,7 +648,9 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 | 3 | `username` | VARCHAR(64) | NOT NULL | 操作人 |
 | 4 | `action` | VARCHAR(128) | NOT NULL | 操作类型 |
 | 5 | `detail` | VARCHAR(512) | NULLABLE | 操作详情 |
-| 6 | `created_at` | DATETIME | default=now | — |
+| 6 | `task_name` | VARCHAR(256) | NULLABLE | 任务名（任务操作时填充） |
+| 7 | `task_assignee` | VARCHAR(64) | NULLABLE | 责任人（任务操作时填充） |
+| 8 | `created_at` | DATETIME | default=now | — |
 
 ---
 

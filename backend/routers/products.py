@@ -686,6 +686,8 @@ def get_product_activities(
                     "display_name": display_map.get(r.username, "") or "",
                     "action": r.action,
                     "detail": r.detail or "",
+                    "task_name": r.task_name or "",
+                    "task_assignee": r.task_assignee or "",
                     "created_at": to_local_str(r.created_at),
                 }
                 for r in rows
