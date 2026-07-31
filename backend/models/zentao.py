@@ -32,7 +32,10 @@ class CachedProject(Base):
     customer_name = Column(String(256), nullable=True)
     # Delivery plan (PMA-local, not overwritten by sync)
     planned_delivery_qty = Column(Integer, default=0)
+    delivered_sets_qty = Column(Integer, default=0)  # manual delivered sets count for big ring
     delivery_note = Column(Text, nullable=True)
+    # Per-product delivery plans: JSON array [{"product_code":"xx","product_name":"yy","planned_qty":5},...]
+    product_delivery_plans = Column(Text, nullable=True)
     # PMA-local project background (not overwritten by sync)
     background = Column(Text, nullable=True)
     # PMA-local linked projects (comma-separated project IDs, not overwritten by sync)

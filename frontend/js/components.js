@@ -230,6 +230,60 @@ function renderPriority(priority) {
 // Deprecated: use renderProgressCircle instead
 // renderProgressBar removed — all progress display now uses the ring component
 
+/** Delivery progress ring — n/m format (n=delivered green, m=planned amber).
+ *  opts: { label, showEdit, editOnclick } */
+function renderDeliveryRing(delivered, planned, size, opts) {
+  opts = opts || {};
+  var s = size || 74;
+  var sw = Math.max(3, Math.round(s * 0.09));
+  var r = (s / 2) - sw;
+  var cx = s / 2;
+  // arcProgress overrides the ring-fill percentage (for big ring aggregated from products)
+  var progress = opts.arcProgress !== undefined ? Math.min(100, Math.max(0, opts.arcProgress || 0))
+    : (planned > 0 ? Math.min(100, Math.round(delivered / planned * 100)) : 0);
+  var circumference = 2 * Math.PI * r;
+  var dash = (progress / 100) * circumference;
+  var gap = circumference - dash;
+  var deliveredColor = 'var(--success)';
+  var plannedColor = 'var(--warn)';
+  var bgStroke = 'var(--border)';
+  var textSize = Math.round(s * 0.22);
+  var labelSize = Math.round(s * 0.14);
+
+  var html = '<div class="ring-wrap" style="display:inline-flex;flex-direction:column;align-items:center;gap:4px;position:relative">';
+
+  // Edit button (top-right)
+  if (opts.showEdit && opts.editOnclick) {
+    html += '<button class="btn-icon ring-edit-btn" style="position:absolute;top:-4px;right:-4px;font-size:' + Math.round(s * 0.13) + 'px;z-index:2;padding:2px 4px;border-radius:4px;background:var(--surface);border:1px solid var(--border);cursor:pointer;opacity:0.7" ' +
+      'onclick="' + opts.editOnclick + '" title="编辑计划数量">&#9881;</button>';
+  }
+
+  html += '<div style="position:relative;width:' + s + 'px;height:' + s + 'px">' +
+    '<svg width="' + s + '" height="' + s + '" viewBox="0 0 ' + s + ' ' + s + '">' +
+      '<circle cx="' + cx + '" cy="' + cx + '" r="' + r + '" fill="none" stroke="' + bgStroke + '" stroke-width="' + sw + '"/>' +
+      (progress > 0
+        ? '<circle cx="' + cx + '" cy="' + cx + '" r="' + r + '" fill="none" stroke="' + deliveredColor + '" stroke-width="' + sw + '"' +
+          ' stroke-dasharray="' + dash.toFixed(1) + ' ' + gap.toFixed(1) + '" stroke-linecap="round" transform="rotate(-90 ' + cx + ' ' + cx + ')"/>'
+        : '') +
+    '</svg>' +
+    '<div style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;line-height:1">' +
+      '<span style="font-size:' + textSize + 'px;font-weight:700;font-family:var(--mono)">' +
+        '<span style="color:' + deliveredColor + '">' + delivered + '</span>' +
+        '<span style="color:var(--muted);font-size:' + Math.round(textSize * 0.65) + 'px"> / </span>' +
+        '<span style="color:' + plannedColor + '">' + planned + '</span>' +
+      '</span>' +
+    '</div>' +
+  '</div>';
+
+  if (opts.label) {
+    // Use consistent label area height so circles align at bottom across sizes
+    var lblH = Math.round(Math.max(size, 120) * 0.16);  // at least big-ring label height
+    html += '<div style="font-size:' + labelSize + 'px;color:var(--muted);font-weight:500;text-align:center;max-width:' + (s + 10) + 'px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-height:' + lblH + 'px;line-height:' + lblH + 'px">' + escHtml(opts.label) + '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
 function renderDelIcon(item) {
   if (item.done) {
     return '<div class="del-icon done">&#10003;</div>';
