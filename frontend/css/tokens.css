@@ -8,7 +8,7 @@
   /* ── Palette ── */
   --red:        #DC2626;  --red-lt:     #FEE2E2;
   --orange:     #EA580C;  --orange-lt:  #FFF7ED;
-  --yellow:     #EAB308;
+  --yellow:     #EAB308;  --yellow-lt:  #FEF9C3;
   --green:      #16A34A;  --green-lt:   #DCFCE7;
   --blue:       #2563EB;  --blue-lt:    #EFF6FF;
   --purple:     #7C3AED;  --purple-lt:  #F3EEFF;
@@ -42,7 +42,7 @@
 [data-theme="dark"] {
   --red:        #F87171;  --red-lt:     #1E0808;
   --orange:     #FB923C;  --orange-lt:  #201000;
-  --yellow:     #FACC15;
+  --yellow:     #FACC15;  --yellow-lt:  #1E1800;
   --green:      #4ADE80;  --green-lt:   #0A2218;
   --blue:       #60A5FA;  --blue-lt:    #0C1A35;
   --purple:     #A78BFA;  --purple-lt:  #1C1535;

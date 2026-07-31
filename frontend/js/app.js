@@ -1825,9 +1825,22 @@ function _ucLoadTasks(user) {
   });
 }
 
-function _ucMatchFilter(status) {
+function _ucMatchFilter(status, task) {
   if (_ucFilterStatus === 'all' || !_ucFilterStatus) return true;
   if (_ucFilterStatus === 'unfinished') return status !== 'done' && status !== 'review';
+  if (_ucFilterStatus === 'high_priority') {
+    if (!task) return false;
+    if (status === 'done' || status === 'closed') return false;
+    return task.priority === 'high' || task.priority === 'critical';
+  }
+  if (_ucFilterStatus === 'expiring') {
+    if (!task || !task.due_date) return false;
+    if (status === 'done' || status === 'closed') return false;
+    var today = fmtLocalDate();
+    var due = task.due_date;
+    var diff = Math.ceil((new Date(due + 'T00:00:00') - new Date(today + 'T00:00:00')) / 86400000);
+    return diff <= 3;
+  }
   return status === _ucFilterStatus;
 }
 
@@ -1838,8 +1851,25 @@ function _renderUcFilterBar() {
   });
   var unfinishedCount = _ucTasks.reduce(function(s,t){return s + ((t.status||'todo')!=='done'&&(t.status||'todo')!=='review'?1:0);}, 0);
 
-  // Category cards — order: 未完成 → 已完成 → [评审中] → 全部
+  // Counts for new category cards
+  var today = fmtLocalDate();
+  var highPriorityCount = _ucTasks.reduce(function(s, t) {
+    if ((t.status || 'todo') === 'done' || t.status === 'closed') return s;
+    return s + (t.priority === 'high' || t.priority === 'critical' ? 1 : 0);
+  }, 0);
+  var expiringCount = _ucTasks.reduce(function(s, t) {
+    if (!t.due_date) return s;
+    if ((t.status || 'todo') === 'done' || t.status === 'closed') return s;
+    var diff = Math.ceil((new Date(t.due_date + 'T00:00:00') - new Date(today + 'T00:00:00')) / 86400000);
+    return s + (diff <= 3 ? 1 : 0);
+  }, 0);
+
+  // Category cards — order: 高优先级 → 即将到期/已过期 → 未完成 → 已完成 → [评审中] → 全部
   var cardsHtml = '<div class="uc-cat-cards">'
+    + '<div class="kpi-card' + (_ucFilterStatus==='high_priority'?' active':'') + '" data-filter="high_priority" onclick="_ucSetFilter(\'high_priority\')">'
+    + '<div class="kpi-label">⚠ 高优先级</div><div class="kpi-value">' + highPriorityCount + '</div><div class="kpi-meta">高/紧急优先级</div></div>'
+    + '<div class="kpi-card' + (_ucFilterStatus==='expiring'?' active':'') + '" data-filter="expiring" onclick="_ucSetFilter(\'expiring\')">'
+    + '<div class="kpi-label">⏰ 即将到期/已过期</div><div class="kpi-value">' + expiringCount + '</div><div class="kpi-meta">3天内到期或已过期</div></div>'
     + '<div class="kpi-card' + (_ucFilterStatus==='unfinished'?' active':'') + '" data-filter="unfinished" onclick="_ucSetFilter(\'unfinished\')">'
     + '<div class="kpi-label">未完成</div><div class="kpi-value">' + unfinishedCount + '</div><div class="kpi-meta">待办 + 进行中</div></div>'
     + '<div class="kpi-card' + (_ucFilterStatus==='done'?' active':'') + '" data-filter="done" onclick="_ucSetFilter(\'done\')">'
@@ -2010,7 +2040,7 @@ var _ucTasksDt = null;
 
 function _renderUcTaskTable() {
   var filtered = _ucTasks.filter(function(t) {
-    if (!_ucMatchFilter(t.status || 'todo')) return false;
+    if (!_ucMatchFilter(t.status || 'todo', t)) return false;
     if (_ucFilterProd && t.product_name !== _ucFilterProd) return false;
     if (_ucFilterProj && t.project_name !== _ucFilterProj) return false;
     return true;
@@ -2239,7 +2269,7 @@ function _ucBuildTaskStats() {
   var tasks = _ucTasks || [];
   // Apply filters
   if (_ucFilterStatus && _ucFilterStatus !== 'all') {
-    tasks = tasks.filter(function(t) { return _ucMatchFilter(t.status || 'todo'); });
+    tasks = tasks.filter(function(t) { return _ucMatchFilter(t.status || 'todo', t); });
   }
   if (_ucFilterProd) {
     tasks = tasks.filter(function(t) { return t.product_name === _ucFilterProd; });

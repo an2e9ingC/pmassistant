@@ -1955,6 +1955,9 @@ function openBatchEditDialog() {
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">状态</label>' +
       '<select class="search-inp" id="ba-status" style="' + inp + '"><option value="">不修改</option>' +
         '<option value="todo">待办</option><option value="in_progress">进行中</option><option value="review">评审中</option><option value="done">已完成</option><option value="closed">已关闭</option></select></div>' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">优先级</label>' +
+      '<select class="search-inp" id="ba-priority" style="' + inp + '"><option value="">不修改</option>' +
+        '<option value="low">低</option><option value="medium">中</option><option value="high">高</option><option value="critical">紧急</option></select></div>' +
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">阶段</label>' +
       '<select class="search-inp" id="ba-stage" style="' + inp + '"><option value="">不修改</option></select></div>' +
     '<div style="display:flex;gap:8px;margin-bottom:8px">' +
@@ -1994,11 +1997,13 @@ async function submitBatchEdit() {
   var updates = {};
   var assignee = document.getElementById('ba-assignee').value;
   var status = document.getElementById('ba-status').value;
+  var priority = document.getElementById('ba-priority').value;
   var stage = document.getElementById('ba-stage').value;
   var start = document.getElementById('ba-start').value;
   var due = document.getElementById('ba-due').value;
   if (assignee) updates.assignee_id = parseInt(assignee);
   if (status) updates.status = status;
+  if (priority) updates.priority = priority;
   if (stage) updates.stage_name = stage;
   if (start) updates.start_date = start;
   if (due) updates.due_date = due;
