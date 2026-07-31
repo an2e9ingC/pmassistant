@@ -3,10 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="app-version" content="v2026.07.31-beta5">
+<meta name="app-version" content="v2026.07.31-beta6">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>PMA · 登录</title>
-<link rel="stylesheet" href="/css/tokens.css">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { font-size: 14px; }
@@ -148,6 +147,7 @@ body {
 window.APP_VERSION = document.querySelector('meta[name="app-version"]').content;
 (function(){
 var v = window.APP_VERSION;
+document.write('<link rel="stylesheet" href="/css/tokens.css?v=' + v + '">');
 document.write('<script src="/js/utils.js?v=' + v + '"><\/script>');
 document.write('<script src="/js/api.js?v=' + v + '"><\/script>');
 document.write('<script src="/js/auth.js?v=' + v + '"><\/script>');

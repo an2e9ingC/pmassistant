@@ -688,14 +688,7 @@ async function _pmDeleteProduct(productId, productName) {
   }
 }
 
-function _filterSearchableItems(input) {
-  var q = (input.value || '').toLowerCase();
-  var list = input.nextElementSibling;
-  if (!list) return;
-  list.querySelectorAll('.searchable-item').forEach(function(item) {
-    item.style.display = q ? (item.getAttribute('data-search-text').indexOf(q) >= 0 ? '' : 'none') : '';
-  });
-}
+// _filterSearchableItems moved to utils.js
 
 /* ── Create Product by Naming Convention ── */
 

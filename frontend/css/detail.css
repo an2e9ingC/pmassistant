@@ -136,7 +136,7 @@
 .del-icon.warn  { background: var(--danger-lt); color: var(--danger); border: 1px solid var(--danger); font-weight: 700; }
 .del-icon.open  { background: var(--border); }
 
-.doc-link {
+.doc-link-btn {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 3px 9px; border-radius: 6px;
   font-size: 11.5px; font-weight: 500;
@@ -144,7 +144,7 @@
   color: var(--muted); cursor: pointer;
   transition: all 0.13s; text-decoration: none;
 }
-.doc-link:hover { background: var(--accent-lt); color: var(--accent); border-color: var(--accent); }
+.doc-link-btn:hover { background: var(--accent-lt); color: var(--accent); border-color: var(--accent); }
 
 /* Delivery */
 .delivery-kpi { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
@@ -309,10 +309,6 @@
 }
 .map-unlink:hover { color: var(--danger); background: var(--danger-lt); }
 
-/* Map toolbar */
-.map-style-btn:hover { border-color: var(--accent); color: var(--fg); }
-.map-style-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-
 /* Sidebar layout */
 .prod-cat-item:hover { background: var(--bg); }
 .prod-cat-item.active {
@@ -324,52 +320,6 @@
   padding: 1px 6px; border-radius: 10px;
 }
 .prod-cat-item:not(.active) .cat-count { background: var(--bg); }
-
-.prod-main { flex: 1; overflow-y: auto; padding: 16px; background: var(--surface); }
-.prod-tree-empty {
-  height: 100%; display: flex; align-items: center; justify-content: center;
-  color: var(--muted); font-size: 13.5px;
-}
-
-/* Product tree */
-.prod-tree-section { margin-bottom: 20px; }
-.prod-tree-prod {
-  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
-  padding: 12px 14px; cursor: pointer; transition: all 0.12s;
-}
-.prod-tree-prod:hover { border-color: var(--accent); }
-.prod-tree-prod.expanded { border-color: var(--accent); background: var(--surface); }
-.prod-tree-prod-header { display: flex; align-items: center; justify-content: space-between; }
-.prod-tree-prod-title { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
-.prod-tree-prod-meta { font-size: 11px; color: var(--muted); margin-top: 4px; padding-left: 26px; }
-.prod-tree-toggle {
-  width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
-  color: var(--muted); transition: transform 0.2s; font-size: 11px;
-}
-.prod-tree-toggle.open { transform: rotate(90deg); }
-.prod-tree-projs {
-  margin-top: 10px; padding-left: 26px; border-left: 2px solid var(--border);
-  display: none;
-}
-.prod-tree-projs.show { display: block; }
-
-/* Project tree (customer view) */
-.matrix-tbl th:first-child { text-align: left; min-width: 150px; }
-.matrix-tbl td {
-  padding: 10px 14px; border-bottom: 1px solid var(--border);
-  text-align: center; vertical-align: middle;
-}
-.matrix-tbl td:first-child { text-align: left; font-weight: 510; }
-.matrix-tbl tr:nth-child(even) td { background: var(--surface); }
-.matrix-tbl tr:nth-child(odd) td { background: var(--bg); }
-.m-dot {
-  display: inline-flex; width: 18px; height: 18px; border-radius: 4px;
-  align-items: center; justify-content: center; cursor: pointer;
-  transition: all 0.1s;
-}
-.m-dot.yes { background: var(--success); }
-.m-dot.yes:hover { transform: scale(1.2); }
-.m-dot.no { color: var(--border); font-size: 14px; }
 
 /* Link Dialog */
 .log-error { color: var(--danger); background: var(--danger-lt); padding: 1px 4px; border-radius: 2px; }
@@ -421,15 +371,6 @@
   color: inherit; font-size: 16px; padding: 0 4px; line-height: 1;
 }
 .notif-bar-item .notif-close:hover { opacity: 1; }
-.notif-bar-severe {
-  background: var(--danger); color: #fff;
-}
-.notif-bar-important {
-  background: #e6a817; color: #fff;
-}
-.notif-bar-general {
-  background: var(--accent); color: #fff;
-}
 .notif-bar-author {
   opacity: 0.85; font-weight: 400; font-size: 12px;
 }
@@ -754,7 +695,7 @@ body.has-ticker .view.active { padding-bottom: 28px; }
   transition: box-shadow 0.15s, border-color 0.15s;
 }
 .block-diagram-item:hover {
-  box-shadow: var(--sh-sm);
+  box-shadow: var(--sh);
   border-color: var(--accent) !important;
 }
 

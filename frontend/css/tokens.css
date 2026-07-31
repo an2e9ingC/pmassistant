@@ -8,11 +8,10 @@
   /* ── Palette ── */
   --red:        #DC2626;  --red-lt:     #FEE2E2;
   --orange:     #EA580C;  --orange-lt:  #FFF7ED;
-  --yellow:     #EAB308;  --yellow-lt:  #FEFCE8;
+  --yellow:     #EAB308;
   --green:      #16A34A;  --green-lt:   #DCFCE7;
   --blue:       #2563EB;  --blue-lt:    #EFF6FF;
   --purple:     #7C3AED;  --purple-lt:  #F3EEFF;
-  --gray:       #6B7280;
 
   /* ── Legacy semantic aliases ── */
   --danger:     var(--red);     --danger-lt:  var(--red-lt);
@@ -43,11 +42,10 @@
 [data-theme="dark"] {
   --red:        #F87171;  --red-lt:     #1E0808;
   --orange:     #FB923C;  --orange-lt:  #201000;
-  --yellow:     #FACC15;  --yellow-lt:  #201800;
+  --yellow:     #FACC15;
   --green:      #4ADE80;  --green-lt:   #0A2218;
   --blue:       #60A5FA;  --blue-lt:    #0C1A35;
   --purple:     #A78BFA;  --purple-lt:  #1C1535;
-  --gray:       #9CA3AF;
 
   --danger:     var(--red);     --danger-lt:  var(--red-lt);
   --warn:       var(--orange);  --warn-lt:    var(--orange-lt);
@@ -64,8 +62,6 @@
   --border:      #232839;
   --sh:          0 1px 3px rgba(0,0,0,0.35), 0 1px 2px rgba(0,0,0,0.3);
   --sh-md:       0 4px 14px rgba(0,0,0,0.45);
-  --r:           8px;
-  --r-lg:        12px;
 }
 
 /* ═══════════════════════════════════════════════════
@@ -98,12 +94,12 @@
 /* ═══════════════════════════════════════════════════
    STANDARD INPUT SIZE
    Use .search-inp for consistent input styling.
-   Already defined in theme.css — this is a reminder.
+   Search input styling — use .search-inp class.
 ═══════════════════════════════════════════════════ */
 
 /* ═══════════════════════════════════════════════════
    STANDARD CARD VARIANTS
-   Use .card for default card styling (already in theme.css).
+   Use .card for default card styling.
    .card-pad — card with standard padding
    .card-clip — card with overflow:hidden (for tables/lists)
 ═══════════════════════════════════════════════════ */

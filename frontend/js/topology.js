@@ -29,6 +29,7 @@ function _initTopoDt() {
 
 function _topoShowResult(items) {
   _initTopoDt();
+  if (!_topoDt) return;
   if (!items || !items.length) {
     _topoDt.setData([]);
     return;
