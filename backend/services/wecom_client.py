@@ -124,6 +124,19 @@ class WeComClient:
         except Exception:
             return {}
 
+    async def get_checkin_options(self, datetime_ts: int, useridlist: list = None) -> list:
+        """Fetch checkin rules (getcorpcheckinoption).
+        获取企业打卡规则: 上下班时间、午休时段、工作日定义。
+
+        POST https://qyapi.weixin.qq.com/cgi-bin/checkin/getcorpcheckinoption?access_token=TOKEN
+        Returns list of group objects, each with groupid, checkindate, etc.
+        """
+        body = {"datetime": datetime_ts}
+        if useridlist:
+            body["useridlist"] = useridlist
+        data = await self._post("checkin/getcorpcheckinoption", body)
+        return data.get("group", [])
+
     async def get_approval_data(
         self, start_time: int, end_time: int
     ) -> list:
@@ -143,6 +156,16 @@ class WeComClient:
         }
         data = await self._post("oa/getapprovalinfo", body)
         return data.get("sp_no_list", [])
+
+    async def get_approval_detail(self, sp_no: str) -> dict:
+        """Fetch approval detail by sp_no.
+
+        POST https://qyapi.weixin.qq.com/cgi-bin/oa/getapprovaldetail?access_token=TOKEN
+        Returns the full approval record with apply_data, comments, etc.
+        """
+        body = {"sp_no": sp_no}
+        data = await self._post("oa/getapprovaldetail", body)
+        return data.get("info", {})
 
     async def close(self):
         if self._client:
