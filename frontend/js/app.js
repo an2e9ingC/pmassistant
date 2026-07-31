@@ -1615,6 +1615,11 @@ async function initUserCenter(viewUserId) {
     '</div>' +
     '</div>';
 
+  // Reset DataTable refs — DOM rebuilt, old instances point to detached elements
+  _ucTasksDt = null;
+  _ucBugsDt = null;
+  _ucApprovalsDt = null;
+
   // Create or show fixed right panel (calendar at top + stats below)
   if (!window._ucRightPanel) {
     var rp = document.createElement('div');
@@ -1813,7 +1818,9 @@ function _ucLoadTasks(user) {
     _ucLoadCalendar(user);
     _ucLoadWecomCalendar(user);
   }).catch(function() {
-    document.getElementById('uc-tasks-table-tbody').innerHTML = '<tr><td colspan="15"><div class="empty-state">加载失败</div></td></tr>';
+    var wrap = document.getElementById('uc-tasks-table-wrap');
+    if (wrap) wrap.innerHTML = '<div class="empty-state">加载失败</div>';
+    _ucTasksDt = null;
   });
 }
 
@@ -2082,7 +2089,10 @@ function _renderUcTaskTable() {
   }
 
   if (typeof _ensureBatchToolbar === 'function') _ensureBatchToolbar();
-  setTimeout(function() { if (typeof window._ucUpdateLayout === 'function') window._ucUpdateLayout(); }, 50);
+  // Ensure table height is set — may have been missed by _ucUpdateLayout if DataTable wasn't yet created
+  setTimeout(function() { if (typeof window._ucUpdateLayout === 'function') window._ucUpdateLayout(); }, 20);
+  // Double-call to ensure layout has settled
+  setTimeout(function() { if (typeof window._ucUpdateLayout === 'function') window._ucUpdateLayout(); }, 100);
 }
 
 function _renderUcStats() {
