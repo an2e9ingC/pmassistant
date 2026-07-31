@@ -2129,11 +2129,11 @@ function showProjectFormDialog(isEdit, convertSource) {
           '<div id="proj-form-end-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择计划结束</div></div>' +
         '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">项目状态</label>' +
           '<select class="search-inp" id="proj-form-status" style="width:100%;box-sizing:border-box">' +
-            '<option value="wait"' + ((p && p.status === 'wait') || (!isEdit) ? ' selected' : '') + '>待启动</option>' +
-            '<option value="doing"' + (p && p.status === 'doing' ? ' selected' : '') + '>进行中</option>' +
-            '<option value="suspended"' + (p && p.status === 'suspended' ? ' selected' : '') + '>已挂起</option>' +
-            '<option value="done"' + (p && p.status === 'done' ? ' selected' : '') + '>已完成</option>' +
-            '<option value="closed"' + (p && p.status === 'closed' ? ' selected' : '') + '>已关闭</option>' +
+            '<option value="wait"' + ((p && p.raw_status === 'wait') || (!isEdit) ? ' selected' : '') + '>待启动</option>' +
+            '<option value="doing"' + (p && p.raw_status === 'doing' ? ' selected' : '') + '>进行中</option>' +
+            '<option value="suspended"' + (p && p.raw_status === 'suspended' ? ' selected' : '') + '>已挂起</option>' +
+            '<option value="done"' + (p && p.raw_status === 'done' ? ' selected' : '') + '>已完成</option>' +
+            '<option value="closed"' + (p && p.raw_status === 'closed' ? ' selected' : '') + '>已关闭</option>' +
           '</select></div>' +
       '</div>' +
       // Row 6: 实际开始 | 实际结束

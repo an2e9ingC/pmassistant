@@ -1067,6 +1067,42 @@ def update_project(
                 db.flush()
             db.add(CustomerProjectLink(project_id=project.id, customer_id=cust.id))
 
+    # Handle product_ids → product_project_links sync (with quantity)
+    new_product_ids = data.pop("product_ids", None)
+    if new_product_ids is not None:
+        from backend.models.zentao import ProductProjectLink
+        from backend.models.zentao import PmaProduct
+        # Capture old state for change tracking
+        old_links = db.query(ProductProjectLink).filter(
+            ProductProjectLink.project_id == project.id
+        ).all()
+        old_qty_map = {l.product_id: l.quantity for l in old_links}
+        # Clear existing links
+        db.query(ProductProjectLink).filter(ProductProjectLink.project_id == project.id).delete()
+        # Create new links with quantities
+        new_qty_map = {}
+        for item in (new_product_ids or []):
+            if isinstance(item, dict):
+                pid = item.get("product_id")
+                qty = item.get("quantity", 1)
+            else:
+                pid = getattr(item, 'product_id', item)
+                qty = getattr(item, 'quantity', 1)
+            new_qty_map[pid] = qty
+            prod = db.query(PmaProduct).filter(PmaProduct.id == pid).first()
+            if prod:
+                db.add(ProductProjectLink(product_id=pid, project_id=project.id, quantity=qty))
+        # Track changes in product quantity
+        all_pids = set(list(old_qty_map.keys()) + list(new_qty_map.keys()))
+        if old_qty_map != new_qty_map:
+            for pid in sorted(all_pids):
+                old_qty = old_qty_map.get(pid, 0)
+                new_qty = new_qty_map.get(pid, 0)
+                if old_qty != new_qty:
+                    prod = db.query(PmaProduct).filter(PmaProduct.id == pid).first()
+                    prod_name = (prod.code + ' ' + prod.name) if prod else f'产品#{pid}'
+                    changes.append(f"{prod_name}: {old_qty}台 -> {new_qty}台")
+
     for field, value in data.items():
         if field in ("begin", "end", "real_began", "real_end"):
             if value is not None:
