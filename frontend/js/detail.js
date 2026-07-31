@@ -1271,7 +1271,6 @@ function addCustomDoc() {
     '<div><label style="font-size:11px;color:var(--muted)">所属阶段</label><select class="search-inp" id="custom-doc-stage" style="' + inp + '"></select></div>' +
     '<div><label style="font-size:11px;color:var(--muted)">文档类型</label><select class="search-inp" id="custom-doc-type" style="' + inp + '"><option value="">PMA内部</option><option value="gitlab">GitLab</option><option value="svn">SVN</option><option value="nas">NAS</option><option value="solidworks">结构设计</option></select></div>' +
     '<div><label style="font-size:11px;color:var(--muted)">文档路径/链接</label><input class="search-inp" id="custom-doc-location" style="' + inp + '" placeholder="如：http://..."></div>' +
-    '<div><label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="custom-doc-optional" style="width:16px;height:16px">可选项（可按需删除）</label></div>' +
   '</div>';
 
   openDialog('新增文档', html, [
@@ -1294,12 +1293,11 @@ function submitCustomDoc() {
   var stage = document.getElementById('custom-doc-stage').value;
   var docType = document.getElementById('custom-doc-type').value;
   var location = document.getElementById('custom-doc-location').value.trim();
-  var isOptional = document.getElementById('custom-doc-optional').checked;
   if (!name) { showToast('请输入文档名称', 'error'); return; }
   if (!stage) { showToast('请选择所属阶段', 'error'); return; }
   API.post('/projects/' + _comboCurCode + '/documents/add', {
     doc_name: name, stage_type: stage, doc_type: docType,
-    location: location, is_optional: isOptional
+    location: location, is_optional: true
   }).then(function(r) {
     showToast(r.message || '文档已添加', 'success');
     closeSharedDialog();
