@@ -201,6 +201,18 @@
   border-color: var(--warn); background: var(--warn-lt);
   box-shadow: var(--sh-md); transform: scale(1.02);
 }
+.kpi-card[data-filter="high_priority"] { border-left-color: var(--danger); }
+.kpi-card[data-filter="high_priority"] .kpi-value { color: var(--danger); }
+.kpi-card[data-filter="high_priority"].active {
+  border-color: var(--danger); background: var(--danger-lt);
+  box-shadow: var(--sh-md); transform: scale(1.02);
+}
+.kpi-card[data-filter="expiring"] { border-left-color: var(--yellow); }
+.kpi-card[data-filter="expiring"] .kpi-value { color: var(--yellow); }
+.kpi-card[data-filter="expiring"].active {
+  border-color: var(--yellow); background: var(--yellow-lt);
+  box-shadow: var(--sh-md); transform: scale(1.02);
+}
 
 /* Project boundary: subtle top border on first row of each project group */
 .uc-proj-first { border-top: 2px solid var(--border); }
