@@ -329,7 +329,7 @@ function buildInfo(p, notes, delivery, docs) {
     if (doc) {
       var token = localStorage.getItem('pma_token') || '';
       var fetchUrl = '/api/documents/fetch?url=' + encodeURIComponent(doc.location) + '&token=' + encodeURIComponent(token);
-      el.innerHTML = '<iframe src="' + fetchUrl + '" style="width:100%;height:100%;border:none"></iframe>';
+      el.innerHTML = '<iframe src="' + fetchUrl + '" style="width:100%;min-height:800px;border:none"></iframe>';
     } else {
       el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">未找到' + docName + '，请按要求提交</div>';
     }
