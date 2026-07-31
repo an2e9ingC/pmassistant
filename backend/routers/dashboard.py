@@ -128,22 +128,35 @@ def get_recent_activity_feed(
     days: int = Query(7, ge=1, le=30),
     limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
-    _=Depends(get_current_user),
+    user=Depends(get_current_user),
 ):
     """Get recent task activity feed for bottom scrolling ticker.
 
     Returns worklog entries from the last N days with project code,
     assignee, date, and worklog description. Today's items get is_today=True.
+
+    By default, only shows activities from projects the user has favorited.
+    If no favorites are set, shows all activities (backward compatible).
     """
     from backend.models.task import WorkLog, Task
     from backend.models.zentao import CachedProject
     from backend.models.local import LocalUser
+    import json
+
+    # Parse user favorites to get followed project IDs
+    try:
+        favs = json.loads(user.favorites or '{"products":[],"projects":[]}')
+        if isinstance(favs, list):
+            favs = {"products": [], "projects": favs}
+    except (json.JSONDecodeError, TypeError):
+        favs = {"products": [], "projects": []}
+    fav_proj_ids = favs.get("projects", [])
 
     today = date.today()
     since = datetime.utcnow() - timedelta(days=days)
 
     # Query: worklog + task + project + assignee
-    rows = db.query(
+    q = db.query(
         WorkLog.id, WorkLog.description, WorkLog.date, WorkLog.created_at,
         Task.id, Task.title,
         CachedProject.code,
@@ -154,7 +167,13 @@ def get_recent_activity_feed(
         LocalUser, Task.assignee_id == LocalUser.id,
     ).filter(
         WorkLog.created_at >= since,
-    ).order_by(
+    )
+
+    # Filter by user's favorited projects (if any)
+    if fav_proj_ids:
+        q = q.filter(CachedProject.id.in_(fav_proj_ids))
+
+    rows = q.order_by(
         WorkLog.created_at.desc(),
     ).limit(limit).all()
 

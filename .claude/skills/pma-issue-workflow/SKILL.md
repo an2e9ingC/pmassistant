@@ -202,15 +202,35 @@ PYEOF
 - **提供测试链接**：通过 `./server.sh status` 获取当前服务地址和端口，给出可直接点击的验证 URL，使用标准 markdown 链接格式（如 [项目详情](http://192.168.100.100:8000/#/detail/PE0445/docs)），说明需要查看哪个页面/功能来验证修复效果。**禁止对链接使用粗体或其他修饰。**
 - 等待用户确认
 
-### 8. Commit
-- 遵循 pma-commit 规范
-- 必须包含 `Closes #X`
-- 更新版本号
+### 8. 提交并上线（用户说 "上线" 即可）
 
-### 9. 发布分析总结到 GitLab Issue
-- Commit 完成后，使用 `scripts/gitlab_issue_comment.py` 将分析和解决方案作为评论发布到 GitLab Issue：
-  ```bash
-  python3 scripts/gitlab_issue_comment.py --issue <N> --body "<markdown 内容>"
-  ```
-- **必须使用该脚本，禁止临时写 curl/inline Python 脚本。**
-- 评论模板见 pma-commit skill 中的定义。
+> **验证通过后，用户只需说 "上线" 即可完成全流程。不要拆分说 "commit" 再 "上线"。**
+
+**执行链**：
+
+```
+用户说 "上线" → Skill("pma-worktree")
+  ├── 自动 commit（内部触发 pma-commit：版本号 → review → commit → GitLab 评论）
+  ├── rebase origin/trunk
+  ├── code review（diff 检查）
+  ├── 二次 rebase（防止并发冲突）
+  ├── merge --no-ff 到 trunk
+  ├── schema 检查（只读）
+  ├── push origin trunk
+  ├── 删除远程临时分支
+  └── cleanup（删除 worktree 目录和本地分支）
+```
+
+**各 skill 职责边界**：
+
+| Skill | 触发词 | 职责 |
+|-------|--------|------|
+| `pma-issue-workflow` | `issue#N` | 获取 issue → worktree → 诊断 → 实现 → 验证。**验证完后告知用户说 "上线"** |
+| `pma-commit` | `commit` | 版本号 + review + 停服 + git commit + 重启 + MCP 重索引 + GitLab 评论 |
+| `pma-worktree` | `上线` | 自动 commit（调 pma-commit）→ rebase → merge → push → cleanup |
+
+**关键规则**：
+
+- `pma-worktree` 的上线流程内置了自动 commit（`git status --porcelain` 有改动时调 pma-commit），**不需要用户先单独说 "commit"**
+- `pma-commit` 内部已包含 GitLab Issue 评论发布（使用 `scripts/gitlab_issue_comment.py`，模板含分析摘要），**issue-workflow 不重复实现**
+- 如果用户只想 commit 暂存改动（不上线），可以说 "commit" 单独触发 `pma-commit`
