@@ -91,74 +91,150 @@ async def sync_wecom_data(db: Session) -> dict:
 
         created, updated, total_fetched = 0, 0, 0
 
-        # Fetch checkin data in 30-day batches
+        # ── Accumulate all records across batches BEFORE processing ──
+        # (records for the same day can be split across batch boundaries)
+        daily = {}  # (user_id, date_str) -> {checkins_in: [], checkins_out: [], raw: []}
+        wecom_userids = [u.wecom_userid for u in users]
+
         for batch_start in range(start_ts, end_ts, 30 * 86400):
             batch_end = min(batch_start + 30 * 86400, end_ts)
-            wecom_userids = [u.wecom_userid for u in users]
             checkins = await client.get_checkin_data(batch_start, batch_end, wecom_userids)
 
             # Debug: log first record to verify data format
-            if checkins and created == 0 and updated == 0:
+            if checkins and total_fetched == 0:
                 logger.info(f"WeCom checkin sample: {json.dumps(checkins[0], ensure_ascii=False)[:300]}")
 
             total_fetched += len(checkins)
 
-            # Group checkin records by (user_id, date), pair consecutive records
-            daily = {}  # (user_id, date_str) -> [timestamps sorted]
             for record in checkins:
                 uid = record.get("userid", "")
                 ct = record.get("checkin_time", 0)
-                if not uid or not ct:
+                ctype = record.get("checkin_type", "")
+                if not uid:
                     continue
-                dt = datetime.fromtimestamp(ct, tz=timezone.utc)
-                ds = dt.strftime("%Y-%m-%d")
+                dt = datetime.fromtimestamp(ct, tz=timezone.utc) if ct > 0 else None
+                ds = dt.strftime("%Y-%m-%d") if dt else None
+                if not ds:
+                    continue
                 key = (uid, ds)
                 if key not in daily:
-                    daily[key] = {"times": [], "raw": []}
-                daily[key]["times"].append(ct)
+                    daily[key] = {"checkins_in": [], "checkins_out": [], "raw": []}
                 daily[key]["raw"].append(record)
+                if ct > 0:
+                    if "上班" in ctype:
+                        daily[key]["checkins_in"].append(ct)
+                    elif "下班" in ctype:
+                        daily[key]["checkins_out"].append(ct)
 
-            for (uid, ds), d in daily.items():
-                d["times"].sort()
+        # ── Process all accumulated records ──
+        for (uid, ds), d in daily.items():
+            d["checkins_in"].sort()
+            d["checkins_out"].sort()
+
+            # ── Check if day has any valid (non-未打卡) punch records ──
+            has_valid_punch = any(
+                r.get("checkin_time", 0) > 0
+                and r.get("exception_type", "") != "未打卡"
+                for r in d["raw"]
+            )
+
+            if not has_valid_punch:
+                # Truly no valid punches (外出/真正缺勤/全部未打卡)
+                # Hours will come from approval data (Phase 3) or stay 0
                 hours = 0.0
-                # Pair consecutive records: checkin → checkout
-                for i in range(0, len(d["times"]) - 1, 2):
-                    diff = d["times"][i+1] - d["times"][i]
-                    if diff > 0:
-                        hours += diff / 3600.0
-                # Single pair + full day (>5h raw) → subtract 1.5h lunch
-                # (multi-pair days already have lunch gap from pairing)
-                if len(d["times"]) == 2 and hours > 5:
-                    hours -= 1.5
-                # Only "未打卡" means no actual checkin; other exceptions (时间异常 etc.) are still valid
-                if any(r.get("exception_type", "") == "未打卡" for r in d["raw"]):
-                    hours = 0.0
-                hours = max(0, hours)
-                existing = db.query(WeComCheckin).filter(
-                    WeComCheckin.user_id == uid,
-                    WeComCheckin.date == date.fromisoformat(ds),
-                    WeComCheckin.source == "checkin",
-                ).first()
-                if existing:
-                    existing.work_hours = hours
-                    existing.raw_data = json.dumps(d["raw"][:5], ensure_ascii=False)
-                    existing.synced_at = datetime.now(timezone.utc)
-                    updated += 1
-                else:
-                    db.add(WeComCheckin(
-                        user_id=uid,
-                        date=date.fromisoformat(ds),
-                        work_hours=hours,
-                        source="checkin",
-                        raw_data=json.dumps(d["raw"][:5], ensure_ascii=False),
-                        synced_at=datetime.now(timezone.utc),
-                    ))
-                    created += 1
+            else:
+                # ── Pair 上班→下班 records ──
+                hours = 0.0
+                used_out = set()
+                for cin in d["checkins_in"]:
+                    best = None
+                    for j, cout in enumerate(d["checkins_out"]):
+                        if j not in used_out and cout > cin:
+                            if best is None or cout < d["checkins_out"][best]:
+                                best = j
+                    if best is not None:
+                        hours += (d["checkins_out"][best] - cin) / 3600.0
+                        used_out.add(best)
 
-            db.commit()
+            # ── Lunch deduction: only for single-pair days with raw >= 9h ──
+            # Threshold of 9h raw span: only full workdays that include lunch break
+            # Weekend/short days (<9h raw) won't trigger the deduction
+            lunch_deducted = False
+            if (hours >= 9.0 and len(d["checkins_in"]) == 1 and len(d["checkins_out"]) == 1
+                    and has_valid_punch):
+                hours -= 1.5
+                lunch_deducted = True
 
-        # Fetch approval data (TODO: verify correct API parameters)
-        # Skipped for now — checkin data is the primary need
+            hours = max(0, hours)
+
+            # ── Structured logging for debugging ──
+            exception_types = [r.get("exception_type", "") for r in d["raw"]]
+            logger.info(
+                f"WeCom calc: user={uid}, date={ds}, "
+                f"records={len(d['raw'])}, "
+                f"in={len(d['checkins_in'])}, out={len(d['checkins_out'])}, "
+                f"exceptions={exception_types}, "
+                f"hours={hours:.2f}, lunch_deducted={lunch_deducted}, "
+                f"valid_punch={has_valid_punch}"
+            )
+
+            existing = db.query(WeComCheckin).filter(
+                WeComCheckin.user_id == uid,
+                WeComCheckin.date == date.fromisoformat(ds),
+                WeComCheckin.source == "checkin",
+            ).first()
+            if existing:
+                existing.work_hours = hours
+                existing.raw_data = json.dumps(d["raw"][:5], ensure_ascii=False)
+                existing.synced_at = datetime.now(timezone.utc)
+                updated += 1
+            else:
+                db.add(WeComCheckin(
+                    user_id=uid,
+                    date=date.fromisoformat(ds),
+                    work_hours=hours,
+                    source="checkin",
+                    raw_data=json.dumps(d["raw"][:5], ensure_ascii=False),
+                    synced_at=datetime.now(timezone.utc),
+                ))
+                created += 1
+
+        db.commit()
+
+        # ── Fetch approval data (补卡审批, 外出审批 etc.) ──
+        # Approval records fill the gap for days without valid checkin punches
+        # (e.g. 外出: user doesn't clock in/out, hours come from approval)
+        try:
+            approval_created, approval_updated = 0, 0
+            seen_sp = set()  # deduplicate across batch ranges
+            client2 = WeComClient()
+            await client2.authenticate()
+            try:
+                for batch_start in range(start_ts, end_ts, 31 * 86400):
+                    batch_end = min(batch_start + 31 * 86400, end_ts)
+                    sp_list = await client2.get_approval_data(batch_start, batch_end)
+                    logger.info(f"WeCom approval batch {batch_start}-{batch_end}: {len(sp_list)} approvals")
+                    for sp_no in sp_list:
+                        if sp_no in seen_sp:
+                            continue
+                        seen_sp.add(sp_no)
+                        try:
+                            detail = await client2.get_approval_detail(sp_no)
+                            if not detail:
+                                continue
+                            result = _process_approval(db, detail, wecom_userids)
+                            if result == "created":
+                                approval_created += 1
+                            elif result == "updated":
+                                approval_updated += 1
+                        except Exception as e:
+                            logger.warning(f"WeCom approval detail failed for {sp_no}: {e}")
+                db.commit()
+                logger.info(f"WeCom approvals: created={approval_created}, updated={approval_updated}")
+            finally:
+                await client2.close()
+        except Exception as e:
+            logger.warning(f"WeCom approval sync failed (non-fatal): {e}")
 
         # Fetch schedule (expected working hours, non-blocking)
         try:
@@ -216,23 +292,128 @@ def _upsert_checkin(db: Session, record: dict, source: str) -> Optional[str]:
         return "created"
 
 
-def _upsert_approval(db: Session, record: dict) -> Optional[str]:
-    """Upsert one approval record as a checkin entry."""
-    # Approval records vary by template; store raw data and mark source="approval"
-    user_id = record.get("apply_user_id", "") or record.get("sp_applicant", "")
-    apply_time = record.get("apply_time", 0)
+def _extract_approval_hours(detail: dict) -> tuple:
+    """Extract (user_id, date, hours) from approval detail record.
 
-    if not user_id or not apply_time:
+    Parses the WeCom approval detail format. Handles:
+    - 外出审批 (out-of-office): extracts date range, no lunch deduction
+    - 补卡审批 (supplementary checkin): skipped (handled by checkin data)
+    - Other approval types: logged and skipped
+
+    Returns (user_id, date_key, hours) or (None, None, 0) if irrelevant.
+    """
+    sp_name = detail.get("sp_name", "")
+    apply_user_id = detail.get("applyer", {}).get("userid", "") or detail.get("sp_applicant", "")
+
+    if not apply_user_id:
+        return (None, None, 0)
+
+    # Only process relevant approval types
+    if "外出" not in sp_name:
+        return (None, None, 0)  # skip non-out-of-office approvals
+
+    # Parse apply_data for time range
+    apply_data = detail.get("apply_data", {})
+    contents = apply_data.get("contents", [])
+
+    start_ts, end_ts = None, None
+
+    for item in contents:
+        ctrl = item.get("control", "")
+        val = item.get("value", {})
+
+        if ctrl == "Attendance":
+            # 外出审批 uses Attendance control — contains date range in 'attendance' field
+            att = val.get("attendance", {})
+            if att:
+                # attendance may be a dict with date_range or a direct date range
+                if isinstance(att, dict):
+                    dr = att.get("date_range", {})
+                    if dr:
+                        start_ts = dr.get("new_begin")
+                        end_ts = dr.get("new_end")
+                    if not start_ts:
+                        # Try direct fields on attendance
+                        start_ts = att.get("new_begin") or att.get("start_time")
+                        end_ts = att.get("new_end") or att.get("end_time")
+                if start_ts and end_ts:
+                    break
+
+        elif ctrl == "DateRange":
+            # Date range picker — extract begin/end timestamps
+            dr = val.get("date_range", {})
+            if dr:
+                start_ts = dr.get("new_begin")
+                end_ts = dr.get("new_end")
+                if start_ts and end_ts:
+                    break  # found the time range
+
+        elif ctrl == "Date":
+            # Single date picker
+            dt = val.get("date", {})
+            s = dt.get("s") or dt.get("s_timestamp")
+            e = dt.get("e") or dt.get("e_timestamp")
+            if s:
+                start_ts = s if not start_ts else start_ts
+                end_ts = e if e else s  # same-day
+                break
+
+        elif ctrl == "PunchCorrection":
+            # 补卡审批 — already handled by checkin data, skip
+            return (None, None, 0)
+
+    if not start_ts or not end_ts:
+        # Log the contents structure for debugging
+        ctrls = [f"{c.get('control')}(val_keys={list(c.get('value', {}).keys())})" for c in contents[:3]]
+        logger.warning(f"WeCom approval: no time range in '{sp_name}' for {apply_user_id}, controls={ctrls}")
+        return (None, None, 0)
+
+    # Calculate hours (no lunch deduction for 外出)
+    duration_sec = end_ts - start_ts
+    if duration_sec <= 0:
+        return (None, None, 0)
+    hours = duration_sec / 3600.0
+
+    # Determine the date of the approval start
+    try:
+        dt = datetime.fromtimestamp(int(start_ts), tz=timezone.utc)
+        date_key = dt.date()
+    except (ValueError, OSError):
+        return (None, None, 0)
+
+    return (apply_user_id, date_key, hours)
+
+
+# Track whether we've logged a sample (module-level)
+_approval_sample_logged = False
+
+
+def _process_approval(db: Session, detail: dict, wecom_userids: list) -> Optional[str]:
+    """Process one approval detail record. Returns 'created', 'updated', or None."""
+    global _approval_sample_logged
+
+    if not _approval_sample_logged:
+        logger.info(f"WeCom approval detail keys: {list(detail.keys())}")
+        ad = detail.get("apply_data", {})
+        if ad:
+            logger.info(f"WeCom approval apply_data keys: {list(ad.keys())}")
+            contents = ad.get("contents", [])
+            for i, c in enumerate(contents[:5]):
+                logger.info(f"WeCom approval content[{i}]: control={c.get('control')}, id={c.get('id')}, title={c.get('title')}, value_keys={list(c.get('value', {}).keys()) if c.get('value') else 'None'}")
+        logger.info(f"WeCom approval full sample: {json.dumps(detail, ensure_ascii=False)[:2000]}")
+        _approval_sample_logged = True
+
+    user_id, date_key, hours = _extract_approval_hours(detail)
+
+    if not user_id or hours <= 0:
         return None
 
-    dt = datetime.fromtimestamp(int(apply_time), tz=timezone.utc)
-    date_key = dt.date()
+    # Only process if user is linked in PMA
+    if user_id not in wecom_userids:
+        return None
 
-    # Try to extract hours from approval data
-    duration = record.get("duration", 0)  # some templates have duration in hours
-    if not duration:
-        duration = record.get("leave_duration", 0)
-    hours = float(duration) if duration else 0
+    sp_name = detail.get("sp_name", "审批")
+    sp_no = detail.get("sp_no", "")
 
     existing = db.query(WeComCheckin).filter(
         WeComCheckin.user_id == user_id,
@@ -241,9 +422,10 @@ def _upsert_approval(db: Session, record: dict) -> Optional[str]:
     ).first()
 
     if existing:
-        existing.work_hours = hours if hours else existing.work_hours
-        existing.raw_data = json.dumps(record, ensure_ascii=False)
+        existing.work_hours = hours
+        existing.raw_data = json.dumps(detail, ensure_ascii=False)
         existing.synced_at = datetime.now(timezone.utc)
+        logger.info(f"WeCom approval: updated {user_id} {date_key} {hours:.2f}h ({sp_name})")
         return "updated"
     else:
         db.add(WeComCheckin(
@@ -251,9 +433,10 @@ def _upsert_approval(db: Session, record: dict) -> Optional[str]:
             date=date_key,
             work_hours=hours,
             source="approval",
-            raw_data=json.dumps(record, ensure_ascii=False),
+            raw_data=json.dumps(detail, ensure_ascii=False),
             synced_at=datetime.now(timezone.utc),
         ))
+        logger.info(f"WeCom approval: created {user_id} {date_key} {hours:.2f}h ({sp_name})")
         return "created"
 
 

@@ -18,6 +18,8 @@ class WeComCheckin(Base):
     date = Column(Date, nullable=False, index=True)             # checkin date
     work_hours = Column(Float, default=0.0)                     # total work hours
     source = Column(String(20), default="checkin")              # "checkin" or "approval"
+    expected_hours = Column(Float, default=0.0)                 # expected hours from checkin rules
+    checkin_count = Column(Integer, default=0)                  # number of actual punch records
     raw_data = Column(Text, nullable=True)                      # JSON blob of raw API record
     synced_at = Column(DateTime, default=func.now())            # last sync time
 
