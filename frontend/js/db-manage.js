@@ -140,8 +140,9 @@ function renderDbManage() {
   if (_dbBackups.length) {
     new DataTable({
       container: document.getElementById('db-backup-table'),
+      data: _dbBackups,
       columns: [
-        { key: 'idx', title: '序号', width: '50px', render: function(v) { return '<span style="font-family:var(--mono);color:var(--muted);font-size:11px">' + v + '</span>'; } },
+        { key: 'idx', title: '序号', width: '50px', render: function(v, row, rowIdx) { return '<span style="font-family:var(--mono);color:var(--muted);font-size:11px">' + (rowIdx + 1) + '</span>'; } },
         { key: 'name', title: '文件名', render: function(v, row) { return '<span style="font-family:monospace;font-size:11px">' + escHtml(v) + '</span>' + (row.permanent ? ' <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:var(--success-lt);color:var(--success);font-weight:540">永久</span>' : ''); } },
         { key: 'size_display', title: '大小', width: '90px', render: function(v) { return '<span style="font-size:11px">' + escHtml(v||'') + '</span>'; } },
         { key: 'created_at', title: '时间', width: '160px', render: function(v) { return '<span style="font-size:11px">' + escHtml(fmtISODateTime(v)||'') + '</span>'; } },
