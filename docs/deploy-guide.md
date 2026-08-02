@@ -7,6 +7,7 @@
 | Python | 3.9+（直接运行）或 Docker 24+（容器运行） |
 | 磁盘 | 100MB（SQLite 数据 + 依赖） |
 | 网络 | 可访问禅道服务器 `192.168.0.124:8800` |
+| smbclient | 远端备份同步到 NAS 需要（Docker 镜像已内置） |
 
 ---
 
@@ -136,7 +137,57 @@ pip install pysmb
 
 ---
 
-### 1.6 企业微信打卡数据接入（可选）
+---
+
+### 1.6 远端备份同步（可选，数据安全推荐开启）
+
+PMA 支持在每次自动备份后将备份文件（数据库 + .env 配置）同步到远端 NAS 服务器，防止本地磁盘故障导致数据丢失。
+
+#### 依赖
+
+- **Docker 部署**：镜像已内置 `smbclient`，无需额外安装
+- **直接运行**：需安装 smbclient：
+  ```bash
+  sudo apt install smbclient
+  ```
+
+#### 接入方式
+
+**方式 A — SMB 直连（推荐）**：PMA 直接通过 smbclient 将文件写入 NAS 共享目录。
+
+1. 进入「管理 → 数据库管理」
+2. 在「远端备份配置」中：
+   - 勾选「启用远端备份同步」
+   - 选择 NAS 类型
+   - 填写远端路径（如 `//192.168.0.180/PMABackup`）
+   - 填写 NAS 凭据（用户名 + 密码）
+3. 点击「保存配置」→「测试连接」验证
+
+**方式 B — 本地挂载**：先将 NAS 挂载到服务器本地目录，PMA 直接写入该目录。
+
+```bash
+# 挂载 NAS
+sudo mount -t cifs //192.168.0.180/PMABackup /mnt/nas-backup -o username=your_user,password=your_pass
+
+# 添加到 /etc/fstab 以开机自动挂载
+echo "//192.168.0.180/PMABackup /mnt/nas-backup cifs username=your_user,password=your_pass,iocharset=utf8 0 0" | sudo tee -a /etc/fstab
+```
+
+然后在 PMA 中配置路径为 `/mnt/nas-backup`。
+
+#### 备份内容
+
+每次自动备份同步到远端的内容：
+- 数据库备份文件（`.db`）
+- 配置文件备份（`.env`）
+
+#### 验证
+
+配置完成后，可在「备份历史」列表中查看备份文件，或通过「立即同步」手动触发一次同步测试。
+
+---
+
+### 1.7 企业微信打卡数据接入（可选）
 
 企业微信打卡工时数据接入，支持获取员工的打卡签到和审批记录，在个人中心展示打卡工时日历。
 
@@ -225,6 +276,7 @@ docker compose down
 
 ```bash
 # 1. 安装依赖
+sudo apt install smbclient    # 远端备份 NAS 同步需要
 pip install -r requirements.txt
 
 # 2. 启动服务
