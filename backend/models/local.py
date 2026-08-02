@@ -44,10 +44,12 @@ class Role(Base):
     label = Column(String(64), nullable=False)
     permissions = Column(String(256), default="")  # comma-separated
     description = Column(String(256), nullable=True)
+    leader_id = Column(Integer, ForeignKey("local_users.id"), nullable=True)
     created_at = Column(DateTime, default=func.now())
 
-    # Relationship
+    # Relationships
     user_roles = relationship("UserRole", back_populates="role", lazy="selectin")
+    leader = relationship("LocalUser", foreign_keys=[leader_id], lazy="selectin")
 
 
 class UserRole(Base):
