@@ -460,11 +460,15 @@ def _migrate_to_sqlcipher():
 def _clear_gitlab_tokens():
     """Clear all GitLab OAuth access tokens on server restart.
     Forces users to re-authenticate via GitLab after a restart.
+    Also clears refresh tokens (stale without access token context).
     """
     import sqlite3
     try:
         conn = sqlite3.connect(_db_path)
-        count = conn.execute("UPDATE local_users SET gitlab_access_token = NULL WHERE gitlab_access_token IS NOT NULL").rowcount
+        count = conn.execute(
+            "UPDATE local_users SET gitlab_access_token = NULL, gitlab_refresh_token = NULL, gitlab_token_expires_at = NULL "
+            "WHERE gitlab_access_token IS NOT NULL OR gitlab_refresh_token IS NOT NULL"
+        ).rowcount
         conn.commit()
         conn.close()
         if count > 0:

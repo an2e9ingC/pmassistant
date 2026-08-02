@@ -64,10 +64,14 @@ PMA 支持通过 GitLab OAuth 2.0 登录，用户无需创建本地密码。
 
 1. 登录 GitLab → **Admin Area** → **Applications**（或 User Settings → Applications）
 2. 填写：
-   - **Name**: `PMA`
+   - **Name**: `PMA_system`
    - **Redirect URI**: `http://<PMA-服务器地址>:8000/api/auth/gitlab/callback`
    - **Scopes**: 勾选 `read_user` + `api`（读取用户信息 + 创建 Issue 等 API 操作）
+   - **Trusted**（受信任的）: ✅ 勾选 — 内部工具无需用户手动确认授权
+   - **Confidential**（机密）: ✅ 勾选（必须）— PMA 使用 `client_secret` 交换 token，必须设为 true
 3. 点击 **Save application**，记录 **Application ID** 和 **Secret**
+
+> **Trusted + Confidential 说明**：Trusted 跳过用户授权确认页，提升登录流畅度。Confidential 设为 true 表示应用可安全保管 `client_secret`，token 交换响应会包含 `refresh_token`，PMA 可自动刷新过期的 access token（无需用户重新登录）。
 
 #### 步骤 2：配置 PMA
 

@@ -456,6 +456,11 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 | 8 | `permissions` | VARCHAR(256) | NULLABLE（DB 中存在） | 权限（已弃用） |
 | 9 | `created_at` | DATETIME | default=now | — |
 | 10 | `updated_at` | DATETIME | default=now, onupdate=now | — |
+| 11 | `auth_source` | VARCHAR(16) | default="local" | 认证来源: `local` 或 `gitlab` |
+| 12 | `gitlab_user_id` | INTEGER | NULLABLE, INDEX | GitLab 用户 ID |
+| 13 | `gitlab_access_token` | VARCHAR(256) | NULLABLE | GitLab OAuth access token |
+| 14 | `gitlab_refresh_token` | VARCHAR(256) | NULLABLE | GitLab OAuth refresh token（用于自动刷新过期 token） |
+| 15 | `gitlab_token_expires_at` | DATETIME | NULLABLE | access token 过期时间（UTC） |
 
 **关系**：`user_roles` → `UserRole.user_id`（1:N, lazy="selectin"）
 

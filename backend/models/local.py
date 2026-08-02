@@ -20,6 +20,8 @@ class LocalUser(Base):
     auth_source = Column(String(16), default="local")  # 'local' or 'gitlab'
     gitlab_user_id = Column(Integer, nullable=True, index=True)  # GitLab user ID
     gitlab_access_token = Column(String(256), nullable=True)  # OAuth access token (for API calls as user)
+    gitlab_refresh_token = Column(String(256), nullable=True)  # OAuth refresh token
+    gitlab_token_expires_at = Column(DateTime, nullable=True)  # OAuth access token expiry time (UTC)
     is_active = Column(Boolean, default=True)
     favorites = Column(Text, default="[]")  # JSON array of product IDs
     seen_version = Column(String(32), nullable=True)  # last seen changelog version

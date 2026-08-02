@@ -1,7 +1,7 @@
 import secrets
 import time
 from typing import Dict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import re
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
@@ -342,6 +342,8 @@ async def gitlab_oauth_callback(code: str, state: str, request: Request, db: Ses
         access_token = token_data.get("access_token")
         if not access_token:
             return RedirectResponse(url="/login?error=gitlab_token_error")
+        refresh_token = token_data.get("refresh_token", "")
+        expires_in = token_data.get("expires_in", 0)  # seconds, 0 = unknown/no expiry
 
         # Get GitLab user info
         try:
@@ -395,6 +397,9 @@ async def gitlab_oauth_callback(code: str, state: str, request: Request, db: Ses
         local_user.display_name = gitlab_name
         local_user.is_active = (gitlab_state == "active")
         local_user.gitlab_access_token = access_token
+        local_user.gitlab_refresh_token = refresh_token or None
+        if expires_in and expires_in > 0:
+            local_user.gitlab_token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
     else:
         # Create new user
         is_new_user = True
@@ -406,6 +411,8 @@ async def gitlab_oauth_callback(code: str, state: str, request: Request, db: Ses
             auth_source="gitlab",
             gitlab_user_id=gitlab_user_id,
             gitlab_access_token=access_token,
+            gitlab_refresh_token=refresh_token or None,
+            gitlab_token_expires_at=(datetime.utcnow() + timedelta(seconds=expires_in)) if (expires_in and expires_in > 0) else None,
             is_active=(gitlab_state == "active"),
         )
         db.add(local_user)

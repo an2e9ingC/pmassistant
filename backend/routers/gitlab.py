@@ -6,7 +6,10 @@ Endpoints for:
 - Trigger GitLab URL validation
 - Create GitLab issues (bug/feature feedback)
 """
+import logging
 from urllib.parse import quote
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
@@ -244,19 +247,64 @@ async def create_issue(
     db: Session = Depends(get_db),
 ):
     """Create a GitLab issue (bug report or feature request) in the PMA project."""
-    # Token selection: OAuth user → own token; admin → PAT fallback; others → reject
-    if user.auth_source == "gitlab":
-        if not user.gitlab_access_token:
-            return {"code": 1, "message": "GitLab 授权已过期，请重新登录后再提交反馈"}
-        effective_token = user.gitlab_access_token
-    elif user.role == "admin":
-        effective_token = settings.GITLAB_TOKEN
-        if not effective_token:
+    from backend.services.gitlab_client import GitLabClient
+    from datetime import datetime, timedelta, timezone
+
+    # ── Token selection ──
+    has_oauth = user.auth_source == "gitlab" and user.gitlab_access_token
+    sys_pat = settings.GITLAB_TOKEN
+
+    if not has_oauth and not (user.role == "admin" and sys_pat):
+        if user.role == "admin" and not sys_pat:
             return {"code": 1, "message": "GitLab Token 未配置，无法创建 Issue"}
-    else:
+        if user.auth_source == "gitlab" and not user.gitlab_access_token:
+            return {"code": 1, "message": "GitLab 授权已过期，请重新登录后再提交反馈"}
         return {"code": 1, "message": "请使用 GitLab 账号登录后再提交反馈\n\n当前为本地账号登录，无法创建 GitLab Issue。请退出后使用 GitLab 账号登录。"}
 
-    # Build issue content using templates
+    # ── Try OAuth token → refresh if expired → fall back to system PAT ──
+    fallback = False
+    effective_token = None
+
+    if has_oauth:
+        # Check if token is expired and we have a refresh token
+        token_expired = False
+        if user.gitlab_token_expires_at:
+            now_utc = datetime.now(timezone.utc)
+            # Consider expired if within 5 minutes of expiry
+            token_expired = user.gitlab_token_expires_at.replace(tzinfo=timezone.utc) <= now_utc
+
+        if token_expired and user.gitlab_refresh_token:
+            # Try to refresh before attempting the API call
+            try:
+                refresh_client = GitLabClient()
+                try:
+                    new_tokens = await refresh_client.refresh_access_token(user.gitlab_refresh_token)
+                    user.gitlab_access_token = new_tokens.get("access_token")
+                    new_refresh = new_tokens.get("refresh_token", "")
+                    if new_refresh:
+                        user.gitlab_refresh_token = new_refresh
+                    expires_in = new_tokens.get("expires_in", 0)
+                    if expires_in and expires_in > 0:
+                        user.gitlab_token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
+                    db.commit()
+                    effective_token = user.gitlab_access_token
+                    logger.info(f"OAuth token refreshed for user={user.username}")
+                finally:
+                    await refresh_client.close()
+            except Exception as e:
+                logger.warning(f"OAuth token refresh failed for {user.username}: {e}")
+                effective_token = user.gitlab_access_token  # try the old one anyway
+        else:
+            effective_token = user.gitlab_access_token
+
+    if not effective_token and user.role == "admin" and sys_pat:
+        effective_token = sys_pat
+        fallback = True
+
+    if not effective_token:
+        return {"code": 1, "message": "无法获取有效的 GitLab Token"}
+
+    # ── Build issue content using templates ──
     user_info = f"**反馈人**: {body.reporter}" if body.reporter else ""
 
     if body.issue_type == "bug":
@@ -285,28 +333,53 @@ async def create_issue(
 
     from backend.services.gitlab_client import GitLabClient
 
-    client = GitLabClient(token=effective_token)
+    # ── Execute with current token; fall back to system PAT on 401 ──
+    result = None
+
     try:
-        result = await client.create_issue(
-            project_path=_get_project_path(),
-            title=title,
-            description=template,
-            labels=all_labels,
-            assignee_id=body.assignee_id or None,
-        )
-        if result:
-            issue_iid = result.get("iid")
-            web_url = result.get("web_url", "")
-            return {
-                "code": 0,
-                "data": {"iid": issue_iid, "web_url": web_url},
-                "message": f"Issue 已创建: {web_url}",
-            }
-        return {"code": 1, "message": "GitLab API 返回空，请检查 Token 权限（需 api scope）"}
+        client = GitLabClient(token=effective_token)
+        try:
+            result = await client.create_issue(
+                project_path=_get_project_path(),
+                title=title,
+                description=template,
+                labels=all_labels,
+                assignee_id=body.assignee_id or None,
+            )
+        finally:
+            await client.close()
     except RuntimeError as e:
-        return {"code": 1, "message": f"创建失败: {e}"}
-    finally:
-        await client.close()
+        # If personal OAuth token failed and system PAT is available, fall back
+        err_msg = str(e)
+        if ("401" in err_msg or "token" in err_msg.lower()) and not fallback and sys_pat and effective_token != sys_pat:
+            logger.warning(f"Personal token failed, falling back to system PAT for user={user.username}")
+            try:
+                client2 = GitLabClient(token=sys_pat)
+                try:
+                    result = await client2.create_issue(
+                        project_path=_get_project_path(),
+                        title=title,
+                        description=template,
+                        labels=all_labels,
+                        assignee_id=body.assignee_id or None,
+                    )
+                    fallback = True
+                finally:
+                    await client2.close()
+            except Exception as e2:
+                return {"code": 1, "message": f"创建失败: {e2}"}
+        else:
+            return {"code": 1, "message": f"创建失败: {e}"}
+
+    if result:
+        issue_iid = result.get("iid")
+        web_url = result.get("web_url", "")
+        return {
+            "code": 0,
+            "data": {"iid": issue_iid, "web_url": web_url, "fallback": fallback},
+            "message": f"Issue 已创建: {web_url}",
+        }
+    return {"code": 1, "message": "GitLab API 返回空，请检查 Token 权限（需 api scope）"}
 
 
 @router.get("/issues/{issue_iid}", response_model=dict)

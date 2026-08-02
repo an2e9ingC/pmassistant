@@ -337,6 +337,42 @@ class GitLabClient:
         except Exception as e:
             raise RuntimeError(f"GitLab OAuth user fetch failed: {e}")
 
+    async def refresh_access_token(self, refresh_token: str) -> dict:
+        """Refresh an expired OAuth access token using a refresh token.
+
+        POST {gitlab}/oauth/token with grant_type=refresh_token.
+        Returns the new token response dict: {access_token, refresh_token, expires_in, ...}.
+        Raises RuntimeError on failure.
+        """
+        from backend.config import settings as current_settings
+
+        url = f"{self._gitlab_root_url}/oauth/token"
+        data = {
+            "client_id": current_settings.GITLAB_APP_ID,
+            "client_secret": current_settings.GITLAB_APP_SECRET,
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+        }
+
+        client = await self._get_client()
+        try:
+            resp = await client.post(url, data=data)
+            if resp.status_code == 200:
+                return resp.json()
+            if resp.status_code == 400:
+                error_detail = ""
+                try:
+                    error_detail = resp.json().get("error_description", resp.text)
+                except Exception:
+                    error_detail = resp.text
+                raise RuntimeError(f"GitLab token refresh failed: {error_detail}")
+            resp.raise_for_status()
+            return resp.json()
+        except RuntimeError:
+            raise
+        except Exception as e:
+            raise RuntimeError(f"GitLab token refresh failed: {e}")
+
     async def close(self):
         if self._client:
             await self._client.aclose()
