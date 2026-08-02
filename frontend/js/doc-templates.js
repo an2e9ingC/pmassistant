@@ -43,8 +43,23 @@ function _getRoleLabels() {
   return window._roleLabels || _DEFAULT_ROLE_LABELS;
 }
 
+function _getRoleLeaders() {
+  return window._roleLeaders || {};
+}
+
+function _checkRoleLeader(roleLabel) {
+  if (!roleLabel) return { hasLeader: false, leaderName: '' };
+  var leaders = _getRoleLeaders();
+  var info = leaders[roleLabel];
+  if (info && info.leader_id && info.leader_name) {
+    return { hasLeader: true, leaderName: info.leader_name };
+  }
+  return { hasLeader: false, leaderName: '' };
+}
+
 function _roleSelect(selected) {
   var labels = _getRoleLabels();
+  var leaders = _getRoleLeaders();
   // Use label text as both option value and display for backward compatibility
   // (responsible_role column stores labels, not keys).
   var options = [];
@@ -54,12 +69,45 @@ function _roleSelect(selected) {
     if (!seen[v]) { seen[v] = true; options.push(v); }
   });
   options.sort();
-  return '<select class="search-inp" id="dt-role" style="margin-top:4px;padding:7px 8px">' +
+  var html = '<select class="search-inp" id="dt-role" style="margin-top:4px;padding:7px 8px" onchange="_onRoleSelectChange()">' +
     '<option value="">— 请选择 —</option>' +
     options.map(function(r) {
       return '<option value="' + r + '"' + (r === selected ? ' selected' : '') + '>' + r + '</option>';
     }).join('') +
-  '</select>';
+  '</select>' +
+  '<div id="dt-role-leader-warn" style="display:none;margin-top:4px;font-size:11px;color:var(--warning-dark, #b06d00);background:var(--warning-lt, #fff8e1);padding:4px 8px;border-radius:4px">' +
+    '⚠ 该角色未设置Leader，将使用角色组第一个成员作为默认责任人。' +
+    '<a href="javascript:void(0)" onclick="closeSharedDialog();gotoView(\'users\');setTimeout(function(){switchUserTab(\'roles\')},100)" style="margin-left:4px;color:var(--accent);text-decoration:underline">去设置</a>' +
+  '</div>' +
+  '<div id="dt-role-leader-info" style="display:none;margin-top:4px;font-size:11px;color:var(--success);padding:2px 0">' +
+    'Leader: <span id="dt-role-leader-name"></span>' +
+  '</div>';
+  // Trigger initial check if editing with pre-selected role
+  setTimeout(function() { _onRoleSelectChange(); }, 50);
+  return html;
+}
+
+function _onRoleSelectChange() {
+  var sel = document.getElementById('dt-role');
+  var warnEl = document.getElementById('dt-role-leader-warn');
+  var infoEl = document.getElementById('dt-role-leader-info');
+  var nameEl = document.getElementById('dt-role-leader-name');
+  if (!sel || !warnEl || !infoEl) return;
+  var val = sel.value;
+  if (!val) {
+    warnEl.style.display = 'none';
+    infoEl.style.display = 'none';
+    return;
+  }
+  var leader = _checkRoleLeader(val);
+  if (leader.hasLeader) {
+    warnEl.style.display = 'none';
+    infoEl.style.display = '';
+    if (nameEl) nameEl.textContent = leader.leaderName;
+  } else {
+    warnEl.style.display = '';
+    infoEl.style.display = 'none';
+  }
 }
 
 function switchDocTemplateTab(tab, el) {

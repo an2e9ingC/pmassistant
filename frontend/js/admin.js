@@ -543,9 +543,10 @@ function _initRolesDt() {
     columns: [
       { key: 'idx', title: '序号', width: '40px', render: function(v) { return '<span style="font-family:var(--mono);color:var(--muted)">' + v + '</span>'; } },
       { key: 'key', title: '角色Key', render: function(v) { return '<span style="font-family:var(--mono);font-size:12px;font-weight:500">' + escHtml(v||'') + '</span>'; } },
-      { key: 'label', title: '显示名', render: function(v) { return '<span style="font-size:13px">' + escHtml(v||'') + '</span>'; } },
+      { key: 'label_with_count', title: '显示名', render: function(v) { return v; } },
+      { key: 'leader_display', title: 'Leader', render: function(v) { return v || '<span style="font-size:11px;color:var(--muted)">未设置</span>'; } },
       { key: 'perm_badges', title: '特殊权限', render: function(v) { return v || '<span style="font-size:11px;color:var(--muted)">无</span>'; } },
-      { key: 'user_count_btn', title: '用户数', render: function(v) { return v; } },
+      { key: 'user_names', title: '成员', render: function(v) { return v || '<span style="font-size:11px;color:var(--muted)">暂无成员</span>'; } },
       { key: 'actions', title: '操作', width: '12%', render: function(v) { return v; } }
     ],
     maxHeight: 'calc(100vh - 340px)',
@@ -562,8 +563,28 @@ function renderRoleTable() {
   _rolesDt.setData(sorted.map(function(r, idx) {
     var perms = r.permissions || [];
     r.perm_badges = perms.map(function(p) { return '<span style="display:inline-block;margin:1px 2px;padding:1px 6px;border-radius:3px;font-size:10px;background:var(--accent-lt);color:var(--accent)">'+escHtml(p)+'</span>'; }).join('') || null;
-    var uc = _userList.filter(function(u) { return (u.role_ids||[]).indexOf(r.id)>=0; }).length;
-    r.user_count_btn = '<button class="btn btn-sm" onclick="showRoleUsers('+r.id+',\''+escHtml(r.label)+'\')">'+uc+' 人</button>';
+    // Users in this role — leader first
+    var roleUsers = _userList.filter(function(u) { return (u.role_ids||[]).indexOf(r.id)>=0; });
+    roleUsers.sort(function(a, b) {
+      if (a.id === r.leader_id) return -1;
+      if (b.id === r.leader_id) return 1;
+      return 0;
+    });
+    var uc = roleUsers.length;
+    // Display name with user count badge
+    r.label_with_count = '<span style="font-size:13px">' + escHtml(r.label) + '</span>' +
+      (uc > 0 ? ' <sup style="display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:#fff;font-size:9px;min-width:16px;height:16px;border-radius:8px;padding:0 4px;vertical-align:top;cursor:pointer" title="' + uc + ' 人" onclick="showRoleUsers('+r.id+',\''+escHtml(r.label)+'\')">' + uc + '</sup>' : '');
+    // User names list — leader highlighted, cell clickable to open member dialog
+    var namesHtml = roleUsers.length ? roleUsers.map(function(u) {
+      var isLeader = (u.id === r.leader_id);
+      return '<span style="display:inline-block;margin:1px 2px;font-size:11px;cursor:pointer;' +
+        (isLeader ? 'font-weight:600;color:var(--warning-dark, #856404);background:var(--warning-lt, #fff3cd);padding:1px 6px;border-radius:3px;' : 'color:var(--accent);') +
+        '" onclick="event.stopPropagation();gotoView(\'user-center\',{params:[' + u.id + ']})" title="' + escHtml(u.username) + (isLeader ? ' (Leader)' : '') + '">' +
+        (isLeader ? '👑 ' : '') + escHtml(getDisplayName(u.username)) + '</span>';
+    }).join('') : null;
+    r.user_names = '<div style="min-height:24px;display:flex;align-items:center;flex-wrap:wrap;cursor:pointer" onclick="showRoleUsers(' + r.id + ',\'' + escHtml(r.label) + '\')" title="点击管理成员">' +
+      (namesHtml || '<span style="font-size:11px;color:var(--muted)">点击添加成员</span>') + '</div>';
+    r.leader_display = r.leader_name ? ('<span style="font-size:12px">' + escHtml(r.leader_name) + '</span> <button class="btn btn-xs" onclick="openRoleLeaderDialog('+r.id+',\''+escHtml(r.label)+'\','+(r.leader_id||0)+')" title="编辑Leader" style="padding:1px 4px;font-size:9px">✎</button>') : ('<button class="btn btn-xs" onclick="openRoleLeaderDialog('+r.id+',\''+escHtml(r.label)+'\',0)" title="设置Leader" style="padding:1px 6px;font-size:10px">设置Leader</button>');
     r.actions = '<span style="white-space:nowrap">' + (r.key==='admin' ? '<span style="font-size:11px;color:var(--muted)">系统内置</span>' : iconEdit('openRoleCreateDialog('+r.id+')') + iconDelete('deleteRole('+r.id+',\''+escHtml(r.label)+'\')')) + '</span>';
     r.idx = idx + 1;
     return r;
@@ -599,6 +620,49 @@ async function saveRole(editId) {
       await API.post('/admin/users/roles', { key: key, label: label, description: desc });
     }
     showToast(editId ? '角色已更新' : '角色已创建', 'success');
+    initUserManagement();
+  } catch(e) {
+    showToast('保存失败: ' + (e.message || '未知错误'), 'error');
+  }
+}
+
+function openRoleLeaderDialog(roleId, roleLabel, currentLeaderId) {
+  // Get users who belong to this role
+  var roleUsers = _userList.filter(function(u) {
+    return (u.role_ids || []).indexOf(roleId) >= 0;
+  });
+  if (roleUsers.length === 0) {
+    showToast('该角色暂无成员，请先添加成员再设置Leader', 'error');
+    return;
+  }
+  var options = '<option value="">— 清除Leader —</option>' +
+    roleUsers.map(function(u) {
+      return '<option value="' + u.id + '"' + (u.id === currentLeaderId ? ' selected' : '') + '>' +
+        escHtml(getDisplayName(u.username)) + ' (@' + escHtml(u.username) + ')' +
+      '</option>';
+    }).join('');
+  var html = '<div style="padding:8px 0">' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">角色组</label>' +
+      '<div style="font-size:14px;font-weight:500;margin-top:4px">' + escHtml(roleLabel) + '</div></div>' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">Leader</label>' +
+      '<select class="search-inp" id="role-leader-sel" style="margin-top:4px;width:100%">' + options + '</select></div>' +
+    '<p style="font-size:11px;color:var(--muted);margin-top:4px">新建项目时，任务和文档将默认分配给该角色的Leader。</p>' +
+  '</div>';
+  openDialog('设置角色Leader', html, [
+    { text: '取消', cls: '', onclick: "this.closest('.note-dialog-overlay').remove()" },
+    { text: '保存', cls: 'btn-primary', onclick: "saveRoleLeader(" + roleId + ")" },
+  ]);
+}
+
+async function saveRoleLeader(roleId) {
+  var sel = document.getElementById('role-leader-sel');
+  var leaderId = sel ? parseInt(sel.value) || null : null;
+  try {
+    await API.put('/admin/users/roles/' + roleId, { leader_id: leaderId || 0 });
+    showToast('Leader已更新', 'success');
+    // Close dialog
+    var overlay = document.querySelector('.note-dialog-overlay');
+    if (overlay) overlay.remove();
     initUserManagement();
   } catch(e) {
     showToast('保存失败: ' + (e.message || '未知错误'), 'error');
@@ -684,14 +748,59 @@ async function saveRoleUsers(roleId) {
 }
 
 async function deleteRole(id, label) {
-  if (!confirm('确定删除角色 "' + label + '"？关联的用户将被移除该角色。')) return;
-  try {
-    await API.del('/admin/users/roles/' + id);
+  var confirmStr = '删除角色 ' + label;
+  var dlgId = 'delrole-' + Date.now();
+  window['_cdr_' + dlgId] = { id: id, str: confirmStr };
+  var html = '<div class="note-dialog-overlay" id="' + dlgId + '">' +
+    '<div class="note-dialog" style="max-width:440px">' +
+      '<div class="note-dialog-head"><span class="note-dialog-title">删除角色</span>' +
+        '<button class="note-dialog-close" onclick="_delRoleClose(\'' + dlgId + '\')">&times;</button></div>' +
+      '<div style="padding:4px 0">' +
+        '<p style="font-size:13px;margin-bottom:4px">关联的用户将被移出该角色，Leader 设置将被清除。此操作不可撤销。</p>' +
+        '<div style="display:flex;align-items:center;gap:8px;margin:12px 0;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px">' +
+          '<code style="flex:1;font-size:15px;font-weight:700;color:var(--danger);word-break:break-all;font-family:KaiTi,STKaiti,serif" id="' + dlgId + '-code">' + escHtml(confirmStr) + '</code>' +
+          '<button class="btn-icon" title="复制" onclick="_copyConfirmText(\'' + dlgId + '\')" style="flex-shrink:0;color:var(--fg)">' +
+            '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="9" height="11" rx="1"/><path d="M11 2H3a1 1 0 0 0-1 1v9"/></svg></button>' +
+        '</div>' +
+        '<div class="user-form-field">' +
+          '<label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">请输入上方红色文字确认</label>' +
+          '<input class="config-input" id="' + dlgId + '-input" type="text" placeholder="输入确认文字..." style="width:100%;box-sizing:border-box;font-family:KaiTi,STKaiti,serif" onkeydown="if(event.key===\'Enter\')_delRoleSubmit(\'' + dlgId + '\')">' +
+          '<div id="' + dlgId + '-msg" style="font-size:11px;min-height:16px;margin-top:4px"></div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:8px">' +
+        '<button class="btn" onclick="_delRoleClose(\'' + dlgId + '\')">取消</button>' +
+        '<button class="btn btn-primary" id="' + dlgId + '-btn" onclick="_delRoleSubmit(\'' + dlgId + '\')">确认删除</button>' +
+      '</div></div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+  setTimeout(function() {
+    var inp = document.getElementById(dlgId + '-input');
+    if (inp) inp.focus();
+  }, 100);
+}
+
+function _delRoleSubmit(dlgId) {
+  var data = window['_cdr_' + dlgId];
+  var input = document.getElementById(dlgId + '-input');
+  var val = input ? input.value.trim() : '';
+  if (val !== data.str) {
+    var msg = document.getElementById(dlgId + '-msg');
+    if (msg) { msg.textContent = '输入不匹配，请重新输入'; msg.style.color = 'var(--danger)'; }
+    return;
+  }
+  _delRoleClose(dlgId);
+  API.del('/admin/users/roles/' + data.id).then(function() {
     showToast('角色已删除', 'success');
     initUserManagement();
-  } catch(e) {
+  }).catch(function(e) {
     showToast('删除失败: ' + (e.message || '未知错误'), 'error');
-  }
+  });
+}
+
+function _delRoleClose(dlgId) {
+  var overlay = document.getElementById(dlgId);
+  if (overlay) overlay.remove();
+  delete window['_cdr_' + dlgId];
 }
 
 var _usersDt = null;
@@ -733,7 +842,11 @@ function renderUserTable() {
     });
     u.role_badges = roleIds.map(function(rid) {
       var r = _permRoles.find(function(x) { return x.id === rid; });
-      return r ? '<span style="display:inline-block;margin:1px 2px;padding:1px 6px;border-radius:3px;font-size:10.5px;background:var(--accent-lt);color:var(--accent)">' + escHtml(r.label) + '</span>' : '';
+      if (!r) return '';
+      var isLeader = (r.leader_id === u.id);
+      return '<span style="display:inline-block;margin:1px 2px;padding:1px 6px;border-radius:3px;font-size:10.5px;' +
+        (isLeader ? 'background:var(--warning-lt, #fff3cd);color:var(--warning-dark, #856404);font-weight:600;border:1px solid var(--warning, #ffc107)' : 'background:var(--accent-lt);color:var(--accent)') +
+        '" title="' + (isLeader ? '该角色Leader' : '') + '">' + (isLeader ? '👑 ' : '') + escHtml(r.label) + '</span>';
     }).join('') || null;
     u.status_html = u.is_active
       ? '<span class="pill" style="background:var(--success-lt);color:var(--success)">正常</span>'
@@ -748,8 +861,12 @@ function renderUserTable() {
       var tt2 = '最后登录: ' + (u.last_login_at||'') + '\n' + (u.last_login_ua||'') + ' / ' + (u.last_login_ip||'');
       u.login_html = '<span style="font-size:11px;color:var(--muted);cursor:default" title="' + escHtml(tt2) + '">离线</span>';
     } else { u.login_html = '<span style="font-size:11px;color:var(--muted)">从未登录</span>'; }
-    var toggleLabel = u.is_active ? '禁用' : '启用';
-    u.actions = '<span style="white-space:nowrap">' + iconEdit('openUserEditDialog(' + u.id + ')') + iconToggle('toggleUserActive(' + u.id + ',' + u.is_active + ')', toggleLabel) + iconDelete('deleteUser(' + u.id + ',\'' + escHtml(u.username) + '\')') + '</span>';
+    if (u.is_active) {
+      u.actions = '<span style="white-space:nowrap">' + iconEdit('openUserEditDialog(' + u.id + ')') + iconToggle('toggleUserActive(' + u.id + ',' + u.is_active + ')', '禁用') + iconDelete('deleteUser(' + u.id + ',\'' + escHtml(u.username) + '\')') + '</span>';
+    } else {
+      var activateSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+      u.actions = '<span style="white-space:nowrap">' + iconEdit('openUserEditDialog(' + u.id + ')') + '<button class="btn btn-icon" style="color:var(--success)" onclick="toggleUserActive(' + u.id + ',' + u.is_active + ')" title="激活">' + activateSvg + '</button>' + iconDelete('deleteUser(' + u.id + ',\'' + escHtml(u.username) + '\')') + '</span>';
+    }
     u.idx = idx + 1;
     return u;
   }));
@@ -1280,7 +1397,7 @@ function renderPermTable() {
       '<td style="font-size:11.5px">' +
         '<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">' +
           (usersInRole.length ? usersInRole.map(function(u) {
-            return '<span style="display:inline-block;margin:1px 2px;padding:1px 6px;border-radius:3px;background:var(--accent-lt);color:var(--accent);font-size:11px">' + escHtml(u.username) + '</span>';
+            return '<span style="display:inline-block;margin:1px 2px;padding:1px 6px;border-radius:3px;background:var(--accent-lt);color:var(--accent);font-size:11px">' + escHtml(getDisplayName(u.username)) + '</span>';
           }).join('') : '<span style="color:var(--muted)">—</span>') +
         '</div>' +
       '</td>' +

@@ -357,7 +357,7 @@ def get_public_settings(db: Session = Depends(get_db)):
     """Public settings + role-permission mapping (no admin required)."""
     from backend.models.local import PmaSetting
     from backend.routers.admin_users import ROLE_LABELS, ALL_PERMISSIONS
-    from backend.models.local import Role
+    from backend.models.local import Role, LocalUser
 
     roles = db.query(Role).all()
     # Merge ROLE_LABELS (built-in defaults) with DB roles — custom roles added via
@@ -369,6 +369,19 @@ def get_public_settings(db: Session = Depends(get_db)):
     for p in ALL_PERMISSIONS:
         perm_roles[p] = [role_labels.get(r.key, r.key) for r in roles if p in (r.permissions or "").split(",")]
 
+    # Role leader map: {label: {leader_id, leader_name}}
+    leader_ids = [r.leader_id for r in roles if r.leader_id]
+    leader_name_map = {}
+    if leader_ids:
+        leaders = db.query(LocalUser).filter(LocalUser.id.in_(leader_ids)).all()
+        leader_name_map = {u.id: u.display_name or u.username for u in leaders}
+    role_leaders = {}
+    for r in roles:
+        role_leaders[r.label] = {
+            "leader_id": r.leader_id,
+            "leader_name": leader_name_map.get(r.leader_id, "") if r.leader_id else "",
+        }
+
     return {
         "code": 0,
         "data": {
@@ -376,6 +389,7 @@ def get_public_settings(db: Session = Depends(get_db)):
             "approval_enabled": PmaSetting.get(db, "approval_enabled", "1") == "1",
             "perm_roles": perm_roles,
             "role_labels": role_labels,
+            "role_leaders": role_leaders,
         },
         "message": "ok",
     }

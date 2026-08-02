@@ -86,6 +86,12 @@ def list_roles(db: Session = Depends(get_db), _=Depends(require_admin)):
     roles = db.query(Role).order_by(
         case((Role.key == "public", 0), else_=1), Role.id
     ).all()
+    # Resolve leader display names in one batch
+    leader_ids = [r.leader_id for r in roles if r.leader_id]
+    leader_map = {}
+    if leader_ids:
+        leaders = db.query(LocalUser).filter(LocalUser.id.in_(leader_ids)).all()
+        leader_map = {u.id: u.display_name or u.username for u in leaders}
     return {
         "code": 0,
         "data": [
@@ -93,6 +99,8 @@ def list_roles(db: Session = Depends(get_db), _=Depends(require_admin)):
                 "id": r.id, "key": r.key, "label": r.label,
                 "permissions": [p for p in (r.permissions or "").split(",") if p],
                 "description": r.description or "",
+                "leader_id": r.leader_id,
+                "leader_name": leader_map.get(r.leader_id, "") if r.leader_id else "",
             }
             for r in roles
         ],
@@ -107,15 +115,45 @@ def update_role(role_id: int, payload: dict, db: Session = Depends(get_db), user
         raise HTTPException(status_code=404, detail="角色不存在")
     if role.key == "admin":
         raise HTTPException(status_code=403, detail="admin角色不可修改")
+    changes = []
     if "permissions" in payload:
         perms = payload["permissions"]
-        role.permissions = ",".join(p for p in perms if p in ALL_PERMISSIONS) if isinstance(perms, list) else perms
-    if "label" in payload:
+        new_perms = ",".join(p for p in perms if p in ALL_PERMISSIONS) if isinstance(perms, list) else perms
+        if new_perms != role.permissions:
+            changes.append(f"权限: {role.permissions!r} -> {new_perms!r}")
+            role.permissions = new_perms
+    if "label" in payload and payload["label"] != role.label:
+        changes.append(f"显示名: {role.label!r} -> {payload['label']!r}")
         role.label = payload["label"]
-    if "description" in payload:
+    if "description" in payload and payload["description"] != role.description:
+        changes.append(f"说明已更新")
         role.description = payload["description"]
+    if "leader_id" in payload:
+        new_leader = payload["leader_id"]
+        old_leader = role.leader_id
+        if new_leader is not None and new_leader != 0:
+            # Validate that the user exists and is a member of this role
+            leader_user = db.query(LocalUser).filter(LocalUser.id == new_leader).first()
+            if not leader_user:
+                raise HTTPException(status_code=400, detail="指定的Leader用户不存在")
+            # Check the user belongs to this role
+            in_role = db.query(UserRole).filter(
+                UserRole.user_id == new_leader, UserRole.role_id == role_id
+            ).first()
+            if not in_role:
+                raise HTTPException(status_code=400, detail="Leader必须是该角色组成员")
+            if old_leader != new_leader:
+                changes.append(f"Leader: {old_leader} -> {new_leader} ({leader_user.display_name or leader_user.username})")
+            role.leader_id = new_leader
+        else:
+            if old_leader is not None:
+                old_leader_user = db.query(LocalUser).filter(LocalUser.id == old_leader).first()
+                old_name = (old_leader_user.display_name or old_leader_user.username) if old_leader_user else str(old_leader)
+                changes.append(f"Leader: 已清除 ({old_name})")
+            role.leader_id = None
     db.commit()
-    log_audit(db, user, "role_update", f"{role.key}: {role.permissions}", AUDIT_CAT_USER, "high")
+    detail = f"{role.key}: " + "; ".join(changes) if changes else f"{role.key}: 无变化"
+    log_audit(db, user, "role_update", detail, AUDIT_CAT_USER, "high")
     return {"code": 0, "message": "角色已更新"}
 
 
@@ -124,13 +162,21 @@ class RoleCreate(BaseModel):
     label: str
     permissions: str = ""
     description: str = ""
+    leader_id: int = None
 
 
 @router.post("/roles", response_model=dict)
 def create_role(payload: RoleCreate, db: Session = Depends(get_db), user=Depends(require_admin)):
     if db.query(Role).filter(Role.key == payload.key).first():
         raise HTTPException(status_code=400, detail="角色key已存在")
-    role = Role(key=payload.key, label=payload.label, permissions=payload.permissions, description=payload.description)
+    leader_id = None
+    if payload.leader_id:
+        leader_user = db.query(LocalUser).filter(LocalUser.id == payload.leader_id).first()
+        if not leader_user:
+            raise HTTPException(status_code=400, detail="指定的Leader用户不存在")
+        leader_id = payload.leader_id
+    role = Role(key=payload.key, label=payload.label, permissions=payload.permissions,
+                description=payload.description, leader_id=leader_id)
     db.add(role)
     db.commit()
     db.refresh(role)

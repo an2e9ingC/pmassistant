@@ -555,7 +555,7 @@ def _resolve_reporter_name(db: Session, reporter_id) -> str:
 def _resolve_user_for_role(db: Session, responsible_role: str):
     """Resolve a responsible_role label (e.g. '硬件开发') to a local_users id via local_roles.
 
-    Returns user id if found. Falls back to CTO role if the specified role has no members.
+    Priority: 1) role.leader_id (if set), 2) first role member, 3) CTO role fallback.
     Returns None only if neither the role nor CTO has members.
     """
     from backend.models.local import Role, UserRole
@@ -563,12 +563,18 @@ def _resolve_user_for_role(db: Session, responsible_role: str):
         return None
     role = db.query(Role).filter(Role.label == responsible_role).first()
     if role:
+        # Priority 1: Use designated leader
+        if role.leader_id:
+            return role.leader_id
+        # Priority 2: Fall back to first member of the role
         ur = db.query(UserRole).filter(UserRole.role_id == role.id).first()
         if ur:
             return ur.user_id
     # Fallback: assign to CTO if the role has no members
     cto_role = db.query(Role).filter(Role.label == "CTO").first()
     if cto_role:
+        if cto_role.leader_id:
+            return cto_role.leader_id
         ur = db.query(UserRole).filter(UserRole.role_id == cto_role.id).first()
         if ur:
             return ur.user_id

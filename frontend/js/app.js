@@ -1394,6 +1394,7 @@ async function init() {
     window._approvalEnabled = d && d.approval_enabled !== false;
     if (d && d.perm_roles) window._permRoles = d.perm_roles;
     if (d && d.role_labels) window._roleLabels = d.role_labels;
+    if (d && d.role_leaders) window._roleLeaders = d.role_leaders;
   }).catch(function() {});
 
   // Poll for auto-sync — show progress if running, notify when done
