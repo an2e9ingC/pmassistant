@@ -45,6 +45,11 @@ function iconRestore(onclick, title) {
   return iconBtn('🔄', title || '恢复', onclick);
 }
 
+function iconSync(onclick, title) {
+  var svg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>';
+  return iconBtn(svg, title || '同步到远端', onclick);
+}
+
 /* ── Favorite helpers ── */
 
 /* ═══════════════════════════════════════════════════
