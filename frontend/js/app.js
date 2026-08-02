@@ -617,13 +617,14 @@ function showSrcMenu(key, e) {
   var tag = document.getElementById('src-' + key);
   if (!tag) return;
   var rect = tag.getBoundingClientRect();
+  var z = _getZoom();
   var names = { zentao: '禅道', gitlab: 'GitLab', nas: 'NAS', svn: 'SVN', wecom: '企微', pdm: 'PDM' };
   var name = names[key] || key;
   var menu = document.createElement('div');
   menu.id = 'src-popup-menu';
   menu.style.cssText = 'position:fixed;z-index:1000;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.15);min-width:150px;overflow:hidden';
-  menu.style.left = rect.left + 'px';
-  menu.style.top = (rect.bottom + 4) + 'px';
+  menu.style.left = (rect.left / z) + 'px';
+  menu.style.top = (rect.bottom / z + 4) + 'px';
   menu.innerHTML =
     '<div style="padding:8px 14px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border)">' + escHtml(name) + '</div>' +
     '<button onclick="triggerSingleSync(\'' + key + '\');var m=document.getElementById(\'src-popup-menu\');if(m)m.remove()" style="display:block;width:100%;padding:8px 14px;border:none;background:var(--surface);color:var(--fg);font-size:13px;text-align:left;cursor:pointer;transition:background 0.1s" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'var(--surface)\'">' +
@@ -2683,15 +2684,16 @@ function showNewUserGuide() {
     var target = document.querySelector(s.el);
     if (!target) { showStep(n + 1); return; }
     var r = target.getBoundingClientRect();
-    // Update highlight (clamp within viewport)
+    var z = _getZoom();
+    // Update highlight (clamp within viewport, adjust for CSS zoom)
     var hl = Math.max(0, r.left - 6), ht = Math.max(0, r.top - 6);
     var hw = Math.max(48, Math.min(r.width + 12, window.innerWidth - hl)), hh = Math.max(36, Math.min(r.height + 12, window.innerHeight - ht));
-    highlight.style.left = hl + 'px';
-    highlight.style.top = ht + 'px';
-    highlight.style.width = hw + 'px';
-    highlight.style.height = hh + 'px';
+    highlight.style.left = (hl / z) + 'px';
+    highlight.style.top = (ht / z) + 'px';
+    highlight.style.width = (hw / z) + 'px';
+    highlight.style.height = (hh / z) + 'px';
     highlight.style.display = '';
-    // Position tip
+    // Position tip (adjust for CSS zoom)
     var tipW = 300, tipH = 110;
     var tx, ty;
     if (s.pos === 'right') {
@@ -2708,8 +2710,8 @@ function showNewUserGuide() {
       tipBox.style.transform = 'translate(-50%, 0)';
     }
     tipText.textContent = s.tip;
-    tipBox.style.left = tx + 'px';
-    tipBox.style.top = ty + 'px';
+    tipBox.style.left = (tx / z) + 'px';
+    tipBox.style.top = (ty / z) + 'px';
     prevBtn.style.display = n > 0 ? '' : 'none';
     nextBtn.textContent = n < steps.length - 1 ? '下一步' : '完成';
   }

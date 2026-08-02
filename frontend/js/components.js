@@ -123,7 +123,8 @@ function _favSparkle(el) {
   svg.offsetHeight;
   svg.style.animation = 'fav-sparkle 0.5s ease-out';
   var rect = svg.getBoundingClientRect();
-  var cx = rect.left + rect.width/2, cy = rect.top + rect.height/2;
+  var z = _getZoom();
+  var cx = (rect.left + rect.width/2) / z, cy = (rect.top + rect.height/2) / z;
   var colors = ['var(--yellow)','#fbbf24','#f59e0b','var(--yellow)','#fbbf24','#f59e0b','var(--yellow)','#f59e0b'];
   for (var i=0; i<8; i++) {
     (function(idx){
@@ -1370,8 +1371,9 @@ function _showPieTooltip(e, label, cnt, pct) {
     document.body.appendChild(tip);
   }
   tip.innerHTML = '<strong>'+escHtml(label)+'</strong>: '+cnt+' 个 ('+pct+'%)';
-  tip.style.left = (e.clientX+12)+'px';
-  tip.style.top = (e.clientY-28)+'px';
+  var z = _getZoom();
+  tip.style.left = (e.clientX/z + 12)+'px';
+  tip.style.top = (e.clientY/z - 28)+'px';
   tip.style.display = 'block';
 }
 

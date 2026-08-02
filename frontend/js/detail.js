@@ -965,8 +965,9 @@ function initBarTooltip() {
     if (!bar || !bar.dataset.tip) { _barTipEl.style.display = 'none'; return; }
     _barTipEl.textContent = bar.dataset.tip;
     _barTipEl.style.display = 'block';
-    _barTipEl.style.left = (e.clientX + 12) + 'px';
-    _barTipEl.style.top = (e.clientY - 30) + 'px';
+    var z = _getZoom();
+    _barTipEl.style.left = (e.clientX / z + 12) + 'px';
+    _barTipEl.style.top = (e.clientY / z - 30) + 'px';
   });
   root.addEventListener('mouseleave', function() {
     _barTipEl.style.display = 'none';
