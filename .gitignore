@@ -12,10 +12,7 @@ dist/
 data/*.log*
 data/pma.db
 data/pma-*.db
-data/backups/secrets/
-data/backups/pma-backup*.db
-data/backups/pma-backup*.gz
-data/backups/permanent/
+data/backups/
 data/source_config-*.json
 data/uploads/
 data/.shutdown-*
