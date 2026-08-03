@@ -18,7 +18,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from backend.config import settings, beijing_now
+from backend.config import settings, beijing_now, BEIJING_TZ
 from backend.database import get_db, _db_path, _is_sqlcipher_enabled, _HAS_SQLCIPHER
 from backend.middleware.auth import require_admin, get_current_user
 from backend.models.local import LocalUser, PmaSetting
@@ -137,7 +137,7 @@ def _find_companion_files(file_path: Path) -> list:
     """Find companion files (env, uploads) in the same timestamp folder as file_path."""
     companions = []
     # file_path is like .../hotback/20260802-120000/db/pma-backup-xxx.db
-    # or .../permanent/20260802-120000/db/pma-backup-xxx-keep.db
+    # or .../permanent/20260802-120000/db/pma-backup-xxx.db
     ts_folder = file_path.parent.parent  # go up from db/ to timestamp/
     for sub in ("env", "uploads"):
         sub_dir = ts_folder / sub
@@ -462,6 +462,15 @@ def update_remote_backup_config(
               f"更新远端备份配置: enabled={payload.enabled}, type={payload.remote_type}, path={payload.remote_path}",
               AUDIT_CAT_SYSTEM)
     return {"code": 0, "message": "远端备份配置已更新"}
+
+
+@router.get("/remote-backup-config/password", response_model=dict)
+def get_remote_backup_password(_=Depends(require_admin), db: Session = Depends(get_db)):
+    """Get the actual remote backup password (for admin eye-icon reveal)."""
+    config = _get_remote_config(db)
+    if not config.remote_password:
+        return {"code": 1, "message": "未设置远端备份密码"}
+    return {"code": 0, "data": {"password": config.remote_password}, "message": "ok"}
 
 
 @router.post("/remote-backup/test", response_model=dict)
@@ -790,7 +799,7 @@ def _list_remote_files(config: RemoteBackupConfig) -> List[dict]:
                     "name": fname,
                     "size": size,
                     "size_display": _format_size(size),
-                    "created_at": date_str,
+                    "created_at": _parse_smb_date(date_str),
                     "rel_path": rel_path,
                 })
             return items
@@ -915,6 +924,25 @@ async def import_database(
         "data": {"backup": backup_path.name},
         "message": f"数据库已导入成功。旧数据库已备份为 {backup_path.name}。请刷新页面以加载新数据。",
     }
+
+
+def _parse_smb_date(date_str: str) -> str:
+    """Parse smbclient date string (e.g. 'Sun Aug  2 22:44:07 2026') to ISO 8601 UTC.
+
+    smbclient returns dates in the NAS server's local time (Asia/Shanghai).
+    We must convert to UTC before serializing, otherwise the frontend will shift by +8h.
+    """
+    from datetime import datetime as _dt, timezone as _tz
+    import re
+    cleaned = re.sub(r' +', ' ', date_str.strip())
+    try:
+        dt = _dt.strptime(cleaned, "%a %b %d %H:%M:%S %Y")
+        # Assume NAS local time is Asia/Shanghai — convert to UTC
+        dt_beijing = dt.replace(tzinfo=BEIJING_TZ)
+        dt_utc = dt_beijing.astimezone(_tz.utc)
+        return dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+    except ValueError:
+        return date_str
 
 
 def _file_type(filename: str) -> str:
@@ -1539,7 +1567,7 @@ def _maybe_save_permanent_backup(hotback_folder: Path, t: str, keep_hours: int, 
     # Copy .db
     db_src = hotback_folder / "db" / f"pma-backup-{t}.db"
     if db_src.exists():
-        db_dest = _backup_file_path(perm_folder, "db", f"pma-backup-{t}-keep.db")
+        db_dest = _backup_file_path(perm_folder, "db", f"pma-backup-{t}.db")
         shutil.copy2(str(db_src), str(db_dest))
         logger.info(f"Permanent db saved: {db_dest.name}")
 
