@@ -578,7 +578,7 @@ def _resync_on_type_change(db: Session, project_id: int, new_type: str):
     """
     from backend.models.project_stage import ProjectStage
     from backend.models.document import ProjectDocument
-    from backend.models.task import Task
+    from backend.models.task import Task, WorkLog, TaskComment
     from backend.services.document_service import _sync_from_templates, _sync_tasks_from_templates
 
     # 1. Reset stages
@@ -590,6 +590,12 @@ def _resync_on_type_change(db: Session, project_id: int, new_type: str):
     _sync_from_templates(db, project_id, new_type)
 
     # 3. Remove template-originated tasks (keep manual tasks)
+    # Clean up worklogs and comments for template tasks first to avoid orphaned data
+    template_task_ids = db.query(Task.id).filter(
+        Task.project_id == project_id, Task.template_id.isnot(None)
+    ).subquery()
+    db.query(WorkLog).filter(WorkLog.task_id.in_(template_task_ids)).delete(synchronize_session=False)
+    db.query(TaskComment).filter(TaskComment.task_id.in_(template_task_ids)).delete(synchronize_session=False)
     db.query(Task).filter(
         Task.project_id == project_id, Task.template_id.isnot(None)
     ).delete()

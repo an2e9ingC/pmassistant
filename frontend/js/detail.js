@@ -2178,6 +2178,8 @@ var _projFormSelectedTags = [];   // selected tag names
 var _projFormAllTagsFull = [];    // all tags (for dialog)
 
 function showProjectFormDialog(isEdit, convertSource) {
+  _projFormIsEdit = !!isEdit;
+  _projFormOrigType = (isEdit && _projDetail && _projDetail.project_type) ? _projDetail.project_type : '';
   var p = isEdit ? _projDetail : null;
   var isConvert = !!convertSource;
   _projFormConvertSource = convertSource || null;
@@ -2280,7 +2282,7 @@ function showProjectFormDialog(isEdit, convertSource) {
       // Row 3: 项目类型 | 客户名称
       '<div style="display:flex;gap:10px;margin-bottom:10px">' +
         '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">项目类型</label>' +
-          '<select class="search-inp" id="proj-form-type" style="width:100%;box-sizing:border-box" onchange="_autoGenProjCode(true)">' +
+          '<select class="search-inp" id="proj-form-type" style="width:100%;box-sizing:border-box" onchange="_projFormTypeChanged()">' +
             projectTypes.map(function(pt) {
               var sel = (p && p.project_type === pt.id) || (!isEdit && pt.id === 'RD');
               return '<option value="' + escHtml(pt.id) + '"' + (sel ? ' selected' : '') + '>' + escHtml(pt.label) + '</option>';
@@ -2688,7 +2690,59 @@ function _projFormConfirmTags() {
   _renderProjFormTags();
 }
 
+var _projFormIsEdit = false;
+var _projFormOrigType = '';
+
+function _projFormTypeChanged() {
+  var typeEl = document.getElementById('proj-form-type');
+  if (!typeEl) return;
+
+  // In edit mode, warn about stage/doc/task reset before allowing type change
+  if (_projFormIsEdit && typeEl.value !== _projFormOrigType) {
+    // Store typeEl ref for onclick handlers (openDialog uses inline HTML onclick)
+    window._projFormTypeChangedEl = typeEl;
+    var newTypeLabel = typeEl.options[typeEl.selectedIndex].text;
+    openDialog('⚠️ 切换项目类型',
+      '<div style="font-size:13px;line-height:1.6">' +
+        '<p>将项目类型切换为 <b>' + escHtml(newTypeLabel) + '</b> 后，系统将在保存时：</p>' +
+        '<ul style="margin:8px 0;padding-left:18px">' +
+          '<li><b>重置所有阶段</b> — 原阶段全部删除，按新类型重建</li>' +
+          '<li><b>重置文档模板</b> — 原模板文档全部删除并重新同步</li>' +
+          '<li><b>删除模板任务</b> — 所有模板生成的任务及关联工时和评论将被删除</li>' +
+        '</ul>' +
+        '<p style="color:var(--warning)">手动创建的任务和项目笔记不受影响，项目编号也不会改变。</p>' +
+        '<p style="margin-top:10px;color:var(--muted);font-size:12px">保存时将要求输入红色文字最终确认。</p>' +
+      '</div>',
+      [
+        {text: '取消', onclick: '_projFormTypeCancel()'},
+        {text: '确定切换', cls: 'btn-warning', onclick: '_projFormTypeConfirm()'}
+      ],
+      {maxWidth: 460, hideClose: true, overlayClass: 'proj-form-type-warn-overlay'}
+    );
+    return;
+  }
+
+  // Create mode: auto-generate code when type changes
+  _autoGenProjCode(true);
+}
+
+function _projFormTypeCancel() {
+  var typeEl = window._projFormTypeChangedEl;
+  if (typeEl) typeEl.value = _projFormOrigType;
+  window._projFormTypeChangedEl = null;
+  var ov = document.querySelector('.proj-form-type-warn-overlay');
+  if (ov) ov.remove();
+}
+
+function _projFormTypeConfirm() {
+  window._projFormTypeChangedEl = null;
+  var ov = document.querySelector('.proj-form-type-warn-overlay');
+  if (ov) ov.remove();
+}
+
 function _autoGenProjCode(force) {
+  // Never auto-generate code in edit mode — the project already has a valid code
+  if (_projFormIsEdit) return;
   var typeEl = document.getElementById('proj-form-type');
   var codeEl = document.getElementById('proj-form-code');
   if (!typeEl || !codeEl) return;
@@ -2795,6 +2849,29 @@ async function saveProjectForm(isEdit) {
     });
   }
   if (!isEdit && !payload.status) payload.status = 'wait';
+
+  // In edit mode, if project type changed, require final confirmation
+  if (isEdit && _projFormOrigType && payload.project_type !== _projFormOrigType) {
+    var typeEl2 = document.getElementById('proj-form-type');
+    var origLabel = _projFormOrigType;
+    var newLabel = payload.project_type;
+    if (typeEl2) {
+      for (var i = 0; i < typeEl2.options.length; i++) {
+        if (typeEl2.options[i].value === _projFormOrigType) origLabel = typeEl2.options[i].text;
+        if (typeEl2.options[i].value === payload.project_type) newLabel = typeEl2.options[i].text;
+      }
+    }
+    var typeConfirmed = await verifyPassword(
+      '切换项目类型: ' + origLabel + ' → ' + newLabel,
+      'pw_verify_maint_remove'
+    );
+    if (!typeConfirmed) {
+      // Revert type and close dialog (don't save)
+      var typeEl = document.getElementById('proj-form-type');
+      if (typeEl) typeEl.value = _projFormOrigType;
+      return;
+    }
+  }
 
   try {
     var result;
