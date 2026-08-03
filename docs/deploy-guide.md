@@ -518,8 +518,149 @@ pma/
 │   ├── pma.log*          # 运行日志（滚动，.gitignore）
 │   └── source_config.json # 数据源配置持久化
 ├── server.sh             # 运维脚本（start/stop/restart/logs）
-├── docker-compose.yml
+├── docker-compose.yml          # 开发环境（bind-mount 源码）
+├── docker-compose.prod.yml      # 生产环境（镜像自包含）
 ├── Dockerfile
 ├── requirements.txt
+├── scripts/              # 辅助脚本
+│   ├── docker-build.sh           # Docker 离线包构建
+│   └── install.sh.template       # 离线安装脚本模板
 └── .env                  # 环境变量配置（不提交 git）
+```
+
+---
+
+## 八、Docker 离线部署
+
+在联网机器上 `docker build` → `docker save` 导出镜像 → 传输到离线服务器 → `docker load` 加载 → `docker compose up` 运行。
+
+### 8.1 前置条件
+
+| 环境 | 要求 |
+|------|------|
+| 构建机 | Docker + 网络访问 PyPI、apt |
+| 目标服务器 | Linux + Docker >= 20.10 |
+| 可选 | 内网 GitLab Container Registry（存放镜像） |
+
+> **不需要**：目标服务器无需安装 Python、pip、编译工具 — 全部打包在 Docker 镜像中。
+
+### 8.2 第一步：构建镜像（在联网机器上）
+
+```bash
+cd pma/
+
+# 查看帮助
+bash scripts/docker-build.sh --help
+
+# 构建（Python 3.10，默认）
+bash scripts/docker-build.sh
+
+# 或指定 Python 版本
+bash scripts/docker-build.sh --python 3.12 --tag pma:v2.0
+
+# 跳过 GitLab Registry 上传（仅本地构建）
+bash scripts/docker-build.sh --skip-upload
+```
+
+产出 `pma-docker-py310-<版本号>.tar.gz`，内含：
+- `pma-image.tar.gz` — Docker 镜像
+- `docker-compose.yml` — 生产环境 compose 配置
+- `.env.example` — 环境变量模板
+- `install.sh` — 一键安装脚本
+
+### 8.3 第二步：传输到目标服务器
+
+```bash
+scp pma-docker-*.tar.gz root@<目标IP>:/opt/
+```
+
+### 8.4 第三步：安装部署
+
+```bash
+ssh root@<目标IP>
+cd /opt
+tar xzf pma-docker-*.tar.gz
+cd docker-package
+sudo bash install.sh
+```
+
+安装脚本自动完成：
+1. 检查 Docker 版本和权限
+2. `docker load` 加载镜像
+3. 生成 `.env` 配置模板（如不存在）
+4. 创建 `data/` 持久化目录
+5. `docker compose up -d` 启动服务
+6. 健康检查验证
+
+### 8.5 部署后配置
+
+```bash
+# 编辑配置
+vi .env
+# 必填：ZENTAO_BASE_URL、ZENTAO_AUTH_ACCOUNT、ZENTAO_AUTH_PASSWORD
+# 可选：JWT_SECRET_KEY、SQLCIPHER_KEY、LOG_LEVEL 等
+
+# 重启生效
+docker compose restart
+```
+
+> 也可以通过 PMA 管理后台在线配置（登录后在「管理 → 数据源配置」）。
+
+### 8.6 服务管理
+
+```bash
+docker compose logs -f               # 实时查看日志
+docker compose restart               # 重启服务
+docker compose stop                  # 停止服务
+docker compose down                  # 停止并删除容器
+docker compose up -d                 # 启动服务
+```
+
+### 8.7 升级更新
+
+```bash
+# 用新版镜像包重新安装
+tar xzf pma-docker-新版本.tar.gz
+cd docker-package
+sudo bash install.sh                 # install.sh 自动覆盖旧镜像
+```
+
+### 8.8 故障排查
+
+#### Docker 权限不足
+
+```
+permission denied while trying to connect to the Docker daemon
+```
+
+```bash
+sudo usermod -aG docker $USER
+newgrp docker
+# 或直接用 sudo 运行
+sudo bash install.sh
+```
+
+#### 镜像加载失败
+
+```
+Error: No such image
+```
+
+- 确认 `pma-image.tar.gz` 存在且完整
+- 手动加载：`docker load < pma-image.tar.gz`
+
+#### 端口被占用
+
+```bash
+# 修改 .env 中的端口
+echo "PMA_PORT=8001" >> .env
+docker compose down && docker compose up -d
+```
+
+#### 查看容器日志
+
+```bash
+docker compose logs -f        # 所有服务日志
+docker compose logs -f pma    # 指定服务日志
+docker logs pma               # 直接查看容器日志
 ```
