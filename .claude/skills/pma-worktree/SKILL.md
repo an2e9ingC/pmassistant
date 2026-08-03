@@ -116,7 +116,7 @@ export PMA_WORKTREE_DIR="<EnterWorktree 返回的实际路径>"
    a. **从最新备份拷贝数据库**（避免停 trunk 服务）：
    ```bash
    # 优先使用最新备份，无备份时才停服拷贝
-   LATEST_BACKUP=$(ls -t $PMA_TRUNK_DIR/data/backups/pma-backup-*.db 2>/dev/null | head -1)
+   LATEST_BACKUP=$(find $PMA_TRUNK_DIR/data/backups -name "pma-backup-*.db" ! -name "*-before-*" -print 2>/dev/null | xargs ls -t 2>/dev/null | head -1)
    if [ -n "$LATEST_BACKUP" ]; then
        cp "$LATEST_BACKUP" $PMA_WORKTREE_DIR/data/pma-$PORT.db
        echo "使用备份数据库: $(basename $LATEST_BACKUP)"
@@ -127,7 +127,7 @@ export PMA_WORKTREE_DIR="<EnterWorktree 返回的实际路径>"
        cd $PMA_TRUNK_DIR && ./server.sh start -p 8000
    fi
    ```
-   > - 备份文件位于 `data/backups/pma-backup-YYYYMMDD-HHMMSS.db`
+   > - 备份文件位于 `data/backups/hotback/YYYYMMDD-HHMMSS/db/pma-backup-YYYYMMDD-HHMMSS.db`（树形结构）
    > - 使用最新备份可避免停服，且数据足够用于开发测试
    > - 无备份时（首次创建/备份被清理）降级为停服拷贝
 
@@ -245,9 +245,11 @@ for table in ['pma_tasks', 'product_documents', 'product_doc_templates', 'docume
 cd $PMA_TRUNK_DIR
 git push origin trunk
 
-# 备份 trunk 数据库（与定时备份同一目录和命名规则）
-mkdir -p data/backups
-BACKUP_FILE="data/backups/pma-backup-$(TZ=Asia/Shanghai date +%Y%m%d-%H%M%S).db"
+# 备份 trunk 数据库（与定时备份同一目录和命名规则，树形结构）
+TIMESTAMP=$(TZ=Asia/Shanghai date +%Y%m%d-%H%M%S)
+BACKUP_DIR="data/backups/hotback/$TIMESTAMP/db"
+mkdir -p "$BACKUP_DIR"
+BACKUP_FILE="$BACKUP_DIR/pma-backup-$TIMESTAMP.db"
 cp data/pma-8000.db "$BACKUP_FILE"
 echo "数据库已备份: $BACKUP_FILE"
 

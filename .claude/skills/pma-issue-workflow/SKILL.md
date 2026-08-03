@@ -103,7 +103,7 @@ PYEOF
    
    ```bash
    # a. 拷贝数据库（优先使用最新备份，避免停 trunk 服务）
-   LATEST_BACKUP=$(ls -t $PMA_TRUNK_DIR/data/backups/pma-backup-*.db 2>/dev/null | head -1)
+   LATEST_BACKUP=$(find $PMA_TRUNK_DIR/data/backups -name "pma-backup-*.db" ! -name "*-before-*" -print 2>/dev/null | xargs ls -t 2>/dev/null | head -1)
    if [ -n "$LATEST_BACKUP" ]; then
        cp "$LATEST_BACKUP" $PMA_WORKTREE_DIR/data/pma-$PORT.db
    else
