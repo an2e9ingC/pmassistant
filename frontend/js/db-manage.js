@@ -137,7 +137,6 @@ function renderDbManage() {
         '</div>' +
         '<button class="btn btn-primary" onclick="saveBackupConfig()" style="height:35px;flex-shrink:0">保存配置</button>' +
       '</div>' +
-      '<div id="db-backup-cfg-msg" style="margin-top:8px;font-size:11.5px"></div>' +
     '</div></div>';
 
   // ── Remote Backup Config ──
@@ -208,20 +207,21 @@ function renderDbManage() {
         '</div>' +
       '</div>' +
 
-      // Action buttons
-      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
-        '<button class="btn btn-primary" onclick="saveRemoteBackupConfig()" style="height:35px;">保存配置</button>' +
+      // Action buttons — right-aligned, test before save
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">' +
         '<button class="btn btn-outline" onclick="testRemoteConnection()" id="db-remote-test-btn" style="height:35px;" ' + (rType === 'svn' ? 'disabled title="SVN 暂不支持连接测试"' : '') + '>测试连接</button>' +
+        '<button class="btn btn-primary" onclick="saveRemoteBackupConfig()" style="height:35px;">保存配置</button>' +
       '</div>' +
-      '<div id="db-remote-cfg-msg" style="margin-top:8px;font-size:11.5px"></div>' +
     '</div>' +  // #db-remote-config-rows
 
     '</div></div>';
 
   // ── Backup History ──
-  // Sort state (persisted across renders)
-  if (typeof _dbSortCol === 'undefined') _dbSortCol = 'created_at';
-  if (typeof _dbSortDir === 'undefined') _dbSortDir = 'desc';
+  // Sort state per table (persisted across renders)
+  if (typeof _dbLocalSortCol === 'undefined') _dbLocalSortCol = 'created_at';
+  if (typeof _dbLocalSortDir === 'undefined') _dbLocalSortDir = 'desc';
+  if (typeof _dbRemoteSortCol === 'undefined') _dbRemoteSortCol = 'created_at';
+  if (typeof _dbRemoteSortDir === 'undefined') _dbRemoteSortDir = 'desc';
   if (typeof _dbFileTypeFilter === 'undefined') _dbFileTypeFilter = '';
 
   var TYPE_LABELS = { 'db': '数据库', 'env': '配置文件 .env', 'uploads': '附件包' };
@@ -314,12 +314,16 @@ function _filterBackups(list, typeFilter) {
   });
 }
 
-function _sortHeader(label, col) {
+function _sortHeader(label, col, table) {
+  // table: 'local' or 'remote' — each table has independent sort state
+  var sortColVar = table === 'local' ? '_dbLocalSortCol' : '_dbRemoteSortCol';
+  var sortDirVar = table === 'local' ? '_dbLocalSortDir' : '_dbRemoteSortDir';
   var arrow = '';
-  if (_dbSortCol === col) {
-    arrow = _dbSortDir === 'asc' ? ' &#9650;' : ' &#9660;';
+  if (window[sortColVar] === col) {
+    arrow = window[sortDirVar] === 'asc' ? ' &#9650;' : ' &#9660;';
   }
-  return '<span style="cursor:pointer;user-select:none" onclick="_dbSortCol=\'' + col + '\';_dbSortDir=(_dbSortCol===\'' + col + '\'&&_dbSortDir===\'asc\')?\'desc\':\'asc\';renderDbManage()" title="点击排序">' + label + arrow + '</span>';
+  // Check OLD column before setting new — new column defaults to asc (Excel convention)
+  return '<span style="cursor:pointer;user-select:none" onclick="' + sortDirVar + '=(' + sortColVar + '===\'' + col + '\'&&' + sortDirVar + '===\'asc\')?\'desc\':\'asc\';' + sortColVar + '=\'' + col + '\';renderDbManage()" title="点击排序">' + label + arrow + '</span>';
 }
 
 function _renderLocalBackupTable(TYPE_LABELS) {
@@ -327,7 +331,7 @@ function _renderLocalBackupTable(TYPE_LABELS) {
   if (!container) return;
 
   var filtered = _filterBackups(_dbBackups, _dbFileTypeFilter);
-  var sorted = _sortBackups(filtered, _dbSortCol, _dbSortDir);
+  var sorted = _sortBackups(filtered, _dbLocalSortCol, _dbLocalSortDir);
 
   // Calculate sync stats for summary
   var syncedCount = _dbBackups.filter(function(b) { return b.sync_status === 'synced'; }).length;
@@ -335,10 +339,10 @@ function _renderLocalBackupTable(TYPE_LABELS) {
   var h = '<table style="width:100%;border-collapse:collapse;font-size:11px">' +
     '<thead><tr style="position:sticky;top:0;background:var(--bg);z-index:1">' +
       '<th style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:center;width:36px;color:var(--muted)">#</th>' +
-      '<th style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:left">' + _sortHeader('数据类型', 'file_type') + '</th>' +
+      '<th style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:left">' + _sortHeader('数据类型', 'file_type', 'local') + '</th>' +
       '<th style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:left">文件名</th>' +
-      '<th style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:right;width:70px">' + _sortHeader('大小', 'size') + '</th>' +
-      '<th style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:left;width:135px">' + _sortHeader('备份时间', 'created_at') + '</th>' +
+      '<th style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:right;width:70px">' + _sortHeader('大小', 'size', 'local') + '</th>' +
+      '<th style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:left;width:135px">' + _sortHeader('备份时间', 'created_at', 'local') + '</th>' +
       '<th style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:center;width:80px">远端状态</th>' +
       '<th style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:center;width:140px">操作</th>' +
     '</tr></thead><tbody>';
@@ -383,17 +387,17 @@ function _renderRemoteBackupTable(TYPE_LABELS) {
   var container = document.getElementById('db-remote-backup-table');
   if (!container) return;
 
-  // Remote backups use same sort/filter state for simplicity
+  // Remote backups use independent sort state (separate from local)
   var filtered = _filterBackups(_dbRemoteBackups, _dbFileTypeFilter);
-  var sorted = _sortBackups(filtered, _dbSortCol, _dbSortDir);
+  var sorted = _sortBackups(filtered, _dbRemoteSortCol, _dbRemoteSortDir);
 
   var h = '<table style="width:100%;border-collapse:collapse;font-size:11px">' +
     '<thead><tr style="position:sticky;top:0;background:var(--bg);z-index:1">' +
       '<th style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:center;width:36px;color:var(--muted)">#</th>' +
-      '<th style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:left">' + _sortHeader('数据类型', 'file_type') + '</th>' +
+      '<th style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:left">' + _sortHeader('数据类型', 'file_type', 'remote') + '</th>' +
       '<th style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:left">文件名</th>' +
-      '<th style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:right;width:70px">' + _sortHeader('大小', 'size') + '</th>' +
-      '<th style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:left;width:135px">' + _sortHeader('备份时间', 'created_at') + '</th>' +
+      '<th style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:right;width:70px">' + _sortHeader('大小', 'size', 'remote') + '</th>' +
+      '<th style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:left;width:135px">' + _sortHeader('备份时间', 'created_at', 'remote') + '</th>' +
       '<th style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:center;width:80px">操作</th>' +
     '</tr></thead><tbody>';
 
@@ -654,9 +658,7 @@ async function saveBackupConfig() {
   if (keepHours < 0) keepHours = 0;
   if (maxPermanent < 1) maxPermanent = 1;
 
-  var msgEl = document.getElementById('db-backup-cfg-msg');
-  msgEl.textContent = '保存中...';
-  msgEl.style.color = 'var(--muted)';
+  showToast('正在保存备份配置...', 'info');
 
   try {
     await API.put('/admin/db/backup-config', {
@@ -665,13 +667,10 @@ async function saveBackupConfig() {
       keep_interval_hours: keepHours,
       max_permanent_count: maxPermanent,
     });
-    _dbBackupConfig = { interval_minutes: interval, retention_count: retention, keep_interval_hours: keepHours };
-    msgEl.textContent = '已保存';
-    msgEl.style.color = 'var(--success)';
-    setTimeout(function() { if (msgEl) msgEl.textContent = ''; }, 2000);
+    _dbBackupConfig = { interval_minutes: interval, retention_count: retention, keep_interval_hours: keepHours, max_permanent_count: maxPermanent };
+    showToast('备份配置已保存', 'success');
   } catch(e) {
-    msgEl.textContent = '保存失败: ' + (e.message || '未知错误');
-    msgEl.style.color = 'var(--danger)';
+    showToast('保存备份配置失败: ' + (e.message || '未知错误'), 'error');
   }
 }
 
@@ -772,18 +771,35 @@ async function rekeyDatabase() {
 
 // ── Remote Backup Config Actions ──
 
-function togglePwdVisibility(inputId, btn) {
+async function togglePwdVisibility(inputId, btn) {
   var input = document.getElementById(inputId);
   if (!input) return;
+
+  // If field is empty but password is saved, fetch actual password from backend first
+  if (!input.value && _dbRemoteBackupConfig && _dbRemoteBackupConfig.has_password) {
+    btn.disabled = true;
+    try {
+      var res = await API.get('/admin/db/remote-backup-config/password');
+      if (res && res.password) {
+        input.value = res.password;
+      }
+    } catch(e) {
+      showToast('无法获取已保存的密码', 'error');
+      btn.disabled = false;
+      return;
+    }
+    btn.disabled = false;
+  }
+
   var isPassword = input.type === 'password';
   input.type = isPassword ? 'text' : 'password';
-  // Toggle icon: eye vs eye-off
+  // Toggle icon: eye (closed) vs eye-off (open)
   var svg = btn.querySelector('svg');
   if (isPassword) {
-    // Was password → now text, show eye-off icon
+    // Was password → now text, show eye-off (open) icon
     svg.innerHTML = '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="m14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>';
   } else {
-    // Was text → now password, show eye icon
+    // Was text → now password, show eye (closed) icon
     svg.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
   }
 }
@@ -792,11 +808,6 @@ function onRemoteEnabledToggle() {
   var checked = document.getElementById('db-remote-backup-enabled').checked;
   var rows = document.getElementById('db-remote-config-rows');
   if (rows) rows.style.display = checked ? 'block' : 'none';
-  var syncBtn = document.getElementById('db-remote-sync-btn');
-  if (syncBtn) {
-    syncBtn.disabled = !checked;
-    syncBtn.title = checked ? '' : '请先启用远端备份';
-  }
 }
 
 function onRemoteTypeChange() {
@@ -813,10 +824,6 @@ function onRemoteTypeChange() {
     testBtn.disabled = type === 'svn';
     testBtn.title = type === 'svn' ? 'SVN 暂不支持连接测试' : '';
   }
-  if (syncBtn) {
-    syncBtn.disabled = type === 'svn';
-    syncBtn.title = type === 'svn' ? 'SVN 暂不支持手动同步' : '';
-  }
 }
 
 async function saveRemoteBackupConfig() {
@@ -828,9 +835,7 @@ async function saveRemoteBackupConfig() {
   // Preserve existing has_password if user didn't type a new password
   var prevHasPwd = _dbRemoteBackupConfig && _dbRemoteBackupConfig.has_password;
 
-  var msgEl = document.getElementById('db-remote-cfg-msg');
-  msgEl.textContent = '保存中...';
-  msgEl.style.color = 'var(--muted)';
+  showToast('正在保存远端备份配置...', 'info');
 
   try {
     var payload = {
@@ -841,7 +846,6 @@ async function saveRemoteBackupConfig() {
       remote_password: remotePassword,
     };
     await API.put('/admin/db/remote-backup-config', payload);
-    // Update local cache from form values (API.put returns json.data which is empty here)
     _dbRemoteBackupConfig = {
       enabled: enabled,
       remote_type: remoteType,
@@ -849,41 +853,28 @@ async function saveRemoteBackupConfig() {
       remote_username: remoteUsername,
       has_password: !!remotePassword || prevHasPwd,
     };
-    msgEl.textContent = '已保存';
-    msgEl.style.color = 'var(--success)';
-    setTimeout(function() { if (msgEl) msgEl.textContent = ''; }, 2000);
+    showToast('远端备份配置已保存', 'success');
 
     // Re-render to update button states
     renderDbManage();
   } catch(e) {
-    msgEl.textContent = '保存失败: ' + (e.message || '未知错误');
-    msgEl.style.color = 'var(--danger)';
+    showToast('保存远端备份配置失败: ' + (e.message || '未知错误'), 'error');
   }
 }
 
 async function testRemoteConnection() {
-  var msgEl = document.getElementById('db-remote-cfg-msg');
-  msgEl.textContent = '测试连接中...';
-  msgEl.style.color = 'var(--muted)';
+  showToast('正在测试远端连接...', 'info');
 
   try {
     await API.post('/admin/db/remote-backup/test');
-    // API.post throws on failure; reaching here means success
     try { _dbRemoteBackupConfig = await API.get('/admin/db/remote-backup-config'); } catch(e) {}
-    msgEl.textContent = '连接成功';
-    msgEl.style.color = 'var(--success)';
-    setTimeout(function() { if (msgEl) msgEl.textContent = ''; }, 5000);
+    showToast('远端连接测试成功', 'success');
   } catch(e) {
-    msgEl.textContent = '测试失败: ' + (e.message || '未知错误');
-    msgEl.style.color = 'var(--danger)';
+    showToast('远端连接测试失败: ' + (e.message || '未知错误'), 'error');
   }
 }
 
 async function syncToRemoteNow() {
-  var msgEl = document.getElementById('db-remote-cfg-msg');
-  msgEl.textContent = '正在同步...';
-  msgEl.style.color = 'var(--muted)';
-
   // Inline progress toast
   var progEl = document.createElement('div');
   progEl.className = 'toast info';
@@ -901,19 +892,13 @@ async function syncToRemoteNow() {
     var res = await API.post('/admin/db/remote-backup/sync-now');
     if (progEl.parentElement) progEl.remove();
     var elapsed = Math.round((Date.now() - startTime) / 1000);
-    // API.post returns json.data; for sync-now, data has {ok, synced, failed, message}
     var syncCount = (res && res.synced) ? res.synced.length : 0;
     var failedCount = (res && res.failed) ? res.failed.length : 0;
     var detail = syncCount > 0 ? syncCount + ' 个文件' : '';
     if (failedCount > 0) detail += '，' + failedCount + ' 个失败';
-    msgEl.textContent = (res && res.message || '同步完成') + '（' + elapsed + 's）';
-    msgEl.style.color = 'var(--success)';
     showToast('远端同步: ' + (detail || '已完成') + '（' + elapsed + 's）', 'success');
-    setTimeout(function() { if (msgEl) msgEl.textContent = ''; }, 5000);
   } catch(e) {
     if (progEl.parentElement) progEl.remove();
-    msgEl.textContent = '同步失败: ' + (e.message || '未知错误');
-    msgEl.style.color = 'var(--danger)';
     showToast('远端同步失败: ' + (e.message || '未知错误'), 'error');
   }
 }
