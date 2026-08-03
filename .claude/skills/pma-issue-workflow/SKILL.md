@@ -206,20 +206,31 @@ PYEOF
 
 > **验证通过后，用户只需说 "上线" 即可完成全流程。不要拆分说 "commit" 再 "上线"。**
 
-**执行链**：
+**执行链（根据当前环境分两路）**：
 
 ```
-用户说 "上线" → Skill("pma-worktree")
-  ├── 自动 commit（内部触发 pma-commit：版本号 → review → commit → GitLab 评论）
-  ├── rebase origin/trunk
-  ├── code review（diff 检查）
-  ├── 二次 rebase（防止并发冲突）
-  ├── merge --no-ff 到 trunk
-  ├── schema 检查（只读）
-  ├── push origin trunk
-  ├── 删除远程临时分支
-  └── cleanup（删除 worktree 目录和本地分支）
+用户说 "上线"
+  │
+  ├── 已在 worktree 中（CWD 包含 .claude/worktrees/）
+  │     ├── ⚠️ 不调用 pma-worktree skill（否则会重复创建 worktree）
+  │     ├── 直接 invoke Skill("pma-commit")  → 版本号 + review + commit + GitLab 评论
+  │     ├── git fetch origin trunk
+  │     ├── git rebase origin/trunk
+  │     ├── git diff origin/trunk...HEAD（review）
+  │     ├── git fetch origin（二次 fetch 防并发）
+  │     ├── git rebase origin/trunk（二次 rebase）
+  │     ├── 切换到 trunk 目录：cd $PMA_TRUNK_DIR
+  │     ├── git merge --no-ff <worktree-branch>
+  │     ├── git push origin trunk
+  │     ├── git push origin --delete <worktree-branch>（如远程存在）
+  │     ├── ExitWorktree(action: "remove", discard_changes: true)
+  │     └── MCP 重索引 trunk：index_repository(repo_path="$PMA_TRUNK_DIR", mode="moderate")
+  │
+  └── 不在 worktree 中（CWD 不含 .claude/worktrees/）
+        └── Skill("pma-worktree")  → 自动 commit → rebase → merge → push → cleanup
 ```
+
+> **关键规则**：`pwd` 输出包含 `.claude/worktrees/` 时，说明已在 worktree 中，直接执行上线流程，**绝不调用 `Skill("pma-worktree")`**，否则会创建第二个 worktree。
 
 **各 skill 职责边界**：
 

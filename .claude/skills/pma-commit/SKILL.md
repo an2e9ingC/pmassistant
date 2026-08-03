@@ -83,9 +83,9 @@ Co-Authored-By: <model-name> / <tool-name>
    **步骤 6b** — Write 短脚本到 `/tmp/post-issue-<N>.sh`：
    ```bash
    #!/bin/bash
-   python3 <WORKTREE>/scripts/gitlab_issue_comment.py --issue <N> --body "$(cat /tmp/issue-<N>-body.md)"
+   python3 /home/xuchuan/workspace/pma/scripts/gitlab_issue_comment.py --issue <N> --body "$(cat /tmp/issue-<N>-body.md)"
    ```
-   > `<WORKTREE>` 替换为当前 worktree 绝对路径（即 `pwd` 输出）。
+   > **注意**：使用 trunk 绝对路径而非 worktree 路径。worktree 可能在 cleanup 阶段被删除，而 trunk 路径始终存在，重试时不会报文件不存在。
 
    **步骤 6c** — 用短命令执行：
    ```bash

@@ -56,3 +56,16 @@ allowed-tools: Read, Write, Edit, Bash
 3. **提取组件时同步更新 HTML 中的 onclick**：`onfocus="oldFunc()"` 和 JS 里 `window.newFunc = ...` 要一起改。
 4. **日期时间**：详见 `CLAUDE.md` §"日期时间规范（前后端统一）"。
 5. **删变量定义时检查所有引用**：简化函数时删了变量定义但漏删使用处 → `ReferenceError`。
+6. **openDialog 按钮 onclick 不能使用闭包**：`openDialog` 的按钮 `onclick` 被序列化为 HTML 内联字符串（`onclick="functionString"`），**匿名函数和闭包变量会丢失上下文**，cancel 按钮不生效。必须使用**命名函数 + 模块级/全局变量**传递 DOM 引用：
+   ```javascript
+   // ❌ 错误 — 闭包变量 typeEl 序列化后无法访问
+   onclick: function() { typeEl.value = _projFormOrigType; }
+
+   // ✅ 正确 — 命名函数 + window 传递引用
+   window._myDialogEl = typeEl;
+   // onclick: '_myCancelFunc()'
+   function _myCancelFunc() {
+     var el = window._myDialogEl;
+     if (el) el.value = original;
+   }
+   ```
