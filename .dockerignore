@@ -1,0 +1,25 @@
+# Runtime data — mounted as volume at runtime, not part of image
+data/
+
+# Git metadata
+.git/
+
+# Build artifacts
+*.tar.gz
+scripts/build/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Claude Code config
+.claude/
+
+# Credentials — must not be baked into image
+.env
+secrets/
+
+# IDE / editor
+.vscode/
+.idea/

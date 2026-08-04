@@ -19,3 +19,7 @@ data/.shutdown-*
 pma-8000.log.*
 data/pma-8000.log.1
 data/pma-8000.log.1
+# 离线部署构建产物
+scripts/build/
+pma-docker-*.tar.gz
+install.log

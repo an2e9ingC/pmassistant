@@ -1,0 +1,21 @@
+# PMA Production Docker Compose
+# For deployment on target servers. No dev bind-mounts — the image is self-contained.
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml up -d
+#   docker compose -f docker-compose.prod.yml logs -f
+#   docker compose -f docker-compose.prod.yml down
+
+services:
+  pma:
+    image: pma:latest
+    container_name: pma
+    ports:
+      - "${PMA_PORT:-8000}:8000"
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    environment:
+      - TZ=Asia/Shanghai
+    restart: unless-stopped
