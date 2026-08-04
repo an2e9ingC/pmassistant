@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -38,6 +38,7 @@ class ZentaoConfig(BaseModel):
 class GitLabConfig(BaseModel):
     base_url: str = ""
     token: str = ""
+    project_path: str = ""         # PMA project path on GitLab (e.g. group/subgroup/pma)
     app_id: str = ""              # GitLab OAuth Application ID
     app_secret: str = ""          # GitLab OAuth Application Secret
     oauth_enabled: bool = False   # Enable GitLab OAuth login
@@ -263,6 +264,189 @@ def update_config(payload: DataSourceConfig, _=Depends(require_admin)):
     _save_config(cfg)
     settings.reload()  # Reload in-memory settings from updated os.environ
     return {"code": 0, "data": cfg, "message": "配置已保存"}
+
+
+# ── Config Export / Import ──
+
+@router.get("/config/export", response_model=dict)
+def export_config(_=Depends(require_admin)):
+    """Download current data-source config as JSON."""
+    cfg = _load_config()
+    return {"code": 0, "data": cfg, "message": "ok"}
+
+
+class ConfigImportPayload(BaseModel):
+    """Wrapper for import — accepts the full config dict."""
+    zentao: ZentaoConfig = ZentaoConfig()
+    gitlab: GitLabConfig = GitLabConfig()
+    nas: NasConfig = NasConfig()
+    svn: SvnConfig = SvnConfig()
+    pdm: PdmConfig = PdmConfig()
+    wecom: WeComConfig = WeComConfig()
+
+
+@router.post("/config/import", response_model=dict)
+async def import_config(
+    file: UploadFile = File(...),
+    _=Depends(require_admin),
+    cu=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Import data-source config from a JSON file. Merges with existing — empty/masked secrets preserved."""
+    import json as _json
+
+    # Read and parse uploaded file
+    try:
+        content = await file.read()
+        imported = _json.loads(content.decode("utf-8"))
+    except (_json.JSONDecodeError, UnicodeDecodeError) as e:
+        return {"code": 1, "message": f"JSON 解析失败: {e}"}
+
+    # Validate structure against DataSourceConfig
+    try:
+        DataSourceConfig(**imported)
+    except Exception as e:
+        return {"code": 1, "message": f"配置格式校验失败: {e}"}
+
+    # Merge with existing config
+    cfg = _load_config()
+    merged_count = 0
+    skipped_count = 0
+
+    for section in cfg:
+        if section not in imported:
+            continue
+        for field in cfg[section]:
+            if field not in imported[section]:
+                continue
+            new_val = imported[section][field]
+            # Preserve existing secrets when imported value is empty or masked
+            if field in ("password", "token", "app_secret", "secret") and (
+                not new_val or "•" in str(new_val) or new_val == "****"
+            ):
+                skipped_count += 1
+                continue
+            cfg[section][field] = new_val
+            merged_count += 1
+
+    _save_config(cfg)
+    settings.reload()
+    log_audit(db, cu, "config_import", f"merged={merged_count} skipped={skipped_count}", AUDIT_CAT_SYSTEM)
+    return {"code": 0, "data": {"merged": merged_count, "skipped": skipped_count}, "message": f"配置已导入（更新 {merged_count} 项，保留 {skipped_count} 项敏感信息不变）"}
+
+
+# ── System Parameters (.env-level settings not covered by data-source config) ──
+
+_SENSITIVE_PARAMS = {"jwt_secret_key"}
+
+_SYSTEM_PARAM_META = {
+    "jwt_secret_key":   {"label": "JWT 密钥",        "type": "password", "ph": "至少 32 字符随机字符串", "sensitive": True},
+    "jwt_algorithm":    {"label": "JWT 算法",        "type": "select",   "ph": "", "options": ["HS256", "HS384", "HS512", "RS256"], "sensitive": False},
+    "jwt_expire_minutes":{"label": "Token 过期(分)",  "type": "number",   "ph": "480（8小时）", "sensitive": False},
+    "log_level":        {"label": "日志级别",         "type": "select",   "ph": "", "options": ["DEBUG", "INFO", "WARNING", "ERROR"], "sensitive": False},
+}
+
+_ENV_TO_PARAM = {
+    "JWT_SECRET_KEY":    "jwt_secret_key",
+    "JWT_ALGORITHM":     "jwt_algorithm",
+    "JWT_EXPIRE_MINUTES":"jwt_expire_minutes",
+    "LOG_LEVEL":         "log_level",
+}
+
+_PARAM_TO_ENV = {v: k for k, v in _ENV_TO_PARAM.items()}
+
+
+@router.get("/system-params", response_model=dict)
+def get_system_params(_=Depends(require_admin)):
+    """Return .env-level system parameters (sensitive values masked)."""
+    # Read from settings object to get defaults, fall back to os.environ for values not in Settings
+    defaults = settings._defaults()
+    params = {}
+    for env_key, param_key in _ENV_TO_PARAM.items():
+        # Prefer os.environ (actual .env value), fall back to Settings default
+        raw = os.environ.get(env_key)
+        if raw is None and env_key in defaults:
+            raw = str(defaults[env_key])
+        if raw is None:
+            raw = ""
+        if param_key in _SENSITIVE_PARAMS and raw:
+            params[param_key] = "••••••••"
+        else:
+            params[param_key] = raw
+    return {"code": 0, "data": params, "message": "ok"}
+
+
+class SystemParamsUpdate(BaseModel):
+    jwt_secret_key: str = ""
+    jwt_algorithm: str = ""
+    jwt_expire_minutes: str = ""
+    log_level: str = ""
+
+
+@router.put("/system-params", response_model=dict)
+def update_system_params(
+    payload: SystemParamsUpdate,
+    _=Depends(require_admin),
+    cu=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update .env-level system parameters. Masked sensitive values are preserved."""
+    data = payload.model_dump()
+    changed = []
+
+    for param_key, env_key in _PARAM_TO_ENV.items():
+        new_val = data.get(param_key, "")
+        if not new_val:
+            continue
+        # Preserve existing value when masked
+        if param_key in _SENSITIVE_PARAMS and "•" in new_val:
+            continue
+        # Validate
+        meta = _SYSTEM_PARAM_META.get(param_key, {})
+        if meta.get("type") == "select" and new_val not in meta.get("options", []):
+            return {"code": 1, "message": f"{meta['label']}: 无效值 '{new_val}'，可选: {meta['options']}"}
+        if meta.get("type") == "number":
+            try:
+                int(new_val)
+            except ValueError:
+                return {"code": 1, "message": f"{meta['label']}: 必须是整数"}
+
+        old_val = os.environ.get(env_key, "")
+        if str(new_val) != str(old_val):
+            _set_env_line_all(env_key, str(new_val))
+            os.environ[env_key] = str(new_val)
+            changed.append(meta.get("label", param_key))
+
+    if changed:
+        settings.reload()
+        log_audit(db, cu, "system_params", f"updated: {', '.join(changed)}", AUDIT_CAT_SYSTEM)
+        if "jwt_secret_key" in data and data["jwt_secret_key"] and "•" not in data["jwt_secret_key"]:
+            return {"code": 0, "data": {"changed": changed}, "message": f"已更新 {len(changed)} 项。JWT 密钥已变更，所有用户需要重新登录。"}
+        return {"code": 0, "data": {"changed": changed}, "message": f"已更新 {len(changed)} 项"}
+    return {"code": 0, "data": {"changed": []}, "message": "无变更"}
+
+
+def _set_env_line_all(key: str, value: str) -> None:
+    """Update or append a single KEY=VALUE line in .env file."""
+    env_path = Path(ENV_FILE)
+    if env_path.exists():
+        with open(env_path) as f:
+            lines = f.readlines()
+    else:
+        lines = []
+    new_line = f'{key}={value}\n'
+    found = False
+    for i, line in enumerate(lines):
+        if line.strip().startswith(f"{key}=") or line.strip().startswith(f"# {key}="):
+            lines[i] = new_line
+            found = True
+            break
+    if not found:
+        if lines and not lines[-1].endswith("\n"):
+            lines.append("\n")
+        lines.append(new_line)
+    with open(env_path, "w") as f:
+        f.writelines(lines)
 
 
 # ── Project Filter (sync permission, not full admin) ──

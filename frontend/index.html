@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="app-version" content="v2026.08.04-beta3">
+<meta name="app-version" content="v2026.08.04-beta2">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>PM Assistant · 集成禅道 & GitLab</title>
 <script>
@@ -151,6 +151,16 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
     </div>
     <div class="nav-group" id="nav-group-admin" style="display:none">
       <div class="nav-group-label">管理</div>
+      <div class="nav-item" id="nav-system-manage" onclick="gotoView('system-manage')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="8" cy="8" r="2.5"/>
+          <path d="M2 13.5v-1A2.5 2.5 0 0 1 4.5 10h7a2.5 2.5 0 0 1 2.5 2.5v1"/>
+          <circle cx="5" cy="5" r="1.8"/>
+          <circle cx="11" cy="5" r="1.8"/>
+          <line x1="6.2" y1="6.3" x2="9.8" y2="6.3"/>
+        </svg>
+        系统管理
+      </div>
       <div class="nav-item" id="nav-users" onclick="gotoView('users')">
         <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
           <circle cx="8" cy="5" r="3"/>
@@ -189,14 +199,6 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
           <line x1="4" y1="10.5" x2="7.5" y2="10.5"/>
         </svg>
         系统日志
-      </div>
-      <div class="nav-item" id="nav-db-manage" onclick="gotoView('db-manage')">
-        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-          <ellipse cx="8" cy="3.5" rx="5.5" ry="2"/>
-          <path d="M2.5 3.5v9c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2v-9"/>
-          <line x1="2.5" y1="7.5" x2="13.5" y2="7.5"/>
-        </svg>
-        数据库管理
       </div>
     </div>
   </nav>
@@ -573,7 +575,7 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
     </div>
 
     <!-- ══════════════════════ VIEW — DB MANAGE ══════════════════════ -->
-    <div class="view" id="view-db-manage"></div>
+    <div class="view" id="view-system-manage"></div>
 
     <!-- ══════════════════════ VIEW — NOTIF-MANAGE ══════════════════════ -->
     <div class="view" id="view-notif-manage">

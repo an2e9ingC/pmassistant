@@ -2192,3 +2192,69 @@ async function submitReviewer(taskId) {
     if (typeof loadTaskData === 'function') loadTaskData();
   } catch(e) { showToast('更新失败: ' + (e.message || ''), 'error'); }
 }
+
+/* ═══════════════════════════════════════════════════
+   SVG Donut Chart
+═══════════════════════════════════════════════════ */
+
+/**
+ * Render an SVG donut (ring) chart into a container element.
+ * @param {string|Element} container - DOM element or id
+ * @param {Array} segments - [{label, value, color}] — value used for proportion
+ * @param {Object} opts - {title, size, centerText}
+ */
+function renderDonutChart(container, segments, opts) {
+  var el = typeof container === 'string' ? document.getElementById(container) : container;
+  if (!el) return;
+
+  opts = opts || {};
+  var size = opts.size || 180;
+  var strokeW = size * 0.18;
+  var radius = (size - strokeW) / 2;
+  var center = size / 2;
+  var circumference = 2 * Math.PI * radius;
+  var total = 0;
+  segments.forEach(function(s) { total += s.value || 0; });
+  if (total === 0) total = 1; // avoid division by zero
+
+  var titleHtml = opts.title ? '<div style="font-size:12px;font-weight:600;color:var(--muted);text-align:center;margin-bottom:8px">' + escHtml(opts.title) + '</div>' : '';
+
+  // Build SVG ring segments
+  var svgCircles = '';
+  var offset = 0;
+  var colors = ['var(--accent)', 'var(--success)', 'var(--warn)', 'var(--info)', 'var(--danger)', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#6366f1'];
+  segments.forEach(function(s, i) {
+    var pct = s.value / total;
+    var dashLen = Math.max(pct * circumference, 0.5); // min visible sliver
+    var dashGap = circumference - dashLen;
+    var color = s.color || colors[i % colors.length];
+    svgCircles += '<circle cx="' + center + '" cy="' + center + '" r="' + radius + '" ' +
+      'fill="none" stroke="' + color + '" stroke-width="' + strokeW + '" ' +
+      'stroke-dasharray="' + dashLen + ' ' + dashGap + '" ' +
+      'stroke-dashoffset="' + (-offset * circumference / total) + '" ' +
+      'stroke-linecap="butt" style="transition: stroke-dasharray 0.5s, stroke-dashoffset 0.5s"/>';
+    offset += s.value;
+  });
+
+  var centerText = opts.centerText || (total > 0 ? '' : '暂无数据');
+  var centerHtml = centerText ? '<text x="' + center + '" y="' + center + '" text-anchor="middle" dominant-baseline="middle" font-size="' + (size * 0.13) + '" fill="var(--fg)">' + escHtml(centerText) + '</text>' : '';
+
+  // Build legend
+  var legendHtml = '<div style="display:flex;flex-wrap:wrap;gap:6px 14px;justify-content:center;margin-top:10px;font-size:11px">';
+  segments.forEach(function(s, i) {
+    var pct = total > 0 ? Math.round(s.value / total * 100) : 0;
+    var color = s.color || colors[i % colors.length];
+    legendHtml += '<span style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap">' +
+      '<span style="width:8px;height:8px;border-radius:2px;background:' + color + ';flex-shrink:0"></span>' +
+      escHtml(s.label) + ' ' + pct + '%' +
+      '</span>';
+  });
+  legendHtml += '</div>';
+
+  el.innerHTML = titleHtml +
+    '<div style="display:flex;justify-content:center">' +
+    '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '">' +
+    svgCircles + centerHtml +
+    '</svg></div>' +
+    legendHtml;
+}
