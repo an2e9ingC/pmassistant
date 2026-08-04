@@ -7,9 +7,12 @@ var _dbBackups = [];
 var _dbSqlcipherEnabled = false;
 var _dbRemoteBackupConfig = null;
 var _dbRemoteBackups = [];
+var _dbManageContainerId = 'view-db-manage';
 
-async function initDbManage() {
-  var container = document.getElementById('view-db-manage');
+async function initDbManage(containerId) {
+  if (containerId) _dbManageContainerId = containerId;
+  var container = document.getElementById(_dbManageContainerId);
+  if (!container) return;
   container.innerHTML = '<div class="loading-spinner" style="padding:40px">加载中...</div>';
 
   try {
@@ -283,7 +286,7 @@ function renderDbManage() {
 
   html += '</div></div></div>';  // grid + section + .db-manage-grid
 
-  document.getElementById('view-db-manage').innerHTML = html;
+  document.getElementById(_dbManageContainerId).innerHTML = html;
 
   // Render tables
   _renderLocalBackupTable(TYPE_LABELS);

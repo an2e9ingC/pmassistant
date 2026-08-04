@@ -88,6 +88,7 @@ var VIEW_REGISTRY = {
   'doc-templates':  { title: '模板管理',    label: '模板管理',    perm: 'doc_template', initName: 'initDocTemplates',  js: '/js/doc-templates.js?v=' + APP_VERSION },
   standards:        { title: '流程规范',    label: '流程规范',    perm: 'doc_template',  initName: 'initStandards',        js: '/js/standards.js?v=' + APP_VERSION },
   'db-manage':      { title: '数据库管理',  label: '数据库管理',  perm: 'admin',         initName: 'initDbManage',         js: '/js/db-manage.js?v=' + APP_VERSION },
+  'system-manage':  { title: '系统管理',    label: '系统管理',    perm: 'admin',         initName: 'initSystemManage',      js: '/js/system-manage.js?v=' + APP_VERSION },
   'user-center':    { title: '用户中心',    label: '用户中心',    perm: null,            init: initUserCenter },
   tasks:            { title: '任务管理',    label: '任务管理',    perm: null,            initName: 'initTasks',            js: '/js/tasks.js?v=' + APP_VERSION },
 };
@@ -697,7 +698,7 @@ async function triggerSingleSync(key) {
 // Open the config edit dialog directly for a source (or all)
 function openConfigDialog(key) {
   window._srcConfigOpenDialog = key || null;  // null = open first section
-  gotoView('config');
+  gotoView('system-manage', {params: ['config']});
 }
 
 // Called by renderConfigForm to add highlight

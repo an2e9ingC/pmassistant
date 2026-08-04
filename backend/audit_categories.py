@@ -8,6 +8,8 @@ AUDIT_CAT_USER     = "用户"
 AUDIT_CAT_CUSTOMER = "客户"
 AUDIT_CAT_TEMPLATE = "模板规范"
 AUDIT_CAT_SYSTEM   = "系统"
+AUDIT_CAT_UPLOADS  = "上传管理"
+AUDIT_CAT_CONFIG   = "配置管理"
 
 # NOTE: 后续新增 log_audit() detail 中的英文字段名时必须同步在此增加映射
 FIELD_LABEL = {

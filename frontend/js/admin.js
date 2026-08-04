@@ -3,9 +3,13 @@
 ═══════════════════════════════════════════════════ */
 
 var _adminFormData = null;
+var _adminConfigContainerId = 'admin-config-form';
+var _adminSettingsContainerId = 'admin-settings-area';
 
-async function initAdmin() {
-  var container = document.getElementById('admin-config-form');
+async function initAdmin(containerId) {
+  if (containerId) _adminConfigContainerId = containerId;
+  var container = document.getElementById(_adminConfigContainerId);
+  if (!container) return;
   container.innerHTML = '<div class="loading-spinner" style="padding:40px">加载配置...</div>';
   try {
     var data = await API.get('/admin/config');
@@ -168,7 +172,7 @@ function renderConfigForm(cfg) {
     '<button class="btn" onclick="clearDatabase()" style="margin-left:auto;font-size:12px;color:var(--danger);padding:5px 16px">清除数据库缓存</button>' +
   '</div>';
 
-  document.getElementById('admin-config-form').innerHTML = html;
+  document.getElementById(_adminConfigContainerId).innerHTML = html;
   // Highlight target card if navigated from source tag
   if (typeof _getSrcConfigHighlight === 'function') {
     var hlKey = _getSrcConfigHighlight();
@@ -1246,7 +1250,7 @@ async function loadPmaSettingsUI() {
           items.join('') +
         '</div>' +
       '</div>';
-    var container = document.getElementById('admin-settings-area');
+    var container = document.getElementById(_adminSettingsContainerId);
     if (container) container.innerHTML = html;
   } catch(e) {}
 }
