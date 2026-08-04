@@ -17,12 +17,18 @@ router = APIRouter(prefix="/api/wecom", tags=["wecom"])
 
 @router.get("/calendar", response_model=dict)
 def wecom_calendar(
+    user_id: Optional[int] = Query(None),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     db: Session = Depends(get_db),
-    user: LocalUser = Depends(get_current_user),
+    current_user: LocalUser = Depends(get_current_user),
 ):
-    """Get WeCom checkin calendar data for the current user."""
+    """Get WeCom checkin calendar data for the given user (defaults to current user)."""
+    user = current_user
+    if user_id and user_id != current_user.id:
+        target = db.query(LocalUser).filter(LocalUser.id == user_id).first()
+        if target:
+            user = target
     data = wecom_service.get_checkin_calendar(db, user, date_from, date_to)
     return {"code": 0, "data": data, "message": "ok"}
 

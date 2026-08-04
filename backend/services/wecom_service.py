@@ -504,24 +504,70 @@ def get_checkin_calendar(
         if d not in daily_map:
             daily_map[d] = {"date": d, "total_hours": 0.0, "checkin_info": ""}
         daily_map[d]["total_hours"] += c.work_hours or 0.0
-        # Extract checkin details from raw_data
+        # Extract details from raw_data based on source type
         try:
-            raw = json.loads(c.raw_data or "[]")
-            if "checkins" not in daily_map[d]:
-                daily_map[d]["checkins"] = []
-            for r in raw:
-                ct = r.get("checkin_time", 0)
-                if ct:
-                    t = datetime.fromtimestamp(ct, tz=timezone.utc) + timedelta(hours=8)
-                    ctype = r.get("checkin_type", "")
-                    tag = "↑" if "上班" in ctype else "↓"
-                    daily_map[d]["checkin_info"] += f"{tag}{t.strftime('%H:%M')} "
-                    daily_map[d]["checkins"].append({
-                        "type": ctype,
-                        "time": t.strftime("%H:%M:%S"),
-                        "exception": r.get("exception_type", ""),
-                        "location": r.get("location_title", "") or r.get("location_detail", "") or "",
-                    })
+            if c.source == "approval":
+                # Approval records: raw_data is a single dict {sp_name, sp_status, ...}
+                raw = json.loads(c.raw_data or "{}")
+                if isinstance(raw, dict):
+                    sp_name = raw.get("sp_name", "")
+                    if sp_name:
+                        # Extract time range from apply_data
+                        start_str, end_str = "", ""
+                        try:
+                            apply_data = raw.get("apply_data", {})
+                            for content in (apply_data.get("contents") or []):
+                                ctrl = content.get("control", "")
+                                cid = content.get("id", "")
+                                if ctrl == "Attendance" and cid == "smart-time":
+                                    dr = (content.get("value", {})
+                                          .get("attendance", {})
+                                          .get("date_range", {}))
+                                    begin_ts = dr.get("new_begin", 0)
+                                    end_ts = dr.get("new_end", 0)
+                                    if begin_ts:
+                                        bt = datetime.fromtimestamp(begin_ts, tz=timezone.utc) + timedelta(hours=8)
+                                        start_str = bt.strftime("%H:%M")
+                                    if end_ts:
+                                        et = datetime.fromtimestamp(end_ts, tz=timezone.utc) + timedelta(hours=8)
+                                        end_str = et.strftime("%H:%M")
+                                    break
+                        except Exception:
+                            pass
+                        time_label = f"{start_str}-{end_str}" if start_str and end_str else ""
+                        # Add approval label with time to checkin_info
+                        if time_label:
+                            daily_map[d]["checkin_info"] += f"[{sp_name} {time_label}] "
+                        else:
+                            daily_map[d]["checkin_info"] += f"[{sp_name}] "
+                        if "approvals" not in daily_map[d]:
+                            daily_map[d]["approvals"] = []
+                        daily_map[d]["approvals"].append({
+                            "name": sp_name,
+                            "status": raw.get("sp_status", 0),
+                            "apply_time": raw.get("apply_time", 0),
+                            "start_time": start_str,
+                            "end_time": end_str,
+                        })
+            else:
+                # Checkin records: raw_data is an array [{checkin_type, checkin_time, ...}]
+                raw = json.loads(c.raw_data or "[]")
+                if "checkins" not in daily_map[d]:
+                    daily_map[d]["checkins"] = []
+                if isinstance(raw, list):
+                    for r in raw:
+                        ct = r.get("checkin_time", 0)
+                        if ct:
+                            t = datetime.fromtimestamp(ct, tz=timezone.utc) + timedelta(hours=8)
+                            ctype = r.get("checkin_type", "")
+                            tag = "↑" if "上班" in ctype else "↓"
+                            daily_map[d]["checkin_info"] += f"{tag}{t.strftime('%H:%M')} "
+                            daily_map[d]["checkins"].append({
+                                "type": ctype,
+                                "time": t.strftime("%H:%M:%S"),
+                                "exception": r.get("exception_type", ""),
+                                "location": r.get("location_title", "") or r.get("location_detail", "") or "",
+                            })
         except Exception:
             pass
 
