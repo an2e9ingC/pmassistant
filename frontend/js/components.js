@@ -1485,16 +1485,25 @@ var _dayDetailTasks = []; // closure for edit/copy operations
 
 function openDayDetail(dateStr, totalHours, fromWecom) {
   if (fromWecom) {
-    API.get('/wecom/calendar?date_from='+dateStr+'&date_to='+dateStr).then(function(data) {
+    var wuid = window._ucViewUserId || '';
+    if (!wuid) {
+      try { var cu = JSON.parse(localStorage.getItem('pma_user') || '{}'); wuid = cu.id || ''; } catch(e) {}
+    }
+    var wecomUrl = '/wecom/calendar?date_from='+dateStr+'&date_to='+dateStr;
+    if (wuid) wecomUrl += '&user_id=' + wuid;
+    API.get(wecomUrl).then(function(data) {
       var dd = (data && data.daily && data.daily.length) ? data.daily[0] : null;
       var checkins = (dd && dd.checkins) ? dd.checkins : [];
-      var rowsHtml = '';
+      var approvals = (dd && dd.approvals) ? dd.approvals : [];
+
+      // Build checkin rows
+      var checkinRowsHtml = '';
       if (checkins.length) {
         checkins.forEach(function(c, i) {
           var tag = c.type.indexOf('上班') >= 0 ? '↑' : '↓';
           var cls = c.type.indexOf('上班') >= 0 ? 'color:var(--accent)' : 'color:var(--warn)';
           var ex = c.exception ? (' <span style="font-size:10px;color:var(--danger)">' + escHtml(c.exception) + '</span>') : '';
-          rowsHtml += '<tr>' +
+          checkinRowsHtml += '<tr>' +
             '<td style="text-align:center;color:var(--muted)">' + (i+1) + '</td>' +
             '<td style="font-weight:600;' + cls + '">' + tag + ' ' + escHtml(c.type) + '</td>' +
             '<td style="font-family:var(--mono);font-weight:500">' + escHtml(c.time) + ex + '</td>' +
@@ -1502,19 +1511,56 @@ function openDayDetail(dateStr, totalHours, fromWecom) {
           '</tr>';
         });
       }
-      var tableHtml = rowsHtml ? '<div style="max-height:360px;overflow-y:auto;margin:-12px -16px 0 -16px"><table class="proj-table" style="font-size:11px;margin:0"><thead><tr>' +
-        '<th style="width:30px">#</th><th style="width:90px">类型</th><th style="width:80px">时间</th><th>地点</th>' +
-        '</tr></thead><tbody>' + rowsHtml + '</tbody></table></div>' : '<div style="color:var(--muted);text-align:center;padding:20px">当日无打卡记录</div>';
+
+      // Build approval rows
+      var approvalRowsHtml = '';
+      if (approvals.length) {
+        approvals.forEach(function(a, i) {
+          var statusMap = {0: '审批中', 1: '待审批', 2: '已通过', 3: '已驳回', 4: '已转审'};
+          var statusLabel = statusMap[a.status] || ('状态' + a.status);
+          var timeRange = (a.start_time && a.end_time) ? (a.start_time + ' - ' + a.end_time) : '—';
+          approvalRowsHtml += '<tr>' +
+            '<td style="text-align:center;color:var(--muted)">' + (i+1) + '</td>' +
+            '<td style="font-weight:600;color:var(--accent)">📋 ' + escHtml(a.name) + '</td>' +
+            '<td style="font-family:var(--mono);font-weight:500">' + escHtml(timeRange) + '</td>' +
+            '<td style="font-size:11px;color:var(--muted)">' + escHtml(statusLabel) + '</td>' +
+          '</tr>';
+        });
+      }
+
+      var sectionsHtml = '';
+
+      // Checkin section
+      if (checkins.length) {
+        sectionsHtml += '<div style="margin-bottom:12px">' +
+          '<div style="font-size:12px;font-weight:600;color:var(--fg);margin-bottom:6px">打卡记录</div>' +
+          '<div style="max-height:240px;overflow-y:auto;margin:0 -16px"><table class="proj-table" style="font-size:11px;margin:0"><thead><tr>' +
+          '<th style="width:30px">#</th><th style="width:90px">类型</th><th style="width:80px">时间</th><th>地点</th>' +
+          '</tr></thead><tbody>' + checkinRowsHtml + '</tbody></table></div></div>';
+      }
+
+      // Approval section
+      if (approvals.length) {
+        sectionsHtml += '<div style="margin-bottom:4px">' +
+          '<div style="font-size:12px;font-weight:600;color:var(--fg);margin-bottom:6px">审批记录</div>' +
+          '<div style="max-height:180px;overflow-y:auto;margin:0 -16px"><table class="proj-table" style="font-size:11px;margin:0"><thead><tr>' +
+          '<th style="width:30px">#</th><th style="width:80px">类型</th><th style="width:110px">时间</th><th>状态</th>' +
+          '</tr></thead><tbody>' + approvalRowsHtml + '</tbody></table></div></div>';
+      }
+
+      var contentHtml = sectionsHtml || '<div style="color:var(--muted);text-align:center;padding:20px">当日无打卡记录</div>';
       var titleStr = dateStr + ' 打卡详情 (' + (typeof fmtHours === 'function' ? fmtHours(totalHours) : totalHours.toFixed(1)+'h') + ')';
       openDialog(titleStr,
-        tableHtml, [{text:'关闭',onclick:"document.querySelector('.note-dialog-overlay').remove()"}]);
+        contentHtml, [{text:'关闭',onclick:"document.querySelector('.note-dialog-overlay').remove()"}]);
     }).catch(function() {
       showToast('加载打卡详情失败', 'error');
     });
     return;
   }
-  var uid = '';
-  try { var u = JSON.parse(localStorage.getItem('pma_user') || '{}'); uid = u.id || ''; } catch(e) {}
+  var uid = window._ucViewUserId || '';
+  if (!uid) {
+    try { var u = JSON.parse(localStorage.getItem('pma_user') || '{}'); uid = u.id || ''; } catch(e) {}
+  }
   API.get('/worklogs/calendar?user_id=' + uid + '&date_from='+dateStr+'&date_to='+dateStr).then(function(data) {
     var daily = (data&&data.daily) ? data.daily : [];
     var dayData = daily.length ? daily[0] : null;

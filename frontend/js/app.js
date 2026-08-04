@@ -2843,7 +2843,7 @@ function _ucLoadWecomCalendar(user) {
   var me = new Date(y, m, 0);
   var df = fmtLocalDate(ms), dt = fmtLocalDate(me);
 
-  API.get('/wecom/calendar?date_from=' + df + '&date_to=' + dt).then(function(data) {
+  API.get('/wecom/calendar?user_id=' + user.id + '&date_from=' + df + '&date_to=' + dt).then(function(data) {
     if (!data) data = {};
     var dailyMap = {};
     if (data.daily) data.daily.forEach(function(d) { dailyMap[d.date] = d; });
