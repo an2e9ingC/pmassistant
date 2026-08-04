@@ -288,6 +288,16 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
         t.completed_at = datetime.now(timezone.utc)
 
     auto_messages = []
+    # When status is set to done/closed, auto-set progress to 100
+    # (complements the reverse direction: progress >= 100 → auto review/done below)
+    if "status" in data and data["status"] in ("done", "closed") and old_status not in ("done", "closed") and (t.progress or 0) < 100:
+        t.progress = 100
+        auto_messages.append("状态已设为完成，进度已自动设为100%")
+    # When status changes from done/closed to a non-done status, auto-set progress to 90
+    if "status" in data and data["status"] not in ("done", "closed") and old_status in ("done", "closed") and (t.progress or 0) >= 100:
+        t.progress = 90
+        auto_messages.append("状态已改为进行中，进度已自动设为90%")
+
     # Auto review flow: progress >= 100 → review (or auto-done if self-review/approval disabled)
     new_progress = data.get("progress")
     if new_progress is not None and new_progress >= 100 and old_status != "done":
@@ -354,6 +364,8 @@ def approve_task(db: Session, task_id: int, user=None) -> Optional[dict]:
 
     t.status = "done"
     t.completed_at = datetime.now(timezone.utc)
+    if (t.progress or 0) < 100:
+        t.progress = 100
     db.commit()
 
     # Add approval comment
