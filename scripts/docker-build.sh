@@ -181,12 +181,25 @@ if [ "$SKIP_UPLOAD" = false ]; then
         echo "  Registry: $registry"
 
         docker tag "$IMAGE_TAG" "$registry_image"
-        echo "$gitlab_token" | docker login "$registry" -u gitlab-ci-token --password-stdin >/dev/null 2>&1
-        docker push "$registry_image" 2>&1 | while IFS= read -r line; do
-            echo "  $line"
-        done
-        echo ""
-        echo "  Pull on target: docker pull $registry_image"
+
+        echo -n "  Login... "
+        if echo "$gitlab_token" | docker login "$registry" -u gitlab-ci-token --password-stdin >/dev/null 2>&1; then
+            echo -e "${GREEN}OK${NC}"
+        else
+            echo -e "${RED}FAILED${NC}"
+            echo -e "${YELLOW}[WARN]${NC} Registry login failed — check GITLAB_TOKEN and network"
+            return 0
+        fi
+
+        echo "  Pushing $registry_image ..."
+        if docker push "$registry_image" 2>&1 | while IFS= read -r line; do echo "  $line"; done; then
+            echo ""
+            echo -e "  ${GREEN}[OK]${NC} Image pushed: $registry_image"
+            echo "  Pull on target: docker pull $registry_image"
+        else
+            echo ""
+            echo -e "${YELLOW}[WARN]${NC} Push failed — check registry connectivity"
+        fi
     }
     upload_to_registry
 else

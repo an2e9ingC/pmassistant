@@ -255,38 +255,27 @@ echo "//192.168.0.180/PMABackup /mnt/nas-backup cifs username=your_user,password
 
 ## 二、运行
 
-### 方式一：Docker（推荐）
+### 方式一：Docker（推荐，详见第八章）
 
 ```bash
-# 构建并启动
+# 开发环境（bind-mount 源码，修改即时生效）
 docker compose up -d
+# 访问: http://<IP>:8080
 
-# 查看日志
-docker compose logs -f
-
-# 停止
-docker compose down
+# 生产环境（镜像自包含，无 bind-mount）
+docker compose -f docker-compose.prod.yml up -d
+# 访问: http://<IP>:8000
 ```
 
-服务在 `http://<服务器IP>:8080` 访问。
-
-数据持久化在 `./data/` 目录（SQLite 文件）。
+数据持久化在 `./data/` 目录。
 
 ### 方式二：直接运行
 
 ```bash
-# 1. 安装依赖
-sudo apt install smbclient    # 远端备份 NAS 同步需要
 pip install -r requirements.txt
-
-# 2. 启动服务
-python3 -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
-
-# 或后台运行
-nohup python3 -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 > pma.log 2>&1 &
+./server.sh start -p 8000
+# 访问: http://<IP>:8000
 ```
-
-服务在 `http://<服务器IP>:8000` 访问。
 
 ---
 
@@ -530,21 +519,37 @@ pma/
 
 ---
 
-## 八、Docker 离线部署
+## 八、Docker 部署
 
-在联网机器上 `docker build` → `docker save` 导出镜像 → 传输到离线服务器 → `docker load` 加载 → `docker compose up` 运行。
+PMA 支持三种部署方式。镜像自带 Python 运行时 + 所有依赖，目标服务器只需 Docker。
 
-### 8.1 前置条件
+### 8.1 场景速览
 
-| 环境 | 要求 |
-|------|------|
-| 构建机 | Docker + 网络访问 PyPI、apt |
-| 目标服务器 | Linux + Docker >= 20.10 |
-| 可选 | 内网 GitLab Container Registry（存放镜像） |
+```
+联网构建机                          目标服务器（无外网 / 可访问 GitLab）
+┌──────────┐    tar.gz+scp          ┌──────────┐
+│ 方式A:   │ ──────────────────────► │ 方式A/B: │
+│ 离线包   │   pma-docker-*.tar.gz  │ install  │
+│          │                        │    .sh   │
+│ 方式B:   │    docker push         └──────────┘
+│ Registry │ ──────────────────────► docker pull
+└──────────┘                                │
+                                      ┌─────┴──────┐
+                                      │ 方式C:      │
+                                      │ 直接运行    │
+                                      │ server.sh   │
+                                      └────────────┘
+```
 
-> **不需要**：目标服务器无需安装 Python、pip、编译工具 — 全部打包在 Docker 镜像中。
+| 方式 | 适用场景 | 目标服务器要求 |
+|------|---------|--------------|
+| A — 离线包 | 目标完全无外网 | Docker，无需网络 |
+| B — Registry pull | 目标可访问 GitLab | Docker + GitLab 连通 |
+| C — 直接运行 | 开发/测试/无 Docker | Python 3.8+，pip |
 
-### 8.2 第一步：构建镜像（在联网机器上）
+---
+
+### 8.2 构建镜像包（在联网机器上执行）
 
 ```bash
 cd pma/
@@ -552,115 +557,249 @@ cd pma/
 # 查看帮助
 bash scripts/docker-build.sh --help
 
-# 构建（Python 3.10，默认）
-bash scripts/docker-build.sh
+# 完整构建：镜像 + tar.gz + GitLab Registry push
+sudo bash scripts/docker-build.sh --python 3.10
 
-# 或指定 Python 版本
-bash scripts/docker-build.sh --python 3.12 --tag pma:v2.0
+# 仅构建本地 tar.gz（不 push Registry）
+sudo bash scripts/docker-build.sh --python 3.10 --skip-upload
 
-# 跳过 GitLab Registry 上传（仅本地构建）
-bash scripts/docker-build.sh --skip-upload
+# 指定版本标签
+sudo bash scripts/docker-build.sh --python 3.12 --tag pma:v2.0
 ```
 
-产出 `pma-docker-py310-<版本号>.tar.gz`，内含：
-- `pma-image.tar.gz` — Docker 镜像
-- `docker-compose.yml` — 生产环境 compose 配置
-- `.env.example` — 环境变量模板
-- `install.sh` — 一键安装脚本
+**产出**：
 
-### 8.3 第二步：传输到目标服务器
+| 产物 | 路径 | 说明 |
+|------|------|------|
+| `pma-docker-py<ver>-<version>.tar.gz` | 项目根目录 | 离线部署包（方式A用） |
+| Docker 镜像 | GitLab Registry | 在线拉取（方式B用） |
 
-```bash
-scp pma-docker-*.tar.gz root@<目标IP>:/opt/
+**tar.gz 内含**：
+
+```
+docker-package/
+├── pma-image.tar.gz        # Docker 镜像（docker load 用）
+├── docker-compose.yml      # 生产环境 compose 配置
+├── .env.example            # 环境变量模板
+└── install.sh              # 一键安装脚本
 ```
 
-### 8.4 第三步：安装部署
+---
+
+### 8.3 方式A — 离线包部署
+
+#### 部署
 
 ```bash
+# 1. 传输到目标服务器
+scp pma-docker-py310-*.tar.gz root@<目标IP>:/opt/
+
+# 2. 解压 + 安装
 ssh root@<目标IP>
 cd /opt
-tar xzf pma-docker-*.tar.gz
+tar xzf pma-docker-py310-*.tar.gz
 cd docker-package
 sudo bash install.sh
 ```
 
-安装脚本自动完成：
-1. 检查 Docker 版本和权限
-2. `docker load` 加载镜像
-3. 生成 `.env` 配置模板（如不存在）
-4. 创建 `data/` 持久化目录
-5. `docker compose up -d` 启动服务
-6. 健康检查验证
+install.sh 自动完成：Docker 检查 → `docker load` → 创建 `.env` → 创建 `data/` → `docker compose up -d` → 健康检查。
 
-### 8.5 部署后配置
+#### 升级
 
 ```bash
-# 编辑配置
-vi .env
-# 必填：ZENTAO_BASE_URL、ZENTAO_AUTH_ACCOUNT、ZENTAO_AUTH_PASSWORD
-# 可选：JWT_SECRET_KEY、SQLCIPHER_KEY、LOG_LEVEL 等
-
-# 重启生效
-docker compose restart
-```
-
-> 也可以通过 PMA 管理后台在线配置（登录后在「管理 → 数据源配置」）。
-
-### 8.6 服务管理
-
-```bash
-docker compose logs -f               # 实时查看日志
-docker compose restart               # 重启服务
-docker compose stop                  # 停止服务
-docker compose down                  # 停止并删除容器
-docker compose up -d                 # 启动服务
-```
-
-### 8.7 升级更新
-
-```bash
-# 用新版镜像包重新安装
+# 用新包重新安装（镜像自动覆盖）
 tar xzf pma-docker-新版本.tar.gz
-cd docker-package
-sudo bash install.sh                 # install.sh 自动覆盖旧镜像
+cd docker-package && sudo bash install.sh
 ```
 
-### 8.8 故障排查
+---
+
+### 8.4 方式B — Registry Pull 部署
+
+#### 首次部署
+
+```bash
+# 1. 登录 GitLab Registry（只需一次）
+sudo docker login 192.168.0.128:5050 -u <GitLab用户名>
+# 输入密码
+
+# 2. Pull 镜像
+sudo docker pull 192.168.0.128:5050/<group>/<project>/pma:<version>
+
+# 3. 打短标签
+sudo docker tag 192.168.0.128:5050/<group>/<project>/pma:<version> pma:latest
+
+# 4. 从镜像内提取部署文件
+docker run --rm pma:latest cat /app/deploy/docker-compose.prod.yml > docker-compose.yml
+docker run --rm pma:latest cat /app/deploy/.env.example > .env
+mkdir -p data
+
+# 5. 启动
+sudo docker compose up -d
+```
+
+#### 升级
+
+```bash
+sudo docker pull 192.168.0.128:5050/<group>/<project>/pma:<新版本>
+sudo docker tag <新镜像> pma:latest
+sudo docker compose down && sudo docker compose up -d
+```
+
+> 如果目标服务器无法访问 Docker Hub，需配置 Registry 镜像加速或 `insecure-registries`，参考 [8.8 故障排查](#88-故障排查)。
+
+---
+
+### 8.5 方式C — 直接运行（开发/测试）
+
+```bash
+# 1. 安装依赖
+sudo apt install smbclient           # NAS 备份需要（可选）
+pip install -r requirements.txt
+
+# 2. 创建配置
+cp .env.example .env
+vi .env                              # 填写禅道连接信息
+
+# 3. 启动
+./server.sh start -p 8000
+
+# 4. 管理
+./server.sh status                   # 查看状态
+./server.sh restart -p 8000          # 重启
+./server.sh logs                     # 查看日志
+./server.sh stop                     # 停止
+```
+
+---
+
+### 8.6 服务管理（Docker）
+
+```bash
+# 所有操作在 docker-compose.yml 所在目录执行
+docker compose logs -f               # 实时日志
+docker compose restart               # 重启
+docker compose stop                  # 停止
+docker compose start                 # 启动
+docker compose down                  # 停止并删除容器
+docker compose up -d                 # 重新创建并启动
+docker compose exec pma bash         # 进入容器
+```
+
+---
+
+### 8.7 故障排查
+
+#### Registry pull 失败（HTTPS/HTTP）
+
+```
+http: server gave HTTP response to HTTPS client
+```
+
+目标服务器也需要配 `insecure-registries`：
+
+```bash
+# Snap 版 Docker
+sudo tee /var/snap/docker/current/config/daemon.json << 'EOF'
+{"insecure-registries":["192.168.0.128:5050"]}
+EOF
+sudo snap restart docker
+
+# APT 版 Docker
+sudo tee /etc/docker/daemon.json << 'EOF'
+{"insecure-registries":["192.168.0.128:5050"]}
+EOF
+sudo systemctl restart docker
+```
+
+#### Registry 访问被拒
+
+```
+access forbidden
+```
+
+先登录：`sudo docker login 192.168.0.128:5050 -u <用户名>`
 
 #### Docker 权限不足
-
-```
-permission denied while trying to connect to the Docker daemon
-```
 
 ```bash
 sudo usermod -aG docker $USER
 newgrp docker
-# 或直接用 sudo 运行
-sudo bash install.sh
+# 或所有 docker 命令加 sudo
 ```
-
-#### 镜像加载失败
-
-```
-Error: No such image
-```
-
-- 确认 `pma-image.tar.gz` 存在且完整
-- 手动加载：`docker load < pma-image.tar.gz`
 
 #### 端口被占用
 
 ```bash
-# 修改 .env 中的端口
 echo "PMA_PORT=8001" >> .env
 docker compose down && docker compose up -d
 ```
 
-#### 查看容器日志
+---
+
+## 九、部署后配置
+
+PMA 支持两种配置方式，可单独使用也可混合使用。配置修改后需重启服务生效。
+
+### 9.1 方式一 — .env 文件（推荐）
+
+适用场景：首次部署、批量部署、自动化运维。
 
 ```bash
-docker compose logs -f        # 所有服务日志
-docker compose logs -f pma    # 指定服务日志
-docker logs pma               # 直接查看容器日志
+vi .env
+
+# 必填项：
+#   ZENTAO_BASE_URL     禅道 API 地址
+#   ZENTAO_AUTH_ACCOUNT  禅道账号
+#   ZENTAO_AUTH_PASSWORD  禅道密码
+#
+# 建议修改：
+#   JWT_SECRET_KEY       登录密钥（python3 -c "import secrets; print(secrets.token_hex(32))"）
+#
+# 可选：
+#   GITLAB_*             GitLab OAuth / Issue 集成
+#   NAS_*                NAS 文件预览
+#   WECOM_*              企业微信打卡
+#   PMA_PORT             服务端口
+#   LOG_LEVEL            日志级别
+#   SYNC_INTERVAL_MINUTES 自动同步间隔
+#   SQLCIPHER_KEY        数据库加密密钥
+
+# 修改后重启
+docker compose restart    # Docker
+./server.sh restart -p 8000    # 直接运行
 ```
+
+### 9.2 方式二 — Web 管理后台
+
+适用场景：部署后日常运维、不熟悉命令行的用户。
+
+1. 浏览器访问 `http://<服务器IP>:8000`
+2. 登录 `admin / admin123`（首次登录后建议改密码）
+3. 进入「管理 → 数据源配置」
+4. 填写禅道、GitLab、NAS、企业微信等配置
+5. 点击「保存配置」→ 配置自动持久化到数据库
+
+> Web 后台配置优先级**高于** `.env` 文件，两者同时配置时以后台为准。
+
+### 9.3 方式三 — 从已有部署导入
+
+适用场景：已有运行中的 PMA，数据迁移到新服务器。
+
+```bash
+# 从旧服务器导出配置和数据
+scp root@<旧服务器>:/opt/pma/data/pma.db /tmp/
+scp root@<旧服务器>:/opt/pma/.env /tmp/
+
+# 导入到新服务器
+sudo docker cp /tmp/pma.db pma:/app/data/pma.db
+cp /tmp/.env .env
+docker compose restart
+```
+
+### 9.4 默认管理员账号
+
+| 属性 | 值 |
+|------|-----|
+| 用户名 | `admin` |
+| 密码 | `admin123`（首次启动自动创建，登录后请修改） |

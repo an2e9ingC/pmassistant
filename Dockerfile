@@ -26,6 +26,9 @@ RUN \
 COPY . .
 RUN mkdir -p /app/data
 
+# Bundle deployment files inside the image for easy extraction on any server
+COPY docker-compose.prod.yml .env.example /app/deploy/
+
 EXPOSE 8000
 
 CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
