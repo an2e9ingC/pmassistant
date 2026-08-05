@@ -416,6 +416,12 @@ def update_system_params(
             _set_env_line_all(env_key, str(new_val))
             os.environ[env_key] = str(new_val)
             changed.append(meta.get("label", param_key))
+            # Apply LOG_LEVEL change to running logger
+            if env_key == "LOG_LEVEL":
+                import logging
+                _new_level = getattr(logging, str(new_val), logging.INFO)
+                logging.getLogger().setLevel(_new_level)
+                logging.getLogger("backend").setLevel(_new_level)
 
     if changed:
         settings.reload()

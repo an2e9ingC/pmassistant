@@ -132,6 +132,26 @@ async def lifespan(app: FastAPI):
     from backend.routers.db_manage import auto_backup_loop
     _auto_backup_task = asyncio.create_task(auto_backup_loop())
 
+    # ── Prominent startup banner ──
+    _start_time_str = time.strftime("%Y-%m-%d %H:%M:%S")
+    _banner = "PMA system started, current time: " + _start_time_str
+    _sep = "-" * len(_banner)
+    logger.info(_sep)
+    logger.info(_banner)
+    logger.info(_sep)
+
+    # Record startup in audit log
+    from backend.database import SessionLocal
+    from backend.routers.logs import log_audit
+    from backend.audit_categories import AUDIT_CAT_SYSTEM
+    _db = SessionLocal()
+    try:
+        log_audit(_db, None, "system_startup", "PMA system started", AUDIT_CAT_SYSTEM, "low")
+    except Exception as _e:
+        logger.warning(f"Failed to write startup audit log: {_e}")
+    finally:
+        _db.close()
+
     yield
     _auto_sync_task.cancel()
     _auto_backup_task.cancel()
@@ -214,12 +234,21 @@ from backend.database import get_db as _gdb
 from backend.middleware.auth import get_current_user as _gcu
 
 @app.get("/api/attachments/{attachment_id}")
-def serve_attachment(attachment_id: int, db: Session = Depends(_gdb)):
+def serve_attachment(attachment_id: int, request: Request, db: Session = Depends(_gdb)):
     result = _bs.get_attachment_path(attachment_id, db)
-    if not result: raise HTTPException(status_code=404, detail="Attachment not found")
+    if not result:
+        logger.warning(f"Attachment #{attachment_id} not found — 附件丢失")
+        # For image requests, return a placeholder SVG showing "附件丢失" (avoid console 404 + give clear visual hint)
+        accept = request.headers.get("accept", "")
+        if "image/" in accept:
+            _placeholder_svg = '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="50"><rect width="100%" height="100%" fill="#f5f5f5" stroke="#ddd" stroke-width="1" rx="6"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" font-family="sans-serif" font-size="13" fill="#999">附件丢失</text></svg>'
+            return Response(content=_placeholder_svg, media_type="image/svg+xml")
+        raise HTTPException(status_code=404, detail="Attachment not found")
     path, mime, fname = result
+    from urllib.parse import quote
+    encoded_fname = quote(fname, safe='')
     return StreamingResponse(open(path, "rb"), media_type=mime,
-                             headers={"Content-Disposition": f"inline; filename={fname}"})
+                             headers={"Content-Disposition": f"inline; filename*=UTF-8''{encoded_fname}"})
 
 # ── Note image upload ──
 import uuid as _uuid

@@ -2083,7 +2083,7 @@ function _renderUcTaskTable() {
       var pd = pg.prodMap[dk];
       Object.keys(pd.stageMap).forEach(function(sk) {
         pd.stageMap[sk].forEach(function(t) {
-          t._projCode = pg.code || pk; t._prodName = pd.name || dk; t._stageName = sk;
+          t._projCode = pg.code || pk; t._prodName = pd.name || dk; t._stageName = (pg.code || pk) + '||' + (pd.code || dk) + '||' + sk;
           flatRows.push(t);
         });
       });
@@ -2101,7 +2101,7 @@ function _renderUcTaskTable() {
       columns: [
         { key: '_projCode', title: '项目编号', width: '8%', rowspan: true, render: function(v, row) { return v ? projCodeTag(row.project_code||v, 'event.stopPropagation();openProject(\''+escHtml(row.project_code||v).replace(/'/g,"\\'")+'\')', row.project_name) : '-'; } },
         { key: '_prodName', title: '产品编号', width: '100px', rowspan: true, render: function(v, row) { return row.product_code ? '<span class="proj-code-btn" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="event.stopPropagation();openProductDetail(\''+escHtml(row.product_code)+'\')" title="'+escHtml(row.product_code)+' '+escHtml(row.product_name||'')+'">'+escHtml(row.product_code)+'</span>' : '<span style="font-size:12px;color:var(--muted)">—</span>'; } },
-        { key: '_stageName', title: '阶段', rowspan: true, render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'')+'</span>'; } },
+        { key: '_stageName', title: '阶段', rowspan: true, render: function(v) { var parts = (v||'').split('||'); var name = parts.length >= 3 ? parts[2] : (v||''); return '<span style="font-size:12px">'+escHtml(name)+'</span>'; } },
         { key: 'id', title: '任务编号', width: '6%', render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted)">#'+v+'</span>'; } },
         { key: 'title', title: '任务标题', align: 'left', render: function(v) { return '<span style="font-weight:530">'+escHtml(v||'')+'</span>'; } },
         { key: 'status', title: '状态', width: '70px', render: function(v, row) { var h = renderPill(v||'todo'); if (window._approvalEnabled) h = '<span style="cursor:pointer" onclick="event.stopPropagation();openReviewerDialog('+row.id+')" title="'+(row.reviewer_name?'审批人: '+escHtml(row.reviewer_name)+' — 点击修改':'点击设置审批人')+'">'+h+'</span>'; return h; } },
@@ -2139,6 +2139,7 @@ var _ucBugTab = 'assignee'; // 'assignee' | 'reporter'
 var _ucBugFilterProd = '';
 var _ucBugFilterProj = '';
 var _ucBugFilterStatus = '';
+var _ucBugsReqId = 0;  // request counter to ignore stale async responses
 
 function _ucRenderBugFilter(bugs, uid) {
   var assigned = (bugs||[]).filter(function(b) { return b.assignee_id === uid; });
@@ -2174,24 +2175,52 @@ function _ucRenderBugFilter(bugs, uid) {
 var _ucBugsDt = null;
 
 async function _ucLoadBugs() {
+  var reqId = ++_ucBugsReqId;
   try {
     var user = getCurrentUser();
     var viewUid = window._ucViewUserId || (user ? user.id : null);
     var bugsUrl = window._ucViewUserId ? '/bugs?assignee_id=' + window._ucViewUserId + '&limit=200' : '/bugs/my';
     var bugs = await API.get(bugsUrl);
+    if (reqId !== _ucBugsReqId) return;  // ignore stale response
     bugs = Array.isArray(bugs) ? bugs : (bugs && bugs.items ? bugs.items : []);
-    _ucUpdateBugCount((bugs || []).filter(function(b) { return b.assignee_id === viewUid; }).length);
+    var bugCount = _ucBugTab === 'reporter'
+      ? (bugs || []).filter(function(b) { return b.reporter_id === viewUid; }).length
+      : (bugs || []).filter(function(b) { return b.assignee_id === viewUid; }).length;
+    _ucUpdateBugCount(bugCount);
     var filtered = _ucRenderBugFilter(bugs, viewUid);
+    // Group by project → product (same merging rules as task list)
+    var projMap = {};
+    filtered.forEach(function(b) {
+      var pk = b.project_code || b.project_name || '__unknown__';
+      var dk = b.product_code || b.product_name || '__unknown__';
+      if (!projMap[pk]) projMap[pk] = { code: b.project_code||'', name: b.project_name||'未知项目', prodMap: {} };
+      if (!projMap[pk].prodMap[dk]) projMap[pk].prodMap[dk] = { code: b.product_code||'', name: b.product_name||'', bugs: [] };
+      projMap[pk].prodMap[dk].bugs.push(b);
+    });
+    var projKeys = Object.keys(projMap).sort(function(a, b) {
+      if (!projMap[a].code) return 1; if (!projMap[b].code) return -1;
+      return projMap[a].name.localeCompare(projMap[b].name);
+    });
+    var bugRows = [];
+    projKeys.forEach(function(pk) {
+      var pg = projMap[pk];
+      Object.keys(pg.prodMap).forEach(function(dk) {
+        pg.prodMap[dk].bugs.forEach(function(b) {
+          b._projCode = pg.code || pk; b._prodName = pg.prodMap[dk].name || dk;
+          bugRows.push(b);
+        });
+      });
+    });
     var container = document.getElementById('uc-bugs-table-wrap');
-    if (!filtered.length) { container.innerHTML = '<div class="empty-state">' + (_ucBugTab==='assignee'?'暂无待处理的Bug':'暂无创建的Bug') + '</div>'; _ucBugsDt = null; if (_ucActiveTab==='bugs') _ucLoadBugStats(); return; }
+    if (!bugRows.length) { container.innerHTML = '<div class="empty-state">' + (_ucBugTab==='assignee'?'暂无待处理的Bug':'暂无创建的Bug') + '</div>'; _ucBugsDt = null; if (_ucActiveTab==='bugs') _ucLoadBugStats(); return; }
     if (!_ucBugsDt) {
       container.innerHTML = '<div id="uc-bugs-dt"></div>';
       _ucBugsDt = new DataTable({
         container: document.getElementById('uc-bugs-dt'),
         columns: [
+          { key: '_projCode', title: '项目编号', width: '8%', rowspan: true, render: function(v, row) { return v ? projCodeTag(row.project_code||v, 'event.stopPropagation();openProject(\''+escHtml(row.project_code||v).replace(/'/g,"\\'")+'\')', row.project_name) : '-'; } },
+          { key: '_prodName', title: '产品编号', width: '100px', rowspan: true, render: function(v, row) { return row.product_code ? '<span class="proj-code-btn" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="event.stopPropagation();openProductDetail(\''+escHtml(row.product_code)+'\')" title="'+escHtml(row.product_code)+' '+escHtml(row.product_name||'')+'">'+escHtml(row.product_code)+'</span>' : '<span style="font-size:12px;color:var(--muted)">—</span>'; } },
           { key: 'id', title: 'Bug编号', width: '6%', render: function(v) { return '<span style="font-family:var(--mono);font-size:11px">#'+v+'</span>'; } },
-          { key: 'project_code', title: '项目编号', width: '8%', render: function(v, row) { return v ? projCodeTag(v, 'event.stopPropagation();openProject(\''+escHtml(v)+'\')', row.project_name) : escHtml(row.project_name||'-'); } },
-          { key: 'product_code', title: '产品编号', width: '100px', render: function(v, row) { return v ? '<span class="proj-code-btn" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="event.stopPropagation();openProductDetail(\''+escHtml(v)+'\')" title="'+escHtml(v)+' '+escHtml(row.product_name||'')+'">'+escHtml(v)+'</span>' : '<span style="font-size:12px;color:var(--muted)">—</span>'; } },
           { key: 'title', title: 'Bug标题', align: 'left', render: function(v) { return '<span style="font-weight:530">'+escHtml(v||'')+'</span>'; } },
           { key: 'status', title: '状态', width: '70px', render: function(v) { return renderPill(v||'open'); } },
           { key: 'priority', title: '优先级', width: '6%', render: function(v) { return '<span class="prio-tag '+(v||'medium')+'">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[v]||v)+'</span>'; } },
@@ -2199,11 +2228,11 @@ async function _ucLoadBugs() {
           { key: 'due_date', title: '截止', width: '7%', render: function(v) { return '<span style="font-size:12px">'+(v||'—')+'</span>'; } },
           { key: 'actions', title: '操作', render: function(v, row) { return '<span style="white-space:nowrap" onclick="event.stopPropagation()">'+iconEdit(_ucEnsureBugsJs('openBugDialog('+row.id+')'),'编辑')+iconDelete(_ucEnsureBugsJs('deleteBugById('+row.id+')'),'删除')+'</span>'; } }
         ],
-        data: filtered,
+        data: bugRows,
         resizable: false,
-        onRowClick: function(row) { _ucEnsureBugsJs('openBugDetail('+row.id+')'); eval('openBugDetail('+row.id+')'); }
+        onRowClick: function(row) { loadViewScript('/js/bugs.js?v=' + APP_VERSION, function() { openBugDetail(row.id); }); }
       });
-    } else { _ucBugsDt.setData(filtered); }
+    } else { _ucBugsDt.setData(bugRows); }
   } catch(e) { document.getElementById('uc-bugs-table-wrap').innerHTML = '<div class="error-state">加载失败</div>'; _ucBugsDt = null; }
   if (_ucActiveTab === 'bugs') _ucLoadBugStats();
   setTimeout(function() { if (typeof window._ucUpdateLayout === "function") window._ucUpdateLayout(); }, 50);

@@ -112,10 +112,13 @@ PYEOF
        cd $PMA_TRUNK_DIR && ./server.sh start -p 8000
    fi
 
-   # b. 拷贝配置文件
+   # b. 同步 uploads 目录（附件/图片文件，db备份不包含）
+   rsync -a $PMA_TRUNK_DIR/data/uploads/ $PMA_WORKTREE_DIR/data/uploads/
+
+   # c. 拷贝配置文件
    cp $PMA_TRUNK_DIR/.env $PMA_WORKTREE_DIR/.env
 
-   # c. 启动 worktree 服务
+   # d. 启动 worktree 服务
    cd $PMA_WORKTREE_DIR && ./server.sh restart -p $PORT
    ```
 

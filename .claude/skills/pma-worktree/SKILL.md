@@ -131,14 +131,22 @@ export PMA_WORKTREE_DIR="<EnterWorktree 返回的实际路径>"
    > - 使用最新备份可避免停服，且数据足够用于开发测试
    > - 无备份时（首次创建/备份被清理）降级为停服拷贝
 
-   b. **拷贝配置文件到 worktree**：
+   b. **同步 uploads 目录**（附件/图片文件）：
+   ```bash
+   rsync -a $PMA_TRUNK_DIR/data/uploads/ $PMA_WORKTREE_DIR/data/uploads/
+   ```
+   > - 数据库备份不包含附件文件，必须单独同步
+   > - `rsync -a` 增量同步，首次全量拷贝后后续几乎无开销
+   > - 如 rsync 不可用则降级为 `cp -r $PMA_TRUNK_DIR/data/uploads/* $PMA_WORKTREE_DIR/data/uploads/`
+
+   c. **拷贝配置文件到 worktree**：
    ```bash
    cp $PMA_TRUNK_DIR/.env $PMA_WORKTREE_DIR/.env
    ```
    > - `.env` 等 gitignore 文件 worktree 不会自动包含，必须手动拷贝
    > - GitLab OAuth 只支持主 session 端口（8000），worktree 请使用管理员账号密码登录
 
-   c. **启动 worktree 服务**：
+   d. **启动 worktree 服务**：
    ```bash
    cd $PMA_WORKTREE_DIR && ./server.sh restart -p $PORT
    ```
