@@ -487,6 +487,7 @@ async function initUserManagement() {
   _initUsersDt(); _usersDt.setData([]);
   _initRolesDt(); _rolesDt.setData([]);
   try {
+    if (typeof invalidateAllUsers === 'function') invalidateAllUsers();
     var rolesPromise = API.get('/admin/users/roles');
     var usersPromise = API.get('/admin/users');
     _permRoles = await rolesPromise || [];

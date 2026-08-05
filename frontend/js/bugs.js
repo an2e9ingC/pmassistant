@@ -444,7 +444,7 @@ async function _submitBug(bugId) {
     }
     showToast(bugId?'已更新':'已创建','success');
     closeSharedDialog();
-    loadBugs();
+    EventBus.emit('bug:saved', {bugId: bugId || (result && result.id)});
   } catch(e) { showToast('操作失败: '+(e.message||''),'error'); }
 }
 
@@ -470,6 +470,7 @@ async function _submitBugWorklog(bugId) {
     showToast('工时已记录','success');
     closeSharedDialog();
     openBugDetail(bugId);
+    EventBus.emit('worklog:saved', {bugId: bugId});
   } catch(e) { showToast('记录失败: '+(e.message||''),'error'); }
 }
 
@@ -521,6 +522,7 @@ async function deleteBugWorklog(bugId, wlId) {
     await API.del('/bugs/'+bugId+'/worklogs/'+wlId);
     showToast('已删除','success');
     openBugDetail(bugId);
+    EventBus.emit('worklog:deleted', {bugId: bugId});
   } catch(e) { showToast('删除失败: '+(e.message||''),'error'); }
 }
 
@@ -566,7 +568,7 @@ function _loadBugAnalyses(bugId) {
 
 async function deleteBugById(id) {
   if (!confirm('确定删除此Bug？')) return;
-  try { await API.del('/bugs/'+id); showToast('已删除','success'); loadBugs(); }
+  try { await API.del('/bugs/'+id); showToast('已删除','success'); EventBus.emit('bug:deleted', {}); }
   catch(e) { showToast('删除失败: '+(e.message||''),'error'); }
 }
 
@@ -604,7 +606,7 @@ async function _bugSubmitGitlab(bugId) {
     var r = await API.post('/bugs/'+bugId+'/gitlab-submit');
     showToast('已提交到GitLab: ' + (r.gitlab_url||''), 'success');
     closeSharedDialog();
-    loadBugs();
+    EventBus.emit('bug:saved', {bugId: bugId});
   } catch(e) { showToast('提交失败: '+(e.message||''),'error'); }
 }
 
@@ -615,7 +617,7 @@ async function _bugDragDrop(e, newStatus) {
   if (!bugId) return;
   try {
     await API.put('/bugs/'+bugId, {status: newStatus});
-    loadBugs();
+    EventBus.emit('bug:saved', {bugId: bugId});
   } catch(ex) { showToast('更新失败: '+(ex.message||''),'error'); }
 }
 

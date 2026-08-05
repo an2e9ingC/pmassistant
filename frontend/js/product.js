@@ -1339,6 +1339,11 @@ async function saveProdEdit() {
   try {
     await API.put('/products/' + _prodDetailCurCode, { name: name, code: code, status: status, tags: tags.join(',') });
     showToast('产品已更新', 'success');
+    if (code !== _prodDetailCurCode) {
+      _prodDetailCurCode = code;
+      var inp = document.getElementById('prod-combo-input');
+      if (inp) inp.value = code;
+    }
     loadProductDetail(_prodDetailCurCode);
   } catch(e) {
     showToast('更新失败: ' + (e.message || ''), 'error');

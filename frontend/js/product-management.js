@@ -1045,6 +1045,7 @@ async function _pmSaveProductProjects(productId) {
   try {
     await API.put('/product-management/products/' + productId + '/projects', { project_ids: projectIds });
     showToast('项目关联已更新', 'ok');
+    if (typeof invalidateAllProjects === 'function') invalidateAllProjects();
     await refreshPMData();
   } catch (e) {
     showToast('更新失败: ' + (e.detail || e.message), 'error');

@@ -2780,6 +2780,7 @@ async function saveProjectForm(isEdit) {
       _projFormConvertSource = null;
       if (result && result.code) {
         _comboCurCode = result.code;
+        if (typeof invalidateAllProjects === 'function') invalidateAllProjects();
         document.getElementById('combo-input').value = result.code;
         loadProjectDetail(result.code);
       }
@@ -2889,10 +2890,12 @@ async function saveProjectForm(isEdit) {
     }
     if (isEdit) {
       loadProjectDetail(_comboCurCode);
+      if (typeof invalidateAllProjects === 'function') invalidateAllProjects();
     } else {
       // Refresh dashboard
       if (typeof loadKpiCards === 'function') loadKpiCards();
       if (typeof loadProjectTable === 'function') loadProjectTable();
+      if (typeof invalidateAllProjects === 'function') invalidateAllProjects();
     }
   } catch(e) {
     showToast('保存失败: ' + (e.message || '未知错误'), 'error');
@@ -2909,6 +2912,7 @@ async function deleteCurrentProject() {
   if (!ok) return;
   try {
     await API.del('/projects/' + _comboCurCode);
+    if (typeof invalidateAllProjects === 'function') invalidateAllProjects();
     showToast('项目已删除', 'success');
     // Navigate back to project list
     if (typeof gotoView === 'function') {

@@ -1798,6 +1798,7 @@ function _ucApproveTask(taskId, taskTitle) {
   API.post('/tasks/' + taskId + '/approve').then(function() {
     showToast('任务「' + taskTitle + '」已批准', 'success');
     _ucLoadApprovals();
+    EventBus.emit('task:saved', {taskId: taskId});
   }).catch(function(e) { showToast('批准失败: ' + (e.message || ''), 'error'); });
 }
 
@@ -1807,6 +1808,7 @@ function _ucRejectTask(taskId, taskTitle) {
   API.post('/tasks/' + taskId + '/reject?reason=' + encodeURIComponent(reason.trim())).then(function() {
     showToast('任务「' + taskTitle + '」已驳回', 'warn');
     _ucLoadApprovals();
+    EventBus.emit('task:saved', {taskId: taskId});
   }).catch(function(e) { showToast('驳回失败: ' + (e.message || ''), 'error'); });
 }
 
@@ -2219,8 +2221,7 @@ async function _ucDeleteTask(taskId) {
   try {
     await API.del('/tasks/' + taskId);
     showToast('已删除', 'success');
-    var user = getCurrentUser();
-    if (user) _ucLoadTasks(user);
+    EventBus.emit('task:deleted', {});
   } catch(e) { showToast('删除失败: ' + (e.message || ''), 'error'); }
 }
 function _ucLoadBugStats() {
@@ -2935,6 +2936,39 @@ function _ucLoadWecomCalendar(user) {
       '<div style="font-size:11px;color:var(--danger)">加载失败</div></div>';
   });
 }
+
+/* ── EventBus Subscriptions (cross-view data refresh) ── */
+
+EventBus.on('task:saved', function(e) {
+  if (typeof loadTaskData === 'function') loadTaskData();
+  if (typeof _ucLoadTasks === 'function') { var u = getCurrentUser(); if (u) _ucLoadTasks(u); }
+});
+EventBus.on('task:deleted', function(e) {
+  if (typeof loadTaskData === 'function') loadTaskData();
+  if (typeof _ucLoadTasks === 'function') { var u = getCurrentUser(); if (u) _ucLoadTasks(u); }
+});
+
+EventBus.on('bug:saved', function(e) {
+  if (typeof loadBugs === 'function') loadBugs();
+  if (typeof _ucLoadBugs === 'function') _ucLoadBugs();
+});
+EventBus.on('bug:deleted', function(e) {
+  if (typeof loadBugs === 'function') loadBugs();
+  if (typeof _ucLoadBugs === 'function') _ucLoadBugs();
+});
+
+EventBus.on('worklog:saved', function(e) {
+  if (typeof _ucLoadCalendar === 'function') { var u = getCurrentUser(); if (u) _ucLoadCalendar(u); }
+  if (e.taskId && typeof _refreshTaskDetailContent === 'function') _refreshTaskDetailContent(e.taskId);
+  if (typeof loadTaskData === 'function') loadTaskData();
+  if (typeof _ucLoadTasks === 'function') { var u = getCurrentUser(); if (u) _ucLoadTasks(u); }
+});
+EventBus.on('worklog:deleted', function(e) {
+  if (typeof _ucLoadCalendar === 'function') { var u = getCurrentUser(); if (u) _ucLoadCalendar(u); }
+  if (e.taskId && typeof _refreshTaskDetailContent === 'function') _refreshTaskDetailContent(e.taskId);
+  if (typeof loadTaskData === 'function') loadTaskData();
+  if (typeof _ucLoadTasks === 'function') { var u = getCurrentUser(); if (u) _ucLoadTasks(u); }
+});
 
 document.addEventListener('DOMContentLoaded', function() {
   init();
