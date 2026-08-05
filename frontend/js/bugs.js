@@ -479,8 +479,10 @@ function _renderBugWorklogTable(logs, bugId) {
   return '<div id="bug-worklog-table-'+bugId+'"></div>';
 }
 function _initBugWorklogDt(logs, bugId) {
+  var container = document.getElementById('bug-worklog-table-'+bugId);
+  if (!container) return;
   new DataTable({
-    container: document.getElementById('bug-worklog-table-'+bugId),
+    container: container,
     columns: [
       { key: 'date', title: '日期', width: '68px', render: function(v) { return '<span style="font-size:11px">'+(v||'?')+'</span>'; } },
       { key: 'user', title: '用户', width: '44px', render: function(v, row) { return '<span style="font-size:11px">'+escHtml(getDisplayName(v||row.username||''))+'</span>'; } },
