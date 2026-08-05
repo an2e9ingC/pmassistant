@@ -887,6 +887,23 @@ function openDocIframeFullscreen(url, title) {
 }
 
 /* ═══════════════════════════════════════════════════
+   EVENT BUS — cross-module data-change notifications
+   Usage:
+     EventBus.emit('task:saved', {taskId: 42})
+     EventBus.on('task:saved', function(e) { ... })
+   ═══════════════════════════════════════════════════ */
+
+var EventBus = {
+  _handlers: {},
+  on: function(event, fn) {
+    (this._handlers[event] = this._handlers[event] || []).push(fn);
+  },
+  emit: function(event, data) {
+    (this._handlers[event] || []).forEach(function(fn) { fn(data || {}); });
+  }
+};
+
+/* ═══════════════════════════════════════════════════
    PROJECT COMBO — reusable searchable project selector
    Usage: createProjectCombo({ comboId, inputId, dropdownId, placeholder, onSelect })
    Generates global functions: {comboId}Open(), {comboId}Filter(q), {comboId}Select(id)
@@ -902,6 +919,11 @@ async function loadAllProjects() {
     if (data) _allProjects = data;
     _allProjectsLoaded = true;
   } catch(e) {}
+}
+
+function invalidateAllProjects() {
+  _allProjectsLoaded = false;
+  _allProjects = [];
 }
 
 function _fnName(comboId, suffix) {
@@ -1229,6 +1251,11 @@ async function loadAllUsers() {
     if (data) _allUsers = data;
     _allUsersLoaded = true;
   } catch(e) {}
+}
+
+function invalidateAllUsers() {
+  _allUsersLoaded = false;
+  _allUsers = [];
 }
 
 function createUserCombo(opts) {
@@ -1618,6 +1645,7 @@ function copyWorklogEntryById(wlId, dateStr) {
 }
 
 function editWorklogEntry(t, dateStr) {
+  _wlEditBugId = t.bug_id || null;
   var isBug = t.source === 'bug';
   var projectHtml = isBug ? '' :
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">项目</label>' +
@@ -1699,6 +1727,7 @@ function _wlEditOnStageChange() {
 }
 
 var _wlEditEntryPending = null;
+var _wlEditBugId = null;
 
 async function saveWorklogEntry(wlId, isBug) {
   var hours = parseFloat(document.getElementById('wl-edit-hours').value);
@@ -1772,7 +1801,7 @@ async function _doSaveWorklogEntry(wlId, isBug, newTaskId, hours, progress, desc
     }
     closeSharedDialog();
     showToast('工时已更新', 'success');
-    if (typeof _ucLoadCalendar === 'function') { var u = getCurrentUser(); if (u) _ucLoadCalendar(u); }
+    EventBus.emit('worklog:saved', {taskId: newTaskId || null, bugId: isBug ? _wlEditBugId : null});
   } catch(e) { showToast('更新失败: '+(e.message||''), 'error'); }
 }
 
@@ -1782,7 +1811,7 @@ async function deleteWorklogEntry(wlId, isBug) {
   try {
     await API.del(url);
     showToast('已删除', 'success');
-    if (typeof _ucLoadCalendar === 'function') { var u = getCurrentUser(); if (u) _ucLoadCalendar(u); }
+    EventBus.emit('worklog:deleted', {taskId: null, bugId: isBug ? _wlEditBugId : null});
   } catch(e) { showToast('删除失败: '+(e.message||''), 'error'); }
 }
 
@@ -1814,7 +1843,7 @@ async function submitCopyWorklog(wlId, isBug) {
     await API.post(isBug ? '/bug-worklogs' : '/worklogs', payload);
     closeSharedDialog();
     showToast('工时已复制', 'success');
-    if (typeof _ucLoadCalendar === 'function') { var u = getCurrentUser(); if (u) _ucLoadCalendar(u); }
+    EventBus.emit('worklog:saved', {taskId: isBug ? null : (t.task_id || null), bugId: isBug ? (t.bug_id || null) : null});
   } catch(e) { showToast('复制失败: '+(e.message||''), 'error'); }
 }
 
@@ -1981,10 +2010,7 @@ async function submitGenericWorklog() {
     await API.put('/tasks/'+tid, {progress:progress});
     closeSharedDialog();
     showToast('工时记录成功', 'success');
-    if (typeof _ucLoadCalendar === 'function') {
-      var user = getCurrentUser();
-      if (user) _ucLoadCalendar(user);
-    }
+    EventBus.emit('worklog:saved', {taskId: tid});
   } catch(e) {
     showToast('提交失败: ' + (e.message || ''), 'error');
   }
@@ -2120,8 +2146,7 @@ async function submitBatchEdit() {
     showToast('已更新 ' + r.updated + '/' + r.total + ' 个任务', 'success');
     closeSharedDialog();
     _clearBatchSelection();
-    if (typeof loadTaskData === 'function') loadTaskData();
-    if (typeof _ucLoadCalendar === 'function') { var u = getCurrentUser(); if (u) _ucLoadCalendar(u); }
+    EventBus.emit('task:saved', {});
   } catch(e) { showToast('批量更新失败: ' + (e.message || ''), 'error'); }
 }
 
@@ -2155,7 +2180,7 @@ async function submitAssign(taskId) {
     await API.put('/tasks/' + taskId, {assignee_id: parseInt(assignee)});
     closeSharedDialog();
     showToast('已指派', 'success');
-    if (typeof loadTaskData === 'function') loadTaskData();
+    EventBus.emit('task:saved', {taskId: taskId});
   } catch(e) { showToast('指派失败: ' + (e.message || ''), 'error'); }
 }
 
@@ -2189,7 +2214,7 @@ async function submitReviewer(taskId) {
     await API.put('/tasks/' + taskId, {reviewer_id: parseInt(reviewer)});
     closeSharedDialog();
     showToast('审批人已更新', 'success');
-    if (typeof loadTaskData === 'function') loadTaskData();
+    EventBus.emit('task:saved', {taskId: taskId});
   } catch(e) { showToast('更新失败: ' + (e.message || ''), 'error'); }
 }
 

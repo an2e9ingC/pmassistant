@@ -2,6 +2,19 @@
    PMA NATIVE TASKS — table/board/calendar views
    ═══════════════════════════════════════════════════ */
 
+// ── task:before-save — progress/status bidirectional sync ──
+EventBus.on('task:before-save', function(e) {
+  var p = e.progress, s = e.status;
+  // progress > 0 and status is todo → doing
+  if (p > 0 && p < 100 && s === 'todo') { e.data.status = 'doing'; e.status = 'doing'; }
+  // progress >= 100 → review (with approval) or done
+  if (p >= 100 && s !== 'review' && s !== 'done') { e.data.status = window._approvalEnabled ? 'review' : 'done'; e.status = e.data.status; }
+  // status done but progress < 100 → auto 100
+  if (s === 'done' && p < 100) { e.data.progress = 100; e.progress = 100; }
+  // status todo but progress > 0 → reset to 0
+  if (s === 'todo' && p > 0) { e.data.progress = 0; e.progress = 0; }
+});
+
 var _taskViewMode = 'table';  // 'table' | 'board' | 'calendar'
 
 // _hasProjectEditPerm moved to utils.js
@@ -169,21 +182,16 @@ function _saveInlineEdit(el) {
     data[fieldName] = newVal;
   }
 
-  // Bidirectional sync: progress <-> status
+  // Bidirectional sync: progress <-> status (via EventBus)
   if (fieldName === 'progress' || fieldName === 'status') {
     var progressEl = document.querySelector('.editable-field[data-field="progress"]');
     var statusEl = document.querySelector('.editable-field[data-field="status"]');
     var progress = fieldName === 'progress' ? parseInt(newVal) || 0 : parseInt(progressEl ? progressEl.dataset.currentValue : 0) || 0;
     var status = fieldName === 'status' ? newVal : (statusEl ? statusEl.dataset.currentValue : 'todo');
-    if (progress >= 100 && status !== 'review' && status !== 'done') {
-      status = window._approvalEnabled ? 'review' : 'done';
-      data.status = status;
-    }
-    if (status === 'done' && progress < 100) {
-      progress = 100;
-      data.progress = 100;
-    }
-    if (progress >= 100 && status === 'review' && fieldName === 'progress') {
+    var evt = {data: data, progress: progress, status: status};
+    EventBus.emit('task:before-save', evt);
+    // Confirm dialog when progress reaches 100 in review mode
+    if (evt.progress >= 100 && evt.status === 'review' && fieldName === 'progress') {
       var titleEl = document.querySelector('.note-dialog-title');
       var taskTitle = titleEl ? titleEl.textContent : '';
       _pendingConfirmField = { el: field, taskId: taskId, data: data, taskTitle: taskTitle };
@@ -232,7 +240,7 @@ function _doSaveFieldEdit(taskId, data, field) {
         }, 100);
       }).catch(function() {});
     }
-    if (typeof loadTaskData === 'function') { loadTaskData(); }
+    EventBus.emit('task:saved', {taskId: taskId});
   }).catch(function(e) {
     field.style.opacity = '';
     showToast('保存失败: ' + (e.message || '未知错误'), 'error');
@@ -752,7 +760,7 @@ function importTasksFromTemplates() {
 function doImportTasksFromTemplates() {
   API.post('/tasks/import-from-templates?project_id=' + encodeURIComponent(_taskProjectId), {}).then(function(data) {
     showToast(data.message || '导入完成', 'success');
-    loadTaskData();
+    EventBus.emit('task:saved', {});
   }).catch(function(e) { showToast('导入失败: ' + (e.message || ''), 'error'); });
 }
 
@@ -772,7 +780,7 @@ async function doClearAllTasks() {
   try {
     var data = await API.del('/tasks?project_id=' + encodeURIComponent(_taskProjectId));
     showToast(data.message || '已清空', 'success');
-    loadTaskData();
+    EventBus.emit('task:deleted', {});
   } catch(e) { showToast('清空失败: ' + (e.message || ''), 'error'); }
 }
 
@@ -787,7 +795,7 @@ async function initProjectStages() {
     } else {
       showToast('已创建 ' + data.created + ' 个阶段', 'success');
     }
-    loadTaskData();
+    EventBus.emit('task:saved', {});
   } catch(e) { showToast('初始化失败: ' + (e.message || ''), 'error'); }
 }
 
@@ -1357,14 +1365,14 @@ async function submitTask(taskId) {
   }
   data.output_items = outputs;
 
-  // Bidirectional sync: progress ↔ status
-  if (data.progress >= 100 && data.status !== 'review' && data.status !== 'done') {
-    data.status = window._approvalEnabled ? 'review' : 'done';
-    document.getElementById('tf-status').value = data.status;
-  }
-  if (data.status === 'done' && data.progress < 100) {
-    data.progress = 100;
-    document.getElementById('tf-progress').value = 100;
+  // Bidirectional sync: progress ↔ status (via EventBus)
+  var origProgress = data.progress, origStatus = data.status;
+  var evt = {data: data, progress: data.progress || 0, status: data.status || 'todo'};
+  EventBus.emit('task:before-save', evt);
+  // Sync DOM with possibly-modified data
+  document.getElementById('tf-status').value = data.status || 'todo';
+  document.getElementById('tf-progress').value = data.progress || 0;
+  if (origStatus === 'done' && origProgress < 100 && data.progress === 100) {
     showToast('状态设为已完成，进度已自动设为100%', 'warn');
   }
   // When progress reaches 100%, confirm
@@ -1408,7 +1416,7 @@ async function _doSaveTask(taskId, data) {
       res.auto_messages.forEach(function(msg) { showToast(msg, 'success'); });
     }
     _closeTaskDialog();
-    loadTaskData();
+    EventBus.emit('task:saved', {taskId: taskId || (res && res.id)});
   } catch(e) {
     showToast('操作失败: ' + (e.message || '未知错误'), 'error');
   }
@@ -1619,7 +1627,7 @@ async function _submitBatchCreate() {
     await API.post('/tasks/batch', {project_id: String(_batchProjectId), tasks: tasks});
     showToast('已创建 ' + tasks.length + ' 个任务', 'success');
     _closeTaskDialog();
-    loadTaskData();
+    EventBus.emit('task:saved', {});
   } catch(e) {
     var msg = '未知错误';
     if (typeof e === 'string') { msg = e; }
@@ -1698,7 +1706,7 @@ async function _submitImportTasks() {
     await API.post('/tasks/import', {task_ids: taskIds, target_project_id: _taskProjectId, execution_mapping: {}});
     showToast('已导入 ' + taskIds.length + ' 个任务', 'success');
     _closeTaskDialog();
-    loadTaskData();
+    EventBus.emit('task:saved', {});
   } catch(e) {
     showToast('导入失败: ' + (e.message || '未知错误'), 'error');
   }
@@ -1884,8 +1892,7 @@ async function _doSubmitWorklog(taskId, hours, progress, desc, date) {
     }
     showToast('工时已记录', 'success');
     _closeWorklogDialog();
-    _refreshTaskDetailContent(taskId);
-    loadTaskData();
+    EventBus.emit('worklog:saved', {taskId: taskId});
   } catch(e) { showToast('记录失败: '+(e.message||'未知错误'), 'error'); }
 }
 
@@ -1965,8 +1972,7 @@ async function _doSubmitWorklogEdit(wlId, taskId, hours, progress, desc, date) {
     }
     showToast('工时已更新', 'success');
     _closeWorklogDialog();
-    _refreshTaskDetailContent(taskId);
-    loadTaskData();
+    EventBus.emit('worklog:saved', {taskId: taskId});
   } catch(e) { showToast('更新失败: '+(e.message||'未知错误'), 'error'); }
 }
 
@@ -1974,8 +1980,7 @@ function deleteWorklogById(wlId, taskId) {
   if (!confirm('确认删除此工时记录？')) return;
   API.del('/worklogs/' + wlId).then(function() {
     showToast('已删除', 'success');
-    _refreshTaskDetailContent(taskId);
-    loadTaskData();
+    EventBus.emit('worklog:deleted', {taskId: taskId});
   }).catch(function(e) { showToast('删除失败: ' + (e.message || ''), 'error'); });
 }
 
@@ -2056,7 +2061,7 @@ async function doDeleteTask(taskId, taskTitle) {
   try {
     await API.del('/tasks/' + taskId);
     showToast('任务已删除', 'success');
-    loadTaskData();
+    EventBus.emit('task:deleted', {});
   } catch(e) {
     showToast('删除失败: ' + (e.message || ''), 'error');
   }

@@ -923,14 +923,14 @@ function toggleTemplateUnnecessary(id, current) {
   var newVal = current ? 0 : 1;
   API.put('/doc-templates/' + id, { is_unnecessary: newVal }).then(function() {
     showToast(newVal ? '已标记为无需文档' : '已取消标记', 'success');
-    _refreshAllTabsData();
+    loadTemplatesForType(_currentProjectType).then(function() { renderTemplatesPage(); });
   }).catch(function(e) { showToast('操作失败: ' + (e.message || ''), 'error'); });
 }
 function toggleTaskUnnecessary(id, current) {
   var newVal = current ? 0 : 1;
   API.put('/doc-templates/tasks/' + id, { is_unnecessary: newVal }).then(function() {
     showToast(newVal ? '已标记为无需任务' : '已取消标记', 'success');
-    _refreshAllTabsData();
+    loadTemplatesForType(_currentProjectType).then(function() { renderTemplatesPage(); });
   }).catch(function(e) { showToast('操作失败: ' + (e.message || ''), 'error'); });
 }
 
