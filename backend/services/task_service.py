@@ -1,8 +1,11 @@
 """Task CRUD + stats + consumed_hours recalculation."""
 from __future__ import annotations
 import json
+import logging
 from datetime import date, datetime, timezone
 from typing import Optional, List
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
@@ -56,7 +59,8 @@ def get_task(db: Session, task_id: int) -> Optional[dict]:
 
 
 def get_my_tasks(db: Session, user_id: int) -> List[dict]:
-    """Get tasks assigned to a user across all projects."""
+    """Get tasks for a user: assigned + CC'd + watched (tagged with _source)."""
+    # 1. Tasks assigned to the user
     tasks = db.query(Task).filter(
         Task.assignee_id == user_id,
         or_(Task.is_deleted == 0, Task.is_deleted == None),
@@ -65,7 +69,87 @@ def get_my_tasks(db: Session, user_id: int) -> List[dict]:
         Task.due_date.asc().nullslast(),
         Task.created_at.desc(),
     ).all()
-    return [_task_dict(t, db) for t in tasks]
+    seen_ids = {t.id for t in tasks}
+    result = [_task_dict(t, db) for t in tasks]
+    for d in result:
+        d["_source"] = "assigned"
+
+    # 2. Tasks CC'd to the user (Python-side filter for SQLite compatibility)
+    cc_q = db.query(Task).filter(
+        Task.cc_user_ids.isnot(None),
+        or_(Task.is_deleted == 0, Task.is_deleted == None),
+    ).all()
+    for t in cc_q:
+        if t.id not in seen_ids and user_id in (t.cc_user_ids or []):
+            d = _task_dict(t, db)
+            d["_source"] = "cc"
+            result.append(d)
+            seen_ids.add(t.id)
+
+    # 3. Tasks the user is watching (from favorites.tasks[]) — only those not already loaded
+    from backend.models.local import LocalUser
+    user = db.query(LocalUser).filter(LocalUser.id == user_id).first()
+    if user:
+        try:
+            favs = json.loads(user.favorites or '{}')
+        except (json.JSONDecodeError, TypeError):
+            favs = {}
+        if isinstance(favs, list):
+            favs = {"products": favs, "projects": [], "tasks": [], "bugs": []}
+        watched_ids = favs.get("tasks", [])
+        if watched_ids:
+            watched_tasks = db.query(Task).filter(
+                Task.id.in_(watched_ids),
+                or_(Task.is_deleted == 0, Task.is_deleted == None),
+            ).all()
+            for t in watched_tasks:
+                if t.id not in seen_ids:
+                    d = _task_dict(t, db)
+                    d["_source"] = "watched"
+                    result.append(d)
+                    seen_ids.add(t.id)
+
+    # Sort: assigned first, then CC'd, then watched; within each group by status/due_date
+    source_order = {"assigned": 0, "cc": 1, "watched": 2}
+    result.sort(key=lambda d: (
+        source_order.get(d.get("_source", "watched"), 2),
+        d.get("status") == "closed",
+        not (d.get("due_date") or ""),
+        d.get("due_date") or "9999-12-31",
+        -(d.get("id") or 0)
+    ))
+    return result
+
+
+def _sync_cc_favorites(db: Session, cc_user_ids: list, item_id: int, item_type: str):
+    """Add item_id to favorites[key] for each user in cc_user_ids. item_type: 'task' or 'bug'."""
+    if not cc_user_ids:
+        return
+    from backend.models.local import LocalUser
+    key = item_type + 's'  # 'tasks' or 'bugs'
+    for uid in cc_user_ids:
+        try:
+            user = db.query(LocalUser).filter(LocalUser.id == uid).first()
+            if not user:
+                continue
+            try:
+                favs = json.loads(user.favorites or '{}')
+            except (json.JSONDecodeError, TypeError):
+                favs = {}
+            # Handle old list format → dict
+            if isinstance(favs, list):
+                favs = {"products": favs, "projects": [], "tasks": [], "bugs": []}
+            # Ensure new keys
+            favs.setdefault("tasks", [])
+            favs.setdefault("bugs", [])
+            lst = favs.get(key, [])
+            if item_id not in lst:
+                lst.append(item_id)
+                favs[key] = lst
+                user.favorites = json.dumps(favs)
+                logger.info(f"[cc:fav] auto-added {item_type}#{item_id} to user={user.username}(id={user.id}) {key}")
+        except Exception:
+            logger.exception(f"[cc:fav] failed to sync {item_type}#{item_id} to user_id={uid}")
 
 
 def get_task_stats(db: Session, project_id: Optional[int] = None) -> dict:
@@ -148,6 +232,7 @@ def create_task(db: Session, data: dict, user) -> dict:
     db.commit()
     db.refresh(t)
     _link_task_to_stage(db, t)
+    _sync_cc_favorites(db, data.get("cc_user_ids"), t.id, 'task')
     _log_audit(db, t.project_id, uname, "task_create", f"创建任务 #{t.id}: {t.title}",
                task_name=t.title, task_assignee=_resolve_assignee_name(db, t.assignee_id), task_id=t.id)
     auto_messages = []
@@ -240,6 +325,7 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
 
     old_status = t.status
     old_stage_name = t.stage_name
+    old_cc_user_ids = (t.cc_user_ids or [])[:]  # snapshot for CC favorites sync
     changes = []
     # Batch-resolve assignee ID → display name for readable logs
     user_name_map = {}
@@ -340,6 +426,34 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
     stage_id = _link_task_to_stage(db, t)
     if stage_id:
         auto_messages += _recalc_stage_progress(db, stage_id)
+
+    # Sync CC favorites: add for new CC users, remove for removed CC users
+    if "cc_user_ids" in data:
+        new_cc = data.get("cc_user_ids") or []
+        added = [uid for uid in new_cc if uid not in old_cc_user_ids]
+        removed = [uid for uid in old_cc_user_ids if uid not in new_cc]
+        try:
+            _sync_cc_favorites(db, added, t.id, 'task')
+            from backend.models.local import LocalUser
+            for uid in removed:
+                try:
+                    ru = db.query(LocalUser).filter(LocalUser.id == uid).first()
+                    if ru:
+                        try:
+                            rfavs = json.loads(ru.favorites or '{}')
+                        except (json.JSONDecodeError, TypeError):
+                            rfavs = {}
+                        if isinstance(rfavs, list):
+                            rfavs = {"products": rfavs, "projects": [], "tasks": [], "bugs": []}
+                        rlst = rfavs.get("tasks", [])
+                        if t.id in rlst:
+                            rlst.remove(t.id)
+                            rfavs["tasks"] = rlst
+                            ru.favorites = json.dumps(rfavs)
+                except Exception:
+                    logger.exception(f"[cc:fav] failed to remove task#{t.id} from user_id={uid}")
+        except Exception:
+            logger.exception(f"[cc:fav] CC sync failed for task#{t.id}")
 
     if changes:
         _log_audit(db, t.project_id, uname, "task_update", f"更新任务「{t.title}」: " + "; ".join(changes[:3]),
@@ -755,21 +869,71 @@ def _resolve_cc_names(db, cc_user_ids) -> list:
 
 
 def get_user_tasks(db, user_id, limit=500):
-    """返回某用户的所有相关任务：负责人 + 创建人 + 被抄送"""
-    q = db.query(Task).filter(
-        (Task.assignee_id == user_id) | (Task.reporter_id == user_id),
+    """返回某用户的所有相关任务：负责人 + 创建人 + 被抄送 + 关注 (tagged with _source)."""
+    result = []
+    seen_ids = set()
+
+    # 1. Tasks assigned to the user
+    assigned = db.query(Task).filter(
+        Task.assignee_id == user_id,
         or_(Task.is_deleted == 0, Task.is_deleted == None),
-    ).order_by(Task.created_at.desc()).limit(limit)
-    result = q.all()
-    seen_ids = {r.id for r in result}
-    # Second query: cc_user_ids contains user_id (Python-side filter for SQLite compatibility)
+    ).order_by(Task.created_at.desc()).limit(limit).all()
+    for t in assigned:
+        d = _task_dict(t, db)
+        d["_source"] = "assigned"
+        result.append(d)
+        seen_ids.add(t.id)
+
+    # 2. Tasks reported by the user
+    reported = db.query(Task).filter(
+        Task.reporter_id == user_id,
+        or_(Task.is_deleted == 0, Task.is_deleted == None),
+    ).order_by(Task.created_at.desc()).limit(limit).all()
+    for t in reported:
+        if t.id not in seen_ids:
+            d = _task_dict(t, db)
+            d["_source"] = "reported"
+            result.append(d)
+            seen_ids.add(t.id)
+
+    # 3. Tasks CC'd to the user
     cc_q = db.query(Task).filter(
         Task.cc_user_ids.isnot(None),
         or_(Task.is_deleted == 0, Task.is_deleted == None),
     ).order_by(Task.created_at.desc()).limit(limit * 2)
     for t in cc_q.all():
         if t.id not in seen_ids and user_id in (t.cc_user_ids or []):
-            result.append(t)
+            d = _task_dict(t, db)
+            d["_source"] = "cc"
+            result.append(d)
             seen_ids.add(t.id)
-    result.sort(key=lambda x: x.created_at, reverse=True)
-    return [_task_dict(t, db) for t in result[:limit]]
+
+    # 4. Tasks the user is watching (from favorites.tasks[])
+    from backend.models.local import LocalUser
+    user = db.query(LocalUser).filter(LocalUser.id == user_id).first()
+    if user:
+        try:
+            favs = json.loads(user.favorites or '{}')
+        except (json.JSONDecodeError, TypeError):
+            favs = {}
+        if isinstance(favs, list):
+            favs = {"products": favs, "projects": [], "tasks": [], "bugs": []}
+        watched_ids = favs.get("tasks", [])
+        if watched_ids:
+            watched_tasks = db.query(Task).filter(
+                Task.id.in_(watched_ids),
+                or_(Task.is_deleted == 0, Task.is_deleted == None),
+            ).all()
+            for t in watched_tasks:
+                if t.id not in seen_ids:
+                    d = _task_dict(t, db)
+                    d["_source"] = "watched"
+                    result.append(d)
+                    seen_ids.add(t.id)
+
+    source_order = {"assigned": 0, "reported": 1, "cc": 2, "watched": 3}
+    result.sort(key=lambda d: (
+        source_order.get(d.get("_source", "watched"), 3),
+        -(d.get("id") or 0)
+    ))
+    return result[:limit * 2]

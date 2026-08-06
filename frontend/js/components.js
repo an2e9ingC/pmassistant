@@ -93,22 +93,29 @@ function iconTaskActivate(onclick, disabled) {
 /* ── Favorite helpers ── */
 
 /* ═══════════════════════════════════════════════════
-   FAVORITES — unified product + project fav, persisted to DB
+   FAVORITES — unified product + project + task + bug fav, persisted to DB
    Usage: favStar(type, id) returns HTML; isFav(type, id) checks
    ═══════════════════════════════════════════════════ */
 
 var _favProducts = [];
 var _favProjects = [];
+var _favTasks = [];
+var _favBugs = [];
 var _favLoaded = false;
 
-async function loadFavorites() {
-  if (_favLoaded) return;
+async function loadFavorites(force) {
+  if (_favLoaded && !force) return;
   try {
     var data = await API.get('/auth/favorites');
     // Handle old format migration: flat array → {products:[], projects:[]}
-    if (Array.isArray(data)) { _favProducts = data; _favProjects = []; }
-    else { _favProducts = (data && data.products) ? data.products : []; _favProjects = (data && data.projects) ? data.projects : []; }
-  } catch(e) { _favProducts = []; _favProjects = []; console.error('loadFavorites failed:', e); }
+    if (Array.isArray(data)) { _favProducts = data; _favProjects = []; _favTasks = []; _favBugs = []; }
+    else {
+      _favProducts = (data && data.products) ? data.products : [];
+      _favProjects = (data && data.projects) ? data.projects : [];
+      _favTasks = (data && data.tasks) ? data.tasks : [];
+      _favBugs = (data && data.bugs) ? data.bugs : [];
+    }
+  } catch(e) { _favProducts = []; _favProjects = []; _favTasks = []; _favBugs = []; console.error('loadFavorites failed:', e); }
   _favLoaded = true;
 }
 
@@ -117,24 +124,33 @@ async function loadFavProducts() { await loadFavorites(); }
 
 function getFavProducts() { return _favProducts; }
 
+function _favList(type) {
+  if (type === 'product') return _favProducts;
+  if (type === 'project') return _favProjects;
+  if (type === 'task') return _favTasks;
+  if (type === 'bug') return _favBugs;
+  return [];
+}
+
 function isFav(type, id) {
   if (typeof type !== 'string') return false;
-  var list = type === 'product' ? _favProducts : _favProjects;
-  return list.indexOf(id) >= 0;
+  return _favList(type).indexOf(id) >= 0;
 }
 
 // Backward compat
 function isFavProduct(id) { return isFav('product', id); }
 
 async function toggleFav(type, id) {
-  var list = type === 'product' ? _favProducts : _favProjects;
+  var list = _favList(type);
   var idx = list.indexOf(id);
   var wasFav = idx >= 0;
   // Optimistic update
   if (wasFav) { list.splice(idx, 1); }
   else { list.push(id); }
+  var ok = false;
   try {
     await API.put('/auth/favorites/toggle', {type: type, id: id});
+    ok = true;
   } catch(e) {
     // Revert on failure — DB is the source of truth
     if (wasFav) { list.push(id); }
@@ -151,6 +167,9 @@ async function toggleFav(type, id) {
         if (p) { p.setAttribute('fill', wasFav ? 'var(--yellow)' : 'none'); p.setAttribute('stroke', wasFav ? 'var(--yellow)' : 'var(--muted)'); }
       }
     });
+  }
+  if (ok && typeof EventBus !== 'undefined') {
+    EventBus.emit('fav:toggled', {type: type, id: id, isFav: !wasFav});
   }
   return !wasFav;
 }

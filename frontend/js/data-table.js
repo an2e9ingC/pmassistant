@@ -85,7 +85,9 @@ var DataTable = (function() {
     // Table
     this._tableEl = document.createElement('table');
     this._tableEl.className = 'dt-table';
-    if (this._resizable) this._tableEl.style.tableLayout = 'fixed';
+    // Always use fixed layout for predictable column widths and proper text-overflow:ellipsis.
+    // Without fixed layout, tables with many columns overflow their containers.
+    this._tableEl.style.tableLayout = 'fixed';
     if (this._stickyHeader) this._tableEl.classList.add('dt-sticky');
     if (this._rowStriped) this._tableEl.classList.add('dt-striped');
     if (this._hoverHighlight) this._tableEl.classList.add('dt-hover');

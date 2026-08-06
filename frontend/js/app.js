@@ -1185,6 +1185,15 @@ function setThemeMode(mode) {
   if (themeTgl) themeTgl.classList.toggle('on', document.documentElement.getAttribute('data-theme') === 'dark');
 }
 
+function setUiDensity(density) {
+  _savePref('pma_ui_density', density);
+  _applyUiDensity(density);
+}
+
+function _applyUiDensity(density) {
+  document.documentElement.setAttribute('data-ui-density', density || 'normal');
+}
+
 /* ── Notification Management View ── */
 
 function initNotifManage() {
@@ -1365,6 +1374,8 @@ async function init() {
 
   // Apply theme once — after sync, before content render
   _applyTheme(_getEffectiveTheme());
+  // Apply UI density preference (after prefs sync)
+  _applyUiDensity(localStorage.getItem('pma_ui_density') || 'normal');
   var themeTgl = document.getElementById('theme-toggle');
   if (themeTgl) themeTgl.classList.toggle('on', document.documentElement.getAttribute('data-theme') === 'dark');
 
@@ -1558,11 +1569,26 @@ async function initUserCenter(viewUserId, tab) {
     try {
       var resp = await API.get('/admin/users/' + viewUserId);
       if (resp) { user = resp; }
+      // Parse viewed user's favorites for "TA的关注" filter card
+      window._ucViewUserFavTasks = [];
+      window._ucViewUserFavBugs = [];
+      if (resp && resp.favorites) {
+        try {
+          var vfavs = JSON.parse(resp.favorites);
+          window._ucViewUserFavTasks = (vfavs && vfavs.tasks) ? vfavs.tasks : [];
+          window._ucViewUserFavBugs = (vfavs && vfavs.bugs) ? vfavs.bugs : [];
+        } catch(e) {}
+      }
     } catch(e) {
       console.warn('Failed to load user ' + viewUserId + ', falling back to current user');
       window._ucViewUserId = null;  // Clear invalid user ID so queries fall back to /bugs/my
       user = currentUser;
+      window._ucViewUserFavTasks = [];
+      window._ucViewUserFavBugs = [];
     }
+  } else {
+    window._ucViewUserFavTasks = null;
+    window._ucViewUserFavBugs = null;
   }
 
   var isGitlab = user.auth_source === 'gitlab';
@@ -1667,6 +1693,8 @@ async function initUserCenter(viewUserId, tab) {
 
   // Calendar navigation callback
   _calChangeCallback = function() { _ucLoadCalendar(user); _ucLoadWecomCalendar(user); };
+  // Always re-fetch favorites to ensure logged-in user's data is current
+  await loadFavorites(true);
   // Determine initial tab from URL or default to tasks
   var initialTab = (tab && ['tasks','bugs','approvals'].indexOf(tab) >= 0) ? tab : 'tasks';
   _ucActiveTab = initialTab;
@@ -1704,7 +1732,9 @@ var _ucActiveTab = 'tasks'; // 'tasks' | 'bugs'
 
 function _ucUpdateTaskCount() {
   var el = document.getElementById('uc-tasks-count');
-  if (el) el.textContent = _ucTasks.length;
+  // Count only tasks assigned to the user
+  var assignedCount = _ucTasks.filter(function(t) { return t._source === 'assigned'; }).length;
+  if (el) el.textContent = assignedCount;
 }
 function _ucUpdateBugCount(n) {
   var el = document.getElementById('uc-bugs-count');
@@ -1859,7 +1889,17 @@ function _ucLoadTasks(user) {
 }
 
 function _ucMatchFilter(status, task) {
-  if (_ucFilterStatus === 'all' || !_ucFilterStatus) return true;
+  if (_ucFilterStatus === 'all' || !_ucFilterStatus) {
+    // Exclude pure-watched tasks from non-watched filters
+    return !task || task._source !== 'watched';
+  }
+  if (_ucFilterStatus === 'watched') {
+    if (!task) return false;
+    var vft = window._ucViewUserFavTasks;
+    return vft ? vft.indexOf(task.id) >= 0 : isFav('task', task.id);
+  }
+  // Other filters: only show tasks assigned to the user
+  if (task && task._source !== 'assigned') return false;
   if (_ucFilterStatus === 'unfinished') return status !== 'done' && status !== 'review';
   if (_ucFilterStatus === 'high_priority') {
     if (!task) return false;
@@ -1878,27 +1918,41 @@ function _ucMatchFilter(status, task) {
 }
 
 function _renderUcFilterBar() {
+  // Non-watched filter cards only show tasks assigned to the user
+  var ownTasks = _ucTasks.filter(function(t) { return t._source === 'assigned'; });
   var counts = {todo:0, in_progress:0, review:0, done:0};
-  _ucTasks.forEach(function(t) {
+  ownTasks.forEach(function(t) {
     counts[t.status||'todo'] = (counts[t.status]||0)+1;
   });
-  var unfinishedCount = _ucTasks.reduce(function(s,t){return s + ((t.status||'todo')!=='done'&&(t.status||'todo')!=='review'?1:0);}, 0);
+  var unfinishedCount = ownTasks.reduce(function(s,t){return s + ((t.status||'todo')!=='done'&&(t.status||'todo')!=='review'?1:0);}, 0);
+  var allCount = ownTasks.length;
 
-  // Counts for new category cards
+  // Counts for new category cards (own tasks only)
   var today = fmtLocalDate();
-  var highPriorityCount = _ucTasks.reduce(function(s, t) {
+  var highPriorityCount = ownTasks.reduce(function(s, t) {
     if ((t.status || 'todo') === 'done' || t.status === 'closed') return s;
     return s + (t.priority === 'high' || t.priority === 'critical' ? 1 : 0);
   }, 0);
-  var expiringCount = _ucTasks.reduce(function(s, t) {
+  var expiringCount = ownTasks.reduce(function(s, t) {
     if (!t.due_date) return s;
     if ((t.status || 'todo') === 'done' || t.status === 'closed') return s;
     var diff = Math.ceil((new Date(t.due_date + 'T00:00:00') - new Date(today + 'T00:00:00')) / 86400000);
     return s + (diff <= 3 ? 1 : 0);
   }, 0);
 
-  // Category cards — order: 高优先级 → 即将到期/已过期 → 未完成 → 已完成 → [评审中] → 全部
+  // Watched count: use viewed user's favs when viewing another user
+  var viewFavTasks = window._ucViewUserFavTasks;
+  var watchedCount = _ucTasks.reduce(function(s, t) {
+    return s + ((viewFavTasks ? viewFavTasks.indexOf(t.id) >= 0 : isFav('task', t.id)) ? 1 : 0);
+  }, 0);
+  var isSelf = !window._ucViewUserId;
+  var watchedLabel = isSelf ? '⭐ 我的关注' : '⭐ TA的关注';
+  var watchedMeta = isSelf ? '关注的任务' : '该用户关注的任务';
+
+  // Category cards — order: 我的关注 → 高优先级 → 即将到期/已过期 → 未完成 → 已完成 → [评审中] → 全部
   var cardsHtml = '<div class="uc-cat-cards">'
+    + '<div class="kpi-card' + (_ucFilterStatus==='watched'?' active':'') + '" data-filter="watched" onclick="_ucSetFilter(\'watched\')">'
+    + '<div class="kpi-label">' + watchedLabel + '</div><div class="kpi-value">' + watchedCount + '</div><div class="kpi-meta">' + watchedMeta + '</div></div>'
     + '<div class="kpi-card' + (_ucFilterStatus==='high_priority'?' active':'') + '" data-filter="high_priority" onclick="_ucSetFilter(\'high_priority\')">'
     + '<div class="kpi-label">⚠ 高优先级</div><div class="kpi-value">' + highPriorityCount + '</div><div class="kpi-meta">高/紧急优先级</div></div>'
     + '<div class="kpi-card' + (_ucFilterStatus==='expiring'?' active':'') + '" data-filter="expiring" onclick="_ucSetFilter(\'expiring\')">'
@@ -1912,7 +1966,7 @@ function _renderUcFilterBar() {
       + '<div class="kpi-label">评审中</div><div class="kpi-value">' + (counts.review||0) + '</div><div class="kpi-meta">等待评审</div></div>';
   }
   cardsHtml += '<div class="kpi-card' + (_ucFilterStatus==='all'?' active':'') + '" data-filter="all" onclick="_ucSetFilter(\'all\')">'
-    + '<div class="kpi-label">全部</div><div class="kpi-value">' + _ucTasks.length + '</div><div class="kpi-meta">所有任务</div></div>'
+    + '<div class="kpi-label">全部</div><div class="kpi-value">' + allCount + '</div><div class="kpi-meta">所有任务</div></div>'
     + '</div>';
 
   // Build product items from user's tasks only
@@ -2127,6 +2181,7 @@ function _renderUcTaskTable() {
     _ucTasksDt = new DataTable({
       container: document.getElementById('uc-tasks-dt'),
       columns: [
+        { key: 'fav', title: '', width: '28px', render: function(v, row) { return favStar('task', row.id, {stopPropagation: true}); } },
         { key: '_projCode', title: '项目编号', width: '8%', rowspan: true, render: function(v, row) { return v ? projCodeTag(row.project_code||v, 'event.stopPropagation();openProject(\''+escHtml(row.project_code||v).replace(/'/g,"\\'")+'\')', row.project_name) : '-'; } },
         { key: '_prodName', title: '产品编号', width: '100px', rowspan: true, render: function(v, row) { return row.product_code ? '<span class="proj-code-btn" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="event.stopPropagation();openProductDetail(\''+escHtml(row.product_code)+'\')" title="'+escHtml(row.product_code)+' '+escHtml(row.product_name||'')+'">'+escHtml(row.product_code)+'</span>' : '<span style="font-size:12px;color:var(--muted)">—</span>'; } },
         { key: '_stageName', title: '阶段', rowspan: true, render: function(v) { var parts = (v||'').split('||'); var name = parts.length >= 3 ? parts[2] : (v||''); return '<span style="font-size:12px">'+escHtml(name)+'</span>'; } },
@@ -2142,7 +2197,7 @@ function _renderUcTaskTable() {
       maxHeight: '400px',
       stickyHeader: true,
       selectable: true,
-      checkboxPosition: 3,
+      checkboxPosition: 4,
       onSelectChange: function(rows) { _selectedTasks = new Set(rows.map(function(r) { return r.id; })); if (typeof _ensureBatchToolbar==='function') _ensureBatchToolbar(); if (typeof _updateBatchToolbar==='function') _updateBatchToolbar(); }
       // No onRowClick — only ID/title are clickable
     });
@@ -2450,20 +2505,42 @@ function _ucRenderBugFilter(bugs, uid) {
     onSelect: function(p) { _ucBugFilterProd = p.name; _ucLoadBugs(); }
   });
   var projSel = projs.length ? '<select class="proj-select" onchange="_ucBugFilterProj=this.value;_ucLoadBugs()"><option value="">全部项目</option>' + projs.map(function(p) { return '<option value="'+escHtml(p)+'"'+(_ucBugFilterProj===p?' selected':'')+'>'+escHtml(p)+'</option>'; }).join('') + '</select>' : '';
-  // CC tab only shown for own user center (not viewing others)
-  var ccTabHtml = '';
-  if (!window._ucViewUserId) {
-    ccTabHtml = '<button class="task-tab' + (_ucBugTab==='cc'?' active':'') + '" onclick="_ucBugTab=\'cc\';_ucLoadBugs()">抄送给我<span class="task-tab-count">' + cc.length + '</span></button>';
-  }
+  // Labels depend on whether viewing self or another user
+  var isSelf = !window._ucViewUserId;
+  var assigneeLabel = isSelf ? '👤 指派给我' : '👤 指派给TA';
+  var assigneeMeta  = isSelf ? '待我处理的Bug' : '待TA处理的Bug';
+  var reporterLabel = isSelf ? '✍️ 我创建的' : '✍️ TA创建的';
+  var reporterMeta  = isSelf ? '我创建的Bug' : 'TA创建的Bug';
+  var watchedLabel  = isSelf ? '⭐ 我关注的' : '⭐ TA关注的';
+  var watchedMeta   = isSelf ? '关注的Bug' : '该用户关注的Bug';
+  var ccLabel = isSelf ? '📋 抄送给我' : '📋 抄送给TA';
+  var ccMeta = isSelf ? '抄送给我的Bug' : '抄送给该用户的Bug';
+  var ccCardHtml = '<div class="kpi-card' + (_ucBugTab==='cc'?' active':'') + '" data-bug-filter="cc" onclick="_ucBugTab=\'cc\';_ucLoadBugs()">'
+    + '<div class="kpi-label">' + ccLabel + '</div><div class="kpi-value">' + cc.length + '</div><div class="kpi-meta">' + ccMeta + '</div></div>';
+  // Watched count: use viewed user's favs when viewing another user
+  var viewFavBugs = window._ucViewUserFavBugs;
+  var watchedBugCount = (bugs||[]).reduce(function(s, b) {
+    return s + ((viewFavBugs ? viewFavBugs.indexOf(b.id) >= 0 : isFav('bug', b.id)) ? 1 : 0);
+  }, 0);
   document.getElementById('uc-bugs-filter-bar').innerHTML =
-    '<div class="task-tabs">' +
-      '<button class="task-tab' + (_ucBugTab==='assignee'?' active':'') + '" onclick="_ucBugTab=\'assignee\';_ucLoadBugs()">待我处理<span class="task-tab-count">' + assigned.length + '</span></button>' +
-      '<button class="task-tab' + (_ucBugTab==='reporter'?' active':'') + '" onclick="_ucBugTab=\'reporter\';_ucLoadBugs()">我创建的<span class="task-tab-count">' + reported.length + '</span></button>' +
-      ccTabHtml +
-    '</div>' + statusSel + '<span style="display:inline-block;vertical-align:middle">' + prodSelHtml + '</span>' + projSel;
+    '<div style="width:100%">' +
+      '<div class="uc-cat-cards">' +
+        '<div class="kpi-card' + (_ucBugTab==='assignee'?' active':'') + '" data-bug-filter="assignee" onclick="_ucBugTab=\'assignee\';_ucLoadBugs()">'
+          + '<div class="kpi-label">' + assigneeLabel + '</div><div class="kpi-value">' + assigned.length + '</div><div class="kpi-meta">' + assigneeMeta + '</div></div>' +
+        '<div class="kpi-card' + (_ucBugTab==='reporter'?' active':'') + '" data-bug-filter="reporter" onclick="_ucBugTab=\'reporter\';_ucLoadBugs()">'
+          + '<div class="kpi-label">' + reporterLabel + '</div><div class="kpi-value">' + reported.length + '</div><div class="kpi-meta">' + reporterMeta + '</div></div>' +
+        '<div class="kpi-card' + (_ucBugTab==='watched'?' active':'') + '" data-bug-filter="watched" onclick="_ucBugTab=\'watched\';_ucLoadBugs()">'
+          + '<div class="kpi-label">' + watchedLabel + '</div><div class="kpi-value">' + watchedBugCount + '</div><div class="kpi-meta">' + watchedMeta + '</div></div>' +
+        ccCardHtml +
+      '</div>' +
+    '</div>' +
+    '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px">' + statusSel + '<span style="display:inline-block;vertical-align:middle">' + prodSelHtml + '</span>' + projSel + '</div>';
   var result;
   if (_ucBugTab === 'reporter') result = reported;
   else if (_ucBugTab === 'cc') result = cc;
+  else if (_ucBugTab === 'watched') result = (bugs||[]).filter(function(b) {
+    return viewFavBugs ? viewFavBugs.indexOf(b.id) >= 0 : isFav('bug', b.id);
+  });
   else result = assigned;
   // Apply product/project/status filters
   if (_ucBugFilterStatus) result = result.filter(function(b) { return (b.status || 'open') === _ucBugFilterStatus; });
@@ -2518,6 +2595,7 @@ async function _ucLoadBugs() {
       _ucBugsDt = new DataTable({
         container: document.getElementById('uc-bugs-dt'),
         columns: [
+          { key: 'fav', title: '', width: '28px', render: function(v, row) { return favStar('bug', row.id, {stopPropagation: true}); } },
           { key: '_projCode', title: '项目编号', width: '8%', rowspan: true, render: function(v, row) { return v ? projCodeTag(row.project_code||v, 'event.stopPropagation();openProject(\''+escHtml(row.project_code||v).replace(/'/g,"\\'")+'\')', row.project_name) : '-'; } },
           { key: '_prodName', title: '产品编号', width: '100px', rowspan: true, render: function(v, row) { return row.product_code ? '<span class="proj-code-btn" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="event.stopPropagation();openProductDetail(\''+escHtml(row.product_code)+'\')" title="'+escHtml(row.product_code)+' '+escHtml(row.product_name||'')+'">'+escHtml(row.product_code)+'</span>' : '<span style="font-size:12px;color:var(--muted)">—</span>'; } },
           { key: 'id', title: 'Bug编号', width: '6%', render: function(v) { return '<span style="font-family:var(--mono);font-size:11px;cursor:pointer" onclick="event.stopPropagation();loadViewScript(\'/js/bugs.js?v=' + APP_VERSION + '\',function(){openBugDetail('+v+')})">#'+v+'</span>'; } },
@@ -2762,6 +2840,7 @@ function _renderPreferencesPanel(content) {
   var tickerSpeed = localStorage.getItem('pma_ticker_speed') || 'normal';
   var tickerMode = localStorage.getItem('pma_ticker_mode') || 'activities';
   var themeMode = localStorage.getItem('pm_theme_mode') || 'auto';
+  var uiDensity = localStorage.getItem('pma_ui_density') || 'normal';
   var tableDensity = localStorage.getItem('pma_table_density') || 'normal';
   var speedLabels = {slow: '慢速', normal: '正常', fast: '快速'};
   var speedBtns = '';
@@ -2790,12 +2869,22 @@ function _renderPreferencesPanel(content) {
       '" onclick="setThemeMode(\'' + m + '\');_renderPreferencesPanel()">' + themeIcons[m] + '</button>';
   });
 
-  var densityLabels = {compact: '紧凑', normal: '标准', comfortable: '舒适'};
-  var densityBtns = '';
+  // UI Density buttons (filter card font size)
+  var uiDensityLabels = {compact: '紧凑', normal: '标准', comfortable: '舒适'};
+  var uiDensityBtns = '';
   ['compact', 'normal', 'comfortable'].forEach(function(d) {
-    densityBtns += '<button class="btn btn-xs" style="margin-right:4px;' +
+    uiDensityBtns += '<button class="btn btn-xs" style="margin-right:4px;' +
+      (uiDensity === d ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : '') +
+      '" onclick="setUiDensity(\'' + d + '\');_renderPreferencesPanel()">' + uiDensityLabels[d] + '</button>';
+  });
+
+  // Table Density buttons (row spacing)
+  var tblDensityLabels = {compact: '紧凑', normal: '标准', comfortable: '舒适'};
+  var tblDensityBtns = '';
+  ['compact', 'normal', 'comfortable'].forEach(function(d) {
+    tblDensityBtns += '<button class="btn btn-xs" style="margin-right:4px;' +
       (tableDensity === d ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : '') +
-      '" onclick="_setTableDensity(\'' + d + '\');_renderPreferencesPanel()">' + densityLabels[d] + '</button>';
+      '" onclick="_setTableDensity(\'' + d + '\');_renderPreferencesPanel()">' + tblDensityLabels[d] + '</button>';
   });
 
   var html =
@@ -2823,12 +2912,16 @@ function _renderPreferencesPanel(content) {
             '<span class="integration-row-lbl">主题模式</span>' +
             '<span class="integration-row-val">' + themeBtns + '</span>' +
           '</div>' +
+          '<div class="integration-row" style="margin-top:6px">' +
+            '<span class="integration-row-lbl">界面密度</span>' +
+            '<span class="integration-row-val">' + uiDensityBtns + '</span>' +
+          '</div>' +
         '</div>' +
 
         // Card 3: 表格
         '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px">' +
           '<div style="font-size:12px;font-weight:600;color:var(--fg);margin-bottom:10px">表格</div>' +
-          '<div style="margin-bottom:6px"><span style="font-size:11px;color:var(--muted)">行高密度</span><div style="margin-top:3px">' + densityBtns + '</div></div>' +
+          '<div style="margin-bottom:6px"><span style="font-size:11px;color:var(--muted)">行高密度</span><div style="margin-top:3px">' + tblDensityBtns + '</div></div>' +
         '</div>' +
 
       '</div>' +
@@ -3310,6 +3403,15 @@ EventBus.on('bug:field-changed', function(e) {
   // Inline edit on bug detail — refresh bug list and user center
   if (typeof loadBugs === 'function') loadBugs();
   if (typeof _ucLoadBugs === 'function') _ucLoadBugs();
+});
+
+EventBus.on('fav:toggled', function(e) {
+  // Refresh filter bars and tables in user center to reflect changed fav counts
+  if (_ucActiveTab === 'bugs' && typeof _ucLoadBugs === 'function') {
+    _ucLoadBugs();
+  } else if (_ucActiveTab === 'tasks' && typeof _ucLoadTasks === 'function') {
+    var u = getCurrentUser(); if (u) _ucLoadTasks(u);
+  }
 });
 
 EventBus.on('worklog:saved', function(e) {

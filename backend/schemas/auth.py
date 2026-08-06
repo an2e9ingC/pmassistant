@@ -20,6 +20,7 @@ class UserInfo(BaseModel):
     need_guide: bool = True  # whether to show new user guide
     wecom_userid: Optional[str] = None   # 企业微信关联账号
     preferences: Optional[str] = None     # JSON user preferences
+    favorites: Optional[str] = None       # JSON favorites {products,projects,tasks,bugs}
 
     model_config = {"from_attributes": True}
 

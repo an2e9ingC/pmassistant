@@ -563,6 +563,7 @@ function renderTaskTable(tasks, execs) {
       { key: 'id', title: '任务编号', width: '7%', render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted)">#' + v + '</span>'; } },
       { key: 'project_code', title: '项目编号', width: '8%', render: function(v, row) { return v ? projCodeTag(v, 'openProject(\''+escHtml(v).replace(/'/g,"\\'")+'\')', row.project_name) : '-'; } },
       { key: 'project_name', title: '项目名称', width: '10%', align: 'left', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'-')+'</span>'; } },
+      { key: 'fav', title: '', width: '28px', render: function(v, row) { return favStar('task', row.id, {stopPropagation: true}); } },
       { key: 'title', title: '标题', align: 'left', className: 'dt-wrap', render: function(v, row) { return '<a href="javascript:void(0)" onclick="openTaskDetail('+row.id+')" style="color:var(--accent)">'+escHtml(v||'')+'</a>'; } },
       { key: 'stage_name', title: '阶段', width: '9%', render: function(v) { return v ? '<span style="font-size:11px;color:var(--muted)">'+escHtml(v)+'</span>' : '-'; } },
       { key: 'status', title: '状态', width: '6%', render: function(v, row) {
@@ -656,6 +657,7 @@ function renderTaskTableCompact(tasks, execs) {
         return '<div>' + cell + ' <sup style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:8px">' + (count||row._stageCount||1) + '</sup></div>';
       }},
       { key: 'title', title: '任务标题', align: 'left', render: function(v, row) { return row._empty?'—':'<span style="cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" onclick="openTaskDetail('+row.id+')" title="查看任务详情">'+escHtml(v||'')+'</span>'; } },
+      { key: 'fav', title: '', width: '28px', render: function(v, row) { return row._empty ? '' : favStar('task', row.id, {stopPropagation: true}); } },
       { key: 'status', title: '状态', width: '6%', render: function(v, row) { return row._empty?'—':renderPill(v||'todo'); } },
       { key: 'priority', title: '优先级', width: '5%', render: function(v, row) { return row._empty?'—':(typeof renderPriorityBadge==='function'?renderPriorityBadge(v):escHtml(v||'medium')); } },
       { key: 'assignee_name', title: '负责人', width: '7%', render: function(v, row) { return row._empty?'—':'<span style="font-size:12px;cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();openAssignDialog('+row.id+')" title="指派任务">'+escHtml(v||'—')+'</span>'; } },
@@ -1019,7 +1021,7 @@ function _renderTaskDetailBody(t) {
   html += '<div style="display:flex;gap:16px">' +
     // ── 基本信息 ──
     '<div class="card info-glass-card" style="flex:1;min-width:0;padding:20px">' +
-      '<div class="section-hd"><span class="section-title">基本信息</span></div>' +
+      '<div class="section-hd"><span class="section-title">' + favStar('task', t.id, {size: '18px'}) + ' 基本信息</span></div>' +
       '<div class="delivery-kpi" style="grid-template-columns:1fr 1fr">' +
         // Title
         '<div class="dkpi"><div class="dkpi-lbl">标题' + (t.template_id ? ' <span style="color:var(--accent);font-size:10px" title="由模板控制">🔒</span>' : '') + '</div>' +

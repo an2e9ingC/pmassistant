@@ -179,9 +179,17 @@
 /* User Center category cards */
 .uc-cat-cards { display: flex; gap: 8px; flex-wrap: wrap; padding-left: 4px; }
 .uc-cat-cards .kpi-card { min-width: 0; flex: 1 1 0; padding: 10px 14px 10px; overflow: hidden; }
-.uc-cat-cards .kpi-card .kpi-label { font-size: 10px; white-space: nowrap; }
+.uc-cat-cards .kpi-card .kpi-label { font-size: 12px; white-space: nowrap; }
 .uc-cat-cards .kpi-card .kpi-value { font-size: 20px; white-space: nowrap; }
-.uc-cat-cards .kpi-card .kpi-meta { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.uc-cat-cards .kpi-card .kpi-meta { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── UI Density: Compact (keep current 10px sizes) ── */
+[data-ui-density="compact"] .uc-cat-cards .kpi-card .kpi-label { font-size: 10px; }
+[data-ui-density="compact"] .uc-cat-cards .kpi-card .kpi-meta  { font-size: 10px; }
+
+/* ── UI Density: Comfortable (larger) ── */
+[data-ui-density="comfortable"] .uc-cat-cards .kpi-card .kpi-label { font-size: 13px; }
+[data-ui-density="comfortable"] .uc-cat-cards .kpi-card .kpi-meta  { font-size: 12px; }
 
 /* kpi-card colors for user center filters */
 .kpi-card[data-filter="unfinished"] { border-left-color: var(--accent); }
@@ -212,6 +220,40 @@
 .kpi-card[data-filter="expiring"] .kpi-value { color: var(--yellow); }
 .kpi-card[data-filter="expiring"].active {
   border-color: var(--yellow); background: var(--yellow-lt);
+  box-shadow: var(--sh-md); transform: scale(1.02);
+}
+
+/* Watched card — gold accent matching project favorites */
+.kpi-card[data-filter="watched"] { border-left-color: #eab308; }
+.kpi-card[data-filter="watched"] .kpi-value { color: var(--yellow); }
+.kpi-card[data-filter="watched"].active {
+  border-color: #eab308; background: #fef9c3;
+  box-shadow: var(--sh-md); transform: scale(1.02);
+}
+
+/* Bug filter cards (user center) */
+.kpi-card[data-bug-filter="assignee"] { border-left-color: var(--accent); }
+.kpi-card[data-bug-filter="assignee"] .kpi-value { color: var(--accent); }
+.kpi-card[data-bug-filter="assignee"].active {
+  border-color: var(--accent); background: var(--accent-lt);
+  box-shadow: var(--sh-md); transform: scale(1.02);
+}
+.kpi-card[data-bug-filter="reporter"] { border-left-color: var(--success); }
+.kpi-card[data-bug-filter="reporter"] .kpi-value { color: var(--success); }
+.kpi-card[data-bug-filter="reporter"].active {
+  border-color: var(--success); background: var(--success-lt);
+  box-shadow: var(--sh-md); transform: scale(1.02);
+}
+.kpi-card[data-bug-filter="watched"] { border-left-color: #eab308; }
+.kpi-card[data-bug-filter="watched"] .kpi-value { color: var(--yellow); }
+.kpi-card[data-bug-filter="watched"].active {
+  border-color: #eab308; background: #fef9c3;
+  box-shadow: var(--sh-md); transform: scale(1.02);
+}
+.kpi-card[data-bug-filter="cc"] { border-left-color: #f59e0b; }
+.kpi-card[data-bug-filter="cc"] .kpi-value { color: var(--yellow); }
+.kpi-card[data-bug-filter="cc"].active {
+  border-color: #f59e0b; background: #fef3c7;
   box-shadow: var(--sh-md); transform: scale(1.02);
 }
 

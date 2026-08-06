@@ -525,29 +525,42 @@ def _clear_gitlab_tokens():
 
 
 def clean_orphan_favorites(db: Session):
-    """Remove invalid project/product IDs from all users' favorites after data deletion."""
+    """Remove invalid project/product/task/bug IDs from all users' favorites after data deletion."""
     import json as _json
     try:
         from backend.models.local import LocalUser
         from backend.models.zentao import CachedProject, PmaProduct
+        from backend.models.task import Task
+        from backend.models.bug import PmaBug
         valid_proj = set(r[0] for r in db.query(CachedProject.id).all())
         valid_prod = set(r[0] for r in db.query(PmaProduct.id).all())
+        valid_tasks = set(r[0] for r in db.query(Task.id).all())
+        valid_bugs = set(r[0] for r in db.query(PmaBug.id).all())
         users = db.query(LocalUser).all()
         fixed = 0
         for u in users:
             try:
-                favs = _json.loads(u.favorites) if u.favorites else {"products": [], "projects": []}
+                favs = _json.loads(u.favorites) if u.favorites else {"products": [], "projects": [], "tasks": [], "bugs": []}
             except (_json.JSONDecodeError, TypeError):
-                favs = {"products": [], "projects": []}
+                favs = {"products": [], "projects": [], "tasks": [], "bugs": []}
             if isinstance(favs, list):
                 favs = {"products": [], "projects": favs}
+            # Ensure new keys
+            favs.setdefault("tasks", [])
+            favs.setdefault("bugs", [])
             proj_ids = favs.get("projects", [])
             prod_ids = favs.get("products", [])
+            task_ids = favs.get("tasks", [])
+            bug_ids = favs.get("bugs", [])
             new_proj = [p for p in proj_ids if p in valid_proj]
             new_prod = [p for p in prod_ids if p in valid_prod]
-            if len(new_proj) != len(proj_ids) or len(new_prod) != len(prod_ids):
+            new_tasks = [t for t in task_ids if t in valid_tasks]
+            new_bugs = [b for b in bug_ids if b in valid_bugs]
+            if len(new_proj) != len(proj_ids) or len(new_prod) != len(prod_ids) or len(new_tasks) != len(task_ids) or len(new_bugs) != len(bug_ids):
                 favs["projects"] = new_proj
                 favs["products"] = new_prod
+                favs["tasks"] = new_tasks
+                favs["bugs"] = new_bugs
                 u.favorites = _json.dumps(favs)
                 fixed += 1
         if fixed:

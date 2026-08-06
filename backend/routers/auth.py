@@ -121,12 +121,15 @@ class FavToggle(BaseModel):
 def get_favorites(user: LocalUser = Depends(get_current_user)):
     import json
     try:
-        favs = json.loads(user.favorites or '{"products":[],"projects":[]}')
+        favs = json.loads(user.favorites or '{"products":[],"projects":[],"tasks":[],"bugs":[]}')
         # Migrate old flat-array format
         if isinstance(favs, list):
-            favs = {"products": favs, "projects": []}
+            favs = {"products": favs, "projects": [], "tasks": [], "bugs": []}
+        # Ensure new keys exist for backward compatibility
+        favs.setdefault("tasks", [])
+        favs.setdefault("bugs", [])
     except (json.JSONDecodeError, TypeError):
-        favs = {"products": [], "projects": []}
+        favs = {"products": [], "projects": [], "tasks": [], "bugs": []}
     return {"code": 0, "data": favs, "message": "ok"}
 
 @router.put("/favorites/toggle", response_model=dict)
@@ -137,21 +140,28 @@ def toggle_favorite(
 ):
     import json
     try:
-        favs = json.loads(user.favorites or '{"products":[],"projects":[]}')
+        favs = json.loads(user.favorites or '{"products":[],"projects":[],"tasks":[],"bugs":[]}')
         # Migrate old flat-array format to new dict format
         if isinstance(favs, list):
-            favs = {"products": favs, "projects": []}
+            favs = {"products": favs, "projects": [], "tasks": [], "bugs": []}
+        # Ensure new keys exist for backward compatibility
+        favs.setdefault("tasks", [])
+        favs.setdefault("bugs", [])
     except (json.JSONDecodeError, TypeError):
-        favs = {"products": [], "projects": []}
-    key = payload.type + 's'  # 'products' or 'projects'
+        favs = {"products": [], "projects": [], "tasks": [], "bugs": []}
+    key = payload.type + 's'  # 'products' or 'projects' or 'tasks' or 'bugs'
     lst = favs.get(key, [])
-    if payload.id in lst:
+    was_fav = payload.id in lst
+    if was_fav:
         lst.remove(payload.id)
     else:
         lst.append(payload.id)
     favs[key] = lst
     user.favorites = json.dumps(favs)
     db.commit()
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"[fav:toggle] user={user.username}(id={user.id}) type={payload.type} item_id={payload.id} action={'remove' if was_fav else 'add'} key={key} list_len={len(lst)}")
     return {"code": 0, "data": favs, "message": "ok"}
 
 class PasswordUpdate(BaseModel):

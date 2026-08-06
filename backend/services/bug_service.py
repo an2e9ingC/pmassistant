@@ -1,14 +1,19 @@
 """Bug CRUD, worklog, analysis, attachments, and import logic."""
 from __future__ import annotations
+import logging
 from datetime import date, datetime, timezone
 from typing import Optional
 import os
+import json
 
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func as sa_func
 
+logger = logging.getLogger(__name__)
+
 from backend.models.bug import PmaBug, BugWorkLog, BugAnalysis, BugAttachment, BugTransfer, BugComment
 from backend.database import to_local_str
+from backend.services.task_service import _sync_cc_favorites
 
 UPLOAD_ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "uploads", "bugs")
 
@@ -29,10 +34,70 @@ def get_bugs(db, product_id=None, project_id=None, status=None, assignee_id=None
     return [_bug_dict(b, db) for b in q.all()]
 
 def get_my_bugs(db, user_id, limit=200):
-    q = db.query(PmaBug).filter(
-        (PmaBug.assignee_id == user_id) | (PmaBug.reporter_id == user_id)
-    ).order_by(PmaBug.created_at.desc()).limit(limit)
-    return [_bug_dict(b, db) for b in q.all()]
+    """Get bugs for a user: assigned + reported + CC'd + watched (tagged with _source)."""
+    bugs = []
+    seen_ids = set()
+
+    # 1. Bugs assigned to the user
+    assigned = db.query(PmaBug).filter(
+        PmaBug.assignee_id == user_id
+    ).order_by(PmaBug.created_at.desc()).limit(limit).all()
+    for b in assigned:
+        d = _bug_dict(b, db)
+        d["_source"] = "assigned"
+        bugs.append(d)
+        seen_ids.add(b.id)
+
+    # 2. Bugs reported by the user
+    reported = db.query(PmaBug).filter(
+        PmaBug.reporter_id == user_id
+    ).order_by(PmaBug.created_at.desc()).limit(limit).all()
+    for b in reported:
+        if b.id not in seen_ids:
+            d = _bug_dict(b, db)
+            d["_source"] = "reported"
+            bugs.append(d)
+            seen_ids.add(b.id)
+
+    # 3. Bugs CC'd to the user (Python-side filter for SQLite compatibility)
+    cc_q = db.query(PmaBug).filter(
+        PmaBug.cc_user_ids.isnot(None)
+    ).order_by(PmaBug.created_at.desc()).limit(limit * 2)
+    for b in cc_q.all():
+        if b.id not in seen_ids and user_id in (b.cc_user_ids or []):
+            d = _bug_dict(b, db)
+            d["_source"] = "cc"
+            bugs.append(d)
+            seen_ids.add(b.id)
+
+    # 4. Bugs the user is watching (from favorites.bugs[]) — only those not already loaded
+    from backend.models.local import LocalUser
+    user = db.query(LocalUser).filter(LocalUser.id == user_id).first()
+    if user:
+        try:
+            favs = json.loads(user.favorites or '{}')
+        except (json.JSONDecodeError, TypeError):
+            favs = {}
+        if isinstance(favs, list):
+            favs = {"products": favs, "projects": [], "tasks": [], "bugs": []}
+        watched_ids = favs.get("bugs", [])
+        if watched_ids:
+            watched_bugs = db.query(PmaBug).filter(
+                PmaBug.id.in_(watched_ids)
+            ).order_by(PmaBug.created_at.desc()).all()
+            for b in watched_bugs:
+                if b.id not in seen_ids:
+                    d = _bug_dict(b, db)
+                    d["_source"] = "watched"
+                    bugs.append(d)
+                    seen_ids.add(b.id)
+
+    source_order = {"assigned": 0, "reported": 1, "cc": 2, "watched": 3}
+    bugs.sort(key=lambda d: (
+        source_order.get(d.get("_source", "watched"), 3),
+        -(d.get("id") or 0)
+    ))
+    return bugs[:limit * 2]
 
 def get_bug(db, bug_id):
     b = db.query(PmaBug).filter(PmaBug.id == bug_id).first()
@@ -56,12 +121,14 @@ def create_bug(db, data):
         progress=int(data.get("progress", 0) or 0),
     )
     db.add(b); db.commit(); db.refresh(b)
+    _sync_cc_favorites(db, data.get("cc_user_ids"), b.id, 'bug')
     return _bug_dict(b, db)
 
 def update_bug(db, bug_id, data):
     b = db.query(PmaBug).filter(PmaBug.id == bug_id).first()
     if not b: return None
     old_status = b.status
+    old_cc_user_ids = (b.cc_user_ids or [])[:]  # snapshot for CC favorites sync
     for k in ["title","description","project_id","component_id","status","resolution",
               "severity","priority","type","assignee_id","estimate_hours",
               "gitlab_url","gitlab_iid","resolved_by_id","cc_user_ids","progress"]:
@@ -72,6 +139,33 @@ def update_bug(db, bug_id, data):
         b.closed_at = datetime.now(timezone.utc)
     b.updated_at = datetime.now(timezone.utc)
     db.commit()
+    # Sync CC favorites: add for new CC users, remove for removed CC users
+    if "cc_user_ids" in data:
+        try:
+            new_cc = data.get("cc_user_ids") or []
+            added = [uid for uid in new_cc if uid not in old_cc_user_ids]
+            removed = [uid for uid in old_cc_user_ids if uid not in new_cc]
+            _sync_cc_favorites(db, added, b.id, 'bug')
+            from backend.models.local import LocalUser
+            for uid in removed:
+                try:
+                    ru = db.query(LocalUser).filter(LocalUser.id == uid).first()
+                    if ru:
+                        try:
+                            rfavs = json.loads(ru.favorites or '{}')
+                        except (json.JSONDecodeError, TypeError):
+                            rfavs = {}
+                        if isinstance(rfavs, list):
+                            rfavs = {"products": rfavs, "projects": [], "tasks": [], "bugs": []}
+                        rlst = rfavs.get("bugs", [])
+                        if b.id in rlst:
+                            rlst.remove(b.id)
+                            rfavs["bugs"] = rlst
+                            ru.favorites = json.dumps(rfavs)
+                except Exception:
+                    logger.exception(f"[cc:fav] failed to remove bug#{b.id} from user_id={uid}")
+        except Exception:
+            logger.exception(f"[cc:fav] CC sync failed for bug#{b.id}")
     # Auto-sync linked bugs when resolved/closed
     if data.get("status") in ("resolved","closed") and old_status not in ("resolved","closed"):
         linked = db.query(PmaBug).filter(PmaBug.original_bug_id == bug_id).all()
@@ -388,20 +482,67 @@ def get_bug_list(db: Session, project_id: Optional[int] = None, product_id: Opti
 
 
 def get_user_bugs(db, user_id, limit=500):
-    """返回某用户的所有相关 Bug：负责人 + 创建人 + 被抄送"""
-    # First query: assignee OR reporter
-    q = db.query(PmaBug).filter(
-        (PmaBug.assignee_id == user_id) | (PmaBug.reporter_id == user_id)
-    ).order_by(PmaBug.created_at.desc()).limit(limit)
-    result = q.all()
-    seen_ids = {r.id for r in result}
-    # Second query: cc_user_ids contains user_id (Python-side filter for SQLite compatibility)
+    """返回某用户的所有相关 Bug：负责人 + 创建人 + 被抄送 + 关注 (tagged with _source)."""
+    result = []
+    seen_ids = set()
+
+    # 1. Bugs assigned to the user
+    assigned = db.query(PmaBug).filter(
+        PmaBug.assignee_id == user_id
+    ).order_by(PmaBug.created_at.desc()).limit(limit).all()
+    for b in assigned:
+        d = _bug_dict(b, db)
+        d["_source"] = "assigned"
+        result.append(d)
+        seen_ids.add(b.id)
+
+    # 2. Bugs reported by the user
+    reported = db.query(PmaBug).filter(
+        PmaBug.reporter_id == user_id
+    ).order_by(PmaBug.created_at.desc()).limit(limit).all()
+    for b in reported:
+        if b.id not in seen_ids:
+            d = _bug_dict(b, db)
+            d["_source"] = "reported"
+            result.append(d)
+            seen_ids.add(b.id)
+
+    # 3. Bugs CC'd to the user
     cc_q = db.query(PmaBug).filter(
         PmaBug.cc_user_ids.isnot(None)
     ).order_by(PmaBug.created_at.desc()).limit(limit * 2)
     for b in cc_q.all():
         if b.id not in seen_ids and user_id in (b.cc_user_ids or []):
-            result.append(b)
+            d = _bug_dict(b, db)
+            d["_source"] = "cc"
+            result.append(d)
             seen_ids.add(b.id)
-    result.sort(key=lambda x: x.created_at, reverse=True)
-    return [_bug_dict(b, db) for b in result[:limit]]
+
+    # 4. Bugs the user is watching (from favorites.bugs[])
+    from backend.models.local import LocalUser
+    user = db.query(LocalUser).filter(LocalUser.id == user_id).first()
+    if user:
+        try:
+            favs = json.loads(user.favorites or '{}')
+        except (json.JSONDecodeError, TypeError):
+            favs = {}
+        if isinstance(favs, list):
+            favs = {"products": favs, "projects": [], "tasks": [], "bugs": []}
+        watched_ids = favs.get("bugs", [])
+        if watched_ids:
+            watched_bugs = db.query(PmaBug).filter(
+                PmaBug.id.in_(watched_ids)
+            ).order_by(PmaBug.created_at.desc()).all()
+            for b in watched_bugs:
+                if b.id not in seen_ids:
+                    d = _bug_dict(b, db)
+                    d["_source"] = "watched"
+                    result.append(d)
+                    seen_ids.add(b.id)
+
+    source_order = {"assigned": 0, "reported": 1, "cc": 2, "watched": 3}
+    result.sort(key=lambda d: (
+        source_order.get(d.get("_source", "watched"), 3),
+        -(d.get("id") or 0)
+    ))
+    return result[:limit * 2]
