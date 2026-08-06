@@ -120,6 +120,8 @@ PYEOF
 
    # c2. 关闭远端同步（避免 worktree 临时数据库污染远端数据源）
    sed -i 's/^SYNC_INTERVAL_MINUTES=.*/SYNC_INTERVAL_MINUTES=0/' $PMA_WORKTREE_DIR/.env
+   sed -i 's/^WECOM_SYNC_INTERVAL=.*/WECOM_SYNC_INTERVAL=0/' $PMA_WORKTREE_DIR/.env
+   sed -i 's/^ZENTAO_SYNC_RELEASES=.*/ZENTAO_SYNC_RELEASES=false/' $PMA_WORKTREE_DIR/.env
 
    # d. 启动 worktree 服务
    cd $PMA_WORKTREE_DIR && ./server.sh restart -p $PORT

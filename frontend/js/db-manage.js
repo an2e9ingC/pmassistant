@@ -210,12 +210,16 @@ function renderDbManage() {
         '</div>' +
       '</div>' +
 
-      // Action buttons — right-aligned, test before save
+      // Test button — inside config rows (only relevant when fields are visible)
       '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">' +
         '<button class="btn btn-outline" onclick="testRemoteConnection()" id="db-remote-test-btn" style="height:35px;" ' + (rType === 'svn' ? 'disabled title="SVN 暂不支持连接测试"' : '') + '>测试连接</button>' +
-        '<button class="btn btn-primary" onclick="saveRemoteBackupConfig()" style="height:35px;">保存配置</button>' +
       '</div>' +
     '</div>' +  // #db-remote-config-rows
+
+    // Save button — always visible (outside toggle), so user can save "disabled" state
+    '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;margin-top:8px">' +
+      '<button class="btn btn-primary" onclick="saveRemoteBackupConfig()" style="height:35px;">保存配置</button>' +
+    '</div>' +
 
     '</div></div>';
 
