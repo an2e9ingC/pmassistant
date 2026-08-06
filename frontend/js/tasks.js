@@ -763,16 +763,84 @@ function _renderTaskRowCompact(t, stageStart) {
 
 function importTasksFromTemplates() {
   if (!_taskProjectId) { showToast('请先选择项目', 'error'); return; }
-  var projLabel = _taskProjectName || _taskProjectId;
-  openDialog('导入模板任务',
-    '<div class="confirm-dlg">将按项目模板为 <b>' + escHtml(projLabel) + '</b> 的所有阶段创建任务。<br><br>已有任务不会重复创建。</div>',
-    [{text: '取消', onclick: 'closeSharedDialog()'},
-     {text: '确定导入', cls: 'btn-primary', onclick: 'closeSharedDialog();doImportTasksFromTemplates()'}],
-    {hideClose: true});
+
+  API.get('/tasks/template-preview?project_id=' + encodeURIComponent(_taskProjectId)).then(function(data) {
+    var stages = (data && data.stages) ? data.stages : [];
+    var hasDeleted = false;
+    var rows = '';
+
+    stages.forEach(function(stage) {
+      var tasks = stage.tasks || [];
+      tasks.forEach(function(t) {
+        var status = t.status;
+        var disabled = '';
+        var checked = '';
+        var statusText = '';
+        var statusColor = '';
+        var checkbox = '';
+
+        switch (status) {
+          case 'missing':
+            checked = ' checked';
+            statusText = '缺失';
+            statusColor = 'var(--warn)';
+            checkbox = '<input type="checkbox" value="' + t.template_id + '" data-status="' + status + '"' + checked + disabled + '>';
+            break;
+          case 'exists_active':
+            checked = ' checked';
+            disabled = ' disabled';
+            statusText = '已导入';
+            statusColor = 'var(--muted)';
+            checkbox = '<input type="checkbox" value="' + t.template_id + '" data-status="' + status + '"' + checked + disabled + '>';
+            break;
+          case 'exists_deleted':
+            hasDeleted = true;
+            statusText = '已删除';
+            statusColor = 'var(--danger)';
+            checkbox = '<input type="checkbox" value="' + t.template_id + '" data-status="' + status + '"' + checked + disabled + '>';
+            break;
+          case 'exists_diverged':
+            disabled = ' disabled';
+            statusText = '已修改';
+            statusColor = 'var(--warn)';
+            checkbox = '<input type="checkbox" value="' + t.template_id + '" data-status="' + status + '"' + checked + disabled + '>';
+            break;
+          case 'exists_manual':
+            statusText = '手动';
+            statusColor = 'var(--muted)';
+            checkbox = '<span style="font-size:10px;color:var(--muted)">—</span>';
+            break;
+        }
+
+        rows += '<tr>' +
+          '<td>' + checkbox + '</td>' +
+          '<td style="font-size:11px;color:var(--muted)">' + escHtml(stage.stage_name || '') + '</td>' +
+          '<td>' + escHtml(t.task_name) + '</td>' +
+          '<td><span style="color:' + statusColor + '">' + statusText + '</span></td>' +
+          '</tr>';
+      });
+    });
+
+    var html = '<div style="max-height:400px;overflow-y:auto"><table class="proj-table" style="width:100%;table-layout:auto"><thead><tr><th style="width:30px">选</th><th style="width:90px">阶段</th><th>任务名</th><th style="width:55px">状态</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+    if (hasDeleted) {
+      html += '<div style="margin-top:8px;font-size:11px;color:var(--warn)">已删除的任务可勾选后强制重新导入</div>';
+    }
+
+    openDialog('导入模板任务', html, [
+      {text: '取消', onclick: 'closeSharedDialog()'},
+      {text: '确认导入', cls: 'btn-primary', onclick: 'doImportTasksFromTemplates()'}
+    ], {maxWidth: '85vw'});
+  }).catch(function(e) { showToast('加载失败: ' + (e.message || ''), 'error'); });
 }
 function doImportTasksFromTemplates() {
-  API.post('/tasks/import-from-templates?project_id=' + encodeURIComponent(_taskProjectId), {}).then(function(data) {
+  var cbs = document.querySelectorAll('.shared-dialog-overlay input[type=checkbox]:checked');
+  var templateIds = [];
+  cbs.forEach(function(cb) { templateIds.push(parseInt(cb.value)); });
+  if (!templateIds.length) { showToast('请选择要导入的模板任务', 'error'); return; }
+
+  API.post('/tasks/import-from-templates?project_id=' + encodeURIComponent(_taskProjectId), {template_ids: templateIds}).then(function(data) {
     showToast(data.message || '导入完成', 'success');
+    closeSharedDialog();
     EventBus.emit('task:saved', {});
   }).catch(function(e) { showToast('导入失败: ' + (e.message || ''), 'error'); });
 }

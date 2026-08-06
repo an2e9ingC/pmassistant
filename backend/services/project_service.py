@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Optional
 import logging
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
@@ -354,6 +355,7 @@ def get_project_gantt(db: Session, project_id: int) -> dict:
             tasks = db.query(Task).filter(
                 Task.project_id == project_id,
                 Task.stage_name == st,
+                or_(Task.is_deleted == 0, Task.is_deleted == None),
             ).all()
             progs = [t.progress or 0 for t in tasks]
             pct = round(sum(progs) / len(progs)) if progs else 0
@@ -378,13 +380,17 @@ def get_project_gantt(db: Session, project_id: int) -> dict:
         gantt_stages = []
         for s in stages_rows:
             # Tasks linked by stage_id
-            tasks_by_id = db.query(Task).filter(Task.stage_id == s.id).all()
+            tasks_by_id = db.query(Task).filter(
+                Task.stage_id == s.id,
+                or_(Task.is_deleted == 0, Task.is_deleted == None),
+            ).all()
             # Also include tasks with same stage_name but stage_id=NULL (imported from templates)
             id_set = {t.id for t in tasks_by_id}
             tasks_by_name = db.query(Task).filter(
                 Task.project_id == project_id,
                 Task.stage_name == s.name,
                 Task.stage_id == None,
+                or_(Task.is_deleted == 0, Task.is_deleted == None),
             ).all()
             tasks = tasks_by_id + [t for t in tasks_by_name if t.id not in id_set]
             progs = [t.progress or 0 for t in tasks]
