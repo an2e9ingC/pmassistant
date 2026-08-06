@@ -269,7 +269,7 @@ var PRIORITY_COLORS = { low: 'var(--muted)', medium: 'var(--accent)', high: 'var
 
 function renderPriority(priority) {
   var p = priority || 'medium';
-  return '<span class="prio-tag prio-' + p + '" style="color:' + (PRIORITY_COLORS[p] || '') + '" title="优先级: ' + (PRIORITY_LABELS[p] || p) + '">' +
+  return '<span class="prio-tag prio-' + p + '" title="优先级: ' + (PRIORITY_LABELS[p] || p) + '">' +
     (PRIORITY_LABELS[p] || p) + '</span>';
 }
 

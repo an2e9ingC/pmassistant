@@ -927,7 +927,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 
 .prio-tag { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; color: #fff; }
 .prio-tag.low { background: var(--muted); }
-.prio-tag.medium { background: #ca8a04; }
+.prio-tag.medium { background: var(--yellow); }
 .prio-tag.high { background: #f97316; }
 .prio-tag.critical { background: var(--danger); }
 
