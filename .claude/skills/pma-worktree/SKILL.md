@@ -146,6 +146,11 @@ export PMA_WORKTREE_DIR="<EnterWorktree 返回的实际路径>"
    > - `.env` 等 gitignore 文件 worktree 不会自动包含，必须手动拷贝
    > - GitLab OAuth 只支持主 session 端口（8000），worktree 请使用管理员账号密码登录
 
+   c2. **关闭远端同步**（避免 worktree 临时数据库污染远端数据源）：
+   ```bash
+   sed -i 's/^SYNC_INTERVAL_MINUTES=.*/SYNC_INTERVAL_MINUTES=0/' $PMA_WORKTREE_DIR/.env
+   ```
+
    d. **启动 worktree 服务**：
    ```bash
    cd $PMA_WORKTREE_DIR && ./server.sh restart -p $PORT
