@@ -25,6 +25,7 @@ FIELD_LABEL = {
     "reviewer_id": "审批人",
     "parent_id": "父任务",
     "blocked_by_id": "阻塞任务",
+    "cc_user_ids": "抄送人",
     "start_date": "开始日期",
     "due_date": "截止日期",
     "sort_order": "排序",

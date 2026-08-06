@@ -1,6 +1,6 @@
 """PMA-native Task and WorkLog models."""
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, Date, DateTime, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, Date, DateTime, Text, ForeignKey, JSON
 from sqlalchemy.sql import func
 
 from backend.database import Base
@@ -23,6 +23,8 @@ class Task(Base):
     assignee_id = Column(Integer, ForeignKey("local_users.id"), nullable=True)
     reviewer_id = Column(Integer, ForeignKey("local_users.id"), nullable=True)  # 审批人，进度100%时从 stage.owner_id 解析
     reporter_id = Column(Integer, ForeignKey("local_users.id"), nullable=False)
+    cc_user_ids = Column(JSON, nullable=True, default=list)
+    # List of user IDs who are CC'd on this task, e.g. [2, 5, 7]
     parent_id = Column(Integer, ForeignKey("pma_tasks.id"), nullable=True)
     blocked_by_id = Column(Integer, ForeignKey("pma_tasks.id"), nullable=True)
     progress = Column(Integer, default=0)  # 0-100, manually updated by user

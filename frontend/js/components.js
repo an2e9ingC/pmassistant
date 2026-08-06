@@ -50,6 +50,46 @@ function iconSync(onclick, title) {
   return iconBtn(svg, title || '同步到远端', onclick);
 }
 
+/* ── Bug Action Icon Buttons ── */
+
+function iconBugConfirm(onclick, disabled) {
+  var svg = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="8 12 11 15 16 9"/></svg>';
+  if (disabled) return '<span class="btn-xs" style="padding:1px 3px;color:var(--muted);opacity:0.35;cursor:not-allowed" title="确认Bug">' + svg + '</span>';
+  return '<button class="btn-xs" style="padding:1px 3px;color:var(--success);border:1px solid var(--success);border-radius:4px;background:var(--success-lt);cursor:pointer;line-height:1" onclick="' + onclick + '" title="确认Bug">' + svg + '</button>';
+}
+
+function iconBugResolve(onclick, disabled) {
+  var svg = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12 9 17 20 6"/></svg>';
+  if (disabled) return '<span class="btn-xs" style="padding:1px 3px;color:var(--muted);opacity:0.35;cursor:not-allowed" title="解决Bug">' + svg + '</span>';
+  return '<button class="btn-xs" style="padding:1px 3px;color:var(--accent);border:1px solid var(--accent);border-radius:4px;background:var(--accent-lt);cursor:pointer;line-height:1" onclick="' + onclick + '" title="解决Bug">' + svg + '</button>';
+}
+
+function iconBugClose(onclick, disabled) {
+  var svg = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v8"/><path d="M18 6a9 9 0 1 1-12 0"/></svg>';
+  if (disabled) return '<span class="btn-xs" style="padding:1px 3px;color:var(--muted);opacity:0.35;cursor:not-allowed" title="关闭">' + svg + '</span>';
+  return '<button class="btn-xs" style="padding:1px 3px;color:var(--danger);border:1px solid var(--danger);border-radius:4px;background:var(--danger-lt);cursor:pointer;line-height:1" onclick="' + onclick + '" title="关闭">' + svg + '</button>';
+}
+
+function iconBugReopen(onclick, disabled) {
+  var svg = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>';
+  if (disabled) return '<span class="btn-xs" style="padding:1px 3px;color:var(--muted);opacity:0.35;cursor:not-allowed" title="重新激活Bug">' + svg + '</span>';
+  return '<button class="btn-xs" style="padding:1px 3px;color:var(--warn);border:1px solid var(--warn);border-radius:4px;background:var(--warn-lt);cursor:pointer;line-height:1" onclick="' + onclick + '" title="重新激活Bug">' + svg + '</button>';
+}
+
+/* ── Task Action Icon Buttons (same SVG/style as bug icons, task-specific titles) ── */
+
+function iconTaskDone(onclick, disabled) {
+  var svg = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12 9 17 20 6"/></svg>';
+  if (disabled) return '<span class="btn-xs" style="padding:1px 3px;color:var(--muted);opacity:0.35;cursor:not-allowed" title="完成任务">' + svg + '</span>';
+  return '<button class="btn-xs" style="padding:1px 3px;color:var(--accent);border:1px solid var(--accent);border-radius:4px;background:var(--accent-lt);cursor:pointer;line-height:1" onclick="' + onclick + '" title="完成任务">' + svg + '</button>';
+}
+
+function iconTaskActivate(onclick, disabled) {
+  var svg = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>';
+  if (disabled) return '<span class="btn-xs" style="padding:1px 3px;color:var(--muted);opacity:0.35;cursor:not-allowed" title="激活任务">' + svg + '</span>';
+  return '<button class="btn-xs" style="padding:1px 3px;color:var(--warn);border:1px solid var(--warn);border-radius:4px;background:var(--warn-lt);cursor:pointer;line-height:1" onclick="' + onclick + '" title="激活任务">' + svg + '</button>';
+}
+
 /* ── Favorite helpers ── */
 
 /* ═══════════════════════════════════════════════════
@@ -1322,6 +1362,109 @@ function _renderUserDropdown(dropdownId, selectedId, q, selectFnName) {
 function closeSharedDialog() {
   var overlay = document.querySelector('.shared-dialog-overlay');
   if (overlay) overlay.remove();
+}
+
+/* ── CC (抄送) Multi-User Selector ── */
+
+function createCcSelector(opts) {
+  // opts: { containerId, selectedIds: [], onChange: fn(ids), placeholder }
+  var containerId = opts.containerId;
+  // Sanitize containerId for use in function names (replace hyphens with underscores)
+  var safeId = containerId.replace(/-/g, '_');
+  var comboId = containerId + '-combo';
+  var inputId = containerId + '-input';
+  var dropdownId = containerId + '-dropdown';
+  var tagsId = containerId + '-tags';
+  var ph = opts.placeholder || '搜索抄送人...';
+
+  // Store selected IDs globally accessible by combo functions
+  var key = '_cc_' + safeId;
+  window[key] = opts.selectedIds ? opts.selectedIds.slice() : [];
+
+  var openFn = '_ccOpen_' + safeId;
+  window[openFn] = function() {
+    if (typeof loadAllUsers !== 'function') return;
+    loadAllUsers().then(function() {
+      document.getElementById(comboId).classList.add('open');
+      var inp = document.getElementById(inputId); if (inp) inp.select();
+      _renderCcDropdown(dropdownId, window[key], '', containerId);
+    });
+  };
+
+  var filterFn = '_ccFilter_' + safeId;
+  window[filterFn] = function(q) {
+    _renderCcDropdown(dropdownId, window[key], q, containerId);
+  };
+
+  var selectFn = '_ccSelect_' + safeId;
+  window[selectFn] = function(uid) {
+    var ids = window[key];
+    if (ids.indexOf(uid) >= 0) return; // already selected
+    ids.push(uid);
+    document.getElementById(inputId).value = '';
+    document.getElementById(comboId).classList.remove('open');
+    _renderCcTags(containerId);
+    if (opts.onChange) opts.onChange(ids.slice());
+  };
+
+  var enterFn = '_ccEnter_' + safeId;
+  window[enterFn] = function(e) {
+    if (e.key === 'Enter') {
+      var dd = document.getElementById(dropdownId);
+      if (dd) { var f = dd.querySelector('.combo-opt'); if (f) f.click(); }
+    }
+  };
+
+  // Expose getter/setter for external use
+  window['_getCcIds_' + safeId] = function() { return window[key]; };
+  window['_setCcIds_' + safeId] = function(ids) { window[key] = ids || []; };
+
+  return '<div style="margin-top:2px">' +
+    '<div id="' + tagsId + '" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px"></div>' +
+    '<div class="proj-combo" id="' + comboId + '" style="display:inline-block;min-width:200px">' +
+      '<input class="proj-combo-input" id="' + inputId + '" type="text" autocomplete="off" placeholder="' + escHtml(ph) + '" ' +
+        'onclick="' + openFn + '()" oninput="' + filterFn + '(this.value)" onkeydown="' + enterFn + '(event)" style="width:100%;box-sizing:border-box">' +
+      '<svg class="proj-combo-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2,5 7,10 12,5"/></svg>' +
+      '<div class="proj-combo-dropdown" id="' + dropdownId + '"></div>' +
+    '</div>' +
+  '</div>';
+}
+
+function _renderCcTags(containerId) {
+  var safeId = containerId.replace(/-/g, '_');
+  var tagsEl = document.getElementById(containerId + '-tags');
+  if (!tagsEl) return;
+  var ids = window['_cc_' + safeId] || [];
+  if (!ids.length) { tagsEl.innerHTML = ''; return; }
+  loadAllUsers().then(function() {
+    var html = '';
+    ids.forEach(function(uid) {
+      var u = _allUsers.find(function(x) { return x.id == uid; });
+      var name = u ? (u.name || u.display_name || u.username) : ('#' + uid);
+      html += '<span style="display:inline-flex;align-items:center;gap:2px;background:var(--accent);color:#fff;padding:1px 6px;border-radius:10px;font-size:11px;white-space:nowrap">' +
+        escHtml(name) +
+        '<button onclick="event.stopPropagation();var ids=window._cc_' + safeId + ';var idx=ids.indexOf(' + uid + ');if(idx>=0)ids.splice(idx,1);_renderCcTags(\'' + containerId + '\');" ' +
+        'style="background:none;border:none;color:inherit;cursor:pointer;padding:0;margin-left:2px;font-size:13px;line-height:1;opacity:0.7">×</button>' +
+      '</span>';
+    });
+    tagsEl.innerHTML = html;
+  });
+}
+
+function _renderCcDropdown(dropdownId, selectedIds, q, containerId) {
+  var safeId = containerId.replace(/-/g, '_');
+  var dd = document.getElementById(dropdownId);
+  if (!dd) return;
+  var v = (q || '').trim().toLowerCase();
+  var list = v
+    ? _allUsers.filter(function(u) { return (u.name || '').toLowerCase().indexOf(v) >= 0 && selectedIds.indexOf(u.id) < 0; })
+    : _allUsers.filter(function(u) { return selectedIds.indexOf(u.id) < 0; });
+  list = list.slice(0, 30);
+  if (!list.length) { dd.innerHTML = '<div class="combo-opt" style="color:var(--muted)">无匹配用户</div>'; return; }
+  var fn = '_ccSelect_' + safeId;
+  dd.innerHTML = list.map(function(u) {
+    return '<div class="combo-opt" onclick="' + fn + '(' + u.id + ')">' + escHtml(u.name) + '</div>';
+  }).join('');
 }
 
 // Global click to close any open combo

@@ -17,13 +17,15 @@ class BugCreate(BaseModel):
     title: str
     description: Optional[str] = ""
     product_id: int
-    project_id: Optional[int] = None
+    project_id: int
     component_id: Optional[int] = None
     severity: int = 3
     priority: str = "medium"
     type: str = "codeerror"
     assignee_id: Optional[int] = None
     estimate_hours: float = 0
+    cc_user_ids: Optional[List[int]] = None
+    progress: Optional[int] = 0
 
 
 class BugUpdate(BaseModel):
@@ -39,6 +41,8 @@ class BugUpdate(BaseModel):
     assignee_id: Optional[int] = None
     estimate_hours: Optional[float] = None
     resolved_by_id: Optional[int] = None
+    cc_user_ids: Optional[List[int]] = None
+    progress: Optional[int] = None
 
 
 class WorklogCreate(BaseModel):
@@ -87,14 +91,22 @@ class BatchImportRequest(BaseModel):
 def list_bugs(product_id: Optional[int] = Query(None), project_id: Optional[int] = Query(None),
               status: Optional[str] = Query(None), assignee_id: Optional[int] = Query(None),
               component_id: Optional[int] = Query(None), search: Optional[str] = Query(None),
+              reporter_id: Optional[int] = Query(None),
               db: Session = Depends(get_db), _=Depends(get_current_user)):
-    bugs = bug_service.get_bugs(db, product_id, project_id, status, assignee_id, component_id, search)
+    bugs = bug_service.get_bugs(db, product_id, project_id, status, assignee_id, component_id, search, reporter_id=reporter_id)
     return {"code": 0, "data": bugs, "message": "ok"}
 
 
 @router.get("/my", response_model=dict)
 def my_bugs(db: Session = Depends(get_db), user=Depends(get_current_user)):
     bugs = bug_service.get_my_bugs(db, user.id)
+    return {"code": 0, "data": bugs, "message": "ok"}
+
+
+@router.get("/user/{user_id}", response_model=dict)
+def get_user_bugs(user_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    """返回某用户的所有相关 Bug：负责人 + 创建人 + 被抄送"""
+    bugs = bug_service.get_user_bugs(db, user_id)
     return {"code": 0, "data": bugs, "message": "ok"}
 
 
@@ -221,6 +233,25 @@ def transfer_bug(bug_id: int, body: TransferCreate, db: Session = Depends(get_db
     if not b: raise HTTPException(status_code=404, detail="Bug not found")
     log_audit(db, user, "bug_transfer", f"Bug #{bug_id} {body.transfer_type}→项目{body.to_project_id}", AUDIT_CAT_BUG, "medium")
     return {"code": 0, "data": b, "message": "ok"}
+
+
+# ── Comments ──
+
+class CommentCreate(BaseModel):
+    content: str
+    is_system: Optional[int] = 0
+
+
+@router.get("/{bug_id}/comments", response_model=dict)
+def list_comments(bug_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    comments = bug_service.get_comments(db, bug_id)
+    return {"code": 0, "data": comments, "message": "ok"}
+
+
+@router.post("/{bug_id}/comments", response_model=dict)
+def create_comment(bug_id: int, body: CommentCreate, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    c = bug_service.create_comment(db, bug_id, body.content, user.id, body.is_system)
+    return {"code": 0, "data": c, "message": "ok"}
 
 
 # ── GitLab Integration ──

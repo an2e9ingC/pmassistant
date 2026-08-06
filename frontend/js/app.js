@@ -1540,12 +1540,17 @@ function changePassword() {
   document.body.insertAdjacentHTML('beforeend', html);
 }
 
-async function initUserCenter(viewUserId) {
+async function initUserCenter(viewUserId, tab) {
   var container = document.getElementById('user-center-content');
   if (!container) return;
   var currentUser = getCurrentUser();
   if (!currentUser) { container.innerHTML = '<div class="error-state">未登录</div>'; return; }
 
+  // Handle case where a tab name is passed as first arg (e.g. #/user-center/bugs)
+  if (viewUserId && ['tasks','bugs','approvals'].indexOf(String(viewUserId)) >= 0) {
+    tab = String(viewUserId);
+    viewUserId = null;
+  }
   // If viewing another user's center (admin feature), load that user's data
   var user = currentUser;
   var isViewingOther = viewUserId && viewUserId !== currentUser.id;
@@ -1554,7 +1559,11 @@ async function initUserCenter(viewUserId) {
     try {
       var resp = await API.get('/admin/users/' + viewUserId);
       if (resp) { user = resp; }
-    } catch(e) { /* fall back to current user */ }
+    } catch(e) {
+      console.warn('Failed to load user ' + viewUserId + ', falling back to current user');
+      window._ucViewUserId = null;  // Clear invalid user ID so queries fall back to /bugs/my
+      user = currentUser;
+    }
   }
 
   var isGitlab = user.auth_source === 'gitlab';
@@ -1659,13 +1668,31 @@ async function initUserCenter(viewUserId) {
 
   // Calendar navigation callback
   _calChangeCallback = function() { _ucLoadCalendar(user); _ucLoadWecomCalendar(user); };
-  // Load tasks by default (bugs load on tab switch)
-  _ucActiveTab = 'tasks';
-  _ucLoadTasks(user);
-  // Preload bug count for the tab button, stats hidden (bugs section not active)
-  _ucLoadBugs();
-  // Preload approvals count for the tab button
-  if (window._approvalEnabled) _ucLoadApprovals();
+  // Determine initial tab from URL or default to tasks
+  var initialTab = (tab && ['tasks','bugs','approvals'].indexOf(tab) >= 0) ? tab : 'tasks';
+  _ucActiveTab = initialTab;
+  if (initialTab === 'bugs') {
+    // Show bugs section, hide tasks
+    var tasksSec = document.getElementById('uc-tasks-section');
+    var bugsSec = document.getElementById('uc-bugs-section');
+    var tasksBtn = document.getElementById('btn-my-tasks');
+    var bugsBtn = document.getElementById('btn-my-bugs');
+    if (tasksSec) tasksSec.style.display = 'none';
+    if (bugsSec) bugsSec.style.display = 'flex';
+    if (tasksBtn) tasksBtn.classList.remove('active');
+    if (bugsBtn) bugsBtn.classList.add('active');
+    _ucLoadTasks(user);
+    _ucLoadBugs();
+    if (window._approvalEnabled) _ucLoadApprovals();
+  } else if (initialTab === 'approvals') {
+    _ucLoadTasks(user);
+    _ucLoadBugs();
+    if (window._approvalEnabled) _ucLoadApprovals();
+  } else {
+    _ucLoadTasks(user);
+    _ucLoadBugs();
+    if (window._approvalEnabled) _ucLoadApprovals();
+  }
 }
 
 var _ucTasks = [];
@@ -1705,6 +1732,9 @@ function _ucRenderTaskStats() {
 function _ucSwitchTab(tab) {
   if (_ucActiveTab === tab) return;
   _ucActiveTab = tab;
+  // Update URL hash to persist tab
+  var uid = window._ucViewUserId || '';
+  history.replaceState(null, '', '#/user-center' + (uid ? '/' + uid : '') + '/' + tab);
   // Update button active states in floating card
   var tasksBtn = document.getElementById('btn-my-tasks');
   var bugsBtn = document.getElementById('btn-my-bugs');
@@ -1781,7 +1811,7 @@ function _renderUcApprovalTable() {
         { key: 'status', title: '状态', width: '70px', render: function(v, row) { return '<span style="cursor:pointer" onclick="event.stopPropagation();openReviewerDialog('+row.id+')" title="'+(row.reviewer_name?'审批人: '+escHtml(row.reviewer_name)+' — 点击修改':'点击设置审批人')+'">'+renderPill(v||'review')+'</span>'; } },
         { key: 'progress', title: '进度', width: '6%', render: function(v) { return renderProgressCircle(v||0, 30, {label:''}); } },
         { key: 'assignee_name', title: '责任人', width: '8%', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'')+'</span>'; } },
-        { key: 'due_date', title: '截止', width: '7%', render: function(v, row) { var overdue = v && row.status!=='done' && row.status!=='closed' && v<fmtLocalDate(); return '<span style="font-size:12px;color:'+(overdue?'var(--danger)':'')+'">'+(v||'-')+'</span>'; } },
+        { key: 'due_date', title: '截止', width: '7%', render: function(v, row) { var overdue = v && row.status!=='done' && v<fmtLocalDate(); return '<span style="font-size:12px;color:'+(overdue?'var(--danger)':'')+'">'+(v||'-')+'</span>'; } },
         { key: 'actions', title: '操作', render: function(v, row) { return '<span style="white-space:nowrap" onclick="event.stopPropagation()"><button class="btn-icon" onclick="_ucApproveTask('+row.id+',\''+escJs(row.title)+'\')" title="批准" style="color:var(--success)">'+_ucApproveIcon+'</button><button class="btn-icon" onclick="_ucRejectTask('+row.id+',\''+escJs(row.title)+'\')" title="驳回" style="color:var(--danger);margin-left:2px">'+_ucRejectIcon+'</button></span>'; } }
       ],
       data: _ucApprovals,
@@ -1813,7 +1843,7 @@ function _ucRejectTask(taskId, taskTitle) {
 }
 
 function _ucLoadTasks(user) {
-  var url = window._ucViewUserId ? '/tasks?assignee_id=' + window._ucViewUserId + '&limit=200' : '/tasks/my';
+  var url = window._ucViewUserId ? '/tasks/user/' + window._ucViewUserId : '/tasks/my';
   API.get(url).then(function(tasks) {
     _ucTasks = Array.isArray(tasks) ? tasks : (tasks && tasks.items ? tasks.items : []);
     _ucUpdateTaskCount();
@@ -1835,12 +1865,12 @@ function _ucMatchFilter(status, task) {
   if (_ucFilterStatus === 'unfinished') return status !== 'done' && status !== 'review';
   if (_ucFilterStatus === 'high_priority') {
     if (!task) return false;
-    if (status === 'done' || status === 'closed') return false;
+    if (status === 'done' ) return false;
     return task.priority === 'high' || task.priority === 'critical';
   }
   if (_ucFilterStatus === 'expiring') {
     if (!task || !task.due_date) return false;
-    if (status === 'done' || status === 'closed') return false;
+    if (status === 'done' ) return false;
     var today = fmtLocalDate();
     var due = task.due_date;
     var diff = Math.ceil((new Date(due + 'T00:00:00') - new Date(today + 'T00:00:00')) / 86400000);
@@ -2102,13 +2132,13 @@ function _renderUcTaskTable() {
         { key: '_projCode', title: '项目编号', width: '8%', rowspan: true, render: function(v, row) { return v ? projCodeTag(row.project_code||v, 'event.stopPropagation();openProject(\''+escHtml(row.project_code||v).replace(/'/g,"\\'")+'\')', row.project_name) : '-'; } },
         { key: '_prodName', title: '产品编号', width: '100px', rowspan: true, render: function(v, row) { return row.product_code ? '<span class="proj-code-btn" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="event.stopPropagation();openProductDetail(\''+escHtml(row.product_code)+'\')" title="'+escHtml(row.product_code)+' '+escHtml(row.product_name||'')+'">'+escHtml(row.product_code)+'</span>' : '<span style="font-size:12px;color:var(--muted)">—</span>'; } },
         { key: '_stageName', title: '阶段', rowspan: true, render: function(v) { var parts = (v||'').split('||'); var name = parts.length >= 3 ? parts[2] : (v||''); return '<span style="font-size:12px">'+escHtml(name)+'</span>'; } },
-        { key: 'id', title: '任务编号', width: '6%', render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted)">#'+v+'</span>'; } },
-        { key: 'title', title: '任务标题', align: 'left', render: function(v) { return '<span style="font-weight:530">'+escHtml(v||'')+'</span>'; } },
-        { key: 'status', title: '状态', width: '70px', render: function(v, row) { var h = renderPill(v||'todo'); if (window._approvalEnabled) h = '<span style="cursor:pointer" onclick="event.stopPropagation();openReviewerDialog('+row.id+')" title="'+(row.reviewer_name?'审批人: '+escHtml(row.reviewer_name)+' — 点击修改':'点击设置审批人')+'">'+h+'</span>'; return h; } },
-        { key: 'priority', title: '<span style="cursor:pointer" onclick="_ucSortBy(\'priority\')">优先级</span> <span id="uc-sort-prio" style="color:var(--muted);font-size:10px">⇅</span>', width: '6%', render: function(v) { return '<span class="prio-tag '+(v||'medium')+'">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[v]||v)+'</span>'; } },
-        { key: 'progress', title: '进度', width: '6%', render: function(v) { return renderProgressCircle(v||0, 36, {label:''}); } },
-        { key: 'due_date', title: '<span style="cursor:pointer" onclick="_ucSortBy(\'due_date\')">截止</span> <span id="uc-sort-due" style="color:var(--muted);font-size:10px">⇅</span>', width: '7%', render: function(v, row) { var overdue = v && row.status!=='done' && row.status!=='closed' && v<fmtLocalDate(); return '<span style="font-size:12px;color:'+(overdue?'var(--danger)':'')+'">'+(v||'-')+'</span>'; } },
-        { key: 'actions', title: '操作', render: function(v, row) { return '<span style="white-space:nowrap" onclick="event.stopPropagation()">'+iconEdit('_ucOpenTask('+row.id+')','查看/编辑')+iconDelete('_ucDeleteTask('+row.id+')','删除')+'</span>'; } }
+        { key: 'id', title: '任务编号', width: '6%', render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--accent);cursor:pointer" onclick="event.stopPropagation();_ucOpenTask('+v+')">#'+v+'</span>'; } },
+        { key: 'title', title: '任务标题', align: 'left', render: function(v, row) { return '<span style="font-weight:530;cursor:pointer" onclick="event.stopPropagation();_ucOpenTask('+row.id+')">'+escHtml(v||'')+'</span>'; } },
+        { key: 'status', title: '状态', width: '70px', render: function(v, row) { var labels = {todo:'待办',in_progress:'进行中',review:'待审批',done:'已完成'}; var h = '<span class="pill '+(v||'todo')+'">'+(labels[v]||v)+'</span>'; if (window._approvalEnabled) h = '<span style="cursor:pointer" onclick="event.stopPropagation();openReviewerDialog('+row.id+')" title="'+(row.reviewer_name?'审批人: '+escHtml(row.reviewer_name)+' — 点击修改':'点击设置审批人')+'">'+h+'</span>'; return h; } },
+        { key: 'priority', title: '优先级', width: '6%', render: function(v, row) { return '<span class="prio-tag '+(v||'medium')+'" style="cursor:pointer" onclick="event.stopPropagation();_ucEditTaskField('+row.id+',\'priority\',\''+(v||'medium')+'\',\'low:低,medium:中,high:高,critical:紧急\',\''+escHtml(row.title||'').replace(/'/g,"\\'")+'\')">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[v]||v)+'</span>'; } },
+        { key: 'progress', title: '进度', width: '6%', render: function(v, row) { var st = row.status || 'todo'; return '<span style="cursor:pointer" onclick="event.stopPropagation();_ucEditTaskNumber('+row.id+',\'progress\',\''+(v||0)+'\',\'进度(%)\',0,100,5,\''+escHtml(row.title||'').replace(/'/g,"\\'")+'\',\''+st+'\')">' + (typeof renderProgressCircle==='function'?renderProgressCircle(v||0,36,{label:''}):(v||0)+'%') + '</span>'; } },
+        { key: 'due_date', title: '截止', width: '7%', render: function(v, row) { var overdue = v && row.status!=='done' && v<fmtLocalDate(); return '<span style="font-size:12px;color:'+(overdue?'var(--danger)':'')+'">'+(v||'-')+'</span>'; } },
+        { key: 'actions', title: '操作', width: '58px', render: function(v, row) { return _ucTaskActionsHtml(row); } }
       ],
       data: flatRows,
       maxHeight: '400px',
@@ -2116,8 +2146,8 @@ function _renderUcTaskTable() {
       stickyHeader: true,
       selectable: true,
       checkboxPosition: 3,
-      onSelectChange: function(rows) { _selectedTasks = new Set(rows.map(function(r) { return r.id; })); if (typeof _ensureBatchToolbar==='function') _ensureBatchToolbar(); if (typeof _updateBatchToolbar==='function') _updateBatchToolbar(); },
-      onRowClick: function(row) { _ucOpenTask(row.id); }
+      onSelectChange: function(rows) { _selectedTasks = new Set(rows.map(function(r) { return r.id; })); if (typeof _ensureBatchToolbar==='function') _ensureBatchToolbar(); if (typeof _updateBatchToolbar==='function') _updateBatchToolbar(); }
+      // No onRowClick — only ID/title are clickable
     });
   } else {
     _ucTasksDt.setData(flatRows);
@@ -2135,6 +2165,269 @@ function _ucEnsureBugsJs(fn) {
   return 'loadViewScript(\'/js/bugs.js?v=' + APP_VERSION + '\',function(){' + fn + '})';
 }
 
+/* ── User Center Task Quick Actions ── */
+
+function _ucTaskActionsHtml(row) {
+  var user = getCurrentUser();
+  var uid = user ? user.id : null;
+  var isReporter = !!(uid && row.reporter_id == uid);
+  var isAssignee = !!(uid && row.assignee_id == uid);
+  var canAct = isReporter || isAssignee;
+  var isDone = row.status === 'done';
+
+  var html = '<span style="white-space:nowrap;display:flex;align-items:center;gap:2px" onclick="event.stopPropagation()">';
+  html += iconEdit('_ucOpenTask(' + row.id + ')', '查看/编辑');
+  html += iconTaskDone((!isDone && canAct) ? '_ucCompleteTask(' + row.id + ')' : '', !(!isDone && canAct));
+  html += iconTaskActivate((isDone && canAct) ? '_ucActivateTask(' + row.id + ')' : '', !(isDone && canAct));
+  html += iconDelete('_ucDeleteTask(' + row.id + ')', '删除');
+  html += '</span>';
+  return html;
+}
+
+async function _ucCompleteTask(taskId) {
+  if (!confirm('确定将此任务标记为已完成？')) return;
+  try {
+    var payload = {status: 'done', progress: 100};
+    var evt = {data: payload, progress: 100, status: 'done'};
+    EventBus.emit('task:before-save', evt);
+    await API.put('/tasks/' + taskId, payload);
+    EventBus.emit('task:saved', {taskId: taskId});
+    showToast('任务已完成','success');
+  } catch(e) { showToast('操作失败: '+(e.message||''),'error'); }
+}
+
+async function _ucActivateTask(taskId) {
+  if (!confirm('确定重新激活此任务？')) return;
+  try {
+    var payload = {status: 'in_progress', progress: 50};
+    var evt = {data: payload, progress: 50, status: 'in_progress'};
+    EventBus.emit('task:before-save', evt);
+    await API.put('/tasks/' + taskId, payload);
+    EventBus.emit('task:saved', {taskId: taskId});
+    showToast('任务已激活','success');
+  } catch(e) { showToast('操作失败: '+(e.message||''),'error'); }
+}
+
+/* ── Task Inline Edit Helpers ── */
+
+function _ucEditTaskField(taskId, field, currentVal, options, title) {
+  var opts = options.split(',');
+  var html = '<select id="uc-edit-sel" style="width:100%;padding:6px 10px;border-radius:6px;border:1px solid var(--accent)">';
+  opts.forEach(function(o) { var p = o.split(':'); html += '<option value="'+p[0]+'"'+(p[0]===currentVal?' selected':'')+'>'+p[1]+'</option>'; });
+  html += '</select>';
+  window._ucEditCtx = {taskId: taskId, field: field, currentVal: currentVal, isTask: true};
+  var dlgTitle = '#' + taskId + ' ' + (title || '');
+  openDialog(dlgTitle, html, [
+    {text:'取消',onclick:'closeSharedDialog()'},
+    {text:'确定',cls:'btn-primary',onclick:'_doEditTaskField()'}
+  ], {maxWidth:300});
+}
+async function _doEditTaskField() {
+  var ctx = window._ucEditCtx; if (!ctx) return;
+  try {
+    var v = document.getElementById('uc-edit-sel').value;
+    if (v === String(ctx.currentVal)) { closeSharedDialog(); return; }
+    var payload = {};
+    payload[ctx.field] = v;
+    await API.put('/tasks/'+ctx.taskId, payload);
+    EventBus.emit('task:saved', {taskId: ctx.taskId});
+    showToast('已更新','success');
+    closeSharedDialog();
+  } catch(e) { showToast('更新失败: '+(e.message||''),'error'); }
+}
+
+function _ucEditTaskNumber(taskId, field, currentVal, label, min, max, step, title, currentStatus) {
+  var html = '<div><label style="font-size:11px;color:var(--muted)">' + label + '</label>' +
+    '<input type="number" class="search-inp" id="uc-edit-num" value="'+currentVal+'" min="'+min+'" max="'+max+'" step="'+step+'" style="width:100%;margin-top:4px"></div>';
+  window._ucEditCtx = {taskId: taskId, field: field, currentVal: currentVal, isTask: true, currentStatus: currentStatus || 'todo'};
+  var dlgTitle = '#' + taskId + ' ' + (title || '');
+  openDialog(dlgTitle, html, [
+    {text:'取消',onclick:'closeSharedDialog()'},
+    {text:'确定',cls:'btn-primary',onclick:'_doEditTaskNumber()'}
+  ], {maxWidth:300});
+}
+async function _doEditTaskNumber() {
+  var ctx = window._ucEditCtx; if (!ctx) return;
+  try {
+    var v = parseInt(document.getElementById('uc-edit-num').value) || 0;
+    if (v === parseInt(ctx.currentVal)) { closeSharedDialog(); return; }
+    var payload = {};
+    payload[ctx.field] = v;
+    // Progress/status sync: handle directly for reliability
+    if (ctx.field === 'progress') {
+      var s = ctx.currentStatus || 'todo';
+      if (v > 0 && v < 100 && s === 'todo') { payload.status = 'in_progress'; }
+      if (v >= 100 && s !== 'review' && s !== 'done') { payload.status = window._approvalEnabled ? 'review' : 'done'; }
+      if ((s === 'done' || s === 'review') && v < 100) { payload.status = 'in_progress'; }
+      if (s === 'todo' && v > 0) { payload.progress = 0; payload.status = undefined; }
+    }
+    await API.put('/tasks/'+ctx.taskId, payload);
+    EventBus.emit('task:saved', {taskId: ctx.taskId});
+    showToast('已更新','success');
+    closeSharedDialog();
+  } catch(e) { showToast('更新失败: '+(e.message||''),'error'); }
+}
+
+/* ── User Center Bug Quick Actions ── */
+
+function _ucBugActionsHtml(row) {
+  var user = getCurrentUser();
+  var uid = user ? user.id : null;
+  var isReporter = !!(uid && row.reporter_id == uid);
+  var isAssignee = !!(uid && row.assignee_id == uid);
+  var isOpen = row.status === 'open';
+  var isInProgress = row.status === 'in_progress';
+  var isResolved = row.status === 'resolved';
+  var isClosed = row.status === 'closed';
+
+  // Permission model:
+  // Close → only reporter
+  // Reopen → reporter OR assignee
+  // Confirm → only assignee
+  // Resolve → only assignee
+
+  var showConfirm = isOpen;
+  var showResolve = isInProgress;
+  var showClose = isOpen || isInProgress || isResolved;
+  var showReopen = isResolved || isClosed;
+
+  var canConfirm = showConfirm && isAssignee;
+  var canResolve = showResolve && isAssignee;
+  var canClose = showClose && isReporter;
+  var canReopen = showReopen && (isReporter || isAssignee);
+
+  var html = '<span style="white-space:nowrap;display:flex;align-items:center;gap:2px" onclick="event.stopPropagation()">';
+  html += iconEdit('openBugDetail(' + row.id + ')', '查看/编辑');
+  html += iconBugConfirm(canConfirm ? '_ucConfirmBug(' + row.id + ')' : '', !canConfirm);
+  html += iconBugResolve(canResolve ? '_ucResolveBug(' + row.id + ')' : '', !canResolve);
+  html += iconBugClose(canClose ? '_ucCloseBug(' + row.id + ')' : '', !canClose);
+  html += iconBugReopen(canReopen ? '_ucReopenBug(' + row.id + ')' : '', !canReopen);
+  html += '</span>';
+  return html;
+}
+
+/* ── Inline Edit Helpers for Bug Table Columns ── */
+
+function _ucEditBugField(bugId, field, currentVal, options, title) {
+  // options: 'val1:label1,val2:label2'
+  var opts = options.split(',');
+  var html = '<select id="uc-edit-sel" style="width:100%;padding:6px 10px;border-radius:6px;border:1px solid var(--accent)">';
+  opts.forEach(function(o) { var p = o.split(':'); html += '<option value="'+p[0]+'"'+(p[0]===currentVal?' selected':'')+'>'+p[1]+'</option>'; });
+  html += '</select>';
+  window._ucEditCtx = {bugId: bugId, field: field, currentVal: currentVal};
+  var dlgTitle = '#' + bugId + ' ' + (title || '');
+  openDialog(dlgTitle, html, [
+    {text:'取消',onclick:'closeSharedDialog()'},
+    {text:'确定',cls:'btn-primary',onclick:'_doEditBugField()'}
+  ], {maxWidth:300});
+}
+async function _doEditBugField() {
+  var ctx = window._ucEditCtx; if (!ctx) return;
+  try {
+    var v = document.getElementById('uc-edit-sel').value;
+    if (v === String(ctx.currentVal)) { closeSharedDialog(); return; }
+    var payload = {};
+    payload[ctx.field] = ctx.field === 'severity' ? parseInt(v) : v;
+    await API.put('/bugs/'+ctx.bugId, payload);
+    EventBus.emit('bug:field-changed', {bugId: ctx.bugId, payload: payload});
+    showToast('已更新','success');
+    closeSharedDialog();
+  } catch(e) { showToast('更新失败: '+(e.message||''),'error'); }
+}
+
+function _ucEditBugNumber(bugId, field, currentVal, label, min, max, step, title, currentStatus) {
+  var html = '<div><label style="font-size:11px;color:var(--muted)">' + label + '</label>' +
+    '<input type="number" class="search-inp" id="uc-edit-num" value="'+currentVal+'" min="'+min+'" max="'+max+'" step="'+step+'" style="width:100%;margin-top:4px"></div>';
+  window._ucEditCtx = {bugId: bugId, field: field, currentVal: currentVal, currentStatus: currentStatus || 'open'};
+  var dlgTitle = '#' + bugId + ' ' + (title || '');
+  openDialog(dlgTitle, html, [
+    {text:'取消',onclick:'closeSharedDialog()'},
+    {text:'确定',cls:'btn-primary',onclick:'_doEditBugNumber()'}
+  ], {maxWidth:300});
+}
+async function _doEditBugNumber() {
+  var ctx = window._ucEditCtx; if (!ctx) return;
+  try {
+    var v = parseInt(document.getElementById('uc-edit-num').value) || 0;
+    if (v === parseInt(ctx.currentVal)) { closeSharedDialog(); return; }
+    var payload = {};
+    payload[ctx.field] = v;
+    // Progress/status sync directly
+    if (ctx.field === 'progress') {
+      var s = ctx.currentStatus || 'open';
+      if (v > 0 && v < 100 && s === 'open') { payload.status = 'in_progress'; }
+      if (v >= 100 && s !== 'resolved' && s !== 'closed') { payload.status = 'resolved'; }
+      if (s === 'resolved' && v < 100) { payload.status = 'in_progress'; }
+      if (s === 'open' && v > 0) { payload.progress = 0; payload.status = undefined; }
+    }
+    await API.put('/bugs/'+ctx.bugId, payload);
+    EventBus.emit('bug:field-changed', {bugId: ctx.bugId, payload: payload});
+    showToast('已更新','success');
+    closeSharedDialog();
+  } catch(e) { showToast('更新失败: '+(e.message||''),'error'); }
+}
+
+async function _ucConfirmBug(bugId) {
+  var user = getCurrentUser();
+  var html = '<div>' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">类型 *</label>' +
+      '<select class="search-inp" id="cfm-type" style="width:100%;margin-top:2px">' +
+        '<option value="codeerror">代码错误</option><option value="design">设计缺陷</option>' +
+        '<option value="security">安全问题</option><option value="performance">性能问题</option>' +
+        '<option value="other">其他</option></select></div>' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">预估工时(h)</label>' +
+      '<input class="search-inp" id="cfm-estimate" type="number" step="0.5" value="0" style="width:100%;margin-top:2px"></div>' +
+    '</div>';
+  openDialog('确认Bug #' + bugId, html, [
+    {text:'取消',onclick:'closeSharedDialog()'},
+    {text:'确认',cls:'btn-primary',onclick:'_doConfirmBug(' + bugId + ')'}
+  ], {maxWidth:350});
+}
+async function _doConfirmBug(bugId) {
+  try {
+    var type = document.getElementById('cfm-type').value;
+    var est = parseFloat(document.getElementById('cfm-estimate').value) || 0;
+    await API.put('/bugs/' + bugId, {status: 'in_progress', type: type, estimate_hours: est});
+    await API.post('/bugs/' + bugId + '/comments', {content: 'Bug已确认，状态切换为处理中（类型: ' + type + ', 预估工时: ' + est.toFixed(1) + 'h）', is_system: 1});
+    EventBus.emit('bug:saved', {bugId: bugId});
+    showToast('Bug已确认','success');
+    closeSharedDialog();
+  } catch(e) { showToast('操作失败: '+(e.message||''),'error'); }
+}
+
+async function _ucResolveBug(bugId) {
+  if (!confirm('确定将此Bug标记为已解决？')) return;
+  try {
+    var payload = {status: 'resolved', progress: 100, resolution: 'resolved'};
+    var evt = {data: payload, progress: 100, status: 'resolved'};
+    EventBus.emit('bug:before-save', evt);
+    await API.put('/bugs/' + bugId, payload);
+    await API.post('/bugs/' + bugId + '/comments', {content: 'Bug已解决', is_system: 1});
+    EventBus.emit('bug:saved', {bugId: bugId});
+    showToast('Bug已解决','success');
+  } catch(e) { showToast('操作失败: '+(e.message||''),'error'); }
+}
+
+async function _ucCloseBug(bugId) {
+  if (!confirm('确定关闭此Bug？')) return;
+  try {
+    await API.put('/bugs/' + bugId, {status: 'closed'});
+    await API.post('/bugs/' + bugId + '/comments', {content: 'Bug已关闭', is_system: 1});
+    EventBus.emit('bug:saved', {bugId: bugId});
+    showToast('Bug已关闭','success');
+  } catch(e) { showToast('操作失败: '+(e.message||''),'error'); }
+}
+
+async function _ucReopenBug(bugId) {
+  if (!confirm('确定重新激活此Bug？')) return;
+  try {
+    await API.put('/bugs/' + bugId, {status: 'in_progress', resolution: null, progress: 50});
+    await API.post('/bugs/' + bugId + '/comments', {content: 'Bug已重新激活，状态切换为处理中（进度50%）', is_system: 1});
+    EventBus.emit('bug:saved', {bugId: bugId});
+    showToast('Bug已重新激活','success');
+  } catch(e) { showToast('操作失败: '+(e.message||''),'error'); }
+}
+
 var _ucBugTab = 'assignee'; // 'assignee' | 'reporter'
 var _ucBugFilterProd = '';
 var _ucBugFilterProj = '';
@@ -2144,6 +2437,7 @@ var _ucBugsReqId = 0;  // request counter to ignore stale async responses
 function _ucRenderBugFilter(bugs, uid) {
   var assigned = (bugs||[]).filter(function(b) { return b.assignee_id === uid; });
   var reported = (bugs||[]).filter(function(b) { return b.reporter_id === uid; });
+  var cc = (bugs||[]).filter(function(b) { return (b.cc_user_ids || []).indexOf(uid) >= 0; });
   // Collect unique product and project names from all bugs
   var prodSet = {}, projSet = {};
   (bugs||[]).forEach(function(b) {
@@ -2151,7 +2445,7 @@ function _ucRenderBugFilter(bugs, uid) {
     if (b.project_name) projSet[b.project_name] = 1;
   });
   var projs = Object.keys(projSet).sort();
-  var statuses = [{v:'',l:'全部状态'},{v:'open',l:'待确认'},{v:'confirmed',l:'已确认'},{v:'in_progress',l:'处理中'},{v:'resolved',l:'已解决'},{v:'closed',l:'已关闭'}];
+  var statuses = [{v:'',l:'全部状态'},{v:'open',l:'待确认'},{v:'in_progress',l:'处理中'},{v:'resolved',l:'已解决'},{v:'closed',l:'已关闭'}];
   var statusSel = '<select class="proj-select" onchange="_ucBugFilterStatus=this.value;_ucLoadBugs()">' + statuses.map(function(s) { return '<option value="'+s.v+'"'+(_ucBugFilterStatus===s.v?' selected':'')+'>'+s.l+'</option>'; }).join('') + '</select>';
   var prodSelHtml = createProductCombo({
     comboId: 'uc-bug-prod-filter', inputId: 'uc-bug-prod-filter-input', dropdownId: 'uc-bug-prod-filter-dropdown',
@@ -2159,12 +2453,21 @@ function _ucRenderBugFilter(bugs, uid) {
     onSelect: function(p) { _ucBugFilterProd = p.name; _ucLoadBugs(); }
   });
   var projSel = projs.length ? '<select class="proj-select" onchange="_ucBugFilterProj=this.value;_ucLoadBugs()"><option value="">全部项目</option>' + projs.map(function(p) { return '<option value="'+escHtml(p)+'"'+(_ucBugFilterProj===p?' selected':'')+'>'+escHtml(p)+'</option>'; }).join('') + '</select>' : '';
+  // CC tab only shown for own user center (not viewing others)
+  var ccTabHtml = '';
+  if (!window._ucViewUserId) {
+    ccTabHtml = '<button class="task-tab' + (_ucBugTab==='cc'?' active':'') + '" onclick="_ucBugTab=\'cc\';_ucLoadBugs()">抄送给我<span class="task-tab-count">' + cc.length + '</span></button>';
+  }
   document.getElementById('uc-bugs-filter-bar').innerHTML =
     '<div class="task-tabs">' +
       '<button class="task-tab' + (_ucBugTab==='assignee'?' active':'') + '" onclick="_ucBugTab=\'assignee\';_ucLoadBugs()">待我处理<span class="task-tab-count">' + assigned.length + '</span></button>' +
       '<button class="task-tab' + (_ucBugTab==='reporter'?' active':'') + '" onclick="_ucBugTab=\'reporter\';_ucLoadBugs()">我创建的<span class="task-tab-count">' + reported.length + '</span></button>' +
+      ccTabHtml +
     '</div>' + statusSel + '<span style="display:inline-block;vertical-align:middle">' + prodSelHtml + '</span>' + projSel;
-  var result = _ucBugTab === 'assignee' ? assigned : reported;
+  var result;
+  if (_ucBugTab === 'reporter') result = reported;
+  else if (_ucBugTab === 'cc') result = cc;
+  else result = assigned;
   // Apply product/project/status filters
   if (_ucBugFilterStatus) result = result.filter(function(b) { return (b.status || 'open') === _ucBugFilterStatus; });
   if (_ucBugFilterProd) result = result.filter(function(b) { return b.product_name === _ucBugFilterProd; });
@@ -2179,7 +2482,7 @@ async function _ucLoadBugs() {
   try {
     var user = getCurrentUser();
     var viewUid = window._ucViewUserId || (user ? user.id : null);
-    var bugsUrl = window._ucViewUserId ? '/bugs?assignee_id=' + window._ucViewUserId + '&limit=200' : '/bugs/my';
+    var bugsUrl = window._ucViewUserId ? '/bugs/user/' + window._ucViewUserId : '/bugs/my';
     var bugs = await API.get(bugsUrl);
     if (reqId !== _ucBugsReqId) return;  // ignore stale response
     bugs = Array.isArray(bugs) ? bugs : (bugs && bugs.items ? bugs.items : []);
@@ -2220,17 +2523,16 @@ async function _ucLoadBugs() {
         columns: [
           { key: '_projCode', title: '项目编号', width: '8%', rowspan: true, render: function(v, row) { return v ? projCodeTag(row.project_code||v, 'event.stopPropagation();openProject(\''+escHtml(row.project_code||v).replace(/'/g,"\\'")+'\')', row.project_name) : '-'; } },
           { key: '_prodName', title: '产品编号', width: '100px', rowspan: true, render: function(v, row) { return row.product_code ? '<span class="proj-code-btn" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="event.stopPropagation();openProductDetail(\''+escHtml(row.product_code)+'\')" title="'+escHtml(row.product_code)+' '+escHtml(row.product_name||'')+'">'+escHtml(row.product_code)+'</span>' : '<span style="font-size:12px;color:var(--muted)">—</span>'; } },
-          { key: 'id', title: 'Bug编号', width: '6%', render: function(v) { return '<span style="font-family:var(--mono);font-size:11px">#'+v+'</span>'; } },
-          { key: 'title', title: 'Bug标题', align: 'left', render: function(v) { return '<span style="font-weight:530">'+escHtml(v||'')+'</span>'; } },
-          { key: 'status', title: '状态', width: '70px', render: function(v) { return renderPill(v||'open'); } },
-          { key: 'priority', title: '优先级', width: '6%', render: function(v) { return '<span class="prio-tag '+(v||'medium')+'">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[v]||v)+'</span>'; } },
-          { key: 'progress', title: '进度', width: '6%', render: function(v) { return typeof renderProgressCircle==='function'?renderProgressCircle(v||0,36,{label:''}):(v||0)+'%'; } },
-          { key: 'due_date', title: '截止', width: '7%', render: function(v) { return '<span style="font-size:12px">'+(v||'—')+'</span>'; } },
-          { key: 'actions', title: '操作', render: function(v, row) { return '<span style="white-space:nowrap" onclick="event.stopPropagation()">'+iconEdit(_ucEnsureBugsJs('openBugDialog('+row.id+')'),'编辑')+iconDelete(_ucEnsureBugsJs('deleteBugById('+row.id+')'),'删除')+'</span>'; } }
+          { key: 'id', title: 'Bug编号', width: '6%', render: function(v) { return '<span style="font-family:var(--mono);font-size:11px;cursor:pointer" onclick="event.stopPropagation();loadViewScript(\'/js/bugs.js?v=' + APP_VERSION + '\',function(){openBugDetail('+v+')})">#'+v+'</span>'; } },
+          { key: 'title', title: 'Bug标题', align: 'left', render: function(v, row) { return '<span style="font-weight:530;cursor:pointer" onclick="event.stopPropagation();loadViewScript(\'/js/bugs.js?v=' + APP_VERSION + '\',function(){openBugDetail('+row.id+')})">'+escHtml(v||'')+'</span>'; } },
+          { key: 'severity', title: '严重程度', width: '6%', render: function(v, row) { var sevs={1:'致命',2:'严重',3:'一般',4:'建议'}; var c={1:'var(--danger)',2:'var(--warn)',3:'var(--muted)',4:'var(--success)'}; var user=getCurrentUser(); var canEdit=user&&user.id==row.reporter_id; return '<span style="font-size:11px;color:'+(c[v]||c[3])+';font-weight:600;cursor:'+(canEdit?'pointer':'default')+'" onclick="event.stopPropagation();'+(canEdit?'_ucEditBugField('+row.id+',\'severity\',\''+v+'\',\'1:致命,2:严重,3:一般,4:建议\',\''+escHtml(row.title||'').replace(/'/g,"\\'")+'\')':'')+'">'+(sevs[v]||'—')+'</span>'; } },
+          { key: 'status', title: '状态', width: '72px', render: function(v) { var colorMap = {open:'review',in_progress:'in_progress',resolved:'done',closed:'pending'}; var labels = {open:'待确认',in_progress:'处理中',resolved:'已解决',closed:'已关闭'}; return '<span class="pill ' + (colorMap[v]||'pending') + '">' + (labels[v]||v) + '</span>'; } },
+          { key: 'priority', title: '优先级', width: '6%', render: function(v, row) { return '<span class="prio-tag '+(v||'medium')+'" style="cursor:pointer" onclick="event.stopPropagation();_ucEditBugField('+row.id+',\'priority\',\''+(v||'medium')+'\',\'low:低,medium:中,high:高,critical:紧急\',\''+escHtml(row.title||'').replace(/'/g,"\\'")+'\')">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[v]||v)+'</span>'; } },
+          { key: 'progress', title: '进度', width: '6%', render: function(v, row) { var st = row.status || 'open'; return '<span style="cursor:pointer" onclick="event.stopPropagation();_ucEditBugNumber('+row.id+',\'progress\',\''+(v||0)+'\',\'进度(%)\',0,100,5,\''+escHtml(row.title||'').replace(/'/g,"\\'")+'\',\''+st+'\')">' + (typeof renderProgressCircle==='function'?renderProgressCircle(v||0,36,{label:''}):(v||0)+'%') + '</span>'; } },
+          { key: 'actions', title: '操作', width: '88px', render: function(v, row) { return _ucBugActionsHtml(row); } }
         ],
         data: bugRows,
-        resizable: false,
-        onRowClick: function(row) { loadViewScript('/js/bugs.js?v=' + APP_VERSION, function() { openBugDetail(row.id); }); }
+        resizable: false
       });
     } else { _ucBugsDt.setData(bugRows); }
   } catch(e) { document.getElementById('uc-bugs-table-wrap').innerHTML = '<div class="error-state">加载失败</div>'; _ucBugsDt = null; }
@@ -2256,7 +2558,7 @@ async function _ucDeleteTask(taskId) {
 function _ucLoadBugStats() {
   var rs = document.getElementById('uc-right-stats');
   if (!rs) return;
-  var bugsUrl2 = window._ucViewUserId ? '/bugs?assignee_id=' + window._ucViewUserId + '&limit=200' : '/bugs/my';
+  var bugsUrl2 = window._ucViewUserId ? '/bugs/user/' + window._ucViewUserId : '/bugs/my';
   API.get(bugsUrl2).then(function(bugs) {
     bugs = Array.isArray(bugs) ? bugs : (bugs && bugs.items ? bugs.items : []);
     var user = getCurrentUser();
@@ -2982,6 +3284,11 @@ EventBus.on('bug:saved', function(e) {
   if (typeof _ucLoadBugs === 'function') _ucLoadBugs();
 });
 EventBus.on('bug:deleted', function(e) {
+  if (typeof loadBugs === 'function') loadBugs();
+  if (typeof _ucLoadBugs === 'function') _ucLoadBugs();
+});
+EventBus.on('bug:field-changed', function(e) {
+  // Inline edit on bug detail — refresh bug list and user center
   if (typeof loadBugs === 'function') loadBugs();
   if (typeof _ucLoadBugs === 'function') _ucLoadBugs();
 });

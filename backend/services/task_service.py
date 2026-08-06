@@ -142,6 +142,7 @@ def create_task(db: Session, data: dict, user) -> dict:
         start_date=_parse_date(data.get("start_date")),
         due_date=_parse_date(data.get("due_date")),
         output_items=json.dumps(data.get("output_items") or [], ensure_ascii=False) if data.get("output_items") is not None else None,
+        cc_user_ids=data.get("cc_user_ids"),
     )
     db.add(t)
     db.commit()
@@ -255,7 +256,7 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
     for field in ("title", "description", "status", "priority", "type",
                    "execution_id", "stage_name", "assignee_id", "reviewer_id",
                    "parent_id", "blocked_by_id",
-                   "start_date", "due_date", "sort_order", "progress"):
+                   "start_date", "due_date", "sort_order", "progress", "cc_user_ids"):
         if field in data and getattr(t, field) != data[field]:
             old_val = getattr(t, field)
             new_val = data[field]
@@ -588,6 +589,8 @@ def _task_dict(t: Task, db=None) -> dict:
         "template_id": t.template_id,
         "is_diverged": t.is_diverged,
         "is_deleted": t.is_deleted,
+        "cc_user_ids": t.cc_user_ids or [],
+        "cc_user_names": _resolve_cc_names(db, t.cc_user_ids) if db and t.cc_user_ids else [],
     }
 
 
@@ -737,3 +740,31 @@ def _resolve_reviewer_name(db: Session, reviewer_id) -> str:
     if u:
         return u.display_name or u.username
     return ""
+
+
+def _resolve_cc_names(db, cc_user_ids) -> list:
+    """Resolve cc_user_ids list to display_name list."""
+    if not cc_user_ids:
+        return []
+    from backend.models.local import LocalUser
+    cc_users = db.query(LocalUser).filter(LocalUser.id.in_(cc_user_ids)).all()
+    return [u.display_name or u.username for u in cc_users]
+
+
+def get_user_tasks(db, user_id, limit=500):
+    """返回某用户的所有相关任务：负责人 + 创建人 + 被抄送"""
+    q = db.query(Task).filter(
+        (Task.assignee_id == user_id) | (Task.reporter_id == user_id)
+    ).order_by(Task.created_at.desc()).limit(limit)
+    result = q.all()
+    seen_ids = {r.id for r in result}
+    # Second query: cc_user_ids contains user_id (Python-side filter for SQLite compatibility)
+    cc_q = db.query(Task).filter(
+        Task.cc_user_ids.isnot(None)
+    ).order_by(Task.created_at.desc()).limit(limit * 2)
+    for t in cc_q.all():
+        if t.id not in seen_ids and user_id in (t.cc_user_ids or []):
+            result.append(t)
+            seen_ids.add(t.id)
+    result.sort(key=lambda x: x.created_at, reverse=True)
+    return [_task_dict(t, db) for t in result[:limit]]
