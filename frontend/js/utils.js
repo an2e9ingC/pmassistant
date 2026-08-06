@@ -152,10 +152,9 @@ function escJs(str) {
 }
 
 function renderPriorityBadge(p) {
-  // Unified priority badge (badge style with background, from tasks.js impl)
-  var colors = {low: 'var(--success)', medium: 'var(--warn)', high: 'var(--warn)', critical: 'var(--danger)'};
+  // Unified priority badge — uses .prio-tag CSS for consistent colors across all pages
   var labels = {low: '低', medium: '中', high: '高', critical: '紧急'};
-  return '<span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:600;color:#fff;background:' + (colors[p] || 'var(--muted)') + '">' + (labels[p] || p) + '</span>';
+  return '<span class="prio-tag ' + (p || 'medium') + '">' + (labels[p] || p) + '</span>';
 }
 
 function _filterSearchableItems(input) {
