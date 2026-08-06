@@ -123,7 +123,6 @@ function _renderBugTable(container, bugs) {
         { key: 'assignee_name', title: '负责人', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'-')+'</span>'; } },
         { key: 'actions', title: '操作', render: function(v, row) { return '<span onclick="event.stopPropagation()">'+iconEdit('openBugDialog('+row.id+')','编辑')+iconDelete('deleteBugById('+row.id+')','删除')+'</span>'; } }
       ],
-      resizable: false
     });
   }
   _bugDt.setData(bugs);
@@ -329,7 +328,6 @@ function _loadBugComments(bugId) {
         { key: 'content', title: '内容', align: 'left', render: function(v) { return '<span style="font-size:13px">'+escHtml(v||'')+'</span>'; } }
       ],
       data: comments,
-      resizable: false
     });
   }).catch(function() {});
 }
@@ -661,7 +659,6 @@ function _initBugWorklogDt(logs, bugId) {
       { key: 'actions', title: '', width: '34px', render: function(v, row) { return iconEdit('openBugWorklogEditDialog('+bugId+','+row.id+')')+iconDelete('deleteBugWorklog('+bugId+','+row.id+')'); } }
     ],
     data: logs,
-    resizable: false
   });
 }
 

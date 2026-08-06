@@ -311,13 +311,14 @@ async function saveRiskConfig() {
 // ── Project Table ──
 
 var _dashDt = null;
+window._dashDt = null; // exposed for cross-module access (preferences panel)
 
 function _initDashDt() {
   if (_dashDt) return;
   _dashDt = new DataTable({
     container: document.getElementById('proj-table'),
     columns: [
-      { key: 'fav', title: '', width: '28px', render: function(v, row) { return favStar('project', row.id, {stopPropagation: true}); } },
+      { key: 'fav', title: '', width: '28px', minWidth: 28, render: function(v, row) { return favStar('project', row.id, {stopPropagation: true}); } },
       { key: 'code', title: '项目编号', width: '6%', headerRender: function() { return '<span style="cursor:pointer" onclick="dashFilter.toggleSortCode()">项目编号</span> <span id="sort-code-ind" style="color:var(--muted)">⇅</span>'; }, render: function(v, row) { return v ? projCodeTag(v, 'event.stopPropagation();openProject(\'' + escHtml(v||'').replace(/'/g, "\\'") + '\')', row.name) : projCodeTag('RD'); } },
       { key: 'name', title: '项目名', width: '28%', render: function(v) { return '<div class="proj-name">' + escHtml(v||'') + '</div>'; } },
       { key: 'customer_name', title: '客户', width: '5%', render: function(v) { return renderCustomerBadge(v); } },
@@ -330,9 +331,11 @@ function _initDashDt() {
       { key: 'linked', title: '关联项目', width: '10%', render: function(v, row) { var lp=row.linked_projects; return (lp&&lp.length)?lp.map(function(x){return '<span class="proj-code-btn" style="font-size:10px" onclick="event.stopPropagation();openProject(\''+escHtml(x.code||String(x.id))+'\')" title="'+escHtml(x.name||'')+'">'+escHtml(x.code||x.name)+'</span>';}).join(' '):'<span style="color:var(--muted)">—</span>'; } },
       { key: 'tags', title: '项目标签', width: '9%', render: function(v, row) { var tl=row.tags_list||[]; return (tl.length&&tl[0]!=='')?tl.slice(0,3).map(function(t){return '<span class="tag-badge tag-'+(t.length%5)+'">#'+escHtml(t)+'</span>';}).join(' '):'<span style="font-size:11.5px;color:var(--muted)">无</span>'; } }
     ],
-    resizable: false,
+    resizable: true,
+    density: (function() { try { return localStorage.getItem('pma_table_density') || 'normal'; } catch(e) { return 'normal'; } })(),
     clickable: true
   });
+  window._dashDt = _dashDt;
   // Delegate row clicks to filterAlertsByProject
   _dashDt._tbodyEl.addEventListener('click', function(e) {
     var tr = e.target.closest('tr[data-row-id]');
@@ -364,6 +367,7 @@ async function loadProjectTable() {
     _dashDt.setData(list);
   } catch(e) {
     _dashDt = null;
+    window._dashDt = null;
     document.getElementById('proj-table').innerHTML = '<div class="error-state" style="padding:20px">加载失败: ' + escHtml(e.message) + '<br><button class="btn" style="margin-top:8px" onclick="loadProjectTable()">重试</button></div>';
     showToast('加载失败: ' + e.message, 'error');
   }

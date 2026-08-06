@@ -1221,7 +1221,6 @@ function loadNotifManage() {
         { key: 'actions', title: '操作', width: '60px', render: function(v, row) { return '<span style="white-space:nowrap">' + iconEdit('editNotifDialog(' + row.id + ',\'' + escJs(row.content) + '\')') + iconDelete('deleteNotif(' + row.id + ')') + '</span>'; } }
       ],
       maxHeight: 'calc(100vh - 260px)',
-      resizable: false
     });
   }
 
@@ -1815,7 +1814,6 @@ function _renderUcApprovalTable() {
         { key: 'actions', title: '操作', render: function(v, row) { return '<span style="white-space:nowrap" onclick="event.stopPropagation()"><button class="btn-icon" onclick="_ucApproveTask('+row.id+',\''+escJs(row.title)+'\')" title="批准" style="color:var(--success)">'+_ucApproveIcon+'</button><button class="btn-icon" onclick="_ucRejectTask('+row.id+',\''+escJs(row.title)+'\')" title="驳回" style="color:var(--danger);margin-left:2px">'+_ucRejectIcon+'</button></span>'; } }
       ],
       data: _ucApprovals,
-      resizable: false,
       onRowClick: function(row) { _ucOpenTask(row.id); }
     });
   } else {
@@ -2142,7 +2140,6 @@ function _renderUcTaskTable() {
       ],
       data: flatRows,
       maxHeight: '400px',
-      resizable: false,
       stickyHeader: true,
       selectable: true,
       checkboxPosition: 3,
@@ -2532,7 +2529,6 @@ async function _ucLoadBugs() {
           { key: 'actions', title: '操作', width: '88px', render: function(v, row) { return _ucBugActionsHtml(row); } }
         ],
         data: bugRows,
-        resizable: false
       });
     } else { _ucBugsDt.setData(bugRows); }
   } catch(e) { document.getElementById('uc-bugs-table-wrap').innerHTML = '<div class="error-state">加载失败</div>'; _ucBugsDt = null; }
@@ -2766,6 +2762,7 @@ function _renderPreferencesPanel(content) {
   var tickerSpeed = localStorage.getItem('pma_ticker_speed') || 'normal';
   var tickerMode = localStorage.getItem('pma_ticker_mode') || 'activities';
   var themeMode = localStorage.getItem('pm_theme_mode') || 'auto';
+  var tableDensity = localStorage.getItem('pma_table_density') || 'normal';
   var speedLabels = {slow: '慢速', normal: '正常', fast: '快速'};
   var speedBtns = '';
   ['slow', 'normal', 'fast'].forEach(function(s) {
@@ -2793,6 +2790,14 @@ function _renderPreferencesPanel(content) {
       '" onclick="setThemeMode(\'' + m + '\');_renderPreferencesPanel()">' + themeIcons[m] + '</button>';
   });
 
+  var densityLabels = {compact: '紧凑', normal: '标准', comfortable: '舒适'};
+  var densityBtns = '';
+  ['compact', 'normal', 'comfortable'].forEach(function(d) {
+    densityBtns += '<button class="btn btn-xs" style="margin-right:4px;' +
+      (tableDensity === d ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : '') +
+      '" onclick="_setTableDensity(\'' + d + '\');_renderPreferencesPanel()">' + densityLabels[d] + '</button>';
+  });
+
   var html =
     '<div class="expand-card" style="visibility:hidden"></div>' +
     '<div class="expand-card">' +
@@ -2818,6 +2823,12 @@ function _renderPreferencesPanel(content) {
             '<span class="integration-row-lbl">主题模式</span>' +
             '<span class="integration-row-val">' + themeBtns + '</span>' +
           '</div>' +
+        '</div>' +
+
+        // Card 3: 表格
+        '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px">' +
+          '<div style="font-size:12px;font-weight:600;color:var(--fg);margin-bottom:10px">表格</div>' +
+          '<div style="margin-bottom:6px"><span style="font-size:11px;color:var(--muted)">行高密度</span><div style="margin-top:3px">' + densityBtns + '</div></div>' +
         '</div>' +
 
       '</div>' +
@@ -2883,6 +2894,14 @@ async function showNewUserWelcomeDialog() {
         '<button class="btn btn-primary" onclick="closePwDialog()">知道了</button></div>' +
     '</div></div>';
   document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function _setTableDensity(level) {
+  if (typeof DataTable !== 'undefined' && DataTable.setAllDensity) {
+    DataTable.setAllDensity(level);
+  } else {
+    _savePref('pma_table_density', level);
+  }
 }
 
 function _savePref(key, value) {

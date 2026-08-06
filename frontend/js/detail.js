@@ -1155,7 +1155,6 @@ function buildDocs(data) {
     ],
     data: flatRows,
     maxHeight: 'calc(100vh - 320px)',
-    resizable: false,
     rowClassFn: function(row) { return row._bg ? { background: row._bg } : null; }
   });
 }
@@ -1460,7 +1459,6 @@ function buildDelivery(data) {
       container: document.getElementById('delivery-table'),
       columns: cols,
       data: records,
-      resizable: false
     });
   }
 }
@@ -1791,7 +1789,6 @@ function buildNotes(notes) {
         }}
       ],
       data: notes,
-      resizable: false,
       rowClassFn: function(row) { return row.parent_id ? { paddingLeft: '28px', borderLeft: '3px solid var(--accent-lt)' } : null; }
     });
   } else {
@@ -1852,7 +1849,6 @@ function buildProjectActivity(code) {
         }}
       ],
       data: taskItems,
-      resizable: false,
       maxHeight: '400px'
     });
   }).catch(function() {
@@ -3452,7 +3448,6 @@ function _renderMaintStages(stages, container, canEditStage) {
         { key: 'completed_date', title: '完成日期', width: '8%', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'—')+'</span>'; } },
         { key: 'actions', title: '操作', render: function(v, row) { return '<span style="white-space:nowrap">'+(row.id&&canEditStage?iconEdit('openStageDialog('+row.id+')','编辑阶段')+iconDelete('deleteMaintStage('+row.id+',\''+escHtml(row.name||'').replace(/'/g,"\\'")+'\')','删除阶段'):'')+'</span>'; } }
       ],
-      resizable: false,
       maxHeight: 'calc(100vh - 400px)'
     });
   }
@@ -3536,7 +3531,6 @@ function buildActivities(items, opts) {
     ],
     data: items,
     maxHeight: 'calc(100vh - 330px)',
-    resizable: false
   });
 }
 

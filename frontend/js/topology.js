@@ -21,7 +21,6 @@ function _initTopoDt() {
       { key: 'project_status', title: '状态', width: '10%', render: function(v) { return renderPill(v); } }
     ],
     maxHeight: 'calc(100vh - 260px)',
-    resizable: false,
     emptyText: '输入关键字开始搜索...',
     clickable: false
   });
