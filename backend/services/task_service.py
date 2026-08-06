@@ -34,7 +34,7 @@ def get_tasks(
         q = q.filter(Task.assignee_id == assignee_id)
     if reviewer_id:
         q = q.filter(Task.reviewer_id == reviewer_id)
-    q = q.filter(or_(Task.is_diverged == 0, Task.is_diverged == None))
+    q = q.filter(or_(Task.is_deleted == 0, Task.is_deleted == None))
     q = q.order_by(Task.sort_order, Task.created_at.desc())
     return [_task_dict(t, db) for t in q.all()]
 
@@ -59,7 +59,7 @@ def get_my_tasks(db: Session, user_id: int) -> List[dict]:
     """Get tasks assigned to a user across all projects."""
     tasks = db.query(Task).filter(
         Task.assignee_id == user_id,
-        or_(Task.is_diverged == 0, Task.is_diverged == None),
+        or_(Task.is_deleted == 0, Task.is_deleted == None),
     ).order_by(
         Task.status != "closed",
         Task.due_date.asc().nullslast(),
@@ -224,11 +224,18 @@ def import_tasks(db: Session, task_ids: list, target_project_id: int, execution_
 
 
 def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[dict]:
-    """Update a task. Status change to done/closed auto-sets completed_at."""
+    """Update a task. Template tasks cannot change title or stage_name."""
     uid, uname = _get_user_info(user)
     t = db.query(Task).filter(Task.id == task_id).first()
     if not t:
         return None
+
+    # Template-created tasks: title and stage_name are locked (controlled by template)
+    if t.template_id is not None:
+        if "title" in data and data["title"] != t.title:
+            raise PermissionError("模板任务不允许修改任务名称，请通过模板管理修改。")
+        if "stage_name" in data and data["stage_name"] != t.stage_name:
+            raise PermissionError("模板任务不允许修改所属阶段，请通过模板管理修改。")
 
     old_status = t.status
     old_stage_name = t.stage_name
@@ -270,14 +277,11 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
 
     if "stage_name" in data:
         t.stage_name = data["stage_name"] or None
-        if t.stage_name != old_stage_name and t.template_id:
-            t.is_removed = 1  # mark as diverged from template
-            changes.append("已脱离模板（阶段变更）")
-    # When assignee of a template task is changed, mark as diverged
+    # When assignee of a template task is changed, mark as diverged (prevent sync overwrite)
     if t.template_id and "assignee_id" in data:
         new_assignee = data["assignee_id"]
         if new_assignee is not None and int(new_assignee or 0) != (t.assignee_id or 0):
-            t.is_removed = 1
+            t.is_diverged = 1
             changes.append("已脱离模板（责任人变更）")
     if "estimate_hours" in data:
         t.estimate_hours = float(data["estimate_hours"] or 0)
@@ -424,7 +428,7 @@ def extend_task_estimate(db: Session, task_id: int, additional_hours: float) -> 
 
 
 def delete_task(db: Session, task_id: int, user=None) -> bool:
-    """Delete a task. Template-originated tasks are soft-deleted (is_diverged=1)
+    """Delete a task. Template-originated tasks are soft-deleted (is_deleted=1)
     to prevent re-creation on template re-sync. Manual tasks are hard-deleted."""
     uid, uname = _get_user_info(user)
     t = db.query(Task).filter(Task.id == task_id).first()
@@ -437,8 +441,8 @@ def delete_task(db: Session, task_id: int, user=None) -> bool:
     assignee_name = _resolve_assignee_name(db, t.assignee_id)
 
     if t.template_id:
-        # Soft-delete template task: mark as diverged so sync won't recreate
-        t.is_diverged = 1
+        # Soft-delete template task: hide from lists but preserve data
+        t.is_deleted = 1
         db.commit()
         if stage_id:
             _recalc_stage_progress(db, stage_id)
@@ -581,6 +585,9 @@ def _task_dict(t: Task, db=None) -> dict:
         "updated_at": to_local_str(t.updated_at) if t.updated_at else None,
         "latest_activity": latest_activity,
         "stage_id": t.stage_id,
+        "template_id": t.template_id,
+        "is_diverged": t.is_diverged,
+        "is_deleted": t.is_deleted,
     }
 
 

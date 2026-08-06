@@ -1128,7 +1128,8 @@ function buildDocs(data) {
         d._updatedAt = fmtISODateTime(d.updated_at) || formatDate(d.completed_at);
         d._updatedBy = d.updated_by || '';
         var loc = d.location, dn = d.doc_name;
-        d._actions = (loc && !loc.startsWith('@') && isPreviewableUrl(loc) ? iconEye('previewDocument(\'' + encodeURIComponent(loc) + '\',\'' + escJs(dn||'') + '\')', '预览') : (loc && loc !== '无需文档' && loc !== '已删除' ? '<a href="' + escHtml(loc) + '" target="_blank" title="打开链接" style="text-decoration:none;font-size:15px">&#x1F517;</a>' : '')) + (d.is_optional && canEdit ? iconDelete('removeOptionalDoc(' + d.id + ',\x27' + escJs(dn) + '\x27)', '移除此文档') : '') + (canEdit ? iconEdit('openDocEditDialog(' + d.id + ')', '编辑') : '');
+        var isOrphan = d.stage_type === '未知';
+        d._actions = (loc && !loc.startsWith('@') && isPreviewableUrl(loc) ? iconEye('previewDocument(\'' + encodeURIComponent(loc) + '\',\'' + escJs(dn||'') + '\')', '预览') : (loc && loc !== '无需文档' && loc !== '已删除' ? '<a href="' + escHtml(loc) + '" target="_blank" title="打开链接" style="text-decoration:none;font-size:15px">&#x1F517;</a>' : '')) + (d.is_optional && canEdit ? iconDelete('removeOptionalDoc(' + d.id + ',\x27' + escJs(dn) + '\x27)', '移除此文档') : '') + (isOrphan && canEdit ? iconDelete('deleteOrphanDoc(' + d.id + ',\x27' + escJs(dn) + '\x27)', '删除文档') : '') + (canEdit ? iconEdit('openDocEditDialog(' + d.id + ')', '编辑') : '');
         flatRows.push(d);
       });
     }
@@ -1200,6 +1201,29 @@ function removeOptionalDoc(docId, docName) {
     [{text: '取消', onclick: 'closeSharedDialog()'},
      {text: '确认移除', cls: 'btn-danger', onclick: 'closeSharedDialog();_confirmRemoveDoc(' + docId + ',\x27' + escJs(label) + '\x27)'}],
     {hideClose: true});
+}
+
+async function deleteOrphanDoc(docId, docName) {
+  var label = docName || ('#' + docId);
+  openDialog('删除文档',
+    '<div class="confirm-dlg">确认<strong>永久删除</strong>文档 <b>' + escHtml(label) + '</b>？<br><br><span style="color:var(--danger)">此操作不可恢复。</span></div>',
+    [{text: '取消', onclick: 'closeSharedDialog()'},
+     {text: '确认删除', cls: 'btn-danger', onclick: 'closeSharedDialog();_confirmDeleteOrphanDoc(' + docId + ',\x27' + escJs(label) + '\x27)'}],
+    {hideClose: true});
+}
+
+async function _confirmDeleteOrphanDoc(docId, docName) {
+  try {
+    await API.del('/projects/' + _comboCurCode + '/documents/' + docId);
+    showToast('文档「' + docName + '」已删除', 'success');
+    // Refresh docs
+    if (typeof buildDocs === 'function') {
+      var data = await API.get('/projects/' + _comboCurCode + '/documents');
+      if (data) buildDocs(data);
+    }
+  } catch(e) {
+    showToast('删除失败: ' + (e.message || ''), 'error');
+  }
 }
 async function _confirmRemoveDoc(docId, docName) {
   var ok = await verifyPassword('移除文档: ' + (docName || '#' + docId), 'skip_doc_remove');

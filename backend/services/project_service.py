@@ -221,6 +221,10 @@ def get_project_stages(db: Session, project_id: int) -> dict:
             "sort_order": s.sort_order,
         })
 
+    # Hide empty "未知" system stage
+    from backend.services.document_service import UNKNOWN_STAGE_NAME
+    stages = [s for s in stages if not (s["name"] == UNKNOWN_STAGE_NAME and s["task_count"] == 0)]
+
     return {"stages": stages, "standard_stages": [s.name for s in stages_rows]}
 
 
@@ -315,6 +319,17 @@ def get_project_documents(db: Session, project_id: int, include_removed: bool = 
             "documents": items,
         })
 
+    # Append "未知" stage if it has documents (system stage, not in standard_stages)
+    from backend.services.document_service import UNKNOWN_STAGE_NAME
+    unknown_items = grouped.get(UNKNOWN_STAGE_NAME, [])
+    if unknown_items:
+        result.append({
+            "stage_name": UNKNOWN_STAGE_NAME,
+            "stage_completed_date": None,
+            "has_documents": True,
+            "documents": unknown_items,
+        })
+
     return {"documents": result, "standard_stages": standard_stages}
 
 
@@ -330,9 +345,9 @@ def get_project_gantt(db: Session, project_id: int) -> dict:
     ).order_by(ProjectStage.sort_order).all()
 
     # Fallback: use template stage list if no ProjectStage rows
+    project_type = project.project_type or "RD" if project else "RD"
+    standard_stages = get_stage_types_for_project_type(db, project_type)
     if not stages_rows:
-        project_type = project.project_type or "RD" if project else "RD"
-        standard_stages = get_stage_types_for_project_type(db, project_type)
         stages_rows = []
         for i, st in enumerate(standard_stages):
             tasks = db.query(Task).filter(
@@ -406,6 +421,12 @@ def get_project_gantt(db: Session, project_id: int) -> dict:
                 "tasks_done": sum(1 for p in progs if p >= 100),
                 "tasks_total": len(progs),
             })
+
+    # Hide empty system stages and deleted stages (0 tasks, not in standard_stages)
+    from backend.services.document_service import UNKNOWN_STAGE_NAME
+    gantt_stages = [s for s in gantt_stages
+                    if not ((s["name"] == UNKNOWN_STAGE_NAME or s["name"] not in standard_stages)
+                            and s["tasks_total"] == 0)]
 
     return {
         "project_begin": str(project.begin) if project and project.begin else None,

@@ -200,18 +200,36 @@ def update_template(
 @router.delete("/{template_id}", response_model=dict)
 def delete_template(
     template_id: int,
+    delete_docs: bool = Query(False, description="If true, hard-delete all project docs created from this template"),
     db: Session = Depends(get_db),
     user=Depends(require_perm("doc_template")),
 ):
-    from backend.models.document import DocumentTemplate
+    from backend.models.document import DocumentTemplate, ProjectDocument
+    from backend.services.project_service import log_project_activity
     tpl = db.query(DocumentTemplate).filter(DocumentTemplate.id == template_id).first()
     if not tpl:
         raise HTTPException(status_code=404, detail="Template not found")
     detail = f"{tpl.stage_type}/{tpl.doc_name}"
+
+    deleted_docs = 0
+    if delete_docs:
+        # Hard-delete all project documents created from this template
+        deleted_docs = db.query(ProjectDocument).filter(
+            ProjectDocument.template_id == template_id
+        ).delete()
+    else:
+        # Unlink: clear template_id so docs become manual
+        db.query(ProjectDocument).filter(
+            ProjectDocument.template_id == template_id
+        ).update({"template_id": None}, synchronize_session=False)
+
     db.delete(tpl)
     db.commit()
-    log_audit(db, user, "doc_template_del", detail, AUDIT_CAT_TEMPLATE, "high")
-    return {"code": 0, "data": None, "message": "ok"}
+
+    log_audit(db, user, "doc_template_del",
+              f"{detail}" + (f" (hard: {deleted_docs} docs deleted)" if delete_docs else " (docs unlinked)"),
+              AUDIT_CAT_TEMPLATE, "high")
+    return {"code": 0, "data": {"deleted_docs": deleted_docs}, "message": "ok"}
 
 
 class StageTypeRename(BaseModel):
@@ -225,7 +243,24 @@ def rename_stage_type(
     db: Session = Depends(get_db),
     user=Depends(require_perm("doc_template")),
 ):
+    from backend.services.project_service import log_project_activity
     result = document_service.rename_stage_type(db, body.old_name, body.new_name)
+
+    # Log project activity for affected projects (tasks whose stage_name changed)
+    if result.get("tasks", 0) > 0:
+        from backend.models.task import Task as TaskModel
+        affected_tasks = db.query(TaskModel).filter(
+            TaskModel.stage_name == body.new_name
+        ).all()
+        affected_projects = set(t.project_id for t in affected_tasks)
+        for pid in affected_projects:
+            task_count = sum(1 for t in affected_tasks if t.project_id == pid)
+            log_project_activity(
+                db, pid, user.username,
+                "阶段重命名",
+                f"阶段「{body.old_name}」→「{body.new_name}」，{task_count} 个任务已同步更新"
+            )
+
     # Also update custom stage types if the old name is a custom stage
     from backend.services.document_service import _DEFAULT_RD_STAGES, _DEFAULT_SC_STAGES, _get_custom_stage_types, _save_custom_stage_types, _get_custom_project_types, PROJECT_TYPE_DEFS
     all_types = list(PROJECT_TYPE_DEFS.keys()) + list(_get_custom_project_types(db).keys())
@@ -244,11 +279,13 @@ def rename_stage_type(
 
 @router.post("/sync-all", response_model=dict)
 def sync_all_projects(
+    project_ids: Optional[str] = Query(None, description="Comma-separated project IDs to sync (default: all)"),
     db: Session = Depends(get_db),
     user=Depends(require_perm("doc_template")),
 ):
     """Apply current templates to all projects — add/update/remove/cleanup docs."""
-    result = document_service.sync_all_projects(db)
+    ids = [int(x.strip()) for x in project_ids.split(",") if x.strip()] if project_ids else None
+    result = document_service.sync_all_projects(db, project_ids=ids)
     log_audit(
         db, user, "doc_template_sync_all",
         f"{result['synced']}/{result['total']} 个项目已同步"
@@ -261,12 +298,110 @@ def sync_all_projects(
 def delete_stage_type(
     stage_type: str,
     project_type: str = Query("RD"),
+    delete_tasks: bool = Query(False, description="If true, hard-delete all project tasks/docs for this stage"),
     db: Session = Depends(get_db),
     user=Depends(require_perm("doc_template")),
 ):
-    from backend.services.document_service import _DEFAULT_RD_STAGES, _DEFAULT_SC_STAGES, _get_custom_stage_types, _save_custom_stage_types, _get_excluded_stages, _save_excluded_stages, PROJECT_TYPE_DEFS
-    count = document_service.delete_stage_type(db, stage_type, project_type)
-    # If this is a predefined stage, add to excluded list; otherwise remove from custom
+    from backend.services.document_service import _DEFAULT_RD_STAGES, _DEFAULT_SC_STAGES, _get_custom_stage_types, _save_custom_stage_types, _get_excluded_stages, _save_excluded_stages, PROJECT_TYPE_DEFS, UNKNOWN_STAGE_NAME
+    from backend.services.project_service import log_project_activity
+    from backend.models.task import Task as TaskModel
+    from backend.models.project_stage import ProjectStage
+
+    if stage_type == UNKNOWN_STAGE_NAME:
+        raise HTTPException(status_code=400, detail=f"「{UNKNOWN_STAGE_NAME}」是系统保留阶段，不能删除。")
+
+    if delete_tasks:
+        # Hard-delete: remove all project data for this stage
+        result = document_service._hard_delete_stage_data(db, stage_type, project_type)
+        for pid in result.get("affected_projects", []):
+            log_project_activity(
+                db, pid, user.username,
+                "删除阶段类型（含项目数据）",
+                f"阶段「{stage_type}」[{project_type}]已删除，级联删除了项目中的任务和文档"
+            )
+        log_audit(db, user, "doc_stage_hard_del",
+                  f"[{project_type}] {stage_type} (hard: tasks={result['deleted_tasks']}, docs={result['deleted_docs']}, stages={result['deleted_stages']})",
+                  AUDIT_CAT_TEMPLATE, "high")
+    else:
+        # Soft-unlink: move tasks and docs to 未知, unlink from template, delete templates
+        from backend.models.document import ProjectDocument as PDoc
+
+        # Collect affected tasks and docs, grouped by project
+        affected_tasks = db.query(TaskModel).filter(
+            TaskModel.stage_name == stage_type
+        ).all()
+        affected_docs = db.query(PDoc).filter(
+            PDoc.stage_type == stage_type
+        ).all()
+
+        # Build per-project counts for tasks and docs
+        project_stats: dict[int, dict] = {}  # pid -> {task_count, doc_count}
+        for t in affected_tasks:
+            project_stats.setdefault(t.project_id, {"task_count": 0, "doc_count": 0})["task_count"] += 1
+        for d in affected_docs:
+            project_stats.setdefault(d.project_id, {"task_count": 0, "doc_count": 0})["doc_count"] += 1
+
+        # Process each affected project
+        affected_task_count = len(affected_tasks)
+        affected_doc_count = len(affected_docs)
+        affected_projects = []
+
+        task_ids_by_project: dict[int, list] = {}
+        for t in affected_tasks:
+            task_ids_by_project.setdefault(t.project_id, []).append(t.id)
+
+        for pid, stats in project_stats.items():
+            unknown_id = document_service._ensure_unknown_stage(db, pid)
+
+            # Move tasks
+            if stats["task_count"] > 0:
+                db.query(TaskModel).filter(TaskModel.id.in_(task_ids_by_project[pid])).update(
+                    {"stage_name": UNKNOWN_STAGE_NAME, "stage_id": unknown_id, "template_id": None},
+                    synchronize_session=False
+                )
+
+            # Move docs for this project
+            if stats["doc_count"] > 0:
+                db.query(PDoc).filter(
+                    PDoc.project_id == pid,
+                    PDoc.stage_type == stage_type
+                ).update({"stage_type": UNKNOWN_STAGE_NAME, "template_id": None}, synchronize_session=False)
+
+            # Delete the ProjectStage row (tasks/docs already moved to 未知)
+            db.query(ProjectStage).filter(
+                ProjectStage.project_id == pid,
+                ProjectStage.name == stage_type
+            ).delete()
+
+            affected_projects.append({"project_id": pid, "task_count": stats["task_count"], "doc_count": stats["doc_count"]})
+
+            # Build activity detail
+            parts = []
+            if stats["task_count"] > 0:
+                parts.append(f"{stats['task_count']} 个任务")
+            if stats["doc_count"] > 0:
+                parts.append(f"{stats['doc_count']} 个文档")
+            detail = f"阶段「{stage_type}」[{project_type}]已删除，{'、'.join(parts)}移至「{UNKNOWN_STAGE_NAME}」阶段"
+
+            log_project_activity(db, pid, user.username, "删除阶段类型", detail)
+
+        # Delete templates
+        tpl_result = document_service.delete_stage_type(db, stage_type, project_type)
+
+        db.commit()
+
+        result = {
+            "doc_templates": tpl_result["doc_templates"],
+            "task_templates": tpl_result["task_templates"],
+            "affected_tasks": affected_task_count,
+            "affected_docs": affected_doc_count,
+            "affected_projects": affected_projects,
+        }
+        log_audit(db, user, "doc_stage_del",
+                  f"[{project_type}] {stage_type} (unlink: tasks={affected_task_count}, docs={affected_doc_count})",
+                  AUDIT_CAT_TEMPLATE, "high")
+
+    # Update PmaSetting stage lists
     if project_type in PROJECT_TYPE_DEFS and stage_type in (_DEFAULT_SC_STAGES if project_type == "SC" else _DEFAULT_RD_STAGES):
         excluded = _get_excluded_stages(db, project_type)
         if stage_type not in excluded:
@@ -277,8 +412,20 @@ def delete_stage_type(
         if stage_type in customs:
             customs.remove(stage_type)
             _save_custom_stage_types(db, project_type, customs)
-    log_audit(db, user, "doc_stage_del", f"[{project_type}] {stage_type} ({count} docs)", AUDIT_CAT_TEMPLATE, "high")
-    return {"code": 0, "data": {"deleted": count}, "message": "ok"}
+
+    return {"code": 0, "data": result, "message": "ok"}
+
+
+@router.get("/stage-types/{stage_type}/usage", response_model=dict)
+def get_stage_type_usage(
+    stage_type: str,
+    project_type: str = Query("RD"),
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("doc_template")),
+):
+    """Get impact stats before deleting a stage type."""
+    result = document_service.get_stage_usage(db, stage_type, project_type)
+    return {"code": 0, "data": result, "message": "ok"}
 
 
 @router.post("/stage-types", response_model=dict)
@@ -536,27 +683,73 @@ def update_task_template(
 @task_router.delete("/{template_id}", response_model=dict)
 def delete_task_template(
     template_id: int,
+    delete_tasks: bool = Query(False, description="If true, hard-delete all tasks created from this template"),
     db: Session = Depends(get_db),
     user=Depends(require_perm("doc_template")),
 ):
     from backend.models.document import TaskTemplate
+    from backend.models.task import Task as TaskModel, WorkLog, TaskComment
+    from backend.services.project_service import log_project_activity
     tpl = db.query(TaskTemplate).filter(TaskTemplate.id == template_id).first()
     if not tpl:
         raise HTTPException(status_code=404, detail="Task template not found")
     detail = f"{tpl.stage_type}/{tpl.task_name}"
-    db.delete(tpl)
-    db.commit()
-    log_audit(db, user, "task_template_del", detail, AUDIT_CAT_TEMPLATE, "high")
-    return {"code": 0, "data": None, "message": "ok"}
+
+    if delete_tasks:
+        # Hard-delete: remove all tasks created from this template
+        affected_tasks = db.query(TaskModel).filter(
+            TaskModel.template_id == template_id
+        ).all()
+        task_ids = [t.id for t in affected_tasks]
+        project_ids = set(t.project_id for t in affected_tasks)
+
+        if task_ids:
+            db.query(WorkLog).filter(WorkLog.task_id.in_(task_ids)).delete(synchronize_session=False)
+            db.query(TaskComment).filter(TaskComment.task_id.in_(task_ids)).delete(synchronize_session=False)
+            db.query(TaskModel).filter(TaskModel.id.in_(task_ids)).delete(synchronize_session=False)
+
+        # Delete the template
+        db.delete(tpl)
+        db.commit()
+
+        for pid in project_ids:
+            log_project_activity(
+                db, pid, user.username,
+                "删除任务模板（含项目任务）",
+                f"模板「{tpl.task_name}」已删除，级联删除了 {sum(1 for t in affected_tasks if t.project_id == pid)} 个项目任务"
+            )
+
+        result = {"deleted": True, "deleted_tasks": len(task_ids), "affected_projects": list(project_ids)}
+        log_audit(db, user, "task_template_hard_del",
+                  f"{detail} (hard: {len(task_ids)} tasks deleted)",
+                  AUDIT_CAT_TEMPLATE, "high")
+    else:
+        # Soft-unlink: tasks become manual
+        result = document_service.delete_task_template(db, template_id)
+
+        for p in result["affected_projects"]:
+            log_project_activity(
+                db, p["project_id"], user.username,
+                "删除任务模板",
+                f"阶段「{tpl.stage_type}」模板「{tpl.task_name}」已删除，{p['task_count']} 个任务转为手动任务"
+            )
+
+        log_audit(db, user, "task_template_del",
+                  f"{detail} (affected_tasks={result['affected_tasks']}, projects={len(result['affected_projects'])})",
+                  AUDIT_CAT_TEMPLATE, "high")
+
+    return {"code": 0, "data": result, "message": "ok"}
 
 
 @task_router.post("/sync-all", response_model=dict)
 def sync_all_projects_tasks(
+    project_ids: Optional[str] = Query(None, description="Comma-separated project IDs to sync (default: all)"),
     db: Session = Depends(get_db),
     user=Depends(require_perm("doc_template")),
 ):
     """Apply current task templates to all projects — create tasks from templates."""
-    result = document_service.sync_all_projects_tasks(db)
+    ids = [int(x.strip()) for x in project_ids.split(",") if x.strip()] if project_ids else None
+    result = document_service.sync_all_projects_tasks(db, project_ids=ids)
     log_audit(
         db, user, "task_template_sync_all",
         f"{result['synced']}/{result['total']} 个项目已同步"

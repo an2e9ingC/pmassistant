@@ -465,9 +465,12 @@ def update_document(
     old_status = old.status if old else '?'
     old_location = (old.location or '') if old else '?'
     old_removed = old.is_removed if old else 0
-    result = document_service.update_project_document(
-        db, doc_id, body.model_dump(exclude_none=True), user.username
-    )
+    try:
+        result = document_service.update_project_document(
+            db, doc_id, body.model_dump(exclude_none=True), user.username
+        )
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
     if not result:
         raise HTTPException(status_code=404, detail="Document not found")
 
@@ -495,6 +498,29 @@ def update_document(
     log_project_activity(db, project.id, user.username, "文档状态", detail)
     log_audit(db, user, "project_doc_update", f"project={project.code} {detail}", AUDIT_CAT_PROJECT, "low")
     return {"code": 0, "data": result, "message": "ok"}
+
+
+@router.delete("/{identifier}/documents/{doc_id}", response_model=dict)
+def delete_document(
+    identifier: str,
+    doc_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("project_edit")),
+):
+    """Hard-delete a project document (only for manual/orphaned docs with template_id=NULL)."""
+    from backend.models.document import ProjectDocument
+    project = resolve_project(db, identifier)
+    doc = db.query(ProjectDocument).filter(ProjectDocument.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if doc.template_id is not None:
+        raise HTTPException(status_code=403, detail="模板文档不允许直接删除，请通过模板管理删除。")
+    doc_name = doc.doc_name
+    db.delete(doc)
+    db.commit()
+    log_project_activity(db, project.id, user.username, "文档删除", f"「{doc_name}」已删除")
+    log_audit(db, user, "project_doc_delete", f"project={project.code} doc={doc_name}", AUDIT_CAT_PROJECT, "high")
+    return {"code": 0, "data": None, "message": "ok"}
 
 
 @router.get("/{identifier}/gantt", response_model=dict)

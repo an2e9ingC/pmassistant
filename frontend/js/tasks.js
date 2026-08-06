@@ -49,6 +49,7 @@ function _startInlineEdit(el) {
   if (!_hasTaskEditPerm()) return;
   var field = el.closest('.editable-field') || el;
   if (!field || !field.classList.contains('editable-field') || field.classList.contains('editing')) return;
+  if (field.dataset.readonly === '1') { showToast('该字段由模板控制，不可修改', 'error'); return; }
 
   var taskId = field.dataset.taskId;
   var fieldName = field.dataset.field;
@@ -944,13 +945,17 @@ function _renderTaskDetailBody(t) {
       '<div class="section-hd"><span class="section-title">基本信息</span></div>' +
       '<div class="delivery-kpi" style="grid-template-columns:1fr 1fr">' +
         // Title
-        '<div class="dkpi"><div class="dkpi-lbl">标题</div>' +
-          _buildEditableField(t.id, 'title', 'text', '<span class="dkpi-val">' + escHtml(t.title || '—') + '</span>', t.title || '') + '</div>' +
+        '<div class="dkpi"><div class="dkpi-lbl">标题' + (t.template_id ? ' <span style="color:var(--accent);font-size:10px" title="由模板控制">🔒</span>' : '') + '</div>' +
+          (t.template_id
+            ? '<span class="dkpi-val" style="color:var(--muted)">' + escHtml(t.title || '—') + '</span>'
+            : _buildEditableField(t.id, 'title', 'text', '<span class="dkpi-val">' + escHtml(t.title || '—') + '</span>', t.title || '')) + '</div>' +
         // Project (read-only)
         '<div class="dkpi"><div class="dkpi-lbl">项目</div><div class="dkpi-val">' + projHtml + '</div></div>' +
-        // Stage (editable)
-        '<div class="dkpi"><div class="dkpi-lbl">阶段</div>' +
-          _buildEditableField(t.id, 'stage_name', 'stage-select', '<span class="dkpi-val">' + stageName + '</span>', t.stage_name || t.execution_name || '', {v:'',l:''}, ' data-project-id="' + (t.project_id || '') + '" data-project-code="' + escHtml(t.project_code || '') + '"') + '</div>' +
+        // Stage (editable unless template task)
+        '<div class="dkpi"><div class="dkpi-lbl">阶段' + (t.template_id ? ' <span style="color:var(--accent);font-size:10px" title="由模板控制">🔒</span>' : '') + '</div>' +
+          (t.template_id
+            ? '<span class="dkpi-val" style="color:var(--muted)">' + stageName + '</span>'
+            : _buildEditableField(t.id, 'stage_name', 'stage-select', '<span class="dkpi-val">' + stageName + '</span>', t.stage_name || t.execution_name || '', {v:'',l:''}, ' data-project-id="' + (t.project_id || '') + '" data-project-code="' + escHtml(t.project_code || '') + '"')) + '</div>' +
         // Reporter (read-only)
         '<div class="dkpi"><div class="dkpi-lbl">创建人</div><div class="dkpi-val">' + escHtml(t.reporter_name || '—') + '</div></div>' +
         // Assignee (editable)

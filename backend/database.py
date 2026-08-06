@@ -457,6 +457,53 @@ def _migrate_to_sqlcipher():
     )
 
 
+def _migrate_task_is_deleted():
+    """Split is_diverged semantics: add is_deleted column, fix existing data.
+
+    Before: is_diverged served three roles — visibility gate, sync guard, soft-delete.
+    After:  is_diverged = sync guard only (prevents template from overwriting user edits).
+            is_deleted  = soft-delete flag (hides task from lists).
+    """
+    import sqlite3
+    try:
+        conn = sqlite3.connect(_db_path)
+        cursor = conn.cursor()
+        # Check if column already exists (_migrate_sqlite may have added it)
+        cursor.execute("PRAGMA table_info(pma_tasks)")
+        cols = {row[1] for row in cursor.fetchall()}
+        if "is_deleted" not in cols:
+            logger.info("_migrate_task_is_deleted: is_deleted column not yet added by _migrate_sqlite, skipping data fix")
+            conn.close()
+            return
+
+        # Fix: tasks with is_diverged=1 and template_id still valid → genuine user soft-delete
+        # Copy is_diverged → is_deleted, keep is_diverged for sync guard
+        cursor.execute("""
+            UPDATE pma_tasks SET is_deleted = 1
+            WHERE is_diverged = 1
+              AND template_id IS NOT NULL
+              AND template_id IN (SELECT id FROM task_templates)
+        """)
+        genuine = cursor.rowcount
+
+        # Fix: tasks with is_diverged=1 and template_id=NULL or template deleted
+        # These were set by broken template-deletion code — clear is_diverged
+        cursor.execute("""
+            UPDATE pma_tasks SET is_diverged = 0
+            WHERE is_diverged = 1
+              AND (template_id IS NULL
+                   OR template_id NOT IN (SELECT id FROM task_templates))
+        """)
+        cleared = cursor.rowcount
+
+        conn.commit()
+        conn.close()
+        if genuine or cleared:
+            logger.info(f"_migrate_task_is_deleted: genuine_soft_deletes={genuine}, cleared_broken={cleared}")
+    except Exception as e:
+        logger.warning(f"_migrate_task_is_deleted: {e}")
+
+
 def _clear_gitlab_tokens():
     """Clear all GitLab OAuth access tokens on server restart.
     Forces users to re-authenticate via GitLab after a restart.
@@ -539,6 +586,7 @@ def init_db():
     _migrate_password_hash_nullable()
     _migrate_product_hierarchy()
     _migrate_project_doc_template_id()  # backfill template_id on project_documents
+    _migrate_task_is_deleted()  # Split is_diverged semantics: add is_deleted, fix existing data
     _migrate_to_sqlcipher()  # Convert unencrypted DB to SQLCipher if key configured
     _clear_gitlab_tokens()   # Force re-auth on server restart
     _ensure_db_instance_id()  # Ensure instance UUID for DB fingerprint detection

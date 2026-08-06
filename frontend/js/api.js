@@ -26,9 +26,11 @@ const API = {
       return;
     }
 
-    // 403: silently return empty for non-admin users accessing admin APIs
+    // 403: throw with detail message so callers can handle properly
     if (res.status === 403) {
-      return null;
+      var _403json;
+      try { _403json = await res.json(); } catch(e) { _403json = null; }
+      throw new Error((_403json && (_403json.detail || _403json.message)) || '权限不足 (HTTP 403)');
     }
 
     var json;
