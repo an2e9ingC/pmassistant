@@ -7,7 +7,7 @@ import os
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func as sa_func
 
-from backend.models.bug import PmaBug, BugWorkLog, BugAnalysis, BugAttachment, BugTransfer
+from backend.models.bug import PmaBug, BugWorkLog, BugAnalysis, BugAttachment, BugTransfer, BugComment
 from backend.database import to_local_str
 
 UPLOAD_ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "uploads", "bugs")
@@ -16,7 +16,7 @@ UPLOAD_ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__fil
 # ═══════════════════════════════════════════ Bug CRUD
 
 def get_bugs(db, product_id=None, project_id=None, status=None, assignee_id=None,
-             component_id=None, search=None, limit=100):
+             component_id=None, search=None, reporter_id=None, limit=100):
     q = db.query(PmaBug)
     if product_id: q = q.filter(PmaBug.product_id == product_id)
     if project_id: q = q.filter(PmaBug.project_id == project_id)
@@ -24,6 +24,7 @@ def get_bugs(db, product_id=None, project_id=None, status=None, assignee_id=None
     if assignee_id: q = q.filter(PmaBug.assignee_id == assignee_id)
     if component_id: q = q.filter(PmaBug.component_id == component_id)
     if search: q = q.filter(PmaBug.title.ilike(f"%{search}%"))
+    if reporter_id: q = q.filter(PmaBug.reporter_id == reporter_id)
     q = q.order_by(PmaBug.created_at.desc()).limit(limit)
     return [_bug_dict(b, db) for b in q.all()]
 
@@ -51,6 +52,8 @@ def create_bug(db, data):
         type=data.get("type", "codeerror"),
         reporter_id=data["reporter_id"], assignee_id=data.get("assignee_id"),
         estimate_hours=float(data.get("estimate_hours", 0) or 0),
+        cc_user_ids=data.get("cc_user_ids"),
+        progress=int(data.get("progress", 0) or 0),
     )
     db.add(b); db.commit(); db.refresh(b)
     return _bug_dict(b, db)
@@ -61,7 +64,7 @@ def update_bug(db, bug_id, data):
     old_status = b.status
     for k in ["title","description","project_id","component_id","status","resolution",
               "severity","priority","type","assignee_id","estimate_hours",
-              "gitlab_url","gitlab_iid","resolved_by_id"]:
+              "gitlab_url","gitlab_iid","resolved_by_id","cc_user_ids","progress"]:
         if k in data: setattr(b, k, data[k])
     if data.get("status") == "resolved" and not b.resolved_at:
         b.resolved_at = datetime.now(timezone.utc)
@@ -154,6 +157,30 @@ def delete_analysis(db, aid):
     db.delete(a); db.commit()
     return True
 
+# ═══════════════════════════════════════════ Comments
+
+def get_comments(db, bug_id):
+    comments = db.query(BugComment).filter(BugComment.bug_id == bug_id).order_by(BugComment.created_at.asc()).all()
+    from backend.models.local import LocalUser
+    uids = {c.user_id for c in comments}
+    users = {u.id: (u.display_name or u.username) for u in db.query(LocalUser).filter(LocalUser.id.in_(uids)).all()}
+    return [{"id": c.id, "bug_id": c.bug_id, "user_id": c.user_id,
+             "username": users.get(c.user_id, "?"), "content": c.content,
+             "is_system": c.is_system,
+             "created_at": to_local_str(c.created_at) if c.created_at else None}
+            for c in comments]
+
+def create_comment(db, bug_id, content, user_id, is_system=0):
+    c = BugComment(bug_id=bug_id, user_id=user_id, content=content, is_system=is_system)
+    db.add(c); db.commit()
+    return {"id": c.id, "bug_id": c.bug_id, "user_id": c.user_id,
+            "content": c.content, "is_system": c.is_system,
+            "created_at": to_local_str(c.created_at) if c.created_at else None}
+
+def add_system_comment(db, bug_id, user_id, content):
+    return create_comment(db, bug_id, content, user_id, is_system=1)
+
+
 # ═══════════════════════════════════════════ Attachments
 
 def save_attachment(db, bug_id, analysis_id, filename, mime_type, file_data, user_id):
@@ -241,7 +268,7 @@ def transfer_bug(db, bug_id, to_project_id, transfer_type, user_id):
 # ═══════════════════════════════════════════ Helpers
 
 def _bug_dict(b, db=None):
-    pc = pn = pj_n = pj_c = cn = rn = an = None
+    pc = pn = pj_n = pj_c = cn = rn = an = cc_names = None
     if db:
         if b.product_id:
             p = db.query(__import__('backend.models.zentao', fromlist=['PmaProduct']).PmaProduct).filter_by(id=b.product_id).first()
@@ -260,6 +287,10 @@ def _bug_dict(b, db=None):
             if b.assignee_id:
                 u = db.query(LU).filter_by(id=b.assignee_id).first()
                 if u: an = u.display_name or u.username
+        if b.cc_user_ids:
+            LU = __import__('backend.models.local', fromlist=['LocalUser']).LocalUser
+            cc_users = db.query(LU).filter(LU.id.in_(b.cc_user_ids)).all()
+            cc_names = [u.display_name or u.username for u in cc_users]
     return {"id":b.id,"title":b.title,"description":b.description or "","product_id":b.product_id,"product_name":pn,"product_code":pc,
             "project_id":b.project_id,"project_name":pj_n,"project_code":pj_c,
             "component_id":b.component_id,"component_name":cn,
@@ -268,11 +299,14 @@ def _bug_dict(b, db=None):
             "original_bug_id":b.original_bug_id,"source_bug_id":b.source_bug_id,
             "gitlab_url":b.gitlab_url,"gitlab_iid":b.gitlab_iid,
             "estimate_hours":b.estimate_hours or 0,"consumed_hours":b.consumed_hours or 0,
+            "progress":b.progress or 0,
             "due_date":str(b.due_date) if b.due_date else None,
             "resolved_at":to_local_str(b.resolved_at) if b.resolved_at else None,
             "closed_at":to_local_str(b.closed_at) if b.closed_at else None,
             "created_at":to_local_str(b.created_at) if b.created_at else None,
-            "updated_at":to_local_str(b.updated_at) if b.updated_at else None}
+            "updated_at":to_local_str(b.updated_at) if b.updated_at else None,
+            "cc_user_ids": b.cc_user_ids or [],
+            "cc_user_names": cc_names or []}
 
 def _analysis_dict(a, db=None):
     from backend.models.local import LocalUser
@@ -351,3 +385,23 @@ def get_bug_list(db: Session, project_id: Optional[int] = None, product_id: Opti
     total = q.count()
     items = q.order_by(PmaBug.id.desc()).offset((page - 1) * limit).limit(limit).all()
     return [_bug_dict(b, db) for b in items], total
+
+
+def get_user_bugs(db, user_id, limit=500):
+    """返回某用户的所有相关 Bug：负责人 + 创建人 + 被抄送"""
+    # First query: assignee OR reporter
+    q = db.query(PmaBug).filter(
+        (PmaBug.assignee_id == user_id) | (PmaBug.reporter_id == user_id)
+    ).order_by(PmaBug.created_at.desc()).limit(limit)
+    result = q.all()
+    seen_ids = {r.id for r in result}
+    # Second query: cc_user_ids contains user_id (Python-side filter for SQLite compatibility)
+    cc_q = db.query(PmaBug).filter(
+        PmaBug.cc_user_ids.isnot(None)
+    ).order_by(PmaBug.created_at.desc()).limit(limit * 2)
+    for b in cc_q.all():
+        if b.id not in seen_ids and user_id in (b.cc_user_ids or []):
+            result.append(b)
+            seen_ids.add(b.id)
+    result.sort(key=lambda x: x.created_at, reverse=True)
+    return [_bug_dict(b, db) for b in result[:limit]]

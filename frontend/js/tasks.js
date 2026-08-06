@@ -5,14 +5,16 @@
 // ── task:before-save — progress/status bidirectional sync ──
 EventBus.on('task:before-save', function(e) {
   var p = e.progress, s = e.status;
-  // progress > 0 and status is todo → doing
-  if (p > 0 && p < 100 && s === 'todo') { e.data.status = 'doing'; e.status = 'doing'; }
+  // progress > 0 and status is todo → in_progress
+  if (p > 0 && p < 100 && s === 'todo') { e.data.status = 'in_progress'; e.status = 'in_progress'; }
   // progress >= 100 → review (with approval) or done
   if (p >= 100 && s !== 'review' && s !== 'done') { e.data.status = window._approvalEnabled ? 'review' : 'done'; e.status = e.data.status; }
-  // status done but progress < 100 → auto 100
-  if (s === 'done' && p < 100) { e.data.progress = 100; e.progress = 100; }
-  // status todo but progress > 0 → reset to 0
+  // done + progress drops below 100 → back to in_progress
+  if (s === 'done' && p < 100) { e.data.status = 'in_progress'; e.status = 'in_progress'; }
+  // todo + progress > 0 → inconsistent, reset to 0
   if (s === 'todo' && p > 0) { e.data.progress = 0; e.progress = 0; }
+  // review + progress drops below 100 → back to in_progress
+  if (s === 'review' && p < 100) { e.data.status = 'in_progress'; e.status = 'in_progress'; }
 });
 
 var _taskViewMode = 'table';  // 'table' | 'board' | 'calendar'
@@ -28,7 +30,7 @@ function _hasTaskEditPerm() {
 
 // ── Inline Edit Engine ──
 
-var _STATUS_OPTS = [{v:'todo',l:'待办'},{v:'in_progress',l:'进行中'},{v:'review',l:'评审中'},{v:'done',l:'已完成'},{v:'closed',l:'已关闭'}];
+var _STATUS_OPTS = [{v:'todo',l:'待办'},{v:'in_progress',l:'进行中'},{v:'review',l:'评审中'},{v:'done',l:'已完成'}];
 var _PRIORITY_OPTS = [{v:'low',l:'低'},{v:'medium',l:'中'},{v:'high',l:'高'},{v:'critical',l:'紧急'}];
 
 function _buildEditableField(taskId, field, inputType, displayHtml, currentVal, opts, extraAttrs) {
@@ -115,10 +117,15 @@ function _startInlineEdit(el) {
     if (inp) { setTimeout(function() { inp.focus(); inp.select(); }, 50); }
     if (inp) { inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); _saveInlineEdit(inp); } if (e.key === 'Escape') { e.preventDefault(); _cancelInlineEdit(inp); } }); }
   } else if (inputType === 'textarea') {
-    field.innerHTML = '<textarea class="search-inp ef-input" rows="4" style="width:100%;box-sizing:border-box;font-size:13px;margin-top:1px;resize:vertical">' + escHtml(currentVal) + '</textarea>' +
+    var taId = 'ef-ta-' + taskId + '-' + fieldName;
+    field.innerHTML = '<textarea class="search-inp ef-input" id="' + taId + '" rows="4" style="width:100%;box-sizing:border-box;font-size:13px;margin-top:1px;resize:vertical">' + escHtml(currentVal) + '</textarea>' +
+      '<div id="' + taId + '-img-preview" style="margin-top:4px;min-height:0;max-height:30vh;overflow-y:auto"></div>' +
+      '<div style="font-size:10px;color:var(--muted);margin-top:2px">支持粘贴图片 (Ctrl+V)</div>' +
       '<div style="display:flex;gap:10px;margin-top:6px"><button class="btn-xs ef-save-btn" onclick="event.stopPropagation();_saveInlineEdit(this)">✓</button><button class="btn-xs ef-cancel-btn" onclick="event.stopPropagation();_cancelInlineEdit(this)">✕</button></div>';
     var inp = field.querySelector('.ef-input');
     if (inp) { setTimeout(function() { inp.focus(); }, 50); }
+    // Init image paste for description textarea
+    setTimeout(function() { _clearNoteImagePreviews(taId + '-img-preview'); initNoteImagePaste(taId); _loadExistingNoteImages(currentVal, taId + '-img-preview'); }, 100);
   }
 }
 
@@ -144,7 +151,7 @@ function _renderUserSelect(field, currentVal) {
   _renderSelectField(field, currentVal, opts);
 }
 
-function _saveInlineEdit(el) {
+async function _saveInlineEdit(el) {
   var field = el.closest('.editable-field');
   if (!field) return;
   var taskId = field.dataset.taskId;
@@ -158,6 +165,11 @@ function _saveInlineEdit(el) {
   if (newVal === currentVal && inputType !== 'textarea') {
     _cancelInlineEdit(el);
     return;
+  }
+
+  // Upload pasted images for textarea fields
+  if (inputType === 'textarea' && typeof _uploadNoteImages === 'function') {
+    newVal = await _uploadNoteImages(newVal);
   }
 
   var data = {};
@@ -397,7 +409,7 @@ function _renderTaskFiltersInline() {
       '<option value="in_progress">进行中</option>' +
       '<option value="review">评审中</option>' +
       '<option value="done">已完成</option>' +
-      '<option value="closed">已关闭</option></select>';
+      '</select>';
   // Assignee filter
   html += '<span style="font-size:11px;color:var(--muted);white-space:nowrap;margin-left:4px">负责人</span>' +
     '<select class="search-inp" id="task-assignee-filter" onchange="_taskFilterAssignee=this.value;loadTaskData()" style="width:100px">' +
@@ -438,7 +450,7 @@ function _renderTaskFilters() {
         '<option value="in_progress">进行中</option>' +
         '<option value="review">评审中</option>' +
         '<option value="done">已完成</option>' +
-        '<option value="closed">已关闭</option></select>' +
+        '</select>' +
     '</div>' +
     '<div style="margin-bottom:16px">' +
       '<label style="font-size:11px;color:var(--muted)">负责人</label>' +
@@ -561,7 +573,7 @@ function renderTaskTable(tasks, execs) {
       }},
       { key: 'priority', title: '优先级', width: '5%', render: function(v) { return renderPriorityBadge(v); } },
       { key: 'progress', title: '进度', width: '6%', render: function(v) { return renderProgressCircle(v||0, 26, {label:''}); } },
-      { key: 'due_date', title: '截止日期', width: '6%', render: function(v, row) { return '<span style="color:'+(v&&row.status!=='done'&&row.status!=='closed'&&v<fmtLocalDate()?'var(--danger)':'')+'">'+(v||'-')+'</span>'; } },
+      { key: 'due_date', title: '截止日期', width: '6%', render: function(v, row) { return '<span style="color:'+(v&&row.status!=='done'&&row.status!=='done'&&v<fmtLocalDate()?'var(--danger)':'')+'">'+(v||'-')+'</span>'; } },
       { key: 'actions', title: '操作', render: function(v, row) { return iconEdit('openTaskDialog('+row.id+')','编辑任务')+iconCopy('openCopyTaskDialog('+row.id+')','复制任务')+iconDelete('deleteTask('+row.id+',\''+escJs(row.title)+'\')','删除任务'); } }
     ],
     data: tasks,
@@ -803,7 +815,7 @@ async function initProjectStages() {
 function _renderTaskRow(t, stageMap) {
   var stageName = t.stage_name || t.execution_name || '';
   var progressPct = t.progress || 0;
-  var overdue = t.due_date && t.status !== 'done' && t.status !== 'closed' && t.due_date < fmtLocalDate();
+  var overdue = t.due_date && t.status !== 'done' && t.status !== 'done' && t.due_date < fmtLocalDate();
   var projCode = t.project_code || '';
   return '<tr class="clickable">' +
     '<td style="font-size:11px;font-family:var(--mono);color:var(--muted)">#' + t.id + '</td>' +
@@ -916,7 +928,7 @@ function _daysLeft(dueDate) {
 }
 
 function _renderTaskDetailBody(t) {
-  var overdue = t.due_date && t.status !== 'done' && t.status !== 'closed' && t.due_date < fmtLocalDate();
+  var overdue = t.due_date && t.status !== 'done' && t.status !== 'done' && t.due_date < fmtLocalDate();
   var daysInfo = _daysLeft(t.due_date);
   var projHtml = t.project_code ? projCodeTag(t.project_code, null, t.project_name) + ' ' + escHtml(t.project_name || '') : escHtml(t.project_name || '-');
   var stageName = escHtml(t.stage_name || t.execution_name || '-');
@@ -997,7 +1009,7 @@ function _renderTaskDetailBody(t) {
           var overtime = cons - orig;
           var h = '<div class="dkpi"><div class="dkpi-lbl">工时</div><div class="dkpi-val">';
           h += '预估 ' + est.toFixed(1) + 'h / 实际 ' + cons.toFixed(1) + 'h';
-          if (overtime > 0 && t.status !== 'done' && t.status !== 'closed') {
+          if (overtime > 0 && t.status !== 'done' && t.status !== 'done') {
             h += '<br><span style="color:var(--warn);font-size:11px">超时 ' + overtime.toFixed(1) + 'h (原计划 ' + orig.toFixed(1) + 'h)</span>';
           }
           h += '</div></div>';
@@ -1054,6 +1066,11 @@ function _showTaskDetail(t) {
   openDialog(escHtml(t.title), html, [
     {text: '关闭', onclick: '_closeTaskDialog()'}
   ], {maxWidth: '60%'});
+  // Scroll to top when dialog opens
+  setTimeout(function() {
+    var body = document.querySelector('.task-detail-body');
+    if (body) body.scrollTop = 0;
+  }, 50);
 
   // Async load worklogs and comments (DOM exists after openDialog)
   _refreshTaskWorklogs(t.id);
@@ -1155,6 +1172,7 @@ function _showTaskForm(title, task) {
           selectedIdFn: function() { return _tfReviewerId; },
           onSelect: function(u) { _tfReviewerId = u.id; }
         }) + '</div></div>' : '') +
+        '<div><label style="' + _lbl + '">抄送给</label><div style="margin-top:2px" id="tf-cc-wrap"></div></div>' +
       '</div>' +
     '</div>' +
     // ── 状态与进度 ──
@@ -1253,7 +1271,33 @@ function _showTaskForm(title, task) {
         var ri = document.getElementById('tf-reviewer-input');
         if (ri) ri.value = t.reviewer_name;
       }
+      // Init CC selector
+      var ccWrap = document.getElementById('tf-cc-wrap');
+      if (ccWrap) {
+        ccWrap.innerHTML = createCcSelector({
+          containerId: 'tf-cc',
+          selectedIds: (t.cc_user_ids || []).slice(),
+          placeholder: '搜索抄送人...',
+          onChange: function(ids) { window._tfCcIds = ids; }
+        });
+        setTimeout(function() { _renderCcTags('tf-cc'); }, 180);
+      }
     }, 50);
+  }
+  // Init CC selector for create mode (no project pre-fill)
+  if (!isEdit) {
+    setTimeout(function() {
+      var ccWrap = document.getElementById('tf-cc-wrap');
+      if (ccWrap && !ccWrap.innerHTML.trim()) {
+        ccWrap.innerHTML = createCcSelector({
+          containerId: 'tf-cc',
+          selectedIds: [],
+          placeholder: '搜索抄送人...',
+          onChange: function(ids) { window._tfCcIds = ids; }
+        });
+        setTimeout(function() { _renderCcTags('tf-cc'); }, 180);
+      }
+    }, 200);
   }
 
 function _loadTfExecutions(projectId, selectedId) {
@@ -1341,6 +1385,7 @@ async function submitTask(taskId) {
     execution_id: parseInt(document.getElementById('tf-execution').value) || null,
     stage_name: _tfStageName(),
     project_id: _resolveProjectId(),
+    cc_user_ids: (window._tfCcIds && window._tfCcIds.length) ? window._tfCcIds : null,
   };
 
   // Clear all hints first
@@ -1468,7 +1513,7 @@ function _batchRowHTML(i, r) {
     '<span style="width:22px;text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);flex-shrink:0">' + (i + 1) + '</span>' +
     _batchExecOptions('bt-exec-' + i) +
     '<input class="search-inp" id="bt-title-' + i + '" value="' + escHtml(r.title || '') + '" placeholder="标题 *" style="flex:2;min-width:120px">' +
-    '<select class="search-inp" id="bt-status-' + i + '" style="flex:0.8;min-width:70px"><option value="todo">待办</option><option value="in_progress">进行中</option><option value="review">评审中</option><option value="done">已完成</option><option value="closed">已关闭</option></select>' +
+    '<select class="search-inp" id="bt-status-' + i + '" style="flex:0.8;min-width:70px"><option value="todo">待办</option><option value="in_progress">进行中</option><option value="review">评审中</option><option value="done">已完成</option></select>' +
     '<select class="search-inp" id="bt-priority-' + i + '" style="flex:0.7;min-width:55px"><option value="medium">中</option><option value="low">低</option><option value="high">高</option><option value="critical">紧急</option></select>' +
     '<select class="search-inp" id="bt-assignee-' + i + '" style="flex:0.9;min-width:120px"><option value="">负责人 *</option></select>' +
     '<input class="search-inp" id="bt-estimate-' + i + '" value="' + escHtml(r.estimate || '') + '" placeholder="工时(h) *" style="flex:0.6;min-width:55px" type="number" step="0.5">' +

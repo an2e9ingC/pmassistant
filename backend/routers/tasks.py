@@ -53,6 +53,7 @@ class TaskCreate(BaseModel):
     start_date: Optional[str] = None
     due_date: Optional[str] = None
     output_items: Optional[List] = None
+    cc_user_ids: Optional[List[int]] = None
 
 
 class TaskBatchCreate(BaseModel):
@@ -84,6 +85,7 @@ class TaskUpdate(BaseModel):
     due_date: Optional[str] = None
     output_items: Optional[List] = None
     sort_order: Optional[int] = None
+    cc_user_ids: Optional[List[int]] = None
 
 
 @router.get("", response_model=dict)
@@ -110,6 +112,13 @@ def my_tasks(
     user=Depends(get_current_user),
 ):
     tasks = task_service.get_my_tasks(db, user.id)
+    return {"code": 0, "data": tasks, "message": "ok"}
+
+
+@router.get("/user/{user_id}", response_model=dict)
+def get_user_tasks(user_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    """返回某用户的所有相关任务：负责人 + 创建人 + 被抄送"""
+    tasks = task_service.get_user_tasks(db, user_id)
     return {"code": 0, "data": tasks, "message": "ok"}
 
 

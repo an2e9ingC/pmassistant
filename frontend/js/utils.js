@@ -429,7 +429,8 @@ function _addNoteImagePreview(previewId, idx, dataUrl) {
 
 // Parse existing images in content and add them to preview
 function _loadExistingNoteImages(content, previewId) {
-  var regex = /!\[\]\((\/api\/note-images\/[^) ]+)\s*=(\d+)x\)/g;
+  // Match images with optional width suffix: ![](url) or ![](url =200x)
+  var regex = /!\[\]\((\/api\/note-images\/[^)]+?)(?:\s*=(\d+)x)?\)/g;
   var match;
   while ((match = regex.exec(content)) !== null) {
     var url = match[1];

@@ -1,5 +1,18 @@
 /* PMA Bug Tracking System */
 var _bugFilterProduct = null;
+
+// ── bug:before-save — progress/status bidirectional sync ──
+EventBus.on('bug:before-save', function(e) {
+  var p = e.progress, s = e.status;
+  // progress > 0 on open → auto in_progress
+  if (p > 0 && p < 100 && s === 'open') { e.data.status = 'in_progress'; e.status = 'in_progress'; }
+  // progress >= 100 on non-resolved/closed → auto resolved
+  if (p >= 100 && s !== 'resolved' && s !== 'closed') { e.data.status = 'resolved'; e.status = 'resolved'; }
+  // resolved + progress drops below 100 → back to in_progress
+  if (s === 'resolved' && p < 100) { e.data.status = 'in_progress'; e.status = 'in_progress'; }
+  // open + progress > 0 → inconsistent, reset progress
+  if (s === 'open' && p > 0) { e.data.progress = 0; e.progress = 0; }
+});
 var _bugFilterStatus = '';
 var _bugKanbanMode = false;
 var _bfProjId = null;
@@ -56,7 +69,7 @@ async function _renderBugSidebar() {
 
   html += '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">状态</div>' +
     '<div style="display:flex;flex-direction:column;gap:3px;margin-bottom:14px">' +
-    ['','open','confirmed','in_progress','resolved','closed'].map(function(s) {
+    ['','open','in_progress','resolved','closed'].map(function(s) {
       return '<button class="btn-sm" onclick="_bugFilterStatus=\''+s+'\';loadBugs()" style="text-align:left;font-size:11px;padding:4px 8px' +
         (_bugFilterStatus===s?';background:var(--accent);color:#fff':'') + '">' + (s||'全部') + '</button>';
     }).join('') + '</div>';
@@ -118,7 +131,7 @@ function _renderBugTable(container, bugs) {
 
 function _renderKanban(container, bugs) {
   var cols = [
-    {key:'open',label:'待确认'},{key:'confirmed',label:'已确认'},
+    {key:'open',label:'待确认'},
     {key:'in_progress',label:'处理中'},{key:'gitlab_submitted',label:'GitLab已提交'},
     {key:'resolved',label:'已解决'},{key:'closed',label:'已关闭'}];
   var grouped = {};
@@ -151,88 +164,190 @@ var _bGrid2 = 'display:grid;grid-template-columns:1fr 1fr;gap:6px 20px';
 var _bLbl = 'font-size:11px;color:var(--muted)';
 var _bVal = 'font-size:13px;margin-top:1px';
 
-async function openBugDetail(bugId) {
-  var data = await API.get('/bugs/' + bugId);
-  var b = data || {};
+function _renderBugDetailBody(b) {
   var sevs = {1:'致命',2:'严重',3:'一般',4:'建议'};
   var sevColors = {1:'var(--danger)',2:'var(--warn)',3:'var(--accent)',4:'var(--muted)'};
   var projHtml = b.project_code ? projCodeTag(b.project_code, b.project_id, b.project_name) + ' ' + escHtml(b.project_name || '') : escHtml(b.project_name || '-');
+  var typeLabel = {codeerror:'代码错误',design:'设计缺陷',security:'安全问题',performance:'性能问题',other:'其他'}[b.type]||b.type;
 
-  var html = '<div style="max-height:78vh;overflow-y:auto;padding-right:4px">' +
-    '<div style="font-size:14px;font-weight:600;margin-bottom:10px">' + escHtml(b.title) + '</div>' +
-    // Row 1: 基本信息 + 状态与进度
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
-      '<div style="' + _bCard + '">' +
-        '<div style="' + _bCardHd + '">基本信息</div>' +
-        '<div style="' + _bGrid2 + '">' +
-          '<div><span style="' + _bLbl + '">产品</span><div style="' + _bVal + '">' + (b.product_code ? '<span class="proj-code-btn" onclick="openProductDetail(\'' + escHtml(b.product_code) + '\')" title="' + escHtml(b.product_name || '') + '">' + escHtml(b.product_code) + '</span> ' + escHtml(b.product_name || '') : escHtml(b.product_name || '-')) + '</div></div>' +
-          '<div><span style="' + _bLbl + '">项目</span><div style="' + _bVal + '">' + projHtml + '</div></div>' +
-          '<div><span style="' + _bLbl + '">组件</span><div style="' + _bVal + '">' + escHtml(b.component_name || '-') + '</div></div>' +
-          '<div><span style="' + _bLbl + '">类型</span><div style="' + _bVal + '">' + escHtml(b.type || '-') + '</div></div>' +
-          '<div><span style="' + _bLbl + '">负责人</span><div style="' + _bVal + '">' + escHtml(b.assignee_name || '未分配') + '</div></div>' +
-          '<div><span style="' + _bLbl + '">创建人</span><div style="' + _bVal + '">' + escHtml(b.reporter_name || '-') + '</div></div>' +
-        '</div>' +
-      '</div>' +
-      '<div style="' + _bCard + '">' +
-        '<div style="' + _bCardHd + '">状态与进度</div>' +
-        '<div style="' + _bGrid2 + '">' +
-          '<div><span style="' + _bLbl + '">状态</span><div style="margin-top:3px">' + renderPill(b.status || 'open') + '</div></div>' +
-          '<div><span style="' + _bLbl + '">解决</span><div style="' + _bVal + '">' + escHtml(b.resolution || '-') + '</div></div>' +
-          '<div><span style="' + _bLbl + '">严重程度</span><div style="' + _bVal + ';color:' + (sevColors[b.severity] || 'var(--muted)') + ';font-weight:500">' + (sevs[b.severity] || b.severity) + '</div></div>' +
-          '<div><span style="' + _bLbl + '">优先级</span><div style="margin-top:3px"><span class="prio-tag '+(b.priority||'medium')+'">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[b.priority]||b.priority)+'</span></div></div>' +
-          '<div><span style="' + _bLbl + '">工时</span><div style="font-size:12px;margin-top:1px">预估 '+(b.estimate_hours||0).toFixed(1)+'h / 实际 '+(b.consumed_hours||0).toFixed(1)+'h</div></div>' +
-        '</div>' +
+  var _STATUS_OPTS = [
+    {v:'open',l:'待确认'},{v:'in_progress',l:'处理中'},
+    {v:'resolved',l:'已解决'},{v:'closed',l:'已关闭'}];
+  var _SEV_OPTS = [{v:'1',l:'1-致命'},{v:'2',l:'2-严重'},{v:'3',l:'3-一般'},{v:'4',l:'4-建议'}];
+  var _PRIO_OPTS = [{v:'low',l:'低'},{v:'medium',l:'中'},{v:'high',l:'高'},{v:'critical',l:'紧急'}];
+  var _TYPE_OPTS = [{v:'codeerror',l:'代码错误'},{v:'design',l:'设计缺陷'},{v:'security',l:'安全问题'},{v:'performance',l:'性能问题'},{v:'other',l:'其他'}];
+
+  var html = '';
+  // ── CSS for inline editing ──
+  html += '<style>' +
+    '.bug-detail-body .editable-field{cursor:pointer;display:inline-block;border-radius:5px;padding:2px 8px;margin:-2px -8px;transition:background 0.15s,border-color 0.15s;border:2px solid transparent}' +
+    '.bug-detail-body .editable-field:hover{background:var(--accent-lt);border-color:var(--accent)}' +
+    '.bug-detail-body .editable-field.editing{cursor:default;padding:0;margin:0;border:none;display:block}' +
+    '.bug-detail-body .editable-field.editing:hover{background:transparent;border-color:transparent}' +
+    '.bug-detail-body .ef-display{display:inline-block;min-width:8px}' +
+    '.bug-detail-body .ef-save-btn{background:var(--accent-lt);border-color:var(--accent);color:var(--accent);transition:background 0.15s,color 0.15s,border-color 0.15s}' +
+    '.bug-detail-body .ef-save-btn:hover{background:var(--accent);color:#fff;border-color:var(--accent)}' +
+    '.bug-detail-body .ef-cancel-btn{background:var(--warn-lt);border-color:var(--warn);color:var(--warn);transition:background 0.15s,color 0.15s,border-color 0.15s}' +
+    '.bug-detail-body .ef-cancel-btn:hover{background:var(--warn);color:#fff;border-color:var(--warn)}' +
+    '.bug-detail-body .bd-val{font-size:13px}' +
+    '.bug-detail-body .bd-lbl{font-size:11px}' +
+    '</style>';
+
+  // ── Row 1: 基本信息 + 状态与进度 side by side ──
+  html += '<div style="display:flex;gap:16px">' +
+    // ── 基本信息 ──
+    '<div class="card info-glass-card" style="flex:1;min-width:0;padding:20px">' +
+      '<div class="section-hd"><span class="section-title">基本信息</span></div>' +
+      '<div class="delivery-kpi" style="grid-template-columns:1fr 1fr">' +
+        // Title (editable)
+        '<div class="dkpi"><div class="dkpi-lbl">标题</div>' +
+          _buildBugEditableField(b.id, 'title', 'text', '<span class="bd-val">' + escHtml(b.title || '—') + '</span>', b.title || '') + '</div>' +
+        // Product (read-only)
+        '<div class="dkpi"><div class="dkpi-lbl">产品</div><div class="bd-val">' + (b.product_code ? '<span class="proj-code-btn" onclick="openProductDetail(\'' + escHtml(b.product_code) + '\')" title="' + escHtml(b.product_name || '') + '">' + escHtml(b.product_code) + '</span> ' + escHtml(b.product_name || '') : escHtml(b.product_name || '-')) + '</div></div>' +
+        // Project (read-only)
+        '<div class="dkpi"><div class="dkpi-lbl">项目</div><div class="bd-val">' + projHtml + '</div></div>' +
+        // Component (editable)
+        '<div class="dkpi"><div class="dkpi-lbl">组件</div>' +
+          _buildBugEditableField(b.id, 'component_id', 'component-select',
+            '<span class="bd-val">' + escHtml(b.component_name || '-') + '</span>',
+            String(b.component_id || ''), null, ' data-product-id="' + (b.product_id || '') + '"') + '</div>' +
+        // Type (editable)
+        '<div class="dkpi"><div class="dkpi-lbl">类型</div>' +
+          _buildBugEditableField(b.id, 'type', 'select', '<span class="bd-val">' + escHtml(typeLabel) + '</span>', b.type || 'codeerror', _TYPE_OPTS) + '</div>' +
+        // Assignee (editable)
+        '<div class="dkpi"><div class="dkpi-lbl">负责人</div>' +
+          _buildBugEditableField(b.id, 'assignee_id', 'user-select', '<span class="bd-val">' + escHtml(b.assignee_name || '未分配') + '</span>', b.assignee_id || '') + '</div>' +
+        // Reporter (read-only)
+        '<div class="dkpi"><div class="dkpi-lbl">创建人</div><div class="bd-val">' + escHtml(b.reporter_name || '-') + '</div></div>' +
+        // CC (editable)
+        '<div class="dkpi" style="grid-column:1/-1"><div class="dkpi-lbl">抄送</div>' +
+          _buildBugEditableField(b.id, 'cc_user_ids', 'cc-select',
+            '<span class="bd-val">' + ((b.cc_user_names && b.cc_user_names.length) ? escHtml(b.cc_user_names.join(', ')) : '无') + '</span>',
+            JSON.stringify(b.cc_user_ids || [])) + '</div>' +
       '</div>' +
     '</div>' +
-
-    // Row 2: 描述 (left 50%) + 工时/分析 (right 50%, stacked)
-    '<div style="display:flex;gap:10px">' +
-      '<div style="flex:1;min-width:0">' +
-        '<div style="' + _bCard + '">' +
-          '<div style="' + _bCardHd + '">描述</div>' +
-          '<div class="markdown-body" style="font-size:13px;line-height:1.6;max-height:40vh;overflow-y:auto">' + (b.description ? renderMarkdown(b.description) : '<span style="color:var(--muted)">暂无描述</span>') + '</div>' +
-        '</div>' +
-      '</div>' +
-      '<div style="flex:1;display:flex;flex-direction:column;gap:10px;min-width:0">' +
-        '<div style="' + _bCard + '">' +
-          '<div style="display:flex;justify-content:space-between;margin-bottom:6px">' +
-            '<span style="' + _bCardHd + ';margin-bottom:0">工时日志 ('+(b.consumed_hours||0).toFixed(1)+'h)</span>' +
-            '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openBugWorklogDialog('+bugId+')">+ 记录</button></div>' +
-          '<div id="bv-worklogs" style="font-size:12px;max-height:200px;overflow-y:auto">加载中...</div>' +
-        '</div>' +
-        '<div style="' + _bCard + '">' +
-          '<div style="display:flex;justify-content:space-between;margin-bottom:6px">' +
-            '<span style="' + _bCardHd + ';margin-bottom:0">分析记录</span>' +
-            '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openBugAnalysisDialog('+bugId+')">+ 添加</button></div>' +
-          '<div id="bv-analyses" style="max-height:200px;overflow-y:auto">加载中...</div>' +
-        '</div>' +
+    // ── 状态与进度 ──
+    '<div class="card info-glass-card" style="flex:1;min-width:0;padding:20px">' +
+      '<div class="section-hd"><span class="section-title">状态与进度</span></div>' +
+      '<div class="delivery-kpi" style="grid-template-columns:1fr 1fr">' +
+        // Status (read-only — changed via quick action buttons)
+        '<div class="dkpi"><div class="dkpi-lbl">状态</div><div style="margin-top:6px">' + renderPill(b.status || 'open') + '</div></div>' +
+        // Severity (editable)
+        '<div class="dkpi"><div class="dkpi-lbl">严重程度</div><div style="margin-top:6px">' + _buildBugEditableField(b.id, 'severity', 'select',
+          '<span style="font-size:13px;color:' + (sevColors[b.severity] || 'var(--muted)') + ';font-weight:500">' + (sevs[b.severity] || b.severity) + '</span>',
+          String(b.severity || 3), _SEV_OPTS) + '</div></div>' +
+        // Priority (editable)
+        '<div class="dkpi"><div class="dkpi-lbl">优先级</div><div style="margin-top:6px">' + _buildBugEditableField(b.id, 'priority', 'select', renderPriorityBadge(b.priority || 'medium'), b.priority || 'medium', _PRIO_OPTS) + '</div></div>' +
+        // Estimate (editable)
+        '<div class="dkpi"><div class="dkpi-lbl">预估工时(h)</div>' +
+          _buildBugEditableField(b.id, 'estimate_hours', 'number', '<span class="bd-val">' + (b.estimate_hours || 0).toFixed(1) + 'h</span>', String(b.estimate_hours || 0), {min:0,step:0.5}) + '</div>' +
+        // Progress (editable)
+        '<div class="dkpi"><div class="dkpi-lbl">进度(%)</div>' +
+          _buildBugEditableField(b.id, 'progress', 'number', '<span class="bd-val">' + (b.progress || 0) + '%</span>', String(b.progress || 0), {min:0,max:100,step:5}) + '</div>' +
+        // Resolution (editable — bug解决方式)
+        '<div class="dkpi"><div class="dkpi-lbl">解决方式</div>' +
+          _buildBugEditableField(b.id, 'resolution', 'select',
+            '<span class="bd-val">' + ({resolved:'已解决',duplicate:'重复',wontfix:'不予解决',invalid:'无效',postponed:'延期处理'}[b.resolution] || b.resolution || '—') + '</span>',
+            b.resolution || '', [{v:'',l:'—'},{v:'resolved',l:'已解决'},{v:'duplicate',l:'重复'},{v:'wontfix',l:'不予解决'},{v:'invalid',l:'无效'},{v:'postponed',l:'延期处理'}]) + '</div>' +
       '</div>' +
     '</div>' +
   '</div>';
 
+  // ── Section 2: 描述 ──
+  html += '<div class="card info-glass-card" style="margin-top:16px;padding:20px">' +
+    '<div class="section-hd"><span class="section-title">描述</span></div>' +
+    _buildBugEditableField(b.id, 'description', 'textarea',
+      '<div class="markdown-body" style="font-size:13px;line-height:1.6;min-height:20px">' + (b.description ? renderMarkdown(b.description) : '<span style="color:var(--muted)">暂无描述，点击编辑</span>') + '</div>',
+      b.description || '') +
+  '</div>';
+
+  // ── Section 3: 工时日志 ──
+  html += '<div class="card info-glass-card" style="margin-top:16px;padding:20px">' +
+    '<div class="section-hd"><span class="section-title">工时日志 (' + (b.consumed_hours || 0).toFixed(1) + 'h)</span>' +
+      '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openBugWorklogDialog(' + b.id + ')">+ 记录</button></div>' +
+    '<div id="bv-worklogs" style="font-size:12px">加载中...</div>' +
+  '</div>';
+
+  // ── Section 4: 评论 ──
+  html += '<div class="card info-glass-card" style="margin-top:16px;padding:20px">' +
+    '<div class="section-hd"><span class="section-title">评论</span></div>' +
+    '<div id="bug-detail-comments" style="margin-bottom:8px">加载中...</div>' +
+    '<div style="display:flex;gap:8px">' +
+      '<input class="search-inp" id="bug-comment-input" placeholder="添加评论..." style="flex:1">' +
+      '<button class="btn-sm btn-primary" onclick="_submitBugComment(' + b.id + ')">发送</button>' +
+    '</div>' +
+  '</div>';
+
+  // ── Section 5: 分析记录 ──
+  html += '<div class="card info-glass-card" style="margin-top:16px;padding:20px">' +
+    '<div class="section-hd"><span class="section-title">分析记录</span>' +
+      '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openBugAnalysisDialog(' + b.id + ')">+ 添加</button></div>' +
+    '<div id="bv-analyses">加载中...</div>' +
+  '</div>';
+
+  return html;
+}
+
+async function openBugDetail(bugId) {
+  var data = await API.get('/bugs/' + bugId);
+  var b = data || {};
+
+  var html = '<div class="bug-detail-body" style="max-height:75vh;overflow-y:auto;padding-right:4px">' +
+    _renderBugDetailBody(b) +
+  '</div>';
+
   var btns = [
     {text:'提交到GitLab',cls:'btn',onclick:'_bugSubmitGitlab('+bugId+')'},
-    {text:'编辑',cls:'btn-primary',onclick:'openBugDialog('+bugId+');closeSharedDialog()'},
     {text:'关闭',onclick:'closeSharedDialog()'}];
   openDialog('Bug #' + bugId, html, btns, {maxWidth: '80vw', maxHeight: '90vh'});
+  // Scroll to top when dialog opens
+  setTimeout(function() {
+    var body = document.querySelector('.bug-detail-body');
+    if (body) body.scrollTop = 0;
+  }, 50);
 
-  // Load worklogs + analyses
+  // Load worklogs + comments + analyses
   API.get('/bugs/'+bugId+'/worklogs').then(function(logs) {
     var el = document.getElementById('bv-worklogs');
     if (el) { el.innerHTML = _renderBugWorklogTable(logs||[], bugId); _initBugWorklogDt(logs||[], bugId); }
   });
+  _loadBugComments(bugId);
   _loadBugAnalyses(bugId);
+}
+
+function _loadBugComments(bugId) {
+  API.get('/bugs/' + bugId + '/comments').then(function(comments) {
+    var el = document.getElementById('bug-detail-comments');
+    if (!el) return;
+    if (!comments || !comments.length) { el.innerHTML = '<div style="color:var(--muted);font-size:12px">暂无评论</div>'; return; }
+    el.innerHTML = '<div id="bug-comments-table"></div>';
+    new DataTable({
+      container: document.getElementById('bug-comments-table'),
+      columns: [
+        { key: 'created_at', title: '时间', width: '130px', render: function(v) { return '<span style="font-size:10px;color:var(--muted);white-space:nowrap">'+(fmtISODateTime(v)||'')+'</span>'; } },
+        { key: 'username', title: '用户', width: '80px', render: function(v) { return '<span style="font-size:12px">'+escHtml(v)+'</span>'; } },
+        { key: 'content', title: '内容', align: 'left', render: function(v) { return '<span style="font-size:13px">'+escHtml(v||'')+'</span>'; } }
+      ],
+      data: comments,
+      resizable: false
+    });
+  }).catch(function() {});
+}
+
+function _submitBugComment(bugId) {
+  var input = document.getElementById('bug-comment-input');
+  if (!input || !input.value.trim()) return;
+  API.post('/bugs/' + bugId + '/comments', {content: input.value.trim()}).then(function() {
+    input.value = '';
+    _loadBugComments(bugId);
+  }).catch(function(e) { showToast('发送失败: ' + (e.message || ''), 'error'); });
 }
 
 /* ── Create/Edit Dialog ── */
 
 function openBugDialog(bugId) {
-  var isEdit = !!bugId;
-  if (isEdit) {
-    API.get('/bugs/'+bugId).then(function(b) { _showBugForm(b); });
-  } else {
-    _showBugForm(null);
-  }
+  if (bugId) { openBugDetail(bugId); return; } // route edit to unified detail view
+  _showBugForm(null);
 }
 
 function _showBugForm(b) {
@@ -245,80 +360,97 @@ function _showBugForm(b) {
   }
   window._bfProdId = t.product_id || ctx.product || null;
   window._bfProjId = t.project_id || ctx.project || null;
+  window._bfAsgnId = t.assignee_id || null;
+  window._bfCcIds = (t.cc_user_ids || []).slice();
   window._bugPreFill = null;  // consume once
-  var html = '<div style="display:flex;flex-direction:column;height:76vh">' +
-    // Fields section — flex-shrink:0 (fixed height)
-    '<div style="flex-shrink:0">' +
-    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">标题 *</label>' +
-    '<input class="search-inp" id="bf-title" value="'+escHtml(t.title||'')+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
-    // Row: 产品 | 项目 (full width each, 2-col)
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
-      '<div><label style="font-size:11px;color:var(--muted)">产品 *</label>' +
-        '<div style="margin-top:2px">' + createProductCombo({
-          comboId: 'bf-prod', inputId: 'bf-prod-input', dropdownId: 'bf-prod-drop',
-          placeholder: '搜索产品...',
-          selectedIdFn: function() { return t.product_id || null; },
-          onSelect: function(p) { _bfProdId = p.id; _bugLoadComponents(); }
-        }) + '</div></div>' +
-      '<div><label style="font-size:11px;color:var(--muted)">项目</label>' +
-        '<div style="margin-top:2px">' + createSearchCombo({
-          comboId: 'bf-proj', inputId: 'bf-proj-input', dropdownId: 'bf-proj-drop',
-          placeholder: '搜索项目...',
-          dataSource: function() { return API.get('/products/'+(_bfProdId||0)+'/projects').then(function(d){ return d||[]; }).catch(function(){ return []; }); },
-          selectedIdFn: function() { return t.project_id || null; },
-          onSelect: function(p) { _bfProjId = p.id; }
-        }) + '</div></div>' +
-    '</div>' +
-    // Row: 组件 | 负责人 | 严重程度 | 优先级 (4-col)
-    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px 10px">' +
-      '<div><label style="font-size:11px;color:var(--muted)">组件</label><select class="search-inp" id="bf-component" style="width:100%;margin-top:2px"><option value="">选择组件...</option></select></div>' +
-      '<div><label style="font-size:11px;color:var(--muted)">负责人</label><div id="bf-assignee-wrap" style="margin-top:2px"></div></div>' +
-      '<div><label style="font-size:11px;color:var(--muted)">严重程度</label><select class="search-inp" id="bf-severity" style="width:100%;margin-top:2px">' +
-        '<option value="1">1-致命</option><option value="2">2-严重</option><option value="3" selected>3-一般</option><option value="4">4-建议</option></select></div>' +
-      '<div><label style="font-size:11px;color:var(--muted)">优先级</label><select class="search-inp" id="bf-priority" style="width:100%;margin-top:2px">' +
-        '<option value="low">低</option><option value="medium" selected>中</option><option value="high">高</option><option value="critical">紧急</option></select></div>' +
-    '</div>' +
-    // Row: 类型 | 状态 | 预估工时 | (empty) (4-col)
-    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px 10px">' +
-      '<div><label style="font-size:11px;color:var(--muted)">类型</label><select class="search-inp" id="bf-type" style="width:100%;margin-top:2px">' +
-        '<option value="codeerror">代码错误</option><option value="design">设计缺陷</option><option value="security">安全问题</option><option value="performance">性能问题</option><option value="other">其他</option></select></div>' +
-      '<div><label style="font-size:11px;color:var(--muted)">状态</label><select class="search-inp" id="bf-status" style="width:100%;margin-top:2px">' +
-        '<option value="open">待确认</option><option value="confirmed">已确认</option><option value="in_progress">处理中</option><option value="resolved">已解决</option><option value="closed">已关闭</option></select></div>' +
-      '<div><label style="font-size:11px;color:var(--muted)">预估工时(h)</label>' +
-        '<input class="search-inp" id="bf-estimate" type="number" step="0.5" value="'+(t.estimate_hours||'')+'" style="width:100%;margin-top:2px"></div>' +
-      '<div></div>' +
-    '</div>' +
-    '<div style="margin-top:8px"><label style="font-size:11px;color:var(--muted)">描述模板 <span style="font-weight:400">（可选）</span></label>' +
-    '<select class="search-inp" id="bf-desc-tpl" onchange="_bugApplyDescTemplate()" style="width:100%;box-sizing:border-box;margin-top:2px">' +
-      '<option value="">不使用模板</option></select></div>' +
-    '</div>' + // close flex-shrink:0
-    // Description — flex:1 takes all extra height
-    '<div style="flex:1;display:flex;flex-direction:column;min-height:0;margin-top:8px">' +
-      '<div style="flex-shrink:0;display:flex;align-items:center;justify-content:space-between">' +
-        '<label style="font-size:11px;color:var(--muted)">描述（Markdown）</label>' +
-        '<button class="btn btn-xs" onclick="_bugToggleMdPreview()" style="font-size:10px;padding:1px 6px">预览</button>' +
+
+  var inp = 'width:100%;box-sizing:border-box;margin-top:1px';
+  var bodyHtml = '';
+
+  // ── Row 1: 基本信息 + 状态与进度 side by side ──
+  bodyHtml += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+    // ── 基本信息 Card ──
+    '<div style="' + _bCard + '">' +
+      '<div style="' + _bCardHd + '">基本信息</div>' +
+      '<div style="margin-bottom:6px"><label style="' + _bLbl + '">标题 *</label>' +
+        '<input class="search-inp" id="bf-title" value="' + escHtml(t.title || '') + '" placeholder="请填入Bug标题" style="' + inp + '">' +
+        '<div id="bf-title-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请填入Bug标题</div></div>' +
+      '<div style="' + _bGrid2 + '">' +
+        '<div><label style="' + _bLbl + '">产品 *</label>' +
+          '<div style="margin-top:2px">' + createProductCombo({
+            comboId: 'bf-prod', inputId: 'bf-prod-input', dropdownId: 'bf-prod-drop',
+            placeholder: '搜索产品...',
+            selectedIdFn: function() { return t.product_id || null; },
+            onSelect: function(p) { _bfProdId = p.id; _bugLoadComponents(); }
+          }) + '<div id="bf-prod-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择产品</div></div></div>' +
+        '<div><label style="' + _bLbl + '">项目 *</label>' +
+          '<div style="margin-top:2px">' + createSearchCombo({
+            comboId: 'bf-proj', inputId: 'bf-proj-input', dropdownId: 'bf-proj-drop',
+            placeholder: '搜索项目...',
+            dataSource: function() { return API.get('/products/' + (_bfProdId || 0) + '/projects').then(function(d) { return d || []; }).catch(function() { return []; }); },
+            selectedIdFn: function() { return t.project_id || null; },
+            onSelect: function(p) { _bfProjId = p.id; }
+          }) + '<div id="bf-proj-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择项目</div></div></div>' +
       '</div>' +
-      '<div style="flex:1;min-height:0;margin-top:2px">' +
-        '<textarea class="search-inp" id="bf-desc" style="width:100%;height:100%;box-sizing:border-box;resize:none">'+escHtml(t.description||'')+'</textarea>' +
+      '<div style="' + _bGrid2 + '">' +
+        '<div><label style="' + _bLbl + '">组件</label><select class="search-inp" id="bf-component" style="' + inp + '"><option value="">选择组件...</option></select></div>' +
+        '<div><label style="' + _bLbl + '">负责人 *</label><div id="bf-assignee-wrap" style="margin-top:2px"></div>' +
+          '<div id="bf-assignee-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择负责人</div></div>' +
       '</div>' +
-      '<div id="bf-desc-preview" class="markdown-body" style="display:none;flex:1;overflow-y:auto;padding:8px;border:1px solid var(--border);border-radius:6px;margin-top:2px;font-size:13px"></div>' +
-      '<div style="flex-shrink:0;display:flex;gap:8px;margin-top:4px;align-items:center">' +
-        '<label class="btn btn-sm" style="cursor:pointer;font-size:10px;padding:2px 8px">📎 附件<input type="file" id="bf-file-input" style="display:none" onchange="_bugUploadAttach()" multiple></label>' +
-        '<span style="font-size:10px;color:var(--muted)">支持粘贴图片 (Ctrl+V)</span>' +
+      '<div style="margin-top:6px"><label style="' + _bLbl + '">抄送给</label>' +
+        '<div id="bf-cc-wrap" style="margin-top:2px"></div></div>' +
+    '</div>' +
+    // ── 状态与进度 Card ──
+    '<div style="' + _bCard + '">' +
+      '<div style="' + _bCardHd + '">状态与进度</div>' +
+      '<div style="' + _bGrid2 + '">' +
+        '<div><label style="' + _bLbl + '">严重程度 *</label><select class="search-inp" id="bf-severity" style="' + inp + '">' +
+          '<option value="">请选择...</option><option value="1">1-致命</option><option value="2">2-严重</option><option value="3" selected>3-一般</option><option value="4">4-建议</option></select>' +
+          '<div id="bf-severity-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择严重程度</div></div>' +
+        '<div><label style="' + _bLbl + '">优先级</label><select class="search-inp" id="bf-priority" style="' + inp + '">' +
+          '<option value="low">低</option><option value="medium" selected>中</option><option value="high">高</option><option value="critical">紧急</option></select></div>' +
+        '<div><label style="' + _bLbl + '">类型</label><select class="search-inp" id="bf-type" style="' + inp + '">' +
+          '<option value="codeerror">代码错误</option><option value="design">设计缺陷</option><option value="security">安全问题</option><option value="performance">性能问题</option><option value="other">其他</option></select></div>' +
+        '<div><label style="' + _bLbl + '">状态</label><select class="search-inp" id="bf-status" style="' + inp + '">' +
+          '<option value="open">待确认</option><option value="in_progress">处理中</option><option value="resolved">已解决</option><option value="closed">已关闭</option></select></div>' +
+        '<div><label style="' + _bLbl + '">预估工时(h)</label>' +
+          '<input class="search-inp" id="bf-estimate" type="number" step="0.5" value="' + (t.estimate_hours || '') + '" style="' + inp + '"></div>' +
+        '<div><label style="' + _bLbl + '">进度(%)</label>' +
+          '<input class="search-inp" id="bf-progress" type="number" min="0" max="100" step="5" value="' + (t.progress || 0) + '" style="' + inp + '"></div>' +
+        '<div style="grid-column:1/-1"><label style="' + _bLbl + '">创建人</label><div style="' + inp + ';padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:13px;color:var(--fg)">' + escHtml(t.reporter_name || (function(){var u=getCurrentUser();return u?u.display_name||u.username:'—';})()) + '</div></div>' +
       '</div>' +
-      '<div id="bf-desc-img-preview" style="margin-top:4px;min-height:0;max-height:50vh;overflow-y:auto"></div>' +
     '</div>' +
   '</div>';
+
+  // ── Section 2: 描述 Card ──
+  bodyHtml += '<div style="' + _bCard + ';margin-top:10px">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between">' +
+      '<div><span style="' + _bCardHd + ';margin-bottom:0">描述 (Markdown)</span>' +
+      '<select class="search-inp" id="bf-desc-tpl" onchange="_bugApplyDescTemplate()" style="margin-left:12px;font-size:11px;padding:2px 6px">' +
+        '<option value="">不使用模板</option></select></div>' +
+      '<button class="btn btn-xs" onclick="_bugToggleMdPreview()" style="font-size:10px;padding:1px 6px">预览</button>' +
+    '</div>' +
+    '<div style="margin-top:6px">' +
+      '<textarea class="search-inp" id="bf-desc" rows="4" style="width:100%;min-height:80px;height:auto;max-height:30vh;box-sizing:border-box;resize:vertical">' + escHtml(t.description || '') + '</textarea>' +
+    '</div>' +
+    '<div id="bf-desc-preview" class="markdown-body" style="display:none;overflow-y:auto;padding:8px;border:1px solid var(--border);border-radius:6px;margin-top:6px;font-size:13px;max-height:30vh"></div>' +
+    '<div style="font-size:10px;color:var(--muted);margin-top:4px">支持粘贴图片 (Ctrl+V)</div>' +
+    '<div id="bf-desc-img-preview" style="margin-top:4px;min-height:0;max-height:50vh;overflow-y:auto"></div>' +
+  '</div>';
+
+  bodyHtml = '<div style="max-height:75vh;overflow-y:auto;padding-right:4px">' + bodyHtml + '</div>';
+
   var title = isEdit ? '编辑Bug #'+t.id : '新建Bug';
   _clearNoteImagePreviews('bf-desc-img-preview');
   setTimeout(function() { initNoteImagePaste('bf-desc'); }, 100);
   setTimeout(function() { _loadExistingNoteImages(t.description||'', 'bf-desc-img-preview'); }, 200);
-  openDialog(title, html, [
+  openDialog(title, bodyHtml, [
     {text:'取消',onclick:'closeSharedDialog()'},
-    {text:isEdit?'保存':'创建',cls:'btn-primary',onclick:'_submitBug('+(t.id||'null')+')'}], {maxWidth:'calc(80vh * 1.618)'});
+    {text:isEdit?'保存':'创建',cls:'btn-primary',onclick:'_submitBug('+(t.id||'null')+')'}], {maxWidth:'80vw', maxHeight:'90vh'});
+
   // Load bug description templates (independent of product selection)
   API.get('/product-doc-templates/bug-templates').then(function(btpls) {
-  window._bfDescTemplates = btpls || [];
+    window._bfDescTemplates = btpls || [];
     var tplSel = document.getElementById('bf-desc-tpl');
     var defaultTpl = (btpls||[]).find(function(t) { return t.is_default; });
     if (tplSel) {
@@ -340,18 +472,41 @@ function _showBugForm(b) {
       _bugLoadComponents();
     }, 100);
   }
+  // Pre-fill project name for edit mode
+  if (isEdit && t.project_id) {
+    setTimeout(function() {
+      var projName = (t.project_code ? '[' + t.project_code + '] ' : '') + (t.project_name || '');
+      var pi = document.getElementById('bf-proj-input');
+      if (pi && projName.trim()) pi.value = projName.trim();
+    }, 100);
+  }
   if (isEdit && t.severity) { setTimeout(function() { var s=document.getElementById('bf-severity'); if(s)s.value=t.severity; },100); }
   if (isEdit && t.priority) { setTimeout(function() { var s=document.getElementById('bf-priority'); if(s)s.value=t.priority; },100); }
   if (isEdit && t.type) { setTimeout(function() { var s=document.getElementById('bf-type'); if(s)s.value=t.type; },100); }
   if (isEdit && t.status) { setTimeout(function() { var s=document.getElementById('bf-status'); if(s)s.value=t.status; },100); }
   if (isEdit && t.component_id) { setTimeout(function() { var s=document.getElementById('bf-component'); if(s)s.value=t.component_id; },200); }
-  // Create user combo + init features
+  // Create user combo + CC selector
   setTimeout(function() {
     var wrap = document.getElementById('bf-assignee-wrap');
     if (wrap) wrap.innerHTML = createUserCombo({comboId:'bf-assignee',inputId:'bf-assignee-input',dropdownId:'bf-assignee-drop',
       selectedIdFn:function(){return t.assignee_id||null;},
       onSelect:function(u){window._bfAsgnId=u.id;}});
-    _initBugFormFeatures();
+    // CC selector
+    var ccWrap = document.getElementById('bf-cc-wrap');
+    if (ccWrap) {
+      ccWrap.innerHTML = createCcSelector({
+        containerId: 'bf-cc',
+        selectedIds: (t.cc_user_ids || []).slice(),
+        placeholder: '搜索抄送人...',
+        onChange: function(ids) { window._bfCcIds = ids; }
+      });
+      setTimeout(function() { _renderCcTags('bf-cc'); }, 150);
+    }
+    // Pre-fill assignee name for edit mode
+    if (isEdit && t.assignee_name) {
+      var ai = document.getElementById('bf-assignee-input');
+      if (ai) ai.value = t.assignee_name;
+    }
   }, 80);
 }
 
@@ -404,23 +559,38 @@ function _bugApplyDescTemplate() {
 }
 
 async function _submitBug(bugId) {
+  // Clear hints
+  ['bf-title-hint','bf-prod-hint','bf-proj-hint','bf-assignee-hint','bf-severity-hint'].forEach(function(id) {
+    var el = document.getElementById(id); if (el) el.style.display = 'none';
+  });
+  var valid = true;
   var title = document.getElementById('bf-title').value.trim();
-  if (!title) { showToast('请输入标题','error'); return; }
+  if (!title) { var h = document.getElementById('bf-title-hint'); if (h) h.style.display = ''; valid = false; }
   var pid = _bfProdId || 0;
-  if (!pid) { showToast('请选择产品','error'); return; }
+  if (!pid) { var h = document.getElementById('bf-prod-hint'); if (h) h.style.display = ''; valid = false; }
+  var projId = _bfProjId || 0;
+  if (!projId) { var h = document.getElementById('bf-proj-hint'); if (h) h.style.display = ''; valid = false; }
+  var asgnId = window._bfAsgnId || null;
+  if (!asgnId) { var h = document.getElementById('bf-assignee-hint'); if (h) h.style.display = ''; valid = false; }
+  var sev = parseInt(document.getElementById('bf-severity').value) || 0;
+  if (!sev) { var h = document.getElementById('bf-severity-hint'); if (h) h.style.display = ''; valid = false; }
+  if (!valid) return;
+
   var desc = document.getElementById('bf-desc').value.trim();
   desc = await _uploadNoteImages(desc);
   var payload = {
     title:title, product_id:pid,
     description:desc,
-    project_id:_bfProjId||null,
+    project_id:projId,
     component_id:parseInt(document.getElementById('bf-component').value)||null,
-    severity:parseInt(document.getElementById('bf-severity').value)||3,
+    severity:sev,
     priority:document.getElementById('bf-priority').value,
     type:document.getElementById('bf-type').value,
     status:document.getElementById('bf-status').value,
     estimate_hours:parseFloat(document.getElementById('bf-estimate').value)||0,
-    assignee_id:window._bfAsgnId||null,
+    assignee_id:asgnId,
+    progress: parseInt(document.getElementById('bf-progress').value) || 0,
+    cc_user_ids:(window._bfCcIds && window._bfCcIds.length) ? window._bfCcIds : null,
   };
   try {
     var result;
@@ -576,13 +746,10 @@ async function deleteBugById(id) {
 
 /* ── Helpers ── */
 
-
-
 function _bugUploadAttach() {
   var inp = document.getElementById('bf-file-input');
   if (!inp || !inp.files.length) return;
-  var bugId = null; // Not created yet — upload after create
-  // For new bugs, store files and upload after creation
+  var bugId = null;
   window._bfPendingFiles = window._bfPendingFiles || [];
   for (var i = 0; i < inp.files.length; i++) {
     window._bfPendingFiles.push(inp.files[i]);
@@ -590,16 +757,6 @@ function _bugUploadAttach() {
     if (ta) ta.value += '\n📎 ' + inp.files[i].name + ' (待上传)\n';
   }
   inp.value = '';
-}
-
-function _initBugFormFeatures() {
-  var ta = document.getElementById('bf-desc');
-  var bugId = null; // Will be filled after create
-  if (ta) initImagePaste(ta, bugId || 0, function(url) {
-    // Store URL for later use
-    if (!window._bfUploadedUrls) window._bfUploadedUrls = [];
-    window._bfUploadedUrls.push(url);
-  });
 }
 
 async function _bugSubmitGitlab(bugId) {
@@ -626,4 +783,276 @@ async function _bugDragDrop(e, newStatus) {
 function _renderSev(label, sev) {
   var c = {1:'var(--danger)',2:'var(--warn)',3:'var(--muted)',4:'var(--success)'};
   return '<span style="font-size:11px;color:'+(c[sev]||c[3])+';font-weight:600">'+label+'</span>';
+}
+
+/* ── Bug Detail Inline Edit (same pattern as tasks) ── */
+
+function _hasBugEditPerm() {
+  // Same perm check as tasks for now
+  if (typeof _hasTaskEditPerm === 'function') return _hasTaskEditPerm();
+  return true;
+}
+
+function _buildBugEditableField(bugId, field, inputType, displayHtml, currentVal, opts, extraAttrs) {
+  if (!_hasBugEditPerm()) return '<span>' + displayHtml + '</span>';
+  var optsJson = opts ? encodeURIComponent(JSON.stringify(opts)) : '';
+  var attrs = extraAttrs || '';
+  if (inputType === 'number') {
+    attrs += ' data-min="' + (opts && opts.min !== undefined ? opts.min : '') + '"';
+    attrs += ' data-max="' + (opts && opts.max !== undefined ? opts.max : '') + '"';
+    attrs += ' data-step="' + (opts && opts.step || '1') + '"';
+  }
+  return '<div class="editable-field" data-bug-id="' + bugId + '" data-field="' + field + '" data-input-type="' + inputType + '" data-current-value="' + escHtml(String(currentVal || '')) + '"' + (optsJson ? ' data-opts="' + optsJson + '"' : '') + attrs + ' onclick="event.stopPropagation();_startBugInlineEdit(this)">' +
+    '<span class="ef-display">' + displayHtml + '</span>' +
+  '</div>';
+}
+
+function _startBugInlineEdit(el) {
+  if (!_hasBugEditPerm()) return;
+  var field = el.closest('.editable-field') || el;
+  if (!field || !field.classList.contains('editable-field') || field.classList.contains('editing')) return;
+
+  var bugId = field.dataset.bugId;
+  var fieldName = field.dataset.field;
+  var inputType = field.dataset.inputType;
+  var currentVal = field.dataset.currentValue || '';
+  field._originalHTML = field.innerHTML;
+  field.classList.add('editing');
+
+  if (inputType === 'select') {
+    var optsJson = field.dataset.opts ? decodeURIComponent(field.dataset.opts) : '[]';
+    var opts = JSON.parse(optsJson);
+    var html = '<select class="search-inp ef-input" style="width:100%;box-sizing:border-box;font-size:13px;margin-top:1px">';
+    opts.forEach(function(o) {
+      html += '<option value="' + escHtml(String(o.v)) + '"' + (String(o.v) === String(currentVal) ? ' selected' : '') + '>' + escHtml(o.l) + '</option>';
+    });
+    html += '</select>';
+    html += '<div style="display:flex;gap:10px;margin-top:6px"><button class="btn-xs ef-save-btn" onclick="event.stopPropagation();_saveBugInlineEdit(this)">✓</button><button class="btn-xs ef-cancel-btn" onclick="event.stopPropagation();_cancelBugInlineEdit(this)">✕</button></div>';
+    field.innerHTML = html;
+    var sel = field.querySelector('.ef-input');
+    if (sel) { setTimeout(function() { sel.focus(); }, 50); }
+  } else if (inputType === 'number') {
+    var min = field.dataset.min || '';
+    var max = field.dataset.max || '';
+    var step = field.dataset.step || '1';
+    field.innerHTML = '<input type="number" class="search-inp ef-input" value="' + escHtml(currentVal) + '" min="' + min + '" max="' + max + '" step="' + step + '" style="width:100%;box-sizing:border-box;font-size:13px;margin-top:1px">' +
+      '<div style="display:flex;gap:10px;margin-top:6px"><button class="btn-xs ef-save-btn" onclick="event.stopPropagation();_saveBugInlineEdit(this)">✓</button><button class="btn-xs ef-cancel-btn" onclick="event.stopPropagation();_cancelBugInlineEdit(this)">✕</button></div>';
+    var inp = field.querySelector('.ef-input');
+    if (inp) { setTimeout(function() { inp.focus(); inp.select(); }, 50); }
+    if (inp) { inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); _saveBugInlineEdit(inp); } if (e.key === 'Escape') { e.preventDefault(); _cancelBugInlineEdit(inp); } }); }
+  } else if (inputType === 'text') {
+    field.innerHTML = '<input type="text" class="search-inp ef-input" value="' + escHtml(currentVal) + '" style="width:100%;box-sizing:border-box;font-size:13px;margin-top:1px">' +
+      '<div style="display:flex;gap:10px;margin-top:6px"><button class="btn-xs ef-save-btn" onclick="event.stopPropagation();_saveBugInlineEdit(this)">✓</button><button class="btn-xs ef-cancel-btn" onclick="event.stopPropagation();_cancelBugInlineEdit(this)">✕</button></div>';
+    var inp = field.querySelector('.ef-input');
+    if (inp) { setTimeout(function() { inp.focus(); inp.select(); }, 50); }
+    if (inp) { inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); _saveBugInlineEdit(inp); } if (e.key === 'Escape') { e.preventDefault(); _cancelBugInlineEdit(inp); } }); }
+  } else if (inputType === 'textarea') {
+    var taId = 'bug-ta-' + bugId + '-' + fieldName;
+    field.innerHTML = '<textarea class="search-inp ef-input" id="' + taId + '" rows="4" style="width:100%;box-sizing:border-box;font-size:13px;margin-top:1px;resize:vertical">' + escHtml(currentVal) + '</textarea>' +
+      '<div id="' + taId + '-img-preview" style="margin-top:4px;min-height:0;max-height:30vh;overflow-y:auto"></div>' +
+      '<div style="font-size:10px;color:var(--muted);margin-top:2px">支持粘贴图片 (Ctrl+V)</div>' +
+      '<div style="display:flex;gap:10px;margin-top:6px"><button class="btn-xs ef-save-btn" onclick="event.stopPropagation();_saveBugInlineEdit(this)">✓</button><button class="btn-xs ef-cancel-btn" onclick="event.stopPropagation();_cancelBugInlineEdit(this)">✕</button></div>';
+    var inp = field.querySelector('.ef-input');
+    if (inp) { setTimeout(function() { inp.focus(); }, 50); }
+    setTimeout(function() { _clearNoteImagePreviews(taId + '-img-preview'); initNoteImagePaste(taId); _loadExistingNoteImages(currentVal, taId + '-img-preview'); }, 100);
+  } else if (inputType === 'user-select') {
+    if (!window._allUsers || !window._allUsers.length) {
+      field.innerHTML = '<span style="font-size:12px;color:var(--muted)">加载用户列表...</span>';
+      (typeof loadAllUsers === 'function' ? loadAllUsers() : Promise.resolve()).then(function() {
+        _renderBugUserSelect(field, currentVal);
+      });
+      return;
+    }
+    _renderBugUserSelect(field, currentVal);
+  } else if (inputType === 'component-select') {
+    var prodId = field.dataset.productId;
+    field.innerHTML = '<span style="font-size:12px;color:var(--muted)">加载组件...</span>';
+    _loadBugComponentsForEdit(prodId).then(function(comps) {
+      var opts = comps.map(function(c) { return {v: String(c.id), l: c.doc_name}; });
+      opts.unshift({v: '', l: '无'});
+      field.dataset.opts = encodeURIComponent(JSON.stringify(opts));
+      field.dataset.inputType = 'select';
+      field.classList.remove('editing');
+      _startBugInlineEdit(field);
+    }).catch(function() {
+      field.innerHTML = '<span style="font-size:12px;color:var(--danger)">加载失败</span>';
+    });
+    return;
+  } else if (inputType === 'cc-select') {
+    if (!window._allUsers || !window._allUsers.length) {
+      field.innerHTML = '<span style="font-size:12px;color:var(--muted)">加载用户列表...</span>';
+      (typeof loadAllUsers === 'function' ? loadAllUsers() : Promise.resolve()).then(function() {
+        _renderBugCcEdit(field, currentVal);
+      });
+      return;
+    }
+    _renderBugCcEdit(field, currentVal);
+    return;
+  }
+}
+
+function _renderBugUserSelect(field, currentVal) {
+  field.classList.add('editing');
+  var html = '<select class="search-inp ef-input" style="width:100%;box-sizing:border-box;font-size:13px;margin-top:1px"><option value="">未分配</option>';
+  (_allUsers || []).forEach(function(u) {
+    html += '<option value="' + u.id + '"' + (String(u.id) === String(currentVal) ? ' selected' : '') + '>' + escHtml(u.name) + '</option>';
+  });
+  html += '</select>';
+  html += '<div style="display:flex;gap:10px;margin-top:6px"><button class="btn-xs ef-save-btn" onclick="event.stopPropagation();_saveBugInlineEdit(this)">✓</button><button class="btn-xs ef-cancel-btn" onclick="event.stopPropagation();_cancelBugInlineEdit(this)">✕</button></div>';
+  field.innerHTML = html;
+  var sel = field.querySelector('.ef-input');
+  if (sel) { setTimeout(function() { sel.focus(); }, 50); }
+}
+
+async function _loadBugComponentsForEdit(prodId) {
+  // Load components for a product
+  if (!prodId) return [];
+  try {
+    var r = await API.get('/product-management/products/' + prodId + '/node');
+    var nodeId = (r && r.node_id) ? r.node_id : null;
+    if (!nodeId) return [];
+    var tpls = await API.get('/product-doc-templates/templates/' + nodeId);
+    // Dedupe by doc_name
+    var seen = {};
+    return (tpls || []).filter(function(t) {
+      if (seen[t.doc_name]) return false;
+      seen[t.doc_name] = true;
+      return true;
+    });
+  } catch(e) { return []; }
+}
+
+function _renderBugCcEdit(field, currentVal) {
+  field.classList.add('editing');
+  var ccIds = [];
+  try { ccIds = JSON.parse(currentVal); } catch(e) { ccIds = []; }
+  if (!Array.isArray(ccIds)) ccIds = [];
+  // Store for modification
+  window._bugCcEditIds = ccIds.slice();
+  var html = '<div id="bug-cc-tags" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px"></div>' +
+    '<select class="search-inp ef-input" id="bug-cc-select" style="width:100%;box-sizing:border-box;font-size:13px;margin-top:1px" onchange="_bugCcAdd(this.value)"><option value="">添加抄送人...</option>';
+  (_allUsers || []).forEach(function(u) {
+    if (window._bugCcEditIds.indexOf(u.id) < 0) {
+      html += '<option value="' + u.id + '">' + escHtml(u.name) + '</option>';
+    }
+  });
+  html += '</select>';
+  html += '<div style="display:flex;gap:10px;margin-top:6px"><button class="btn-xs ef-save-btn" onclick="event.stopPropagation();_bugCcSave(this)">✓</button><button class="btn-xs ef-cancel-btn" onclick="event.stopPropagation();_cancelBugInlineEdit(this)">✕</button></div>';
+  field.innerHTML = html;
+  _bugCcRenderTags();
+}
+
+function _bugCcRenderTags() {
+  var el = document.getElementById('bug-cc-tags');
+  if (!el) return;
+  var ids = window._bugCcEditIds || [];
+  var html = '';
+  ids.forEach(function(uid) {
+    var u = (_allUsers || []).find(function(x) { return x.id == uid; });
+    var name = u ? u.name : ('#' + uid);
+    html += '<span style="display:inline-flex;align-items:center;gap:2px;background:var(--accent);color:#fff;padding:1px 6px;border-radius:10px;font-size:11px">' + escHtml(name) +
+      '<button onclick="event.stopPropagation();_bugCcRemove(' + uid + ')" style="background:none;border:none;color:inherit;cursor:pointer;padding:0;margin-left:2px;font-size:13px;line-height:1;opacity:0.7">×</button></span>';
+  });
+  el.innerHTML = html;
+  // Refresh select options
+  var sel = document.getElementById('bug-cc-select');
+  if (sel) {
+    sel.innerHTML = '<option value="">添加抄送人...</option>';
+    (_allUsers || []).forEach(function(u) {
+      if (ids.indexOf(u.id) < 0) {
+        sel.innerHTML += '<option value="' + u.id + '">' + escHtml(u.name) + '</option>';
+      }
+    });
+  }
+}
+
+function _bugCcAdd(uid) {
+  uid = parseInt(uid);
+  if (!uid || (window._bugCcEditIds || []).indexOf(uid) >= 0) return;
+  window._bugCcEditIds.push(uid);
+  _bugCcRenderTags();
+}
+
+function _bugCcRemove(uid) {
+  var ids = window._bugCcEditIds || [];
+  var idx = ids.indexOf(uid);
+  if (idx >= 0) ids.splice(idx, 1);
+  _bugCcRenderTags();
+}
+
+function _bugCcSave(el) {
+  var field = el.closest('.editable-field');
+  if (!field) return;
+  var bugId = field.dataset.bugId;
+  var ids = window._bugCcEditIds || [];
+  var data = { cc_user_ids: ids.length ? ids : null };
+  _doSaveBugFieldEdit(bugId, data, field);
+}
+
+async function _saveBugInlineEdit(el) {
+  var field = el.closest('.editable-field');
+  if (!field) return;
+  var bugId = field.dataset.bugId;
+  var fieldName = field.dataset.field;
+  var inputType = field.dataset.inputType;
+  var input = field.querySelector('.ef-input');
+  if (!input) return;
+  var newVal = input.value;
+  var currentVal = field.dataset.currentValue || '';
+
+  if (newVal === currentVal && inputType !== 'textarea') {
+    _cancelBugInlineEdit(el);
+    return;
+  }
+
+  // Upload pasted images for textarea fields
+  if (inputType === 'textarea' && typeof _uploadNoteImages === 'function') {
+    newVal = await _uploadNoteImages(newVal);
+  }
+
+  var data = {};
+  if (inputType === 'number') {
+    data[fieldName] = newVal === '' ? null : (parseInt(newVal) || 0);
+  } else if (fieldName === 'assignee_id' || fieldName === 'component_id') {
+    data[fieldName] = newVal === '' ? null : parseInt(newVal) || null;
+  } else if (fieldName === 'estimate_hours') {
+    data[fieldName] = newVal === '' ? null : (parseFloat(newVal) || 0);
+  } else if (fieldName === 'severity') {
+    data[fieldName] = parseInt(newVal) || 3;
+  } else {
+    data[fieldName] = newVal;
+  }
+
+  // Bidirectional sync: progress <-> status (via EventBus, same as tasks)
+  if (fieldName === 'progress' || fieldName === 'status') {
+    var progressEl = document.querySelector('.bug-detail-body .editable-field[data-field="progress"]');
+    var statusEl = document.querySelector('.bug-detail-body .editable-field[data-field="status"]');
+    var progress = fieldName === 'progress' ? parseInt(newVal) || 0 : parseInt(progressEl ? progressEl.dataset.currentValue : 0) || 0;
+    var status = fieldName === 'status' ? newVal : (statusEl ? statusEl.dataset.currentValue : 'open');
+    var evt = {data: data, progress: progress, status: status};
+    EventBus.emit('bug:before-save', evt);
+  }
+
+  _doSaveBugFieldEdit(bugId, data, field);
+}
+
+async function _doSaveBugFieldEdit(bugId, data, field) {
+  try {
+    await API.put('/bugs/' + bugId, data);
+    EventBus.emit('bug:field-changed', {bugId: bugId, payload: data});
+    // Refresh the detail view
+    var fresh = await API.get('/bugs/' + bugId);
+    if (fresh) {
+      var bodyEl = document.querySelector('.bug-detail-body');
+      if (bodyEl) bodyEl.innerHTML = _renderBugDetailBody(fresh);
+    }
+    showToast('已更新','success');
+  } catch(e) { showToast('更新失败: '+(e.message||''),'error'); _cancelBugInlineEdit(field); }
+}
+
+function _cancelBugInlineEdit(el) {
+  var field = el.closest('.editable-field');
+  if (!field) return;
+  if (field._originalHTML) field.innerHTML = field._originalHTML;
+  field.classList.remove('editing');
 }

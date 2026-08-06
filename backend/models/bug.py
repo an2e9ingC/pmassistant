@@ -57,6 +57,8 @@ class PmaBug(Base):
     reporter_id = Column(Integer, ForeignKey("local_users.id"), nullable=False)
     assignee_id = Column(Integer, ForeignKey("local_users.id"), nullable=True)
     resolved_by_id = Column(Integer, ForeignKey("local_users.id"), nullable=True)
+    cc_user_ids = Column(JSON, nullable=True, default=list)
+    # List of user IDs who are CC'd on this bug, e.g. [2, 5, 7]
 
     # Genealogy
     original_bug_id = Column(Integer, ForeignKey("pma_bugs.id"), nullable=True)  # copy/clone source
@@ -69,6 +71,7 @@ class PmaBug(Base):
     # Work tracking
     estimate_hours = Column(Float, default=0.0)
     consumed_hours = Column(Float, default=0.0)
+    progress = Column(Integer, default=0)  # 0-100
 
     # Dates
     due_date = Column(Date, nullable=True)
@@ -128,4 +131,16 @@ class BugTransfer(Base):
     to_project_id = Column(Integer, ForeignKey("zenta_projects.id"), nullable=False)
     transfer_type = Column(String(16), nullable=False)  # move / copy
     transferred_by = Column(Integer, ForeignKey("local_users.id"), nullable=False)
+    created_at = Column(DateTime, default=func.now())
+
+
+class BugComment(Base):
+    """Comments on bugs — manual user comments + auto system activity log."""
+    __tablename__ = "pma_bug_comments"
+
+    id = Column(Integer, primary_key=True)
+    bug_id = Column(Integer, ForeignKey("pma_bugs.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("local_users.id"), nullable=False)
+    content = Column(Text, nullable=False)
+    is_system = Column(Integer, default=0)  # 0=user comment, 1=system auto-log
     created_at = Column(DateTime, default=func.now())
