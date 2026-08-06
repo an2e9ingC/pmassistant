@@ -214,6 +214,20 @@ git rebase origin/trunk           # 冲突在这里解决
 git diff origin/trunk...HEAD      # Code Review
 git fetch origin                  # 二次 fetch（防止其他 worktree 抢先合入）
 git rebase origin/trunk           # 二次 rebase（通常快进）
+
+# ⚠️ 版本号自检：检查 docs/dev-plan.md 今天是否已有同 beta 号记录
+# 如有冲突或同号，递增 beta 号并 amend commit
+TODAY=$(TZ=Asia/Shanghai date +%Y-%m-%d)
+EXISTING=$(grep "| $TODAY |" docs/dev-plan.md | grep -oP 'v[\d.]+-beta\K\d+' | sort -n | tail -1)
+CURRENT=$(grep -oP 'v[\d.]+-beta\K\d+' docs/dev-plan.md | head -1)
+if [ -n "$EXISTING" ] && [ "$CURRENT" -le "$EXISTING" ]; then
+  NEW=$((EXISTING + 1))
+  # 更新 meta 标签和 dev-plan
+  sed -i "s/<meta name=\"app-version\" content=\"[^\"]*\"/<meta name=\"app-version\" content=\"v$TODAY-beta$NEW\"/" frontend/index.html frontend/login.html
+  sed -i "s/当前版本：v[^ ]*/当前版本：v$TODAY-beta$NEW/" docs/dev-plan.md
+  git add frontend/index.html frontend/login.html docs/dev-plan.md
+  git commit --amend --no-edit
+fi
 ```
 
 ### 2. merge

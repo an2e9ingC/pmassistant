@@ -57,6 +57,22 @@ Co-Authored-By: <model-name> / <tool-name>
    ```
 3. **数据层变更**同步更新 `docs/db.md`
 
+#### 版本号自检（rebase 后、commit 前必须执行）
+
+> **为什么？** worktree 基于旧 trunk 快照。并行开发的其他分支可能已占用同日期+beta号。
+
+4. **确定正确的版本号**：
+   a. 检查今天已有的版本记录：
+   ```bash
+   TODAY=$(TZ=Asia/Shanghai date +%Y-%m-%d)
+   grep "| $TODAY |" docs/dev-plan.md
+   ```
+   b. 如果今天已有 `betaN`，递增为 `beta(N+1)`：
+      - 已有 `beta1` → 用 `beta2`
+      - 已有 `beta1`、`beta2` → 用 `beta3`
+   c. 用修正后的版本号重新执行步骤 1a-1c
+   d. **rebase 冲突涉及 dev-plan.md 时必须重新自检**，手动去重 + 递增
+
 ### 2. Code Review
 
 1. 对 `git diff` 改动进行快速自检：
