@@ -995,24 +995,69 @@ function toggleTaskOptional(stageName, id, current) {
   renderTemplatesPage();
 }
 
-function deleteTemplate(id) {
-  if (!confirm('确认删除此文档模板？')) return;
-  if (id > 0) {
-    _pendingOps.push({ type: 'delete', id: id });
-  } else if (id < 0) {
-    // Remove pending add op for locally-added template
+async function deleteTemplate(id) {
+  if (id < 0) {
+    // Locally-added template, just remove
     for (var pi = _pendingOps.length - 1; pi >= 0; pi--) {
       if (_pendingOps[pi].tempId === id) { _pendingOps.splice(pi, 1); break; }
     }
+    var arr0 = _templatesGrouped[_selectedStage];
+    if (arr0) {
+      for (var i0 = arr0.length - 1; i0 >= 0; i0--) {
+        if (arr0[i0].id === id) { arr0.splice(i0, 1); break; }
+      }
+    }
+    renderTemplatesPage();
+    return;
   }
-  // Remove from local cache
-  var stageType = _selectedStage;
-  var arr = _templatesGrouped[stageType];
+
+  // Find template info
+  var tplInfo = '';
+  var arr = _templatesGrouped[_selectedStage] || [];
+  var found = arr.find(function(x) { return x.id === id; });
+  if (found) tplInfo = found.doc_name;
+
+  var html = '<div style="font-size:13px">' +
+    '<p>确认删除文档模板 <b>"' + escHtml(tplInfo || '#' + id) + '"</b>？</p>' +
+    '<div style="margin:12px 0"><label style="font-size:13px;font-weight:600;display:block;margin-bottom:8px">对已创建的项目文档：</label>' +
+    '<div style="margin:6px 0"><label style="cursor:pointer;display:flex;align-items:flex-start;gap:8px"><input type="radio" name="deleteMode" value="keep" checked style="margin-top:2px"><div><div style="font-size:13px">保留项目文档（推荐）</div><div style="font-size:11px;color:var(--muted)">文档保留但不再随模板同步更新</div></div></label></div>' +
+    '<div style="margin:6px 0"><label style="cursor:pointer;display:flex;align-items:flex-start;gap:8px"><input type="radio" name="deleteMode" value="hard" style="margin-top:2px"><div><div style="font-size:13px;color:var(--danger)">同时删除项目文档</div><div style="font-size:11px;color:var(--muted)">删除所有项目中通过该模板创建的文档，不可恢复</div></div></label></div>' +
+    '</div></div>';
+
+  openDialog('删除文档模板', html, [
+    {text: '取消', onclick: 'closeSharedDialog()'},
+    {text: '确认删除', cls: 'btn-danger', onclick: '_doDeleteDocTemplateDialog(' + id + ')'}
+  ], {hideClose: true});
+}
+
+function _doDeleteDocTemplateDialog(id) {
+  var mode = document.querySelector('input[name="deleteMode"]:checked');
+  var hardDelete = mode && mode.value === 'hard';
+  closeSharedDialog();
+  _doDeleteDocTemplate(id, hardDelete);
+}
+
+async function _doDeleteDocTemplate(id, hardDelete) {
+  try {
+    var url = '/doc-templates/' + id;
+    if (hardDelete) url += '?delete_docs=true';
+    await API.del(url);
+    showToast(hardDelete ? '已删除模板及项目文档' : '模板已删除（项目文档已保留）', 'success');
+  } catch(e) {
+    showToast('删除失败: ' + (e.message || '未知错误'), 'error');
+    return;
+  }
+  // Remove from local cache and refresh
+  var arr = _templatesGrouped[_selectedStage];
   if (arr) {
     for (var i = arr.length - 1; i >= 0; i--) {
       if (arr[i].id === id) { arr.splice(i, 1); break; }
     }
   }
+  try {
+    var fresh = await API.get('/doc-templates?project_type=' + encodeURIComponent(_currentProjectType));
+    if (fresh && Object.keys(fresh).length) _templatesGrouped = fresh;
+  } catch(e) {}
   renderTemplatesPage();
 }
 
@@ -1141,10 +1186,8 @@ function saveTaskTemplate(id) {
   renderTemplatesPage();
 }
 
-function deleteTaskTemplate(id) {
-  if (!confirm('确定要删除此任务模板吗？此操作不会删除已创建的任务。')) return;
+async function deleteTaskTemplate(id) {
   if (id < 0) {
-    // Locally-added, just remove from array
     var arr = _taskTemplatesGrouped[_selectedStage];
     if (arr) {
       for (var i = arr.length - 1; i >= 0; i--) {
@@ -1155,13 +1198,48 @@ function deleteTaskTemplate(id) {
     renderTemplatesPage();
     return;
   }
-  _taskPendingOps.push({ type: 'delete', id: id });
-  var arr = _taskTemplatesGrouped[_selectedStage];
-  if (arr) {
-    for (var i = arr.length - 1; i >= 0; i--) {
-      if (arr[i].id === id) { arr.splice(i, 1); break; }
-    }
+  // Find template info for the dialog
+  var tplInfo = '';
+  for (var st in _taskTemplatesGrouped) {
+    var found = (_taskTemplatesGrouped[st] || []).find(function(x) { return x.id === id; });
+    if (found) { tplInfo = found.task_name; break; }
   }
+
+  var html = '<div style="font-size:13px">' +
+    '<p>确认删除任务模板 <b>"' + escHtml(tplInfo || '#' + id) + '"</b>？</p>' +
+    '<div style="margin:12px 0"><label style="font-size:13px;font-weight:600;display:block;margin-bottom:8px">对已创建的项目任务：</label>' +
+    '<div style="margin:6px 0"><label style="cursor:pointer;display:flex;align-items:flex-start;gap:8px"><input type="radio" name="deleteMode" value="keep" checked style="margin-top:2px"><div><div style="font-size:13px">保留项目任务（推荐）</div><div style="font-size:11px;color:var(--muted)">任务转为手动任务，脱离模板关联，数据不会丢失</div></div></label></div>' +
+    '<div style="margin:6px 0"><label style="cursor:pointer;display:flex;align-items:flex-start;gap:8px"><input type="radio" name="deleteMode" value="hard" style="margin-top:2px"><div><div style="font-size:13px;color:var(--danger)">同时删除项目任务</div><div style="font-size:11px;color:var(--muted)">删除所有项目中通过该模板创建的任务（含工时和评论），不可恢复</div></div></label></div>' +
+    '</div></div>';
+
+  openDialog('删除任务模板', html, [
+    {text: '取消', onclick: 'closeSharedDialog()'},
+    {text: '确认删除', cls: 'btn-danger', onclick: '_doDeleteTaskTemplateDialog(' + id + ')'}
+  ], {hideClose: true});
+}
+
+function _doDeleteTaskTemplateDialog(id) {
+  var mode = document.querySelector('input[name="deleteMode"]:checked');
+  var hardDelete = mode && mode.value === 'hard';
+  closeSharedDialog();
+  _doDeleteTaskTemplate(id, hardDelete);
+}
+
+async function _doDeleteTaskTemplate(id, hardDelete) {
+  try {
+    var url = '/task-templates/' + id;
+    if (hardDelete) url += '?delete_tasks=true';
+    var result = await API.del(url);
+    showToast(hardDelete ? '已删除模板及项目任务' : '模板已删除（任务已转为手动）', 'success');
+  } catch(e) {
+    showToast('删除失败: ' + (e.message || '未知错误'), 'error');
+    return;
+  }
+  // Refresh task template cache
+  try {
+    var taskFresh = await API.get('/task-templates?project_type=' + encodeURIComponent(_currentProjectType));
+    if (taskFresh && Object.keys(taskFresh).length) _taskTemplatesGrouped = taskFresh;
+  } catch(e) {}
   renderTemplatesPage();
 }
 
@@ -1286,20 +1364,73 @@ function showRenameStageDialog(oldName) {
   document.getElementById('dt-rename-input').select();
 }
 
-function renameStageType(oldName) {
+async function renameStageType(oldName) {
   var newName = document.getElementById('dt-rename-input').value.trim();
   if (!newName) { showToast('请输入新名称', 'error'); return; }
   if (newName === oldName) { document.querySelector('.note-dialog-overlay').remove(); return; }
-  _pendingOps.push({ type: 'rename_stage', old_name: oldName, new_name: newName });
-  // Update local cache
-  if (_templatesGrouped[oldName]) {
-    _templatesGrouped[newName] = _templatesGrouped[oldName];
-    delete _templatesGrouped[oldName];
-    _templatesGrouped[newName].forEach(function(d) { d.stage_type = newName; });
-  }
-  if (_selectedStage === oldName) _selectedStage = newName;
+
+  // 关闭重命名弹窗
   document.querySelector('.note-dialog-overlay').remove();
+
+  // 检查未保存的配置
+  if (_pendingOps.length > 0 || _taskPendingOps.length > 0) {
+    if (!confirm('有未保存的配置将被清空：\n  • ' + _pendingOps.length + ' 个文档模板变更\n  • ' + _taskPendingOps.length + ' 个任务模板变更\n\n继续重命名将丢弃这些未保存的配置。确认继续？')) return;
+    _pendingOps = [];
+    _taskPendingOps = [];
+  }
+
+  // 确认弹窗
+  if (!confirm('修改阶段名将立即保存配置并同步到所有项目和产品。此操作不可撤销，确认继续？\n\n旧名称：' + oldName + '\n新名称：' + newName)) return;
+
+  // 1. 立即执行重命名
+  try {
+    var renameResult = await API.put('/doc-templates/stage-types/rename', { old_name: oldName, new_name: newName });
+    var total = Object.values(renameResult).reduce(function(a, b) { return a + b; }, 0);
+    showToast('阶段已重命名: ' + oldName + ' → ' + newName + ' (' + total + ' 条记录)', 'success');
+  } catch(e) {
+    showToast('重命名失败: ' + (e.message || '未知错误'), 'error');
+    return;
+  }
+
+  // 2. 立即同步到所有项目和产品（含部分失败重试）
+  await _doRenameSyncAll(oldName, newName);
+
+  // 3. 刷新本地缓存
+  try {
+    var fresh = await API.get('/doc-templates?project_type=' + encodeURIComponent(_currentProjectType));
+    if (fresh && Object.keys(fresh).length) _templatesGrouped = fresh;
+  } catch(e) {}
+  try {
+    var taskFresh = await API.get('/task-templates?project_type=' + encodeURIComponent(_currentProjectType));
+    if (taskFresh && Object.keys(taskFresh).length) _taskTemplatesGrouped = taskFresh;
+  } catch(e) {}
+
+  if (_selectedStage === oldName) _selectedStage = newName;
   renderTemplatesPage();
+}
+
+async function _doRenameSyncAll(oldName, newName) {
+  var results = await Promise.all([
+    API.post('/doc-templates/sync-all').catch(function(e) { return {_error: e.message}; }),
+    API.post('/task-templates/sync-all').catch(function(e) { return {_error: e.message}; }),
+    API.post('/product-doc-templates/sync-all').catch(function(e) { return {_error: e.message}; }),
+  ]);
+  var docR = results[0], taskR = results[1], prodR = results[2];
+  var totalFailed = (docR._error ? 1 : (docR.failed || 0)) + (taskR._error ? 1 : (taskR.failed || 0)) + (prodR._error ? 1 : (prodR.failed || 0));
+  if (totalFailed > 0) {
+    var failList = [];
+    if (docR._error) failList.push('文档: ' + docR._error);
+    else if (docR.failed > 0) failList.push('文档: ' + docR.failed + '/' + docR.total + ' 失败');
+    if (taskR._error) failList.push('任务: ' + taskR._error);
+    else if (taskR.failed > 0) failList.push('任务: ' + taskR.failed + '/' + taskR.total + ' 失败');
+    if (prodR._error) failList.push('产品: ' + prodR._error);
+    else if (prodR.failed > 0) failList.push('产品: ' + prodR.failed + '/' + prodR.total + ' 失败');
+    showToast('同步部分失败:\n' + failList.join('\n'), 'error');
+  } else {
+    showToast('同步完成 | 文档: ' + (docR.synced||0) + '/' + (docR.total||0)
+      + ' | 任务: ' + (taskR.synced||0) + '/' + (taskR.total||0)
+      + ' | 产品: ' + (prodR.synced||0) + '/' + (prodR.total||0), 'success');
+  }
 }
 
 function showAddStageDialog() {
@@ -1333,16 +1464,67 @@ function addStageType() {
   renderTemplatesPage();
 }
 
-function deleteStageType(stageType) {
-  var count = (_templatesGrouped[stageType] || []).length;
-  if (!confirm('确认删除阶段类型 "' + stageType + '"？\n将同时删除其下的 ' + count + ' 个文档模板。此操作不可撤销。')) return;
-  _pendingOps.push({ type: 'delete_stage', stage_type: stageType });
-  delete _templatesGrouped[stageType];
-  if (_selectedStage === stageType) _selectedStage = null;
-  if (!Object.keys(_templatesGrouped).length) {
-    document.getElementById('dtsec-project').innerHTML = '<div class="empty-state" style="padding:40px">暂无文档模板，点击下方"保存配置"或刷新页面</div>';
+async function deleteStageType(stageType) {
+  var docCount = (_templatesGrouped[stageType] || []).length;
+  var taskCount = (_taskTemplatesGrouped[stageType] || []).length;
+
+  // 查询影响范围
+  var usage = null;
+  try {
+    usage = await API.get('/doc-templates/stage-types/' + encodeURIComponent(stageType) + '/usage?project_type=' + encodeURIComponent(_currentProjectType));
+  } catch(e) {}
+
+  var impactHtml = '';
+  if (usage && usage.affected_projects && usage.affected_projects.length > 0) {
+    impactHtml = '<div style="margin:8px 0;font-size:12px;color:var(--warn)">影响 ' + usage.affected_projects.length + ' 个项目的 ' + usage.total_tasks + ' 个任务和 ' + usage.total_docs + ' 个文档</div>';
+  }
+
+  var html = '<div style="font-size:13px">' +
+    '<p>确认删除阶段类型 <b>"' + escHtml(stageType) + '"</b>？</p>' +
+    '<p style="color:var(--muted);font-size:12px">将同时删除 ' + docCount + ' 个文档模板、' + taskCount + ' 个任务模板</p>' +
+    impactHtml +
+    '<div style="margin:12px 0"><label style="font-size:13px;font-weight:600;display:block;margin-bottom:8px">对已有项目数据的处理方式：</label>' +
+    '<div style="margin:6px 0"><label style="cursor:pointer;display:flex;align-items:flex-start;gap:8px"><input type="radio" name="deleteMode" value="keep" checked style="margin-top:2px"><div><div style="font-size:13px">保留项目数据（推荐）</div><div style="font-size:11px;color:var(--muted)">任务和文档移至「未知」阶段并脱离模板关联，不删除任何项目数据</div></div></label></div>' +
+    '<div style="margin:6px 0"><label style="cursor:pointer;display:flex;align-items:flex-start;gap:8px"><input type="radio" name="deleteMode" value="hard" style="margin-top:2px"><div><div style="font-size:13px;color:var(--danger)">同时删除项目数据</div><div style="font-size:11px;color:var(--muted)">删除所有项目中的该阶段及其任务和文档，不可恢复</div></div></label></div>' +
+    '</div></div>';
+
+  openDialog('删除阶段类型', html, [
+    {text: '取消', onclick: 'closeSharedDialog()'},
+    {text: '确认删除', cls: 'btn-danger', onclick: '_doDeleteStageDialog(\'' + escHtml(stageType) + '\')'}
+  ], {hideClose: true});
+
+  // Store stageType for the callback
+  window._deleteStageType = stageType;
+}
+
+function _doDeleteStageDialog(stageType) {
+  var mode = document.querySelector('input[name="deleteMode"]:checked');
+  var hardDelete = mode && mode.value === 'hard';
+  closeSharedDialog();
+  _doDeleteStage(stageType, hardDelete);
+}
+
+async function _doDeleteStage(stageType, hardDelete) {
+  try {
+    var url = '/doc-templates/stage-types/' + encodeURIComponent(stageType) + '?project_type=' + encodeURIComponent(_currentProjectType);
+    if (hardDelete) url += '&delete_tasks=true';
+    var result = await API.del(url);
+    var action = hardDelete ? '已删除阶段及项目数据' : '已删除阶段（项目数据已保留）';
+    showToast(action + ' (docs=' + (result.doc_templates||0) + ' tasks=' + (result.task_templates||0) + ')', 'success');
+  } catch(e) {
+    showToast('删除失败: ' + (e.message || '未知错误'), 'error');
     return;
   }
+
+  // Refresh cache
+  try {
+    var fresh = await API.get('/doc-templates?project_type=' + encodeURIComponent(_currentProjectType));
+    if (fresh && Object.keys(fresh).length) _templatesGrouped = fresh;
+    var taskFresh = await API.get('/task-templates?project_type=' + encodeURIComponent(_currentProjectType));
+    if (taskFresh && Object.keys(taskFresh).length) _taskTemplatesGrouped = taskFresh;
+  } catch(e) {}
+
+  if (_selectedStage === stageType) _selectedStage = null;
   renderTemplatesPage();
 }
 
@@ -1456,9 +1638,10 @@ async function saveAllChanges() {
     }
   }
 
-  var ops = _pendingOps.slice(); // snapshot
+  var ops = _pendingOps.slice();
   var total = ops.length;
-  var success = 0, fail = 0;
+  var success = 0;
+  var failedOps = [];
 
   for (var i = 0; i < ops.length; i++) {
     var op = ops[i];
@@ -1485,30 +1668,47 @@ async function saveAllChanges() {
         await API.put('/doc-templates/stage-types/reorder', { project_type: _currentProjectType, stages: op.stages });
         success++;
       }
+      // Remove successful op from pending
+      _pendingOps = _pendingOps.filter(function(o) { return o !== op; });
     } catch(e) {
-      fail++;
-      showToast('操作失败: ' + (e.message || '未知错误'), 'error');
+      failedOps.push({ op: op, error: e.message || '未知错误' });
     }
   }
 
-  _pendingOps = [];
-  // Collect affected stage types and reset their project documents
-  var affectedTypes = [];
-  ops.forEach(function(op) {
-    var st = op.stage_type || (op.old_name || op.stage_type);
-    if (st && affectedTypes.indexOf(st) < 0) affectedTypes.push(st);
-  });
-  if (affectedTypes.length) {
-    try { await API.post('/doc-templates/reset-project-docs', { stage_types: affectedTypes }); } catch(e) {}
+  // Auto-sync to all projects after save
+  if (success > 0) {
+    try {
+      var syncResult = await API.post('/doc-templates/sync-all');
+      showToast('保存完成: ' + success + ' 成功, 同步 ' + syncResult.synced + '/' + syncResult.total + ' 个项目'
+        + (failedOps.length > 0 ? ', ' + failedOps.length + ' 失败' : ''), failedOps.length > 0 ? 'error' : 'success');
+    } catch(e) {
+      showToast('保存完成但同步失败: ' + (e.message || ''), 'error');
+    }
   }
-  // Full refresh from server for current project type
+
+  // Report failed ops
+  if (failedOps.length > 0) {
+    var failMsg = failedOps.map(function(f) {
+      var desc = f.op.type;
+      if (f.op.doc_name) desc += ': ' + f.op.doc_name;
+      if (f.op.stage_type) desc += ' (' + f.op.stage_type + ')';
+      return desc + ' — ' + f.error;
+    }).join('\n');
+    if (confirm('以下操作失败：\n\n' + failMsg + '\n\n是否重试失败的操作？')) {
+      // Re-run failed ops
+      for (var fi = 0; fi < failedOps.length; fi++) {
+        _pendingOps.push(failedOps[fi].op);
+      }
+      await saveAllChanges();
+      return;
+    }
+  }
+
+  // Refresh cache from server
   try {
     var fresh = await API.get('/doc-templates?project_type=' + encodeURIComponent(_currentProjectType));
-    if (fresh && Object.keys(fresh).length) {
-      _templatesGrouped = fresh;
-    }
+    if (fresh && Object.keys(fresh).length) _templatesGrouped = fresh;
   } catch(e) {}
-  showToast('保存完成: ' + success + ' 成功' + (fail > 0 ? ', ' + fail + ' 失败' : ''), success === total ? 'success' : 'error');
   renderTemplatesPage();
 }
 

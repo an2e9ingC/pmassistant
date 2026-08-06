@@ -467,14 +467,57 @@ def rename_stage_type(db: Session, old_name: str, new_name: str) -> dict:
     }
 
 
-def delete_stage_type(db: Session, stage_type: str, project_type: str = "") -> int:
-    """Delete all templates for a stage type, optionally scoped to a project type."""
+def delete_stage_type(db: Session, stage_type: str, project_type: str = "") -> dict:
+    """Delete all templates for a stage type, optionally scoped to a project type.
+
+    Returns {"doc_templates": int, "task_templates": int, "affected_tasks": int,
+             "affected_projects": [{"project_id": int, "task_count": int}]}.
+    Task references to deleted task templates are cleared (template_id=NULL).
+    Tasks themselves are preserved and remain visible.
+    """
+    import logging
+    _log = logging.getLogger(__name__)
+
+    # 1. Delete document templates
     q = db.query(DocumentTemplate).filter(DocumentTemplate.stage_type == stage_type)
     if project_type:
         q = q.filter(DocumentTemplate.project_type == project_type)
-    count = q.delete()
+    doc_count = q.delete()
+
+    # 2. Delete task templates (each deletion also cleans up task references)
+    tq = db.query(TaskTemplate).filter(TaskTemplate.stage_type == stage_type)
+    if project_type:
+        tq = tq.filter(TaskTemplate.project_type == project_type)
+    task_tpls = tq.all()
+    task_count = 0
+    total_affected_tasks = 0
+    affected_by_project: dict[int, int] = {}  # project_id -> task_count
+
+    for tpl in task_tpls:
+        # Find affected tasks before clearing template_id (for logging)
+        affected_tasks = db.query(Task).filter(Task.template_id == tpl.id).all()
+        for at in affected_tasks:
+            affected_by_project[at.project_id] = affected_by_project.get(at.project_id, 0) + 1
+
+        # Clear template_id so tasks become manual (NOT is_deleted — that hides them)
+        affected = db.query(Task).filter(Task.template_id == tpl.id).update(
+            {"template_id": None}, synchronize_session=False
+        )
+        if affected:
+            _log.info(f"[stage-del] stage_type={stage_type} template_id={tpl.id}: "
+                      f"cleared template_id on {affected} tasks (preserved as manual tasks)")
+        db.delete(tpl)
+        task_count += 1
+        total_affected_tasks += affected
+
     db.commit()
-    return count
+    return {
+        "doc_templates": doc_count,
+        "task_templates": task_count,
+        "affected_tasks": total_affected_tasks,
+        "affected_projects": [{"project_id": pid, "task_count": cnt}
+                              for pid, cnt in affected_by_project.items()],
+    }
 
 
 def _template_dict(t: DocumentTemplate) -> dict:
@@ -768,10 +811,18 @@ def _query_project_documents(db: Session, project_id: int, include_removed: bool
 def update_project_document(
     db: Session, doc_id: int, data: dict, username: str
 ) -> Optional[dict]:
-    """Update a project document's status/location/metadata."""
+    """Update a project document's status/location/metadata.
+    Template-created docs: doc_name and stage_type are locked."""
     pd = db.query(ProjectDocument).filter(ProjectDocument.id == doc_id).first()
     if not pd:
         return None
+
+    # Template-created docs: name and stage locked (controlled by template)
+    if pd.template_id is not None:
+        if "doc_name" in data and data["doc_name"] != pd.doc_name:
+            raise PermissionError("模板文档不允许修改文档名称，请通过模板管理修改。")
+        if "stage_type" in data and data["stage_type"] != pd.stage_type:
+            raise PermissionError("模板文档不允许修改所属阶段，请通过模板管理修改。")
 
     if "status" in data:
         pd.status = data["status"]
@@ -873,13 +924,17 @@ def _sync_project_stages(db: Session, project_id: int, project_type: str) -> int
     return changed
 
 
-def sync_all_projects(db: Session) -> dict:
+def sync_all_projects(db: Session, project_ids: Optional[list[int]] = None) -> dict:
     """Sync all projects' documents AND stages with current templates.
 
     Iterates every project in zenta_projects, calls _sync_from_templates
     and _sync_project_stages for each, and returns success/fail counts.
+    If project_ids is provided, only sync those projects.
     """
-    projects = db.query(CachedProject).order_by(CachedProject.id).all()
+    q = db.query(CachedProject)
+    if project_ids:
+        q = q.filter(CachedProject.id.in_(project_ids))
+    projects = q.order_by(CachedProject.id).all()
     synced: list[str] = []
     failed: list[str] = []
 
@@ -986,14 +1041,40 @@ def update_task_template(db: Session, template_id: int, data: dict) -> Optional[
     return _task_template_dict(tpl)
 
 
-def delete_task_template(db: Session, template_id: int) -> bool:
-    """Delete a task template."""
+def delete_task_template(db: Session, template_id: int) -> dict:
+    """Delete a task template. Tasks that referenced it become manual (template_id=NULL).
+
+    Returns {"deleted": bool, "affected_tasks": int, "affected_projects": [dict]}.
+    Tasks are preserved and remain visible (is_deleted is NOT set).
+    """
+    import logging
+    _log = logging.getLogger(__name__)
     tpl = db.query(TaskTemplate).filter(TaskTemplate.id == template_id).first()
     if not tpl:
-        return False
+        return {"deleted": False, "affected_tasks": 0, "affected_projects": []}
+
+    # Find affected tasks before clearing template_id (for logging)
+    affected_tasks = db.query(Task).filter(Task.template_id == template_id).all()
+    affected_by_project: dict[int, int] = {}
+    for at in affected_tasks:
+        affected_by_project[at.project_id] = affected_by_project.get(at.project_id, 0) + 1
+
+    # Clear template_id so tasks become manual (NOT is_deleted — that hides them)
+    affected = db.query(Task).filter(Task.template_id == template_id).update(
+        {"template_id": None}, synchronize_session=False
+    )
+    if affected:
+        _log.info(f"[task-template-del] template_id={template_id} ({tpl.stage_type}/{tpl.task_name}): "
+                  f"cleared template_id on {affected} tasks (preserved as manual tasks)")
+
     db.delete(tpl)
     db.commit()
-    return True
+    return {
+        "deleted": True,
+        "affected_tasks": affected,
+        "affected_projects": [{"project_id": pid, "task_count": cnt}
+                              for pid, cnt in affected_by_project.items()],
+    }
 
 
 def _sync_tasks_from_templates(db: Session, project_id: int, project_type: str = "RD") -> int:
@@ -1034,8 +1115,8 @@ def _sync_tasks_from_templates(db: Session, project_id: int, project_type: str =
             ).first()
 
             if existing:
-                # Update existing task from template (unless user diverged it)
-                if existing.is_diverged:
+                # Skip if user deleted (is_deleted) or diverged (is_diverged)
+                if existing.is_deleted or existing.is_diverged:
                     continue
                 updated = False
                 if existing.title != tpl.task_name:
@@ -1094,9 +1175,13 @@ def _sync_tasks_from_templates(db: Session, project_id: int, project_type: str =
     return created_count
 
 
-def sync_all_projects_tasks(db: Session) -> dict:
-    """Sync all projects' tasks with current task templates."""
-    projects = db.query(CachedProject).order_by(CachedProject.id).all()
+def sync_all_projects_tasks(db: Session, project_ids: Optional[list[int]] = None) -> dict:
+    """Sync all projects' tasks with current task templates.
+    If project_ids is provided, only sync those projects."""
+    q = db.query(CachedProject)
+    if project_ids:
+        q = q.filter(CachedProject.id.in_(project_ids))
+    projects = q.order_by(CachedProject.id).all()
     synced: list[str] = []
     failed: list[str] = []
 
@@ -1629,4 +1714,172 @@ def _tag_dict(t: PmaTag) -> dict:
         "name": t.name,
         "category": t.category,
         "created_at": to_local_str(t.created_at) or None,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Stage / template delete helpers
+# ---------------------------------------------------------------------------
+
+UNKNOWN_STAGE_NAME = "未知"
+
+
+def _ensure_unknown_stage(db: Session, project_id: int) -> int:
+    """Ensure the '未知' system stage exists for a project. Returns its id.
+    The unknown stage is always sorted last and is hidden when empty."""
+    from backend.models.project_stage import ProjectStage
+
+    stage = db.query(ProjectStage).filter(
+        ProjectStage.project_id == project_id,
+        ProjectStage.name == UNKNOWN_STAGE_NAME,
+    ).first()
+    if stage:
+        return stage.id
+
+    # Find max sort_order to place last
+    max_sort = db.query(ProjectStage).filter(
+        ProjectStage.project_id == project_id
+    ).order_by(ProjectStage.sort_order.desc()).first()
+    next_sort = (max_sort.sort_order + 1) if max_sort else 999
+
+    stage = ProjectStage(
+        project_id=project_id,
+        name=UNKNOWN_STAGE_NAME,
+        sort_order=next_sort,
+        status="active",
+    )
+    db.add(stage)
+    db.flush()
+    return stage.id
+
+
+def get_stage_usage(db: Session, stage_type: str, project_type: str = "") -> dict:
+    """Return impact stats for deleting a stage type.
+    Returns counts of templates, project tasks, and project docs affected."""
+    # Templates
+    doc_tpl_count = db.query(DocumentTemplate).filter(
+        DocumentTemplate.stage_type == stage_type,
+        DocumentTemplate.project_type == project_type if project_type else True,
+    ).count()
+    task_tpl_count = db.query(TaskTemplate).filter(
+        TaskTemplate.stage_type == stage_type,
+        TaskTemplate.project_type == project_type if project_type else True,
+    ).count()
+
+    # Affected projects (distinct project_ids from tasks with this stage_name)
+    from backend.models.task import Task as TaskModel
+    from backend.models.zentao import CachedProject
+
+    affected_tasks = db.query(TaskModel).filter(
+        TaskModel.stage_name == stage_type
+    ).all()
+    project_task_counts: dict[int, int] = {}
+    for t in affected_tasks:
+        project_task_counts[t.project_id] = project_task_counts.get(t.project_id, 0) + 1
+
+    affected_docs = db.query(ProjectDocument).filter(
+        ProjectDocument.stage_type == stage_type
+    ).all()
+    project_doc_counts: dict[int, int] = {}
+    for d in affected_docs:
+        project_doc_counts[d.project_id] = project_doc_counts.get(d.project_id, 0) + 1
+
+    all_project_ids = set(list(project_task_counts.keys()) + list(project_doc_counts.keys()))
+    projects = db.query(CachedProject).filter(
+        CachedProject.id.in_(all_project_ids)
+    ).all() if all_project_ids else []
+    project_map = {p.id: p.code for p in projects}
+
+    affected_projects = []
+    for pid in sorted(all_project_ids):
+        affected_projects.append({
+            "project_id": pid,
+            "code": project_map.get(pid, f"#{pid}"),
+            "task_count": project_task_counts.get(pid, 0),
+            "doc_count": project_doc_counts.get(pid, 0),
+        })
+
+    return {
+        "stage_type": stage_type,
+        "project_type": project_type,
+        "doc_templates": doc_tpl_count,
+        "task_templates": task_tpl_count,
+        "total_tasks": sum(project_task_counts.values()),
+        "total_docs": sum(project_doc_counts.values()),
+        "affected_projects": affected_projects,
+    }
+
+
+def _hard_delete_stage_data(db: Session, stage_type: str, project_type: str = "") -> dict:
+    """Hard-delete all project data for a stage: ProjectStages, Tasks (with worklogs/comments),
+    and ProjectDocuments. Also deletes templates. Returns counts."""
+    import logging
+    _log = logging.getLogger(__name__)
+    from backend.models.task import Task as TaskModel, WorkLog, TaskComment
+    from backend.models.project_stage import ProjectStage
+    from backend.models.zentao import CachedProject
+
+    # 1. Find all affected project_ids (as list for SQLAlchemy in_())
+    affected_tasks = db.query(TaskModel).filter(
+        TaskModel.stage_name == stage_type
+    ).all()
+    project_ids = list(set(t.project_id for t in affected_tasks))
+    affected_docs = db.query(ProjectDocument).filter(
+        ProjectDocument.stage_type == stage_type
+    ).all()
+    for d in affected_docs:
+        if d.project_id not in project_ids:
+            project_ids.append(d.project_id)
+
+    # 2. Delete worklogs and comments for affected tasks
+    task_ids = [t.id for t in affected_tasks]
+    if task_ids:
+        db.query(WorkLog).filter(WorkLog.task_id.in_(task_ids)).delete(synchronize_session=False)
+        db.query(TaskComment).filter(TaskComment.task_id.in_(task_ids)).delete(synchronize_session=False)
+        db.query(TaskModel).filter(TaskModel.id.in_(task_ids)).delete(synchronize_session=False)
+
+    # 3. Delete project documents
+    doc_count = db.query(ProjectDocument).filter(
+        ProjectDocument.stage_type == stage_type
+    ).delete()
+
+    # 4. Delete project stages (only if we have project_ids)
+    stage_count = 0
+    if project_ids:
+        stage_count = db.query(ProjectStage).filter(
+            ProjectStage.project_id.in_(project_ids),
+            ProjectStage.name == stage_type,
+        ).delete()
+
+    # 5. Delete templates
+    doc_tpl_count = db.query(DocumentTemplate).filter(
+        DocumentTemplate.stage_type == stage_type,
+        DocumentTemplate.project_type == project_type if project_type else True,
+    ).delete()
+
+    task_tpl_count = 0
+    task_tpls = db.query(TaskTemplate).filter(
+        TaskTemplate.stage_type == stage_type,
+        TaskTemplate.project_type == project_type if project_type else True,
+    ).all()
+    for tpl in task_tpls:
+        # Clean up any remaining task references (should be none after hard delete)
+        db.query(TaskModel).filter(TaskModel.template_id == tpl.id).update(
+            {"template_id": None}, synchronize_session=False
+        )
+        db.delete(tpl)
+        task_tpl_count += 1
+
+    db.commit()
+    _log.info(f"[hard-delete-stage] stage_type={stage_type}: "
+              f"tasks={len(task_ids)} docs={doc_count} stages={stage_count} "
+              f"doc_tpls={doc_tpl_count} task_tpls={task_tpl_count}")
+
+    return {
+        "deleted_tasks": len(task_ids),
+        "deleted_docs": doc_count,
+        "deleted_stages": stage_count,
+        "deleted_doc_templates": doc_tpl_count,
+        "deleted_task_templates": task_tpl_count,
+        "affected_projects": list(project_ids),
     }

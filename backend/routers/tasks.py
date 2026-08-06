@@ -214,11 +214,16 @@ def batch_update_tasks(
     if not updates:
         raise HTTPException(status_code=400, detail="请至少设置一个要更新的字段")
     updated = 0
+    skipped = 0
     for tid in payload.task_ids:
-        t = task_service.update_task(db, tid, updates, user)
-        if t: updated += 1
+        try:
+            t = task_service.update_task(db, tid, updates, user)
+            if t:
+                updated += 1
+        except PermissionError:
+            skipped += 1
     db.commit()
-    return {"code": 0, "data": {"updated": updated, "total": len(payload.task_ids)}, "message": "ok"}
+    return {"code": 0, "data": {"updated": updated, "skipped": skipped, "total": len(payload.task_ids)}, "message": "ok"}
 
 
 @router.put("/{task_id}", response_model=dict)
@@ -228,7 +233,10 @@ def update_task(
     db: Session = Depends(get_db),
     user=Depends(require_perm("task_edit")),
 ):
-    t = task_service.update_task(db, task_id, payload.model_dump(exclude_unset=True), user)
+    try:
+        t = task_service.update_task(db, task_id, payload.model_dump(exclude_unset=True), user)
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
     if not t:
         raise HTTPException(status_code=404, detail="Task not found")
     return {"code": 0, "data": t, "message": "ok"}
