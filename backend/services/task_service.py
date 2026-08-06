@@ -710,7 +710,10 @@ def _recalc_stage_progress(db: Session, stage_id: int) -> list[str]:
             db.commit()
         # #122: 项目立项阶段进度 ↔ 项目状态联动
         if stage.name and '项目立项' in stage.name:
-            if stage.status == 'completed' and pct >= 100 and project.status != 'doing':
+            # NEVER auto-transition abolished projects (#231)
+            if project.status == "abolished":
+                pass  # abolished is a terminal manual state, no auto-transitions
+            elif stage.status == 'completed' and pct >= 100 and project.status != 'doing':
                 project.status = 'doing'
                 db.commit()
                 messages.append(f'项目"{project.name}"立项阶段已完成，项目状态已自动切换为进行中')

@@ -1031,7 +1031,9 @@ class SyncService:
         existing.code = p.get("code", existing.code)
         existing.name = name
         existing.model = p.get("model", existing.model)
-        existing.status = p.get("status", existing.status)
+        # Preserve PMA-local 'abolished' status — not a Zentao concept (#231)
+        if existing.status != "abolished":
+            existing.status = p.get("status", existing.status)
         existing.begin = _parse_date(p.get("begin")) or existing.begin
         existing.end = _parse_date(p.get("end")) or existing.end
         parent_id = p.get("parent")

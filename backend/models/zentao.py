@@ -30,6 +30,8 @@ class CachedProject(Base):
     # PMA-local enrichments (not overwritten by sync)
     project_type = Column(String(16), default="RD")
     customer_name = Column(String(256), nullable=True)
+    # Task status snapshot for abolish/restore: {"abolished_at": "<ISO8601>", "tasks": {"<id>": {"status": "...", "progress": N}, ...}}
+    task_status_snapshot = Column(Text, nullable=True)
     # Delivery plan (PMA-local, not overwritten by sync)
     planned_delivery_qty = Column(Integer, default=0)
     delivered_sets_qty = Column(Integer, default=0)  # manual delivered sets count for big ring

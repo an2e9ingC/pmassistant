@@ -3,6 +3,7 @@ from typing import Optional
 import logging
 
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 
 import re
 
@@ -730,8 +731,203 @@ def _map_status(status: str, has_pending_docs: bool = False, has_incomplete_task
         "closed": "completed",
         "suspended": "blocked",
         "canceled": "canceled",
+        "abolished": "abolished",  # PMA-internal: project deprecated, all tasks auto-closed
     }
     return mapping.get(status, "pending")
+
+
+# ---------------------------------------------------------------------------
+# Status transition validation and handlers (issue #231)
+# ---------------------------------------------------------------------------
+
+def _validate_status_transition(
+    db: Session,
+    project_id: int,
+    old_status: str,
+    new_status: str,
+) -> tuple:
+    """Validate a project status transition. Returns (allowed: bool, reason: str).
+
+    Rules:
+    - * → abolished: always allowed
+    - abolished → doing: always allowed (restores task states)
+    - * → done/closed: requires all tasks done/closed, all docs submitted, delivery 100%
+    - * → anything else: always allowed
+    """
+    # Transitioning to 'abolished' is always allowed
+    if new_status == "abolished":
+        return (True, "")
+
+    # Transitioning from 'abolished' to 'doing' is always allowed
+    if old_status == "abolished" and new_status == "doing":
+        return (True, "")
+
+    # Transitioning to 'done' or 'closed' requires validation
+    if new_status in ("done", "closed"):
+        from backend.models.task import Task
+        from backend.models.document import ProjectDocument
+        from backend.services.delivery_service import get_delivery_summary
+
+        # Check 1: All PMA tasks are done or closed
+        incomplete_tasks = db.query(Task).filter(
+            Task.project_id == int(project_id),
+            Task.status.notin_(["done", "closed"]),
+            or_(Task.is_deleted == 0, Task.is_deleted == None),
+        ).count()
+        if incomplete_tasks > 0:
+            return (False, f"还有 {incomplete_tasks} 个任务未完成，请先完成所有任务")
+
+        # Check 2: All docs submitted (no pending docs for non-optional docs)
+        pending_docs = db.query(ProjectDocument).filter(
+            ProjectDocument.project_id == project_id,
+            ProjectDocument.status == "pending",
+            ProjectDocument.is_optional == 0,
+            ProjectDocument.is_removed == 0,
+        ).count()
+        if pending_docs > 0:
+            return (False, f"还有 {pending_docs} 个必选文档未提交，请先提交所有文档")
+
+        # Check 3: Delivery progress is 100%
+        delivery = get_delivery_summary(db, project_id)
+        delivery_progress = delivery.get("progress", 0) if delivery else 0
+        if delivery_progress < 100:
+            return (False, f"交付进度为 {delivery_progress}%，未达100%，请先完成所有交付")
+
+        return (True, "")
+
+    # All other transitions are allowed
+    return (True, "")
+
+
+def _handle_transition_to_abolished(db: Session, project) -> int:
+    """When project transitions to 'abolished': auto-close all PMA tasks, save snapshot.
+
+    Sets task.status = 'closed' directly (bypassing normal update_task flow),
+    allowing any status (todo/in_progress/review/done) → closed directly.
+    Progress values are preserved. Sets completed_at for tasks not already done/closed.
+
+    Returns count of tasks closed.
+    """
+    import json
+    from datetime import datetime, timezone
+    from backend.models.task import Task
+    from backend.database import to_iso_str
+
+    tasks = db.query(Task).filter(
+        Task.project_id == int(project.id),
+        or_(Task.is_deleted == 0, Task.is_deleted == None),
+    ).all()
+
+    _log = logging.getLogger(__name__)
+    _log.info(f"Project {project.id} set to abolished: closing {len(tasks)} tasks")
+
+    snapshot = {}
+    now = datetime.now(timezone.utc)
+    closed_count = 0
+
+    for t in tasks:
+        if t.status != "closed":
+            orig_status = t.status
+            snapshot[str(t.id)] = {
+                "status": orig_status,
+                "progress": t.progress or 0,
+            }
+            t.status = "closed"
+            # Set completed_at for tasks that weren't already done/closed
+            if orig_status not in ("done", "closed"):
+                t.completed_at = now
+            closed_count += 1
+        else:
+            # Already closed — still snapshot in case it was closed by abolish previously
+            snapshot[str(t.id)] = {
+                "status": t.status,
+                "progress": t.progress or 0,
+            }
+        # progress preserved as-is
+
+    project.task_status_snapshot = json.dumps({
+        "abolished_at": to_iso_str(now),
+        "tasks": snapshot,
+    }, ensure_ascii=False)
+    db.commit()
+
+    return closed_count
+
+
+def _handle_transition_from_abolished(db: Session, project) -> int:
+    """When project transitions from 'abolished' to 'doing': restore original task states.
+
+    Returns count of tasks restored.
+    """
+    import json
+    from backend.models.task import Task
+
+    if not project.task_status_snapshot:
+        return 0
+
+    try:
+        data = json.loads(project.task_status_snapshot)
+        task_snapshots = data.get("tasks", {})
+    except (json.JSONDecodeError, TypeError):
+        logger.warning(f"Invalid task_status_snapshot for project {project.id}, clearing")
+        project.task_status_snapshot = None
+        db.commit()
+        return 0
+
+    tasks = db.query(Task).filter(
+        Task.project_id == int(project.id),
+        or_(Task.is_deleted == 0, Task.is_deleted == None),
+    ).all()
+
+    restored_count = 0
+    for t in tasks:
+        snap = task_snapshots.get(str(t.id))
+        if snap:
+            t.status = snap.get("status", "closed")
+            t.progress = snap.get("progress", 0)
+            restored_count += 1
+
+    # Clear snapshot after restoration
+    project.task_status_snapshot = None
+    db.commit()
+
+    logger.info(f"Restored {restored_count} tasks for project {project.id} after abolishment")
+    return restored_count
+
+
+def _handle_transition_to_doing(db: Session, project) -> dict:
+    """When project first enters 'doing': trigger template sync (docs, tasks).
+
+    Stages are always initialized during project creation (for Gantt structure).
+    Docs and tasks are only created here on first transition to active state.
+    Returns {"stages": N, "docs": N, "tasks": N}.
+    """
+    from backend.models.document import ProjectDocument
+    from backend.models.task import Task
+
+    # Check if docs/tasks already exist (from template sync)
+    existing_docs = db.query(ProjectDocument).filter(
+        ProjectDocument.project_id == project.id,
+        ProjectDocument.template_id.isnot(None),
+    ).count()
+
+    if existing_docs == 0:
+        from backend.services.document_service import _sync_from_templates, _sync_tasks_from_templates
+
+        ptype = (project.project_type or "RD").strip()
+        _sync_from_templates(db, project.id, ptype)
+        task_count = _sync_tasks_from_templates(db, project.id, ptype)
+
+        # Count docs after sync
+        doc_count = db.query(ProjectDocument).filter(
+            ProjectDocument.project_id == project.id,
+            ProjectDocument.template_id.isnot(None),
+        ).count()
+
+        return {
+            "docs": doc_count,
+            "tasks": task_count if isinstance(task_count, int) else 0,
+        }
 
 
 def _find_blocker(tasks: list[CachedTask]) -> Optional[str]:

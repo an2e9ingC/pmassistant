@@ -332,6 +332,9 @@ def import_tasks_from_template(
     from backend.services.document_service import _sync_tasks_from_templates
     from backend.services.project_service import log_project_activity
     project = resolve_project(db, project_id)
+    # Block template import for wait/abolished projects (#231)
+    if project.status in ("wait", "abolished"):
+        raise HTTPException(status_code=400, detail="待启动或已废止的项目不允许导入模板任务，请先将项目状态切换为进行中")
     count = _sync_tasks_from_templates(db, project.id, project.project_type or "RD")
     log_audit(db, user, "task_import_templates", f"项目={project.code} 创建数={count}", AUDIT_CAT_TASK, "medium")
     log_project_activity(db, project.id, user.username, "导入模板任务", f"从模板创建了 {count} 个任务")

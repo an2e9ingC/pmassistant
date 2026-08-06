@@ -542,8 +542,14 @@ def _template_dict(t: DocumentTemplate) -> dict:
 # ---------------------------------------------------------------------------
 
 def get_or_init_project_documents(db: Session, project_id: int, project_type: str = "RD", include_removed: bool = False) -> list[dict]:
-    """Get project documents, initializing from templates on first access."""
-    _sync_from_templates(db, project_id, project_type)
+    """Get project documents, initializing from templates on first access.
+
+    Skip template sync if project status is 'wait' or 'abolished' —
+    templates are created only when project enters active state (#231).
+    """
+    project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
+    if project and project.status not in ("wait", "abolished"):
+        _sync_from_templates(db, project_id, project_type)
     return _query_project_documents(db, project_id, include_removed=include_removed)
 
 
@@ -934,6 +940,8 @@ def sync_all_projects(db: Session, project_ids: Optional[list[int]] = None) -> d
     q = db.query(CachedProject)
     if project_ids:
         q = q.filter(CachedProject.id.in_(project_ids))
+    # Skip projects in 'wait' or 'abolished' status — templates not yet initialized (#231)
+    q = q.filter(CachedProject.status.notin_(["wait", "abolished"]))
     projects = q.order_by(CachedProject.id).all()
     synced: list[str] = []
     failed: list[str] = []
@@ -1181,6 +1189,8 @@ def sync_all_projects_tasks(db: Session, project_ids: Optional[list[int]] = None
     q = db.query(CachedProject)
     if project_ids:
         q = q.filter(CachedProject.id.in_(project_ids))
+    # Skip projects in 'wait' or 'abolished' status — templates not yet initialized (#231)
+    q = q.filter(CachedProject.status.notin_(["wait", "abolished"]))
     projects = q.order_by(CachedProject.id).all()
     synced: list[str] = []
     failed: list[str] = []

@@ -192,6 +192,7 @@ function buildInfo(p, notes, delivery, docs) {
     pending: { label: '待启动', color: 'var(--warn)' },
     canceled: { label: '已取消', color: 'var(--muted)' },
     incomplete: { label: '未完成', color: 'var(--muted)' },
+    abolished: { label: '已废止', color: 'var(--muted)' },
   };
   var st = statusMap[p.status] || { label: p.status || '—', color: 'var(--muted)' };
 
@@ -2348,6 +2349,7 @@ function showProjectFormDialog(isEdit, convertSource) {
             '<option value="suspended"' + (p && p.raw_status === 'suspended' ? ' selected' : '') + '>已挂起</option>' +
             '<option value="done"' + (p && p.raw_status === 'done' ? ' selected' : '') + '>已完成</option>' +
             '<option value="closed"' + (p && p.raw_status === 'closed' ? ' selected' : '') + '>已关闭</option>' +
+            '<option value="abolished"' + (p && p.raw_status === 'abolished' ? ' selected' : '') + '>已废止</option>' +
           '</select></div>' +
       '</div>' +
       // Row 6: 实际开始 | 实际结束
@@ -2822,6 +2824,13 @@ async function saveProjectForm(isEdit) {
 
   var statusEl = g('proj-form-status');
   if (statusEl) payload.status = statusEl.value;
+
+  // Confirm wait→doing transition (triggers template sync) (#231)
+  if (isEdit && _projDetail && _projDetail.raw_status === 'wait' && payload.status === 'doing') {
+    if (!confirm('将项目状态从「待启动」切换为「进行中」将自动根据模板创建阶段、任务和文档。确认继续？')) {
+      return;
+    }
+  }
 
   var custEl = g('proj-form-customer');
   if (custEl && custEl.value.trim()) payload.customer_name = custEl.value.trim();
