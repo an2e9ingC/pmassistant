@@ -70,7 +70,7 @@ def get_my_tasks(db: Session, user_id: int) -> List[dict]:
 
 def get_task_stats(db: Session, project_id: Optional[int] = None) -> dict:
     """Task statistics grouped by status, priority, and execution."""
-    q = db.query(Task)
+    q = db.query(Task).filter(or_(Task.is_deleted == 0, Task.is_deleted == None))
     if project_id:
         q = q.filter(Task.project_id == project_id)
     tasks = q.all()
@@ -757,13 +757,15 @@ def _resolve_cc_names(db, cc_user_ids) -> list:
 def get_user_tasks(db, user_id, limit=500):
     """返回某用户的所有相关任务：负责人 + 创建人 + 被抄送"""
     q = db.query(Task).filter(
-        (Task.assignee_id == user_id) | (Task.reporter_id == user_id)
+        (Task.assignee_id == user_id) | (Task.reporter_id == user_id),
+        or_(Task.is_deleted == 0, Task.is_deleted == None),
     ).order_by(Task.created_at.desc()).limit(limit)
     result = q.all()
     seen_ids = {r.id for r in result}
     # Second query: cc_user_ids contains user_id (Python-side filter for SQLite compatibility)
     cc_q = db.query(Task).filter(
-        Task.cc_user_ids.isnot(None)
+        Task.cc_user_ids.isnot(None),
+        or_(Task.is_deleted == 0, Task.is_deleted == None),
     ).order_by(Task.created_at.desc()).limit(limit * 2)
     for t in cc_q.all():
         if t.id not in seen_ids and user_id in (t.cc_user_ids or []):

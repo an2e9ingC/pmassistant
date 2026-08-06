@@ -1085,14 +1085,24 @@ def delete_task_template(db: Session, template_id: int) -> dict:
     }
 
 
-def _sync_tasks_from_templates(db: Session, project_id: int, project_type: str = "RD") -> int:
+def _sync_tasks_from_templates(
+    db: Session,
+    project_id: int,
+    project_type: str = "RD",
+    force_template_ids: set = None,
+) -> int:
     """Sync project tasks from task templates for all standard stages.
 
     No longer depends on Zentao executions. All tasks use execution_id=0.
     Deduplication key: (template_id, project_id, stage_name).
 
     Updates existing tasks (title, sort_order, description) from template,
-    respecting is_diverged flag. Returns count of newly created tasks.
+    respecting is_diverged flag. Returns count of newly created + restored tasks.
+
+    Args:
+        force_template_ids: Optional set of template IDs to force re-import.
+            When set, deleted tasks whose template_id is in this set will be
+            un-deleted and re-synced from the template.
     """
     import logging
     _log = logging.getLogger(__name__)
@@ -1103,6 +1113,7 @@ def _sync_tasks_from_templates(db: Session, project_id: int, project_type: str =
     _log.info(f"[task-sync] project_id={project_id} type={project_type} stages={standard_stages}")
     created_count = 0
     updated_count = 0
+    restored_count = 0
 
     for st in standard_stages:
         templates = (
@@ -1123,9 +1134,26 @@ def _sync_tasks_from_templates(db: Session, project_id: int, project_type: str =
             ).first()
 
             if existing:
-                # Skip if user deleted (is_deleted) or diverged (is_diverged)
-                if existing.is_deleted or existing.is_diverged:
+                # Check if this template is force-selected for re-import
+                is_forced = force_template_ids and tpl.id in force_template_ids
+
+                # Diverged tasks: always skip unless this is a deleted+diverged task
+                # being force-restored (user explicitly chose to re-import)
+                if existing.is_diverged and not (existing.is_deleted and is_forced):
                     continue
+
+                # Deleted tasks: skip unless force-selected for re-import
+                if existing.is_deleted:
+                    if not is_forced:
+                        continue
+                    # Force re-import: un-delete and reset diverged flag
+                    existing.is_deleted = 0
+                    existing.is_diverged = 0
+                    existing.status = "todo"
+                    restored_count += 1
+                    _log.info(f"[task-sync] restoring deleted task template_id={tpl.id} task_id={existing.id}")
+
+                # Update fields from template (normal update or force-restore)
                 updated = False
                 if existing.title != tpl.task_name:
                     existing.title = tpl.task_name
@@ -1141,7 +1169,7 @@ def _sync_tasks_from_templates(db: Session, project_id: int, project_type: str =
                     if assignee_id:
                         existing.assignee_id = assignee_id
                         updated = True
-                if updated:
+                if updated or is_forced:
                     updated_count += 1
                 continue
 
@@ -1180,7 +1208,9 @@ def _sync_tasks_from_templates(db: Session, project_id: int, project_type: str =
         db.commit()
     if updated_count > 0:
         _log.info(f"[task-sync] project_id={project_id} updated {updated_count} existing tasks")
-    return created_count
+    if restored_count > 0:
+        _log.info(f"[task-sync] project_id={project_id} restored {restored_count} deleted tasks")
+    return created_count + restored_count
 
 
 def sync_all_projects_tasks(db: Session, project_ids: Optional[list[int]] = None) -> dict:

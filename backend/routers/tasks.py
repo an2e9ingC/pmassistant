@@ -4,6 +4,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
@@ -134,6 +135,140 @@ def task_stats(
         pid = p.id
     stats = task_service.get_task_stats(db, pid)
     return {"code": 0, "data": stats, "message": "ok"}
+
+
+
+
+@router.get("/template-preview", response_model=dict)
+def preview_template_tasks(
+    project_id: str = Query(...),
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Return template tasks + existing project tasks, annotated with status.
+
+    Shows both:
+      - Template tasks (from TaskTemplate) with their import status
+      - Existing project tasks (including manual ones without template_id)
+    Grouped by stage.
+    """
+    from backend.models.document import TaskTemplate
+    from backend.models.task import Task
+    from backend.services.document_service import get_stage_types_for_project_type
+
+    project = resolve_project(db, project_id)
+    project_type = project.project_type or "RD"
+    standard_stages = get_stage_types_for_project_type(db, project_type)
+
+    # Build lookup of existing tasks by template_id (for template matching)
+    # Also track which stage+template combinations are covered
+    existing_tasks = (
+        db.query(Task)
+        .filter(Task.project_id == project.id)
+        .all()
+    )
+
+    # Index existing tasks by template_id
+    task_by_template = {}  # template_id -> Task
+    manual_tasks = []  # tasks without template_id
+    template_task_ids = set()  # templates that have a matching task
+
+    for t in existing_tasks:
+        if t.template_id:
+            task_by_template[t.template_id] = t
+            template_task_ids.add(t.template_id)
+        else:
+            manual_tasks.append(t)
+
+    # Group manual tasks by stage_name
+    manual_by_stage = {}
+    for t in manual_tasks:
+        st = t.stage_name or ""
+        manual_by_stage.setdefault(st, []).append(t)
+
+    stages_result = []
+
+    for st in standard_stages:
+        items = []  # items for this stage: template-based + manual
+
+        # 1. Template tasks for this stage
+        templates = (
+            db.query(TaskTemplate)
+            .filter(
+                TaskTemplate.stage_type == st,
+                TaskTemplate.project_type == project_type,
+                or_(TaskTemplate.is_unnecessary == 0, TaskTemplate.is_unnecessary == None),
+            )
+            .order_by(TaskTemplate.sort_order)
+            .all()
+        )
+
+        for tpl in templates:
+            existing = task_by_template.get(tpl.id)
+            if not existing:
+                status = "missing"
+                existing_task_id = None
+            elif existing.is_deleted:
+                status = "exists_deleted"
+                existing_task_id = existing.id
+            elif existing.is_diverged:
+                status = "exists_diverged"
+                existing_task_id = existing.id
+            else:
+                status = "exists_active"
+                existing_task_id = existing.id
+
+            items.append({
+                "template_id": tpl.id,
+                "task_name": tpl.task_name,
+                "sort_order": tpl.sort_order,
+                "status": status,
+                "existing_task_id": existing_task_id,
+            })
+
+        # 2. Manual tasks (no template) in this stage
+        stage_manual = manual_by_stage.pop(st, [])
+        for t in sorted(stage_manual, key=lambda x: x.sort_order or 0):
+            items.append({
+                "template_id": None,
+                "task_name": t.title,
+                "sort_order": t.sort_order or 0,
+                "status": "exists_manual",
+                "existing_task_id": t.id,
+            })
+
+        # 3. Deleted tasks whose template no longer exists (template_id set but template deleted)
+        for t in existing_tasks:
+            if t.template_id and t.template_id not in template_task_ids and t.stage_name == st:
+                # This task has a template_id but the template was deleted
+                # It would have been caught by task_by_template if template existed
+                # Already handled above via templates loop
+                pass
+
+        if items:
+            stages_result.append({
+                "stage_name": st,
+                "tasks": items,
+            })
+
+    # Add any remaining manual tasks in stages not in standard_stages
+    for st, tasks in manual_by_stage.items():
+        items = []
+        for t in sorted(tasks, key=lambda x: x.sort_order or 0):
+            items.append({
+                "template_id": None,
+                "task_name": t.title,
+                "sort_order": t.sort_order or 0,
+                "status": "exists_manual",
+                "existing_task_id": t.id,
+            })
+        if items:
+            stages_result.append({
+                "stage_name": st,
+                "tasks": items,
+            })
+
+    return {"code": 0, "data": {"stages": stages_result, "standard_stages": standard_stages}, "message": "ok"}
 
 
 @router.get("/{task_id}", response_model=dict)
@@ -321,24 +456,42 @@ def reject_task(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+class TaskImportBody(BaseModel):
+    """Body for selective template task import."""
+    template_ids: List[int] = []
+
+
 @router.post("/import-from-templates", response_model=dict)
 def import_tasks_from_template(
     project_id: str = Query(...),
+    body: TaskImportBody = TaskImportBody(),
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
     """Import tasks from task templates for all stages of a project.
-    Existing tasks (matched by template_id + project_id + stage_name) are not duplicated."""
+
+    If template_ids is provided, only those template IDs are imported
+    (deleted tasks are force-restored). Otherwise all templates are synced.
+    """
     from backend.services.document_service import _sync_tasks_from_templates
     from backend.services.project_service import log_project_activity
     project = resolve_project(db, project_id)
     # Block template import for wait/abolished projects (#231)
     if project.status in ("wait", "abolished"):
         raise HTTPException(status_code=400, detail="待启动或已废止的项目不允许导入模板任务，请先将项目状态切换为进行中")
-    count = _sync_tasks_from_templates(db, project.id, project.project_type or "RD")
-    log_audit(db, user, "task_import_templates", f"项目={project.code} 创建数={count}", AUDIT_CAT_TASK, "medium")
-    log_project_activity(db, project.id, user.username, "导入模板任务", f"从模板创建了 {count} 个任务")
-    return {"code": 0, "data": {"created": count}, "message": f"已创建 {count} 个任务"}
+    force_ids = set(body.template_ids) if body.template_ids else None
+    count = _sync_tasks_from_templates(
+        db, project.id,
+        project.project_type or "RD",
+        force_template_ids=force_ids,
+    )
+    if force_ids:
+        msg = f"项目={project.code} 选择性导入 {len(force_ids)} 个模板, 创建/恢复数={count}"
+    else:
+        msg = f"项目={project.code} 创建数={count}"
+    log_audit(db, user, "task_import_templates", msg, AUDIT_CAT_TASK, "medium")
+    log_project_activity(db, project.id, user.username, "导入模板任务", msg)
+    return {"code": 0, "data": {"created": count}, "message": f"已创建/恢复 {count} 个任务"}
 
 
 @router.delete("", response_model=dict)
