@@ -83,7 +83,6 @@ async function loadReportMonthly() {
         { key: 'tasks_info', title: '任务(完成/总数)', render: function(v, row) { return '<span style="font-variant-numeric:tabular-nums">' + (row.tasks_done||0) + '/' + (row.tasks_total||0) + '</span>'; } }
       ],
       data: data.projects || [],
-      resizable: false
     });
   } catch(e) {
     container.innerHTML = '<div class="error-state">加载月报失败: ' + escHtml(e.message) + '</div>';
@@ -127,7 +126,6 @@ async function loadBugStats() {
           { key: 'opened_date', title: '创建日期', width: '100px', render: function(v) { return '<span style="font-size:11.5px;font-family:var(--mono);color:var(--muted)">'+formatDate(v)+'</span>'; } }
         ],
         data: bugs,
-        resizable: false
       });
     }
   } catch(e) {

@@ -387,7 +387,6 @@ async function loadAuditLogs() {
         ],
         data: items,
         maxHeight: 'calc(100vh - 280px)',
-        resizable: false
       });
     }
   } catch(e) {

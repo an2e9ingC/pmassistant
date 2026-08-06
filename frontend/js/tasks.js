@@ -284,7 +284,6 @@ function _loadDetailComments(taskId) {
         { key: 'content', title: '内容', align: 'left', render: function(v) { return '<span style="font-size:13px">'+escHtml(v||'')+'</span>'; } }
       ],
       data: comments,
-      resizable: false
     });
   }).catch(function() {});
 }
@@ -578,7 +577,6 @@ function renderTaskTable(tasks, execs) {
     ],
     data: tasks,
     maxHeight: 'calc(100vh - 220px)',
-    resizable: false,
     selectable: true,
     checkboxPosition: 3,
     onSelectChange: function(rows) {
@@ -675,7 +673,6 @@ function renderTaskTableCompact(tasks, execs) {
     ],
     data: flatRows,
     maxHeight: 'calc(100vh - 340px)',
-    resizable: false,
     selectable: true,
     checkboxPosition: 1,
     onSelectChange: function(rows) { _selectedTasks = new Set(rows.map(function(r) { return r.id; })); _ensureBatchToolbar(); if (typeof _updateBatchToolbar === 'function') _updateBatchToolbar(); }
@@ -1848,7 +1845,6 @@ function _initWorklogDt(logs, taskId) {
       { key: 'actions', title: '操作', render: function(v, row) { return iconEdit('openWorklogEditDialog('+row.id+','+taskId+')','编辑')+iconDelete('deleteWorklogById('+row.id+','+taskId+')','删除'); } }
     ],
     data: logs,
-    resizable: false
   });
 }
 

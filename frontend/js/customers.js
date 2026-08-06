@@ -14,7 +14,6 @@ function _initCustDt() {
       { key: 'actions', title: '操作', width: '18%', render: function(v, row) { return '<span style="white-space:nowrap">' + iconEdit('openCustEditDialog(' + row.id + ')') + iconDelete('deleteCust(' + row.id + ',\'' + escHtml(row.name) + '\')') + '</span>'; } }
     ],
     maxHeight: 'calc(100vh - 200px)',
-    resizable: false
   });
 }
 
@@ -127,7 +126,6 @@ function _initCustDetProjDt() {
       }}
     ],
     maxHeight: '400px',
-    resizable: false,
     headerBg: 'var(--accent)',
     headerColor: '#fff'
   });
@@ -148,7 +146,6 @@ function _initCustDetProdDt() {
       }}
     ],
     maxHeight: '400px',
-    resizable: false,
     headerBg: 'var(--success)',
     headerColor: '#fff'
   });

@@ -458,7 +458,6 @@ function renderTemplatesPage() {
         return cols;
       })(),
       data: docs,
-      resizable: false
     });
     dtDocs.enableDragReorder(_templatesGrouped[_selectedStage] || [], function() {
       _pendingOps.push({ stage: _selectedStage, type: 'docs', items: (_templatesGrouped[_selectedStage]||[]).map(function(d,i) { return {id:d.id, sort_order:i+1}; }) });
@@ -482,7 +481,6 @@ function renderTemplatesPage() {
         return cols;
       })(),
       data: tasks,
-      resizable: false
     });
     dtTasks.enableDragReorder(_taskTemplatesGrouped[_selectedStage] || [], function() {
       _taskPendingOps.push({ stage: _selectedStage, type: 'tasks', items: (_taskTemplatesGrouped[_selectedStage]||[]).map(function(t,i) { return {id:t.id, sort_order:i+1}; }) });
@@ -2071,7 +2069,6 @@ function renderProductTreePage() {
         return cols;
       })(),
       data: _productStageDocs,
-      resizable: false
     });
     dtProdDocs.enableDragReorder(_productStageDocs, renderProductAfterReorder);
   }
@@ -2084,7 +2081,6 @@ function renderProductTreePage() {
         { key: 'template_count', title: '模板数', width: '80px', render: function(v) { return '<span style="text-align:center">'+(v||0)+'</span>'; } }
       ],
       data: children,
-      resizable: false
     });
   }
 }
@@ -2739,7 +2735,6 @@ async function initNamingOptions() {
           { key: 'actions', title: '操作', render: function(v, row) { return iconEdit('_namingShowEdit('+row.id+',\''+fk+'\',\''+escHtml(row.code||'').replace(/'/g,"\\'")+'\',\''+escHtml(row.description||'').replace(/'/g,"\\'")+'\')','编辑')+iconDelete('_namingDelete('+row.id+',\''+fk+'\')','删除'); } }
         ],
         data: opts,
-        resizable: false
       });
     });
   } catch(e) {
@@ -2845,7 +2840,6 @@ async function initBugTemplates() {
           { key: 'actions', title: '操作', render: function(v, row) { return (row.is_default?'':iconBtn('⭐','设为默认','_bugTplSetDefault('+row.id+')'))+iconEdit('_bugTplShowEdit('+row.id+')','编辑')+iconDelete('_bugTplDelete('+row.id+')','删除'); } }
         ],
         data: tpls,
-        resizable: false
       });
     }
   } catch(e) { c.innerHTML = '<div class="error-state">加载失败: '+escHtml(e.message)+'</div>'; }

@@ -685,7 +685,6 @@ function renderProductNotes(notes) {
       }}
     ],
     data: notes,
-    resizable: false,
     rowClassFn: function(row) { return row.parent_id ? { paddingLeft: '28px', borderLeft: '3px solid var(--accent-lt)' } : null; }
   });
 }
@@ -711,7 +710,6 @@ function buildProductActivity(code) {
         }}
       ],
       data: items,
-      resizable: false,
       maxHeight: '400px'
     });
   }).catch(function() {
@@ -1159,7 +1157,6 @@ function _renderProdDocsInline(docs) {
       { key: '_actions', title: '操作', width: '100px', render: function(v) { return v||''; } }
     ],
     data: flatRows,
-    resizable: false,
     rowClassFn: function(row) { return row._bg ? { background: row._bg } : null; }
   });
 
@@ -1277,7 +1274,6 @@ function renderProdMaintenance(p) {
         { key: 'end', title: '计划完成', render: function(v) { return '<span style="font-size:12px;color:'+(v?'var(--muted)':'var(--yellow)')+'">'+(v?formatDate(v):'长期')+'</span>'; } }
       ],
       data: projects,
-      resizable: false,
       onRowClick: function(row) { openProject(row.code || String(row.id)); }
     });
   }
@@ -1499,13 +1495,12 @@ function buildProdActivities(items, opts) {
     container: document.getElementById('prod-act-table'),
     columns: [
       { key: 'created_at', title: '时间 <span id="prod-act-sort-ind" style="cursor:pointer" onclick="toggleProdActivitySort()">' + sortIcon + '</span>', width: '160px', render: function(v) { return '<span class="act-td-time">'+escHtml(fmtISODateTime(v))+'</span>'; } },
-      { key: 'display_name', title: '用户名 ' + userFilter, width: '100px', render: function(v, row) { return '<span class="act-td-user">'+escHtml(getDisplayName(v||row.username))+'</span>'; } },
-      { key: 'action', title: '操作类型 ' + actionFilter, width: '120px', render: function(v) { return '<span class="activity-action pill">'+escHtml(v||'')+'</span>'; } },
+      { key: 'display_name', title: '用户名 ' + userFilter, width: '140px', render: function(v, row) { return '<span class="act-td-user">'+escHtml(getDisplayName(v||row.username))+'</span>'; } },
+      { key: 'action', title: '操作类型 ' + actionFilter, width: '150px', render: function(v) { return '<span class="activity-action pill">'+escHtml(v||'')+'</span>'; } },
       { key: 'detail', title: '具体明细', width: 'auto', align: 'left', className: 'dt-wrap', render: function(v) { return '<span class="act-td-detail">'+(v?escHtml(v):'')+'</span>'; } }
     ],
     data: items,
     maxHeight: 'calc(100vh - 330px)',
-    resizable: false
   });
 }
 
@@ -1575,6 +1570,5 @@ function _renderProdBugs(bugs, container) {
     ],
     data: bugs,
     maxHeight: 'calc(100vh - 280px)',
-    resizable: false
   });
 }

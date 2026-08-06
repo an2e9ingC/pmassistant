@@ -7,10 +7,17 @@ var DataTable = (function() {
   'use strict';
 
   var INSTANCE_ID = 0;
+  var _instances = []; // global registry for cross-table density updates
+
+  // Remove stale instances (table no longer in DOM)
+  function _gcInstances() {
+    _instances = _instances.filter(function(dt) { return dt._tableEl && document.body.contains(dt._tableEl); });
+  }
 
   function DataTable(opts) {
     opts = opts || {};
     this._id = ++INSTANCE_ID;
+    _instances.push(this);
     this._container = typeof opts.container === 'string'
       ? document.querySelector(opts.container)
       : opts.container;
@@ -47,6 +54,7 @@ var DataTable = (function() {
     this._onSelectChange = opts.onSelectChange || null;
     this._emptyText = opts.emptyText || '暂无数据';
     this._clickable = opts.clickable === true;
+    this._density = opts.density || (function() { try { return localStorage.getItem('pma_table_density') || 'normal'; } catch(e) { return 'normal'; } })();
     this._onRowClick = opts.onRowClick || null;
 
     // ── Sort state ──
@@ -82,6 +90,8 @@ var DataTable = (function() {
     if (this._rowStriped) this._tableEl.classList.add('dt-striped');
     if (this._hoverHighlight) this._tableEl.classList.add('dt-hover');
     if (this._clickable) this._tableEl.classList.add('dt-clickable');
+    if (this._density === 'compact') this._tableEl.classList.add('dt-density-compact');
+    else if (this._density === 'comfortable') this._tableEl.classList.add('dt-density-comfortable');
 
     // Header color variants
     if (this._headerBg === 'var(--accent)' || this._headerBg === '--accent')
@@ -496,6 +506,29 @@ var DataTable = (function() {
       var id = row[self._idKey];
       return id != null && self._selected.has(id);
     });
+  };
+
+  DataTable.prototype.setDensity = function(level) {
+    this._tableEl.classList.remove('dt-density-compact', 'dt-density-comfortable');
+    if (level === 'compact') {
+      this._density = 'compact';
+      this._tableEl.classList.add('dt-density-compact');
+    } else if (level === 'comfortable') {
+      this._density = 'comfortable';
+      this._tableEl.classList.add('dt-density-comfortable');
+    } else {
+      this._density = 'normal';
+    }
+  };
+
+  // Global: persist density preference and apply to ALL tables
+  DataTable.setAllDensity = function(level) {
+    try { localStorage.setItem('pma_table_density', level); } catch(e) {}
+    if (typeof _savePref === 'function') {
+      try { _savePref('pma_table_density', level); } catch(e) {}
+    }
+    _gcInstances();
+    _instances.forEach(function(dt) { dt.setDensity(level); });
   };
 
   DataTable.prototype.filter = function(predicate) {

@@ -53,7 +53,6 @@ function _initGlrDt() {
       }}
     ],
     maxHeight: 'calc(100vh - 360px)',
-    resizable: false,
     rowClassFn: function(row) { return row.gitlab_url_valid === false ? { background: 'var(--danger-lt)' } : null; }
   });
 }

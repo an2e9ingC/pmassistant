@@ -451,7 +451,6 @@ function _initWecomDt() {
       { key: 'synced_at', title: '同步时间', width: '10%', render: function(v) { return '<span style="font-size:11px;color:var(--muted)">' + (v ? v.substring(11,19) : '—') + '</span>'; } }
     ],
     maxHeight: 'calc(100vh - 300px)',
-    resizable: false
   });
 }
 
@@ -555,7 +554,6 @@ function _initRolesDt() {
       { key: 'actions', title: '操作', width: '12%', render: function(v) { return v; } }
     ],
     maxHeight: 'calc(100vh - 340px)',
-    resizable: false
   });
 }
 
@@ -827,7 +825,6 @@ function _initUsersDt() {
       { key: 'actions', title: '操作', width: '12%', render: function(v, row) { return v; } }
     ],
     maxHeight: 'calc(100vh - 340px)',
-    resizable: false
   });
 }
 

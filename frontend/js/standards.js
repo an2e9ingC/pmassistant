@@ -52,7 +52,6 @@ function renderStandards() {
       { key: 'description', title: '说明', width: '300px', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">' + escHtml(v||'') + '</span>'; } }
     ];
     if (canEdit) cols.push({ key: 'actions', title: '操作', width: '70px', render: function(v, row) { return '<button class="btn btn-xs" onclick="showStdEdit(' + row.id + ')">编辑</button>'; } });
-    new DataTable({ container: document.getElementById('std-table-' + idx), columns: cols, data: items, resizable: false });
   });
 }
 
