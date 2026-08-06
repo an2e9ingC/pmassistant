@@ -10,7 +10,13 @@ from backend.middleware.auth import get_current_user, require_perm
 from backend.models.local import ProjectNote, ProjectActivity
 from backend.models.zentao import CachedProject, CachedExecution
 from backend.services.entity_resolver import resolve_project
-from backend.services.project_service import log_project_activity
+from backend.services.project_service import (
+    log_project_activity,
+    _validate_status_transition,
+    _handle_transition_to_abolished,
+    _handle_transition_from_abolished,
+    _handle_transition_to_doing,
+)
 from backend.routers.logs import log_audit
 from backend.audit_categories import AUDIT_CAT_PROJECT, AUDIT_CAT_TASK, FIELD_LABEL
 from backend.services import project_service
@@ -346,6 +352,9 @@ def sync_documents(
 ):
     """Manually trigger document sync from templates, with optional force re-import."""
     project = resolve_project(db, identifier)
+    # Block template sync for wait/abolished projects (#231)
+    if project.status in ("wait", "abolished"):
+        raise HTTPException(status_code=400, detail="待启动或已废止的项目不允许同步模板文档，请先将项目状态切换为进行中")
     from backend.services.document_service import _sync_from_templates
     from backend.models.document import ProjectDocument
 
@@ -1146,6 +1155,40 @@ def update_project(
                     prod_name = (prod.code + ' ' + prod.name) if prod else f'产品#{pid}'
                     changes.append(f"{prod_name}: {old_qty}台 -> {new_qty}台")
 
+    # --- Status transition handling (issue #231) ---
+    new_status = data.pop("status", None)
+    old_status = project.status
+    transition_result = None
+
+    if new_status is not None and new_status != old_status:
+        # Validate transition
+        allowed, reason = _validate_status_transition(db, project.id, old_status, new_status)
+        if not allowed:
+            raise HTTPException(status_code=400, detail=reason)
+
+        changes.append(f"状态: '{old_status}' -> '{new_status}'")
+
+        # Handle transition to abolished: auto-close all tasks, save snapshot
+        if new_status == "abolished":
+            closed_count = _handle_transition_to_abolished(db, project)
+            log_audit(db, user, "project_abolish",
+                      f"项目={project.code} 关闭任务数={closed_count}",
+                      AUDIT_CAT_PROJECT, "high")
+
+        # Handle transition from abolished: restore task states
+        if old_status == "abolished" and new_status == "doing":
+            restored_count = _handle_transition_from_abolished(db, project)
+            changes.append(f"恢复任务: {restored_count} 个")
+
+        # Handle first-time transition to doing: trigger template sync
+        transition_result = None
+        if new_status == "doing" and old_status == "wait":
+            transition_result = _handle_transition_to_doing(db, project)
+
+        project.status = new_status
+        db.commit()
+    # --- End status handling ---
+
     for field, value in data.items():
         if field in ("begin", "end", "real_began", "real_end"):
             if value is not None:
@@ -1180,6 +1223,8 @@ def update_project(
     detail = project_service.get_project_detail(db, project.id)
     detail["_updated_fields"] = changes
     detail["_updated_count"] = len(changes)
+    if transition_result:
+        detail["_transition_result"] = transition_result
     return {"code": 0, "data": detail, "message": f"已更新 {len(changes)} 个字段"}
 
 

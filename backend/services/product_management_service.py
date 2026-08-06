@@ -411,14 +411,16 @@ def create_local_project(
     except Exception:
         pass  # non-critical
 
-    # Initialize documents and tasks from templates
-    try:
-        from backend.services.document_service import _sync_from_templates, _sync_tasks_from_templates
-        _sync_from_templates(db, project.id, project_type)
-        _sync_tasks_from_templates(db, project.id, project_type)
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"Template sync failed for project {code} ({project_type}): {e}")
+    # Initialize documents and tasks from templates ONLY if not 'wait'
+    # For 'wait' status, templates are created later on first transition to 'doing' (#231)
+    if status != "wait":
+        try:
+            from backend.services.document_service import _sync_from_templates, _sync_tasks_from_templates
+            _sync_from_templates(db, project.id, project_type)
+            _sync_tasks_from_templates(db, project.id, project_type)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Template sync failed for project {code} ({project_type}): {e}")
 
     return _project_item(project, db)
 
@@ -575,11 +577,17 @@ def _resync_on_type_change(db: Session, project_id: int, new_type: str):
     """When project_type changes: reset stages, docs, and template-originated tasks.
 
     Manual tasks (template_id IS NULL) are preserved.
+    Skip if project is abolished — abolished projects should not be modified (#231).
     """
     from backend.models.project_stage import ProjectStage
     from backend.models.document import ProjectDocument
     from backend.models.task import Task, WorkLog, TaskComment
     from backend.services.document_service import _sync_from_templates, _sync_tasks_from_templates
+
+    project = db.query(CachedProject).filter(CachedProject.id == project_id).first()
+    if project and project.status == "abolished":
+        logger.warning(f"Skipping _resync_on_type_change for abolished project {project_id}")
+        return
 
     # 1. Reset stages
     db.query(ProjectStage).filter(ProjectStage.project_id == project_id).delete()
