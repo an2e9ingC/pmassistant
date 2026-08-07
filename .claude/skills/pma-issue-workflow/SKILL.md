@@ -228,6 +228,7 @@ PYEOF
   │     ├── git fetch origin（二次 fetch 防并发）
   │     ├── git rebase origin/trunk（二次 rebase）
   │     ├── ⚠️ 版本号自检：检查 docs/dev-plan.md 今天是否已有同beta号记录，有则递增 → amend commit
+  │     ├── 停 worktree 服务：./server.sh stop -p <PORT>
   │     ├── 切换到 trunk 目录：cd $PMA_TRUNK_DIR
   │     ├── git merge --no-ff <worktree-branch>
   │     ├── git push origin trunk
