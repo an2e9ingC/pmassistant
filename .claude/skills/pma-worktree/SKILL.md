@@ -111,7 +111,7 @@ export PMA_WORKTREE_DIR="<EnterWorktree 返回的实际路径>"
    # 4. 之后所有 Edit/Write 的 file_path 使用绝对路径拼接
    ```
 
-4. 准备开发环境（**严格按以下顺序，所有路径使用环境变量**）：
+4. 准备开发环境（**严格按以下顺序 — 先配置后启动，所有路径使用环境变量**）：
 
    a. **从最新备份拷贝数据库**（避免停 trunk 服务）：
    ```bash
@@ -145,15 +145,24 @@ export PMA_WORKTREE_DIR="<EnterWorktree 返回的实际路径>"
    ```
    > - `.env` 等 gitignore 文件 worktree 不会自动包含，必须手动拷贝
    > - GitLab OAuth 只支持主 session 端口（8000），worktree 请使用管理员账号密码登录
+   > - **必须在启动服务前拷贝**，否则服务会使用错误的配置
 
-   c2. **关闭远端同步**（避免 worktree 临时数据库污染远端数据源）：
+   d. **关闭远端数据同步**（避免 worktree 临时数据库污染远端数据源）：
    ```bash
    sed -i 's/^SYNC_INTERVAL_MINUTES=.*/SYNC_INTERVAL_MINUTES=0/' $PMA_WORKTREE_DIR/.env
    sed -i 's/^WECOM_SYNC_INTERVAL=.*/WECOM_SYNC_INTERVAL=0/' $PMA_WORKTREE_DIR/.env
    sed -i 's/^ZENTAO_SYNC_RELEASES=.*/ZENTAO_SYNC_RELEASES=false/' $PMA_WORKTREE_DIR/.env
    ```
 
-   d. **启动 worktree 服务**：
+   e. **关闭数据库级远端备份同步**（数据库从 trunk 拷贝后继承了生产环境的 PmaSetting）：
+   ```bash
+   sqlite3 $PMA_WORKTREE_DIR/data/pma-$PORT.db "UPDATE pma_settings SET value='0' WHERE key='db_backup_remote_enabled';"
+   ```
+   > - 远端备份配置（`db_backup_remote_enabled`）存储在数据库 `pma_settings` 表中
+   > - worktree 拷贝 trunk 数据库后会继承生产环境值 `"1"`
+   > - 不关闭会导致 worktree 测试服务器定期向远端 NAS 写入备份，污染生产备份目录
+
+   f. **启动 worktree 服务**（配置全部就绪后才能启动）：
    ```bash
    cd $PMA_WORKTREE_DIR && ./server.sh restart -p $PORT
    ```

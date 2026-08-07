@@ -1629,7 +1629,9 @@ async function saveAllChanges() {
             _pendingOps.push({ type: 'edit', id: docs[di].id, stage_type: stageTypes[si],
               doc_name: docs[di].doc_name, sort_order: newSort,
               responsible_role: docs[di].responsible_role || '',
-              description: docs[di].description || '', doc_path: docs[di].doc_path || '', doc_type: docs[di].doc_type || '', is_optional: docs[di].is_optional ? 1 : 0 });
+              description: docs[di].description || '', doc_path: docs[di].doc_path || '',
+              base_path: docs[di].base_path || '', file_pattern: docs[di].file_pattern || '',
+              doc_type: docs[di].doc_type || '', is_optional: docs[di].is_optional ? 1 : 0 });
           }
         }
       }
@@ -1645,10 +1647,10 @@ async function saveAllChanges() {
     var op = ops[i];
     try {
       if (op.type === 'add') {
-        await API.post('/doc-templates', { project_type: _currentProjectType, stage_type: op.stage_type, doc_name: op.doc_name, sort_order: op.sort_order, responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '', doc_type: op.doc_type || '', is_optional: op.is_optional || 0 });
+        await API.post('/doc-templates', { project_type: _currentProjectType, stage_type: op.stage_type, doc_name: op.doc_name, sort_order: op.sort_order, responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '', base_path: op.base_path || '', file_pattern: op.file_pattern || '', doc_type: op.doc_type || '', is_optional: op.is_optional || 0 });
         success++;
       } else if (op.type === 'edit') {
-        await API.put('/doc-templates/' + op.id, { doc_name: op.doc_name, sort_order: op.sort_order, responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '', doc_type: op.doc_type || '', is_optional: op.is_optional || 0 });
+        await API.put('/doc-templates/' + op.id, { doc_name: op.doc_name, sort_order: op.sort_order, responsible_role: op.responsible_role || '', description: op.description || '', doc_path: op.doc_path || '', base_path: op.base_path || '', file_pattern: op.file_pattern || '', doc_type: op.doc_type || '', is_optional: op.is_optional || 0 });
         success++;
       } else if (op.type === 'delete') {
         await API.del('/doc-templates/' + op.id);
@@ -2217,6 +2219,16 @@ function showEditProductTemplateForm(id) {
   }
   if (!tpl) return;
   var tplStage = tpl.stage_type || '通用';
+  // Fallback: if base_path/file_pattern empty but doc_path exists, parse doc_path
+  var bp = tpl.base_path || '';
+  var fp = tpl.file_pattern || '';
+  if (!bp && !fp && tpl.doc_path) {
+    var lastSlash = tpl.doc_path.lastIndexOf('/');
+    if (lastSlash > 0) {
+      bp = tpl.doc_path.substring(0, lastSlash + 1);
+      fp = tpl.doc_path.substring(lastSlash + 1);
+    }
+  }
   _openDocDialog('编辑文档模板',
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名称</label>' +
@@ -2242,11 +2254,11 @@ function showEditProductTemplateForm(id) {
     '</div>' +
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">路径 <span style="color:var(--danger)">*必填</span> &nbsp;<span style="font-weight:400;font-size:10px">{code} = 产品代号占位符，如 LNS677A-V010</span></label>' +
-      '<input class="search-inp" id="ptf-base-path" value="' + escHtml(tpl.base_path || '') + '" placeholder="http://.../信号板/{code}/" style="width:100%;box-sizing:border-box;margin-bottom:8px" oninput="_updatePathPreview()">' +
+      '<input class="search-inp" id="ptf-base-path" value="' + escHtml(bp) + '" placeholder="http://.../信号板/{code}/" style="width:100%;box-sizing:border-box;margin-bottom:8px" oninput="_updatePathPreview()">' +
     '</div>' +
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名 <span style="color:var(--danger)">*必填</span> &nbsp;<span style="font-weight:400;font-size:10px">{code} = 产品代号占位符</span></label>' +
-      '<input class="search-inp" id="ptf-file-pattern" value="' + escHtml(tpl.file_pattern || '') + '" placeholder="01_{code}_SCH-FINAL.rar" style="width:100%;box-sizing:border-box" oninput="_updatePathPreview()">' +
+      '<input class="search-inp" id="ptf-file-pattern" value="' + escHtml(fp) + '" placeholder="01_{code}_SCH-FINAL.rar" style="width:100%;box-sizing:border-box" oninput="_updatePathPreview()">' +
     '</div>' +
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">最终路径预览 &nbsp;<span style="font-weight:400;font-size:10px">* 替换为产品代号</span></label>' +
