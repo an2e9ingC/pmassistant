@@ -314,7 +314,13 @@ Worktree B 上线 → fetch 拉到 A 的改动 → 二次 rebase → push trunk
 - 正常：`上线` 命令最后一步自动 `ExitWorktree(action: "remove")` + 删除远程临时分支
 - 远程分支：`git push origin --delete <branch>`（上线后自动执行）
 - 异常：`git worktree remove .claude/worktrees/<name>` + `git branch -D <branch>`
-- **退出后清理残留**：每次 worktree session 退出后，检查 `.claude/worktrees/` 下是否有 `git worktree list` 中不存在的残留目录，将其删除：
+- **⚠️ ExitWorktree 前必须先清理 data/ 目录**：`data/` 在 `.gitignore` 中，`git worktree remove` 不会删除未被跟踪的文件，导致 worktree 目录残留（只剩 `data/` 夹）。正确顺序：
+  ```bash
+  ./server.sh stop -p <PORT>   # 先停服
+  rm -rf data/                  # 清理 gitignore 中的 data 目录
+  # 然后切到 trunk 执行 merge/push/ExitWorktree
+  ```
+- **退出后清理残留**：每次 worktree session 退出后，检查 `.claude/worktrees/` 下是否有残留目录，将其删除：
   ```bash
   # 列出当前活跃的 worktree 路径
   git worktree list --porcelain | grep '^worktree ' | cut -d' ' -f2- > /tmp/active_worktrees.txt

@@ -228,12 +228,13 @@ PYEOF
   │     ├── git fetch origin（二次 fetch 防并发）
   │     ├── git rebase origin/trunk（二次 rebase）
   │     ├── ⚠️ 版本号自检：检查 docs/dev-plan.md 今天是否已有同beta号记录，有则递增 → amend commit
-  │     ├── 停 worktree 服务：./server.sh stop -p <PORT>
+  │     ├── 停 worktree 服务 + 清理 data 目录：./server.sh stop -p <PORT> && rm -rf data/
   │     ├── 切换到 trunk 目录：cd $PMA_TRUNK_DIR
   │     ├── git merge --no-ff <worktree-branch>
   │     ├── git push origin trunk
   │     ├── git push origin --delete <worktree-branch>（如远程存在）
   │     ├── ExitWorktree(action: "remove", discard_changes: true)
+  │     ├── ⚠️ 确保 worktree 目录已完全删除：rm -rf $PMA_WORKTREE_DIR（ExitWorktree 可能因 data/ 在 .gitignore 中而无法完全删除）
   │     └── MCP 重索引 trunk：index_repository(repo_path="$PMA_TRUNK_DIR", mode="moderate")
   │
   └── 不在 worktree 中（CWD 不含 .claude/worktrees/）
