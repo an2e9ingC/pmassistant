@@ -2,6 +2,12 @@
    PRODUCT LIST & PRODUCT DETAIL VIEWS
 ═══════════════════════════════════════════════════ */
 
+// ── Fav toggle → refresh product overview cards and grid ──
+EventBus.on('fav:toggled', function(e) {
+  if (e.type !== 'product') return;
+  if (document.getElementById('prod-kpi-grid')) renderProdOverview();
+});
+
 /* ---- Product List (Overview) ── Card Layout ── */
 
 var _prodActiveL1 = null;  // null = all
@@ -26,7 +32,17 @@ async function initProductList() {
   } catch(e) { _prodTree = []; }
 
   await loadFavProducts();
-  _prodActiveL1 = null;
+  // Apply saved default filter preference for product list
+  var savedProdFilter = localStorage.getItem('pma_default_product_filter');
+  if (savedProdFilter === 'fav' || !savedProdFilter) {
+    _prodActiveL1 = null;
+  } else if (savedProdFilter && _prodTree) {
+    // Check if the saved category still exists in the tree
+    var found = _prodTree.find(function(t) { return String(t.id) === String(savedProdFilter); });
+    _prodActiveL1 = found ? found.id : null;
+  } else {
+    _prodActiveL1 = null;
+  }
   _prodActiveL2 = null;
   renderProdOverview();
   setTimeout(function() {
@@ -54,20 +70,20 @@ function renderProdOverview() {
   }
 
   // L1 category cards
-  var catGrid = document.getElementById('pov-cat-grid');
+  var catGrid = document.getElementById('prod-kpi-grid');
   var favCount = getFavProducts().length;
-  catGrid.innerHTML = '<div class="pov-cat-card' + (_prodActiveL1 === null ? ' active' : '') + '" onclick="_povSelectL1(null)">' +
-    '<div class="pov-cat-icon" style="background:var(--warn-lt);color:var(--warn)">★</div>' +
-    '<div class="pov-cat-info"><div class="pov-cat-name">关注产品</div><div class="pov-cat-desc">用户收藏的产品</div></div>' +
-    '<div class="pov-cat-count" style="color:var(--warn)">' + favCount + '</div></div>' +
+  catGrid.innerHTML = '<div class="kpi-card' + (_prodActiveL1 === null ? ' active' : '') + '" data-filter="fav" onclick="_povSelectL1(null)">' +
+    '<div class="kpi-label">★ 关注产品</div>' +
+    '<div class="kpi-value" style="color:var(--warn)">' + favCount + '</div>' +
+    '<div class="kpi-meta">用户收藏的产品</div></div>' +
     _prodTree.map(function(l1, i) {
       var idx = i % _prodCatColors.length;
       var c = _prodCatColors[idx];
       var total = _prodTotal(l1);
-      return '<div class="pov-cat-card' + (_prodActiveL1 === l1.id ? ' active' : '') + '" onclick="_povSelectL1(' + l1.id + ')" style="--accent:' + c + '">' +
-        '<div class="pov-cat-icon" style="background:color-mix(in srgb,' + c + ' 12%,transparent);color:' + c + '">' + _prodCatIcons[idx] + '</div>' +
-        '<div class="pov-cat-info"><div class="pov-cat-name">' + escHtml(l1.name) + '</div><div class="pov-cat-desc">' + total + ' 个产品</div></div>' +
-        '<div class="pov-cat-count" style="color:' + c + '">' + total + '</div></div>';
+      return '<div class="kpi-card' + (_prodActiveL1 === l1.id ? ' active' : '') + '" data-prod-cat="' + l1.id + '" onclick="_povSelectL1(' + l1.id + ')" style="--cat-color:' + c + '">' +
+        '<div class="kpi-label">' + _prodCatIcons[idx] + ' ' + escHtml(l1.name) + '</div>' +
+        '<div class="kpi-value">' + total + '</div>' +
+        '<div class="kpi-meta">' + total + ' 个产品</div></div>';
     }).join('');
 
   // L2 chips + products

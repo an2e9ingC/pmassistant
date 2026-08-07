@@ -2,6 +2,14 @@
    DASHBOARD VIEW
 ═══════════════════════════════════════════════════ */
 
+// ── Fav toggle → refresh project card counts and table ──
+EventBus.on('fav:toggled', function(e) {
+  if (e.type !== 'project') return;
+  var el = document.getElementById('kpi-fav-count');
+  if (el) el.textContent = _favProjects.length;
+  if (document.getElementById('proj-table')) loadProjectTable();
+});
+
 // ── Unified filter state (default: fav) ──
 
 var dashFilter = {
@@ -167,6 +175,22 @@ var _origRenderDashboard;
 async function renderDashboard() {
   if (_dashboardLoading) return;
   _dashboardLoading = true;
+
+  // Apply saved default filter preference for dashboard
+  var savedDashFilter = localStorage.getItem('pma_default_dash_filter');
+  var validDashFilters = ['fav','all','active','completed','high_risk','incomplete_docs'];
+  if (savedDashFilter && validDashFilters.indexOf(savedDashFilter) >= 0) {
+    dashFilter.type = savedDashFilter === 'fav' ? 'fav' : 'all';
+    dashFilter.category = (savedDashFilter !== 'fav' && savedDashFilter !== 'all') ? savedDashFilter : '';
+  } else {
+    // Reset to default on each entry
+    dashFilter.type = 'fav';
+    dashFilter.category = '';
+    dashFilter.status = '';
+    dashFilter.program = '';
+    dashFilter.search = '';
+  }
+
   // Show loading state on KPI cards
   ['kpi-active-count','kpi-completed-count','kpi-high-risk-count','kpi-incomplete-docs-count'].forEach(function(id) {
     var el = document.getElementById(id);
@@ -177,6 +201,11 @@ async function renderDashboard() {
     loadKpiCards(),
     loadProjectTable(),
   ]);
+  // Update KPI card active state to reflect current filter
+  var activeFilter = dashFilter.type === 'fav' ? 'fav' : (dashFilter.category || 'all');
+  document.querySelectorAll('.kpi-grid .kpi-card').forEach(function(c) {
+    c.classList.toggle('active', c.getAttribute('data-filter') === activeFilter);
+  });
   document.getElementById('kpi-fav-count').textContent = _favProjects.length;
   _dashboardLoading = false;
 }

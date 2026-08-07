@@ -10,6 +10,21 @@ var TOAST_PERM_LABELS = {
   task_edit: '任务管理',
 };
 
+// ── Fav toggle → refresh user-center task/bug filter cards and tables ──
+EventBus.on('fav:toggled', function(e) {
+  if (e.type === 'task') {
+    if (typeof _renderUcFilterBar === 'function' && document.getElementById('uc-tasks-filter-bar')) {
+      _renderUcFilterBar();
+      _renderUcTaskTable();
+      if (typeof _ucRefreshTaskStats === 'function') _ucRefreshTaskStats();
+    }
+  } else if (e.type === 'bug') {
+    if (typeof _ucLoadBugs === 'function' && document.getElementById('uc-bugs-filter-bar')) {
+      _ucLoadBugs();
+    }
+  }
+});
+
 // ── View init wrappers (complex init logic extracted from gotoView) ──
 
 function initDashboard() {
@@ -1556,6 +1571,15 @@ async function initUserCenter(viewUserId, tab) {
   var currentUser = getCurrentUser();
   if (!currentUser) { container.innerHTML = '<div class="error-state">未登录</div>'; return; }
 
+  // Reset filter state to defaults on each entry (saved prefs will override below)
+  _ucFilterStatus = 'watched';
+  _ucBugTab = 'assignee';
+  _ucFilterProd = '';
+  _ucFilterProj = '';
+  _ucBugFilterStatus = '';
+  _ucBugFilterProd = '';
+  _ucBugFilterProj = '';
+
   // Handle case where a tab name is passed as first arg (e.g. #/user-center/bugs)
   if (viewUserId && ['tasks','bugs','approvals'].indexOf(String(viewUserId)) >= 0) {
     tab = String(viewUserId);
@@ -1697,6 +1721,16 @@ async function initUserCenter(viewUserId, tab) {
   await loadFavorites(true);
   // Determine initial tab from URL or default to tasks
   var initialTab = (tab && ['tasks','bugs','approvals'].indexOf(tab) >= 0) ? tab : 'tasks';
+  // Apply saved default filter preferences (before loading tasks/bugs)
+  var savedTaskFilter = localStorage.getItem('pma_default_task_filter');
+  if (savedTaskFilter && ['watched','high_priority','expiring','unfinished','done','review','all'].indexOf(savedTaskFilter) >= 0) {
+    _ucFilterStatus = savedTaskFilter;
+  }
+  var savedBugFilter = localStorage.getItem('pma_default_bug_filter');
+  if (savedBugFilter && ['assignee','reporter','watched','cc'].indexOf(savedBugFilter) >= 0) {
+    _ucBugTab = savedBugFilter;
+  }
+
   _ucActiveTab = initialTab;
   if (initialTab === 'bugs') {
     // Show bugs section, hide tasks
@@ -1723,7 +1757,7 @@ async function initUserCenter(viewUserId, tab) {
 }
 
 var _ucTasks = [];
-var _ucFilterStatus = 'unfinished';
+var _ucFilterStatus = 'watched';
 var _ucFilterProd = '';
 var _ucFilterProj = '';
 var _ucSortCol = '';
@@ -1946,10 +1980,10 @@ function _renderUcFilterBar() {
     return s + ((viewFavTasks ? viewFavTasks.indexOf(t.id) >= 0 : isFav('task', t.id)) ? 1 : 0);
   }, 0);
   var isSelf = !window._ucViewUserId;
-  var watchedLabel = isSelf ? '⭐ 我的关注' : '⭐ TA的关注';
+  var watchedLabel = isSelf ? '⭐ 关注任务' : '⭐ TA的关注';
   var watchedMeta = isSelf ? '关注的任务' : '该用户关注的任务';
 
-  // Category cards — order: 我的关注 → 高优先级 → 即将到期/已过期 → 未完成 → 已完成 → [评审中] → 全部
+  // Category cards — order: 关注任务 → 高优先级 → 即将到期/已过期 → 未完成 → 已完成 → [评审中] → 全部
   var cardsHtml = '<div class="uc-cat-cards">'
     + '<div class="kpi-card' + (_ucFilterStatus==='watched'?' active':'') + '" data-filter="watched" onclick="_ucSetFilter(\'watched\')">'
     + '<div class="kpi-label">' + watchedLabel + '</div><div class="kpi-value">' + watchedCount + '</div><div class="kpi-meta">' + watchedMeta + '</div></div>'
@@ -2511,7 +2545,7 @@ function _ucRenderBugFilter(bugs, uid) {
   var assigneeMeta  = isSelf ? '待我处理的Bug' : '待TA处理的Bug';
   var reporterLabel = isSelf ? '✍️ 我创建的' : '✍️ TA创建的';
   var reporterMeta  = isSelf ? '我创建的Bug' : 'TA创建的Bug';
-  var watchedLabel  = isSelf ? '⭐ 我关注的' : '⭐ TA关注的';
+  var watchedLabel  = isSelf ? '⭐ 关注bug' : '⭐ TA关注的';
   var watchedMeta   = isSelf ? '关注的Bug' : '该用户关注的Bug';
   var ccLabel = isSelf ? '📋 抄送给我' : '📋 抄送给TA';
   var ccMeta = isSelf ? '抄送给我的Bug' : '抄送给该用户的Bug';
@@ -2887,6 +2921,32 @@ function _renderPreferencesPanel(content) {
       '" onclick="_setTableDensity(\'' + d + '\');_renderPreferencesPanel()">' + tblDensityLabels[d] + '</button>';
   });
 
+  // Default filter preferences
+  var defaultDashFilter = localStorage.getItem('pma_default_dash_filter') || 'fav';
+  var defaultProdFilter = localStorage.getItem('pma_default_product_filter') || 'fav';
+  var defaultTaskFilter = localStorage.getItem('pma_default_task_filter') || 'watched';
+  var defaultBugFilter = localStorage.getItem('pma_default_bug_filter') || 'assignee';
+
+  var dashFilterOpts = [
+    {v:'fav', l:'关注项目'}, {v:'all', l:'全部项目'}, {v:'active', l:'进行中'},
+    {v:'completed', l:'已完成'}, {v:'high_risk', l:'高风险'}, {v:'incomplete_docs', l:'资料不全'}
+  ];
+  // Build product filter options dynamically from global product tree
+  var prodFilterOpts = [{v:'fav', l:'关注产品'}];
+  if (typeof _prodTree !== 'undefined' && _prodTree && _prodTree.length) {
+    _prodTree.forEach(function(l1) {
+      prodFilterOpts.push({v: String(l1.id), l: l1.name});
+    });
+  }
+  var taskFilterOpts = [
+    {v:'watched', l:'关注任务'}, {v:'high_priority', l:'高优先级'}, {v:'expiring', l:'即将到期/已过期'},
+    {v:'unfinished', l:'未完成'}, {v:'done', l:'已完成'}, {v:'review', l:'评审中'}, {v:'all', l:'全部'}
+  ];
+  var bugFilterOpts = [
+    {v:'assignee', l:'指派给我'}, {v:'reporter', l:'我创建的'}, {v:'watched', l:'关注bug'}, {v:'cc', l:'抄送给我'}
+  ];
+  function _selOpts(opts, sel) { return opts.map(function(o) { return '<option value="'+o.v+'"'+(o.v===sel?' selected':'')+'>'+o.l+'</option>'; }).join(''); }
+
   var html =
     '<div class="expand-card" style="visibility:hidden"></div>' +
     '<div class="expand-card">' +
@@ -2924,9 +2984,30 @@ function _renderPreferencesPanel(content) {
           '<div style="margin-bottom:6px"><span style="font-size:11px;color:var(--muted)">行高密度</span><div style="margin-top:3px">' + tblDensityBtns + '</div></div>' +
         '</div>' +
 
+        // Card 4: 默认筛选
+        '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px">' +
+          '<div style="font-size:12px;font-weight:600;color:var(--fg);margin-bottom:10px">默认筛选</div>' +
+          '<div class="integration-row" style="margin-bottom:6px">' +
+            '<span class="integration-row-lbl">项目总览</span>' +
+            '<select onchange="_setDefaultFilter(\'dash\',this.value)" style="font-size:12px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg)">' + _selOpts(dashFilterOpts, defaultDashFilter) + '</select>' +
+          '</div>' +
+          '<div class="integration-row" style="margin-bottom:6px">' +
+            '<span class="integration-row-lbl">产品总览</span>' +
+            '<select onchange="_setDefaultFilter(\'product\',this.value)" style="font-size:12px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg)">' + _selOpts(prodFilterOpts, defaultProdFilter) + '</select>' +
+          '</div>' +
+          '<div class="integration-row" style="margin-bottom:6px">' +
+            '<span class="integration-row-lbl">我的任务</span>' +
+            '<select onchange="_setDefaultFilter(\'task\',this.value)" style="font-size:12px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg)">' + _selOpts(taskFilterOpts, defaultTaskFilter) + '</select>' +
+          '</div>' +
+          '<div class="integration-row" style="margin-bottom:6px">' +
+            '<span class="integration-row-lbl">我的Bug</span>' +
+            '<select onchange="_setDefaultFilter(\'bug\',this.value)" style="font-size:12px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg)">' + _selOpts(bugFilterOpts, defaultBugFilter) + '</select>' +
+          '</div>' +
+        '</div>' +
+
       '</div>' +
 
-      '<div style="font-size:10px;color:var(--muted);margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">更多偏好设置即将上线</div>' +
+      '<div style="font-size:10px;color:var(--muted);margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">设置实时生效，下次进入页面时将应用默认筛选</div>' +
     '</div>';
   if (content) content.innerHTML = html;
   return html;
@@ -2995,6 +3076,19 @@ function _setTableDensity(level) {
   } else {
     _savePref('pma_table_density', level);
   }
+}
+
+function _setDefaultFilter(type, value) {
+  var keyMap = {
+    dash: 'pma_default_dash_filter',
+    product: 'pma_default_product_filter',
+    task: 'pma_default_task_filter',
+    bug: 'pma_default_bug_filter'
+  };
+  var key = keyMap[type];
+  if (key) _savePref(key, value);
+  // Refresh the preferences panel to show the updated selection
+  _renderPreferencesPanel();
 }
 
 function _savePref(key, value) {
