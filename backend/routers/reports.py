@@ -1,6 +1,12 @@
+import json
+import os
+import subprocess
+import sys
+import tempfile
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
@@ -30,3 +36,95 @@ def monthly_report(db: Session = Depends(get_db), _=Depends(get_current_user)):
 def project_summary(db: Session = Depends(get_db), _=Depends(get_current_user)):
     data = report_service.get_project_summary(db)
     return {"code": 0, "data": data, "message": "ok"}
+
+
+@router.get("/daily-summary", response_model=dict)
+def daily_summary(
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Generate a daily system update summary report as self-contained HTML.
+
+    Time span runs from the user's last-viewed timestamp (preference key
+    ``pma_last_daily_summary_at``) to now. First-time visitors default to a
+    7-day window, capped at 30 days.
+    """
+    # 1. Determine the "since" datetime from user preferences
+    beijing_tz = timezone(timedelta(hours=8))
+    now = datetime.now(timezone.utc).astimezone(beijing_tz)
+
+    try:
+        prefs = json.loads(user.preferences or "{}")
+    except (json.JSONDecodeError, TypeError):
+        prefs = {}
+
+    last_viewed_str = prefs.get("pma_last_daily_summary_at")
+    if last_viewed_str:
+        try:
+            since = datetime.fromisoformat(last_viewed_str)
+        except (ValueError, TypeError):
+            since = now - timedelta(days=7)
+    else:
+        since = now - timedelta(days=7)
+
+    # Cap at 30 days
+    max_window = timedelta(days=30)
+    if now - since > max_window:
+        since = now - max_window
+
+    # 2. Locate the generator script relative to project root
+    backend_dir = os.path.dirname(os.path.abspath(__file__))       # .../backend/routers
+    project_root = os.path.dirname(os.path.dirname(backend_dir))   # repo root
+    script_path = os.path.join(
+        project_root,
+        ".claude", "skills", "pma-daily-summary", "scripts",
+        "generate_daily_summary.py",
+    )
+    if not os.path.isfile(script_path):
+        raise HTTPException(status_code=500, detail="Daily summary generator script not found")
+
+    # 3. Run the generator via temp file
+    with tempfile.NamedTemporaryFile(
+        mode="w+", suffix=".html", delete=False, encoding="utf-8"
+    ) as tmp:
+        output_path = tmp.name
+
+    try:
+        since_iso = since.strftime("%Y-%m-%dT%H:%M:%S+08:00")
+        result = subprocess.run(
+            [sys.executable, script_path,
+             "--repo-path", project_root,
+             "--output", output_path,
+             "--since", since_iso],
+            capture_output=True, text=True, timeout=60,
+            cwd=project_root,
+        )
+        if result.returncode != 0:
+            stderr_tail = (result.stderr or "").strip()[-500:]
+            raise HTTPException(
+                status_code=500,
+                detail=f"Report generation failed (exit {result.returncode}): {stderr_tail}",
+            )
+        with open(output_path, "r", encoding="utf-8") as f:
+            html = f.read()
+    finally:
+        try:
+            os.unlink(output_path)
+        except OSError:
+            pass
+
+    # 4. Update user's last-viewed timestamp
+    now_iso = now.strftime("%Y-%m-%dT%H:%M:%S+08:00")
+    prefs["pma_last_daily_summary_at"] = now_iso
+    user.preferences = json.dumps(prefs, ensure_ascii=False)
+    db.commit()
+
+    return {
+        "code": 0,
+        "data": {
+            "html": html,
+            "since": since.strftime("%Y-%m-%d %H:%M"),
+            "until": now.strftime("%Y-%m-%d %H:%M"),
+        },
+        "message": "ok",
+    }

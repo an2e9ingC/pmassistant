@@ -3371,6 +3371,40 @@ async function checkNewVersion() {
   } catch(e) { console.error('checkNewVersion error:', e); }
 }
 
+/* ── Daily Update Summary ── */
+
+var _dailySummaryLoading = false;
+
+function openDailySummary() {
+  if (_dailySummaryLoading) return;
+  _dailySummaryLoading = true;
+
+  var loadingToast = showToast('正在生成每日更新汇总，请稍候...', 'info', 0);
+
+  (async function() {
+    try {
+      var data = await API.get('/reports/daily-summary');
+      if (loadingToast && loadingToast.parentElement) loadingToast.remove();
+
+      var blob = new Blob([data.html], { type: 'text/html;charset=utf-8' });
+      var url = URL.createObjectURL(blob);
+      var w = window.open(url, '_blank');
+      if (!w) {
+        showToast('弹窗被浏览器拦截，请允许弹窗后重试', 'error');
+      } else {
+        if (data.until) {
+          localStorage.setItem('pma_last_daily_summary_at', data.until);
+        }
+      }
+    } catch (e) {
+      if (loadingToast && loadingToast.parentElement) loadingToast.remove();
+      showToast('生成日报失败: ' + (e.message || '未知错误'), 'error');
+    } finally {
+      _dailySummaryLoading = false;
+    }
+  })();
+}
+
 /* ── WeCom Checkin Calendar ── */
 function _ucLoadWecomCalendar(user) {
   var cal = document.getElementById('uc-wecom-calendar');

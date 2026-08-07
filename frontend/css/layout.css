@@ -81,6 +81,17 @@
   border-top: 1px solid var(--border);
   flex-shrink: 0;
 }
+/* ── Version link in sidebar footer ── */
+#app-version-link {
+  color: var(--muted);
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+#app-version-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
 .theme-row {
   display: flex; align-items: center; gap: 9px;
   padding: 7px 9px; border-radius: 7px;
