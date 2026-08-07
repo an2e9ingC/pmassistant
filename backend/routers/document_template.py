@@ -19,6 +19,8 @@ class TemplateCreate(BaseModel):
     doc_name: str
     sort_order: int = 0
     doc_path: str = ""
+    base_path: Optional[str] = None
+    file_pattern: Optional[str] = None
     doc_type: Optional[str] = None
     responsible_role: Optional[str] = None
     description: Optional[str] = None
@@ -33,6 +35,8 @@ class TemplateUpdate(BaseModel):
     description: Optional[str] = None
     responsible_role: Optional[str] = None
     doc_path: Optional[str] = None
+    base_path: Optional[str] = None
+    file_pattern: Optional[str] = None
     doc_type: Optional[str] = None
     is_optional: Optional[int] = None
     is_unnecessary: Optional[int] = None
