@@ -441,14 +441,14 @@ function renderTemplatesPage() {
       container: document.getElementById('tpl-docs-' + stageKey),
       columns: (function() {
         var cols = [
-          { key: 'sort_order', title: '序号', width: '50px', render: function(v, row, idx) { return '<span data-drag-index="'+idx+'" style="font-family:var(--mono);color:var(--muted);cursor:grab" title="拖动排序">'+(v!=null?v:'—')+'</span>'; } },
-          { key: 'doc_name', title: '文档名称', render: function(v) { return '<span style="font-weight:500">'+escHtml(v||'')+'</span>'; } },
-          { key: 'responsible_role', title: '责任人', width: '80px', render: function(v) { return '<span style="font-size:12px;white-space:nowrap">'+escHtml(v||'—')+'</span>'; } },
-          { key: 'doc_type', title: '类型', width: '60px', render: function(v) { return '<span style="font-size:11px">'+escHtml(typeLabels[v]||'—')+'</span>'; } },
+          { key: 'sort_order', title: '序号', minWidth: 60, width: '50px', render: function(v, row, idx) { return '<span data-drag-index="'+idx+'" style="font-family:var(--mono);color:var(--muted);cursor:grab" title="拖动排序">'+(v!=null?v:'—')+'</span>'; } },
+          { key: 'doc_name', title: '文档名称', minWidth: 100, render: function(v) { return '<span style="font-weight:500">'+escHtml(v||'')+'</span>'; } },
+          { key: 'responsible_role', title: '责任人', minWidth: 90, width: '80px', render: function(v) { return '<span style="font-size:12px;white-space:nowrap">'+escHtml(v||'—')+'</span>'; } },
+          { key: 'doc_type', title: '类型', minWidth: 65, width: '60px', render: function(v) { return '<span style="font-size:11px">'+escHtml(typeLabels[v]||'—')+'</span>'; } },
           { key: 'path_info', title: '路径', render: function(v, row) { return '<span style="font-size:11px">'+(row.base_path||row.file_pattern?(row.base_path?'<div style="color:var(--muted)">'+escHtml(row.base_path)+'</div>':'')+(row.file_pattern?'<div style="font-family:var(--mono);color:var(--accent)">'+escHtml(row.file_pattern)+'</div>':''):(row.doc_path?'<a href="'+escHtml(row.doc_path)+'" target="_blank" style="color:var(--accent);text-decoration:none">'+escHtml(row.doc_path)+' ↗</a>':'—'))+'</span>'; } },
           { key: 'description', title: '说明', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(v||'')+'</span>'; } }
         ];
-        if (canEdit) cols.push({ key: 'actions', title: '操作', width: '90px', render: function(v, row) {
+        if (canEdit) cols.push({ key: 'actions', title: '操作', width: '150px', minWidth: 150, render: function(v, row) {
           var h = '<span style="white-space:nowrap;text-align:center">';
           if (row.is_unnecessary) h += '<span style="font-size:10px;color:var(--warn);margin-right:4px" title="已标记为无需文档">无需</span>';
           h += '<span style="font-size:10px;color:'+(row.is_optional?'var(--accent)':'var(--muted)')+';margin-right:4px;cursor:pointer" onclick="event.stopPropagation();toggleDocOptional(\''+escHtml(_selectedStage)+'\','+row.id+','+(row.is_optional?'1':'0')+')">'+(row.is_optional?'可选':'必选')+'</span>';
@@ -470,12 +470,12 @@ function renderTemplatesPage() {
       container: document.getElementById('tpl-tasks-' + stageKey),
       columns: (function() {
         var cols = [
-          { key: 'sort_order', title: '序号', width: '50px', render: function(v, row, idx) { return '<span data-drag-index="'+idx+'" style="font-family:var(--mono);color:var(--muted);cursor:grab" title="拖动排序">'+(v!=null?v:'—')+'</span>'; } },
-          { key: 'task_name', title: '任务名称', render: function(v) { return '<span style="font-weight:500">'+escHtml(v||'')+'</span>'; } },
-          { key: 'responsible_role', title: '责任人', width: '100px', render: function(v) { return '<span style="font-size:12px;white-space:nowrap">'+escHtml(v||'—')+'</span>'; } },
+          { key: 'sort_order', title: '序号', minWidth: 60, width: '50px', render: function(v, row, idx) { return '<span data-drag-index="'+idx+'" style="font-family:var(--mono);color:var(--muted);cursor:grab" title="拖动排序">'+(v!=null?v:'—')+'</span>'; } },
+          { key: 'task_name', title: '任务名称', minWidth: 100, render: function(v) { return '<span style="font-weight:500">'+escHtml(v||'')+'</span>'; } },
+          { key: 'responsible_role', title: '责任人', minWidth: 90, width: '100px', render: function(v) { return '<span style="font-size:12px;white-space:nowrap">'+escHtml(v||'—')+'</span>'; } },
           { key: 'description', title: '说明', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(v||'')+'</span>'; } }
         ];
-        if (canEdit) cols.push({ key: 'actions', title: '操作', width: '90px', render: function(v, row) {
+        if (canEdit) cols.push({ key: 'actions', title: '操作', width: '150px', minWidth: 150, render: function(v, row) {
           return '<span style="white-space:nowrap;text-align:center">'+(row.is_unnecessary?'<span style="font-size:10px;color:var(--warn);margin-right:4px">无需</span>':'')+'<span style="font-size:10px;color:'+(row.is_optional?'var(--accent)':'var(--muted)')+';margin-right:4px;cursor:pointer" onclick="event.stopPropagation();toggleTaskOptional(\''+escHtml(_selectedStage)+'\','+row.id+','+(row.is_optional?'1':'0')+')">'+(row.is_optional?'可选':'必选')+'</span>'+iconCopy('copyTaskTemplate('+row.id+')')+iconEdit('showEditTaskTemplateForm('+row.id+')')+iconDelete('deleteTaskTemplate('+row.id+')')+'</span>';
         }});
         return cols;
@@ -2058,14 +2058,14 @@ function renderProductTreePage() {
       container: document.getElementById('tpl-prod-stage-docs'),
       columns: (function() {
         var cols = [
-          { key: 'sort_order', title: '序号', render: function(v, row, idx) { return '<span data-drag-index="'+idx+'" style="font-family:var(--mono);color:var(--muted);cursor:grab" title="拖动排序">'+(v!=null?v:'—')+'</span>'; } },
-          { key: 'doc_name', title: '文档名称', render: function(v) { return '<span style="font-weight:500">'+escHtml(v||'')+'</span>'; } },
-          { key: 'responsible_role', title: '责任人', width: '80px', render: function(v) { return '<span style="font-size:12px;white-space:nowrap">'+escHtml(v||'—')+'</span>'; } },
-          { key: 'doc_type', title: '类型', width: '60px', render: function(v) { return '<span style="font-size:11px">'+escHtml(typeLabels[v]||'—')+'</span>'; } },
+          { key: 'sort_order', title: '序号', minWidth: 60, render: function(v, row, idx) { return '<span data-drag-index="'+idx+'" style="font-family:var(--mono);color:var(--muted);cursor:grab" title="拖动排序">'+(v!=null?v:'—')+'</span>'; } },
+          { key: 'doc_name', title: '文档名称', minWidth: 100, render: function(v) { return '<span style="font-weight:500">'+escHtml(v||'')+'</span>'; } },
+          { key: 'responsible_role', title: '责任人', minWidth: 90, width: '80px', render: function(v) { return '<span style="font-size:12px;white-space:nowrap">'+escHtml(v||'—')+'</span>'; } },
+          { key: 'doc_type', title: '类型', minWidth: 65, width: '60px', render: function(v) { return '<span style="font-size:11px">'+escHtml(typeLabels[v]||'—')+'</span>'; } },
           { key: 'doc_path', title: '路径', render: function(v) { return '<span style="font-size:12px">'+(v?'<a href="'+escHtml(v)+'" target="_blank" style="color:var(--accent);text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'" title="点击打开路径">'+escHtml(v)+' ↗</a>':'—')+'</span>'; } },
           { key: 'description', title: '说明', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(v||'')+'</span>'; } }
         ];
-        if (canEdit) cols.push({ key: 'actions', title: '操作', render: function(v, row) {
+        if (canEdit) cols.push({ key: 'actions', title: '操作', width: '150px', minWidth: 150, render: function(v, row) {
           return '<span style="white-space:nowrap;text-align:center"><span style="font-size:10px;color:'+(row.is_optional?'var(--accent)':'var(--muted)')+';cursor:pointer;margin-right:4px" onclick="event.stopPropagation();toggleProductDocOptional('+row.id+','+(row.is_optional?'1':'0')+')">'+(row.is_optional?'可选':'必选')+'</span>'+iconCopy('copyProductTemplate('+row.id+')')+iconEdit('showEditProductTemplateForm('+row.id+')')+iconDelete('deleteProductTemplate('+row.id+')')+'</span>';
         }});
         return cols;
@@ -2080,7 +2080,7 @@ function renderProductTreePage() {
       container: document.getElementById('tpl-l2-table'),
       columns: [
         { key: 'name', title: '产品系列名称', render: function(v, row) { return '<span style="cursor:pointer;font-weight:500" onclick="selectProductNode('+row.id+')">📂 '+escHtml(v||'')+'</span>'; } },
-        { key: 'template_count', title: '模板数', width: '80px', render: function(v) { return '<span style="text-align:center">'+(v||0)+'</span>'; } }
+        { key: 'template_count', title: '模板数', minWidth: 50, width: '80px', render: function(v) { return '<span style="text-align:center">'+(v||0)+'</span>'; } }
       ],
       data: children,
     });
@@ -2742,9 +2742,9 @@ async function initNamingOptions() {
       new DataTable({
         container: document.getElementById('naming-table-' + fk),
         columns: [
-          { key: 'code', title: '编号', render: function(v) { return '<span style="font-family:var(--mono);font-weight:600">'+escHtml(v||'')+'</span>'; } },
+          { key: 'code', title: '编号', minWidth: 60, render: function(v) { return '<span style="font-family:var(--mono);font-weight:600">'+escHtml(v||'')+'</span>'; } },
           { key: 'description', title: '描述', render: function(v) { return escHtml(v||''); } },
-          { key: 'actions', title: '操作', render: function(v, row) { return iconEdit('_namingShowEdit('+row.id+',\''+fk+'\',\''+escHtml(row.code||'').replace(/'/g,"\\'")+'\',\''+escHtml(row.description||'').replace(/'/g,"\\'")+'\')','编辑')+iconDelete('_namingDelete('+row.id+',\''+fk+'\')','删除'); } }
+          { key: 'actions', title: '操作', width: '100px', minWidth: 100, render: function(v, row) { return iconEdit('_namingShowEdit('+row.id+',\''+fk+'\',\''+escHtml(row.code||'').replace(/'/g,"\\'")+'\',\''+escHtml(row.description||'').replace(/'/g,"\\'")+'\')','编辑')+iconDelete('_namingDelete('+row.id+',\''+fk+'\')','删除'); } }
         ],
         data: opts,
       });
@@ -2847,9 +2847,9 @@ async function initBugTemplates() {
       new DataTable({
         container: document.getElementById('bug-tpl-table'),
         columns: [
-          { key: 'name', title: '名称', render: function(v, row) { return '<span style="font-weight:500">'+escHtml(v||'')+'</span>'+(row.is_default?' <span style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:3px">默认</span>':''); } },
+          { key: 'name', title: '名称', minWidth: 100, render: function(v, row) { return '<span style="font-weight:500">'+escHtml(v||'')+'</span>'+(row.is_default?' <span style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:3px">默认</span>':''); } },
           { key: 'content', title: '内容预览', render: function(v) { return '<span style="font-size:11px;color:var(--muted);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHtml((v||'').substring(0,80))+'</span>'; } },
-          { key: 'actions', title: '操作', render: function(v, row) { return (row.is_default?'':iconBtn('⭐','设为默认','_bugTplSetDefault('+row.id+')'))+iconEdit('_bugTplShowEdit('+row.id+')','编辑')+iconDelete('_bugTplDelete('+row.id+')','删除'); } }
+          { key: 'actions', title: '操作', width: '130px', minWidth: 130, render: function(v, row) { return (row.is_default?'':iconBtn('⭐','设为默认','_bugTplSetDefault('+row.id+')'))+iconEdit('_bugTplShowEdit('+row.id+')','编辑')+iconDelete('_bugTplDelete('+row.id+')','删除'); } }
         ],
         data: tpls,
       });

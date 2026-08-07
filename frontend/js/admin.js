@@ -443,12 +443,12 @@ function _initWecomDt() {
   _wecomDt = new DataTable({
     container: document.getElementById('wecom-table'),
     columns: [
-      { key: 'idx', title: '序号', width: '40px', render: function(v) { return '<span style="color:var(--muted)">' + v + '</span>'; } },
-      { key: 'userid', title: 'userid', render: function(v) { return '<span style="font-family:var(--mono);font-size:12px">' + escHtml(v||'') + '</span>'; } },
-      { key: 'name', title: '姓名', render: function(v) { return escHtml(v||''); } },
-      { key: 'department', title: '部门', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">' + escHtml(v||'') + '</span>'; } },
-      { key: 'pma_user', title: '关联PMA用户', width: '12%', render: function(v) { return '<span style="font-size:12px;color:' + (v?'var(--success)':'var(--muted)') + '">' + escHtml(v||'—') + '</span>'; } },
-      { key: 'synced_at', title: '同步时间', width: '10%', render: function(v) { return '<span style="font-size:11px;color:var(--muted)">' + (v ? v.substring(11,19) : '—') + '</span>'; } }
+      { key: 'idx', title: '序号', width: '40px', minWidth: 60, render: function(v) { return '<span style="color:var(--muted)">' + v + '</span>'; } },
+      { key: 'userid', title: 'userid', minWidth: 90, render: function(v) { return '<span style="font-family:var(--mono);font-size:12px">' + escHtml(v||'') + '</span>'; } },
+      { key: 'name', title: '姓名', minWidth: 100, render: function(v) { return escHtml(v||''); } },
+      { key: 'department', title: '部门', minWidth: 70, render: function(v) { return '<span style="font-size:12px;color:var(--muted)">' + escHtml(v||'') + '</span>'; } },
+      { key: 'pma_user', title: '关联PMA用户', width: '12%', minWidth: 90, render: function(v) { return '<span style="font-size:12px;color:' + (v?'var(--success)':'var(--muted)') + '">' + escHtml(v||'—') + '</span>'; } },
+      { key: 'synced_at', title: '同步时间', width: '10%', minWidth: 120, render: function(v) { return '<span style="font-size:11px;color:var(--muted)">' + (v ? v.substring(11,19) : '—') + '</span>'; } }
     ],
     maxHeight: 'calc(100vh - 300px)',
   });
@@ -545,13 +545,13 @@ function _initRolesDt() {
   _rolesDt = new DataTable({
     container: document.getElementById('roles-table'),
     columns: [
-      { key: 'idx', title: '序号', width: '40px', render: function(v) { return '<span style="font-family:var(--mono);color:var(--muted)">' + v + '</span>'; } },
-      { key: 'key', title: '角色Key', render: function(v) { return '<span style="font-family:var(--mono);font-size:12px;font-weight:500">' + escHtml(v||'') + '</span>'; } },
-      { key: 'label_with_count', title: '显示名', render: function(v) { return v; } },
-      { key: 'leader_display', title: 'Leader', render: function(v) { return v || '<span style="font-size:11px;color:var(--muted)">未设置</span>'; } },
-      { key: 'perm_badges', title: '特殊权限', render: function(v) { return v || '<span style="font-size:11px;color:var(--muted)">无</span>'; } },
-      { key: 'user_names', title: '成员', render: function(v) { return v || '<span style="font-size:11px;color:var(--muted)">暂无成员</span>'; } },
-      { key: 'actions', title: '操作', width: '12%', render: function(v) { return v; } }
+      { key: 'idx', title: '序号', width: '40px', minWidth: 60, render: function(v) { return '<span style="font-family:var(--mono);color:var(--muted)">' + v + '</span>'; } },
+      { key: 'key', title: '角色Key', minWidth: 60, render: function(v) { return '<span style="font-family:var(--mono);font-size:12px;font-weight:500">' + escHtml(v||'') + '</span>'; } },
+      { key: 'label_with_count', title: '显示名', minWidth: 100, render: function(v) { return v; } },
+      { key: 'leader_display', title: 'Leader', minWidth: 90, render: function(v) { return v || '<span style="font-size:11px;color:var(--muted)">未设置</span>'; } },
+      { key: 'perm_badges', title: '特殊权限', minWidth: 80, render: function(v) { return v || '<span style="font-size:11px;color:var(--muted)">无</span>'; } },
+      { key: 'user_names', title: '成员', minWidth: 90, render: function(v) { return v || '<span style="font-size:11px;color:var(--muted)">暂无成员</span>'; } },
+      { key: 'actions', title: '操作', width: '100px', minWidth: 100, render: function(v) { return v; } }
     ],
     maxHeight: 'calc(100vh - 340px)',
   });
@@ -812,17 +812,17 @@ function _initUsersDt() {
   _usersDt = new DataTable({
     container: document.getElementById('users-table'),
     columns: [
-      { key: 'idx', title: '序号', width: '40px', render: function(v) { return '<span style="font-family:var(--mono);color:var(--muted)">' + v + '</span>'; } },
-      { key: 'username', title: '用户名', render: function(v, row) { return '<span style="font-size:13px;font-weight:500;cursor:pointer;color:var(--accent)" onclick="gotoView(\'user-center\',{params:[' + row.id + ']})" title="查看用户中心">' + escHtml(v||'') + '</span>'; } },
-      { key: 'wecom_name', title: '企微姓名', width: '6%', render: function(v) { return '<span style="font-size:12px">' + escHtml(v||'—') + '</span>'; } },
-      { key: 'auth_source', title: '来源', width: '6%', render: function(v) { var isGL = v==='gitlab'; return '<span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;background:'+(isGL?'var(--accent-lt)':'var(--muted-lt)')+';color:'+(isGL?'var(--accent)':'var(--muted)')+'">'+(isGL?'GitLab':'本地')+'</span>'; } },
-      { key: 'role_badges', title: '角色组', width: '18%', render: function(v) { return v || '<span style="font-size:11px;color:var(--muted)">未分配</span>'; } },
-      { key: 'status_html', title: '状态', width: '5%', render: function(v) { return v; } },
-      { key: 'wecom_btn', title: '企业微信', width: '7%', render: function(v) { return v; } },
-      { key: 'login_html', title: '登录状态', width: '8%', render: function(v) { return v; } },
-      { key: 'last_login', title: '上次登录', width: '10%', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(fmtISODateTime(v)||'—')+'</span>'; } },
-      { key: 'created_at', title: '创建时间', width: '8%', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(fmtISODateTime(v)||'')+'</span>'; } },
-      { key: 'actions', title: '操作', width: '12%', render: function(v, row) { return v; } }
+      { key: 'idx', title: '序号', width: '40px', minWidth: 60, render: function(v) { return '<span style="font-family:var(--mono);color:var(--muted)">' + v + '</span>'; } },
+      { key: 'username', title: '用户名', minWidth: 90, render: function(v, row) { return '<span style="font-size:13px;font-weight:500;cursor:pointer;color:var(--accent)" onclick="gotoView(\'user-center\',{params:[' + row.id + ']})" title="查看用户中心">' + escHtml(v||'') + '</span>'; } },
+      { key: 'wecom_name', title: '企微姓名', width: '6%', minWidth: 90, render: function(v) { return '<span style="font-size:12px">' + escHtml(v||'—') + '</span>'; } },
+      { key: 'auth_source', title: '来源', width: '6%', minWidth: 80, render: function(v) { var isGL = v==='gitlab'; return '<span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;background:'+(isGL?'var(--accent-lt)':'var(--muted-lt)')+';color:'+(isGL?'var(--accent)':'var(--muted)')+'">'+(isGL?'GitLab':'本地')+'</span>'; } },
+      { key: 'role_badges', title: '角色组', width: '18%', minWidth: 80, render: function(v) { return v || '<span style="font-size:11px;color:var(--muted)">未分配</span>'; } },
+      { key: 'status_html', title: '状态', width: '5%', minWidth: 80, render: function(v) { return v; } },
+      { key: 'wecom_btn', title: '企业微信', width: '7%', minWidth: 90, render: function(v) { return v; } },
+      { key: 'login_html', title: '登录状态', width: '8%', minWidth: 80, render: function(v) { return v; } },
+      { key: 'last_login', title: '上次登录', width: '10%', minWidth: 120, render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(fmtISODateTime(v)||'—')+'</span>'; } },
+      { key: 'created_at', title: '创建时间', width: '8%', minWidth: 120, render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(fmtISODateTime(v)||'')+'</span>'; } },
+      { key: 'actions', title: '操作', width: '150px', minWidth: 150, render: function(v, row) { return v; } }
     ],
     maxHeight: 'calc(100vh - 340px)',
   });

@@ -11,14 +11,14 @@ function _initTopoDt() {
   _topoDt = new DataTable({
     container: document.getElementById('topo-table'),
     columns: [
-      { key: 'project_code', title: '项目编号', width: '10%', render: function(v, row) { return v ? projCodeTag(v, 'event.stopPropagation();openProject(\'' + escHtml(v).replace(/'/g, "\\'") + '\')', row.project_name) : '—'; } },
-      { key: 'project_name', title: '项目名', render: function(v) { return '<div class="proj-name">' + escHtml(v || '') + '</div>'; } },
-      { key: 'customer_name', title: '客户', width: '10%', render: function(v) { return '<span onclick="event.stopPropagation();openCustomerByName(\'' + escHtml(v || '') + '\')" style="cursor:pointer">' + renderCustomerBadge(v) + '</span>'; } },
+      { key: 'project_code', title: '项目编号', width: '10%', minWidth: 90, render: function(v, row) { return v ? projCodeTag(v, 'event.stopPropagation();openProject(\'' + escHtml(v).replace(/'/g, "\\'") + '\')', row.project_name) : '—'; } },
+      { key: 'project_name', title: '项目名', minWidth: 100, render: function(v) { return '<div class="proj-name">' + escHtml(v || '') + '</div>'; } },
+      { key: 'customer_name', title: '客户', width: '10%', minWidth: 110, render: function(v) { return '<span onclick="event.stopPropagation();openCustomerByName(\'' + escHtml(v || '') + '\')" style="cursor:pointer">' + renderCustomerBadge(v) + '</span>'; } },
       { key: 'products', title: '关联产品', render: function(v) {
         if (!v || !v.length) return '<span style="font-size:12px;color:var(--muted)">—</span>';
         return v.map(function(pr) { return '<button class="gs-btn gs-prod" onclick="event.stopPropagation();openProductDetail(\'' + escHtml(pr.code || pr.id) + '\')" style="margin:1px 2px;font-size:11px" title="' + escHtml(pr.name || '') + '">' + escHtml(pr.code || pr.name) + '</button>'; }).join('');
       }},
-      { key: 'project_status', title: '状态', width: '10%', render: function(v) { return renderPill(v); } }
+      { key: 'project_status', title: '状态', width: '10%', minWidth: 80, render: function(v) { return renderPill(v); } }
     ],
     maxHeight: 'calc(100vh - 260px)',
     emptyText: '输入关键字开始搜索...',

@@ -16,12 +16,12 @@ function _initGlrDt() {
   _glrDt = new DataTable({
     container: document.getElementById('glr-table'),
     columns: [
-      { key: 'product_name', title: '产品', width: '12%', render: function(v, row) {
+      { key: 'product_name', title: '产品', minWidth: 100, width: '12%', render: function(v, row) {
         var h = '<span style="font-weight:520">' + escHtml(v || '') + '</span>';
         if (row.product_code) h += '<div style="font-size:11px;color:var(--muted);font-family:var(--mono)">' + escHtml(row.product_code) + '</div>';
         return h;
       }},
-      { key: 'version', title: '发布版本', width: '10%', render: function(v, row) {
+      { key: 'version', title: '发布版本', width: '10%', minWidth: 90, render: function(v, row) {
         var h = '<span style="font-weight:520;font-family:var(--mono)">' + escHtml(v || '') + '</span>';
         if (row.marker === 1) h += ' <span class="tag-badge tag-0" style="font-size:10px">里程碑</span>';
         return h;
@@ -33,7 +33,7 @@ function _initGlrDt() {
         }
         return '<span style="color:var(--warn);font-size:11px">⚠ 未填写</span>';
       }},
-      { key: 'gitlab_url_valid', title: '校验', width: '8%', render: function(v, row) {
+      { key: 'gitlab_url_valid', title: '校验', width: '8%', minWidth: 80, render: function(v, row) {
         var validHtml, validColor;
         if (!row.gitlab_url) { validHtml = '—'; validColor = 'var(--muted)'; }
         else if (v === true) { validHtml = '✓ 有效'; validColor = 'var(--success)'; }
@@ -43,7 +43,7 @@ function _initGlrDt() {
         else if (row.gitlab_url && v === null) validHtml = '<span title="需配置 GitLab Token 并在同步时自动校验">' + validHtml + '</span>';
         return '<span style="font-weight:600;color:' + validColor + '">' + validHtml + '</span>';
       }},
-      { key: 'date', title: '发布日期', width: '8%', render: function(v) { return v ? '<span style="font-size:12px">' + escHtml(v) + '</span>' : '<span style="color:var(--muted)">—</span>'; } },
+      { key: 'date', title: '发布日期', width: '8%', minWidth: 100, render: function(v) { return v ? '<span style="font-size:12px">' + escHtml(v) + '</span>' : '<span style="color:var(--muted)">—</span>'; } },
       { key: 'desc', title: '描述（来源）', width: '20%', render: function(v) {
         if (!v) return '<span style="font-size:11px;color:var(--muted);font-style:italic">（空）</span>';
         var tmp = document.createElement('div'); tmp.innerHTML = v;

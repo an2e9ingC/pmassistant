@@ -1142,16 +1142,16 @@ function buildDocs(data) {
   _docsDt = new DataTable({
     container: document.getElementById('docs-table'),
     columns: [
-      { key: '_stage', title: '阶段', width: '11%', rowspan: true, render: function(v, row, idx, count) { return '<span style="font-weight:600;color:var(--accent);font-size:12px">'+escHtml(v||'')+' <sup style="font-size:10px;color:var(--muted);font-weight:400">'+(count||(row._empty?0:1))+'</sup>'+(row._empty?'':'<div style="margin-top:4px">'+row._progressRing+'</div>')+'</span>'; } },
-      { key: '_seq', title: '序号', width: '40px', render: function(v, row) { return row._empty?'<span style="color:var(--muted)">-</span>':'<span style="font-family:var(--mono);color:var(--muted)">'+(v||'')+'</span>'; } },
-      { key: '_docName', title: '文档名称', width: '14%', className: 'dt-wrap', render: function(v, row) { return row._empty?'<span style="color:var(--muted)">-</span>':'<span style="font-weight:500;word-break:break-all" title="'+escHtml(row.description||'')+'">'+(v||'')+'</span>'; } },
-      { key: 'responsible_role', title: '责任人', width: '8%', render: function(v, row) { return row._empty?'<span style="color:var(--muted)">-</span>':'<span style="font-size:12px;white-space:nowrap">'+escHtml(v||'—')+'</span>'; } },
-      { key: '_statusHtml', title: '状态', width: '70px', render: function(v, row) { return row._empty?'<span style="color:var(--muted)">-</span>':(v||''); } },
-      { key: '_docType', title: '类型', width: '60px', render: function(v, row) { return row._empty?'<span style="color:var(--muted)">-</span>':'<span style="font-size:11px">'+escHtml(v||'')+'</span>'; } },
+      { key: '_stage', title: '阶段', width: '11%', minWidth: 100, rowspan: true, render: function(v, row, idx, count) { return '<span style="font-weight:600;color:var(--accent);font-size:12px">'+escHtml(v||'')+' <sup style="font-size:10px;color:var(--muted);font-weight:400">'+(count||(row._empty?0:1))+'</sup>'+(row._empty?'':'<div style="margin-top:4px">'+row._progressRing+'</div>')+'</span>'; } },
+      { key: '_seq', title: '序号', width: '40px', minWidth: 60, render: function(v, row) { return row._empty?'<span style="color:var(--muted)">-</span>':'<span style="font-family:var(--mono);color:var(--muted)">'+(v||'')+'</span>'; } },
+      { key: '_docName', title: '文档名称', width: '14%', minWidth: 100, className: 'dt-wrap', render: function(v, row) { return row._empty?'<span style="color:var(--muted)">-</span>':'<span style="font-weight:500;word-break:break-all" title="'+escHtml(row.description||'')+'">'+(v||'')+'</span>'; } },
+      { key: 'responsible_role', title: '责任人', width: '8%', minWidth: 90, render: function(v, row) { return row._empty?'<span style="color:var(--muted)">-</span>':'<span style="font-size:12px;white-space:nowrap">'+escHtml(v||'—')+'</span>'; } },
+      { key: '_statusHtml', title: '状态', width: '70px', minWidth: 80, render: function(v, row) { return row._empty?'<span style="color:var(--muted)">-</span>':(v||''); } },
+      { key: '_docType', title: '类型', width: '60px', minWidth: 70, render: function(v, row) { return row._empty?'<span style="color:var(--muted)">-</span>':'<span style="font-size:11px">'+escHtml(v||'')+'</span>'; } },
       { key: '_locHtml', title: '路径', align: 'left', className: 'dt-wrap', render: function(v, row) { return '<span style="font-size:12px;word-break:break-all">'+(v||'')+'</span>'; } },
-      { key: '_updatedAt', title: '最后修改时间', width: '12%', render: function(v) { return '<span style="font-size:11px;color:var(--muted);white-space:nowrap">'+escHtml(v||'—')+'</span>'; } },
-      { key: '_updatedBy', title: '修改人', width: '7%', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(getDisplayName(v)||'')+'</span>'; } },
-      { key: '_actions', title: '操作', width: '80px', render: function(v, row) { return '<span style="white-space:nowrap">'+(v||'')+'</span>'; } }
+      { key: '_updatedAt', title: '最后修改时间', width: '12%', minWidth: 120, render: function(v) { return '<span style="font-size:11px;color:var(--muted);white-space:nowrap">'+escHtml(v||'—')+'</span>'; } },
+      { key: '_updatedBy', title: '修改人', width: '7%', minWidth: 90, render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(getDisplayName(v)||'')+'</span>'; } },
+      { key: '_actions', title: '操作', width: '150px', minWidth: 150, render: function(v, row) { return '<span style="white-space:nowrap">'+(v||'')+'</span>'; } }
     ],
     data: flatRows,
     maxHeight: 'calc(100vh - 320px)',
@@ -1437,20 +1437,20 @@ function buildDelivery(data) {
 
   if (records.length) {
     var cols = [
-      { key: 'date', title: '交付日期', render: function(v) { return '<span style="font-family:var(--mono);font-size:12px;color:var(--success);font-weight:540;white-space:nowrap">'+formatDate(v)+'</span>'; } },
-      { key: 'product_code', title: '产品编号', render: function(v, row) {
+      { key: 'date', title: '交付日期', minWidth: 100, render: function(v) { return '<span style="font-family:var(--mono);font-size:12px;color:var(--success);font-weight:540;white-space:nowrap">'+formatDate(v)+'</span>'; } },
+      { key: 'product_code', title: '产品编号', minWidth: 170, render: function(v, row) {
         if (v) return '<span class="proj-code-btn" onclick="event.stopPropagation();openProductDetail(\'' + escHtml(v) + '\')" title="' + escHtml(v) + ' ' + escHtml(row.product_name || '') + '">' + escHtml(v) + '</span>';
         return '<span style="font-size:12px;color:var(--muted)">—</span>';
       }},
-      { key: 'product_name', title: '产品名称', render: function(v) { return '<span style="font-size:12.5px;font-weight:500">'+escHtml(v||'')+'</span>'; } },
-      { key: 'material_code', title: '物料编码', render: function(v) { return '<span style="font-family:var(--mono);font-size:11.5px">'+escHtml(v||'')+'</span>'; } },
-      { key: 'responsible_person', title: '交付人', render: function(v) { return '<span style="font-size:12px">'+escHtml(_userDisplayMap[v] || v || '—')+'</span>'; } },
-      { key: 'receiver', title: '收货方', render: function(v) { return '<span style="font-size:12.5px">'+escHtml(v||'—')+'</span>'; } },
-      { key: 'delivery_method', title: '交付形式', render: function(v) { return '<span style="font-size:12px">'+(v||'—')+'</span>'; } },
+      { key: 'product_name', title: '产品名称', minWidth: 100, render: function(v) { return '<span style="font-size:12.5px;font-weight:500">'+escHtml(v||'')+'</span>'; } },
+      { key: 'material_code', title: '物料编码', minWidth: 80, render: function(v) { return '<span style="font-family:var(--mono);font-size:11.5px">'+escHtml(v||'')+'</span>'; } },
+      { key: 'responsible_person', title: '交付人', minWidth: 90, render: function(v) { return '<span style="font-size:12px">'+escHtml(_userDisplayMap[v] || v || '—')+'</span>'; } },
+      { key: 'receiver', title: '收货方', minWidth: 110, render: function(v) { return '<span style="font-size:12.5px">'+escHtml(v||'—')+'</span>'; } },
+      { key: 'delivery_method', title: '交付形式', minWidth: 80, render: function(v) { return '<span style="font-size:12px">'+(v||'—')+'</span>'; } },
       { key: 'note', title: '备注', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(v||'')+'</span>'; } },
     ];
     if (canEdit) {
-      cols.push({ key: 'actions', title: '', width: '64px', render: function(v, row) {
+      cols.push({ key: 'actions', title: '', width: '100px', minWidth: 100, render: function(v, row) {
         return iconEdit('editDeliveryRecord(' + row.id + ')', '编辑') +
                iconDelete('deleteDeliveryRecord(' + row.id + ')', '删除');
       }});
@@ -1771,16 +1771,16 @@ function buildNotes(notes) {
     new DataTable({
       container: document.getElementById('notes-table'),
       columns: [
-        { key: 'created_at', title: '记录时间', width: '140px', render: function(v, row) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">'+(fmtISODateTime(v)||'—')+'</span>'+(row.updated_at?'<div style="font-size:9px;color:var(--warn)">编辑过</div>':''); } },
-        { key: 'stage_name', title: '涉及阶段', width: '90px', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'项目整体')+'</span>'; } },
-        { key: 'recorded_by', title: '记录人', width: '70px', render: function(v) { return '<span style="font-size:12.5px;font-weight:540">'+escHtml(_userDisplayMap[v] || v || '')+'</span>'; } },
+        { key: 'created_at', title: '记录时间', width: '140px', minWidth: 120, render: function(v, row) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">'+(fmtISODateTime(v)||'—')+'</span>'+(row.updated_at?'<div style="font-size:9px;color:var(--warn)">编辑过</div>':''); } },
+        { key: 'stage_name', title: '涉及阶段', width: '90px', minWidth: 100, render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'项目整体')+'</span>'; } },
+        { key: 'recorded_by', title: '记录人', width: '70px', minWidth: 90, render: function(v) { return '<span style="font-size:12.5px;font-weight:540">'+escHtml(_userDisplayMap[v] || v || '')+'</span>'; } },
         { key: 'content', title: '内容', align: 'left', className: 'dt-wrap', render: function(v, row) {
           var plainText = stripHtml(renderMarkdown?renderMarkdown(v):v).substring(0,80);
           var replyMark = row.parent_id?'<span style="font-size:10px;color:var(--accent);margin-right:4px">↳ 回复</span>':'';
           var imgBadge = /!\[.*\]\(.*\)/.test(v)?' <span style="font-size:10px">📷</span>':'';
           return '<span style="font-size:13px;line-height:1.5">'+replyMark+escHtml(plainText)+(v&&v.length>80?'...':'')+imgBadge+'</span>';
         }},
-        { key: 'actions', title: '操作', width: '90px', render: function(v, row) {
+        { key: 'actions', title: '操作', width: '130px', minWidth: 130, render: function(v, row) {
           var isMine = row.recorded_by === currentUser;
           var a = '<span style="cursor:pointer;font-size:12px;color:var(--accent);margin-right:4px" onclick="openViewNoteDialog('+row.id+')" title="查看">👁</span>';
           if (isMine) a += iconEdit('openEditNoteDialog('+row.id+')','编辑')+iconDelete('deleteProjectNote('+row.id+')','删除');
@@ -1834,7 +1834,7 @@ function buildProjectActivity(code) {
     new DataTable({
       container: document.getElementById('project-activity-table'),
       columns: [
-        { key: 'created_at', title: '时间', width: '130px', render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">' + (fmtISODateTime(v) || '—') + '</span>'; } },
+        { key: 'created_at', title: '时间', width: '130px', minWidth: 120, render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">' + (fmtISODateTime(v) || '—') + '</span>'; } },
         { key: 'task_name', title: '任务名', width: 'auto', render: function(v, row) {
           var name = escHtml(v || '—');
           if (row.task_id && v) {
@@ -1842,7 +1842,7 @@ function buildProjectActivity(code) {
           }
           return '<span style="font-size:12px;font-weight:500">' + name + '</span>';
         } },
-        { key: 'task_assignee', title: '责任人', width: '70px', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">' + escHtml(v || '—') + '</span>'; } },
+        { key: 'task_assignee', title: '责任人', width: '70px', minWidth: 90, render: function(v) { return '<span style="font-size:12px;color:var(--muted)">' + escHtml(v || '—') + '</span>'; } },
         { key: 'detail', title: '动态内容', align: 'left', className: 'dt-wrap', render: function(v, row) {
           var text = _cleanDetail(v, row.action);
           return '<span style="font-size:12px;line-height:1.5">' + escHtml(text.length > 100 ? text.substring(0, 100) + '...' : text) + '</span>';
@@ -3437,16 +3437,16 @@ function _renderMaintStages(stages, container, canEditStage) {
     _maintStagesDt = new DataTable({
       container: document.getElementById('maint-stages-table'),
       columns: [
-        { key: 'idx', title: '#', width: '5%', render: function(v) { return '<span style="color:var(--muted)">'+v+'</span>'; } },
+        { key: 'idx', title: '#', width: '5%', minWidth: 60, render: function(v) { return '<span style="color:var(--muted)">'+v+'</span>'; } },
         { key: 'name', title: '阶段名称', width: '16%', render: function(v) { return '<span style="font-weight:500">'+escHtml(v||'')+'</span>'; } },
-        { key: 'status', title: '状态', width: '10%', render: function(v) { var l=riskLabels[v]||v||'进行中'; var c=v==='blocked'?'var(--danger)':(v==='completed'?'var(--success)':'var(--accent)'); return '<span style="font-size:11px;padding:2px 8px;border-radius:10px;background:'+c+'15;color:'+c+';font-weight:500">'+escHtml(l)+'</span>'; } },
-        { key: 'owner', title: '责任人', width: '10%', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'—')+'</span>'; } },
-        { key: 'start', title: '计划开始', width: '12%', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'—')+'</span>'; } },
-        { key: 'end', title: '计划结束', width: '12%', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'—')+'</span>'; } },
-        { key: 'task_count', title: '任务数', width: '7%', render: function(v, row) { var n=escHtml(row.name||'').replace(/'/g,"\\'"); return '<span style="cursor:pointer;color:var(--accent);font-weight:500" onclick="gotoStageTasksFromMaint(\''+n+'\')" title="跳转到任务详情">'+(v||0)+'</span>'; } },
-        { key: 'progress', title: '进度', width: '7%', render: function(v, row) { var n=escHtml(row.name||'').replace(/'/g,"\\'"); return '<span style="cursor:pointer" onclick="gotoStageTasksFromMaint(\''+n+'\')" title="跳转到任务详情">'+(typeof renderProgressRing==='function'?'<div style="display:inline-block">'+renderProgressRing(v||0)+'</div>':(v||0)+'%')+'</span>'; } },
-        { key: 'completed_date', title: '完成日期', width: '8%', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'—')+'</span>'; } },
-        { key: 'actions', title: '操作', render: function(v, row) { return '<span style="white-space:nowrap">'+(row.id&&canEditStage?iconEdit('openStageDialog('+row.id+')','编辑阶段')+iconDelete('deleteMaintStage('+row.id+',\''+escHtml(row.name||'').replace(/'/g,"\\'")+'\')','删除阶段'):'')+'</span>'; } }
+        { key: 'status', title: '状态', width: '10%', minWidth: 80, render: function(v) { var l=riskLabels[v]||v||'进行中'; var c=v==='blocked'?'var(--danger)':(v==='completed'?'var(--success)':'var(--accent)'); return '<span style="font-size:11px;padding:2px 8px;border-radius:10px;background:'+c+'15;color:'+c+';font-weight:500">'+escHtml(l)+'</span>'; } },
+        { key: 'owner', title: '责任人', width: '10%', minWidth: 90, render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'—')+'</span>'; } },
+        { key: 'start', title: '计划开始', width: '12%', minWidth: 100, render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'—')+'</span>'; } },
+        { key: 'end', title: '计划结束', width: '12%', minWidth: 100, render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'—')+'</span>'; } },
+        { key: 'task_count', title: '任务数', width: '7%', minWidth: 50, render: function(v, row) { var n=escHtml(row.name||'').replace(/'/g,"\\'"); return '<span style="cursor:pointer;color:var(--accent);font-weight:500" onclick="gotoStageTasksFromMaint(\''+n+'\')" title="跳转到任务详情">'+(v||0)+'</span>'; } },
+        { key: 'progress', title: '进度', width: '7%', minWidth: 60, render: function(v, row) { var n=escHtml(row.name||'').replace(/'/g,"\\'"); return '<span style="cursor:pointer" onclick="gotoStageTasksFromMaint(\''+n+'\')" title="跳转到任务详情">'+(typeof renderProgressRing==='function'?'<div style="display:inline-block">'+renderProgressRing(v||0)+'</div>':(v||0)+'%')+'</span>'; } },
+        { key: 'completed_date', title: '完成日期', width: '8%', minWidth: 100, render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'—')+'</span>'; } },
+        { key: 'actions', title: '操作', width: '100px', minWidth: 100, render: function(v, row) { return '<span style="white-space:nowrap">'+(row.id&&canEditStage?iconEdit('openStageDialog('+row.id+')','编辑阶段')+iconDelete('deleteMaintStage('+row.id+',\''+escHtml(row.name||'').replace(/'/g,"\\'")+'\')','删除阶段'):'')+'</span>'; } }
       ],
       maxHeight: 'calc(100vh - 400px)'
     });
@@ -3524,9 +3524,9 @@ function buildActivities(items, opts) {
   new DataTable({
     container: document.getElementById('act-table'),
     columns: [
-      { key: 'created_at', title: '时间 <span id="act-sort-ind" style="cursor:pointer" onclick="toggleActivitySort()">' + sortIcon + '</span>', width: '160px', render: function(v) { return '<span class="act-td-time">'+escHtml(fmtISODateTime(v))+'</span>'; } },
-      { key: 'display_name', title: '用户名 ' + userFilter, width: '100px', render: function(v, row) { return '<span class="act-td-user">'+escHtml(getDisplayName(v||row.username))+'</span>'; } },
-      { key: 'action', title: '操作类型 ' + actionFilter, width: '120px', render: function(v) { return '<span class="activity-action pill">'+escHtml(v||'')+'</span>'; } },
+      { key: 'created_at', title: '时间 <span id="act-sort-ind" style="cursor:pointer" onclick="toggleActivitySort()">' + sortIcon + '</span>', width: '160px', minWidth: 120, render: function(v) { return '<span class="act-td-time">'+escHtml(fmtISODateTime(v))+'</span>'; } },
+      { key: 'display_name', title: '用户名 ' + userFilter, width: '100px', minWidth: 90, render: function(v, row) { return '<span class="act-td-user">'+escHtml(getDisplayName(v||row.username))+'</span>'; } },
+      { key: 'action', title: '操作类型 ' + actionFilter, width: '120px', minWidth: 80, render: function(v) { return '<span class="activity-action pill">'+escHtml(v||'')+'</span>'; } },
       { key: 'detail', title: '具体明细', width: 'auto', align: 'left', className: 'dt-wrap', render: function(v) { return '<span class="act-td-detail">'+(v?escHtml(v):'')+'</span>'; } }
     ],
     data: items,

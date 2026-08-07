@@ -686,14 +686,14 @@ function renderProductNotes(notes) {
   new DataTable({
     container: document.getElementById('prod-notes-table'),
     columns: [
-      { key: 'created_at', title: '记录时间', width: '140px', render: function(v, row) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">'+(fmtISODateTime(v)||'—')+'</span>'+(row.updated_at?'<div style="font-size:9px;color:var(--warn)">编辑过</div>':''); } },
-      { key: 'category', title: '涉及领域', width: '90px', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'不涉及')+'</span>'; } },
-      { key: 'recorded_by', title: '记录人', width: '70px', render: function(v) { return '<span style="font-size:12.5px;font-weight:540">'+escHtml(_prodUserDisplayMap[v] || v || '')+'</span>'; } },
+      { key: 'created_at', title: '记录时间', minWidth: 150, width: '140px', render: function(v, row) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">'+(fmtISODateTime(v)||'—')+'</span>'+(row.updated_at?'<div style="font-size:9px;color:var(--warn)">编辑过</div>':''); } },
+      { key: 'category', title: '涉及领域', minWidth: 70, width: '90px', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'不涉及')+'</span>'; } },
+      { key: 'recorded_by', title: '记录人', minWidth: 100, width: '70px', render: function(v) { return '<span style="font-size:12.5px;font-weight:540">'+escHtml(_prodUserDisplayMap[v] || v || '')+'</span>'; } },
       { key: 'content', title: '内容', render: function(v, row) {
         var plainText = stripHtml(renderMarkdown?renderMarkdown(v):v).substring(0,80);
         return '<span style="font-size:13px;line-height:1.5">'+(row.parent_id?'<span style="font-size:10px;color:var(--accent);margin-right:4px">↳ 回复</span>':'')+escHtml(plainText)+(v&&v.length>80?'...':'')+(/!\[.*\]\(.*\)/.test(v)?' <span style="font-size:10px">📷</span>':'')+'</span>';
       }},
-      { key: 'actions', title: '操作', width: '90px', render: function(v, row) {
+      { key: 'actions', title: '操作', width: '130px', minWidth: 130, render: function(v, row) {
         var isMine = row.recorded_by === currentUser;
         var a = '<span style="cursor:pointer;font-size:12px;color:var(--accent);margin-right:4px" onclick="openViewProdNoteDialog('+row.id+')" title="查看">👁</span>';
         a += isMine ? iconEdit('openEditProdNoteDialog('+row.id+')','编辑')+iconDelete('deleteProductNote('+row.id+')','删除') : '<span style="cursor:pointer;font-size:12px;color:var(--accent)" onclick="openReplyProdNoteDialog('+row.id+')" title="回复">💬</span>';
@@ -718,9 +718,9 @@ function buildProductActivity(code) {
     new DataTable({
       container: document.getElementById('product-activity-table'),
       columns: [
-        { key: 'created_at', title: '时间', width: '130px', render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">' + (fmtISODateTime(v) || '—') + '</span>'; } },
-        { key: 'action', title: '操作', width: '100px', render: function(v) { return '<span style="font-size:12px">' + escHtml(v || '') + '</span>'; } },
-        { key: 'display_name', title: '操作人', width: '70px', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">' + escHtml(v || '') + '</span>'; } },
+        { key: 'created_at', title: '时间', minWidth: 140, width: '130px', render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">' + (fmtISODateTime(v) || '—') + '</span>'; } },
+        { key: 'action', title: '操作', minWidth: 70, width: '100px', render: function(v) { return '<span style="font-size:12px">' + escHtml(v || '') + '</span>'; } },
+        { key: 'display_name', title: '操作人', minWidth: 100, width: '70px', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">' + escHtml(v || '') + '</span>'; } },
         { key: 'detail', title: '内容', align: 'left', className: 'dt-wrap', render: function(v) {
           return '<span style="font-size:12px;line-height:1.5">' + escHtml((v || '').length > 100 ? (v || '').substring(0, 100) + '...' : (v || '')) + '</span>';
         }}
@@ -1161,16 +1161,16 @@ function _renderProdDocsInline(docs) {
   new DataTable({
     container: document.getElementById('prod-docs-table'),
     columns: [
-      { key: '_cat', title: '分类', width: '100px', rowspan: true, render: function(v, row, idx, count) { return '<span style="font-weight:600;color:var(--accent);font-size:12px">'+escHtml(v||'')+' <sup style="font-size:10px;color:var(--muted);font-weight:400">'+(count||(row._catCount||1))+'</sup></span>'; } },
-      { key: '_seq', title: '序号', width: '50px', render: function(v) { return '<span style="font-family:var(--mono);color:var(--muted)">'+(v||'')+'</span>'; } },
-      { key: '_docName', title: '文档名称', className: 'dt-wrap', render: function(v) { return '<span style="font-weight:500;word-break:break-all">'+(v||'')+'</span>'; } },
-      { key: 'responsible_role', title: '责任人', width: '80px', render: function(v) { return '<span style="font-size:12px;white-space:nowrap">'+escHtml(v||'—')+'</span>'; } },
-      { key: '_statusHtml', title: '状态', width: '80px', render: function(v) { return v||''; } },
-      { key: '_docType', title: '类型', width: '50px', render: function(v) { return '<span style="font-size:11px">'+escHtml(v||'')+'</span>'; } },
+      { key: '_cat', title: '分类', minWidth: 90, width: '100px', rowspan: true, render: function(v, row, idx, count) { return '<span style="font-weight:600;color:var(--accent);font-size:12px">'+escHtml(v||'')+' <sup style="font-size:10px;color:var(--muted);font-weight:400">'+(count||(row._catCount||1))+'</sup></span>'; } },
+      { key: '_seq', title: '序号', minWidth: 60, width: '50px', render: function(v) { return '<span style="font-family:var(--mono);color:var(--muted)">'+(v||'')+'</span>'; } },
+      { key: '_docName', title: '文档名称', minWidth: 100, className: 'dt-wrap', render: function(v) { return '<span style="font-weight:500;word-break:break-all">'+(v||'')+'</span>'; } },
+      { key: 'responsible_role', title: '责任人', minWidth: 90, width: '80px', render: function(v) { return '<span style="font-size:12px;white-space:nowrap">'+escHtml(v||'—')+'</span>'; } },
+      { key: '_statusHtml', title: '状态', minWidth: 80, width: '80px', render: function(v) { return v||''; } },
+      { key: '_docType', title: '类型', minWidth: 65, width: '50px', render: function(v) { return '<span style="font-size:11px">'+escHtml(v||'')+'</span>'; } },
       { key: '_locHtml', title: '路径', align: 'left', className: 'dt-wrap', render: function(v) { return '<span style="font-size:12px;word-break:break-all">'+(v||'')+'</span>'; } },
-      { key: '_updatedAt', title: '最后修改时间', width: '100px', render: function(v) { return '<span style="font-size:11px;color:var(--muted);white-space:nowrap">'+escHtml(v||'—')+'</span>'; } },
-      { key: '_updatedBy', title: '修改人', width: '80px', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(v||'')+'</span>'; } },
-      { key: '_actions', title: '操作', width: '100px', render: function(v) { return v||''; } }
+      { key: '_updatedAt', title: '最后修改时间', minWidth: 140, width: '100px', render: function(v) { return '<span style="font-size:11px;color:var(--muted);white-space:nowrap">'+escHtml(v||'—')+'</span>'; } },
+      { key: '_updatedBy', title: '修改人', minWidth: 90, width: '80px', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(v||'')+'</span>'; } },
+      { key: '_actions', title: '操作', width: '100px', minWidth: 100, render: function(v) { return v||''; } }
     ],
     data: flatRows,
     rowClassFn: function(row) { return row._bg ? { background: row._bg } : null; }
@@ -1281,13 +1281,13 @@ function renderProdMaintenance(p) {
     new DataTable({
       container: document.getElementById('prod-linked-proj-table'),
       columns: [
-        { key: 'code', title: '项目编号', render: function(v, row) { return v ? projCodeTag(v, 'event.stopPropagation();openProject(\''+escHtml(v).replace(/'/g,"\\'")+'\')', row.name) : '—'; } },
-        { key: 'name', title: '项目名', render: function(v, row) { return '<div class="proj-name">'+escHtml(v||'')+'</div>'; } },
-        { key: 'customer_name', title: '客户', render: function(v) { return v ? renderCustomerBadge(v) : '—'; } },
-        { key: 'project_type', title: '类型', render: function(v) { return renderTypeBadge(v); } },
-        { key: 'status', title: '状态', render: function(v) { return renderPill(v); } },
-        { key: 'progress', title: '进度', render: function(v) { return renderProgressCircle(parseFloat(v)||0, 26, {label:''}); } },
-        { key: 'end', title: '计划完成', render: function(v) { return '<span style="font-size:12px;color:'+(v?'var(--muted)':'var(--yellow)')+'">'+(v?formatDate(v):'长期')+'</span>'; } }
+        { key: 'code', title: '项目编号', minWidth: 90, render: function(v, row) { return v ? projCodeTag(v, 'event.stopPropagation();openProject(\''+escHtml(v).replace(/'/g,"\\'")+'\')', row.name) : '—'; } },
+        { key: 'name', title: '项目名', minWidth: 100, render: function(v, row) { return '<div class="proj-name">'+escHtml(v||'')+'</div>'; } },
+        { key: 'customer_name', title: '客户', minWidth: 110, render: function(v) { return v ? renderCustomerBadge(v) : '—'; } },
+        { key: 'project_type', title: '类型', minWidth: 65, render: function(v) { return renderTypeBadge(v); } },
+        { key: 'status', title: '状态', minWidth: 80, render: function(v) { return renderPill(v); } },
+        { key: 'progress', title: '进度', minWidth: 60, render: function(v) { return renderProgressCircle(parseFloat(v)||0, 26, {label:''}); } },
+        { key: 'end', title: '计划完成', minWidth: 100, render: function(v) { return '<span style="font-size:12px;color:'+(v?'var(--muted)':'var(--yellow)')+'">'+(v?formatDate(v):'长期')+'</span>'; } }
       ],
       data: projects,
       onRowClick: function(row) { openProject(row.code || String(row.id)); }
@@ -1510,9 +1510,9 @@ function buildProdActivities(items, opts) {
   new DataTable({
     container: document.getElementById('prod-act-table'),
     columns: [
-      { key: 'created_at', title: '时间 <span id="prod-act-sort-ind" style="cursor:pointer" onclick="toggleProdActivitySort()">' + sortIcon + '</span>', width: '160px', render: function(v) { return '<span class="act-td-time">'+escHtml(fmtISODateTime(v))+'</span>'; } },
-      { key: 'display_name', title: '用户名 ' + userFilter, width: '140px', render: function(v, row) { return '<span class="act-td-user">'+escHtml(getDisplayName(v||row.username))+'</span>'; } },
-      { key: 'action', title: '操作类型 ' + actionFilter, width: '150px', render: function(v) { return '<span class="activity-action pill">'+escHtml(v||'')+'</span>'; } },
+      { key: 'created_at', title: '时间 <span id="prod-act-sort-ind" style="cursor:pointer" onclick="toggleProdActivitySort()">' + sortIcon + '</span>', minWidth: 140, width: '160px', render: function(v) { return '<span class="act-td-time">'+escHtml(fmtISODateTime(v))+'</span>'; } },
+      { key: 'display_name', title: '用户名 ' + userFilter, minWidth: 100, width: '140px', render: function(v, row) { return '<span class="act-td-user">'+escHtml(getDisplayName(v||row.username))+'</span>'; } },
+      { key: 'action', title: '操作类型 ' + actionFilter, minWidth: 70, width: '150px', render: function(v) { return '<span class="activity-action pill">'+escHtml(v||'')+'</span>'; } },
       { key: 'detail', title: '具体明细', width: 'auto', align: 'left', className: 'dt-wrap', render: function(v) { return '<span class="act-td-detail">'+(v?escHtml(v):'')+'</span>'; } }
     ],
     data: items,
@@ -1574,15 +1574,15 @@ function _renderProdBugs(bugs, container) {
   new DataTable({
     container: document.getElementById('prod-bugs-table'),
     columns: [
-      { key: 'id', title: '#', width: '6%', render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);cursor:pointer" onclick="openBugDetail('+v+')">#'+v+'</span>'; } },
-      { key: 'title', title: '标题', width: '24%', align: 'left', render: function(v, row) { return '<span style="font-weight:530;cursor:pointer" onclick="openBugDetail('+row.id+')" title="查看Bug详情">'+escHtml(v||'')+'</span>'; } },
-      { key: 'status', title: '状态', width: '6%', render: function(v, row) { return '<span onclick="openBugDetail('+row.id+')">'+renderPill(v||'open')+'</span>'; } },
-      { key: 'severity', title: '严重程度', width: '5%', render: function(v, row) { var c=sevColors[v]||'var(--muted)'; return '<span style="color:'+c+';font-weight:500;font-size:12px;cursor:pointer" onclick="openBugDetail('+row.id+')">'+(sevLabels[v]||v)+'</span>'; } },
-      { key: 'priority', title: '优先级', width: '5%', render: function(v, row) { return '<span onclick="openBugDetail('+row.id+')"><span class="prio-tag '+(v||'medium')+'">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[v]||v)+'</span></span>'; } },
-      { key: 'assignee_name', title: '负责人', width: '8%', render: function(v, row) { return '<span style="font-size:12px;cursor:pointer" onclick="openBugDetail('+row.id+')">'+escHtml(v||'—')+'</span>'; } },
-      { key: 'project_code', title: '项目编号', width: '8%', render: function(v, row) { return v?'<span class="proj-code-btn" onclick="event.stopPropagation();openProject(\''+escHtml(v)+'\')" title="'+escHtml(row.project_name||'')+'">'+escHtml(v)+'</span>':'<span style="font-size:12px;color:var(--muted)">—</span>'; } },
-      { key: 'created_at', title: '创建时间', width: '10%', render: function(v, row) { return '<span style="font-size:11px;color:var(--muted);cursor:pointer" onclick="openBugDetail('+row.id+')">'+formatDate(v)+'</span>'; } },
-      { key: 'actions', title: '操作', render: function(v, row) { return '<span style="white-space:nowrap" onclick="event.stopPropagation()">'+iconEdit('openBugDialog('+row.id+')','编辑Bug')+'</span>'; } }
+      { key: 'id', title: '#', minWidth: 60, width: '6%', render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);cursor:pointer" onclick="openBugDetail('+v+')">#'+v+'</span>'; } },
+      { key: 'title', title: '标题', minWidth: 100, width: '24%', align: 'left', render: function(v, row) { return '<span style="font-weight:530;cursor:pointer" onclick="openBugDetail('+row.id+')" title="查看Bug详情">'+escHtml(v||'')+'</span>'; } },
+      { key: 'status', title: '状态', minWidth: 80, width: '6%', render: function(v, row) { return '<span onclick="openBugDetail('+row.id+')">'+renderPill(v||'open')+'</span>'; } },
+      { key: 'severity', title: '严重程度', minWidth: 70, width: '5%', render: function(v, row) { var c=sevColors[v]||'var(--muted)'; return '<span style="color:'+c+';font-weight:500;font-size:12px;cursor:pointer" onclick="openBugDetail('+row.id+')">'+(sevLabels[v]||v)+'</span>'; } },
+      { key: 'priority', title: '优先级', minWidth: 65, width: '5%', render: function(v, row) { return '<span onclick="openBugDetail('+row.id+')"><span class="prio-tag '+(v||'medium')+'">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[v]||v)+'</span></span>'; } },
+      { key: 'assignee_name', title: '负责人', minWidth: 90, width: '8%', render: function(v, row) { return '<span style="font-size:12px;cursor:pointer" onclick="openBugDetail('+row.id+')">'+escHtml(v||'—')+'</span>'; } },
+      { key: 'project_code', title: '项目编号', minWidth: 90, width: '8%', render: function(v, row) { return v?'<span class="proj-code-btn" onclick="event.stopPropagation();openProject(\''+escHtml(v)+'\')" title="'+escHtml(row.project_name||'')+'">'+escHtml(v)+'</span>':'<span style="font-size:12px;color:var(--muted)">—</span>'; } },
+      { key: 'created_at', title: '创建时间', minWidth: 100, width: '10%', render: function(v, row) { return '<span style="font-size:11px;color:var(--muted);cursor:pointer" onclick="openBugDetail('+row.id+')">'+formatDate(v)+'</span>'; } },
+      { key: 'actions', title: '操作', width: '50px', minWidth: 50, render: function(v, row) { return '<span style="white-space:nowrap" onclick="event.stopPropagation()">'+iconEdit('openBugDialog('+row.id+')','编辑Bug')+'</span>'; } }
     ],
     data: bugs,
     maxHeight: 'calc(100vh - 280px)',

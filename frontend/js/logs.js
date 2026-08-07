@@ -378,11 +378,11 @@ async function loadAuditLogs() {
       new DataTable({
         container: document.getElementById('audit-table'),
         columns: [
-          { key: 'created_at', title: '时间', width: '140px', render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">' + escHtml(fmtISODateTime(v)) + '</span>'; } },
-          { key: 'username', title: '用户', width: '70px', render: function(v) { return '<span style="font-size:12px">' + escHtml(getDisplayName(v)) + '</span>'; } },
-          { key: 'category', title: '分类', width: '80px', render: function(v) { return '<span style="font-size:11px">' + escHtml(v||'—') + '</span>'; } },
-          { key: 'action', title: '操作', width: '140px', render: function(v) { return '<span style="font-size:11px">' + escHtml(ACTION_LABEL[v]||v) + '</span>'; } },
-          { key: 'level', title: '等级', width: '50px', render: function(v) { return levelPill(v); } },
+          { key: 'created_at', title: '时间', width: '140px', minWidth: 120, render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">' + escHtml(fmtISODateTime(v)) + '</span>'; } },
+          { key: 'username', title: '用户', width: '70px', minWidth: 90, render: function(v) { return '<span style="font-size:12px">' + escHtml(getDisplayName(v)) + '</span>'; } },
+          { key: 'category', title: '分类', width: '80px', minWidth: 80, render: function(v) { return '<span style="font-size:11px">' + escHtml(v||'—') + '</span>'; } },
+          { key: 'action', title: '操作', width: '140px', minWidth: 110, render: function(v) { return '<span style="font-size:11px">' + escHtml(ACTION_LABEL[v]||v) + '</span>'; } },
+          { key: 'level', title: '等级', width: '50px', minWidth: 60, render: function(v) { return levelPill(v); } },
           { key: 'detail', title: '详情', render: function(v) { return '<span style="font-size:11px;color:var(--muted)">' + escHtml(v||'') + '</span>'; } }
         ],
         data: items,

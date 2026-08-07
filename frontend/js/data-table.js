@@ -445,7 +445,7 @@ var DataTable = (function() {
       e.preventDefault();
       var colIdx = parseInt(handle.getAttribute('data-col'));
       var th = handle.parentElement;
-      state = { handle: handle, th: th, colIdx: colIdx, startX: e.clientX, startW: th.offsetWidth };
+      state = { handle: handle, th: th, colIdx: colIdx, startX: e.clientX, startW: th.offsetWidth, configMinW: self._columns[colIdx].minWidth };
       handle.classList.add('active');
       document.body.style.cursor = 'col-resize';
       document.body.style.userSelect = 'none';
@@ -454,9 +454,8 @@ var DataTable = (function() {
     document.addEventListener('mousemove', function(e) {
       if (!state) return;
       var delta = e.clientX - state.startX;
-      var newW = Math.max(state.th.style.minWidth ? parseInt(state.th.style.minWidth) : 40, state.startW + delta);
+      var newW = Math.max(state.configMinW, state.startW + delta);
       state.th.style.width = newW + 'px';
-      state.th.style.minWidth = newW + 'px';
     });
 
     document.addEventListener('mouseup', function() {
