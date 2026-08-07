@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="app-version" content="v2026.08.07-beta5">
+  <meta name="app-version" content="v2026.08.07-beta6">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>PM Assistant · 集成禅道 & GitLab</title>
 <script>
@@ -333,12 +333,12 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
     <!-- ══════════════════════ VIEW 1 — DASHBOARD ══════════════════════ -->
     <div class="view" id="view-dashboard">
 
-      <!-- KPI 统计卡片：6列，收藏默认选中，单选模式 -->
+      <!-- KPI 统计卡片：6列，关注项目默认选中，单选模式 -->
       <div class="kpi-grid" style="grid-template-columns:repeat(6,1fr);margin-bottom:14px">
-        <div class="kpi-card active" data-filter="fav" onclick="dashFilter.setCard('fav',this)" title="用户收藏的项目">
-          <div class="kpi-label"><svg width="13" height="13" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="#eab308"/></svg> 收藏</div>
+        <div class="kpi-card active" data-filter="fav" onclick="dashFilter.setCard('fav',this)" title="用户关注的项目">
+          <div class="kpi-label"><svg width="13" height="13" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="#eab308"/></svg> 关注项目</div>
           <div class="kpi-value" id="kpi-fav-count" style="color:var(--warn)">—</div>
-          <div class="kpi-meta">个人收藏</div>
+          <div class="kpi-meta">个人关注</div>
         </div>
         <div class="kpi-card" data-filter="all" onclick="dashFilter.setCard('all',this)" title="所有项目总数（含研发和生产）&#10;筛选条件：数据源配置中的项目编号前缀">
           <div class="kpi-label">全部项目</div>
@@ -790,7 +790,7 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
         <kbd>Ctrl+K</kbd>
       </div>
       <div class="pov-search-count" id="pov-search-count" style="display:none"></div>
-      <div class="pov-cat-grid" id="pov-cat-grid"></div>
+      <div class="kpi-grid" id="prod-kpi-grid"></div>
       <div class="pov-l2-bar" id="pov-l2-bar"></div>
       <div class="pov-prod-grid" id="pov-prod-grid">
         <div class="loading-spinner" style="grid-column:1/-1;padding:40px">加载中...</div>
