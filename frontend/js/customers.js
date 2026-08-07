@@ -7,11 +7,11 @@ function _initCustDt() {
   _custDt = new DataTable({
     container: document.getElementById('cust-table'),
     columns: [
-      { key: 'name', title: '客户名称', render: function(v) { return '<button class="gs-btn gs-cust" onclick="openCustomerDetail(\'' + escHtml(v||'').replace(/'/g, "\\'") + '\')">' + escHtml(v||'') + '</button>'; } },
+      { key: 'name', title: '客户名称', minWidth: 110, render: function(v) { return '<button class="gs-btn gs-cust" onclick="openCustomerDetail(\'' + escHtml(v||'').replace(/'/g, "\\'") + '\')">' + escHtml(v||'') + '</button>'; } },
       { key: 'full_name', title: '全称', width: '18%', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">' + escHtml(v||'—') + '</span>'; } },
-      { key: 'project_count', title: '关联项目', width: '10%', render: function(v, row) { var n = escHtml(row.name||'').replace(/'/g, "\\'"); return '<span onclick="event.stopPropagation();openCustomerDetail(\'' + n + '\')" style="cursor:pointer;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:540;background:var(--accent-lt);color:var(--accent)" title="查看客户详情">' + (v||0) + '</span>'; } },
-      { key: 'product_count', title: '关联产品', width: '10%', render: function(v, row) { var n = escHtml(row.name||'').replace(/'/g, "\\'"); return '<span onclick="event.stopPropagation();openCustomerDetail(\'' + n + '\')" style="cursor:pointer;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:540;background:var(--success-lt);color:var(--success)" title="查看客户详情">' + (v||0) + '</span>'; } },
-      { key: 'actions', title: '操作', width: '18%', render: function(v, row) { return '<span style="white-space:nowrap">' + iconEdit('openCustEditDialog(' + row.id + ')') + iconDelete('deleteCust(' + row.id + ',\'' + escHtml(row.name) + '\')') + '</span>'; } }
+      { key: 'project_count', title: '关联项目', width: '10%', minWidth: 50, render: function(v, row) { var n = escHtml(row.name||'').replace(/'/g, "\\'"); return '<span onclick="event.stopPropagation();openCustomerDetail(\'' + n + '\')" style="cursor:pointer;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:540;background:var(--accent-lt);color:var(--accent)" title="查看客户详情">' + (v||0) + '</span>'; } },
+      { key: 'product_count', title: '关联产品', width: '10%', minWidth: 50, render: function(v, row) { var n = escHtml(row.name||'').replace(/'/g, "\\'"); return '<span onclick="event.stopPropagation();openCustomerDetail(\'' + n + '\')" style="cursor:pointer;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:540;background:var(--success-lt);color:var(--success)" title="查看客户详情">' + (v||0) + '</span>'; } },
+      { key: 'actions', title: '操作', width: '100px', minWidth: 100, render: function(v, row) { return '<span style="white-space:nowrap">' + iconEdit('openCustEditDialog(' + row.id + ')') + iconDelete('deleteCust(' + row.id + ',\'' + escHtml(row.name) + '\')') + '</span>'; } }
     ],
     maxHeight: 'calc(100vh - 200px)',
   });
@@ -116,10 +116,10 @@ function _initCustDetProjDt() {
   _custDetProjDt = new DataTable({
     container: document.getElementById('cust-det-proj-table'),
     columns: [
-      { key: 'idx', title: '序号', width: '6%', render: function(v) { return '<span style="color:var(--muted);font-size:12px">' + v + '</span>'; } },
-      { key: 'code', title: '项目编号', width: '14%', render: function(v) { return '<span style="font-family:var(--mono);font-size:11.5px;color:var(--accent);cursor:pointer" onclick="event.stopPropagation();openProject(\'' + escHtml(v||'').replace(/'/g, "\\'") + '\')">' + escHtml(v||'') + '</span>'; } },
-      { key: 'name', title: '项目名称', render: function(v) { return escHtml(v||''); } },
-      { key: 'status', title: '状态', width: '10%', render: function(v) { return renderPill(v); } },
+      { key: 'idx', title: '序号', width: '6%', minWidth: 60, render: function(v) { return '<span style="color:var(--muted);font-size:12px">' + v + '</span>'; } },
+      { key: 'code', title: '项目编号', width: '14%', minWidth: 90, render: function(v) { return '<span style="font-family:var(--mono);font-size:11.5px;color:var(--accent);cursor:pointer" onclick="event.stopPropagation();openProject(\'' + escHtml(v||'').replace(/'/g, "\\'") + '\')">' + escHtml(v||'') + '</span>'; } },
+      { key: 'name', title: '项目名称', minWidth: 100, render: function(v) { return escHtml(v||''); } },
+      { key: 'status', title: '状态', width: '10%', minWidth: 80, render: function(v) { return renderPill(v); } },
       { key: 'products', title: '产品信息', render: function(v) {
         if (!v || !v.length) return '<span style="color:var(--muted);font-size:11px">—</span>';
         return v.map(function(pr) { return '<span style="display:inline-block;margin:1px 2px;padding:1px 6px;border-radius:3px;font-size:10.5px;background:var(--success-lt);color:var(--success);cursor:pointer" onclick="event.stopPropagation();openProductFromCust(\'' + escHtml(pr.code||String(pr.id)).replace(/'/g, "\\'") + '\')" title="' + escHtml(pr.name||'') + '">' + escHtml(pr.code||'#'+pr.id) + '</span>'; }).join('');
@@ -136,10 +136,10 @@ function _initCustDetProdDt() {
   _custDetProdDt = new DataTable({
     container: document.getElementById('cust-det-prod-table'),
     columns: [
-      { key: 'idx', title: '序号', width: '6%', render: function(v) { return '<span style="color:var(--muted);font-size:12px">' + v + '</span>'; } },
-      { key: 'code', title: '产品编号', width: '14%', render: function(v) { return '<span style="font-family:var(--mono);font-size:11.5px;color:var(--accent);cursor:pointer" onclick="event.stopPropagation();openProductFromCust(\'' + escHtml(v||'').replace(/'/g, "\\'") + '\')">' + escHtml(v||'') + '</span>'; } },
-      { key: 'name', title: '产品名称', render: function(v) { return escHtml(v||''); } },
-      { key: 'status', title: '状态', width: '10%', render: function(v) { return renderPill(v); } },
+      { key: 'idx', title: '序号', width: '6%', minWidth: 60, render: function(v) { return '<span style="color:var(--muted);font-size:12px">' + v + '</span>'; } },
+      { key: 'code', title: '产品编号', width: '170px', minWidth: 170, render: function(v) { return '<span style="font-family:var(--mono);font-size:11.5px;color:var(--accent);cursor:pointer" onclick="event.stopPropagation();openProductFromCust(\'' + escHtml(v||'').replace(/'/g, "\\'") + '\')">' + escHtml(v||'') + '</span>'; } },
+      { key: 'name', title: '产品名称', minWidth: 100, render: function(v) { return escHtml(v||''); } },
+      { key: 'status', title: '状态', width: '10%', minWidth: 80, render: function(v) { return renderPill(v); } },
       { key: 'projects', title: '项目信息', render: function(v) {
         if (!v || !v.length) return '<span style="color:var(--muted);font-size:11px">—</span>';
         return v.map(function(pj) { return '<span style="display:inline-block;margin:1px 2px;padding:1px 6px;border-radius:3px;font-size:10.5px;background:var(--accent-lt);color:var(--accent);cursor:pointer" onclick="event.stopPropagation();openProject(\'' + escHtml(pj.code||String(pj.id)).replace(/'/g, "\\'") + '\')" title="' + escHtml(pj.code||'') + '">' + escHtml(pj.code||'#'+pj.id) + '</span>'; }).join('');

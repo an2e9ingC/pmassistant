@@ -77,10 +77,10 @@ async function loadReportMonthly() {
     new DataTable({
       container: document.getElementById('rpt-monthly-table'),
       columns: [
-        { key: 'name', title: '项目', render: function(v, row) { return '<span style="font-family:var(--mono);font-size:11.5px;color:var(--accent)">' + escHtml(row.code||'') + '</span> ' + escHtml(v||''); } },
-        { key: 'status', title: '状态', render: function(v) { return renderPill(v); } },
-        { key: 'progress', title: '进度', render: function(v) { return '<span style="font-variant-numeric:tabular-nums">' + (v||0) + '%</span>'; } },
-        { key: 'tasks_info', title: '任务(完成/总数)', render: function(v, row) { return '<span style="font-variant-numeric:tabular-nums">' + (row.tasks_done||0) + '/' + (row.tasks_total||0) + '</span>'; } }
+        { key: 'name', title: '项目', minWidth: 100, render: function(v, row) { return '<span style="font-family:var(--mono);font-size:11.5px;color:var(--accent)">' + escHtml(row.code||'') + '</span> ' + escHtml(v||''); } },
+        { key: 'status', title: '状态', minWidth: 80, render: function(v) { return renderPill(v); } },
+        { key: 'progress', title: '进度', minWidth: 60, render: function(v) { return '<span style="font-variant-numeric:tabular-nums">' + (v||0) + '%</span>'; } },
+        { key: 'tasks_info', title: '任务(完成/总数)', minWidth: 60, render: function(v, row) { return '<span style="font-variant-numeric:tabular-nums">' + (row.tasks_done||0) + '/' + (row.tasks_total||0) + '</span>'; } }
       ],
       data: data.projects || [],
     });
@@ -119,11 +119,11 @@ async function loadBugStats() {
       new DataTable({
         container: document.getElementById('rpt-bugs-table'),
         columns: [
-          { key: 'severity_label', title: '严重度', width: '60px', render: function(v, row) { var sc = {1:'var(--danger)',2:'var(--warn)',3:'var(--accent)',4:'var(--muted)'}; return '<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:'+(sc[row.severity]||'var(--bg)')+'20;color:'+(sc[row.severity]||'var(--fg)')+';font-weight:600">'+escHtml(v||'')+'</span>'; } },
-          { key: 'title', title: '标题', align: 'left', render: function(v) { return '<span style="font-size:12.5px">'+escHtml(v||'')+'</span>'; } },
-          { key: 'status', title: '状态', width: '80px', render: function(v) { return renderPill(v); } },
-          { key: 'assigned_to', title: '指派', width: '90px', render: function(v) { return '<span style="font-size:11.5px;color:var(--muted)">'+escHtml(v||'')+'</span>'; } },
-          { key: 'opened_date', title: '创建日期', width: '100px', render: function(v) { return '<span style="font-size:11.5px;font-family:var(--mono);color:var(--muted)">'+formatDate(v)+'</span>'; } }
+          { key: 'severity_label', title: '严重度', width: '60px', minWidth: 60, render: function(v, row) { var sc = {1:'var(--danger)',2:'var(--warn)',3:'var(--accent)',4:'var(--muted)'}; return '<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:'+(sc[row.severity]||'var(--bg)')+'20;color:'+(sc[row.severity]||'var(--fg)')+';font-weight:600">'+escHtml(v||'')+'</span>'; } },
+          { key: 'title', title: '标题', minWidth: 100, align: 'left', render: function(v) { return '<span style="font-size:12.5px">'+escHtml(v||'')+'</span>'; } },
+          { key: 'status', title: '状态', width: '80px', minWidth: 80, render: function(v) { return renderPill(v); } },
+          { key: 'assigned_to', title: '指派', width: '90px', minWidth: 90, render: function(v) { return '<span style="font-size:11.5px;color:var(--muted)">'+escHtml(v||'')+'</span>'; } },
+          { key: 'opened_date', title: '创建日期', width: '100px', minWidth: 100, render: function(v) { return '<span style="font-size:11.5px;font-family:var(--mono);color:var(--muted)">'+formatDate(v)+'</span>'; } }
         ],
         data: bugs,
       });

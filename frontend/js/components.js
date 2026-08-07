@@ -54,40 +54,40 @@ function iconSync(onclick, title) {
 
 function iconBugConfirm(onclick, disabled) {
   var svg = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="8 12 11 15 16 9"/></svg>';
-  if (disabled) return '<span class="btn-xs" style="padding:1px 3px;color:var(--muted);opacity:0.35;cursor:not-allowed" title="确认Bug">' + svg + '</span>';
-  return '<button class="btn-xs" style="padding:1px 3px;color:var(--success);border:1px solid var(--success);border-radius:4px;background:var(--success-lt);cursor:pointer;line-height:1" onclick="' + onclick + '" title="确认Bug">' + svg + '</button>';
+  if (disabled) return '<span class="btn-icon" style="color:var(--muted);opacity:0.35;cursor:not-allowed" title="确认Bug">' + svg + '</span>';
+  return '<button class="btn-icon" style="color:var(--success);border:1px solid var(--success);border-radius:4px;background:var(--success-lt);cursor:pointer;line-height:1" onclick="' + onclick + '" title="确认Bug">' + svg + '</button>';
 }
 
 function iconBugResolve(onclick, disabled) {
   var svg = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12 9 17 20 6"/></svg>';
-  if (disabled) return '<span class="btn-xs" style="padding:1px 3px;color:var(--muted);opacity:0.35;cursor:not-allowed" title="解决Bug">' + svg + '</span>';
-  return '<button class="btn-xs" style="padding:1px 3px;color:var(--accent);border:1px solid var(--accent);border-radius:4px;background:var(--accent-lt);cursor:pointer;line-height:1" onclick="' + onclick + '" title="解决Bug">' + svg + '</button>';
+  if (disabled) return '<span class="btn-icon" style="color:var(--muted);opacity:0.35;cursor:not-allowed" title="解决Bug">' + svg + '</span>';
+  return '<button class="btn-icon" style="color:var(--accent);border:1px solid var(--accent);border-radius:4px;background:var(--accent-lt);cursor:pointer;line-height:1" onclick="' + onclick + '" title="解决Bug">' + svg + '</button>';
 }
 
 function iconBugClose(onclick, disabled) {
   var svg = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v8"/><path d="M18 6a9 9 0 1 1-12 0"/></svg>';
-  if (disabled) return '<span class="btn-xs" style="padding:1px 3px;color:var(--muted);opacity:0.35;cursor:not-allowed" title="关闭">' + svg + '</span>';
-  return '<button class="btn-xs" style="padding:1px 3px;color:var(--danger);border:1px solid var(--danger);border-radius:4px;background:var(--danger-lt);cursor:pointer;line-height:1" onclick="' + onclick + '" title="关闭">' + svg + '</button>';
+  if (disabled) return '<span class="btn-icon" style="color:var(--muted);opacity:0.35;cursor:not-allowed" title="关闭">' + svg + '</span>';
+  return '<button class="btn-icon" style="color:var(--danger);border:1px solid var(--danger);border-radius:4px;background:var(--danger-lt);cursor:pointer;line-height:1" onclick="' + onclick + '" title="关闭">' + svg + '</button>';
 }
 
 function iconBugReopen(onclick, disabled) {
   var svg = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>';
-  if (disabled) return '<span class="btn-xs" style="padding:1px 3px;color:var(--muted);opacity:0.35;cursor:not-allowed" title="重新激活Bug">' + svg + '</span>';
-  return '<button class="btn-xs" style="padding:1px 3px;color:var(--warn);border:1px solid var(--warn);border-radius:4px;background:var(--warn-lt);cursor:pointer;line-height:1" onclick="' + onclick + '" title="重新激活Bug">' + svg + '</button>';
+  if (disabled) return '<span class="btn-icon" style="color:var(--muted);opacity:0.35;cursor:not-allowed" title="重新激活Bug">' + svg + '</span>';
+  return '<button class="btn-icon" style="color:var(--warn);border:1px solid var(--warn);border-radius:4px;background:var(--warn-lt);cursor:pointer;line-height:1" onclick="' + onclick + '" title="重新激活Bug">' + svg + '</button>';
 }
 
 /* ── Task Action Icon Buttons (same SVG/style as bug icons, task-specific titles) ── */
 
 function iconTaskDone(onclick, disabled) {
   var svg = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12 9 17 20 6"/></svg>';
-  if (disabled) return '<span class="btn-xs" style="padding:1px 3px;color:var(--muted);opacity:0.35;cursor:not-allowed" title="完成任务">' + svg + '</span>';
-  return '<button class="btn-xs" style="padding:1px 3px;color:var(--accent);border:1px solid var(--accent);border-radius:4px;background:var(--accent-lt);cursor:pointer;line-height:1" onclick="' + onclick + '" title="完成任务">' + svg + '</button>';
+  if (disabled) return '<span class="btn-icon" style="color:var(--muted);opacity:0.35;cursor:not-allowed" title="完成任务">' + svg + '</span>';
+  return '<button class="btn-icon" style="color:var(--accent);border:1px solid var(--accent);border-radius:4px;background:var(--accent-lt);cursor:pointer;line-height:1" onclick="' + onclick + '" title="完成任务">' + svg + '</button>';
 }
 
 function iconTaskActivate(onclick, disabled) {
   var svg = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>';
-  if (disabled) return '<span class="btn-xs" style="padding:1px 3px;color:var(--muted);opacity:0.35;cursor:not-allowed" title="激活任务">' + svg + '</span>';
-  return '<button class="btn-xs" style="padding:1px 3px;color:var(--warn);border:1px solid var(--warn);border-radius:4px;background:var(--warn-lt);cursor:pointer;line-height:1" onclick="' + onclick + '" title="激活任务">' + svg + '</button>';
+  if (disabled) return '<span class="btn-icon" style="color:var(--muted);opacity:0.35;cursor:not-allowed" title="激活任务">' + svg + '</span>';
+  return '<button class="btn-icon" style="color:var(--warn);border:1px solid var(--warn);border-radius:4px;background:var(--warn-lt);cursor:pointer;line-height:1" onclick="' + onclick + '" title="激活任务">' + svg + '</button>';
 }
 
 /* ── Favorite helpers ── */

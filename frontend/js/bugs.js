@@ -112,16 +112,16 @@ function _renderBugTable(container, bugs) {
     _bugDt = new DataTable({
       container: document.getElementById('bug-table'),
       columns: [
-        { key: 'id', title: '编号', width: '6%', render: function(v) { return '<span style="font-family:var(--mono);font-size:11px">#' + v + '</span>'; } },
-        { key: 'title', title: '标题', align: 'left', render: function(v) { return '<span style="font-weight:530">'+escHtml(v||'')+'</span>'; } },
-        { key: 'product_name', title: '产品', width: '9%', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'-')+'</span>'; } },
-        { key: 'project_name', title: '项目', width: '9%', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'-')+'</span>'; } },
-        { key: 'component_name', title: '组件', width: '8%', render: function(v) { return '<span style="font-size:11px">'+escHtml(v||'-')+'</span>'; } },
-        { key: 'severity', title: '严重', width: '5%', render: function(v) { return _renderSev(sevs[v]||'一般', v); } },
-        { key: 'priority', title: '优先级', width: '6%', render: function(v) { return renderPriorityBadge(v); } },
-        { key: 'status', title: '状态', width: '7%', render: function(v) { return renderPill(v||'open'); } },
-        { key: 'assignee_name', title: '负责人', width: '8%', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'-')+'</span>'; } },
-        { key: 'actions', title: '操作', width: '60px', render: function(v, row) { return '<span onclick="event.stopPropagation()">'+iconEdit('openBugDialog('+row.id+')','编辑')+iconDelete('deleteBugById('+row.id+')','删除')+'</span>'; } }
+        { key: 'id', title: '编号', width: '6%', minWidth: 75, render: function(v) { return '<span style="font-family:var(--mono);font-size:11px">#' + v + '</span>'; } },
+        { key: 'title', title: '标题', align: 'left', minWidth: 100, render: function(v) { return '<span style="font-weight:530">'+escHtml(v||'')+'</span>'; } },
+        { key: 'product_name', title: '产品', width: '9%', minWidth: 100, render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'-')+'</span>'; } },
+        { key: 'project_name', title: '项目', width: '9%', minWidth: 100, render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'-')+'</span>'; } },
+        { key: 'component_name', title: '组件', width: '8%', minWidth: 100, render: function(v) { return '<span style="font-size:11px">'+escHtml(v||'-')+'</span>'; } },
+        { key: 'severity', title: '严重', width: '5%', minWidth: 60, render: function(v) { return _renderSev(sevs[v]||'一般', v); } },
+        { key: 'priority', title: '优先级', width: '6%', minWidth: 65, render: function(v) { return renderPriorityBadge(v); } },
+        { key: 'status', title: '状态', width: '7%', minWidth: 80, render: function(v) { return renderPill(v||'open'); } },
+        { key: 'assignee_name', title: '负责人', width: '8%', minWidth: 90, render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'-')+'</span>'; } },
+        { key: 'actions', title: '操作', width: '90px', minWidth: 90, render: function(v, row) { return '<span onclick="event.stopPropagation()">'+iconEdit('openBugDialog('+row.id+')','编辑')+iconDelete('deleteBugById('+row.id+')','删除')+'</span>'; } }
       ],
     });
   }
@@ -323,8 +323,8 @@ function _loadBugComments(bugId) {
     new DataTable({
       container: document.getElementById('bug-comments-table'),
       columns: [
-        { key: 'created_at', title: '时间', width: '130px', render: function(v) { return '<span style="font-size:10px;color:var(--muted);white-space:nowrap">'+(fmtISODateTime(v)||'')+'</span>'; } },
-        { key: 'username', title: '用户', width: '80px', render: function(v) { return '<span style="font-size:12px">'+escHtml(v)+'</span>'; } },
+        { key: 'created_at', title: '时间', width: '130px', minWidth: 120, render: function(v) { return '<span style="font-size:10px;color:var(--muted);white-space:nowrap">'+(fmtISODateTime(v)||'')+'</span>'; } },
+        { key: 'username', title: '用户', width: '80px', minWidth: 90, render: function(v) { return '<span style="font-size:12px">'+escHtml(v)+'</span>'; } },
         { key: 'content', title: '内容', align: 'left', render: function(v) { return '<span style="font-size:13px">'+escHtml(v||'')+'</span>'; } }
       ],
       data: comments,
@@ -652,11 +652,11 @@ function _initBugWorklogDt(logs, bugId) {
   new DataTable({
     container: container,
     columns: [
-      { key: 'date', title: '日期', width: '68px', render: function(v) { return '<span style="font-size:11px">'+(v||'?')+'</span>'; } },
-      { key: 'user', title: '用户', width: '44px', render: function(v, row) { return '<span style="font-size:11px">'+escHtml(getDisplayName(v||row.username||''))+'</span>'; } },
-      { key: 'hours', title: '工时(h)', width: '42px', render: function(v) { return (v||0).toFixed(1); } },
+      { key: 'date', title: '日期', width: '68px', minWidth: 100, render: function(v) { return '<span style="font-size:11px">'+(v||'?')+'</span>'; } },
+      { key: 'user', title: '用户', width: '44px', minWidth: 90, render: function(v, row) { return '<span style="font-size:11px">'+escHtml(getDisplayName(v||row.username||''))+'</span>'; } },
+      { key: 'hours', title: '工时(h)', width: '42px', minWidth: 60, render: function(v) { return (v||0).toFixed(1); } },
       { key: 'description', title: '描述', align: 'left', render: function(v) { return '<span style="white-space:normal;word-break:break-word">'+escHtml(v||'')+'</span>'; } },
-      { key: 'actions', title: '', width: '34px', render: function(v, row) { return iconEdit('openBugWorklogEditDialog('+bugId+','+row.id+')')+iconDelete('deleteBugWorklog('+bugId+','+row.id+')'); } }
+      { key: 'actions', title: '', width: '90px', minWidth: 90, render: function(v, row) { return iconEdit('openBugWorklogEditDialog('+bugId+','+row.id+')')+iconDelete('deleteBugWorklog('+bugId+','+row.id+')'); } }
     ],
     data: logs,
   });
