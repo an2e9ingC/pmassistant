@@ -472,6 +472,7 @@ function renderTemplatesPage() {
         var cols = [
           { key: 'sort_order', title: '序号', minWidth: 60, width: '50px', render: function(v, row, idx) { return '<span data-drag-index="'+idx+'" style="font-family:var(--mono);color:var(--muted);cursor:grab" title="拖动排序">'+(v!=null?v:'—')+'</span>'; } },
           { key: 'task_name', title: '任务名称', minWidth: 100, render: function(v) { return '<span style="font-weight:500">'+escHtml(v||'')+'</span>'; } },
+          { key: 'priority', title: '优先级', minWidth: 70, width: '60px', render: function(v) { return renderPriorityBadge(v); } },
           { key: 'responsible_role', title: '责任人', minWidth: 90, width: '100px', render: function(v) { return '<span style="font-size:12px;white-space:nowrap">'+escHtml(v||'—')+'</span>'; } },
           { key: 'description', title: '说明', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(v||'')+'</span>'; } }
         ];
@@ -1074,6 +1075,15 @@ function showAddTaskTemplateForm() {
       '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">责任人（岗位） <span style="color:var(--danger)">*必填</span></label>' + _roleSelect('') + '</div>' +
     '</div>' +
     '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">缺省优先级</label>' +
+      '<select class="search-inp" id="dt-task-priority" style="width:100%;box-sizing:border-box">' +
+        '<option value="low">低</option>' +
+        '<option value="medium" selected>中</option>' +
+        '<option value="high">高</option>' +
+        '<option value="critical">紧急</option>' +
+      '</select>' +
+    '</div>' +
+    '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer">' +
         '<input type="checkbox" id="dt-task-is-optional" style="width:16px;height:16px;cursor:pointer">' +
         '可选项（标记后，项目可按需删除该任务）' +
@@ -1102,6 +1112,15 @@ function showEditTaskTemplateForm(id) {
       '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">责任人（岗位） <span style="color:var(--danger)">*必填</span></label>' + _roleSelect(t.responsible_role || '') + '</div>' +
     '</div>' +
     '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">缺省优先级</label>' +
+      '<select class="search-inp" id="dt-task-priority" style="width:100%;box-sizing:border-box">' +
+        '<option value="low"' + (t.priority === 'low' ? ' selected' : '') + '>低</option>' +
+        '<option value="medium"' + (!t.priority || t.priority === 'medium' ? ' selected' : '') + '>中</option>' +
+        '<option value="high"' + (t.priority === 'high' ? ' selected' : '') + '>高</option>' +
+        '<option value="critical"' + (t.priority === 'critical' ? ' selected' : '') + '>紧急</option>' +
+      '</select>' +
+    '</div>' +
+    '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer">' +
         '<input type="checkbox" id="dt-task-is-optional" style="width:16px;height:16px;cursor:pointer"' + (t.is_optional ? ' checked' : '') + '>' +
         '可选项（标记后，项目可按需删除该任务）' +
@@ -1120,6 +1139,7 @@ function saveTaskTemplate(id) {
   var sortEl = document.getElementById('dt-task-sort');
   var roleEl = document.getElementById('dt-role');
   var descEl = document.getElementById('dt-task-desc');
+  var priEl = document.getElementById('dt-task-priority');
   if (!nameEl || !sortEl) { showToast('表单数据异常，请重新打开', 'error'); return; }
 
   var name = nameEl.value.trim();
@@ -1127,6 +1147,7 @@ function saveTaskTemplate(id) {
   var sort = sortVal !== '' ? parseInt(sortVal) : 0;
   var role = roleEl ? roleEl.value.trim() : '';
   var desc = descEl ? descEl.value.trim() : '';
+  var priority = priEl ? priEl.value : 'medium';
   var isOptTaskEl = document.getElementById('dt-task-is-optional');
   var isOptional = isOptTaskEl && isOptTaskEl.checked ? 1 : 0;
 
@@ -1144,9 +1165,10 @@ function saveTaskTemplate(id) {
     existing.sort_order = sort;
     existing.responsible_role = role || '';
     existing.description = desc;
+    existing.priority = priority;
     existing.is_optional = !!isOptional;
     _taskPendingOps.push({ type: 'edit', id: id, stage_type: stageType,
-      task_name: name, sort_order: sort, responsible_role: role || '', description: desc, is_optional: isOptional });
+      task_name: name, sort_order: sort, responsible_role: role || '', description: desc, priority: priority, is_optional: isOptional });
   } else if (id && id < 0) {
     // Edit locally-added (not yet saved)
     var arr = _taskTemplatesGrouped[stageType] || [];
@@ -1156,6 +1178,7 @@ function saveTaskTemplate(id) {
       existing.sort_order = sort;
       existing.responsible_role = role || '';
       existing.description = desc;
+      existing.priority = priority;
     }
     for (var pi = 0; pi < _taskPendingOps.length; pi++) {
       if (_taskPendingOps[pi].tempId === id) {
@@ -1163,6 +1186,7 @@ function saveTaskTemplate(id) {
         _taskPendingOps[pi].sort_order = sort;
         _taskPendingOps[pi].responsible_role = role || '';
         _taskPendingOps[pi].description = desc;
+        _taskPendingOps[pi].priority = priority;
         break;
       }
     }
@@ -1170,9 +1194,9 @@ function saveTaskTemplate(id) {
     // New template — add locally with temp ID
     var tempId = _nextTempId--;
     var newTpl = { id: tempId, stage_type: stageType, task_name: name,
-      sort_order: sort, responsible_role: role || '', description: desc, is_optional: !!isOptional };
+      sort_order: sort, responsible_role: role || '', description: desc, priority: priority, is_optional: !!isOptional };
     _taskPendingOps.push({ type: 'add', tempId: tempId, stage_type: stageType,
-      task_name: name, sort_order: sort, responsible_role: role || '', description: desc, is_optional: isOptional });
+      task_name: name, sort_order: sort, responsible_role: role || '', description: desc, priority: priority, is_optional: isOptional });
     var arr2 = _taskTemplatesGrouped[stageType];
     if (!arr2) { _taskTemplatesGrouped[stageType] = []; arr2 = _taskTemplatesGrouped[stageType]; }
     arr2.push(newTpl);

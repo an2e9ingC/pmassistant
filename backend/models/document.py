@@ -112,6 +112,7 @@ class TaskTemplate(Base):
     sort_order = Column(Integer, default=0)
     description = Column(String(512), nullable=True)
     responsible_role = Column(String(128), nullable=True)  # 责任人/岗位
+    priority = Column(String(16), default="medium")  # low / medium / high / critical — 缺省优先级
     is_unnecessary = Column(Integer, default=0)  # 0=正常 1=无需任务
     is_optional = Column(Integer, default=0)  # 0=必选 1=可选（项目可按需删除）
     created_at = Column(DateTime, default=func.now())

@@ -630,6 +630,7 @@ class TaskTemplateCreate(BaseModel):
     sort_order: int = 0
     responsible_role: Optional[str] = None
     description: Optional[str] = None
+    priority: Optional[str] = "medium"  # low / medium / high / critical
     is_optional: int = 0
     is_unnecessary: int = 0
 
@@ -640,6 +641,7 @@ class TaskTemplateUpdate(BaseModel):
     sort_order: Optional[int] = None
     description: Optional[str] = None
     responsible_role: Optional[str] = None
+    priority: Optional[str] = None  # low / medium / high / critical
     is_optional: Optional[int] = None
     is_unnecessary: Optional[int] = None
 

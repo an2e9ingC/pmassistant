@@ -978,6 +978,7 @@ def _task_template_dict(t: TaskTemplate) -> dict:
         "sort_order": t.sort_order,
         "description": t.description or "",
         "responsible_role": t.responsible_role or "",
+        "priority": t.priority or "medium",
         "is_unnecessary": bool(t.is_unnecessary),
         "is_optional": bool(t.is_optional),
     }
@@ -1017,6 +1018,7 @@ def create_task_template(db: Session, data: dict) -> dict:
         sort_order=data.get("sort_order", 0),
         description=data.get("description"),
         responsible_role=data.get("responsible_role"),
+        priority=data.get("priority", "medium"),
         is_unnecessary=1 if data.get("is_unnecessary") else 0,
         is_optional=1 if data.get("is_optional") else 0,
     )
@@ -1041,7 +1043,7 @@ def update_task_template(db: Session, template_id: int, data: dict) -> Optional[
         ).first()
         if dup:
             raise ValueError(f"任务模板「{new_name}」在该阶段下已存在")
-    for field in ("stage_type", "task_name", "sort_order", "description", "responsible_role", "is_unnecessary", "is_optional"):
+    for field in ("stage_type", "task_name", "sort_order", "description", "responsible_role", "priority", "is_unnecessary", "is_optional"):
         if field in data:
             setattr(tpl, field, data[field])
     db.commit()
@@ -1193,7 +1195,7 @@ def _sync_tasks_from_templates(
                 title=tpl.task_name,
                 description=tpl.description or None,
                 status="todo",
-                priority="medium",
+                priority=tpl.priority or "medium",
                 type="development",
                 assignee_id=assignee_id,
                 reviewer_id=reviewer_id,
