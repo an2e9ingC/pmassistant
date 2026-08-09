@@ -271,7 +271,8 @@ class SyncService:
 
             # ── Source 2: GitLab (product document scanning) ──
             gitlab_summary = {}
-            if settings.GITLAB_TOKEN:
+            gitlab_enabled = os.environ.get("GITLAB_ENABLED", "true").lower() in ("1", "true", "yes")
+            if gitlab_enabled and settings.GITLAB_TOKEN:
                 try:
                     _sync_progress["phase"] = "GitLab文档扫描"
                     from backend.services.doc_scanner import check_all_product_docs
@@ -302,8 +303,12 @@ class SyncService:
                                      entity_type="gitlab", status="failed", error_message=str(e)[:200])
                     db.add(gl_log); db.commit()
             else:
-                logger.warning("[GitLab] 未配置Token，跳过")
-                gitlab_summary = {"status": "skipped", "summary": "未配置Token"}
+                if not gitlab_enabled:
+                    logger.info("[GitLab] 同步已跳过（数据源配置禁用）")
+                    gitlab_summary = {"status": "skipped", "summary": "已禁用（数据源配置）"}
+                else:
+                    logger.warning("[GitLab] 未配置Token，跳过")
+                    gitlab_summary = {"status": "skipped", "summary": "未配置Token"}
                 _auto_sync_notify["gitlab"] = gitlab_summary
 
             # ── Source 3: NAS ──

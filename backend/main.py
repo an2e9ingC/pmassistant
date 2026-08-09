@@ -41,6 +41,14 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("backend.services.doc_scanner").setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Startup source self-check results — read by /api/health endpoint.
+# Status: "pending" (not yet checked) | "ok" | "disabled" | "unconfigured" | "failed"
+startup_source_status = {
+    "zentao": {"status": "pending", "detail": "", "checked_at": None},
+    "gitlab": {"status": "pending", "detail": "", "checked_at": None},
+    "svn":    {"status": "pending", "detail": "", "checked_at": None},
+}
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -60,7 +68,7 @@ async def lifespan(app: FastAPI):
     _log_db_change_if_replaced()
 
     # ── Startup connection self-test: enabled sources must pass ──
-    import json, urllib.request, urllib.error, sys
+    import json, urllib.request, urllib.error, time as _time
     from backend.routers.config import _load_config
 
     cfg = _load_config()
@@ -73,9 +81,11 @@ async def lifespan(app: FastAPI):
         enabled = cfg.get(key, {}).get("enabled", True)
         if not enabled:
             logger.info(f"[启动自检] {label}: 已禁用，跳过")
+            startup_source_status[key] = {"status": "disabled", "detail": "", "checked_at": _time.time()}
             continue
         if not url:
             logger.warning(f"[启动自检] {label}: 未配置地址，跳过")
+            startup_source_status[key] = {"status": "unconfigured", "detail": "未配置地址", "checked_at": _time.time()}
             continue
         try:
             if key == "gitlab":
@@ -94,12 +104,13 @@ async def lifespan(app: FastAPI):
                 req = urllib.request.Request(url, method="GET")
             resp = urllib.request.urlopen(req, timeout=10)
             logger.info(f"[启动自检] {label}: OK (HTTP {resp.status})")
+            startup_source_status[key] = {"status": "ok", "detail": f"HTTP {resp.status}", "checked_at": _time.time()}
         except urllib.error.HTTPError as e:
-            logger.critical(f"[启动自检] {label}: HTTP {e.code} — {e.reason}，启动失败")
-            sys.exit(1)
+            logger.warning(f"[启动自检] {label}: HTTP {e.code} — {e.reason}，服务将降级运行")
+            startup_source_status[key] = {"status": "failed", "detail": f"HTTP {e.code} — {e.reason}", "checked_at": _time.time()}
         except Exception as e:
-            logger.critical(f"[启动自检] {label}: 连接失败 — {e}，启动失败")
-            sys.exit(1)
+            logger.warning(f"[启动自检] {label}: 连接失败 — {e}，服务将降级运行")
+            startup_source_status[key] = {"status": "failed", "detail": str(e), "checked_at": _time.time()}
 
     # Start background auto-sync task
     import asyncio
@@ -296,7 +307,14 @@ async def serve_login():
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok"}
+    any_failed = any(
+        s["status"] == "failed"
+        for s in startup_source_status.values()
+    )
+    return {
+        "status": "degraded" if any_failed else "ok",
+        "sources": startup_source_status,
+    }
 
 
 @app.get("/api/server-status")
