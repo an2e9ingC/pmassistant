@@ -484,6 +484,7 @@ def import_tasks_from_template(
         db, project.id,
         project.project_type or "RD",
         force_template_ids=force_ids,
+        reporter_id=user.id,
     )
     if force_ids:
         msg = f"项目={project.code} 选择性导入 {len(force_ids)} 个模板, 创建/恢复数={count}"

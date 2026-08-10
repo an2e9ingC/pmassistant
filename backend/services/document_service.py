@@ -1092,6 +1092,7 @@ def _sync_tasks_from_templates(
     project_id: int,
     project_type: str = "RD",
     force_template_ids: set = None,
+    reporter_id: int = 1,
 ) -> int:
     """Sync project tasks from task templates for all standard stages.
 
@@ -1199,7 +1200,7 @@ def _sync_tasks_from_templates(
                 type="development",
                 assignee_id=assignee_id,
                 reviewer_id=reviewer_id,
-                reporter_id=1,
+                reporter_id=reporter_id,
                 template_id=tpl.id,
                 sort_order=seq_idx,
             )

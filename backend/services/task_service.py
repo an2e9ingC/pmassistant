@@ -59,7 +59,7 @@ def get_task(db: Session, task_id: int) -> Optional[dict]:
 
 
 def get_my_tasks(db: Session, user_id: int) -> List[dict]:
-    """Get tasks for a user: assigned + CC'd + watched (tagged with _source)."""
+    """Get tasks for a user: assigned + reported + CC'd + watched (tagged with _source)."""
     # 1. Tasks assigned to the user
     tasks = db.query(Task).filter(
         Task.assignee_id == user_id,
@@ -86,7 +86,19 @@ def get_my_tasks(db: Session, user_id: int) -> List[dict]:
             result.append(d)
             seen_ids.add(t.id)
 
-    # 3. Tasks the user is watching (from favorites.tasks[]) — only those not already loaded
+    # 3. Tasks reported (created) by the user
+    reported = db.query(Task).filter(
+        Task.reporter_id == user_id,
+        or_(Task.is_deleted == 0, Task.is_deleted == None),
+    ).order_by(Task.created_at.desc()).all()
+    for t in reported:
+        if t.id not in seen_ids:
+            d = _task_dict(t, db)
+            d["_source"] = "reported"
+            result.append(d)
+            seen_ids.add(t.id)
+
+    # 4. Tasks the user is watching (from favorites.tasks[]) — only those not already loaded
     from backend.models.local import LocalUser
     user = db.query(LocalUser).filter(LocalUser.id == user_id).first()
     if user:
@@ -109,10 +121,10 @@ def get_my_tasks(db: Session, user_id: int) -> List[dict]:
                     result.append(d)
                     seen_ids.add(t.id)
 
-    # Sort: assigned first, then CC'd, then watched; within each group by status/due_date
-    source_order = {"assigned": 0, "cc": 1, "watched": 2}
+    # Sort: assigned first, then reported, then CC'd, then watched; within each group by status/due_date
+    source_order = {"assigned": 0, "reported": 1, "cc": 2, "watched": 3}
     result.sort(key=lambda d: (
-        source_order.get(d.get("_source", "watched"), 2),
+        source_order.get(d.get("_source", "watched"), 3),
         d.get("status") == "closed",
         not (d.get("due_date") or ""),
         d.get("due_date") or "9999-12-31",
