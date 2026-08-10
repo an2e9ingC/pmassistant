@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="app-version" content="v2026.08.09-beta2">
+  <meta name="app-version" content="v2026.08.10-beta1">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>PM Assistant · 集成禅道 & GitLab</title>
 <script>
@@ -148,6 +148,13 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
         </svg>
         Bug 管理
       </div>
+      <div class="nav-item" id="nav-users" onclick="gotoView('users')">
+        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="8" cy="5" r="3"/>
+          <path d="M2 14c0-3 2.7-5 6-5s6 2 6 5"/>
+        </svg>
+        组织架构
+      </div>
     </div>
     <div class="nav-group" id="nav-group-admin" style="display:none">
       <div class="nav-group-label">管理</div>
@@ -160,13 +167,6 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
           <line x1="6.2" y1="6.3" x2="9.8" y2="6.3"/>
         </svg>
         系统管理
-      </div>
-      <div class="nav-item" id="nav-users" onclick="gotoView('users')">
-        <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-          <circle cx="8" cy="5" r="3"/>
-          <path d="M2 14c0-3 2.7-5 6-5s6 2 6 5"/>
-        </svg>
-        用户管理
       </div>
       <div class="nav-item" id="nav-permissions" onclick="gotoView('permissions')">
         <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -604,8 +604,8 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
     <!-- ══════════════════════ VIEW — USERS ══════════════════════ -->
     <div class="view" id="view-users">
       <div class="tabs" style="margin-bottom:12px">
-        <span class="tab active" id="utab-users" onclick="switchUserTab('users')">用户管理</span>
-        <span class="tab" id="utab-roles" onclick="switchUserTab('roles')">角色组管理</span>
+        <span class="tab active" id="utab-users" onclick="switchUserTab('users')">用户列表</span>
+        <span class="tab" id="utab-roles" onclick="switchUserTab('roles')">角色分组</span>
         <span class="tab" id="utab-wecom" onclick="switchUserTab('wecom')">企业微信用户</span>
       </div>
       <div id="usec-users">

@@ -97,7 +97,7 @@ var VIEW_REGISTRY = {
   'notif-manage':   { title: '通知管理',    label: '通知管理',    perm: null,            init: initNotifManage },
   logs:             { title: '系统日志',    label: '系统日志',    perm: 'admin',         init: initLogsView,           js: '/js/logs.js?v=' + APP_VERSION },
   bugs:             { title: 'Bug 管理',     label: 'Bug 管理',    perm: null,            initName: 'initBugs',         js: '/js/bugs.js?v=' + APP_VERSION },
-  users:            { title: '用户管理',    label: '用户管理',    perm: 'admin',         initName: 'initUserManagement',   js: '/js/admin.js?v=' + APP_VERSION },
+  users:            { title: '组织架构',    label: '组织架构',    perm: null,            initName: 'initUserManagement',   js: '/js/admin.js?v=' + APP_VERSION },
   permissions:      { title: '权限管理',    label: '权限管理',    perm: 'admin',         initName: 'initPermissions',      js: '/js/admin.js?v=' + APP_VERSION },
   config:           { title: '数据源配置',  label: '数据源配置',  perm: 'admin',         initName: 'initAdmin',            js: '/js/admin.js?v=' + APP_VERSION },
   'doc-templates':  { title: '模板管理',    label: '模板管理',    perm: 'doc_template', initName: 'initDocTemplates',  js: '/js/doc-templates.js?v=' + APP_VERSION },
@@ -1591,8 +1591,16 @@ async function initUserCenter(viewUserId, tab) {
   window._ucViewUserId = isViewingOther ? viewUserId : null;
   if (isViewingOther) {
     try {
-      var resp = await API.get('/admin/users/' + viewUserId);
-      if (resp) { user = resp; }
+      // Non-admin users use the public endpoint (limited fields); admins get full data
+      var currentPerms = (currentUser.permissions || '').split(',').filter(Boolean);
+      var isAdmin = currentUser.role === 'admin' || currentPerms.indexOf('admin') >= 0;
+      if (isAdmin) {
+        var resp = await API.get('/admin/users/' + viewUserId);
+        if (resp) { user = resp; }
+      } else {
+        var resp2 = await API.get('/users/' + viewUserId);
+        if (resp2) { user = resp2; }
+      }
       // Parse viewed user's favorites for "TA的关注" filter card
       window._ucViewUserFavTasks = [];
       window._ucViewUserFavBugs = [];
@@ -2221,6 +2229,7 @@ function _renderUcTaskTable() {
         { key: '_stageName', title: '阶段', minWidth: 100, rowspan: true, render: function(v) { var parts = (v||'').split('||'); var name = parts.length >= 3 ? parts[2] : (v||''); return '<span style="font-size:12px">'+escHtml(name)+'</span>'; } },
         { key: 'id', title: '任务编号', width: '6%', minWidth: 75, render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--accent);cursor:pointer" onclick="event.stopPropagation();_ucOpenTask('+v+')">#'+v+'</span>'; } },
         { key: 'title', title: '任务标题', minWidth: 100, align: 'left', render: function(v, row) { return '<span style="font-weight:530;cursor:pointer" onclick="event.stopPropagation();_ucOpenTask('+row.id+')">'+escHtml(v||'')+'</span>'; } },
+        { key: 'assignee_name', title: '责任人', width: '8%', minWidth: 90, render: function(v, row) { var user=getCurrentUser(); var uid=user?user.id:null; var canEdit=uid&&(row.reporter_id==uid||row.assignee_id==uid); return '<span style="font-size:12px;'+(canEdit?'cursor:pointer;color:var(--accent);text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px':'')+'"'+(canEdit?' onclick="event.stopPropagation();_ucEditAssignee('+row.id+',\'task\','+(row.assignee_id||0)+',\''+escHtml(row.assignee_name||'').replace(/'/g,"\\'")+'\',\''+escHtml(row.title||'').replace(/'/g,"\\'")+'\')" title="'+(canEdit?'点击修改责任人':'')+'"':'')+'>'+escHtml(v||'—')+'</span>'; } },
         { key: 'status', title: '状态', width: '70px', minWidth: 80, render: function(v, row) { var labels = {todo:'待办',in_progress:'进行中',review:'待审批',done:'已完成'}; var h = '<span class="pill '+(v||'todo')+'">'+(labels[v]||v)+'</span>'; if (window._approvalEnabled) h = '<span style="cursor:pointer" onclick="event.stopPropagation();openReviewerDialog('+row.id+')" title="'+(row.reviewer_name?'审批人: '+escHtml(row.reviewer_name)+' — 点击修改':'点击设置审批人')+'">'+h+'</span>'; return h; } },
         { key: 'priority', title: '优先级', width: '6%', minWidth: 65, render: function(v, row) { return '<span class="prio-tag '+(v||'medium')+'" style="cursor:pointer" onclick="event.stopPropagation();_ucEditTaskField('+row.id+',\'priority\',\''+(v||'medium')+'\',\'low:低,medium:中,high:高,critical:紧急\',\''+escHtml(row.title||'').replace(/'/g,"\\'")+'\')">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[v]||v)+'</span>'; } },
         { key: 'progress', title: '进度', width: '6%', minWidth: 60, render: function(v, row) { var st = row.status || 'todo'; return '<span style="cursor:pointer" onclick="event.stopPropagation();_ucEditTaskNumber('+row.id+',\'progress\',\''+(v||0)+'\',\'进度(%)\',0,100,5,\''+escHtml(row.title||'').replace(/'/g,"\\'")+'\',\''+st+'\')">' + (typeof renderProgressCircle==='function'?renderProgressCircle(v||0,36,{label:''}):(v||0)+'%') + '</span>'; } },
@@ -2453,6 +2462,44 @@ async function _doEditBugNumber() {
   } catch(e) { showToast('更新失败: '+(e.message||''),'error'); }
 }
 
+// ── User Center: inline assignee editor (tasks & bugs) ──
+
+async function _ucEditAssignee(itemId, type, currentAssigneeId, currentAssigneeName, title) {
+  // Ensure user list is loaded
+  if (!window._allUsers || !window._allUsers.length) {
+    await (typeof loadAllUsers === 'function' ? loadAllUsers() : Promise.resolve());
+  }
+  var users = window._allUsers || [];
+  var html = '<select id="uc-edit-assignee" class="search-inp" style="width:100%;box-sizing:border-box;font-size:13px;padding:6px 10px">';
+  html += '<option value="">— 未分配 —</option>';
+  users.forEach(function(u) {
+    html += '<option value="' + u.id + '"' + (u.id === currentAssigneeId ? ' selected' : '') + '>' + escHtml(u.display_name || u.name || u.username) + '</option>';
+  });
+  html += '</select>';
+  var dlgTitle = '#' + itemId + ' ' + (title || '');
+  openDialog(dlgTitle, html, [
+    {text: '取消', onclick: 'closeSharedDialog()'},
+    {text: '确定', cls: 'btn-primary', onclick: '_doEditAssignee(' + itemId + ',\'' + type + '\',' + currentAssigneeId + ')'}
+  ], {maxWidth: 300});
+}
+async function _doEditAssignee(itemId, type, currentAssigneeId) {
+  try {
+    var sel = document.getElementById('uc-edit-assignee');
+    var newVal = sel ? (sel.value === '' ? null : parseInt(sel.value)) : null;
+    if (newVal === (currentAssigneeId || null)) { closeSharedDialog(); return; }
+    var payload = {assignee_id: newVal};
+    if (type === 'task') {
+      await API.put('/tasks/' + itemId, payload);
+      EventBus.emit('task:saved', {taskId: itemId});
+    } else {
+      await API.put('/bugs/' + itemId, payload);
+      EventBus.emit('bug:field-changed', {bugId: itemId, payload: payload});
+    }
+    showToast('已更新', 'success');
+    closeSharedDialog();
+  } catch(e) { showToast('更新失败: ' + (e.message || ''), 'error'); }
+}
+
 async function _ucConfirmBug(bugId) {
   var user = getCurrentUser();
   var html = '<div>' +
@@ -2634,6 +2681,7 @@ async function _ucLoadBugs() {
           { key: '_prodName', title: '产品编号', width: '170px', minWidth: 170, rowspan: true, render: function(v, row) { return row.product_code ? '<span class="proj-code-btn" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="event.stopPropagation();openProductDetail(\''+escHtml(row.product_code)+'\')" title="'+escHtml(row.product_code)+' '+escHtml(row.product_name||'')+'">'+escHtml(row.product_code)+'</span>' : '<span style="font-size:12px;color:var(--muted)">—</span>'; } },
           { key: 'id', title: 'Bug编号', width: '6%', minWidth: 75, render: function(v) { return '<span style="font-family:var(--mono);font-size:11px;cursor:pointer" onclick="event.stopPropagation();loadViewScript(\'/js/bugs.js?v=' + APP_VERSION + '\',function(){openBugDetail('+v+')})">#'+v+'</span>'; } },
           { key: 'title', title: 'Bug标题', minWidth: 100, align: 'left', render: function(v, row) { return '<span style="font-weight:530;cursor:pointer" onclick="event.stopPropagation();loadViewScript(\'/js/bugs.js?v=' + APP_VERSION + '\',function(){openBugDetail('+row.id+')})">'+escHtml(v||'')+'</span>'; } },
+          { key: 'assignee_name', title: '责任人', width: '8%', minWidth: 90, render: function(v, row) { var user=getCurrentUser(); var uid=user?user.id:null; var canEdit=uid&&(row.reporter_id==uid||row.assignee_id==uid); return '<span style="font-size:12px;'+(canEdit?'cursor:pointer;color:var(--accent);text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px':'')+'"'+(canEdit?' onclick="event.stopPropagation();_ucEditAssignee('+row.id+',\'bug\','+(row.assignee_id||0)+',\''+escHtml(row.assignee_name||'').replace(/'/g,"\\'")+'\',\''+escHtml(row.title||'').replace(/'/g,"\\'")+'\')" title="'+(canEdit?'点击修改责任人':'')+'"':'')+'>'+escHtml(v||'—')+'</span>'; } },
           { key: 'severity', title: '严重程度', width: '6%', minWidth: 60, render: function(v, row) { var sevs={1:'致命',2:'严重',3:'一般',4:'建议'}; var c={1:'var(--danger)',2:'var(--warn)',3:'var(--muted)',4:'var(--success)'}; var user=getCurrentUser(); var canEdit=user&&user.id==row.reporter_id; return '<span style="font-size:11px;color:'+(c[v]||c[3])+';font-weight:600;cursor:'+(canEdit?'pointer':'default')+'" onclick="event.stopPropagation();'+(canEdit?'_ucEditBugField('+row.id+',\'severity\',\''+v+'\',\'1:致命,2:严重,3:一般,4:建议\',\''+escHtml(row.title||'').replace(/'/g,"\\'")+'\')':'')+'">'+(sevs[v]||'—')+'</span>'; } },
           { key: 'status', title: '状态', width: '72px', minWidth: 80, render: function(v) { var colorMap = {open:'review',in_progress:'in_progress',resolved:'done',closed:'pending'}; var labels = {open:'待确认',in_progress:'处理中',resolved:'已解决',closed:'已关闭'}; return '<span class="pill ' + (colorMap[v]||'pending') + '">' + (labels[v]||v) + '</span>'; } },
           { key: 'priority', title: '优先级', width: '6%', minWidth: 65, render: function(v, row) { return '<span class="prio-tag '+(v||'medium')+'" style="cursor:pointer" onclick="event.stopPropagation();_ucEditBugField('+row.id+',\'priority\',\''+(v||'medium')+'\',\'low:低,medium:中,high:高,critical:紧急\',\''+escHtml(row.title||'').replace(/'/g,"\\'")+'\')">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[v]||v)+'</span>'; } },
