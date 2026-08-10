@@ -275,6 +275,22 @@ def _cleanup_oauth_states():
         del _oauth_states[s]
 
 
+def _get_oauth_redirect_uri(request: Request) -> str:
+    """Derive OAuth redirect URI from the incoming request's Host header.
+
+    This ensures the redirect URI always matches the actual host:port the user
+    is accessing (e.g., worktree on port 8004), avoiding hardcoded port issues.
+    Falls back to settings.GITLAB_OAUTH_REDIRECT_URI if explicitly configured.
+    """
+    # If explicitly configured, use it (backwards compatibility)
+    if settings.GITLAB_OAUTH_REDIRECT_URI:
+        return settings.GITLAB_OAUTH_REDIRECT_URI
+    # Derive from request
+    host = request.headers.get("host", "localhost:8000")
+    scheme = request.headers.get("x-forwarded-proto", request.url.scheme or "http")
+    return f"{scheme}://{host}/api/auth/gitlab/callback"
+
+
 @router.get("/gitlab/config", response_model=dict)
 def gitlab_oauth_config():
     """Return GitLab OAuth configuration status for the login page."""
@@ -290,7 +306,7 @@ def gitlab_oauth_config():
 
 
 @router.get("/gitlab/authorize", response_model=dict)
-def gitlab_oauth_authorize():
+def gitlab_oauth_authorize(request: Request):
     """Generate the GitLab OAuth authorization URL."""
     if not settings.GITLAB_OAUTH_ENABLED:
         return {"code": 1, "message": "GitLab OAuth 登录未启用"}
@@ -303,12 +319,15 @@ def gitlab_oauth_authorize():
     state = secrets.token_urlsafe(32)
     _oauth_states[state] = time.time() + _OAUTH_STATE_TTL
 
+    # Derive redirect URI from request (auto-adapts to worktree ports)
+    redirect_uri = _get_oauth_redirect_uri(request)
+
     # Derive GitLab web root from API base URL
     gitlab_root = settings.GITLAB_BASE_URL.rsplit("/api", 1)[0]
     authorize_url = (
         f"{gitlab_root}/oauth/authorize"
         f"?client_id={settings.GITLAB_APP_ID}"
-        f"&redirect_uri={settings.GITLAB_OAUTH_REDIRECT_URI}"
+        f"&redirect_uri={redirect_uri}"
         f"&response_type=code"
         f"&scope=read_user+api"
         f"&state={state}"
@@ -339,7 +358,7 @@ async def gitlab_oauth_callback(code: str, state: str, request: Request, db: Ses
     # Remove state after validation (one-time use)
     del _oauth_states[state]
 
-    redirect_uri = settings.GITLAB_OAUTH_REDIRECT_URI
+    redirect_uri = _get_oauth_redirect_uri(request)
     client = GitLabClient()
 
     try:

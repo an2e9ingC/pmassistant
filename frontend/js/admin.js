@@ -409,7 +409,7 @@ function _roleOptions(selected) {
 
 function _roleCheckboxes(roleIds) {
   // Load all roles from _permRoles (populated by initUserManagement or initPermissions)
-  var roles = _permRoles.length ? _permRoles : [];
+  var roles = Array.isArray(_permRoles) && _permRoles.length ? _permRoles : [];
   if (!roles.length) return '<span style="font-size:11px;color:var(--muted)">加载角色失败</span>';
   return '<div style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px 12px">' +
     roles.map(function(r) {
@@ -482,22 +482,140 @@ async function refreshWecomUsers() {
 }
 
 async function initUserManagement() {
+  var user = getCurrentUser();
+  var perms = (user && user.permissions) ? user.permissions.split(',').filter(Boolean) : [];
+  var isAdmin = (user && user.role === 'admin') || (perms.indexOf('admin') >= 0);
+  window._orgIsAdmin = isAdmin;
+
   _userList = [];
+  _orgSearchQuery = '';
+  var inp = document.getElementById('org-search-input'); if (inp) inp.value = '';
+
+  // Insert search bar (matching dashboard style) — shared by admin and non-admin
+  var usecUsers = document.getElementById('usec-users');
+  var searchBar = document.getElementById('org-search-bar');
+  if (!searchBar) {
+    searchBar = document.createElement('div');
+    searchBar.id = 'org-search-bar';
+    searchBar.style.cssText = 'margin-bottom:12px';
+    searchBar.innerHTML = '<div class="search-wrap" style="max-width:320px">' +
+      '<svg class="search-ico" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>' +
+      '<input class="search-inp" id="org-search-input" placeholder="搜索用户名 / 显示名 / 角色..." oninput="_orgSearch()">' +
+      '<button class="search-clear" onclick="clearSearch(\'org-search-input\',_orgSearch)" title="清除">&times;</button>' +
+      '</div>';
+    var tableCard = usecUsers.querySelector('.card');
+    if (tableCard) {
+      usecUsers.insertBefore(searchBar, tableCard);
+    }
+  }
+  document.getElementById('org-search-bar').style.display = '';
+
+  // Reset UI to full state (undo previous non-admin restrictions)
+  var tabBar = document.querySelector('#view-users > .tabs');
+  if (tabBar) tabBar.style.display = '';
+  var kpiGrid = document.getElementById('user-kpi-grid');
+  if (kpiGrid) kpiGrid.style.display = '';
+  document.getElementById('usec-roles').style.display = '';
+  document.getElementById('usec-wecom').style.display = '';
+  document.getElementById('utab-wecom').style.display = '';
+  // Remove injected restriction CSS
+  var restrictStyle = document.getElementById('org-restrict-style');
+  if (restrictStyle) restrictStyle.remove();
+
+  // Init DataTables (unified for both admin and non-admin)
   _initUsersDt(); _usersDt.setData([]);
   _initRolesDt(); _rolesDt.setData([]);
+
   try {
-    if (typeof invalidateAllUsers === 'function') invalidateAllUsers();
-    var rolesPromise = API.get('/admin/users/roles');
-    var usersPromise = API.get('/admin/users');
-    _permRoles = await rolesPromise || [];
-    _userList = await usersPromise || [];
+    if (isAdmin) {
+      if (typeof invalidateAllUsers === 'function') invalidateAllUsers();
+      var rolesPromise = API.get('/admin/users/roles');
+      var usersPromise = API.get('/admin/users');
+      _permRoles = await rolesPromise || [];
+      _userList = await usersPromise || [];
+    } else {
+      // Non-admin: use public endpoints; build role list from user data
+      _userList = await API.get('/users') || [];
+      // Aggregate unique roles from all users
+      var roleMap = {};
+      _userList.forEach(function(u) {
+        (u.roles || []).forEach(function(r) {
+          if (r.id && !roleMap[r.id]) {
+            roleMap[r.id] = { id: r.id, key: r.key || '', label: r.label || '', permissions: [], leader_id: null };
+          }
+        });
+      });
+      _permRoles = Object.values(roleMap);
+      // Normalize: add role_ids + wecom_name for compatibility
+      _userList.forEach(function(u) {
+        if (!u.role_ids || !u.role_ids.length) {
+          u.role_ids = (u.roles || []).map(function(r) { return r.id; });
+        }
+        // wecom_name is now resolved by the backend
+      });
+    }
+
     switchUserTab(_userTab);
     renderUserTable();
     renderRoleTable();
     renderUserKPIs();
     renderRoleKPIs();
+
+    if (!isAdmin) {
+      _applyOrgRestrictions();
+    }
   } catch(e) {
     showToast('加载失败: ' + e.message, 'error');
+  }
+}
+
+// ── Apply non-admin restrictions to the unified org-chart page ──
+
+function _applyOrgRestrictions() {
+  // Hide "重置新手引导" button
+  var kpiGrid = document.getElementById('user-kpi-grid');
+  var el = kpiGrid ? kpiGrid.nextElementSibling : null;
+  while (el) {
+    if (el.querySelector && el.querySelector('button[onclick*="resetAllGuides"]')) {
+      el.style.display = 'none';
+      break;
+    }
+    if (el.classList && el.classList.contains('card')) break;
+    el = el.nextElementSibling;
+  }
+
+  // Hide 企业微信 tab and section
+  document.getElementById('utab-wecom').style.display = 'none';
+  document.getElementById('usec-wecom').style.display = 'none';
+
+  // Re-render roles table with limited columns (hides 角色Key, Leader, 特殊权限, 操作)
+  _initRolesDtOrg();
+  // Re-render role data with limited columns
+  var roles = Array.isArray(_permRoles) ? _permRoles.slice() : [];
+  var sorted = roles.slice().sort(function(a, b) { if (a.key==='public') return -1; if (b.key==='public') return 1; return (a.key<b.key)?-1:1; });
+  _rolesDt.setData(sorted.map(function(r, idx) {
+    r.idx = idx + 1;
+    var roleUsers = _userList.filter(function(u) { return (u.role_ids||[]).indexOf(r.id)>=0; });
+    r.user_names = roleUsers.length
+      ? '<div style="line-height:1.8">' + roleUsers.map(function(u) { var tagClass='accent'; return '<span style="display:inline-block;margin:1px 2px;padding:1px 6px;border-radius:3px;font-size:10px;background:var(--'+tagClass+'-lt);color:var(--'+tagClass+');cursor:pointer" onclick="event.stopPropagation();gotoView(\'user-center\',{params:['+u.id+']})" title="'+escHtml(u.username)+'">'+escHtml(u.display_name||u.username)+'</span>'; }).join('') + '</div>'
+      : null;
+    r.label_with_count = '<span>' + escHtml(r.label||'') + ' <sup style="color:var(--muted);font-size:10px">' + roleUsers.length + '</sup></span>';
+    return r;
+  }));
+
+  // Inject CSS to hide restricted user table columns (both th and td)
+  var styleId = 'org-restrict-style';
+  if (!document.getElementById(styleId)) {
+    var style = document.createElement('style');
+    style.id = styleId;
+    // Columns: 1=idx, 2=username, 3=wecom_name, 4=auth_source, 5=role_badges, 6=status, 7=wecom_btn, 8=login, 9=last_login, 10=created_at, 11=actions
+    // Hide col 7 (wecom_btn), 8 (login_html), 9 (last_login), 10 (created_at)
+    var hiddenCols = [7, 8, 9, 10];
+    var rules = hiddenCols.map(function(n) {
+      return '#usec-users .dt-table col:nth-child(' + n + '),#usec-users .dt-table th:nth-child(' + n + '),#usec-users .dt-table td:nth-child(' + n + ')';
+    }).join(',');
+    style.textContent = rules + ' { display: none; }';
+    document.head.appendChild(style);
   }
 }
 
@@ -529,8 +647,9 @@ function renderUserKPIs() {
 }
 
 function renderRoleKPIs() {
-  var total = _permRoles.length;
-  var withPerms = _permRoles.filter(function(r) { return (r.permissions || []).length > 0; }).length;
+  var rolesArr = Array.isArray(_permRoles) ? _permRoles : [];
+  var total = rolesArr.length;
+  var withPerms = rolesArr.filter(function(r) { return (r.permissions || []).length > 0; }).length;
   var html =
     '<div class="kpi-card' + (_roleFilter === 'all' ? ' active' : '') + '" onclick="roleFilterKPI(\'all\')"><div class="kpi-label">角色组总数</div><div class="kpi-value">' + total + '</div></div>' +
     '<div class="kpi-card' + (_roleFilter === 'withPerms' ? ' active' : '') + '" onclick="roleFilterKPI(\'withPerms\')"><div class="kpi-label">有特殊权限角色</div><div class="kpi-value" style="color:var(--accent)">' + withPerms + '</div></div>' +
@@ -546,19 +665,32 @@ function _initRolesDt() {
     container: document.getElementById('roles-table'),
     columns: [
       { key: 'idx', title: '序号', width: '40px', minWidth: 60, render: function(v) { return '<span style="font-family:var(--mono);color:var(--muted)">' + v + '</span>'; } },
-      { key: 'key', title: '角色Key', minWidth: 60, render: function(v) { return '<span style="font-family:var(--mono);font-size:12px;font-weight:500">' + escHtml(v||'') + '</span>'; } },
-      { key: 'label_with_count', title: '显示名', minWidth: 100, render: function(v) { return v; } },
-      { key: 'leader_display', title: 'Leader', minWidth: 90, render: function(v) { return v || '<span style="font-size:11px;color:var(--muted)">未设置</span>'; } },
-      { key: 'perm_badges', title: '特殊权限', minWidth: 80, render: function(v) { return v || '<span style="font-size:11px;color:var(--muted)">无</span>'; } },
-      { key: 'user_names', title: '成员', minWidth: 90, render: function(v) { return v || '<span style="font-size:11px;color:var(--muted)">暂无成员</span>'; } },
-      { key: 'actions', title: '操作', width: '100px', minWidth: 100, render: function(v) { return v; } }
+      { key: 'key', title: '角色Key', width: '80px', minWidth: 60, render: function(v) { return '<span style="font-family:var(--mono);font-size:12px;font-weight:500">' + escHtml(v||'') + '</span>'; } },
+      { key: 'label_with_count', title: '显示名', width: '140px', minWidth: 100, render: function(v) { return v; } },
+      { key: 'leader_display', title: 'Leader', width: '100px', minWidth: 70, render: function(v) { return v || '<span style="font-size:11px;color:var(--muted)">未设置</span>'; } },
+      { key: 'perm_badges', title: '特殊权限', minWidth: 80, align: 'left', render: function(v) { return v || '<span style="font-size:11px;color:var(--muted)">无</span>'; } },
+      { key: 'user_names', title: '成员', minWidth: 120, align: 'left', render: function(v) { return v || '<span style="font-size:11px;color:var(--muted)">暂无成员</span>'; } },
+      { key: 'actions', title: '操作', width: '130px', minWidth: 130, render: function(v) { return v; } }
+    ],
+    maxHeight: 'calc(100vh - 340px)',
+  });
+}
+
+// Limited roles table for non-admin: hides 角色Key, Leader, 特殊权限, 操作
+function _initRolesDtOrg() {
+  _rolesDt = new DataTable({
+    container: document.getElementById('roles-table'),
+    columns: [
+      { key: 'idx', title: '序号', width: '40px', minWidth: 60, render: function(v) { return '<span style="font-family:var(--mono);color:var(--muted)">' + v + '</span>'; } },
+      { key: 'label_with_count', title: '显示名', width: '140px', minWidth: 100, render: function(v) { return v; } },
+      { key: 'user_names', title: '成员', minWidth: 120, align: 'left', render: function(v) { return v || '<span style="font-size:11px;color:var(--muted)">暂无成员</span>'; } }
     ],
     maxHeight: 'calc(100vh - 340px)',
   });
 }
 
 function renderRoleTable() {
-  var roles = _permRoles.slice();
+  var roles = Array.isArray(_permRoles) ? _permRoles.slice() : [];
   if (_roleFilter === 'withPerms') roles = roles.filter(function(r) { return (r.permissions || []).length > 0; });
   else if (_roleFilter === 'public') roles = roles.filter(function(r) { return (r.permissions || []).length === 0; });
   var sorted = roles.slice().sort(function(a, b) { if (a.key==='public') return -1; if (b.key==='public') return 1; return (a.key<b.key)?-1:1; });
@@ -583,9 +715,9 @@ function renderRoleTable() {
       return '<span style="display:inline-block;margin:1px 2px;font-size:11px;cursor:pointer;' +
         (isLeader ? 'font-weight:600;color:var(--warning-dark, #856404);background:var(--warning-lt, #fff3cd);padding:1px 6px;border-radius:3px;' : 'color:var(--accent);') +
         '" onclick="event.stopPropagation();gotoView(\'user-center\',{params:[' + u.id + ']})" title="' + escHtml(u.username) + (isLeader ? ' (Leader)' : '') + '">' +
-        (isLeader ? '👑 ' : '') + escHtml(getDisplayName(u.username)) + '</span>';
+        (isLeader ? '👑 ' : '') + escHtml(u.display_name || getDisplayName(u.username)) + '</span>';
     }).join('') : null;
-    r.user_names = '<div style="min-height:24px;display:flex;align-items:center;flex-wrap:wrap;cursor:pointer" onclick="showRoleUsers(' + r.id + ',\'' + escHtml(r.label) + '\')" title="点击管理成员">' +
+    r.user_names = '<div style="min-height:24px;line-height:1.8;cursor:pointer" onclick="showRoleUsers(' + r.id + ',\'' + escHtml(r.label) + '\')" title="点击管理成员">' +
       (namesHtml || '<span style="font-size:11px;color:var(--muted)">点击添加成员</span>') + '</div>';
     r.leader_display = r.leader_name ? ('<span style="font-size:12px">' + escHtml(r.leader_name) + '</span> <button class="btn btn-xs" onclick="openRoleLeaderDialog('+r.id+',\''+escHtml(r.label)+'\','+(r.leader_id||0)+')" title="编辑Leader" style="padding:1px 4px;font-size:9px">✎</button>') : ('<button class="btn btn-xs" onclick="openRoleLeaderDialog('+r.id+',\''+escHtml(r.label)+'\',0)" title="设置Leader" style="padding:1px 6px;font-size:10px">设置Leader</button>');
     r.actions = '<span style="white-space:nowrap">' + (r.key==='admin' ? '<span style="font-size:11px;color:var(--muted)">系统内置</span>' : iconEdit('openRoleCreateDialog('+r.id+')') + iconDelete('deleteRole('+r.id+',\''+escHtml(r.label)+'\')')) + '</span>';
@@ -813,16 +945,16 @@ function _initUsersDt() {
     container: document.getElementById('users-table'),
     columns: [
       { key: 'idx', title: '序号', width: '40px', minWidth: 60, render: function(v) { return '<span style="font-family:var(--mono);color:var(--muted)">' + v + '</span>'; } },
-      { key: 'username', title: '用户名', minWidth: 90, render: function(v, row) { return '<span style="font-size:13px;font-weight:500;cursor:pointer;color:var(--accent)" onclick="gotoView(\'user-center\',{params:[' + row.id + ']})" title="查看用户中心">' + escHtml(v||'') + '</span>'; } },
-      { key: 'wecom_name', title: '企微姓名', width: '6%', minWidth: 90, render: function(v) { return '<span style="font-size:12px">' + escHtml(v||'—') + '</span>'; } },
+      { key: 'username', title: '用户名', width: '170px', minWidth: 120, render: function(v, row) { return '<span style="font-size:13px;font-weight:500;cursor:pointer;color:var(--accent)" onclick="gotoView(\'user-center\',{params:[' + row.id + ']})" title="查看用户中心">' + escHtml(v||'') + '</span>'; } },
+      { key: 'wecom_name', title: '企微姓名', width: '8%', minWidth: 80, render: function(v) { return '<span style="font-size:12px">' + escHtml(v||'—') + '</span>'; } },
       { key: 'auth_source', title: '来源', width: '6%', minWidth: 80, render: function(v) { var isGL = v==='gitlab'; return '<span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;background:'+(isGL?'var(--accent-lt)':'var(--muted-lt)')+';color:'+(isGL?'var(--accent)':'var(--muted)')+'">'+(isGL?'GitLab':'本地')+'</span>'; } },
-      { key: 'role_badges', title: '角色组', width: '18%', minWidth: 80, render: function(v) { return v || '<span style="font-size:11px;color:var(--muted)">未分配</span>'; } },
+      { key: 'role_badges', title: '角色组', width: '22%', minWidth: 120, align: 'left', render: function(v) { return v || '<span style="font-size:11px;color:var(--muted)">未分配</span>'; } },
       { key: 'status_html', title: '状态', width: '5%', minWidth: 80, render: function(v) { return v; } },
       { key: 'wecom_btn', title: '企业微信', width: '7%', minWidth: 90, render: function(v) { return v; } },
       { key: 'login_html', title: '登录状态', width: '8%', minWidth: 80, render: function(v) { return v; } },
       { key: 'last_login', title: '上次登录', width: '10%', minWidth: 120, render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(fmtISODateTime(v)||'—')+'</span>'; } },
       { key: 'created_at', title: '创建时间', width: '8%', minWidth: 120, render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(fmtISODateTime(v)||'')+'</span>'; } },
-      { key: 'actions', title: '操作', width: '150px', minWidth: 150, render: function(v, row) { return v; } }
+      { key: 'actions', title: '操作', width: '180px', minWidth: 180, render: function(v, row) { return v; } }
     ],
     maxHeight: 'calc(100vh - 340px)',
   });
@@ -833,17 +965,52 @@ function renderUserTable() {
   if (_userFilter === 'active') users = users.filter(function(u) { return u.is_active; });
   else if (_userFilter === 'disabled') users = users.filter(function(u) { return !u.is_active; });
 
+  // Apply search filter
+  if (_orgSearchQuery) {
+    users = users.filter(function(u) {
+      if ((u.username||'').toLowerCase().indexOf(_orgSearchQuery) >= 0) return true;
+      if ((u.display_name||'').toLowerCase().indexOf(_orgSearchQuery) >= 0) return true;
+      if ((u.wecom_name||'').toLowerCase().indexOf(_orgSearchQuery) >= 0) return true;
+      // Search role names — support both admin _permRoles and public u.roles
+      var roles = _permRoles.length ? (u.role_ids||[]).map(function(rid) { return _permRoles.find(function(x) { return x.id === rid; }); }).filter(Boolean)
+        : (u.roles || []);
+      if (roles.some(function(r) {
+        return ((r.label||'').toLowerCase().indexOf(_orgSearchQuery) >= 0) || ((r.key||'').toLowerCase().indexOf(_orgSearchQuery) >= 0);
+      })) return true;
+      return false;
+    });
+  }
+
   _initUsersDt();
   _usersDt.setData(users.map(function(u, idx) {
     // Pre-compute complex cell HTML
-    var roleIds = (u.role_ids || []).slice();
-    roleIds.sort(function(a, b) {
-      var ra = _permRoles.find(function(x) { return x.id === a; });
-      var rb = _permRoles.find(function(x) { return x.id === b; });
-      if (ra && ra.key === 'public') return -1; if (rb && rb.key === 'public') return 1; return 0;
-    });
-    u.role_badges = roleIds.map(function(rid) {
-      var r = _permRoles.find(function(x) { return x.id === rid; });
+    var roleIds = (u.role_ids && u.role_ids.length ? u.role_ids : (u.roles || []).map(function(r) { return r.id; })).slice();
+    if (roleIds.length && _permRoles.length) {
+      roleIds.sort(function(a, b) {
+        var ra = _permRoles.find(function(x) { return x.id === a; });
+        var rb = _permRoles.find(function(x) { return x.id === b; });
+        if (ra && ra.key === 'public') return -1; if (rb && rb.key === 'public') return 1; return 0;
+      });
+    }
+    // Filter out "public" role badge if user has multiple roles
+    var displayRoleIds = roleIds;
+    if (roleIds.length > 1) {
+      displayRoleIds = roleIds.filter(function(rid) {
+        var r = _permRoles.length ? _permRoles.find(function(x) { return x.id === rid; }) : (u.roles || []).find(function(x) { return x.id === rid; });
+        return !r || r.key !== 'public';
+      });
+      // Keep at least one role if all were filtered out
+      if (!displayRoleIds.length) displayRoleIds = roleIds;
+    }
+    u.role_badges = displayRoleIds.map(function(rid) {
+      var r = _permRoles.length ? _permRoles.find(function(x) { return x.id === rid; }) : null;
+      if (!r && !_permRoles.length) {
+        var pubRole = (u.roles || []).find(function(x) { return x.id === rid; });
+        if (pubRole) {
+          return '<span style="display:inline-block;margin:1px 2px;padding:1px 6px;border-radius:3px;font-size:10.5px;background:var(--accent-lt);color:var(--accent)">' + escHtml(pubRole.label) + '</span>';
+        }
+        return '';
+      }
       if (!r) return '';
       var isLeader = (r.leader_id === u.id);
       return '<span style="display:inline-block;margin:1px 2px;padding:1px 6px;border-radius:3px;font-size:10.5px;' +
@@ -863,15 +1030,27 @@ function renderUserTable() {
       var tt2 = '最后登录: ' + (u.last_login_at||'') + '\n' + (u.last_login_ua||'') + ' / ' + (u.last_login_ip||'');
       u.login_html = '<span style="font-size:11px;color:var(--muted);cursor:default" title="' + escHtml(tt2) + '">离线</span>';
     } else { u.login_html = '<span style="font-size:11px;color:var(--muted)">从未登录</span>'; }
-    if (u.is_active) {
-      u.actions = '<span style="white-space:nowrap">' + iconEdit('openUserEditDialog(' + u.id + ')') + iconToggle('toggleUserActive(' + u.id + ',' + u.is_active + ')', '禁用') + iconDelete('deleteUser(' + u.id + ',\'' + escHtml(u.username) + '\')') + '</span>';
+    if (window._orgIsAdmin) {
+      if (u.is_active) {
+        u.actions = '<span style="white-space:nowrap">' + iconEdit('openUserEditDialog(' + u.id + ')') + iconToggle('toggleUserActive(' + u.id + ',' + u.is_active + ')', '禁用') + iconDelete('deleteUser(' + u.id + ',\'' + escHtml(u.username) + '\')') + '</span>';
+      } else {
+        var activateSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+        u.actions = '<span style="white-space:nowrap">' + iconEdit('openUserEditDialog(' + u.id + ')') + '<button class="btn btn-icon" style="color:var(--success)" onclick="toggleUserActive(' + u.id + ',' + u.is_active + ')" title="激活">' + activateSvg + '</button>' + iconDelete('deleteUser(' + u.id + ',\'' + escHtml(u.username) + '\')') + '</span>';
+      }
     } else {
-      var activateSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
-      u.actions = '<span style="white-space:nowrap">' + iconEdit('openUserEditDialog(' + u.id + ')') + '<button class="btn btn-icon" style="color:var(--success)" onclick="toggleUserActive(' + u.id + ',' + u.is_active + ')" title="激活">' + activateSvg + '</button>' + iconDelete('deleteUser(' + u.id + ',\'' + escHtml(u.username) + '\')') + '</span>';
+      var homeSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>';
+      u.actions = '<button class="btn btn-icon" onclick="gotoView(\'user-center\',{params:[' + u.id + ']})" title="查看用户中心">' + homeSvg + '</button>';
     }
     u.idx = idx + 1;
     return u;
   }));
+}
+
+var _orgSearchQuery = '';
+
+function _orgSearch() {
+  _orgSearchQuery = (document.getElementById('org-search-input').value || '').trim().toLowerCase();
+  renderUserTable();
 }
 
 var _udRowCount = 0;
