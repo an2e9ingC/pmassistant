@@ -228,6 +228,9 @@ def get_calendar(
 
     # Batch-load project info (PmaProduct + CachedProject) and executions
     proj_ids = {t.project_id for t in task_map.values() if t and t.project_id}
+    # Also load bug project IDs for calendar display
+    if bug_map:
+        proj_ids.update(b.project_id for b in bug_map.values() if b and b.project_id)
     proj_map = {}
     exec_map = {}
     if proj_ids:
@@ -242,6 +245,25 @@ def get_calendar(
         from backend.models.zentao import CachedExecution
         execs = db.query(CachedExecution).filter(CachedExecution.id.in_(exec_ids)).all()
         exec_map = {e.id: e for e in execs}
+    # Bug worklogs: resolve stage info from the bug's project executions
+    bug_stage_map = {}
+    bug_comp_map = {}
+    if bug_map:
+        bug_proj_ids = {b.project_id for b in bug_map.values() if b and b.project_id}
+        if bug_proj_ids:
+            from backend.models.zentao import CachedExecution
+            bug_execs = db.query(CachedExecution).filter(CachedExecution.project_id.in_(bug_proj_ids)).all()
+            _bug_proj_execs = {}
+            for e in bug_execs:
+                _bug_proj_execs.setdefault(e.project_id, []).append(e)
+            for pid, execs in _bug_proj_execs.items():
+                bug_stage_map[pid] = ', '.join(sorted(set((e.stage_name or e.name) for e in execs if (e.stage_name or e.name))))
+        # Resolve bug component names
+        bug_comp_ids = {b.component_id for b in bug_map.values() if b and b.component_id}
+        if bug_comp_ids:
+            from backend.models.document import ProductDocTemplate
+            comps = db.query(ProductDocTemplate).filter(ProductDocTemplate.id.in_(bug_comp_ids)).all()
+            bug_comp_map = {c.id: c.doc_name for c in comps if c.doc_name}
 
     # Group by date
     daily_map = {}
@@ -277,14 +299,16 @@ def get_calendar(
         daily_map[d]["tasks"].append({
             "id": bw.id,
             "task_id": None,
+            "bug_id": bw.bug_id,
             "title": ("Bug #" + str(bw.bug_id) + " " + bug.title) if bug else ("Bug #" + str(bw.bug_id)),
             "hours": bw.hours,
             "progress": 0,
             "created_at": to_local_str(bw.created_at) if bw.created_at else '',
-            "project_id": None,
-            "project_code": '',
-            "project_name": '',
-            "stage_name": '',
+            "project_id": bug.project_id if bug else None,
+            "project_code": getattr(proj_map.get(bug.project_id), 'code', '') if bug and bug.project_id else '',
+            "project_name": getattr(proj_map.get(bug.project_id), 'name', '') if bug and bug.project_id else '',
+            "stage_name": bug_stage_map.get(bug.project_id, '') if bug and bug.project_id else '',
+            "component_name": bug_comp_map.get(bug.component_id, '') if bug and bug.component_id else '',
             "description": bw.description,
             "source": "bug",
         })
