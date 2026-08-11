@@ -2332,6 +2332,7 @@ function _renderBatchToolbar() {
     'align-items:center;gap:12px">' +
     '<span id="batch-count">已选 0 个任务</span>' +
     '<button onclick="openBatchEditDialog()" style="padding:4px 12px;border:1px solid #fff;border-radius:4px;background:transparent;color:#fff;cursor:pointer;font-size:12px">批量编辑</button>' +
+    '<button onclick="batchDeleteTasks()" style="padding:4px 12px;border:1px solid #fff;border-radius:4px;background:transparent;color:#fff;cursor:pointer;font-size:12px">批量删除</button>' +
     '<button onclick="_clearBatchSelection()" style="padding:4px 12px;border:none;border-radius:4px;background:rgba(255,255,255,0.2);color:#fff;cursor:pointer;font-size:12px">取消</button>' +
     '</div>';
 }
@@ -2368,6 +2369,30 @@ function _clearBatchSelection() {
   var allCb = document.getElementById('task-select-all');
   if (allCb) allCb.checked = false;
   _updateBatchToolbar();
+}
+
+/* ── Batch Delete ── */
+function batchDeleteTasks() {
+  if (_selectedTasks.size === 0) { showToast('请先选择任务', 'error'); return; }
+  var count = _selectedTasks.size;
+  openDialog('批量删除任务',
+    '<div class="confirm-dlg">确认删除 <b>' + count + '</b> 个任务？<br><br>相关工时记录和评论也会被删除。<br><br><b style="color:var(--danger)">此操作不可撤销。</b></div>',
+    [{text: '取消', onclick: 'closeSharedDialog()'},
+     {text: '确认删除', cls: 'btn-danger', onclick: 'closeSharedDialog();_doBatchDelete()'}],
+    {hideClose: true});
+}
+
+async function _doBatchDelete() {
+  var ok = await verifyPassword('批量删除 ' + _selectedTasks.size + ' 个任务', 'skip_task_delete');
+  if (!ok) return;
+  try {
+    var r = await API.del('/tasks/batch', {task_ids: Array.from(_selectedTasks)});
+    showToast('已删除 ' + r.deleted + '/' + r.total + ' 个任务', 'success');
+    _clearBatchSelection();
+    EventBus.emit('task:deleted', {});
+  } catch(e) {
+    showToast('批量删除失败: ' + (e.message || ''), 'error');
+  }
 }
 
 /* ── Assignee Display (shared) ── */
