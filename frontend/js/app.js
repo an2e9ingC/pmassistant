@@ -1573,7 +1573,7 @@ async function initUserCenter(viewUserId, tab) {
 
   // Reset filter state to defaults on each entry (saved prefs will override below)
   _ucFilterStatus = 'watched';
-  _ucBugTab = 'assignee';
+  _ucBugTab = 'pending';
   _ucFilterProd = '';
   _ucFilterProj = '';
   _ucBugFilterStatus = '';
@@ -1735,7 +1735,7 @@ async function initUserCenter(viewUserId, tab) {
     _ucFilterStatus = savedTaskFilter;
   }
   var savedBugFilter = localStorage.getItem('pma_default_bug_filter');
-  if (savedBugFilter && ['assignee','reporter','watched','cc'].indexOf(savedBugFilter) >= 0) {
+  if (savedBugFilter && ['pending','resolved','reporter','watched','cc'].indexOf(savedBugFilter) >= 0) {
     _ucBugTab = savedBugFilter;
   }
 
@@ -1774,8 +1774,10 @@ var _ucActiveTab = 'tasks'; // 'tasks' | 'bugs'
 
 function _ucUpdateTaskCount() {
   var el = document.getElementById('uc-tasks-count');
-  // Count only tasks assigned to the user
-  var assignedCount = _ucTasks.filter(function(t) { return t._source === 'assigned'; }).length;
+  // Count only unfinished tasks assigned to the user
+  var assignedCount = _ucTasks.filter(function(t) {
+    return t._source === 'assigned' && t.status !== 'done' && t.status !== 'review';
+  }).length;
   if (el) el.textContent = assignedCount;
 }
 function _ucUpdateBugCount(n) {
@@ -2608,7 +2610,7 @@ async function _ucReopenBug(bugId) {
   } catch(e) { showToast('操作失败: '+(e.message||''),'error'); }
 }
 
-var _ucBugTab = 'assignee'; // 'assignee' | 'reporter'
+var _ucBugTab = 'pending'; // 'pending' | 'resolved' | 'reporter' | 'watched' | 'cc'
 var _ucBugFilterProd = '';
 var _ucBugFilterProj = '';
 var _ucBugFilterStatus = '';
@@ -2616,6 +2618,8 @@ var _ucBugsReqId = 0;  // request counter to ignore stale async responses
 
 function _ucRenderBugFilter(bugs, uid) {
   var assigned = (bugs||[]).filter(function(b) { return b.assignee_id === uid; });
+  var pending = assigned.filter(function(b) { var s = b.status || 'open'; return s !== 'resolved' && s !== 'closed'; });
+  var resolvedBugs = assigned.filter(function(b) { return b.status === 'resolved'; });
   var reported = (bugs||[]).filter(function(b) { return b.reporter_id === uid; });
   var cc = (bugs||[]).filter(function(b) { return (b.cc_user_ids || []).indexOf(uid) >= 0; });
   // Collect unique product and project names from all bugs
@@ -2635,41 +2639,47 @@ function _ucRenderBugFilter(bugs, uid) {
   var projSel = projs.length ? '<select class="proj-select" onchange="_ucBugFilterProj=this.value;_ucLoadBugs()"><option value="">全部项目</option>' + projs.map(function(p) { return '<option value="'+escHtml(p)+'"'+(_ucBugFilterProj===p?' selected':'')+'>'+escHtml(p)+'</option>'; }).join('') + '</select>' : '';
   // Labels depend on whether viewing self or another user
   var isSelf = !window._ucViewUserId;
-  var assigneeLabel = isSelf ? '👤 指派给我' : '👤 指派给TA';
-  var assigneeMeta  = isSelf ? '待我处理的Bug' : '待TA处理的Bug';
+  var pendingLabel = isSelf ? '⏳ 待处理' : '⏳ 待TA处理';
+  var pendingMeta  = isSelf ? '指派给我，待处理' : '指派给TA，待处理';
+  var resolvedLabel = isSelf ? '✅ 已解决' : '✅ TA已解决';
+  var resolvedMeta  = isSelf ? '指派给我，已解决' : '指派给TA，已解决';
   var reporterLabel = isSelf ? '✍️ 我创建的' : '✍️ TA创建的';
   var reporterMeta  = isSelf ? '我创建的Bug' : 'TA创建的Bug';
   var watchedLabel  = isSelf ? '⭐ 关注bug' : '⭐ TA关注的';
   var watchedMeta   = isSelf ? '关注的Bug' : '该用户关注的Bug';
   var ccLabel = isSelf ? '📋 抄送给我' : '📋 抄送给TA';
   var ccMeta = isSelf ? '抄送给我的Bug' : '抄送给该用户的Bug';
-  var ccCardHtml = '<div class="kpi-card' + (_ucBugTab==='cc'?' active':'') + '" data-bug-filter="cc" onclick="_ucBugTab=\'cc\';_ucLoadBugs()">'
-    + '<div class="kpi-label">' + ccLabel + '</div><div class="kpi-value">' + cc.length + '</div><div class="kpi-meta">' + ccMeta + '</div></div>';
   // Watched count: use viewed user's favs when viewing another user
   var viewFavBugs = window._ucViewUserFavBugs;
   var watchedBugCount = (bugs||[]).reduce(function(s, b) {
     return s + ((viewFavBugs ? viewFavBugs.indexOf(b.id) >= 0 : isFav('bug', b.id)) ? 1 : 0);
   }, 0);
+  // Card order: 关注bug → 待处理 → 已解决 → 我创建的 → 抄送给我
   document.getElementById('uc-bugs-filter-bar').innerHTML =
     '<div style="width:100%">' +
       '<div class="uc-cat-cards">' +
-        '<div class="kpi-card' + (_ucBugTab==='assignee'?' active':'') + '" data-bug-filter="assignee" onclick="_ucBugTab=\'assignee\';_ucLoadBugs()">'
-          + '<div class="kpi-label">' + assigneeLabel + '</div><div class="kpi-value">' + assigned.length + '</div><div class="kpi-meta">' + assigneeMeta + '</div></div>' +
-        '<div class="kpi-card' + (_ucBugTab==='reporter'?' active':'') + '" data-bug-filter="reporter" onclick="_ucBugTab=\'reporter\';_ucLoadBugs()">'
-          + '<div class="kpi-label">' + reporterLabel + '</div><div class="kpi-value">' + reported.length + '</div><div class="kpi-meta">' + reporterMeta + '</div></div>' +
         '<div class="kpi-card' + (_ucBugTab==='watched'?' active':'') + '" data-bug-filter="watched" onclick="_ucBugTab=\'watched\';_ucLoadBugs()">'
           + '<div class="kpi-label">' + watchedLabel + '</div><div class="kpi-value">' + watchedBugCount + '</div><div class="kpi-meta">' + watchedMeta + '</div></div>' +
-        ccCardHtml +
+        '<div class="kpi-card' + (_ucBugTab==='pending'?' active':'') + '" data-bug-filter="pending" onclick="_ucBugTab=\'pending\';_ucLoadBugs()">'
+          + '<div class="kpi-label">' + pendingLabel + '</div><div class="kpi-value">' + pending.length + '</div><div class="kpi-meta">' + pendingMeta + '</div></div>' +
+        '<div class="kpi-card' + (_ucBugTab==='resolved'?' active':'') + '" data-bug-filter="resolved" onclick="_ucBugTab=\'resolved\';_ucLoadBugs()">'
+          + '<div class="kpi-label">' + resolvedLabel + '</div><div class="kpi-value">' + resolvedBugs.length + '</div><div class="kpi-meta">' + resolvedMeta + '</div></div>' +
+        '<div class="kpi-card' + (_ucBugTab==='reporter'?' active':'') + '" data-bug-filter="reporter" onclick="_ucBugTab=\'reporter\';_ucLoadBugs()">'
+          + '<div class="kpi-label">' + reporterLabel + '</div><div class="kpi-value">' + reported.length + '</div><div class="kpi-meta">' + reporterMeta + '</div></div>' +
+        '<div class="kpi-card' + (_ucBugTab==='cc'?' active':'') + '" data-bug-filter="cc" onclick="_ucBugTab=\'cc\';_ucLoadBugs()">'
+          + '<div class="kpi-label">' + ccLabel + '</div><div class="kpi-value">' + cc.length + '</div><div class="kpi-meta">' + ccMeta + '</div></div>' +
       '</div>' +
     '</div>' +
     '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px">' + statusSel + '<span style="display:inline-block;vertical-align:middle">' + prodSelHtml + '</span>' + projSel + '</div>';
   var result;
-  if (_ucBugTab === 'reporter') result = reported;
+  if (_ucBugTab === 'pending') result = pending;
+  else if (_ucBugTab === 'resolved') result = resolvedBugs;
+  else if (_ucBugTab === 'reporter') result = reported;
   else if (_ucBugTab === 'cc') result = cc;
   else if (_ucBugTab === 'watched') result = (bugs||[]).filter(function(b) {
     return viewFavBugs ? viewFavBugs.indexOf(b.id) >= 0 : isFav('bug', b.id);
   });
-  else result = assigned;
+  else result = pending;
   // Apply product/project/status filters
   if (_ucBugFilterStatus) result = result.filter(function(b) { return (b.status || 'open') === _ucBugFilterStatus; });
   if (_ucBugFilterProd) result = result.filter(function(b) { return b.product_name === _ucBugFilterProd; });
@@ -2688,9 +2698,7 @@ async function _ucLoadBugs() {
     var bugs = await API.get(bugsUrl);
     if (reqId !== _ucBugsReqId) return;  // ignore stale response
     bugs = Array.isArray(bugs) ? bugs : (bugs && bugs.items ? bugs.items : []);
-    var bugCount = _ucBugTab === 'reporter'
-      ? (bugs || []).filter(function(b) { return b.reporter_id === viewUid; }).length
-      : (bugs || []).filter(function(b) { return b.assignee_id === viewUid; }).length;
+    var bugCount = (bugs || []).filter(function(b) { return b.assignee_id === viewUid && b.status !== 'resolved' && b.status !== 'closed'; }).length;
     _ucUpdateBugCount(bugCount);
     var filtered = _ucRenderBugFilter(bugs, viewUid);
     // Group by project → product (same merging rules as task list)
@@ -2717,7 +2725,7 @@ async function _ucLoadBugs() {
       });
     });
     var container = document.getElementById('uc-bugs-table-wrap');
-    if (!bugRows.length) { container.innerHTML = '<div class="empty-state">' + (_ucBugTab==='assignee'?'暂无待处理的Bug':'暂无创建的Bug') + '</div>'; _ucBugsDt = null; if (_ucActiveTab==='bugs') _ucLoadBugStats(); return; }
+    if (!bugRows.length) { var emptyMsgs = {pending:'暂无待处理的Bug',resolved:'暂无已解决的Bug',reporter:'暂无创建的Bug',watched:'暂无关注的Bug',cc:'暂无抄送的Bug'}; container.innerHTML = '<div class="empty-state">' + (emptyMsgs[_ucBugTab] || '暂无Bug') + '</div>'; _ucBugsDt = null; if (_ucActiveTab==='bugs') _ucLoadBugStats(); return; }
     if (!_ucBugsDt) {
       container.innerHTML = '<div id="uc-bugs-dt"></div>';
       _ucBugsDt = new DataTable({
@@ -2766,17 +2774,28 @@ function _ucLoadBugStats() {
     bugs = Array.isArray(bugs) ? bugs : (bugs && bugs.items ? bugs.items : []);
     var user = getCurrentUser();
     var uid = window._ucViewUserId || (user ? user.id : null);
-    // Filter by tab: assignee or reporter
-    var filtered = _ucBugTab === 'assignee'
-      ? (bugs||[]).filter(function(b) { return b.assignee_id === uid; })
-      : (bugs||[]).filter(function(b) { return b.reporter_id === uid; });
+    // Filter by tab
+    var tabLabels = {pending:'待处理',resolved:'已解决',reporter:'我创建的',watched:'关注的',cc:'抄送的'};
+    var filtered;
+    if (_ucBugTab === 'reporter') {
+      filtered = (bugs||[]).filter(function(b) { return b.reporter_id === uid; });
+    } else if (_ucBugTab === 'cc') {
+      filtered = (bugs||[]).filter(function(b) { return (b.cc_user_ids || []).indexOf(uid) >= 0; });
+    } else if (_ucBugTab === 'watched') {
+      var viewFavBugs2 = window._ucViewUserFavBugs;
+      filtered = (bugs||[]).filter(function(b) {
+        return viewFavBugs2 ? viewFavBugs2.indexOf(b.id) >= 0 : isFav('bug', b.id);
+      });
+    } else {
+      filtered = (bugs||[]).filter(function(b) { return b.assignee_id === uid; });
+    }
     // Apply product/project/status filters from dropdowns
     if (_ucBugFilterStatus) filtered = filtered.filter(function(b) { return (b.status || 'open') === _ucBugFilterStatus; });
     if (_ucBugFilterProd) filtered = filtered.filter(function(b) { return b.product_name === _ucBugFilterProd; });
     if (_ucBugFilterProj) filtered = filtered.filter(function(b) { return b.project_name === _ucBugFilterProj; });
-    // Exclude resolved/closed
+    // Exclude resolved/closed for active bugs
     var activeBugs = filtered.filter(function(b) { return b.status !== 'resolved' && b.status !== 'closed'; });
-    var title = (_ucBugTab === 'assignee' ? '待我处理' : '我创建的') + ' · 产品分布（活跃）';
+    var title = (tabLabels[_ucBugTab] || 'Bug') + ' · 产品分布（活跃）';
     if (typeof _buildPieChart !== 'function') return;
     var byProd = {}, prodList = [], prodColors = ['var(--accent)','var(--warn)','var(--success)','var(--danger)','var(--purple)'];
     if (activeBugs.length > 0) {
@@ -3020,7 +3039,7 @@ function _renderPreferencesPanel(content) {
   var defaultDashFilter = localStorage.getItem('pma_default_dash_filter') || 'fav';
   var defaultProdFilter = localStorage.getItem('pma_default_product_filter') || 'fav';
   var defaultTaskFilter = localStorage.getItem('pma_default_task_filter') || 'watched';
-  var defaultBugFilter = localStorage.getItem('pma_default_bug_filter') || 'assignee';
+  var defaultBugFilter = localStorage.getItem('pma_default_bug_filter') || 'pending';
 
   var dashFilterOpts = [
     {v:'fav', l:'关注项目'}, {v:'all', l:'全部项目'}, {v:'active', l:'进行中'},
@@ -3038,7 +3057,7 @@ function _renderPreferencesPanel(content) {
     {v:'unfinished', l:'未完成'}, {v:'done', l:'已完成'}, {v:'review', l:'评审中'}, {v:'all', l:'全部'}
   ];
   var bugFilterOpts = [
-    {v:'assignee', l:'指派给我'}, {v:'reporter', l:'我创建的'}, {v:'watched', l:'关注bug'}, {v:'cc', l:'抄送给我'}
+    {v:'pending', l:'待处理'}, {v:'resolved', l:'已解决'}, {v:'reporter', l:'我创建的'}, {v:'watched', l:'关注bug'}, {v:'cc', l:'抄送给我'}
   ];
   function _selOpts(opts, sel) { return opts.map(function(o) { return '<option value="'+o.v+'"'+(o.v===sel?' selected':'')+'>'+o.l+'</option>'; }).join(''); }
 
