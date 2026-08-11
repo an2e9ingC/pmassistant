@@ -177,20 +177,29 @@
 
 /* User Center category cards */
 .uc-cat-cards { display: flex; gap: 8px; flex-wrap: wrap; padding-left: 4px; }
-.uc-cat-cards .kpi-card { min-width: 0; flex: 1 1 0; padding: 10px 14px 10px; overflow: hidden; }
-.uc-cat-cards .kpi-card .kpi-label { font-size: 12px; white-space: nowrap; }
-.uc-cat-cards .kpi-card .kpi-value { font-size: 20px; white-space: nowrap; }
-.uc-cat-cards .kpi-card .kpi-meta { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.uc-cat-cards .kpi-card { min-width: 0; flex: 1 1 0; padding: 10px 14px 10px; overflow: hidden; display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; align-items: center; column-gap: 10px; }
+.uc-cat-cards .kpi-card .kpi-label { font-size: 14px; white-space: nowrap; grid-column: 1; grid-row: 1; }
+.uc-cat-cards .kpi-card .kpi-value { font-size: 28px; white-space: nowrap; grid-column: 2; grid-row: 1 / 3; align-self: center; line-height: 1; }
+.uc-cat-cards .kpi-card .kpi-meta { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; grid-column: 1; grid-row: 2; }
 
-/* ── UI Density: Compact (keep current 10px sizes) ── */
-[data-ui-density="compact"] .uc-cat-cards .kpi-card .kpi-label { font-size: 10px; }
+/* ── UI Density: Compact ── */
+[data-ui-density="compact"] .uc-cat-cards .kpi-card .kpi-label { font-size: 11px; }
+[data-ui-density="compact"] .uc-cat-cards .kpi-card .kpi-value { font-size: 22px; }
 [data-ui-density="compact"] .uc-cat-cards .kpi-card .kpi-meta  { font-size: 10px; }
 
 /* ── UI Density: Comfortable (larger) ── */
-[data-ui-density="comfortable"] .uc-cat-cards .kpi-card .kpi-label { font-size: 13px; }
+[data-ui-density="comfortable"] .uc-cat-cards .kpi-card .kpi-label { font-size: 15px; }
+[data-ui-density="comfortable"] .uc-cat-cards .kpi-card .kpi-value { font-size: 32px; }
 [data-ui-density="comfortable"] .uc-cat-cards .kpi-card .kpi-meta  { font-size: 12px; }
 
-/* kpi-card colors for user center filters */
+/* kpi-card colors for user center task filter cards */
+.kpi-card[data-filter="reported"] { border-left-color: var(--success); }
+.kpi-card[data-filter="reported"] .kpi-value { color: var(--success); }
+.kpi-card[data-filter="reported"].active {
+  border-color: var(--success); background: var(--success-lt);
+  box-shadow: var(--sh-md); transform: scale(1.02);
+}
+
 .kpi-card[data-filter="unfinished"] { border-left-color: var(--accent); }
 .kpi-card[data-filter="unfinished"] .kpi-value { color: var(--accent); }
 .kpi-card[data-filter="unfinished"].active {
@@ -231,16 +240,22 @@
 }
 
 /* Bug filter cards (user center) */
-.kpi-card[data-bug-filter="assignee"] { border-left-color: var(--accent); }
-.kpi-card[data-bug-filter="assignee"] .kpi-value { color: var(--accent); }
-.kpi-card[data-bug-filter="assignee"].active {
+.kpi-card[data-bug-filter="pending"] { border-left-color: var(--accent); }
+.kpi-card[data-bug-filter="pending"] .kpi-value { color: var(--accent); }
+.kpi-card[data-bug-filter="pending"].active {
   border-color: var(--accent); background: var(--accent-lt);
   box-shadow: var(--sh-md); transform: scale(1.02);
 }
-.kpi-card[data-bug-filter="reporter"] { border-left-color: var(--success); }
-.kpi-card[data-bug-filter="reporter"] .kpi-value { color: var(--success); }
-.kpi-card[data-bug-filter="reporter"].active {
+.kpi-card[data-bug-filter="resolved"] { border-left-color: var(--success); }
+.kpi-card[data-bug-filter="resolved"] .kpi-value { color: var(--success); }
+.kpi-card[data-bug-filter="resolved"].active {
   border-color: var(--success); background: var(--success-lt);
+  box-shadow: var(--sh-md); transform: scale(1.02);
+}
+.kpi-card[data-bug-filter="reporter"] { border-left-color: var(--warn); }
+.kpi-card[data-bug-filter="reporter"] .kpi-value { color: var(--warn); }
+.kpi-card[data-bug-filter="reporter"].active {
+  border-color: var(--warn); background: var(--warn-lt);
   box-shadow: var(--sh-md); transform: scale(1.02);
 }
 .kpi-card[data-bug-filter="watched"] { border-left-color: #eab308; }
@@ -773,19 +788,22 @@ input[type="checkbox"] { accent-color: var(--accent); }
   border-radius: var(--r); background: var(--bg);
   color: var(--muted); font-size: clamp(10px, 1.1vw, 12px); font-weight: 500;
   cursor: pointer; transition: background 0.12s, color 0.12s, box-shadow 0.12s;
-  user-select: none; min-width: clamp(55px, 7vw, 90px); border: 1px solid transparent;
+  user-select: none; min-width: clamp(55px, 7vw, 90px); border: 1px solid var(--border);
   flex-shrink: 1;
 }
-.profile-tab-btn:hover { background: var(--surface2); color: var(--fg); }
+.profile-tab-btn:hover { background: var(--surface2); }
 /* 我的任务 — accent (matches 新建任务 button) */
+.profile-tab-btn.tab-tasks:not(.active) { color: var(--accent); border-color: var(--accent); }
+.profile-tab-btn.tab-tasks:not(.active):hover { background: var(--accent-lt); }
 .profile-tab-btn.tab-tasks.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-.profile-tab-btn.tab-tasks:not(.active):hover { border-color: var(--accent); }
 /* 我的Bug — danger (matches 新建Bug button) */
+.profile-tab-btn.tab-bugs:not(.active) { color: var(--danger); border-color: var(--danger); }
+.profile-tab-btn.tab-bugs:not(.active):hover { background: var(--danger-lt); }
 .profile-tab-btn.tab-bugs.active { background: var(--danger); color: #fff; border-color: var(--danger); }
-.profile-tab-btn.tab-bugs:not(.active):hover { border-color: var(--danger); }
 /* 我的审批 — warn/orange (matches 评审中 status) */
+.profile-tab-btn.tab-approvals:not(.active) { color: var(--warn); border-color: var(--warn); }
+.profile-tab-btn.tab-approvals:not(.active):hover { background: var(--warn-lt); }
 .profile-tab-btn.tab-approvals.active { background: var(--warn); color: #fff; border-color: var(--warn); }
-.profile-tab-btn.tab-approvals:not(.active):hover { border-color: var(--warn); }
 .profile-tab-count {
   font-family: var(--mono); font-size: clamp(16px, 2vw, 24px); font-weight: 700; line-height: 1;
 }
