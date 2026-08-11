@@ -12,7 +12,25 @@ RUN \
     apt-get update && apt-get install -y --no-install-recommends \
         libsqlcipher-dev \
         smbclient \
+        # draw.io headless 依赖
+        xvfb \
+        libnss3 \
+        libgtk-3-0 \
+        libasound2 \
+        libgbm1 \
+        # CJK 字体（PDF 中正确渲染中文）
+        fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
+
+# 安装 draw.io AppImage（自解压，无需 FUSE）
+ARG DRAWIO_VERSION=31.1.8
+RUN curl -fsSL -o /tmp/drawio.AppImage \
+        "https://github.com/jgraph/drawio-desktop/releases/download/v${DRAWIO_VERSION}/drawio-x86_64-${DRAWIO_VERSION}.AppImage" \
+    && chmod +x /tmp/drawio.AppImage \
+    && /tmp/drawio.AppImage --appimage-extract \
+    && mv squashfs-root /opt/drawio \
+    && ln -s /opt/drawio/AppRun /opt/drawio.AppImage \
+    && rm /tmp/drawio.AppImage
 
 COPY requirements.txt .
 # Use Tsinghua PyPI mirror for faster downloads in China

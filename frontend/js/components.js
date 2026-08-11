@@ -922,6 +922,8 @@ function togglePreviewFullscreen(dlgId) {
 function openDocIframeFullscreen(url, title) {
   var token = localStorage.getItem('pma_token') || '';
   var fetchUrl = '/api/documents/fetch?url=' + encodeURIComponent(url) + '&token=' + encodeURIComponent(token);
+  var ext = (url || '').split('.').pop().toLowerCase().split('?')[0];
+  var needConvert = (ext === 'vsdx' || ext === 'docx');
   var dlgId = 'fs-doc-dlg-' + Date.now();
   var html = '<div class="note-dialog-overlay" id="' + dlgId + '" style="z-index:9999">' +
     '<div class="note-dialog" style="position:fixed;inset:0;width:100vw;height:100vh;max-width:100vw;max-height:100vh;border-radius:0;display:flex;flex-direction:column">' +
@@ -931,8 +933,14 @@ function openDocIframeFullscreen(url, title) {
           '<button class="note-dialog-close" onclick="document.getElementById(\'' + dlgId + '\').remove()">&times;</button>' +
         '</span>' +
       '</div>' +
-      '<div style="flex:1;overflow:auto">' +
-        '<iframe src="' + fetchUrl + '" style="width:100%;height:100%;border:none"></iframe>' +
+      '<div style="flex:1;overflow:auto;position:relative" id="' + dlgId + '-body">' +
+        '<div id="' + dlgId + '-loading" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:300px;color:var(--muted)">' +
+          '<div style="display:inline-block;width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:16px"></div>' +
+          '<div style="font-size:13px">正在加载文档预览...</div>' +
+          (needConvert ? '<div style="font-size:11px;color:var(--muted);margin-top:4px">首次转换需要 5–15 秒，请稍候…</div>' : '') +
+        '</div>' +
+        '<iframe src="' + fetchUrl + '" style="width:100%;height:100%;border:none;display:none" ' +
+          'onload="var s=document.getElementById(\\\'' + dlgId + '-loading\\\');if(s)s.style.display=\\\'none\\\';this.style.display=\\\'\\\'"></iframe>' +
       '</div>' +
     '</div></div>';
   document.body.insertAdjacentHTML('beforeend', html);

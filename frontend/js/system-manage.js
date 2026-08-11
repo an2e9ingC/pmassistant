@@ -249,6 +249,10 @@ var _SYS_PARAM_META = {
   jwt_algorithm:     { label: 'JWT 算法',         type: 'select',   ph: '', options: ['HS256','HS384','HS512','RS256'], sensitive: false },
   jwt_expire_minutes:{ label: 'Token 过期(分钟)',  type: 'number',   ph: '480（8小时）', sensitive: false },
   log_level:         { label: '日志级别',          type: 'select',   ph: '', options: ['DEBUG','INFO','WARNING','ERROR'], sensitive: false },
+  CONVERT_CACHE_MAX_SIZE_MB: {
+    label: '文件转换缓存上限 (MB)', type: 'number', default: '1024', options: null, sensitive: false,
+    info: '0 表示不限制；达到上限后按最近最少使用淘汰旧缓存文件',
+  },
 };
 
 function _sysParamsCardRows(params) {

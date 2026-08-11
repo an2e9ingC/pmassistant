@@ -344,6 +344,11 @@ _SYSTEM_PARAM_META = {
     "jwt_algorithm":    {"label": "JWT 算法",        "type": "select",   "ph": "", "options": ["HS256", "HS384", "HS512", "RS256"], "sensitive": False},
     "jwt_expire_minutes":{"label": "Token 过期(分)",  "type": "number",   "ph": "480（8小时）", "sensitive": False},
     "log_level":        {"label": "日志级别",         "type": "select",   "ph": "", "options": ["DEBUG", "INFO", "WARNING", "ERROR"], "sensitive": False},
+    "CONVERT_CACHE_MAX_SIZE_MB": {
+        "label": "文件转换缓存上限 (MB)", "type": "number",
+        "default": "1024", "options": None, "sensitive": False,
+        "info": "0 表示不限制；达到上限后按最近最少使用淘汰旧缓存文件",
+    },
 }
 
 _ENV_TO_PARAM = {
@@ -351,6 +356,7 @@ _ENV_TO_PARAM = {
     "JWT_ALGORITHM":     "jwt_algorithm",
     "JWT_EXPIRE_MINUTES":"jwt_expire_minutes",
     "LOG_LEVEL":         "log_level",
+    "CONVERT_CACHE_MAX_SIZE_MB": "CONVERT_CACHE_MAX_SIZE_MB",
 }
 
 _PARAM_TO_ENV = {v: k for k, v in _ENV_TO_PARAM.items()}
@@ -367,6 +373,9 @@ def get_system_params(_=Depends(require_admin)):
         raw = os.environ.get(env_key)
         if raw is None and env_key in defaults:
             raw = str(defaults[env_key])
+        # Fall back to _SYSTEM_PARAM_META default
+        if raw is None:
+            raw = _SYSTEM_PARAM_META.get(param_key, {}).get("default", "")
         if raw is None:
             raw = ""
         if param_key in _SENSITIVE_PARAMS and raw:
@@ -381,6 +390,7 @@ class SystemParamsUpdate(BaseModel):
     jwt_algorithm: str = ""
     jwt_expire_minutes: str = ""
     log_level: str = ""
+    CONVERT_CACHE_MAX_SIZE_MB: str = ""
 
 
 @router.put("/system-params", response_model=dict)

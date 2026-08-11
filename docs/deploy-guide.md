@@ -6,8 +6,9 @@
 |------|---------|
 | Python（直接运行） | 3.9+ |
 | Docker（容器运行） | 24+ |
-| 磁盘 | 100MB（SQLite 数据 + 依赖） |
+| 磁盘 | 2GB（含 draw.io 依赖约 800MB） |
 | 网络 | 可访问禅道服务器 `192.168.0.124:8800` |
+| draw.io AppImage + xvfb（直接运行） | 26.x+ | VSDX→PDF 高还原度转换（Docker 已内置） |
 
 ---
 
@@ -789,3 +790,53 @@ newgrp docker
 ```
 
 > **Ubuntu/Debian 也可用 deb 包离线安装**：从 `https://download.docker.com/linux/ubuntu/dists/` 下载 `containerd.io`、`docker-ce`、`docker-ce-cli` 三个 deb 包，`sudo dpkg -i *.deb` 安装。
+
+---
+
+## 附录H — draw.io VSDX 转换引擎安装（方式C 直接运行）
+
+Docker 部署（方式A/B）已内置 draw.io，无需额外操作。直接运行（方式C）时需手动安装。
+
+### 安装步骤
+
+> ⚠️ 以下命令需要 sudo 权限。
+
+```bash
+# 1. 安装系统依赖
+sudo apt-get install -y xvfb libnss3 libgtk-3-0 libasound2 libgbm1 fonts-noto-cjk
+
+# 2. 下载 draw.io AppImage
+DRAWIO_VERSION=31.1.8
+curl -fsSL -o /tmp/drawio.AppImage \
+  "https://github.com/jgraph/drawio-desktop/releases/download/v${DRAWIO_VERSION}/drawio-x86_64-${DRAWIO_VERSION}.AppImage"
+chmod +x /tmp/drawio.AppImage
+
+# 3. 自解压到 /opt/drawio/
+/tmp/drawio.AppImage --appimage-extract
+sudo mv squashfs-root /opt/drawio
+sudo ln -s /opt/drawio/AppRun /opt/drawio.AppImage
+rm /tmp/drawio.AppImage
+
+# 4. 验证
+xvfb-run -a /opt/drawio.AppImage --version
+```
+
+### 故障排查
+
+| 现象 | 原因 | 解决 |
+|------|------|------|
+| `draw.io AppImage not found` | 未安装 | 按上述步骤安装 |
+| `xvfb-run: command not found` | xvfb 未安装 | `sudo apt install -y xvfb` |
+| PDF 中文显示为方块 | 缺少 CJK 字体 | `sudo apt install -y fonts-noto-cjk` |
+| 转换失败（日志 warning） | draw.io 异常 | 自动回退 LibreOffice |
+| 转换耗时 >30s | 正常现象 | 首次转换 5-15s，后续缓存命中 <1s |
+
+### 缓存配置
+
+| 环境变量 | 默认值 | 说明 |
+|---------|--------|------|
+| `CONVERT_CACHE_MAX_SIZE_MB` | `1024` | 转换缓存磁盘上限（MB）；设为 0 不限制 |
+
+缓存目录 `data/cache/converted/`，达到容量上限时自动按最近最少使用（LRU）淘汰旧文件。
+
+> `CONVERT_CACHE_MAX_SIZE_MB` 已注册为系统参数，可在 **系统管理 → 系统设置 → 系统参数** 中直接修改。

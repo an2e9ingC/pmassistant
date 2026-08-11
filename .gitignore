@@ -15,6 +15,7 @@ data/pma-*.db
 data/backups/
 data/source_config-*.json
 data/uploads/
+data/cache/
 data/.shutdown-*
 pma-8000.log.*
 data/pma-8000.log.1

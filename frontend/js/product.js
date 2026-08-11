@@ -590,7 +590,7 @@ function renderProdInfo(p, docs) {
   html += '<div style="flex:1;min-width:0;display:flex;flex-direction:column">';
   html += '<div class="card card-clip" style="padding:0;overflow:hidden;flex:1;display:flex;flex-direction:column">';
   html += '<div style="padding:8px 12px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">';
-  html += '<span style="font-size:12px;font-weight:600">' + escHtml(currentBlockName || '产品规格书') + '</span>';
+  html += '<span id="prod-block-doc-title" style="font-size:12px;font-weight:600">' + escHtml(currentBlockName || '产品规格书') + '</span>';
   html += '<div style="display:flex;align-items:center;gap:4px">';
   html += '<select id="block-doc-select" style="font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--fg);cursor:pointer" onchange="switchBlockDoc(this.value)">';
   blockOptions.forEach(function(opt) {
@@ -608,14 +608,42 @@ function renderProdInfo(p, docs) {
   document.getElementById('prodsec-info').innerHTML = html;
 
   // Render block doc inline
+  var _blockDocLoadTimer = null;
   var renderBlockDoc = function(docName) {
     var doc = findBlockDoc(docName);
     var el = document.getElementById('prod-block-content');
     if (!el) return;
+    if (_blockDocLoadTimer) { clearTimeout(_blockDocLoadTimer); _blockDocLoadTimer = null; }
     if (doc) {
       var token = localStorage.getItem('pma_token') || '';
       var fetchUrl = '/api/documents/fetch?url=' + encodeURIComponent(doc.location) + '&token=' + encodeURIComponent(token);
-      el.innerHTML = '<iframe src="' + fetchUrl + '" style="width:100%;min-height:800px;border:none"></iframe>';
+      var ext = (doc.location || '').split('.').pop().toLowerCase().split('?')[0];
+      var needConvert = (ext === 'vsdx' || ext === 'docx');
+      // Show loading indicator
+      el.innerHTML = '<div id="prod-block-loading" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:400px;color:var(--muted)">' +
+        '<div style="display:inline-block;width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:16px"></div>' +
+        '<div style="font-size:13px;margin-bottom:4px">正在加载 <b>' + escHtml(docName) + '</b></div>' +
+        (needConvert ? '<div style="font-size:11px;color:var(--muted)">首次转换需要 5–15 秒，请稍候…</div>' : '') +
+        '<div id="prod-block-loading-hint" style="font-size:11px;color:var(--warn);margin-top:12px;display:none">转换时间较长，仍在处理中…</div>' +
+      '</div>';
+      // Show "still waiting" hint after 20s
+      if (needConvert) {
+        _blockDocLoadTimer = setTimeout(function() {
+          var hint = document.getElementById('prod-block-loading-hint');
+          if (hint) hint.style.display = 'block';
+        }, 20000);
+      }
+      // Create iframe, show when loaded
+      var iframe = document.createElement('iframe');
+      iframe.src = fetchUrl;
+      iframe.style.cssText = 'width:100%;min-height:800px;border:none;display:none';
+      iframe.onload = function() {
+        if (_blockDocLoadTimer) { clearTimeout(_blockDocLoadTimer); _blockDocLoadTimer = null; }
+        iframe.style.display = '';
+        var spinner = document.getElementById('prod-block-loading');
+        if (spinner) spinner.style.display = 'none';
+      };
+      el.appendChild(iframe);
     } else {
       el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">未找到' + docName + '，请按要求提交</div>';
     }
@@ -623,8 +651,10 @@ function renderProdInfo(p, docs) {
   renderBlockDoc(currentBlockName || '产品规格书');
 
   window.switchBlockDoc = function(docName) {
-    var hdr = document.querySelector('#prodsec-info .section-hd .section-title');
+    var hdr = document.getElementById('prod-block-doc-title');
     if (hdr) hdr.textContent = docName;
+    var sel = document.getElementById('block-doc-select');
+    if (sel) sel.value = docName;
     renderBlockDoc(docName);
   };
 
