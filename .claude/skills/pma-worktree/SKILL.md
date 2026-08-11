@@ -64,6 +64,46 @@ export PMA_WORKTREE_DIR="<EnterWorktree 返回的实际路径>"
 
 ---
 
+## 端口管理（防止多 worktree 并行时端口冲突）
+
+端口分配文件位于 `$PMA_TRUNK_DIR/.claude/worktrees/used_server_ports`，格式：
+```
+worktree_name=port
+```
+
+### 申请端口（创建 worktree 时）
+
+```bash
+# 读取已占用端口
+USED_PORTS_FILE="$PMA_TRUNK_DIR/.claude/worktrees/used_server_ports"
+touch "$USED_PORTS_FILE"
+USED_PORTS=$(cut -d= -f2 "$USED_PORTS_FILE" 2>/dev/null | tr '\n' ' ')
+
+# 从 8001 开始找第一个未占用端口，跳过 8000（trunk 保留）
+PORT=8001
+while echo "$USED_PORTS" | grep -qw "$PORT"; do
+  PORT=$((PORT + 1))
+  [ $PORT -gt 8099 ] && { echo "ERROR: No free ports"; exit 1; }
+done
+echo "Reserved port: $PORT"
+```
+
+### 释放端口（上线时）
+
+```bash
+USED_PORTS_FILE="$PMA_TRUNK_DIR/.claude/worktrees/used_server_ports"
+sed -i "\|^$WORKTREE_NAME=|d" "$USED_PORTS_FILE"
+```
+
+### 记录端口
+
+创建 worktree 后立即记录：
+```bash
+echo "$WORKTREE_NAME=$PORT" >> "$PMA_TRUNK_DIR/.claude/worktrees/used_server_ports"
+```
+
+---
+
 ## 创建 Worktree 流程
 
 1. 从 prompt 提取简短描述，生成分支名：
@@ -71,10 +111,15 @@ export PMA_WORKTREE_DIR="<EnterWorktree 返回的实际路径>"
    - Bug 修复：`fix/<short-desc>`
    - 英文小写 + 连字符，不超过 50 字符
 
-2. `EnterWorktree(name: "...")` 创建隔离工作区
+2. **申请端口**（在 EnterWorktree 之前）：
+   - 按上述端口管理规则申请一个未占用端口
+   - 端口号存入变量 `$PORT`，后续步骤使用
+
+3. `EnterWorktree(name: "...")` 创建隔离工作区
    - 创建前先在 trunk 分支上拉取服务器最新代码
    - 分支必须从 `origin/trunk` 最新提交创建
    - 验证：`git merge-base <new-branch> origin/trunk` 应等于 `origin/trunk` 最新 commit
+   - **记录端口**：`echo "$WORKTREE_NAME=$PORT" >> "$PMA_TRUNK_DIR/.claude/worktrees/used_server_ports"`
 
 3. **设置路径隔离环境变量**（`EnterWorktree` 返回后立即执行）：
    ```bash
@@ -174,6 +219,17 @@ export PMA_WORKTREE_DIR="<EnterWorktree 返回的实际路径>"
 环境准备完成后，在返回给主会话的输出中，**必须**包含以下内容（用表格展示，确保醒目）：
 
 ```markdown
+## Worktree 环境就绪
+
+| 项目 | 值 |
+|------|-----|
+| **端口** | `<PORT>` |
+| **分支** | `<branch>` |
+| **访问地址** | `http://192.168.100.100:<PORT>` |
+```
+
+> 端口已记录到 `.claude/worktrees/used_server_ports`，上线时自动释放。
+
 ## ⚠️ 路径隔离提醒
 
 **本 session 在 worktree 中运行，所有文件编辑必须使用 worktree 绝对路径。**
@@ -214,6 +270,17 @@ cd $PMA_WORKTREE_DIR
 if git status --porcelain | grep -q .; then
     /pma-commit   # 按 pma-commit 规范自动提交
 fi
+```
+
+### 0.5 停止测试服务器 + 释放端口
+
+```bash
+cd $PMA_WORKTREE_DIR
+./server.sh stop -p $PORT          # 停测试服
+WORKTREE_NAME=$(basename "$PMA_WORKTREE_DIR")
+USED_PORTS_FILE="$PMA_TRUNK_DIR/.claude/worktrees/used_server_ports"
+sed -i "\|^$WORKTREE_NAME=|d" "$USED_PORTS_FILE"  # 释放端口
+echo "已释放端口 $PORT"
 ```
 
 ### 1. rebase + review
