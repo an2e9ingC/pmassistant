@@ -21,6 +21,12 @@ class Task(Base):
     priority = Column(String(16), default="medium")  # low / medium / high / critical
     type = Column(String(32), default="development")  # development / bugfix / review / documentation / testing / other
     assignee_id = Column(Integer, ForeignKey("local_users.id"), nullable=True)
+    assignee_ids = Column(JSON, nullable=True, default=list)
+    # List of user IDs assigned to this task, e.g. [2, 5, 7]
+    # assignee_id is derived as assignee_ids[0] (or null if empty) for backward compatibility
+    assignee_progress = Column(JSON, nullable=True, default=dict)
+    # Per-person progress: {user_id: progress_0_to_100, ...}  e.g. {"2": 100, "5": 50}
+    # Task overall progress = average of all assignee progress values (unset = 0)
     reviewer_id = Column(Integer, ForeignKey("local_users.id"), nullable=True)  # 审批人，进度100%时从 stage.owner_id 解析
     reporter_id = Column(Integer, ForeignKey("local_users.id"), nullable=False)
     cc_user_ids = Column(JSON, nullable=True, default=list)

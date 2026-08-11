@@ -1842,7 +1842,7 @@ function buildProjectActivity(code) {
           }
           return '<span style="font-size:12px;font-weight:500">' + name + '</span>';
         } },
-        { key: 'task_assignee', title: '责任人', width: '70px', minWidth: 90, render: function(v) { return '<span style="font-size:12px;color:var(--muted)">' + escHtml(v || '—') + '</span>'; } },
+        { key: 'task_assignee', title: '责任人', width: '12%', minWidth: 150, render: function(v) { return '<span style="font-size:12px;color:var(--muted)">' + escHtml(v || '—') + '</span>'; } },
         { key: 'detail', title: '动态内容', align: 'left', className: 'dt-wrap', render: function(v, row) {
           var text = _cleanDetail(v, row.action);
           return '<span style="font-size:12px;line-height:1.5">' + escHtml(text.length > 100 ? text.substring(0, 100) + '...' : text) + '</span>';

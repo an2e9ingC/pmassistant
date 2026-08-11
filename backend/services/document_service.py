@@ -1190,6 +1190,7 @@ def _sync_tasks_from_templates(
                     assignee_id = _resolve_user_for_role(db, tpl.responsible_role)
                     if assignee_id:
                         existing.assignee_id = assignee_id
+                        existing.assignee_ids = [assignee_id]
                         updated = True
                 if updated or is_forced:
                     updated_count += 1
@@ -1220,6 +1221,7 @@ def _sync_tasks_from_templates(
                 priority=tpl.priority or "medium",
                 type="development",
                 assignee_id=assignee_id,
+                assignee_ids=[assignee_id] if assignee_id else None,
                 reviewer_id=reviewer_id,
                 reporter_id=task_reporter,
                 template_id=tpl.id,
