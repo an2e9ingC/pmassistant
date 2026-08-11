@@ -433,6 +433,31 @@ def update_my_progress(
         raise HTTPException(status_code=403, detail=str(e))
 
 
+class TaskBatchDelete(BaseModel):
+    task_ids: List[int]
+
+
+@router.delete("/batch", response_model=dict)
+def batch_delete_tasks(
+    payload: TaskBatchDelete,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("task_edit")),
+):
+    """Batch delete tasks by ID list."""
+    if not payload.task_ids:
+        raise HTTPException(status_code=400, detail="请选择至少一个任务")
+    deleted = 0
+    skipped = 0
+    for tid in payload.task_ids:
+        ok = task_service.delete_task(db, tid, user)
+        if ok:
+            deleted += 1
+            log_audit(db, user, "task_delete", f"批量删除任务 #{tid}", AUDIT_CAT_TASK, "high")
+        else:
+            skipped += 1
+    return {"code": 0, "data": {"deleted": deleted, "skipped": skipped, "total": len(payload.task_ids)}, "message": f"已删除 {deleted} 个任务"}
+
+
 @router.delete("/{task_id}", response_model=dict)
 def delete_task(
     task_id: int,
@@ -575,9 +600,6 @@ def batch_update_template_reporter(
         "data": {"updated": updated, "skipped": skipped, "setting": creator_setting},
         "message": f"已更新 {updated} 个任务的创建人，跳过 {skipped} 个",
     }
-
-
-
 @router.delete("", response_model=dict)
 def delete_all_tasks(
     project_id: str = Query(...),
