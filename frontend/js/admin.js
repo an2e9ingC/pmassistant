@@ -945,6 +945,7 @@ function _initUsersDt() {
     container: document.getElementById('users-table'),
     columns: [
       { key: 'idx', title: '序号', width: '40px', minWidth: 60, render: function(v) { return '<span style="font-family:var(--mono);color:var(--muted)">' + v + '</span>'; } },
+      { key: 'id', title: 'ID', width: '50px', minWidth: 60, render: function(v) { return '<span style="font-family:var(--mono);color:var(--muted)">' + (v || '') + '</span>'; } },
       { key: 'username', title: '用户名', width: '170px', minWidth: 120, render: function(v, row) { return '<span style="font-size:13px;font-weight:500;cursor:pointer;color:var(--accent)" onclick="gotoView(\'user-center\',{params:[' + row.id + ']})" title="查看用户中心">' + escHtml(v||'') + '</span>'; } },
       { key: 'wecom_name', title: '企微姓名', width: '8%', minWidth: 80, render: function(v) { return '<span style="font-size:12px">' + escHtml(v||'—') + '</span>'; } },
       { key: 'auth_source', title: '来源', width: '6%', minWidth: 80, render: function(v) { var isGL = v==='gitlab'; return '<span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;background:'+(isGL?'var(--accent-lt)':'var(--muted-lt)')+';color:'+(isGL?'var(--accent)':'var(--muted)')+'">'+(isGL?'GitLab':'本地')+'</span>'; } },
