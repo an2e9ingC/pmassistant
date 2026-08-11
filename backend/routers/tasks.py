@@ -47,6 +47,7 @@ class TaskCreate(BaseModel):
     priority: Optional[str] = "medium"
     type: Optional[str] = "development"
     assignee_id: Optional[int] = None
+    assignee_ids: Optional[List[int]] = None
     reviewer_id: Optional[int] = None
     parent_id: Optional[int] = None
     blocked_by_id: Optional[int] = None
@@ -78,6 +79,7 @@ class TaskUpdate(BaseModel):
     stage_name: Optional[str] = None
     progress: Optional[int] = None
     assignee_id: Optional[int] = None
+    assignee_ids: Optional[List[int]] = None
     reviewer_id: Optional[int] = None
     parent_id: Optional[int] = None
     blocked_by_id: Optional[int] = None
@@ -320,6 +322,9 @@ def create_tasks_batch(
         if d.get("assignee_id") is not None:
             try: d["assignee_id"] = int(d["assignee_id"])
             except (ValueError, TypeError): d["assignee_id"] = None
+        if d.get("assignee_ids") is not None:
+            try: d["assignee_ids"] = [int(x) for x in d["assignee_ids"]]
+            except (ValueError, TypeError): d["assignee_ids"] = None
         valid_tasks.append(d)
     if not valid_tasks:
         raise HTTPException(status_code=400, detail="没有有效的任务数据")
@@ -402,6 +407,30 @@ def extend_estimate(
         raise HTTPException(status_code=404, detail="Task not found")
     log_audit(db, user, "task_extend", f"任务 #{task_id} 延长预估 {body.additional_hours}h", AUDIT_CAT_TASK, "medium")
     return {"code": 0, "data": t, "message": "已延长预估"}
+
+
+class MyProgressBody(BaseModel):
+    progress: int  # 0-100
+
+
+@router.put("/{task_id}/my-progress", response_model=dict)
+def update_my_progress(
+    task_id: int,
+    body: MyProgressBody,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Update current user's own progress on a multi-assignee task."""
+    uid = user.id if hasattr(user, 'id') else (user.get('id') if isinstance(user, dict) else None)
+    if not uid:
+        raise HTTPException(status_code=401, detail="未登录")
+    try:
+        result = task_service.update_my_progress(db, task_id, uid, body.progress, user)
+        if not result:
+            raise HTTPException(status_code=404, detail="Task not found")
+        return {"code": 0, "data": result, "message": "ok"}
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
 
 
 @router.delete("/{task_id}", response_model=dict)

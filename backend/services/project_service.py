@@ -404,8 +404,10 @@ def get_project_gantt(db: Session, project_id: int) -> dict:
             unique_names = []
             seen_names = set()
             for t in tasks:
-                if t.assignee_id:
-                    u = db.query(LocalUser).filter(LocalUser.id == t.assignee_id).first()
+                # Resolve all assignees from assignee_ids (or fallback to assignee_id)
+                task_assignee_ids = t.assignee_ids or ([t.assignee_id] if t.assignee_id else [])
+                for aid in task_assignee_ids:
+                    u = db.query(LocalUser).filter(LocalUser.id == aid).first()
                     if u:
                         name = (u.display_name or u.username).split("（")[0]
                         if name not in seen_names:

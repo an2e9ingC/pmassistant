@@ -39,7 +39,29 @@ def get_tasks(
         q = q.filter(Task.reviewer_id == reviewer_id)
     q = q.filter(or_(Task.is_deleted == 0, Task.is_deleted == None))
     q = q.order_by(Task.sort_order, Task.created_at.desc())
-    return [_task_dict(t, db) for t in q.all()]
+    results = [_task_dict(t, db) for t in q.all()]
+
+    # If filtering by assignee_id, also include tasks where user is in assignee_ids but not first
+    if assignee_id:
+        seen_ids = {r["id"] for r in results}
+        extra_q = db.query(Task).filter(
+            Task.assignee_ids.isnot(None),
+            Task.assignee_id != assignee_id,
+            or_(Task.is_deleted == 0, Task.is_deleted == None),
+        )
+        if project_id:
+            extra_q = extra_q.filter(Task.project_id == project_id)
+        if execution_id:
+            extra_q = extra_q.filter(Task.execution_id == execution_id)
+        if status:
+            extra_q = extra_q.filter(Task.status == status)
+        extra_q = extra_q.order_by(Task.sort_order, Task.created_at.desc())
+        for t in extra_q.all():
+            if t.id not in seen_ids and assignee_id in (t.assignee_ids or []):
+                results.append(_task_dict(t, db))
+                seen_ids.add(t.id)
+
+    return results
 
 
 def get_task(db: Session, task_id: int) -> Optional[dict]:
@@ -60,7 +82,7 @@ def get_task(db: Session, task_id: int) -> Optional[dict]:
 
 def get_my_tasks(db: Session, user_id: int) -> List[dict]:
     """Get tasks for a user: assigned + reported + CC'd + watched (tagged with _source)."""
-    # 1. Tasks assigned to the user
+    # 1. Tasks assigned to the user (primary assignee)
     tasks = db.query(Task).filter(
         Task.assignee_id == user_id,
         or_(Task.is_deleted == 0, Task.is_deleted == None),
@@ -73,6 +95,20 @@ def get_my_tasks(db: Session, user_id: int) -> List[dict]:
     result = [_task_dict(t, db) for t in tasks]
     for d in result:
         d["_source"] = "assigned"
+
+    # 1b. Tasks where user is in assignee_ids but not the first assignee
+    # (Python-side filter for SQLite JSON compatibility)
+    assignee_q = db.query(Task).filter(
+        Task.assignee_ids.isnot(None),
+        Task.assignee_id != user_id,
+        or_(Task.is_deleted == 0, Task.is_deleted == None),
+    ).all()
+    for t in assignee_q:
+        if t.id not in seen_ids and user_id in (t.assignee_ids or []):
+            d = _task_dict(t, db)
+            d["_source"] = "assigned"
+            result.append(d)
+            seen_ids.add(t.id)
 
     # 2. Tasks CC'd to the user (Python-side filter for SQLite compatibility)
     cc_q = db.query(Task).filter(
@@ -216,9 +252,27 @@ def _resolve_assignee_name(db: Session, assignee_id) -> str:
     return ""
 
 
+def _resolve_assignee_names(db: Session, assignee_ids) -> list:
+    """Resolve assignee_ids list to display_name list (in order)."""
+    if not assignee_ids:
+        return []
+    from backend.models.local import LocalUser
+    users = db.query(LocalUser).filter(LocalUser.id.in_(assignee_ids)).all()
+    id_to_name = {u.id: (u.display_name or u.username) for u in users}
+    return [id_to_name.get(uid, "") for uid in assignee_ids]
+
+
 def create_task(db: Session, data: dict, user) -> dict:
     """Create a single task. user is LocalUser from Depends(get_current_user)."""
     uid, uname = _get_user_info(user)
+    # Resolve assignee_ids: if provided use it, else derive from assignee_id
+    assignee_ids = data.get("assignee_ids")
+    if assignee_ids is not None:
+        assignee_ids = [int(x) for x in assignee_ids]
+    elif data.get("assignee_id"):
+        assignee_ids = [int(data["assignee_id"])]
+    else:
+        assignee_ids = None
     t = Task(
         project_id=data.get("project_id"),
         execution_id=data.get("execution_id"),
@@ -228,7 +282,8 @@ def create_task(db: Session, data: dict, user) -> dict:
         status=data.get("status", "todo"),
         priority=data.get("priority", "medium"),
         type=data.get("type", "development"),
-        assignee_id=data.get("assignee_id"),
+        assignee_id=assignee_ids[0] if assignee_ids else None,
+        assignee_ids=assignee_ids,
         reviewer_id=data.get("reviewer_id") or uid,  # default to reporter
         reporter_id=uid,
         parent_id=data.get("parent_id"),
@@ -245,8 +300,9 @@ def create_task(db: Session, data: dict, user) -> dict:
     db.refresh(t)
     _link_task_to_stage(db, t)
     _sync_cc_favorites(db, data.get("cc_user_ids"), t.id, 'task')
+    assignee_names = _resolve_assignee_names(db, t.assignee_ids) if t.assignee_ids else []
     _log_audit(db, t.project_id, uname, "task_create", f"创建任务 #{t.id}: {t.title}",
-               task_name=t.title, task_assignee=_resolve_assignee_name(db, t.assignee_id), task_id=t.id)
+               task_name=t.title, task_assignee="、".join(assignee_names) if assignee_names else _resolve_assignee_name(db, t.assignee_id), task_id=t.id)
     auto_messages = []
     if t.stage_id:
         auto_messages = _recalc_stage_progress(db, t.stage_id)
@@ -260,6 +316,14 @@ def create_tasks_batch(db: Session, tasks_data: list, user) -> List[dict]:
     uid, uname = _get_user_info(user)
     created = []
     for data in tasks_data:
+        # Resolve assignee_ids: if provided use it, else derive from assignee_id
+        assignee_ids = data.get("assignee_ids")
+        if assignee_ids is not None:
+            assignee_ids = [int(x) for x in assignee_ids]
+        elif data.get("assignee_id"):
+            assignee_ids = [int(data["assignee_id"])]
+        else:
+            assignee_ids = None
         t = Task(
             project_id=data.get("project_id"),
             execution_id=data.get("execution_id"),
@@ -269,7 +333,8 @@ def create_tasks_batch(db: Session, tasks_data: list, user) -> List[dict]:
             status=data.get("status", "todo"),
             priority=data.get("priority", "medium"),
             type=data.get("type", "development"),
-            assignee_id=data.get("assignee_id"),
+            assignee_id=assignee_ids[0] if assignee_ids else None,
+            assignee_ids=assignee_ids,
             reviewer_id=data.get("reviewer_id") or uid,  # default to reporter
             reporter_id=uid,
             progress=int(data.get("progress", 0) or 0),
@@ -285,8 +350,9 @@ def create_tasks_batch(db: Session, tasks_data: list, user) -> List[dict]:
         db.refresh(t)
         proj = db.query(CachedProject).filter(CachedProject.id == t.project_id).first()
         proj_info = f"[{proj.code}]" if proj and proj.code else f"项目#{t.project_id}"
+        assignee_names = _resolve_assignee_names(db, t.assignee_ids) if t.assignee_ids else []
         _log_audit(db, t.project_id, uname, "task_create_batch", f"批量创建任务 {proj_info} #{t.id}: {t.title}",
-                   task_name=t.title, task_assignee=_resolve_assignee_name(db, t.assignee_id), task_id=t.id)
+                   task_name=t.title, task_assignee="、".join(assignee_names) if assignee_names else _resolve_assignee_name(db, t.assignee_id), task_id=t.id)
     return [_task_dict(t, db) for t in created]
 
 
@@ -308,6 +374,7 @@ def import_tasks(db: Session, task_ids: list, target_project_id: int, execution_
             priority=src.priority,
             type=src.type,
             assignee_id=src.assignee_id,
+            assignee_ids=src.assignee_ids or ([src.assignee_id] if src.assignee_id else None),
             reporter_id=uid,
             estimate_hours=src.estimate_hours,
             output_items=src.output_items,
@@ -351,35 +418,66 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
             from backend.models.local import LocalUser
             for u in db.query(LocalUser).filter(LocalUser.id.in_(ids)).all():
                 user_name_map[u.id] = u.display_name or u.username
-    for field in ("title", "description", "status", "priority", "type",
+    # Also resolve assignee_ids names for change logging
+    old_assignee_ids = (t.assignee_ids or [])[:]
+    if "assignee_ids" in data:
+        new_assignee_ids = data["assignee_ids"] or []
+        all_ids = set(old_assignee_ids) | set(new_assignee_ids)
+        if all_ids:
+            from backend.models.local import LocalUser
+            for u in db.query(LocalUser).filter(LocalUser.id.in_(all_ids)).all():
+                if u.id not in user_name_map:
+                    user_name_map[u.id] = u.display_name or u.username
+    for field in ("assignee_ids", "title", "description", "status", "priority", "type",
                    "execution_id", "stage_name", "assignee_id", "reviewer_id",
                    "parent_id", "blocked_by_id",
                    "start_date", "due_date", "sort_order", "progress", "cc_user_ids"):
-        if field in data and getattr(t, field) != data[field]:
+        if field in data:
+            if field == "assignee_ids":
+                # Handle assignee_ids: keep assignee_id in sync (first ID)
+                new_ids = [int(x) for x in (data[field] or [])]
+                old_val = (t.assignee_ids or [])[:]
+                new_val = new_ids
+                if old_val != new_val:
+                    t.assignee_ids = new_ids if new_ids else None
+                    t.assignee_id = new_ids[0] if new_ids else None
+                    ov_names = "、".join(user_name_map.get(uid, str(uid)) for uid in old_val)
+                    nv_names = "、".join(user_name_map.get(uid, str(uid)) for uid in new_val)
+                    field_label = FIELD_LABEL.get("assignee_id", "assignee_id")
+                    changes.append(f"{field_label}: {ov_names or '无'} -> {nv_names or '无'}")
+                continue
             old_val = getattr(t, field)
             new_val = data[field]
-            if field == "execution_id":
-                setattr(t, field, int(new_val) if new_val else None)
-            elif field in ("assignee_id", "reviewer_id", "parent_id", "blocked_by_id"):
-                setattr(t, field, int(new_val) if new_val else None)
-            elif field in ("start_date", "due_date"):
-                setattr(t, field, _parse_date(new_val) if new_val else None)
-            else:
-                setattr(t, field, new_val)
-            ov_display = old_val
-            nv_display = new_val if new_val else ''
-            if field in ("assignee_id", "reviewer_id"):
-                ov_display = user_name_map.get(int(old_val), old_val) if old_val else ''
-                nv_display = user_name_map.get(int(new_val), new_val) if new_val else ''
-            field_label = FIELD_LABEL.get(field, field)
-            changes.append(f"{field_label}: {ov_display} -> {nv_display}")
+            if old_val != new_val:
+                if field == "execution_id":
+                    setattr(t, field, int(new_val) if new_val else None)
+                elif field in ("reviewer_id", "parent_id", "blocked_by_id"):
+                    setattr(t, field, int(new_val) if new_val else None)
+                elif field == "assignee_id":
+                    new_id = int(new_val) if new_val else None
+                    setattr(t, field, new_id)
+                    # Sync assignee_ids if not separately provided
+                    if "assignee_ids" not in data:
+                        t.assignee_ids = [new_id] if new_id else None
+                elif field in ("start_date", "due_date"):
+                    setattr(t, field, _parse_date(new_val) if new_val else None)
+                else:
+                    setattr(t, field, new_val)
+                ov_display = old_val
+                nv_display = new_val if new_val else ''
+                if field in ("assignee_id", "reviewer_id"):
+                    ov_display = user_name_map.get(int(old_val), old_val) if old_val else ''
+                    nv_display = user_name_map.get(int(new_val), new_val) if new_val else ''
+                field_label = FIELD_LABEL.get(field, field)
+                changes.append(f"{field_label}: {ov_display} -> {nv_display}")
 
     if "stage_name" in data:
         t.stage_name = data["stage_name"] or None
     # When assignee of a template task is changed, mark as diverged (prevent sync overwrite)
-    if t.template_id and "assignee_id" in data:
-        new_assignee = data["assignee_id"]
-        if new_assignee is not None and int(new_assignee or 0) != (t.assignee_id or 0):
+    if t.template_id and "assignee_ids" in data:
+        new_ids = set(data["assignee_ids"] or [])
+        old_ids = set(old_assignee_ids)
+        if new_ids != old_ids:
             t.is_diverged = 1
             changes.append("已脱离模板（责任人变更）")
     if "estimate_hours" in data:
@@ -419,8 +517,8 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
                 stage = db.query(ProjectStage).filter(ProjectStage.id == t.stage_id).first()
                 if stage and stage.owner_id:
                     reviewer_id = stage.owner_id
-            if reviewer_id and reviewer_id == t.assignee_id:
-                # Self-review: skip approval, auto-complete
+            if reviewer_id and (reviewer_id == t.assignee_id or (t.assignee_ids and reviewer_id in t.assignee_ids)):
+                # Self-review: reviewer is one of the assignees, skip approval, auto-complete
                 t.status = "done"
                 t.completed_at = datetime.now(timezone.utc)
                 auto_messages.append("审批人与责任人相同，任务已自动完成")
@@ -468,8 +566,9 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
             logger.exception(f"[cc:fav] CC sync failed for task#{t.id}")
 
     if changes:
+        assignee_names = _resolve_assignee_names(db, t.assignee_ids) if t.assignee_ids else []
         _log_audit(db, t.project_id, uname, "task_update", f"更新任务「{t.title}」: " + "; ".join(changes[:3]),
-                   task_name=t.title, task_assignee=_resolve_assignee_name(db, t.assignee_id), task_id=t.id)
+                   task_name=t.title, task_assignee="、".join(assignee_names) if assignee_names else _resolve_assignee_name(db, t.assignee_id), task_id=t.id)
         # Also record as task comment for user-visible change history
         comment_text = "; ".join(changes)
         if not comment_text:
@@ -565,7 +664,7 @@ def delete_task(db: Session, task_id: int, user=None) -> bool:
     project_id = t.project_id
     stage_id = t.stage_id
     title = t.title
-    assignee_name = _resolve_assignee_name(db, t.assignee_id)
+    assignee_name = "、".join(_resolve_assignee_names(db, t.assignee_ids)) if t.assignee_ids else _resolve_assignee_name(db, t.assignee_id)
 
     if t.template_id:
         # Soft-delete template task: hide from lists but preserve data
@@ -693,6 +792,9 @@ def _task_dict(t: Task, db=None) -> dict:
         "assignee_id": t.assignee_id,
         "assignee_name": assignee_name,
         "assignee_username": None,
+        "assignee_ids": t.assignee_ids or ([t.assignee_id] if t.assignee_id else []),
+        "assignee_names": _resolve_assignee_names(db, t.assignee_ids) if db and t.assignee_ids else ([assignee_name] if assignee_name else []),
+        "assignee_progress": t.assignee_progress or {},
         "reviewer_id": t.reviewer_id,
         "reviewer_name": _resolve_reviewer_name(db, t.reviewer_id) if db else "",
         "reporter_id": t.reporter_id,
@@ -885,7 +987,7 @@ def get_user_tasks(db, user_id, limit=500):
     result = []
     seen_ids = set()
 
-    # 1. Tasks assigned to the user
+    # 1. Tasks assigned to the user (primary assignee)
     assigned = db.query(Task).filter(
         Task.assignee_id == user_id,
         or_(Task.is_deleted == 0, Task.is_deleted == None),
@@ -895,6 +997,19 @@ def get_user_tasks(db, user_id, limit=500):
         d["_source"] = "assigned"
         result.append(d)
         seen_ids.add(t.id)
+
+    # 1b. Tasks where user is in assignee_ids but not the first assignee
+    assignee_q = db.query(Task).filter(
+        Task.assignee_ids.isnot(None),
+        Task.assignee_id != user_id,
+        or_(Task.is_deleted == 0, Task.is_deleted == None),
+    ).order_by(Task.created_at.desc()).limit(limit * 2).all()
+    for t in assignee_q:
+        if t.id not in seen_ids and user_id in (t.assignee_ids or []):
+            d = _task_dict(t, db)
+            d["_source"] = "assigned"
+            result.append(d)
+            seen_ids.add(t.id)
 
     # 2. Tasks reported by the user
     reported = db.query(Task).filter(
@@ -949,3 +1064,89 @@ def get_user_tasks(db, user_id, limit=500):
         -(d.get("id") or 0)
     ))
     return result[:limit * 2]
+
+
+def _recalc_task_progress(db: Session, t: Task) -> int:
+    """Calculate task overall progress from assignee_progress.
+    Equal weight average of all assignees' individual progress.
+    Returns the calculated progress value (0-100)."""
+    assignee_ids = t.assignee_ids or ([t.assignee_id] if t.assignee_id else [])
+    if not assignee_ids:
+        return 0
+    progress_map = t.assignee_progress or {}
+    total = sum(int(progress_map.get(str(aid), progress_map.get(aid, 0)) or 0) for aid in assignee_ids)
+    return int(total / len(assignee_ids))
+
+
+def update_my_progress(db: Session, task_id: int, user_id: int, progress: int, user=None) -> Optional[dict]:
+    """Update current user's own progress on a task. Only the assignee can update their own progress."""
+    t = db.query(Task).filter(Task.id == task_id).first()
+    if not t:
+        return None
+
+    assignee_ids = t.assignee_ids or ([t.assignee_id] if t.assignee_id else [])
+    if user_id not in assignee_ids:
+        raise PermissionError("只有任务责任人才可以更新自己的进度")
+
+    progress = max(0, min(100, int(progress or 0)))
+    progress_map = dict(t.assignee_progress or {})
+    # Store with both int keys (for SQLite JSON roundtrip compatibility)
+    progress_map[str(user_id)] = progress
+    t.assignee_progress = progress_map
+
+    # Recalculate overall task progress
+    new_progress = _recalc_task_progress(db, t)
+    t.progress = new_progress
+
+    # Auto-update task status based on progress
+    auto_messages = []
+    old_status = t.status
+
+    if new_progress >= 100 and old_status not in ("done", "closed"):
+        approval_enabled = PmaSetting.get(db, "approval_enabled", "1") == "1"
+        if not approval_enabled:
+            t.status = "done"
+            t.completed_at = datetime.now(timezone.utc)
+            auto_messages.append("所有成员进度已达100%，任务已自动完成")
+        else:
+            reviewer_id = None
+            if t.stage_id:
+                from backend.models.project_stage import ProjectStage
+                stage = db.query(ProjectStage).filter(ProjectStage.id == t.stage_id).first()
+                if stage and stage.owner_id:
+                    reviewer_id = stage.owner_id
+            if reviewer_id and (reviewer_id == t.assignee_id or (t.assignee_ids and reviewer_id in t.assignee_ids)):
+                t.status = "done"
+                t.completed_at = datetime.now(timezone.utc)
+                auto_messages.append("所有成员进度已达100%（自审），任务已自动完成")
+            elif old_status not in ("review",):
+                t.status = "review"
+                t.reviewer_id = reviewer_id
+                auto_messages.append("所有成员进度已达100%，任务已进入评审中")
+
+    # Also handle the reverse: progress drops below 100 from a completed state
+    if new_progress < 100 and old_status in ("done", "closed"):
+        t.status = "in_progress"
+        t.completed_at = None
+        auto_messages.append("进度更新，任务已重新打开")
+
+    db.commit()
+    db.refresh(t)
+
+    # Add auto-message as a comment
+    uid, uname = _get_user_info(user) if user else (None, None)
+    if auto_messages:
+        for msg in auto_messages:
+            db.add(TaskComment(task_id=t.id, user_id=user_id, content=msg))
+        db.commit()
+
+        if uname and t.project_id:
+            _log_audit(db, t.project_id, uname, "task_update",
+                       f"更新任务「{t.title}」进度: {auto_messages[0]}",
+                       task_name=t.title,
+                       task_assignee="、".join(_resolve_assignee_names(db, t.assignee_ids)) if t.assignee_ids else _resolve_assignee_name(db, t.assignee_id),
+                       task_id=t.id)
+
+    result = _task_dict(t, db)
+    result["auto_messages"] = auto_messages
+    return result

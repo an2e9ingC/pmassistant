@@ -123,6 +123,9 @@ PYEOF
    sed -i 's/^WECOM_SYNC_INTERVAL=.*/WECOM_SYNC_INTERVAL=0/' $PMA_WORKTREE_DIR/.env
    sed -i 's/^ZENTAO_SYNC_RELEASES=.*/ZENTAO_SYNC_RELEASES=false/' $PMA_WORKTREE_DIR/.env
 
+   # c3. 取消 GitLab OAuth 回调 URL 硬编码（后端自动从请求 Host 头推导，适配任意端口）
+   sed -i 's/^GITLAB_OAUTH_REDIRECT_URI=.*/# GITLAB_OAUTH_REDIRECT_URI is auto-derived from request Host header (comment out to use auto-detection)/' $PMA_WORKTREE_DIR/.env
+
    # d. 启动 worktree 服务
    cd $PMA_WORKTREE_DIR && ./server.sh restart -p $PORT
    ```

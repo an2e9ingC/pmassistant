@@ -73,6 +73,12 @@ function _startInlineEdit(el) {
     var sel = field.querySelector('.ef-input');
     if (sel) { setTimeout(function() { sel.focus(); }, 50); }
   } else if (inputType === 'user-select') {
+    if (fieldName === 'assignee_id') {
+      // Multi-assignee: open dialog with multi-user selector
+      _cancelInlineEdit(field.querySelector('.ef-cancel-btn') || field);
+      _openMultiAssignDialog(field);
+      return;
+    }
     if (!window._allUsers || !window._allUsers.length) {
       field.innerHTML = '<span style="font-size:12px;color:var(--muted)">加载用户列表...</span>';
       (typeof loadAllUsers === 'function' ? loadAllUsers() : Promise.resolve()).then(function() {
@@ -102,6 +108,12 @@ function _startInlineEdit(el) {
     if (inp) { setTimeout(function() { inp.focus(); }, 50); }
     if (inp) { inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); _saveInlineEdit(inp); } if (e.key === 'Escape') { e.preventDefault(); _cancelInlineEdit(inp); } }); }
   } else if (inputType === 'number') {
+    if (fieldName === 'progress') {
+      // Open slider dialog for progress editing
+      _cancelInlineEdit(el);
+      _openProgressInlineEdit(field);
+      return;
+    }
     var min = field.dataset.min || '';
     var max = field.dataset.max || '';
     var step = field.dataset.step || '1';
@@ -142,6 +154,26 @@ function _renderSelectField(field, currentVal, opts) {
   if (sel) { setTimeout(function() { sel.focus(); }, 50); }
 }
 
+function _openProgressInlineEdit(field) {
+  var taskId = field.dataset.taskId;
+  var currentPct = parseInt(field.dataset.currentValue) || 0;
+  var html = _renderProgressSlider('ef-p', currentPct);
+  openDialog('修改进度', html, [
+    {text: '取消', onclick: 'closeSharedDialog()'},
+    {text: '保存', cls: 'btn-primary', onclick: '_saveProgressInline(' + taskId + ')'}
+  ], {maxWidth: 360});
+}
+
+async function _saveProgressInline(taskId) {
+  var val = parseInt(document.getElementById('ef-p-slider').value) || 0;
+  try {
+    await API.put('/tasks/' + taskId, {progress: val});
+    closeSharedDialog();
+    showToast('进度已更新: ' + val + '%', 'success');
+    EventBus.emit('task:saved', {taskId: taskId});
+  } catch(e) { showToast('更新失败: ' + (e.message || ''), 'error'); }
+}
+
 function _renderUserSelect(field, currentVal) {
   var users = window._allUsers || [];
   var opts = users.map(function(u) { return {v: u.id, l: u.display_name || u.name || u.username}; });
@@ -149,6 +181,45 @@ function _renderUserSelect(field, currentVal) {
   field.dataset.opts = encodeURIComponent(JSON.stringify(opts));
   field.dataset.inputType = 'select';
   _renderSelectField(field, currentVal, opts);
+}
+
+/* ── Inline Multi-Assignee Dialog ── */
+function _openMultiAssignDialog(field) {
+  var taskId = field.dataset.taskId;
+  // Fetch task to get current assignee IDs
+  API.get('/tasks/' + taskId).then(function(task) {
+    var currentIds = task.assignee_ids || (task.assignee_id ? [task.assignee_id] : []);
+    window._mu_im_assignee = currentIds.slice();
+    var html = '<div>' +
+      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">负责人</label>' +
+        '<div id="im-assignee-wrap"></div></div>' +
+      '</div>';
+    openDialog('编辑负责人', html, [
+      {text: '取消', onclick: 'closeSharedDialog()'},
+      {text: '保存', cls: 'btn-primary', onclick: '_saveMultiAssignInline(' + taskId + ')'}
+    ], {maxWidth: 420});
+    loadAllUsers().then(function() {
+      var wrap = document.getElementById('im-assignee-wrap');
+      if (wrap) {
+        wrap.innerHTML = createMultiUserSelector({
+          containerId: 'im-assignee',
+          selectedIds: currentIds.slice(),
+          placeholder: '搜索并添加负责人...'
+        });
+        _muRenderTags('im-assignee');
+      }
+    });
+  }).catch(function(e) { showToast('加载失败: ' + (e.message || ''), 'error'); });
+}
+
+async function _saveMultiAssignInline(taskId) {
+  var ids = window._mu_im_assignee || [];
+  try {
+    await API.put('/tasks/' + taskId, { assignee_id: ids.length ? ids[0] : null, assignee_ids: ids.length ? ids : null });
+    closeSharedDialog();
+    showToast('已更新', 'success');
+    EventBus.emit('task:saved', { taskId: taskId });
+  } catch(e) { showToast('更新失败: ' + (e.message || ''), 'error'); }
 }
 
 async function _saveInlineEdit(el) {
@@ -660,7 +731,7 @@ function renderTaskTableCompact(tasks, execs) {
       { key: 'fav', title: '', width: '28px', minWidth: 28, render: function(v, row) { return row._empty ? '' : favStar('task', row.id, {stopPropagation: true}); } },
       { key: 'status', title: '状态', width: '6%', minWidth: 80, render: function(v, row) { return row._empty?'—':renderPill(v||'todo'); } },
       { key: 'priority', title: '优先级', width: '5%', minWidth: 65, render: function(v, row) { return row._empty?'—':(typeof renderPriorityBadge==='function'?renderPriorityBadge(v):escHtml(v||'medium')); } },
-      { key: 'assignee_name', title: '负责人', width: '7%', minWidth: 90, render: function(v, row) { return row._empty?'—':'<span style="font-size:12px;cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();openAssignDialog('+row.id+')" title="指派任务">'+escHtml(v||'—')+'</span>'; } },
+      { key: 'assignee_name', title: '负责人', width: '13%', minWidth: 160, render: function(v, row) { return row._empty?'—':'<span style="font-size:12px;cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();openAssignDialog('+row.id+')" title="指派任务">'+_renderAssigneeDisplay(row.assignee_names||[], row.id, {fallback: v||'—'})+'</span>'; } },
       { key: 'progress', title: '进度', width: '7%', minWidth: 60, render: function(v, row) { return row._empty?'—':(typeof renderProgressRing==='function'?'<div style="display:inline-block;vertical-align:middle">'+renderProgressRing(v||0)+'</div>':'<span>'+(v||0)+'%</span>'); } },
       { key: 'start_date', title: '计划开始', width: '7%', minWidth: 100, render: function(v, row) {
         if (row._empty) return '—';
@@ -741,14 +812,14 @@ function _renderTaskRowCompact(t, stageStart) {
   var progressHtml = typeof renderProgressRing === 'function'
     ? '<div style="display:inline-block;vertical-align:middle">' + renderProgressRing(t.progress || 0) + '</div>'
     : '<span>' + (t.progress || 0) + '%</span>';
-  var assigneeName = t.assignee_name || t.assignee_username || '—';
+  var assigneeName = _renderAssigneeDisplay(t.assignee_names || [], t.id, {fallback: t.assignee_name || t.assignee_username || '—'});
   var effectiveStart = t.start_date || stageStart || null;
   var startDateStr = effectiveStart || '—';
   var startTitle = effectiveStart ? escHtml(effectiveStart) : (stageStart ? '默认取阶段开始时间' : '未设置');
   return '<td style="text-align:left;cursor:pointer" onclick="openTaskDetail(' + t.id + ')" title="查看任务详情">' + escHtml(t.title) + '</td>' +
     '<td style="text-align:center' + (window._approvalEnabled ? ';cursor:pointer' : '') + '"' + (window._approvalEnabled ? ' onclick="event.stopPropagation();openReviewerDialog(' + t.id + ')" title="' + (t.status === 'review' && t.reviewer_name ? '审批人: ' + escHtml(t.reviewer_name) + ' — 点击修改' : '点击修改审批人') + '"' : '') + '>' + renderPill(t.status || 'todo') + '</td>' +
     '<td style="text-align:center">' + (typeof renderPriority === 'function' ? renderPriority(t.priority) : escHtml(t.priority || 'medium')) + '</td>' +
-    '<td style="font-size:12px;cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();openAssignDialog(' + t.id + ')" title="指派任务">' + escHtml(assigneeName) + '</td>' +
+    '<td style="font-size:12px;cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();openAssignDialog(' + t.id + ')" title="指派任务">' + assigneeName + '</td>' +
     '<td style="text-align:center">' + progressHtml + '</td>' +
     '<td style="font-size:12px;color:' + (t.start_date ? 'var(--fg)' : 'var(--muted)') + '" title="' + startTitle + '">' + escHtml(startDateStr) + '</td>' +
     '<td style="font-size:12px">' + (t.due_date ? t.due_date : '—') + '</td>' +
@@ -911,7 +982,7 @@ function _renderTaskRow(t, stageMap) {
 
 var _tfProjectId = null; // project numeric ID selected in the task form
 var _tfProjectCode = null; // project code (e.g. PE0450) for API calls to /projects/{code}/...
-var _tfAssigneeId = null; // assignee ID selected in the task form
+var _tfAssigneeIds = []; // assignee IDs selected in the task form (multi-select)
 var _tfReviewerId = null; // reviewer ID selected in the task form
 var _tfOriginalStatus = null; // original status when editing
 
@@ -984,6 +1055,62 @@ var _grid4 = 'display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px 12px';
 var _lbl = 'display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:2px';
 var _val = 'font-size:13px';
 
+function _renderTeamProgress(t) {
+  var ids = t.assignee_ids || [];
+  if (ids.length <= 1) return ''; // single assignee, no team progress needed
+
+  var progressMap = t.assignee_progress || {};
+  var names = t.assignee_names || [];
+  var curUser = (typeof getCurrentUser === 'function' && getCurrentUser()) || {};
+  var curUid = curUser ? (curUser.id || null) : null;
+  var isMyTask = curUid && ids.indexOf(curUid) >= 0;
+
+  var rows = '';
+  ids.forEach(function(aid, i) {
+    var pct = parseInt(progressMap[String(aid)] || progressMap[aid] || 0);
+    var name = names[i] || ('#' + aid);
+    var icon = pct >= 100 ? '&#9989;' : (pct > 0 ? '&#9203;' : '&#8987;'); // ✅, ⏳, ⌛
+    rows += '<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border);font-size:12px">' +
+      '<span>' + icon + ' ' + escHtml(name) + '</span>' +
+      '<span style="color:' + (pct >= 100 ? 'var(--success)' : (pct > 0 ? 'var(--accent)' : 'var(--muted)')) + ';font-weight:510">' + pct + '%</span>' +
+      '</div>';
+  });
+
+  var myBtn = '';
+  if (isMyTask) {
+    var myPct = parseInt(progressMap[String(curUid)] || progressMap[curUid] || 0);
+    myBtn = '<div style="margin-top:6px">' +
+      '<button class="btn-xs" onclick="event.stopPropagation();_openMyProgressDialog(' + t.id + ',' + myPct + ')" style="background:var(--accent-lt);border-color:var(--accent);color:var(--accent)">&#9998; 更新我的进度</button>' +
+      '</div>';
+  }
+
+  return '<div class="dkpi"><div class="dkpi-lbl">团队进度</div>' +
+    '<div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 10px;margin-top:2px">' +
+    rows + myBtn + '</div></div>';
+}
+
+function _openMyProgressDialog(taskId, currentPct) {
+  var html = _renderProgressSlider('mp', currentPct, '更新你在该任务中的个人进度');
+  openDialog('更新我的进度', html, [
+    {text: '取消', onclick: 'closeSharedDialog()'},
+    {text: '更新', cls: 'btn-primary', onclick: '_submitMyProgress(' + taskId + ')'}
+  ], {maxWidth: 360});
+}
+
+async function _submitMyProgress(taskId) {
+  var val = parseInt(document.getElementById('mp-slider').value) || 0;
+  try {
+    var res = await API.put('/tasks/' + taskId + '/my-progress', {progress: val});
+    closeSharedDialog();
+    if (res.auto_messages && res.auto_messages.length) {
+      res.auto_messages.forEach(function(msg) { showToast(msg, 'success'); });
+    } else {
+      showToast('进度已更新: ' + val + '%', 'success');
+    }
+    EventBus.emit('task:saved', {taskId: taskId});
+  } catch(e) { showToast('更新失败: ' + (e.message || ''), 'error'); }
+}
+
 function _daysLeft(dueDate) {
   if (!dueDate) return '';
   var due = new Date(dueDate + 'T00:00:00');
@@ -1039,7 +1166,9 @@ function _renderTaskDetailBody(t) {
         '<div class="dkpi"><div class="dkpi-lbl">创建人</div><div class="dkpi-val">' + escHtml(t.reporter_name || '—') + '</div></div>' +
         // Assignee (editable)
         '<div class="dkpi"><div class="dkpi-lbl">负责人</div>' +
-          _buildEditableField(t.id, 'assignee_id', 'user-select', '<span class="dkpi-val">' + escHtml(t.assignee_name || t.assignee_username || '—') + '</span>', t.assignee_id || '') + '</div>' +
+          _buildEditableField(t.id, 'assignee_id', 'user-select', '<span class="dkpi-val">' + _renderAssigneeDisplay(t.assignee_names || [], t.id, {fallback: t.assignee_name || t.assignee_username || '—'}) + '</span>', (t.assignee_ids || []).join(',') || (t.assignee_id || '')) + '</div>' +
+        // Per-person progress (team tasks only)
+        _renderTeamProgress(t) +
         // Reviewer (editable, only if approval enabled)
         (window._approvalEnabled ?
           '<div class="dkpi"><div class="dkpi-lbl">审批人</div>' +
@@ -1057,15 +1186,20 @@ function _renderTaskDetailBody(t) {
     '<div class="card info-glass-card" style="flex:1;min-width:0;padding:20px">' +
       '<div class="section-hd"><span class="section-title">状态与进度</span></div>' +
       '<div class="delivery-kpi" style="grid-template-columns:1fr 1fr">' +
-        // Status (editable)
-        '<div class="dkpi"><div class="dkpi-lbl">状态</div>' + _buildEditableField(t.id, 'status', 'select',
-          '<div style="margin-top:6px">' + renderPill(t.status || 'todo') +
-          (t.status === 'review' && t.reviewer_name ? '<div style="font-size:10px;color:var(--muted);margin-top:2px">审批人: ' + escHtml(t.reviewer_name) + '</div>' : '') + '</div>',
-          t.status || 'todo', _STATUS_OPTS) + '</div>' +
+        // Status: auto-calculated for team tasks
+        ((t.assignee_ids && t.assignee_ids.length > 1)
+          ? '<div class="dkpi"><div class="dkpi-lbl">状态 <span style="font-size:10px;color:var(--accent)">(自动)</span></div><div style="margin-top:6px">' + renderPill(t.status || 'todo') +
+            (t.status === 'review' && t.reviewer_name ? '<div style="font-size:10px;color:var(--muted);margin-top:2px">审批人: ' + escHtml(t.reviewer_name) + '</div>' : '') + '</div></div>'
+          : '<div class="dkpi"><div class="dkpi-lbl">状态</div>' + _buildEditableField(t.id, 'status', 'select',
+            '<div style="margin-top:6px">' + renderPill(t.status || 'todo') +
+            (t.status === 'review' && t.reviewer_name ? '<div style="font-size:10px;color:var(--muted);margin-top:2px">审批人: ' + escHtml(t.reviewer_name) + '</div>' : '') + '</div>',
+            t.status || 'todo', _STATUS_OPTS) + '</div>') +
         // Priority (editable)
         '<div class="dkpi"><div class="dkpi-lbl">优先级</div><div style="margin-top:6px">' + _buildEditableField(t.id, 'priority', 'select', renderPriorityBadge(t.priority || 'medium'), t.priority || 'medium', _PRIORITY_OPTS) + '</div></div>' +
-        // Progress (editable)
-        '<div class="dkpi"><div class="dkpi-lbl">进度(%)</div>' + _buildEditableField(t.id, 'progress', 'number', '<div style="margin-top:6px">' + renderProgressCircle(t.progress || 0, 30, {label:''}) + '</div>', String(t.progress || 0), {min:0,max:100,step:5}) + '</div>' +
+        // Progress: auto-calculated for team tasks
+        ((t.assignee_ids && t.assignee_ids.length > 1)
+          ? '<div class="dkpi"><div class="dkpi-lbl">团队进度 <span style="font-size:10px;color:var(--accent)">(自动)</span></div><div style="margin-top:6px">' + renderProgressCircle(t.progress || 0, 30, {label:''}) + '</div></div>'
+          : '<div class="dkpi"><div class="dkpi-lbl">进度(%)</div>' + _buildEditableField(t.id, 'progress', 'number', '<div style="margin-top:6px">' + renderProgressCircle(t.progress || 0, 30, {label:''}) + '</div>', String(t.progress || 0), {min:0,max:100,step:5}) + '</div>') +
         // Estimate hours (editable)
         '<div class="dkpi"><div class="dkpi-lbl">预估工时(h)</div>' + _buildEditableField(t.id, 'estimate_hours', 'number', '<span class="dkpi-val">' + (t.estimate_hours || 0).toFixed(1) + 'h</span>', String(t.estimate_hours || 0), {min:0,step:0.5}) + '</div>' +
         // Hours display (read-only)
@@ -1182,7 +1316,7 @@ function openTaskDialog(taskId) {
   var isEdit = !!taskId;
   var title = isEdit ? '编辑任务' : '新建任务';
   _tfProjectId = _taskProjectId || window._taskProjectId; _tfProjectCode = _taskProjectCode || window._taskProjectCode || _taskProjectId; // default to page context
-  _tfAssigneeId = null;
+  _tfAssigneeIds = [];
   _tfReviewerId = null;
   _tfOriginalStatus = null;
 
@@ -1229,11 +1363,8 @@ function _showTaskForm(title, task) {
       '</div>' +
       '<div style="' + _grid2 + '">' +
         '<div><label style="' + _lbl + '">创建人</label><div style="' + inp + ';padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:13px;color:var(--fg)">' + escHtml(t.reporter_name || '—') + '</div></div>' +
-        '<div><label style="' + _lbl + '">负责人 *</label><div style="margin-top:2px">' + createUserCombo({
-          comboId: 'tf-assignee-combo', inputId: 'tf-assignee-input', dropdownId: 'tf-assignee-dropdown',
-          selectedIdFn: function() { return _tfAssigneeId; },
-          onSelect: function(u) { _tfAssigneeId = u.id; }
-        }) + '<div id="tf-assignee-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择负责人</div></div></div>' +
+        '<div><label style="' + _lbl + '">负责人 *</label><div style="margin-top:2px"><div id="tf-assignee-wrap"></div>' +
+        '<div id="tf-assignee-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择负责人</div></div></div>' +
         (window._approvalEnabled ? '<div><label style="' + _lbl + '">审批人</label><div style="margin-top:2px">' + createUserCombo({
           comboId: 'tf-reviewer-combo', inputId: 'tf-reviewer-input', dropdownId: 'tf-reviewer-dropdown',
           selectedIdFn: function() { return _tfReviewerId; },
@@ -1261,7 +1392,7 @@ function _showTaskForm(title, task) {
           '<option value="high"' + (t.priority==='high'?' selected':'') + '>高</option>' +
           '<option value="critical"' + (t.priority==='critical'?' selected':'') + '>紧急</option>' +
         '</select></div>' +
-        '<div><label style="' + _lbl + '">进度(%)</label><input class="search-inp" id="tf-progress" type="number" min="0" max="100" step="5" value="' + (t.progress || 0) + '" style="' + inp + '"></div>' +
+        '<div><label style="' + _lbl + '">进度(%)</label>' + _renderProgressSlider('tf', t.progress || 0) + '</div>' +
         '<div><label style="' + _lbl + '">预估工时(h)</label><input class="search-inp" id="tf-estimate" type="number" step="0.5" min="0" value="' + (t.estimate_hours || '') + '" style="' + inp + '"></div>' +
       '</div>' +
     '</div>' +
@@ -1320,7 +1451,7 @@ function _showTaskForm(title, task) {
 
   // Pre-fill project, assignee, reviewer, and stage from task data (edit mode)
   _tfProjectId = t.project_id || _taskProjectId;
-  _tfAssigneeId = t.assignee_id || null;
+  _tfAssigneeIds = (t.assignee_ids && t.assignee_ids.length) ? t.assignee_ids.slice() : (t.assignee_id ? [t.assignee_id] : []);
   _tfReviewerId = t.reviewer_id || null;
   if (isEdit && t.project_id) {
     // Set project name from task data
@@ -1328,15 +1459,21 @@ function _showTaskForm(title, task) {
     setTimeout(function() {
       var pi = document.getElementById('tf-project-input');
       if (pi) pi.value = projName;
-      // Pre-fill assignee name
-      if (_tfAssigneeId && t.assignee_name) {
-        var ai = document.getElementById('tf-assignee-input');
-        if (ai) ai.value = t.assignee_name;
-      }
       // Pre-fill reviewer name
       if (window._approvalEnabled && _tfReviewerId && t.reviewer_name) {
         var ri = document.getElementById('tf-reviewer-input');
         if (ri) ri.value = t.reviewer_name;
+      }
+      // Init assignee multi-selector
+      var asgnWrap = document.getElementById('tf-assignee-wrap');
+      if (asgnWrap) {
+        asgnWrap.innerHTML = createMultiUserSelector({
+          containerId: 'tf-assignee',
+          selectedIds: _tfAssigneeIds.slice(),
+          placeholder: '搜索并添加负责人...',
+          onChange: function(ids) { _tfAssigneeIds = ids; }
+        });
+        _muRenderTags('tf-assignee');
       }
       // Init CC selector
       var ccWrap = document.getElementById('tf-cc-wrap');
@@ -1351,9 +1488,19 @@ function _showTaskForm(title, task) {
       }
     }, 50);
   }
-  // Init CC selector for create mode (no project pre-fill)
+  // Init assignee + CC selectors for create mode
   if (!isEdit) {
     setTimeout(function() {
+      var asgnWrap = document.getElementById('tf-assignee-wrap');
+      if (asgnWrap && !asgnWrap.innerHTML.trim()) {
+        asgnWrap.innerHTML = createMultiUserSelector({
+          containerId: 'tf-assignee',
+          selectedIds: [],
+          placeholder: '搜索并添加负责人...',
+          onChange: function(ids) { _tfAssigneeIds = ids; }
+        });
+        _muRenderTags('tf-assignee');
+      }
       var ccWrap = document.getElementById('tf-cc-wrap');
       if (ccWrap && !ccWrap.innerHTML.trim()) {
         ccWrap.innerHTML = createCcSelector({
@@ -1443,9 +1590,10 @@ async function submitTask(taskId) {
     description: desc,
     status: document.getElementById('tf-status').value,
     priority: document.getElementById('tf-priority').value,
-    assignee_id: _tfAssigneeId,
+    assignee_id: _tfAssigneeIds.length ? _tfAssigneeIds[0] : null,
+    assignee_ids: _tfAssigneeIds.length ? _tfAssigneeIds : null,
     reviewer_id: window._approvalEnabled ? _tfReviewerId : null,
-    progress: parseInt(document.getElementById('tf-progress').value) || 0,
+    progress: parseInt(document.getElementById('tf-slider').value) || 0,
     estimate_hours: parseFloat(document.getElementById('tf-estimate').value) || 0,
     start_date: document.getElementById('tf-start-date').value || null,
     due_date: document.getElementById('tf-due').value || null,
@@ -1463,7 +1611,7 @@ async function submitTask(taskId) {
   if (!data.title) { var h = document.getElementById('tf-title-hint'); if (h) h.style.display = ''; valid = false; }
   if (!data.project_id) { var h = document.getElementById('tf-project-hint'); if (h) h.style.display = ''; valid = false; }
   if (!data.execution_id && !data.stage_name) { var h = document.getElementById('tf-execution-hint'); if (h) h.style.display = ''; valid = false; }
-  if (!data.assignee_id) { var h = document.getElementById('tf-assignee-hint'); if (h) h.style.display = ''; valid = false; }
+  if (!data.assignee_ids || !data.assignee_ids.length) { var h = document.getElementById('tf-assignee-hint'); if (h) h.style.display = ''; valid = false; }
   if (!data.due_date) { var h = document.getElementById('tf-due-hint'); if (h) h.style.display = ''; valid = false; }
   if (!valid) return;
 
@@ -1488,7 +1636,7 @@ async function submitTask(taskId) {
   EventBus.emit('task:before-save', evt);
   // Sync DOM with possibly-modified data
   document.getElementById('tf-status').value = data.status || 'todo';
-  document.getElementById('tf-progress').value = data.progress || 0;
+  document.getElementById('tf-slider').value = data.progress || 0;
   if (origStatus === 'done' && origProgress < 100 && data.progress === 100) {
     showToast('状态设为已完成，进度已自动设为100%', 'warn');
   }
@@ -1583,6 +1731,7 @@ function _batchRowHTML(i, r) {
     '<select class="search-inp" id="bt-status-' + i + '" style="flex:0.8;min-width:70px"><option value="todo">待办</option><option value="in_progress">进行中</option><option value="review">评审中</option><option value="done">已完成</option></select>' +
     '<select class="search-inp" id="bt-priority-' + i + '" style="flex:0.7;min-width:55px"><option value="medium">中</option><option value="low">低</option><option value="high">高</option><option value="critical">紧急</option></select>' +
     '<select class="search-inp" id="bt-assignee-' + i + '" style="flex:0.9;min-width:120px"><option value="">负责人 *</option></select>' +
+    '<button class="btn-xs" onclick="event.stopPropagation();_batchOpenMultiAssign(' + i + ')" title="添加多个负责人" style="flex-shrink:0;color:var(--accent);padding:1px 4px;font-size:10px">+</button>' +
     '<input class="search-inp" id="bt-estimate-' + i + '" value="' + escHtml(r.estimate || '') + '" placeholder="工时(h) *" style="flex:0.6;min-width:55px" type="number" step="0.5">' +
     '<span style="font-size:11px;color:var(--muted);white-space:nowrap;flex:1;min-width:110px;display:flex;align-items:center;gap:2px">截止 * <input class="search-inp" id="bt-due-' + i + '" value="' + escHtml(r.due_date || '') + '" type="date" style="flex:1;min-width:0"></span>' +
     '<input class="search-inp" id="bt-desc-' + i + '" value="' + escHtml(r.desc || '') + '" placeholder="描述" style="flex:1.5;min-width:100px">' +
@@ -1599,6 +1748,43 @@ function _batchCopyRow(i) {
     var dst = document.getElementById('bt-' + field + '-' + i);
     if (src && dst) { if (dst.tagName === 'SELECT') dst.selectedIndex = src.selectedIndex; else dst.value = src.value; }
   });
+}
+
+// Per-row multi-assignee state for batch create
+function _batchOpenMultiAssign(rowIdx) {
+  var key = '_ba' + rowIdx;
+  var sel = document.getElementById('bt-assignee-' + rowIdx);
+  var primaryId = sel ? (parseInt(sel.value) || null) : null;
+  var existingIds = window[key] || [];
+  // Combine primary select value with existing extra IDs
+  var allIds = existingIds.slice();
+  if (primaryId && allIds.indexOf(primaryId) < 0) allIds.unshift(primaryId);
+  window._mu_ba_dlg = allIds.slice();
+
+  var html = '<div>' +
+    '<div style="margin-bottom:8px;font-size:11px;color:var(--muted)">第' + (rowIdx + 1) + '行 — 选择负责人（可多选）</div>' +
+    '<div id="ba-dlg-wrap"></div></div>';
+  openDialog('多选负责人', html, [
+    {text: '取消', onclick: 'closeSharedDialog()'},
+    {text: '确定', cls: 'btn-primary', onclick: '_batchSaveMultiAssign(' + rowIdx + ')'}
+  ], {maxWidth: 420});
+  loadAllUsers().then(function() {
+    var wrap = document.getElementById('ba-dlg-wrap');
+    if (wrap) {
+      wrap.innerHTML = createMultiUserSelector({ containerId: 'ba-dlg', selectedIds: allIds.slice(), placeholder: '搜索并添加负责人...' });
+      _muRenderTags('ba-dlg');
+    }
+  });
+}
+
+function _batchSaveMultiAssign(rowIdx) {
+  var ids = window._mu_ba_dlg || [];
+  window['_ba' + rowIdx] = ids.slice();
+  // Update the select to show the first assignee
+  var sel = document.getElementById('bt-assignee-' + rowIdx);
+  if (sel && ids.length) sel.value = ids[0];
+  closeSharedDialog();
+  showToast('第' + (rowIdx + 1) + '行已选 ' + ids.length + ' 人', 'success');
 }
 
 function _renderBatchForm(rows) {
@@ -1715,20 +1901,26 @@ async function _submitBatchCreate() {
     var rowLabel = '第' + (i + 1) + '行';
     var execVal = execEl ? execEl.value : '';
     if (!execVal) { if (execEl) execEl.style.borderColor = 'var(--danger)'; errors.push(rowLabel + '未选择阶段'); }
-    var assigneeVal = assigneeEl ? assigneeEl.value : '';
-    if (!assigneeVal) { if (assigneeEl) assigneeEl.style.borderColor = 'var(--danger)'; errors.push(rowLabel + '未选择负责人'); }
+    // Collect assignee IDs: use per-row multi-select state if set, otherwise single select value
+    var extraIds = window['_ba' + i] || [];
+    var selectVal = assigneeEl ? (parseInt(assigneeEl.value) || null) : null;
+    var assigneeIds = extraIds.length ? extraIds.slice() : [];
+    if (selectVal && assigneeIds.indexOf(selectVal) < 0) assigneeIds.unshift(selectVal);
+    if (!assigneeIds.length && selectVal) assigneeIds = [selectVal];
+    if (!assigneeIds.length) { if (assigneeEl) assigneeEl.style.borderColor = 'var(--danger)'; errors.push(rowLabel + '未选择负责人'); }
     var estVal = estEl ? estEl.value.trim() : '';
     if (!estVal) { if (estEl) estEl.style.borderColor = 'var(--danger)'; errors.push(rowLabel + '未填写工时'); }
     var dueVal = dueEl ? dueEl.value : '';
     if (!dueVal) { if (dueEl) dueEl.style.borderColor = 'var(--danger)'; errors.push(rowLabel + '未填写截止日期'); }
-    if (!execVal || !assigneeVal || !estVal || !dueVal) continue;
+    if (!execVal || !assigneeIds.length || !estVal || !dueVal) continue;
     tasks.push({
       title: title,
       execution_id: execVal && execVal[0] !== '_' ? (parseInt(execVal) || null) : null,
       stage_name: _batchStageName(execVal),
       status: statusEl ? statusEl.value : 'todo',
       priority: priorityEl ? priorityEl.value : 'medium',
-      assignee_id: assigneeEl ? (parseInt(assigneeEl.value) || null) : null,
+      assignee_id: assigneeIds[0],
+      assignee_ids: assigneeIds,
       estimate_hours: estEl ? (parseFloat(estEl.value) || 0) : 0,
       due_date: dueEl ? (dueEl.value || null) : null,
       description: descEl ? (descEl.value.trim() || null) : null,
@@ -1850,6 +2042,19 @@ function _initWorklogDt(logs, taskId) {
   });
 }
 
+function _buildTeamProgressField(task) {
+  // For team tasks: show personal progress slider instead of task progress input
+  var curUser = (typeof getCurrentUser === 'function' && getCurrentUser()) || {};
+  var curUid = curUser ? (curUser.id || null) : null;
+  var progressMap = task.assignee_progress || {};
+  var myPct = parseInt(progressMap[String(curUid)] || progressMap[curUid] || 0);
+  window._wlTeamTaskId = task.id; // flag for submitWorklog to also update personal progress
+  return '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">我的进度(%) * <span style="color:var(--accent);font-size:10px">(团队任务·仅更新个人进度)</span></label>' +
+    _renderProgressSlider('wl', myPct) +
+    '<div id="wl-progress-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请设置进度</div>' +
+    '</div>';
+}
+
 function openWorklogDialog(taskId) {
   API.get('/tasks/'+taskId).then(function(task) {
     var today = fmtLocalDate();
@@ -1871,8 +2076,10 @@ function openWorklogDialog(taskId) {
         '<input class="search-inp" id="wl-date" type="date" required value="'+today+'" style="width:100%;box-sizing:border-box;margin-top:2px"><div id="wl-date-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择日期</div></div>' +
       '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工时(h) *</label>' +
         '<input class="search-inp" id="wl-hours" type="number" step="0.5" min="0.5" required value="1" style="width:100%;box-sizing:border-box;margin-top:2px" oninput="_wlCheckOverBudget(' + taskId + ')"><div id="wl-hours-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请输入有效工时(≥0.5h)</div></div>' +
-      '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">进度(%) * 当前: '+(task.progress||0)+'%</label>' +
-        '<input class="search-inp" id="wl-progress" type="number" min="0" max="100" step="5" required value="'+(task.progress||0)+'" style="width:100%;box-sizing:border-box;margin-top:2px"><div id="wl-progress-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请输入进度(0-100)</div></div>' +
+      ((task.assignee_ids && task.assignee_ids.length > 1)
+        ? _buildTeamProgressField(task)
+        : '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">进度(%) *</label>' +
+          _renderProgressSlider('wl', task.progress||0) + '<div id="wl-progress-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请设置进度</div></div>') +
       '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工作描述 *</label>' +
         '<textarea class="search-inp" id="wl-desc" rows="2" required style="width:100%;box-sizing:border-box;margin-top:2px;resize:vertical" placeholder="请填写工作内容描述"></textarea><div id="wl-desc-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请填写工作描述</div></div>' +
     '</div>';
@@ -1924,7 +2131,7 @@ var _wlPendingSubmit = null;
 
 async function submitWorklog(taskId) {
   var hours = parseFloat(document.getElementById('wl-hours').value);
-  var progress = parseInt(document.getElementById('wl-progress').value);
+  var progress = parseInt(document.getElementById('wl-slider').value);
   var desc = document.getElementById('wl-desc').value.trim();
   var date = document.getElementById('wl-date').value;
   var remainingEl = document.getElementById('wl-remaining');
@@ -1991,8 +2198,15 @@ async function _doSubmitWorklog(taskId, hours, progress, desc, date) {
   var remainingEl = document.getElementById('wl-remaining');
   try {
     await API.post('/worklogs', {task_id:taskId, hours:hours, date:date, description:desc});
-    var taskRes = await API.put('/tasks/'+taskId, {progress:progress});
-    // Show auto-status-change hints (e.g. "进度已达100%，任务已自动完成")
+    // For team tasks: update personal progress, not task progress
+    var taskRes;
+    if (window._wlTeamTaskId === taskId) {
+      taskRes = await API.put('/tasks/'+taskId+'/my-progress', {progress: progress});
+      window._wlTeamTaskId = null;
+    } else {
+      taskRes = await API.put('/tasks/'+taskId, {progress: progress});
+    }
+    // Show auto-status-change hints (e.g. "全员进度已达100%，任务已自动完成")
     if (taskRes && taskRes.auto_messages && taskRes.auto_messages.length) {
       taskRes.auto_messages.forEach(function(msg) { showToast(msg, 'success'); });
     }
@@ -2016,7 +2230,7 @@ var _wlEditPendingSubmit = null;
 
 async function _submitWorklogEdit(wlId, taskId) {
   var hours = parseFloat(document.getElementById('wl-hours').value);
-  var progress = parseInt(document.getElementById('wl-progress').value);
+  var progress = parseInt(document.getElementById('wl-slider').value);
   var desc = document.getElementById('wl-desc').value.trim();
   var date = document.getElementById('wl-date').value;
   // Clear all hints

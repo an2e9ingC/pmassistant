@@ -540,13 +540,19 @@ function openDialog(title, bodyHtml, buttons, opts) {
     '</div></div>';
   document.body.insertAdjacentHTML('beforeend', html);
 
-  // Auto-focus first focusable element in dialog
+  // Auto-focus: prefer "取消" button, otherwise first focusable element
   var overlay = document.querySelector('.' + overlayClass);
   if (overlay) {
-    var firstFocusable = overlay.querySelector('input, textarea, select, button:not(.note-dialog-close)');
-    if (firstFocusable) {
-      setTimeout(function() { firstFocusable.focus(); }, 50);
-    }
+    setTimeout(function() {
+      // Prefer "取消" button so Enter doesn't accidentally confirm
+      var cancelBtn = overlay.querySelector('.note-dialog .btn');
+      if (cancelBtn && cancelBtn.textContent.indexOf('取消') >= 0) {
+        cancelBtn.focus();
+      } else {
+        var firstFocusable = overlay.querySelector('input, textarea, select, button:not(.note-dialog-close)');
+        if (firstFocusable) firstFocusable.focus();
+      }
+    }, 50);
   }
 }
 
@@ -1494,6 +1500,107 @@ function _renderCcDropdown(dropdownId, selectedIds, q, containerId) {
   }).join('');
 }
 
+/* ── Multi-User Selector (generalized from createCcSelector) ── */
+function createMultiUserSelector(opts) {
+  // opts: { containerId, selectedIds: [], onChange: fn(ids), placeholder }
+  var containerId = opts.containerId;
+  var safeId = containerId.replace(/-/g, '_');
+  var comboId = containerId + '-combo';
+  var inputId = containerId + '-input';
+  var dropdownId = containerId + '-dropdown';
+  var tagsId = containerId + '-tags';
+  var ph = opts.placeholder || '搜索用户...';
+
+  // Store selected IDs globally accessible by combo functions
+  var key = '_mu_' + safeId;
+  window[key] = opts.selectedIds ? opts.selectedIds.slice() : [];
+
+  var openFn = '_muOpen_' + safeId;
+  window[openFn] = function() {
+    if (typeof loadAllUsers !== 'function') return;
+    loadAllUsers().then(function() {
+      document.getElementById(comboId).classList.add('open');
+      var inp = document.getElementById(inputId); if (inp) inp.select();
+      _muRenderDropdown(dropdownId, window[key], '', containerId);
+    });
+  };
+
+  var filterFn = '_muFilter_' + safeId;
+  window[filterFn] = function(q) {
+    _muRenderDropdown(dropdownId, window[key], q, containerId);
+  };
+
+  var selectFn = '_muSelect_' + safeId;
+  window[selectFn] = function(uid) {
+    var ids = window[key];
+    if (ids.indexOf(uid) >= 0) return; // already selected
+    ids.push(uid);
+    document.getElementById(inputId).value = '';
+    document.getElementById(comboId).classList.remove('open');
+    _muRenderTags(containerId);
+    if (opts.onChange) opts.onChange(ids.slice());
+  };
+
+  var enterFn = '_muEnter_' + safeId;
+  window[enterFn] = function(e) {
+    if (e.key === 'Enter') {
+      var dd = document.getElementById(dropdownId);
+      if (dd) { var f = dd.querySelector('.combo-opt'); if (f) f.click(); }
+    }
+  };
+
+  // Expose getter/setter for external use
+  window['_getMuIds_' + safeId] = function() { return window[key]; };
+  window['_setMuIds_' + safeId] = function(ids) { window[key] = ids || []; };
+
+  return '<div style="margin-top:2px">' +
+    '<div id="' + tagsId + '" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px"></div>' +
+    '<div class="proj-combo" id="' + comboId + '" style="display:inline-block;min-width:200px">' +
+      '<input class="proj-combo-input" id="' + inputId + '" type="text" autocomplete="off" placeholder="' + escHtml(ph) + '" ' +
+        'onclick="' + openFn + '()" oninput="' + filterFn + '(this.value)" onkeydown="' + enterFn + '(event)" style="width:100%;box-sizing:border-box">' +
+      '<svg class="proj-combo-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2,5 7,10 12,5"/></svg>' +
+      '<div class="proj-combo-dropdown" id="' + dropdownId + '"></div>' +
+    '</div>' +
+  '</div>';
+}
+
+function _muRenderTags(containerId) {
+  var safeId = containerId.replace(/-/g, '_');
+  var tagsEl = document.getElementById(containerId + '-tags');
+  if (!tagsEl) return;
+  var ids = window['_mu_' + safeId] || [];
+  if (!ids.length) { tagsEl.innerHTML = ''; return; }
+  loadAllUsers().then(function() {
+    var html = '';
+    ids.forEach(function(uid) {
+      var u = _allUsers.find(function(x) { return x.id == uid; });
+      var name = u ? (u.name || u.display_name || u.username) : ('#' + uid);
+      html += '<span style="display:inline-flex;align-items:center;gap:2px;background:var(--accent);color:#fff;padding:1px 6px;border-radius:10px;font-size:11px;white-space:nowrap">' +
+        escHtml(name) +
+        '<button onclick="event.stopPropagation();var ids=window._mu_' + safeId + ';var idx=ids.indexOf(' + uid + ');if(idx>=0)ids.splice(idx,1);_muRenderTags(\'' + containerId + '\');" ' +
+        'style="background:none;border:none;color:inherit;cursor:pointer;padding:0;margin-left:2px;font-size:13px;line-height:1;opacity:0.7">×</button>' +
+      '</span>';
+    });
+    tagsEl.innerHTML = html;
+  });
+}
+
+function _muRenderDropdown(dropdownId, selectedIds, q, containerId) {
+  var safeId = containerId.replace(/-/g, '_');
+  var dd = document.getElementById(dropdownId);
+  if (!dd) return;
+  var v = (q || '').trim().toLowerCase();
+  var list = v
+    ? _allUsers.filter(function(u) { return (u.name || '').toLowerCase().indexOf(v) >= 0 && selectedIds.indexOf(u.id) < 0; })
+    : _allUsers.filter(function(u) { return selectedIds.indexOf(u.id) < 0; });
+  list = list.slice(0, 30);
+  if (!list.length) { dd.innerHTML = '<div class="combo-opt" style="color:var(--muted)">无匹配用户</div>'; return; }
+  var fn = '_muSelect_' + safeId;
+  dd.innerHTML = list.map(function(u) {
+    return '<div class="combo-opt" onclick="' + fn + '(' + u.id + ')">' + escHtml(u.name) + '</div>';
+  }).join('');
+}
+
 // Global click to close any open combo
 document.addEventListener('click', function(e) {
   document.querySelectorAll('.proj-combo').forEach(function(c) {
@@ -1802,6 +1909,21 @@ function openDayDetail(dateStr, totalHours, fromWecom) {
 
 function _findDayTask(id) { return _dayDetailTasks.find(function(t){return t.id===id;}); }
 
+/* ── Progress Slider (shared) ── */
+function _renderProgressSlider(idPrefix, currentPct, label) {
+  var pcts = [0, 25, 50, 75, 100];
+  var ticks = pcts.map(function(p) {
+    return '<span style="position:absolute;left:' + p + '%;transform:translateX(-50%);font-size:9px;color:var(--muted);cursor:pointer" onclick="var s=document.getElementById(\'' + idPrefix + '-slider\');s.value=' + p + ';s.oninput()">' + p + '%</span>';
+  }).join('');
+  var labelHtml = label ? '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' + escHtml(label) + '</div>' : '';
+  return labelHtml +
+    '<div style="position:relative;padding:0 6px;margin-bottom:18px">' +
+      '<input type="range" id="' + idPrefix + '-slider" min="0" max="100" step="5" value="' + currentPct + '" style="width:100%;margin:0" oninput="document.getElementById(\'' + idPrefix + '-val\').textContent=this.value+\'%\'">' +
+      '<div style="position:relative;width:100%;height:14px;margin-top:0">' + ticks + '</div>' +
+    '</div>' +
+    '<div style="text-align:center;margin-bottom:8px"><span id="' + idPrefix + '-val" style="font-weight:510;font-size:18px;color:var(--accent)">' + currentPct + '%</span></div>';
+}
+
 function editWorklogEntryById(wlId, dateStr) {
   var t = _findDayTask(wlId);
   if (!t) { showToast('数据已过期，请刷新', 'error'); return; }
@@ -1837,7 +1959,7 @@ function editWorklogEntry(t, dateStr) {
           stageFilterFn: function() { return document.getElementById('wl-edit-stage').value; },
           onSelect: function(tsk) {
             document.getElementById('wl-edit-task-id').value = tsk.id;
-            document.getElementById('wl-edit-progress').value = tsk.progress || 0;
+            document.getElementById('wl-edit-slider').value = tsk.progress || 0;
           }}) + '</div></div>' +
     '<input type="hidden" id="wl-edit-task-id" value="' + (t.task_id||'') + '">' +
     '<input type="hidden" id="wl-edit-reviewer-name" value="' + escHtml(t.reviewer_name || '') + '">' +
@@ -1848,7 +1970,7 @@ function editWorklogEntry(t, dateStr) {
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工时(h) *</label>' +
       '<input class="search-inp" id="wl-edit-hours" type="number" step="0.5" min="0.5" required value="'+t.hours+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
     (isBug ? '' : '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">进度(%) *</label>' +
-      '<input class="search-inp" id="wl-edit-progress" type="number" min="0" max="100" step="5" required value="'+(t.progress||0)+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>') +
+      _renderProgressSlider('wl-edit', t.progress||0) + '</div>') +
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工作描述</label>' +
       '<textarea class="search-inp" id="wl-edit-desc" rows="2" style="width:100%;box-sizing:border-box;margin-top:2px;resize:vertical">'+escHtml(t.description||'')+'</textarea></div>' +
     '</div>';
@@ -1904,7 +2026,7 @@ async function saveWorklogEntry(wlId, isBug) {
   var desc = document.getElementById('wl-edit-desc').value.trim();
   var date = document.getElementById('wl-edit-date').value;
   var taskIdEl = document.getElementById('wl-edit-task-id');
-  var progressEl = document.getElementById('wl-edit-progress');
+  var progressEl = document.getElementById('wl-edit-slider');
   var newTaskId = taskIdEl ? (parseInt(taskIdEl.value) || 0) : 0;
   var progress = progressEl ? (parseInt(progressEl.value) || 0) : 0;
   if (!date || !hours || hours <= 0) { showToast('请填写日期和工时', 'error'); return; }
@@ -2146,7 +2268,7 @@ function openWorklogFromCalendar(dateStr) {
           stageFilterFn: function() { return document.getElementById('wl-stage').value; },
           onSelect: function(t) {
             document.getElementById('wl-task-id').value = t.id;
-            document.getElementById('wl-progress').value = t.progress || 0;
+            document.getElementById('wl-slider').value = t.progress || 0;
           }}) + '</div></div>' +
     '<input type="hidden" id="wl-task-id" value="">' +
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">日期 *</label>' +
@@ -2154,7 +2276,7 @@ function openWorklogFromCalendar(dateStr) {
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工时(h) *</label>' +
       '<input class="search-inp" id="wl-hours" type="number" step="0.5" min="0.5" required value="1" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">进度(%) *</label>' +
-      '<input class="search-inp" id="wl-progress" type="number" min="0" max="100" step="5" required value="0" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
+      _renderProgressSlider('wl', 0) + '</div>' +
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工作描述 *</label>' +
       '<textarea class="search-inp" id="wl-desc" rows="2" required style="width:100%;box-sizing:border-box;margin-top:2px;resize:vertical"></textarea></div>' +
     '</div>';
@@ -2167,7 +2289,7 @@ function openWorklogFromCalendar(dateStr) {
 async function submitGenericWorklog() {
   var tid = parseInt(document.getElementById('wl-task-id').value) || 0;
   var hours = parseFloat(document.getElementById('wl-hours').value);
-  var progress = parseInt(document.getElementById('wl-progress').value);
+  var progress = parseInt(document.getElementById('wl-slider').value);
   var desc = document.getElementById('wl-desc').value.trim();
   var date = document.getElementById('wl-date').value;
   if (!tid) { showToast('请选择任务', 'error'); return; }
@@ -2248,13 +2370,50 @@ function _clearBatchSelection() {
   _updateBatchToolbar();
 }
 
+/* ── Assignee Display (shared) ── */
+// Renders assignee names with 团队(n) badge for multi-person tasks
+function _renderAssigneeDisplay(names, taskId, opts) {
+  opts = opts || {};
+  if (!names || !names.length) return escHtml(opts.fallback || '—');
+  if (names.length === 1) return escHtml(names[0]);
+  // 2+ people: 团队(n) badge first, then first 2 names (+ ... if >2)
+  var html = ' <span class="team-badge" onclick="event.stopPropagation();_showTeamMembers(event,\'' + escHtml(JSON.stringify(names)) + '\')" title="查看团队所有成员">团队(' + names.length + ')</span>';
+  html += ' ' + escHtml(names[0]) + '、' + escHtml(names[1]);
+  if (names.length > 2) html += '...';
+  return html;
+}
+
+function _showTeamMembers(event, namesJson) {
+  var names = JSON.parse(namesJson);
+  var html = '<div style="font-size:13px;line-height:1.8">' +
+    '<div style="font-weight:510;margin-bottom:8px">团队成员（' + names.length + '人）</div>' +
+    names.map(function(n, i) { return '<div style="padding:4px 0;border-bottom:1px solid var(--border)">' + (i + 1) + '. ' + escHtml(n) + '</div>'; }).join('') +
+    '</div>';
+  var rect = event.target.getBoundingClientRect();
+  var popover = document.createElement('div');
+  popover.className = 'team-popover';
+  popover.innerHTML = html;
+  popover.style.cssText = 'position:fixed;z-index:10000;background:var(--card-bg, #fff);border:1px solid var(--border);border-radius:12px;padding:14px 18px;box-shadow:0 8px 32px rgba(0,0,0,0.15);backdrop-filter:blur(8px);min-width:180px;max-width:300px;max-height:360px;overflow-y:auto;animation:popoverIn 0.2s ease';
+  popover.style.left = Math.min(rect.left, window.innerWidth - 320) + 'px';
+  popover.style.top = Math.min(rect.bottom + 6, window.innerHeight - 380) + 'px';
+  popover.onclick = function(e) { e.stopPropagation(); };
+  document.body.appendChild(popover);
+  setTimeout(function() {
+    document.addEventListener('click', function handler(e) {
+      if (!popover.contains(e.target)) { popover.remove(); document.removeEventListener('click', handler); }
+    });
+  }, 10);
+}
+
+/* ── Batch Edit Dialog ── */
 function openBatchEditDialog() {
   if (_selectedTasks.size === 0) { showToast('请先选择任务', 'error'); return; }
   var inp = 'width:100%;box-sizing:border-box;margin-top:1px';
+  window._mu_ba_assignee = [];
   var html = '<div style="max-height:500px;overflow-y:auto">' +
     '<div style="margin-bottom:4px;font-size:11px;color:var(--muted)">将对 <b>' + _selectedTasks.size + '</b> 个任务批量设置以下属性（留空=不修改）</div>' +
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">指派负责人</label>' +
-      '<select class="search-inp" id="ba-assignee" style="' + inp + '"><option value="">不修改</option></select></div>' +
+      '<div id="ba-assignee-wrap"></div></div>' +
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">状态</label>' +
       '<select class="search-inp" id="ba-status" style="' + inp + '"><option value="">不修改</option>' +
         '<option value="todo">待办</option><option value="in_progress">进行中</option><option value="review">评审中</option><option value="done">已完成</option><option value="closed">已关闭</option></select></div>' +
@@ -2271,14 +2430,17 @@ function openBatchEditDialog() {
   openDialog('批量编辑任务', html, [
     {text:'取消',onclick:'closeSharedDialog()'},
     {text:'确定',cls:'btn-primary',onclick:'submitBatchEdit()'}
-  ], {maxWidth:440});
-  // Load assignee options from public user list
-  API.get('/users/options').then(function(data) {
-    if (!data) return;
-    var sel = document.getElementById('ba-assignee');
-    (data || []).forEach(function(u) {
-      sel.innerHTML += '<option value="' + u.id + '">' + escHtml(u.name) + '</option>';
-    });
+  ], {maxWidth:560});
+  // Load multi-user selector for assignee
+  loadAllUsers().then(function() {
+    var wrap = document.getElementById('ba-assignee-wrap');
+    if (wrap) {
+      wrap.innerHTML = createMultiUserSelector({
+        containerId: 'ba-assignee',
+        selectedIds: [],
+        placeholder: '选择负责人（留空=不修改）'
+      });
+    }
   });
   // Load stage options from first selected task's project
   var firstId = _selectedTasks.values().next().value;
@@ -2298,13 +2460,13 @@ function openBatchEditDialog() {
 
 async function submitBatchEdit() {
   var updates = {};
-  var assignee = document.getElementById('ba-assignee').value;
+  var assigneeIds = window._mu_ba_assignee || [];
+  if (assigneeIds.length) { updates.assignee_id = assigneeIds[0]; updates.assignee_ids = assigneeIds; }
   var status = document.getElementById('ba-status').value;
   var priority = document.getElementById('ba-priority').value;
   var stage = document.getElementById('ba-stage').value;
   var start = document.getElementById('ba-start').value;
   var due = document.getElementById('ba-due').value;
-  if (assignee) updates.assignee_id = parseInt(assignee);
   if (status) updates.status = status;
   if (priority) updates.priority = priority;
   if (stage) updates.stage_name = stage;
@@ -2322,32 +2484,38 @@ async function submitBatchEdit() {
 
 function openAssignDialog(taskId) {
   API.get('/tasks/' + taskId).then(function(task) {
-    var inp = 'width:100%;box-sizing:border-box;margin-top:1px';
+    var currentIds = task.assignee_ids || (task.assignee_id ? [task.assignee_id] : []);
+    var currentDisplay = _renderAssigneeDisplay(task.assignee_names || [], task.id, {fallback: task.assignee_name || task.assignee_username || '未指派'});
+    // Pre-populate the multi-selector with current assignees
+    window._mu_as_assignee = currentIds.slice();
     var html = '<div>' +
-      '<div style="margin-bottom:4px;font-size:11px;color:var(--muted)">当前负责人: <b>' + escHtml(task.assignee_name || task.assignee_username || '未指派') + '</b></div>' +
+      '<div style="margin-bottom:4px;font-size:11px;color:var(--muted)">当前负责人: <b>' + currentDisplay + '</b></div>' +
       '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">新负责人</label>' +
-        '<select class="search-inp" id="as-assignee" style="' + inp + '"><option value="">加载中...</option></select></div>' +
+        '<div id="as-assignee-wrap"></div></div>' +
       '</div>';
     openDialog('指派任务 — ' + escHtml(task.title || ''), html, [
       {text:'取消',onclick:'closeSharedDialog()'},
       {text:'指派',cls:'btn-primary',onclick:'submitAssign(' + taskId + ')'}
-    ], {maxWidth:360});
-    API.get('/users/options').then(function(data) {
-      if (!data) return;
-      var sel = document.getElementById('as-assignee');
-      sel.innerHTML = '<option value="">不修改</option>';
-      (data || []).forEach(function(u) {
-        sel.innerHTML += '<option value="' + u.id + '"' + (u.id === task.assignee_id ? ' selected' : '') + '>' + escHtml(u.name) + '</option>';
-      });
+    ], {maxWidth:520});
+    loadAllUsers().then(function() {
+      var wrap = document.getElementById('as-assignee-wrap');
+      if (wrap) {
+        wrap.innerHTML = createMultiUserSelector({
+          containerId: 'as-assignee',
+          selectedIds: currentIds,
+          placeholder: '搜索并添加负责人...'
+        });
+        _muRenderTags('as-assignee');
+      }
     });
   }).catch(function(e) { showToast('加载失败: ' + (e.message || ''), 'error'); });
 }
 
 async function submitAssign(taskId) {
-  var assignee = document.getElementById('as-assignee').value;
-  if (!assignee) { showToast('请选择负责人', 'error'); return; }
+  var ids = window._mu_as_assignee || [];
+  if (!ids.length) { showToast('请选择负责人', 'error'); return; }
   try {
-    await API.put('/tasks/' + taskId, {assignee_id: parseInt(assignee)});
+    await API.put('/tasks/' + taskId, {assignee_id: ids[0], assignee_ids: ids});
     closeSharedDialog();
     showToast('已指派', 'success');
     EventBus.emit('task:saved', {taskId: taskId});

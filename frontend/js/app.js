@@ -1136,7 +1136,7 @@ async function loadAlertTicker() {
           newBadge +
           '<span style="color:var(--accent)">' + escHtml(a.project_code || '') + '</span>' +
           '<span style="color:var(--muted);margin:0 4px">-</span>' +
-          '<span style="color:var(--fg)">' + escHtml(a.assignee_name || '') + '</span>' +
+          '<span style="color:var(--fg)">' + (typeof _renderAssigneeDisplay === 'function' ? _renderAssigneeDisplay(a.assignee_names || [], null, {fallback: a.assignee_name || ''}) : escHtml(a.assignee_name || '')) + '</span>' +
           '<span style="color:var(--muted);margin:0 4px">-</span>' +
           (a.activity_date ? '<span style="color:var(--muted);font-size:11px">' + a.activity_date + '</span>' : '') +
           '<span style="color:var(--muted);margin:0 4px">-</span>' +
@@ -1881,7 +1881,7 @@ function _renderUcApprovalTable() {
         { key: 'title', title: '任务标题', minWidth: 100, render: function(v) { return '<span style="font-weight:530">'+escHtml(v||'')+'</span>'; } },
         { key: 'status', title: '状态', width: '70px', minWidth: 80, render: function(v, row) { return '<span style="cursor:pointer" onclick="event.stopPropagation();openReviewerDialog('+row.id+')" title="'+(row.reviewer_name?'审批人: '+escHtml(row.reviewer_name)+' — 点击修改':'点击设置审批人')+'">'+renderPill(v||'review')+'</span>'; } },
         { key: 'progress', title: '进度', width: '6%', minWidth: 60, render: function(v) { return renderProgressCircle(v||0, 30, {label:''}); } },
-        { key: 'assignee_name', title: '责任人', width: '8%', minWidth: 90, render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'')+'</span>'; } },
+        { key: 'assignee_name', title: '责任人', width: '12%', minWidth: 150, render: function(v, row) { return '<span style="font-size:12px">'+ (typeof _renderAssigneeDisplay === 'function' ? _renderAssigneeDisplay(row.assignee_names||[], row.id, {fallback: v||''}) : escHtml(v||'')) +'</span>'; } },
         { key: 'due_date', title: '截止', width: '7%', minWidth: 100, render: function(v, row) { var overdue = v && row.status!=='done' && v<fmtLocalDate(); return '<span style="font-size:12px;color:'+(overdue?'var(--danger)':'')+'">'+(v||'-')+'</span>'; } },
         { key: 'actions', title: '操作', width: '100px', minWidth: 100, render: function(v, row) { return '<span style="white-space:nowrap" onclick="event.stopPropagation()"><button class="btn-icon" onclick="_ucApproveTask('+row.id+',\''+escJs(row.title)+'\')" title="批准" style="color:var(--success)">'+_ucApproveIcon+'</button><button class="btn-icon" onclick="_ucRejectTask('+row.id+',\''+escJs(row.title)+'\')" title="驳回" style="color:var(--danger);margin-left:2px">'+_ucRejectIcon+'</button></span>'; } }
       ],
@@ -2242,7 +2242,7 @@ function _renderUcTaskTable() {
         { key: '_stageName', title: '阶段', minWidth: 100, rowspan: true, render: function(v) { var parts = (v||'').split('||'); var name = parts.length >= 3 ? parts[2] : (v||''); return '<span style="font-size:12px">'+escHtml(name)+'</span>'; } },
         { key: 'id', title: '任务编号', width: '6%', minWidth: 75, render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--accent);cursor:pointer" onclick="event.stopPropagation();_ucOpenTask('+v+')">#'+v+'</span>'; } },
         { key: 'title', title: '任务标题', minWidth: 100, align: 'left', render: function(v, row) { return '<span style="font-weight:530;cursor:pointer" onclick="event.stopPropagation();_ucOpenTask('+row.id+')">'+escHtml(v||'')+'</span>'; } },
-        { key: 'assignee_name', title: '责任人', width: '8%', minWidth: 90, render: function(v, row) { var user=getCurrentUser(); var uid=user?user.id:null; var canEdit=uid&&(row.reporter_id==uid||row.assignee_id==uid); return '<span style="font-size:12px;'+(canEdit?'cursor:pointer;color:var(--accent);text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px':'')+'"'+(canEdit?' onclick="event.stopPropagation();_ucEditAssignee('+row.id+',\'task\','+(row.assignee_id||0)+',\''+escHtml(row.assignee_name||'').replace(/'/g,"\\'")+'\',\''+escHtml(row.title||'').replace(/'/g,"\\'")+'\')" title="'+(canEdit?'点击修改责任人':'')+'"':'')+'>'+escHtml(v||'—')+'</span>'; } },
+        { key: 'assignee_name', title: '责任人', width: '12%', minWidth: 150, render: function(v, row) { var user=getCurrentUser(); var uid=user?user.id:null; var isAssignee=uid&&(row.assignee_id==uid||(row.assignee_ids&&row.assignee_ids.indexOf(uid)>=0)); var canEdit=uid&&(row.reporter_id==uid||isAssignee); var display=_renderAssigneeDisplay(row.assignee_names||[], row.id, {fallback: v||'—'}); if (canEdit) { window._ucEditData = window._ucEditData || {}; window._ucEditData[row.id] = { ids: row.assignee_ids || (row.assignee_id ? [row.assignee_id] : []), type: 'task', title: row.title || '' }; } var onclick=''; if (canEdit) onclick=' onclick="event.stopPropagation();_ucEditAssignee('+row.id+')" title="点击修改责任人"'; return '<span style="font-size:12px'+(canEdit?';cursor:pointer;color:var(--accent);text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px':'')+'"'+onclick+'>'+display+'</span>'; } },
         { key: 'status', title: '状态', width: '70px', minWidth: 80, render: function(v, row) { var labels = {todo:'待办',in_progress:'进行中',review:'待审批',done:'已完成'}; var h = '<span class="pill '+(v||'todo')+'">'+(labels[v]||v)+'</span>'; if (window._approvalEnabled) h = '<span style="cursor:pointer" onclick="event.stopPropagation();openReviewerDialog('+row.id+')" title="'+(row.reviewer_name?'审批人: '+escHtml(row.reviewer_name)+' — 点击修改':'点击设置审批人')+'">'+h+'</span>'; return h; } },
         { key: 'priority', title: '优先级', width: '6%', minWidth: 65, render: function(v, row) { return '<span class="prio-tag '+(v||'medium')+'" style="cursor:pointer" onclick="event.stopPropagation();_ucEditTaskField('+row.id+',\'priority\',\''+(v||'medium')+'\',\'low:低,medium:中,high:高,critical:紧急\',\''+escHtml(row.title||'').replace(/'/g,"\\'")+'\')">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[v]||v)+'</span>'; } },
         { key: 'progress', title: '进度', width: '6%', minWidth: 60, render: function(v, row) { var st = row.status || 'todo'; return '<span style="cursor:pointer" onclick="event.stopPropagation();_ucEditTaskNumber('+row.id+',\'progress\',\''+(v||0)+'\',\'进度(%)\',0,100,5,\''+escHtml(row.title||'').replace(/'/g,"\\'")+'\',\''+st+'\')">' + (typeof renderProgressCircle==='function'?renderProgressCircle(v||0,36,{label:''}):(v||0)+'%') + '</span>'; } },
@@ -2279,9 +2279,14 @@ function _ucTaskActionsHtml(row) {
   var user = getCurrentUser();
   var uid = user ? user.id : null;
   var isReporter = !!(uid && row.reporter_id == uid);
-  var isAssignee = !!(uid && row.assignee_id == uid);
+  var isAssignee = !!(uid && (row.assignee_id == uid || (row.assignee_ids && row.assignee_ids.indexOf(uid) >= 0)));
   var canAct = isReporter || isAssignee;
   var isDone = row.status === 'done';
+  var isTeam = !!(row.assignee_ids && row.assignee_ids.length > 1);
+
+  // Store team task info for action buttons
+  window._ucTeamTasks = window._ucTeamTasks || {};
+  window._ucTeamTasks[row.id] = isTeam;
 
   var html = '<span style="white-space:nowrap;display:flex;align-items:center;gap:2px" onclick="event.stopPropagation()">';
   html += iconEdit('_ucOpenTask(' + row.id + ')', '查看/编辑');
@@ -2293,26 +2298,42 @@ function _ucTaskActionsHtml(row) {
 }
 
 async function _ucCompleteTask(taskId) {
-  if (!confirm('确定将此任务标记为已完成？')) return;
+  var isTeam = window._ucTeamTasks && window._ucTeamTasks[taskId];
+  var msg = isTeam ? '确定将你的个人进度更新为100%？（团队任务：仅更新自己的部分）' : '确定将此任务标记为已完成？';
+  if (!confirm(msg)) return;
   try {
-    var payload = {status: 'done', progress: 100};
-    var evt = {data: payload, progress: 100, status: 'done'};
-    EventBus.emit('task:before-save', evt);
-    await API.put('/tasks/' + taskId, payload);
+    if (isTeam) {
+      var res = await API.put('/tasks/' + taskId + '/my-progress', {progress: 100});
+      if (res && res.auto_messages && res.auto_messages.length) {
+        res.auto_messages.forEach(function(m) { showToast(m, 'success'); });
+      } else {
+        showToast('个人进度已更新为100%', 'success');
+      }
+    } else {
+      var payload = {status: 'done', progress: 100};
+      EventBus.emit('task:before-save', {data: payload, progress: 100, status: 'done'});
+      await API.put('/tasks/' + taskId, payload);
+      showToast('任务已完成', 'success');
+    }
     EventBus.emit('task:saved', {taskId: taskId});
-    showToast('任务已完成','success');
   } catch(e) { showToast('操作失败: '+(e.message||''),'error'); }
 }
 
 async function _ucActivateTask(taskId) {
-  if (!confirm('确定重新激活此任务？')) return;
+  var isTeam = window._ucTeamTasks && window._ucTeamTasks[taskId];
+  var msg = isTeam ? '确定重新打开你的个人部分？（团队任务：仅重新激活自己的部分）' : '确定重新激活此任务？';
+  if (!confirm(msg)) return;
   try {
-    var payload = {status: 'in_progress', progress: 50};
-    var evt = {data: payload, progress: 50, status: 'in_progress'};
-    EventBus.emit('task:before-save', evt);
-    await API.put('/tasks/' + taskId, payload);
+    if (isTeam) {
+      var res = await API.put('/tasks/' + taskId + '/my-progress', {progress: 0});
+      showToast('个人进度已重置', 'success');
+    } else {
+      var payload = {status: 'in_progress', progress: 50};
+      EventBus.emit('task:before-save', {data: payload, progress: 50, status: 'in_progress'});
+      await API.put('/tasks/' + taskId, payload);
+      showToast('任务已激活', 'success');
+    }
     EventBus.emit('task:saved', {taskId: taskId});
-    showToast('任务已激活','success');
   } catch(e) { showToast('操作失败: '+(e.message||''),'error'); }
 }
 
@@ -2345,6 +2366,17 @@ async function _doEditTaskField() {
 }
 
 function _ucEditTaskNumber(taskId, field, currentVal, label, min, max, step, title, currentStatus) {
+  if (field === 'progress') {
+    // Use slider for progress
+    var html = _renderProgressSlider('uc-p', parseInt(currentVal) || 0);
+    window._ucEditCtx = {taskId: taskId, field: field, currentVal: currentVal, isTask: true, currentStatus: currentStatus || 'todo'};
+    var dlgTitle = '#' + taskId + ' ' + (title || '');
+    openDialog(dlgTitle, html, [
+      {text:'取消',onclick:'closeSharedDialog()'},
+      {text:'确定',cls:'btn-primary',onclick:'_doEditTaskNumber()'}
+    ], {maxWidth: 360});
+    return;
+  }
   var html = '<div><label style="font-size:11px;color:var(--muted)">' + label + '</label>' +
     '<input type="number" class="search-inp" id="uc-edit-num" value="'+currentVal+'" min="'+min+'" max="'+max+'" step="'+step+'" style="width:100%;margin-top:4px"></div>';
   window._ucEditCtx = {taskId: taskId, field: field, currentVal: currentVal, isTask: true, currentStatus: currentStatus || 'todo'};
@@ -2357,7 +2389,8 @@ function _ucEditTaskNumber(taskId, field, currentVal, label, min, max, step, tit
 async function _doEditTaskNumber() {
   var ctx = window._ucEditCtx; if (!ctx) return;
   try {
-    var v = parseInt(document.getElementById('uc-edit-num').value) || 0;
+    var el = document.getElementById('uc-edit-num');
+    var v = el ? (parseInt(el.value) || 0) : (parseInt(document.getElementById('uc-p-slider').value) || 0);
     if (v === parseInt(ctx.currentVal)) { closeSharedDialog(); return; }
     var payload = {};
     payload[ctx.field] = v;
@@ -2367,7 +2400,6 @@ async function _doEditTaskNumber() {
       if (v > 0 && v < 100 && s === 'todo') { payload.status = 'in_progress'; }
       if (v >= 100 && s !== 'review' && s !== 'done') { payload.status = window._approvalEnabled ? 'review' : 'done'; }
       if ((s === 'done' || s === 'review') && v < 100) { payload.status = 'in_progress'; }
-      if (s === 'todo' && v > 0) { payload.progress = 0; payload.status = undefined; }
     }
     await API.put('/tasks/'+ctx.taskId, payload);
     EventBus.emit('task:saved', {taskId: ctx.taskId});
@@ -2477,30 +2509,32 @@ async function _doEditBugNumber() {
 
 // ── User Center: inline assignee editor (tasks & bugs) ──
 
-async function _ucEditAssignee(itemId, type, currentAssigneeId, currentAssigneeName, title) {
+async function _ucEditAssignee(itemId) {
+  var data = (window._ucEditData && window._ucEditData[itemId]) || { ids: [], type: 'task', title: '' };
   // Ensure user list is loaded
   if (!window._allUsers || !window._allUsers.length) {
     await (typeof loadAllUsers === 'function' ? loadAllUsers() : Promise.resolve());
   }
-  var users = window._allUsers || [];
-  var html = '<select id="uc-edit-assignee" class="search-inp" style="width:100%;box-sizing:border-box;font-size:13px;padding:6px 10px">';
-  html += '<option value="">— 未分配 —</option>';
-  users.forEach(function(u) {
-    html += '<option value="' + u.id + '"' + (u.id === currentAssigneeId ? ' selected' : '') + '>' + escHtml(u.display_name || u.name || u.username) + '</option>';
-  });
-  html += '</select>';
-  var dlgTitle = '#' + itemId + ' ' + (title || '');
+  var html = '<div style="margin-bottom:8px">' +
+    '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">责任人（可多选）</div>' +
+    '<div id="uc-edit-assignee-wrap"></div></div>';
+  var dlgTitle = '#' + itemId + ' ' + (data.title || '');
   openDialog(dlgTitle, html, [
     {text: '取消', onclick: 'closeSharedDialog()'},
-    {text: '确定', cls: 'btn-primary', onclick: '_doEditAssignee(' + itemId + ',\'' + type + '\',' + currentAssigneeId + ')'}
-  ], {maxWidth: 300});
+    {text: '确定', cls: 'btn-primary', onclick: '_doEditAssignee(' + itemId + ',\'' + (data.type || 'task') + '\')'}
+  ], {maxWidth: 420});
+  loadAllUsers().then(function() {
+    var wrap = document.getElementById('uc-edit-assignee-wrap');
+    if (wrap) {
+      wrap.innerHTML = createMultiUserSelector({ containerId: 'uc-edit-assignee', selectedIds: (data.ids || []).slice(), placeholder: '搜索并添加负责人...' });
+      _muRenderTags('uc-edit-assignee');
+    }
+  });
 }
-async function _doEditAssignee(itemId, type, currentAssigneeId) {
+async function _doEditAssignee(itemId, type) {
   try {
-    var sel = document.getElementById('uc-edit-assignee');
-    var newVal = sel ? (sel.value === '' ? null : parseInt(sel.value)) : null;
-    if (newVal === (currentAssigneeId || null)) { closeSharedDialog(); return; }
-    var payload = {assignee_id: newVal};
+    var ids = window._mu_uc_edit_assignee || [];
+    var payload = { assignee_id: ids.length ? ids[0] : null, assignee_ids: ids.length ? ids : null };
     if (type === 'task') {
       await API.put('/tasks/' + itemId, payload);
       EventBus.emit('task:saved', {taskId: itemId});
