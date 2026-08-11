@@ -223,8 +223,14 @@ PYEOF
 用户说 "上线"
   │
   ├── 已在 worktree 中（CWD 包含 .claude/worktrees/）
-  │     ├── ⚠️ 不调用 pma-worktree skill（否则会重复创建 worktree）
-  │     ├── 直接 invoke Skill("pma-commit")  → 版本号 + review + commit + GitLab 评论
+  │     ├── ⚠️ 不调用 pma-commit skill，不调用 pma-worktree skill（会重复创建 worktree）
+  │     ├── 【内联 commit】（不调 pma-commit，避免"重启完马上销毁"的浪费）：
+  │     │     1. 更新版本信息（index.html x2 + dev-plan.md，参照 pma-commit 规范）
+  │     │     2. Code Review（语法检查 + 残留引用检查）
+  │     │     3. 仅含 backend/**/*.py 改动时才停服：./server.sh stop -p <PORT>（纯前端/文档改动跳过）
+  │     │     4. git add + git commit（含 Co-Authored-By + Closes #N）
+  │     │     5. GitLab Issue 评论（参照 pma-commit 模板，使用 trunk 路径的脚本）
+  │     │     ⚠️ 不执行 restart + MCP 重索引（worktree 马上要销毁）
   │     ├── git fetch origin trunk
   │     ├── git rebase origin/trunk
   │     ├── git diff origin/trunk...HEAD（review）
@@ -244,18 +250,18 @@ PYEOF
         └── Skill("pma-worktree")  → 自动 commit → rebase → merge → push → cleanup
 ```
 
-> **关键规则**：`pwd` 输出包含 `.claude/worktrees/` 时，说明已在 worktree 中，直接执行上线流程，**绝不调用 `Skill("pma-worktree")`**，否则会创建第二个 worktree。
+> **关键规则**：`pwd` 输出包含 `.claude/worktrees/` 时，说明已在 worktree 中，直接执行上线流程，**绝不调用 `Skill("pma-commit")` 或 `Skill("pma-worktree")`**。
 
 **各 skill 职责边界**：
 
 | Skill | 触发词 | 职责 |
 |-------|--------|------|
-| `pma-issue-workflow` | `issue#N` | 获取 issue → worktree → 诊断 → 实现 → 验证。**验证完后告知用户说 "上线"** |
-| `pma-commit` | `commit` | 版本号 + review + 停服 + git commit + 重启 + MCP 重索引 + GitLab 评论 |
-| `pma-worktree` | `上线` | 自动 commit（调 pma-commit）→ rebase → merge → push → cleanup |
+| `pma-issue-workflow` | `issue#N` + `上线` | 获取 issue → worktree → 诊断 → 实现 → 验证。用户说 "上线" → 内联 commit + rebase + merge + push + cleanup |
+| `pma-commit` | `commit` / `提交` | 版本号 + review + 停服 + git commit + **重启** + MCP 重索引 + GitLab 评论。仅用于**中间暂存、继续工作**的场景 |
+| `pma-worktree` | `worktree:` / `上线` | 并行开发环境创建，或 **trunk 上**的上线流程入口（非 issue 场景） |
 
 **关键规则**：
 
-- `pma-worktree` 的上线流程内置了自动 commit（`git status --porcelain` 有改动时调 pma-commit），**不需要用户先单独说 "commit"**
-- `pma-commit` 内部已包含 GitLab Issue 评论发布（使用 `scripts/gitlab_issue_comment.py`，模板含分析摘要），**issue-workflow 不重复实现**
+- `pma-issue-workflow` 的上线流程**内联所有 commit 步骤**（版本号、review、停服、commit、GitLab 评论），不再调用 `pma-commit`。因为 commit 后要立即销毁 worktree，不需要 restart + 重索引
+- `pma-commit` 交给"用户只想暂存 commit 继续工作"场景：停服 → commit → **重启**（用户继续验证）
 - 如果用户只想 commit 暂存改动（不上线），可以说 "commit" 单独触发 `pma-commit`

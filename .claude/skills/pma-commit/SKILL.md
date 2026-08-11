@@ -1,11 +1,24 @@
 ---
 name: pma-commit
-description: PMA Git 提交规范 — type(scope): subject 格式、scope 表格、Co-Authored-By、提交前停服务
+description: PMA Git 提交规范 — type(scope): subject 格式、scope 表格、Co-Authored-By、提交前停服务。仅用于独立 commit 场景（用户继续工作），上线流程由 pma-issue-workflow 内联处理。
 user-invocable: true
 allowed-tools: Read, Write, Edit, Bash
 ---
 
 # PMA Git 提交规范
+
+## 触发条件
+
+- `commit` / `提交` — 用户在 worktree 中做了改动，想暂存提交但**继续工作**（不销毁 worktree）
+
+> **注意**：用户说 `上线` 时，commit 步骤由 `pma-issue-workflow` 内联处理，不再调用本 skill。避免 "重启完马上停服销毁" 的浪费。
+
+## 职责边界
+
+| 场景 | 谁来处理 | commit 后行为 |
+|------|---------|-------------|
+| `commit` / `提交`（中间暂存） | `pma-commit` | 重启服务 + 重索引 → 继续工作 |
+| `上线`（发布合入 trunk） | `pma-issue-workflow` 内联 | 不重启 → 直接 rebase/merge/push/cleanup |
 
 ## 格式
 
@@ -96,13 +109,23 @@ Co-Authored-By: <model-name> / <tool-name>
 2. 问题较多或改动较大时，调用 `Skill("code-review")` 完整审查
 3. 修复发现的问题，确认无遗留后进入下一步
 
-### 3. 停服 → Commit → 重启
+### 3. 停服 → Commit → 重启（仅在必要时重启）
+
+**重启判断**：只有改动中包含 `backend/**/*.py` 时才需要重启服务器。纯前端（`frontend/**`）或纯文档（`docs/**`）改动不需要重启。
+
+**需要重启（含后端 .py 改动）**：
 
 1. `./server.sh stop -p <PORT>`
 2. `git add ...`（**只添加本次会话修改的文件**，不含会话前工作区已有改动；**必须包含步骤 1 中更新的版本信息文件**：`frontend/index.html`、`frontend/login.html`、`docs/dev-plan.md`；add 后 `git diff --cached --stat` 确认暂存范围无误）
 3. `git commit -m "..."`（AI 生成 commit 必须加 `Co-Authored-By:`）
 4. `./server.sh restart -p <PORT>`
 5. `index_repository(repo_path="/home/xuchuan/workspace/pma", mode="moderate")`
+
+**不需要重启（纯前端/文档改动）**：
+
+1. `git add ...`（同上）
+2. `git commit -m "..."`（同上）
+3. `index_repository(repo_path="/home/xuchuan/workspace/pma", mode="moderate")`
 6. **GitLab Issue 评论**：如果 commit message 中包含 `Closes #N`，按以下方式发布：
 
    **步骤 6a** — 先 Write 评论内容到临时文件（避免长 body 触发安全分类器超时）：

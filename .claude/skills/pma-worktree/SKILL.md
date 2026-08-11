@@ -265,10 +265,17 @@ Worktree B:         cd $PMA_WORKTREE_DIR && ./server.sh restart -p 8002
 
 ### 0. 自动 commit（如有未提交改动）
 
+> **注意**：commit 步骤内联执行（版本号 + review + 停服 + commit），不调用 `pma-commit` skill。
+> 因为 commit 后要立即销毁 worktree，`pma-commit` 的 "重启继续工作" 步骤不适用于上线场景。
+
 ```bash
 cd $PMA_WORKTREE_DIR
 if git status --porcelain | grep -q .; then
-    /pma-commit   # 按 pma-commit 规范自动提交
+    # 版本号 + review + 停服 + commit（内联，不调 pma-commit）
+    # 参照 pma-commit 规范：更新 index.html x2 + dev-plan.md
+    # 语法检查 + 残留引用检查
+    # ./server.sh stop -p $PORT
+    # git add + git commit（含 Co-Authored-By）
 fi
 ```
 
