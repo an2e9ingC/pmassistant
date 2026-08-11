@@ -10,8 +10,7 @@ EventBus.on('bug:before-save', function(e) {
   if (p >= 100 && s !== 'resolved' && s !== 'closed') { e.data.status = 'resolved'; e.status = 'resolved'; }
   // resolved + progress drops below 100 → back to in_progress
   if (s === 'resolved' && p < 100) { e.data.status = 'in_progress'; e.status = 'in_progress'; }
-  // open + progress > 0 → inconsistent, reset progress
-  if (s === 'open' && p > 0) { e.data.progress = 0; e.progress = 0; }
+  // (removed: open + progress > 0 no longer resets progress — line 8 above already auto-transitions to in_progress)
 });
 var _bugFilterStatus = '';
 var _bugKanbanMode = false;
