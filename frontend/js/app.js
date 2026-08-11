@@ -2007,23 +2007,23 @@ function _renderUcFilterBar() {
   // Category cards — order: 关注任务 → 我创建的 → 高优先级 → 即将到期/已过期 → 未完成 → 已完成 → [评审中] → 全部
   var cardsHtml = '<div class="uc-cat-cards">'
     + '<div class="kpi-card' + (_ucFilterStatus==='watched'?' active':'') + '" data-filter="watched" onclick="_ucSetFilter(\'watched\')">'
-    + '<div class="kpi-label">' + watchedLabel + '</div><div class="kpi-value">' + watchedCount + '</div><div class="kpi-meta">' + watchedMeta + '</div></div>'
+    + '<div class="kpi-label" title="' + watchedMeta + '">' + watchedLabel + '</div><div class="kpi-value">' + watchedCount + '</div></div>'
     + '<div class="kpi-card' + (_ucFilterStatus==='reported'?' active':'') + '" data-filter="reported" onclick="_ucSetFilter(\'reported\')">'
-    + '<div class="kpi-label">' + reportedLabel + '</div><div class="kpi-value">' + reportedCount + '</div><div class="kpi-meta">' + reportedMeta + '</div></div>'
+    + '<div class="kpi-label" title="' + reportedMeta + '">' + reportedLabel + '</div><div class="kpi-value">' + reportedCount + '</div></div>'
     + '<div class="kpi-card' + (_ucFilterStatus==='high_priority'?' active':'') + '" data-filter="high_priority" onclick="_ucSetFilter(\'high_priority\')">'
-    + '<div class="kpi-label">⚠ 高优先级</div><div class="kpi-value">' + highPriorityCount + '</div><div class="kpi-meta">高/紧急优先级</div></div>'
+    + '<div class="kpi-label" title="高/紧急优先级">⚠ 高优先级</div><div class="kpi-value">' + highPriorityCount + '</div></div>'
     + '<div class="kpi-card' + (_ucFilterStatus==='expiring'?' active':'') + '" data-filter="expiring" onclick="_ucSetFilter(\'expiring\')">'
-    + '<div class="kpi-label">⏰ 即将到期/已过期</div><div class="kpi-value">' + expiringCount + '</div><div class="kpi-meta">3天内到期或已过期</div></div>'
+    + '<div class="kpi-label" title="3天内到期或已过期">⏰ 即将到期/已过期</div><div class="kpi-value">' + expiringCount + '</div></div>'
     + '<div class="kpi-card' + (_ucFilterStatus==='unfinished'?' active':'') + '" data-filter="unfinished" onclick="_ucSetFilter(\'unfinished\')">'
-    + '<div class="kpi-label">未完成</div><div class="kpi-value">' + unfinishedCount + '</div><div class="kpi-meta">待办 + 进行中</div></div>'
+    + '<div class="kpi-label" title="待办 + 进行中">未完成</div><div class="kpi-value">' + unfinishedCount + '</div></div>'
     + '<div class="kpi-card' + (_ucFilterStatus==='done'?' active':'') + '" data-filter="done" onclick="_ucSetFilter(\'done\')">'
-    + '<div class="kpi-label">已完成</div><div class="kpi-value">' + (counts.done||0) + '</div><div class="kpi-meta">已完成的全部任务</div></div>';
+    + '<div class="kpi-label" title="已完成的全部任务">已完成</div><div class="kpi-value">' + (counts.done||0) + '</div></div>';
   if (window._approvalEnabled) {
     cardsHtml += '<div class="kpi-card' + (_ucFilterStatus==='review'?' active':'') + '" data-filter="review" onclick="_ucSetFilter(\'review\')">'
-      + '<div class="kpi-label">评审中</div><div class="kpi-value">' + (counts.review||0) + '</div><div class="kpi-meta">等待评审</div></div>';
+      + '<div class="kpi-label" title="等待评审">评审中</div><div class="kpi-value">' + (counts.review||0) + '</div></div>';
   }
   cardsHtml += '<div class="kpi-card' + (_ucFilterStatus==='all'?' active':'') + '" data-filter="all" onclick="_ucSetFilter(\'all\')">'
-    + '<div class="kpi-label">全部</div><div class="kpi-value">' + allCount + '</div><div class="kpi-meta">所有任务</div></div>'
+    + '<div class="kpi-label" title="所有任务">全部</div><div class="kpi-value">' + allCount + '</div></div>'
     + '</div>';
 
   // Build product items from user's tasks only
@@ -2659,15 +2659,15 @@ function _ucRenderBugFilter(bugs, uid) {
     '<div style="width:100%">' +
       '<div class="uc-cat-cards">' +
         '<div class="kpi-card' + (_ucBugTab==='watched'?' active':'') + '" data-bug-filter="watched" onclick="_ucBugTab=\'watched\';_ucLoadBugs()">'
-          + '<div class="kpi-label">' + watchedLabel + '</div><div class="kpi-value">' + watchedBugCount + '</div><div class="kpi-meta">' + watchedMeta + '</div></div>' +
+          + '<div class="kpi-label" title="' + watchedMeta + '">' + watchedLabel + '</div><div class="kpi-value">' + watchedBugCount + '</div></div>' +
         '<div class="kpi-card' + (_ucBugTab==='pending'?' active':'') + '" data-bug-filter="pending" onclick="_ucBugTab=\'pending\';_ucLoadBugs()">'
-          + '<div class="kpi-label">' + pendingLabel + '</div><div class="kpi-value">' + pending.length + '</div><div class="kpi-meta">' + pendingMeta + '</div></div>' +
+          + '<div class="kpi-label" title="' + pendingMeta + '">' + pendingLabel + '</div><div class="kpi-value">' + pending.length + '</div></div>' +
         '<div class="kpi-card' + (_ucBugTab==='resolved'?' active':'') + '" data-bug-filter="resolved" onclick="_ucBugTab=\'resolved\';_ucLoadBugs()">'
-          + '<div class="kpi-label">' + resolvedLabel + '</div><div class="kpi-value">' + resolvedBugs.length + '</div><div class="kpi-meta">' + resolvedMeta + '</div></div>' +
+          + '<div class="kpi-label" title="' + resolvedMeta + '">' + resolvedLabel + '</div><div class="kpi-value">' + resolvedBugs.length + '</div></div>' +
         '<div class="kpi-card' + (_ucBugTab==='reporter'?' active':'') + '" data-bug-filter="reporter" onclick="_ucBugTab=\'reporter\';_ucLoadBugs()">'
-          + '<div class="kpi-label">' + reporterLabel + '</div><div class="kpi-value">' + reported.length + '</div><div class="kpi-meta">' + reporterMeta + '</div></div>' +
+          + '<div class="kpi-label" title="' + reporterMeta + '">' + reporterLabel + '</div><div class="kpi-value">' + reported.length + '</div></div>' +
         '<div class="kpi-card' + (_ucBugTab==='cc'?' active':'') + '" data-bug-filter="cc" onclick="_ucBugTab=\'cc\';_ucLoadBugs()">'
-          + '<div class="kpi-label">' + ccLabel + '</div><div class="kpi-value">' + cc.length + '</div><div class="kpi-meta">' + ccMeta + '</div></div>' +
+          + '<div class="kpi-label" title="' + ccMeta + '">' + ccLabel + '</div><div class="kpi-value">' + cc.length + '</div></div>' +
       '</div>' +
     '</div>' +
     '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px">' + statusSel + '<span style="display:inline-block;vertical-align:middle">' + prodSelHtml + '</span>' + projSel + '</div>';
