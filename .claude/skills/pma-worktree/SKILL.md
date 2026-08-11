@@ -107,8 +107,8 @@ echo "$WORKTREE_NAME=$PORT" >> "$PMA_TRUNK_DIR/.claude/worktrees/used_server_por
 ## 创建 Worktree 流程
 
 1. 从 prompt 提取简短描述，生成分支名：
-   - 新功能：`feat/<short-desc>`
-   - Bug 修复：`fix/<short-desc>`
+   - 新功能：`feat-<short-desc>`
+   - Bug 修复：`fix-<short-desc>`
    - 英文小写 + 连字符，不超过 50 字符
 
 2. **申请端口**（在 EnterWorktree 之前）：

@@ -86,13 +86,13 @@ PYEOF
 **操作步骤：**
 
 1. **确定分支名**：根据 Issue 类型和编号生成分支名
-   - Bug 修复：`fix/issue-<N>`
-   - 功能开发：`feat/issue-<N>`
-   - 改进优化：`refactor/issue-<N>`
+   - Bug 修复：`fix-issue-<N>`
+   - 功能开发：`feat-issue-<N>`
+   - 改进优化：`refactor-issue-<N>`
 
 2. **创建并进入 worktree**：
    ```
-   EnterWorktree(name: "fix/issue-<N>")
+   EnterWorktree(name: "fix-issue-<N>")
    ```
    - 分支必须从 `origin/trunk` 最新提交创建
    - 如果 `EnterWorktree` 返回错误，按 `pma-worktree` skill 中的手动补救步骤处理
