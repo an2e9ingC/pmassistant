@@ -1731,7 +1731,7 @@ async function initUserCenter(viewUserId, tab) {
   var initialTab = (tab && ['tasks','bugs','approvals'].indexOf(tab) >= 0) ? tab : 'tasks';
   // Apply saved default filter preferences (before loading tasks/bugs)
   var savedTaskFilter = localStorage.getItem('pma_default_task_filter');
-  if (savedTaskFilter && ['watched','high_priority','expiring','unfinished','done','review','all'].indexOf(savedTaskFilter) >= 0) {
+  if (savedTaskFilter && ['watched','reported','high_priority','expiring','unfinished','done','review','all'].indexOf(savedTaskFilter) >= 0) {
     _ucFilterStatus = savedTaskFilter;
   }
   var savedBugFilter = localStorage.getItem('pma_default_bug_filter');
@@ -1940,6 +1940,10 @@ function _ucMatchFilter(status, task) {
     var vft = window._ucViewUserFavTasks;
     return vft ? vft.indexOf(task.id) >= 0 : isFav('task', task.id);
   }
+  if (_ucFilterStatus === 'reported') {
+    if (!task) return false;
+    return task._source === 'reported';
+  }
   // Other filters: only show tasks assigned to the user
   if (task && task._source !== 'assigned') return false;
   if (_ucFilterStatus === 'unfinished') return status !== 'done' && status !== 'review';
@@ -1991,10 +1995,19 @@ function _renderUcFilterBar() {
   var watchedLabel = isSelf ? '⭐ 关注任务' : '⭐ TA的关注';
   var watchedMeta = isSelf ? '关注的任务' : '该用户关注的任务';
 
-  // Category cards — order: 关注任务 → 高优先级 → 即将到期/已过期 → 未完成 → 已完成 → [评审中] → 全部
+  // Reported (created by me) count: use all tasks (not just assigned)
+  var reportedCount = _ucTasks.reduce(function(s, t) {
+    return s + (t._source === 'reported' ? 1 : 0);
+  }, 0);
+  var reportedLabel = isSelf ? '📝 我创建的' : '📝 TA创建的';
+  var reportedMeta = isSelf ? '我创建的任务' : '该用户创建的任务';
+
+  // Category cards — order: 关注任务 → 我创建的 → 高优先级 → 即将到期/已过期 → 未完成 → 已完成 → [评审中] → 全部
   var cardsHtml = '<div class="uc-cat-cards">'
     + '<div class="kpi-card' + (_ucFilterStatus==='watched'?' active':'') + '" data-filter="watched" onclick="_ucSetFilter(\'watched\')">'
     + '<div class="kpi-label">' + watchedLabel + '</div><div class="kpi-value">' + watchedCount + '</div><div class="kpi-meta">' + watchedMeta + '</div></div>'
+    + '<div class="kpi-card' + (_ucFilterStatus==='reported'?' active':'') + '" data-filter="reported" onclick="_ucSetFilter(\'reported\')">'
+    + '<div class="kpi-label">' + reportedLabel + '</div><div class="kpi-value">' + reportedCount + '</div><div class="kpi-meta">' + reportedMeta + '</div></div>'
     + '<div class="kpi-card' + (_ucFilterStatus==='high_priority'?' active':'') + '" data-filter="high_priority" onclick="_ucSetFilter(\'high_priority\')">'
     + '<div class="kpi-label">⚠ 高优先级</div><div class="kpi-value">' + highPriorityCount + '</div><div class="kpi-meta">高/紧急优先级</div></div>'
     + '<div class="kpi-card' + (_ucFilterStatus==='expiring'?' active':'') + '" data-filter="expiring" onclick="_ucSetFilter(\'expiring\')">'
@@ -2987,7 +3000,7 @@ function _renderPreferencesPanel(content) {
     });
   }
   var taskFilterOpts = [
-    {v:'watched', l:'关注任务'}, {v:'high_priority', l:'高优先级'}, {v:'expiring', l:'即将到期/已过期'},
+    {v:'watched', l:'关注任务'}, {v:'reported', l:'我创建的'}, {v:'high_priority', l:'高优先级'}, {v:'expiring', l:'即将到期/已过期'},
     {v:'unfinished', l:'未完成'}, {v:'done', l:'已完成'}, {v:'review', l:'评审中'}, {v:'all', l:'全部'}
   ];
   var bugFilterOpts = [

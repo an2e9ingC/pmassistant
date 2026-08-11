@@ -494,7 +494,7 @@
   display: flex; align-items: center; justify-content: space-between;
   margin-bottom: 16px;
 }
-.note-dialog-title { font-size: 15px; font-weight: 620; }
+.note-dialog-title { font-size: 15px; font-weight: 620; display: flex; align-items: center; gap: 6px; }
 .note-dialog-close {
   width: 28px; height: 28px; border-radius: 6px;
   border: 1px solid var(--border); background: var(--surface);

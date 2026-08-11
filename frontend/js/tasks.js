@@ -1021,7 +1021,7 @@ function _renderTaskDetailBody(t) {
   html += '<div style="display:flex;gap:16px">' +
     // ── 基本信息 ──
     '<div class="card info-glass-card" style="flex:1;min-width:0;padding:20px">' +
-      '<div class="section-hd"><span class="section-title">' + favStar('task', t.id, {size: '18px'}) + ' 基本信息</span></div>' +
+      '<div class="section-hd"><span class="section-title">基本信息</span></div>' +
       '<div class="delivery-kpi" style="grid-template-columns:1fr 1fr">' +
         // Title
         '<div class="dkpi"><div class="dkpi-lbl">标题' + (t.template_id ? ' <span style="color:var(--accent);font-size:10px" title="由模板控制">🔒</span>' : '') + '</div>' +
@@ -1130,7 +1130,7 @@ function _showTaskDetail(t) {
     _renderTaskDetailBody(t) +
     '</div>';
 
-  openDialog(escHtml(t.title), html, [
+  openDialog(favStar('task', t.id, {size: '18px'}) + ' #' + t.id + ' ' + escHtml(t.title), html, [
     {text: '关闭', onclick: '_closeTaskDialog()'}
   ], {maxWidth: '60%'});
   // Scroll to top when dialog opens

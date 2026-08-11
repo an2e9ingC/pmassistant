@@ -421,6 +421,12 @@ function renderTemplatesPage() {
     '</div>';
 
   document.getElementById('dtsec-project').innerHTML =
+    // Global template config bar (above project type tabs)
+    (canEdit ? '<div id="template-creator-bar" style="margin-bottom:12px;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;gap:12px">' +
+      '<span style="font-size:12px;font-weight:600;white-space:nowrap">模板任务创建人默认值</span>' +
+      '<span id="template-creator-select-wrap" style="color:var(--muted);font-size:12px">加载中...</span>' +
+      '<span style="font-size:11px;color:var(--muted);flex:1">通过模板自动创建任务时，创建人字段的默认值（全局生效）</span>' +
+    '</div>' : '') +
     ptypeTabs +
     '<div class="dt-layout">' +
       '<div class="dt-left">' +
@@ -488,6 +494,65 @@ function renderTemplatesPage() {
       renderTemplatesPage();
     });
   }
+  // Load template creator setting into the global config bar
+  if (canEdit) loadTemplateCreatorSetting();
+}
+
+// ── Global: Template Task Creator Config ──
+
+async function loadTemplateCreatorSetting() {
+  try {
+    var data = await API.get('/admin/template-task-creator');
+    var current = data.value || 'system';
+    var options = [
+      {v: 'system', l: '系统'},
+      {v: 'leader', l: '对应角色的LEADER'}
+    ];
+    var selectHtml = '<select id="template-creator-select" onchange="onTemplateCreatorChange(this.value)" ' +
+      'style="font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg)">' +
+      options.map(function(o) {
+        return '<option value="' + o.v + '"' + (o.v === current ? ' selected' : '') + '>' + o.l + '</option>';
+      }).join('') +
+      '</select>';
+    var wrap = document.getElementById('template-creator-select-wrap');
+    if (wrap) wrap.innerHTML = selectHtml;
+  } catch(e) {
+    var wrap = document.getElementById('template-creator-select-wrap');
+    if (wrap) wrap.innerHTML = '<span style="color:var(--danger)">加载失败</span>';
+  }
+}
+
+function onTemplateCreatorChange(newValue) {
+  _showTemplateCreatorConfirm(newValue);
+}
+
+function _showTemplateCreatorConfirm(newValue) {
+  var labels = {system: '系统', leader: '对应角色的LEADER'};
+  var newLabel = labels[newValue] || newValue;
+  var bodyHtml = '<div style="font-size:13px;line-height:1.8;padding:4px 0">' +
+    '<p style="margin:0 0 8px 0">模板任务创建人将改为<b>"' + newLabel + '"</b>。</p>' +
+    '<p style="margin:0;color:var(--muted)">是否将<u>现有所有</u>通过模板创建的任务的创建人也更新为"' + newLabel + '"？</p>' +
+    '</div>';
+  openDialog('模板任务创建人配置', bodyHtml, [
+    {text: '保存并更新', cls: 'btn-primary', onclick: '_doTemplateCreatorSave(\'' + newValue + '\', true);var o=document.querySelector(\'.shared-dialog-overlay\');if(o)o.remove()'},
+    {text: '仅保存配置', onclick: '_doTemplateCreatorSave(\'' + newValue + '\', false);var o=document.querySelector(\'.shared-dialog-overlay\');if(o)o.remove()'},
+    {text: '取消', onclick: 'var o=document.querySelector(\'.shared-dialog-overlay\');if(o)o.remove();loadTemplateCreatorSetting()'},
+  ], {maxWidth: 440});
+}
+
+async function _doTemplateCreatorSave(newValue, updateHistory) {
+  try {
+    await API.put('/admin/template-task-creator', {value: newValue});
+    if (updateHistory) {
+      var result = await API.post('/tasks/batch-update-template-reporter');
+      showToast('设置已保存，已更新 ' + result.updated + ' 个历史任务的创建人', 'success');
+    } else {
+      showToast('设置已保存，历史任务未修改', 'success');
+    }
+  } catch(e) {
+    showToast('操作失败: ' + (e.message || ''), 'error');
+  }
+  loadTemplateCreatorSetting();
 }
 
 function selectDocTemplateStage(stageType) {

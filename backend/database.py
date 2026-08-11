@@ -660,6 +660,10 @@ def init_db():
             db.commit()
             logger.info("Default admin user created")
 
+        # Ensure system user (id=99999) exists for template task creation
+        from backend.models.local import get_system_user_id
+        get_system_user_id(db)
+
         # Ensure all users have role assignments: map role→Role
         admin_role = db.query(Role).filter(Role.key == "admin").first()
         for u in db.query(LocalUser).all():

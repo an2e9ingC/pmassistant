@@ -8,7 +8,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
-from backend.middleware.auth import get_current_user, require_perm
+from backend.middleware.auth import get_current_user, require_admin, require_perm
 from backend.services import task_service
 from backend.services.entity_resolver import resolve_project
 
@@ -484,6 +484,7 @@ def import_tasks_from_template(
         db, project.id,
         project.project_type or "RD",
         force_template_ids=force_ids,
+        reporter_id=user.id,
     )
     if force_ids:
         msg = f"项目={project.code} 选择性导入 {len(force_ids)} 个模板, 创建/恢复数={count}"
@@ -492,6 +493,60 @@ def import_tasks_from_template(
     log_audit(db, user, "task_import_templates", msg, AUDIT_CAT_TASK, "medium")
     log_project_activity(db, project.id, user.username, "导入模板任务", msg)
     return {"code": 0, "data": {"created": count}, "message": f"已创建/恢复 {count} 个任务"}
+
+
+@router.post("/batch-update-template-reporter", response_model=dict)
+def batch_update_template_reporter(
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+    _=Depends(require_admin),
+):
+    """Batch-update all template-created tasks' reporter_id.
+
+    Reads template_task_creator config: if "leader", resolves reporter from
+    each task template's responsible_role; if "system", uses system user (99999).
+    """
+    from backend.models.task import Task
+    from backend.models.document import TaskTemplate
+    from backend.models.local import PmaSetting, get_system_user_id
+    from backend.services.project_service import _resolve_user_for_role
+
+    creator_setting = PmaSetting.get(db, "template_task_creator", "system")
+
+    tasks = db.query(Task).filter(Task.template_id.isnot(None)).all()
+
+    updated = 0
+    skipped = 0
+    for task in tasks:
+        tpl = db.query(TaskTemplate).filter(TaskTemplate.id == task.template_id).first()
+        if not tpl:
+            skipped += 1
+            continue
+
+        if creator_setting == "leader" and tpl.responsible_role:
+            new_reporter = _resolve_user_for_role(db, tpl.responsible_role)
+        else:
+            new_reporter = get_system_user_id(db)
+
+        if new_reporter and task.reporter_id != new_reporter:
+            task.reporter_id = new_reporter
+            updated += 1
+        else:
+            skipped += 1
+
+    if updated > 0:
+        db.commit()
+
+    log_audit(db, user, "task_batch_update_reporter",
+              f"template_task_creator={creator_setting}, updated={updated}, skipped={skipped}",
+              AUDIT_CAT_TASK, "medium")
+
+    return {
+        "code": 0,
+        "data": {"updated": updated, "skipped": skipped, "setting": creator_setting},
+        "message": f"已更新 {updated} 个任务的创建人，跳过 {skipped} 个",
+    }
+
 
 
 @router.delete("", response_model=dict)

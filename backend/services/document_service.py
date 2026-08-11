@@ -1087,11 +1087,31 @@ def delete_task_template(db: Session, template_id: int) -> dict:
     }
 
 
+def _resolve_template_reporter(db: Session, tpl, explicit_reporter_id: int = None) -> int:
+    """Resolve reporter_id for a new template task.
+
+    Priority:
+    1. explicit_reporter_id (user-triggered import)
+    2. Config "leader" → resolve from template's responsible_role
+    3. Default: system user (id=99999)
+    """
+    if explicit_reporter_id is not None:
+        return explicit_reporter_id
+    from backend.models.local import PmaSetting, get_system_user_id
+    creator_setting = PmaSetting.get(db, "template_task_creator", "system")
+    if creator_setting == "leader" and tpl.responsible_role:
+        resolved = _resolve_user_for_role(db, tpl.responsible_role)
+        if resolved:
+            return resolved
+    return get_system_user_id(db)
+
+
 def _sync_tasks_from_templates(
     db: Session,
     project_id: int,
     project_type: str = "RD",
     force_template_ids: set = None,
+    reporter_id: int = None,
 ) -> int:
     """Sync project tasks from task templates for all standard stages.
 
@@ -1188,6 +1208,8 @@ def _sync_tasks_from_templates(
             if stage and stage.owner_id:
                 reviewer_id = stage.owner_id
 
+            task_reporter = _resolve_template_reporter(db, tpl, reporter_id)
+
             task = Task(
                 project_id=project_id,
                 execution_id=0,
@@ -1199,7 +1221,7 @@ def _sync_tasks_from_templates(
                 type="development",
                 assignee_id=assignee_id,
                 reviewer_id=reviewer_id,
-                reporter_id=1,
+                reporter_id=task_reporter,
                 template_id=tpl.id,
                 sort_order=seq_idx,
             )
