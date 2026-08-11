@@ -1876,13 +1876,17 @@ function openDayDetail(dateStr, totalHours, fromWecom) {
         var rowNum = i + 1;
         var desc = (t.description || '').substring(0, 60) + ((t.description||'').length > 60 ? '...' : '');
         var recordedAt = t.created_at ? fmtISODateTime(t.created_at).substring(11, 19) : '';
+        var isBug = t.source === 'bug';
+        var stageOrComp = isBug ? (t.component_name||'') : (t.stage_name||'');
+        var typeBadge = isBug ? '<span style="display:inline-block;background:var(--danger-lt);color:var(--danger);font-size:10px;padding:1px 6px;border-radius:3px;font-weight:500">Bug</span>' : '<span style="display:inline-block;background:var(--accent-lt);color:var(--accent);font-size:10px;padding:1px 6px;border-radius:3px;font-weight:500">任务</span>';
         rowsHtml += '<tr>' +
           '<td style="text-align:center;color:var(--muted)">' + rowNum + '</td>' +
           '<td style="font-size:11px;color:var(--muted);white-space:nowrap">' + escHtml(recordedAt) + '</td>' +
           '<td style="font-family:var(--mono);font-size:11px">' + escHtml(t.project_code||'') + '</td>' +
           '<td style="font-size:12px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escHtml(t.project_name||'')+'">' + escHtml(t.project_name||'') + '</td>' +
-          '<td style="font-size:12px">' + escHtml(t.stage_name||'') + '</td>' +
+          '<td style="font-size:12px">' + escHtml(stageOrComp) + '</td>' +
           '<td style="font-size:12px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escHtml(t.title||'')+'">' + escHtml(t.title||'') + '</td>' +
+          '<td style="text-align:center">' + typeBadge + '</td>' +
           '<td style="text-align:center">' + (t.progress||0) + '%</td>' +
           '<td style="text-align:right;font-weight:500">' + t.hours.toFixed(1) + 'h</td>' +
           '<td style="font-size:11px;color:var(--muted);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escHtml(t.description||'')+'">' + escHtml(desc) + '</td>' +
@@ -1895,7 +1899,7 @@ function openDayDetail(dateStr, totalHours, fromWecom) {
       });
     }
     var tableHtml = rowsHtml ? '<div style="max-height:420px;overflow-y:auto;margin:-12px -16px 0 -16px"><table class="proj-table" style="font-size:11px;margin:0"><thead><tr>' +
-      '<th style="width:36px">#</th><th style="width:48px">记录时间</th><th style="width:70px">项目编号</th><th>项目名</th><th>阶段</th><th>任务名</th><th style="width:52px">进度</th><th style="width:52px">工时</th><th>工作内容</th><th style="width:80px">操作</th>' +
+      '<th style="width:36px">#</th><th style="width:48px">记录时间</th><th style="width:70px">项目编号</th><th>项目名</th><th>阶段/组件</th><th>任务名</th><th style="width:42px">类型</th><th style="width:52px">进度</th><th style="width:52px">工时</th><th>工作内容</th><th style="width:80px">操作</th>' +
       '</tr></thead><tbody>' + rowsHtml + '</tbody></table></div>' : '<div style="color:var(--muted);text-align:center;padding:20px">当日无工时记录</div>';
     openDialog(dateStr+' 工时详情 ('+totalHours.toFixed(1)+'h)',
       tableHtml,
@@ -2080,7 +2084,7 @@ async function _wlEditEntryConfirm() {
 }
 
 async function _doSaveWorklogEntry(wlId, isBug, newTaskId, hours, progress, desc, date) {
-  var url = (isBug ? '/bug-worklogs/' : '/worklogs/') + wlId;
+  var url = (isBug ? '/bugs/' + _wlEditBugId + '/worklogs/' : '/worklogs/') + wlId;
   try {
     var payload = {hours: hours, date: date, description: desc};
     if (newTaskId && !isBug) payload.task_id = newTaskId;
@@ -2099,7 +2103,7 @@ async function _doSaveWorklogEntry(wlId, isBug, newTaskId, hours, progress, desc
 
 async function deleteWorklogEntry(wlId, isBug) {
   if (!confirm('确定删除此工时记录？')) return;
-  var url = (isBug ? '/bug-worklogs/' : '/worklogs/') + wlId;
+  var url = (isBug ? '/bugs/' + _wlEditBugId + '/worklogs/' : '/worklogs/') + wlId;
   try {
     await API.del(url);
     showToast('已删除', 'success');
@@ -2132,7 +2136,7 @@ async function submitCopyWorklog(wlId, isBug) {
     var payload = {hours: hours, date: date, description: desc};
     if (isBug) payload.bug_id = t.task_id ? null : (t.project_id || null);
     else payload.task_id = t.task_id;
-    await API.post(isBug ? '/bug-worklogs' : '/worklogs', payload);
+    await API.post(isBug ? '/bugs/' + (t.bug_id || '') + '/worklogs' : '/worklogs', payload);
     closeSharedDialog();
     showToast('工时已复制', 'success');
     EventBus.emit('worklog:saved', {taskId: isBug ? null : (t.task_id || null), bugId: isBug ? (t.bug_id || null) : null});
