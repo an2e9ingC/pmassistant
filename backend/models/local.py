@@ -124,6 +124,29 @@ class PmaSetting(Base):
         db_session.commit()
 
 
+SYSTEM_USER_ID = 99999
+
+
+def get_system_user_id(db) -> int:
+    """Return the system user ID for template-created tasks.
+
+    Creates the system user (id=99999, username='system', display_name='系统')
+    if it does not already exist. Returns the fixed ID.
+    """
+    system_user = db.query(LocalUser).filter(LocalUser.id == SYSTEM_USER_ID).first()
+    if not system_user:
+        system_user = LocalUser(
+            id=SYSTEM_USER_ID,
+            username="system",
+            display_name="系统",
+            role="viewer",
+            is_active=False,
+        )
+        db.add(system_user)
+        db.commit()
+    return SYSTEM_USER_ID
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 

@@ -622,6 +622,37 @@ def update_pma_settings(payload: dict, db: Session = Depends(get_db), _=Depends(
     return {"code": 0, "message": "设置已保存"}
 
 
+# ── Template Task Creator Config ──
+
+@router.get("/template-task-creator", response_model=dict)
+def get_template_task_creator(db: Session = Depends(get_db), _=Depends(require_admin)):
+    from backend.models.local import PmaSetting
+    value = PmaSetting.get(db, "template_task_creator", "system")
+    return {"code": 0, "data": {"value": value}, "message": "ok"}
+
+
+class TemplateTaskCreatorUpdate(BaseModel):
+    value: str  # "system" or "leader"
+
+
+@router.put("/template-task-creator", response_model=dict)
+def update_template_task_creator(
+    payload: TemplateTaskCreatorUpdate,
+    db: Session = Depends(get_db),
+    _=Depends(require_admin),
+    cu=Depends(get_current_user),
+):
+    if payload.value not in ("system", "leader"):
+        raise HTTPException(status_code=400, detail="值必须是 system 或 leader")
+    from backend.models.local import PmaSetting
+    old_value = PmaSetting.get(db, "template_task_creator", "system")
+    PmaSetting.set(db, "template_task_creator", payload.value)
+    log_audit(db, cu, "config_update",
+              f"template_task_creator: {old_value} → {payload.value}",
+              AUDIT_CAT_SYSTEM, "medium")
+    return {"code": 0, "data": {"value": payload.value}, "message": "ok"}
+
+
 # ── System Info ──
 
 @router.get("/system-info", response_model=dict)
