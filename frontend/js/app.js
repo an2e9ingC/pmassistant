@@ -2619,7 +2619,7 @@ var _ucBugsReqId = 0;  // request counter to ignore stale async responses
 function _ucRenderBugFilter(bugs, uid) {
   var assigned = (bugs||[]).filter(function(b) { return b.assignee_id === uid; });
   var pending = assigned.filter(function(b) { var s = b.status || 'open'; return s !== 'resolved' && s !== 'closed'; });
-  var resolvedBugs = assigned.filter(function(b) { return b.status === 'resolved'; });
+  var resolvedBugs = assigned.filter(function(b) { return b.status === 'resolved' || b.status === 'closed'; });
   var reported = (bugs||[]).filter(function(b) { return b.reporter_id === uid; });
   var cc = (bugs||[]).filter(function(b) { return (b.cc_user_ids || []).indexOf(uid) >= 0; });
   // Collect unique product and project names from all bugs
@@ -2641,8 +2641,8 @@ function _ucRenderBugFilter(bugs, uid) {
   var isSelf = !window._ucViewUserId;
   var pendingLabel = isSelf ? '⏳ 待处理' : '⏳ 待TA处理';
   var pendingMeta  = isSelf ? '指派给我，待处理' : '指派给TA，待处理';
-  var resolvedLabel = isSelf ? '✅ 已解决' : '✅ TA已解决';
-  var resolvedMeta  = isSelf ? '指派给我，已解决' : '指派给TA，已解决';
+  var resolvedLabel = isSelf ? '✅ 已解决/已关闭' : '✅ TA已解决/已关闭';
+  var resolvedMeta  = isSelf ? '指派给我，已解决或已关闭' : '指派给TA，已解决或已关闭';
   var reporterLabel = isSelf ? '✍️ 我创建的' : '✍️ TA创建的';
   var reporterMeta  = isSelf ? '我创建的Bug' : 'TA创建的Bug';
   var watchedLabel  = isSelf ? '⭐ 关注bug' : '⭐ TA关注的';
