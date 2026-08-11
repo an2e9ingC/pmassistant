@@ -73,6 +73,19 @@ Co-Authored-By: <model-name> / <tool-name>
    c. 用修正后的版本号重新执行步骤 1a-1c
    d. **rebase 冲突涉及 dev-plan.md 时必须重新自检**，手动去重 + 递增
 
+   > ⚠️ **rebase 冲突解决：`--ours`/`--theirs` 与 merge 相反！**
+   >
+   > | 操作 | `--ours` 指代 | `--theirs` 指代 |
+   > |------|-------------|---------------|
+   > | `git merge` | 当前分支（合并目标） | 被合并的分支 |
+   > | `git rebase` | **rebase 目标分支（trunk）** | **你的工作分支（正被应用的补丁）** |
+   >
+   > 因此在 rebase 冲突时：
+   > - 想保留自己 branch 的修改 → 用 `git checkout --theirs <file>`
+   > - 想接受 trunk 的版本 → 用 `git checkout --ours <file>`
+   >
+   > **最容易出错的场景**：`frontend/index.html`、`frontend/login.html` 的 `<meta app-version>` 冲突。如果 trunk 已有更晚日期的新版本（其他分支已上线），应接受 trunk 版本后再递增 beta；如果自己的版本更新，应保留自己的版本。**解决后必须手动验证版本号正确。**
+
 ### 2. Code Review
 
 1. 对 `git diff` 改动进行快速自检：
