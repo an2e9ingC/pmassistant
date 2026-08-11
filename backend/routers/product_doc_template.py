@@ -10,6 +10,7 @@ from backend.models.document import ProductLine, ProductDocTemplate
 from backend.audit_categories import AUDIT_CAT_TEMPLATE
 from backend.routers.logs import log_audit
 from backend.services import document_service
+from backend.services.document_service import _sync_affected_product_docs
 
 
 router = APIRouter(prefix="/api/product-doc-templates", tags=["product-doc-templates"])
@@ -277,6 +278,9 @@ def import_templates(
         imported += 1
 
     db.commit()
+
+    # Sync documents for all products linked to the target node
+    _sync_affected_product_docs(db, target_node_id)
 
     detail = f"从「{src.name}」导入 {imported} 个模板覆盖到「{tgt.name}」"
     if removed > 0:

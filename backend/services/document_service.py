@@ -330,6 +330,24 @@ def get_stage_types(db: Session) -> list[str]:
     return all_stages
 
 
+def _clear_stage_docs_unnecessary(db: Session, project_type: str, stage_name: str,
+                                  prefix: str = "stage_docs_unnecessary") -> None:
+    """If stage_name was in the unnecessary list for project_type, remove it.
+
+    This ensures that adding a template to a stage automatically clears the
+    "no docs/tasks needed" flag for that stage, preventing a disconnect between
+    the frontend toggle state (driven by per-template is_unnecessary) and the
+    backend sync behavior (driven by stage_{docs|tasks}_unnecessary_{ptype}).
+    """
+    from backend.models.local import PmaSetting
+    key = f"{prefix}_{project_type}"
+    current = PmaSetting.get(db, key, "")
+    stages = [s.strip() for s in current.split(",") if s.strip()]
+    if stage_name in stages:
+        stages.remove(stage_name)
+        PmaSetting.set(db, key, ",".join(stages))
+
+
 def create_template(db: Session, data: dict) -> dict:
     """Create a new document template."""
     # Check duplicate name within same project_type + stage_type
@@ -357,6 +375,9 @@ def create_template(db: Session, data: dict) -> dict:
     db.add(tpl)
     db.commit()
     db.refresh(tpl)
+    # If the stage was previously marked as "no docs needed" for this project type,
+    # clear the flag since a template now exists for it (prevents UI-data inconsistency)
+    _clear_stage_docs_unnecessary(db, tpl.project_type, tpl.stage_type)
     return _template_dict(tpl)
 
 
@@ -1025,6 +1046,9 @@ def create_task_template(db: Session, data: dict) -> dict:
     db.add(tpl)
     db.commit()
     db.refresh(tpl)
+    # If the stage was previously marked as "no tasks needed" for this project type,
+    # clear the flag since a task template now exists for it
+    _clear_stage_docs_unnecessary(db, tpl.project_type, tpl.stage_type, prefix="stage_tasks_unnecessary")
     return _task_template_dict(tpl)
 
 
