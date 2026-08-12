@@ -101,7 +101,10 @@ def update_worklog(
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
-    w = worklog_service.update_worklog(db, worklog_id, payload.model_dump(exclude_unset=True))
+    try:
+        w = worklog_service.update_worklog(db, worklog_id, payload.model_dump(exclude_unset=True))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     if not w:
         raise HTTPException(status_code=404, detail="WorkLog not found")
     return {"code": 0, "data": w, "message": "ok"}

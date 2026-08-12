@@ -1863,6 +1863,7 @@ function _renderMergedMonthCalendar(today, wecomDailyMap, wlData, weData, redBor
 function _openMergedDayDetail(dateStr, checkinHours, hasCheckin) {
   function render(wlData) {
     var tasks = (wlData && wlData.daily && wlData.daily[0]) ? wlData.daily[0].tasks : [];
+    _dayDetailTasks = tasks; // populate for edit/copy operations
 
     // Build rows
     var rowsHtml = '';
@@ -1904,20 +1905,20 @@ function _openMergedDayDetail(dateStr, checkinHours, hasCheckin) {
       ? '<span style="font-size:15px;color:var(--muted)">打卡 <b style="color:var(--success);font-size:17px">' + checkinHours.toFixed(1) + 'h</b></span>'
       : '<span style="font-size:15px;color:var(--warn)">⚠ 无打卡</span>';
     var ratioText = totalCalcH > 0 && checkinHours > 0
-      ? '<span style="font-size:15px;color:var(--muted)">工时/打卡 <b style="color:var(--fg);font-size:17px">' + (totalCalcH / checkinHours * 100).toFixed(0) + '%</b></span>'
+      ? '<span style="font-size:15px;color:var(--muted)" title="已记录工时 ÷ 打卡工时的比例">记录/打卡 <b style="color:var(--fg);font-size:17px">' + (totalCalcH / checkinHours * 100).toFixed(0) + '%</b></span>'
       : '';
 
     var summaryBar = '<div style="display:flex;gap:16px;padding:12px 16px;margin-bottom:12px;background:var(--bg);border-radius:8px;border:1px solid var(--border);align-items:center;flex-wrap:wrap">' +
       checkinLabel +
       '<span style="color:var(--border)">|</span>' +
-      '<span style="font-size:15px;color:var(--muted)">记录 <b style="color:var(--fg);font-size:17px">' + totalCalcH.toFixed(1) + 'h</b></span>' +
+      '<span style="font-size:15px;color:var(--muted)" title="当天所有工时记录的总小时数">已记录 <b style="color:var(--fg);font-size:17px">' + totalCalcH.toFixed(1) + 'h</b></span>' +
       '<span style="font-size:15px;color:var(--muted)">' + entryCount + ' 条</span>' +
       ratioText +
     '</div>' +
     '<div id="wl-checkin-detail" style="font-size:15px;color:var(--muted);margin-bottom:10px;padding:10px 14px;background:var(--bg);border-radius:8px;border:1px solid var(--border);display:none">加载打卡详情...</div>';
 
     var tableHtml = rowsHtml ? summaryBar + '<div style="max-height:420px;overflow-y:auto;margin:0 -16px 0 -16px"><table class="proj-table" style="font-size:14px;margin:0"><thead><tr>' +
-      '<th style="width:28px">#</th><th style="width:42px">时间</th><th style="width:60px">项目</th><th>项目名</th><th>阶段</th><th>任务</th><th style="width:36px">类型</th><th style="width:40px">进度</th><th style="width:36px">占比</th><th style="width:44px">工时</th><th>内容</th><th style="width:68px">操作</th>' +
+      '<th style="width:28px">#</th><th style="width:42px">时间</th><th style="width:60px">项目</th><th>项目名</th><th>阶段</th><th>任务</th><th style="width:36px">类型</th><th style="width:40px">进度</th><th style="width:52px" title="该记录占当天所有工时记录的比例">当日占比</th><th style="width:44px">工时</th><th>内容</th><th style="width:68px">操作</th>' +
       '</tr></thead><tbody>' + rowsHtml + '</tbody></table></div>' : '<div style="color:var(--muted);text-align:center;padding:20px">当日无工时记录</div>';
 
     // Update dialog body in-place (reuse the existing dialog if open)
@@ -2249,10 +2250,11 @@ function editWorklogEntry(t, dateStr) {
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">日期 *</label>' +
       '<input class="search-inp" id="wl-edit-date" type="date" required value="'+dateStr+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工时占比 (%) *</label>' +
-      '<input type="range" id="wl-edit-pct" min="5" max="100" step="5" value="'+(t.percentage||25)+'" style="width:100%" oninput="document.getElementById(\'wl-edit-pct-val\').textContent=this.value+\'%\'">' +
+      '<input type="range" id="wl-edit-pct" min="5" max="100" step="1" value="'+(t.percentage||25)+'" style="width:100%" oninput="_wlEditPctChanged()">' +
       '<div style="display:flex;justify-content:space-between;font-size:9px;color:var(--muted)"><span>5%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>' +
       '<div style="text-align:center"><span id="wl-edit-pct-val" style="font-size:18px;font-weight:600;color:var(--accent)">'+(t.percentage||25)+'%</span></div>' +
-      '<div style="font-size:10px;color:var(--muted);margin-top:2px">计算工时: ' + ((t.calculated_hours||t.hours||0)).toFixed(1) + 'h</div></div>' +
+      '<div style="font-size:10px;color:var(--muted);margin-top:2px">计算工时: ' + ((t.calculated_hours||t.hours||0)).toFixed(1) + 'h</div>' +
+      '<div id="wl-edit-pct-hint" style="font-size:10px;color:var(--warn);margin-top:2px"></div></div>' +
     (isBug ? '' : '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">进度(%) *</label>' +
       _renderProgressSlider('wl-edit', t.progress||0) + '</div>') +
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工作描述</label>' +
@@ -2262,6 +2264,24 @@ function editWorklogEntry(t, dateStr) {
     {text:'取消',onclick:'closeSharedDialog()'},
     {text:'保存',cls:'btn-primary',onclick:'saveWorklogEntry('+t.id+','+(isBug?'true':'false')+')'}
   ], {maxWidth: isBug ? 400 : 480});
+
+  // 限制占比上限：当天其他记录百分比总和 + 当前值 ≤ 100
+  window._wlEditOthersPct = 0;
+  setTimeout(function() {
+    var uid = window._ucViewUserId || (getCurrentUser() ? getCurrentUser().id : '');
+    API.get('/worklogs/daily-usage?user_id=' + uid + '&date=' + dateStr).then(function(data) {
+      var totalUsed = data.total_percentage_used || 0;
+      var othersPct = totalUsed - (t.percentage || 0);
+      window._wlEditOthersPct = Math.round(othersPct);
+      var maxPct = Math.max(5, 100 - othersPct);
+      var pctEl = document.getElementById('wl-edit-pct');
+      if (pctEl) {
+        pctEl.max = maxPct;
+        if (parseInt(pctEl.value) > maxPct) pctEl.value = maxPct;
+      }
+      _wlEditPctChanged();
+    }).catch(function(){});
+  }, 100);
   if (!isBug) {
     setTimeout(function() {
       var inp = document.getElementById('wl-edit-proj-input');
@@ -2304,6 +2324,26 @@ function _wlEditOnStageChange() {
 
 var _wlEditEntryPending = null;
 var _wlEditBugId = null;
+
+function _wlEditPctChanged() {
+  var pctEl = document.getElementById('wl-edit-pct');
+  var valEl = document.getElementById('wl-edit-pct-val');
+  var hintEl = document.getElementById('wl-edit-pct-hint');
+  if (!pctEl) return;
+  var pct = parseInt(pctEl.value) || 0;
+  if (valEl) valEl.textContent = pct + '%';
+  if (hintEl) {
+    var others = window._wlEditOthersPct || 0;
+    var total = others + pct;
+    if (total > 100) {
+      hintEl.textContent = '当前 ' + pct + '% + 其他记录 ' + others + '% = ' + total + '%，超过 100%！';
+      hintEl.style.color = 'var(--danger)';
+    } else {
+      hintEl.textContent = '当前 ' + pct + '% + 其他记录 ' + others + '% = ' + total + '%，剩余可用 ' + (100 - total) + '%';
+      hintEl.style.color = 'var(--muted)';
+    }
+  }
+}
 
 async function saveWorklogEntry(wlId, isBug) {
   var pct = parseInt(document.getElementById('wl-edit-pct').value) || 0;
@@ -2586,8 +2626,9 @@ function _wlCalBuildRow(idx, defaultDate) {
       '<div id="wl-cal-pct-ring-' + idx + '" style="width:80px;flex-shrink:0;cursor:pointer;text-align:center" onclick="_wlCalShowPct(' + idx + ')" title="点击调整占比">' +
         _wlCalRing(25, 38, 'var(--accent)') +
       '</div>' +
-      '<div id="wl-cal-pct-slider-' + idx + '" style="display:none;flex-shrink:0;width:80px">' +
-        '<input type="range" id="wl-cal-pct-' + idx + '" min="5" max="100" step="5" value="25" style="width:100%" oninput="_wlCalPctInput(' + idx + ')" onblur="_wlCalHidePct(' + idx + ')">' +
+      '<div id="wl-cal-pct-slider-' + idx + '" style="display:none;flex-shrink:0;align-items:center;gap:4px;width:130px">' +
+        '<input type="range" id="wl-cal-pct-' + idx + '" min="5" max="100" step="1" value="25" style="flex:1" oninput="_wlCalPctInput(' + idx + ')" onblur="_wlCalHidePct(' + idx + ')">' +
+        '<span id="wl-cal-pct-slider-val-' + idx + '" style="font-size:13px;font-weight:600;color:var(--accent);min-width:38px;text-align:right">25%</span>' +
       '</div>' +
       '<span id="wl-cal-avail-' + idx + '" style="width:80px;flex-shrink:0;font-size:14px;color:var(--success);text-align:center">可用 100%</span>' +
       '<span style="width:32px;flex-shrink:0;text-align:center">' + iconDelete('_wlCalRemoveRow(' + idx + ')', '删除此行') + '</span>' +
@@ -2623,7 +2664,16 @@ function _wlCalOnDateChange(idx) {
     var av = document.getElementById('wl-cal-avail-' + idx);
     if (av) { av.textContent = '可用 ' + remaining + '%'; av.style.color = remaining > 0 ? 'var(--success)' : 'var(--danger)'; }
     var pctEl = document.getElementById('wl-cal-pct-' + idx);
-    if (pctEl) { pctEl.max = Math.max(5, remaining); if (parseInt(pctEl.value) > remaining) pctEl.value = Math.max(5, remaining); _wlCalUpdateRing(idx); }
+    if (remaining <= 0) {
+      var ringEl = document.getElementById('wl-cal-pct-ring-' + idx);
+      if (ringEl) ringEl.innerHTML = '<span style="font-size:15px;color:var(--muted)">-</span>';
+      var hoursEl = document.getElementById('wl-cal-hours-' + idx);
+      if (hoursEl) hoursEl.textContent = '-';
+    } else if (pctEl) {
+      pctEl.max = Math.max(5, remaining);
+      if (parseInt(pctEl.value) > remaining) pctEl.value = Math.max(5, remaining);
+      _wlCalUpdateRing(idx);
+    }
   });
 }
 
@@ -2632,6 +2682,8 @@ function _wlCalPctInput(idx) {
   var d = document.getElementById('wl-cal-date-' + idx).value;
   var checkinH = _wlCalCheckinH[d] || 8;
   document.getElementById('wl-cal-hours-' + idx).textContent = (pct / 100 * checkinH).toFixed(1);
+  var valEl = document.getElementById('wl-cal-pct-slider-val-' + idx);
+  if (valEl) valEl.textContent = pct + '%';
   _wlCalUpdateRing(idx);
 }
 

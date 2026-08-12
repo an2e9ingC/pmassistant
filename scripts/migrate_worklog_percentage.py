@@ -95,9 +95,10 @@ def migrate(db_path: str, dry_run: bool = False) -> dict:
     stats["total"] = len(unmigrated_rows)
 
     # Step 2: Compute day totals using ALL records (migrated + unmigrated)
-    #         for each (user_id, date) that has unmigrated records
+    #         Denominator = max(total hours, 8h standard) so a single short record
+    #         does NOT become 100% (which would block further time logging).
     affected_dates = set((uid, d) for _, _, uid, _, d in unmigrated_rows)
-    day_totals = defaultdict(float)  # (user_id, date) -> total hours from ALL records
+    day_denominators = defaultdict(float)  # (user_id, date) -> denominator hours
     for (uid, d) in affected_dates:
         total = 0.0
         for table in ("pma_worklogs", "pma_bug_worklogs"):
@@ -106,61 +107,17 @@ def migrate(db_path: str, dry_run: bool = False) -> dict:
                 (uid, d),
             )
             total += cursor.fetchone()[0]
-        day_totals[(uid, d)] = total
+        day_denominators[(uid, d)] = max(total, 8.0)
 
     # Step 3: Compute percentage for each unmigrated record
     # updates: list of [table, percentage, calculated_hours, worklog_id]
     updates = []
     for table, wl_id, user_id, hours, d in unmigrated_rows:
-        total = day_totals[(user_id, d)]
-        if total > 0:
-            pct = round(hours / total * 100)
-        else:
-            pct = 100
+        denom = day_denominators[(user_id, d)]
+        pct = round(hours / denom * 100) if denom > 0 else 0
         pct = max(5, min(100, pct))
         calc_hours = hours  # initial = original hours; WeCom sync will recalibrate
         updates.append([table, pct, calc_hours, wl_id])
-
-    # Step 4: Adjust unmigrated records so the date's TOTAL (migrated + unmigrated) sums to 100
-    # First, compute already-migrated percentage total per (user_id, date)
-    migrated_pct = defaultdict(float)
-    for (uid, d) in affected_dates:
-        for table in ("pma_worklogs", "pma_bug_worklogs"):
-            cursor.execute(
-                f"SELECT COALESCE(SUM(percentage), 0) FROM {table} WHERE user_id = ? AND date = ? AND percentage IS NOT NULL",
-                (uid, d),
-            )
-            migrated_pct[(uid, d)] += cursor.fetchone()[0]
-
-    # Group unmigrated updates by (user_id, date)
-    # updates elements: [table, percentage, calculated_hours, worklog_id]
-    group_updates = defaultdict(list)
-    for idx, item in enumerate(updates):
-        tbl = item[0]; wl_id = item[3]
-        for t, wid, uid, h, d in unmigrated_rows:
-            if t == tbl and wid == wl_id:
-                group_updates[(uid, d)].append(idx)
-                break
-
-    for (uid, d), indices in group_updates.items():
-        already = migrated_pct[(uid, d)]
-        remaining = max(0, 100 - already)
-        # sum hours from unmigrated_rows for these indices
-        group_hours = []
-        total_h = 0.0
-        for j in indices:
-            tbl = updates[j][0]; wl_id = updates[j][3]
-            for t, wid, u, h, dt in unmigrated_rows:
-                if t == tbl and wid == wl_id:
-                    group_hours.append((j, h))
-                    total_h += h
-                    break
-        if total_h > 0 and remaining > 0:
-            for j, h in group_hours:
-                new_pct = round(h / total_h * remaining)
-                new_pct = max(5, min(100, new_pct))
-                # updates[j] = [table, percentage, calculated_hours, worklog_id]
-                updates[j][1] = new_pct
 
     # Step 5: Apply updates
     if not dry_run:
@@ -176,12 +133,66 @@ def migrate(db_path: str, dry_run: bool = False) -> dict:
         stats["migrated"] = len(updates)
 
     if dry_run:
-        print("\nPreview (--dry-run):")
-        for item in updates:
-            print(f"  {item[0]} id={item[3]}: percentage={item[1]}%, calculated_hours={item[2]}")
+        _print_dry_run_report(conn, unmigrated_rows, updates)
 
     conn.close()
     return stats
+
+
+def _print_dry_run_report(conn, unmigrated_rows, updates):
+    """Print a human-readable dry-run report grouped by user + date."""
+    # Build pct lookup: (table, wl_id) -> percentage
+    pct_map = {}
+    for item in updates:
+        pct_map[(item[0], item[3])] = item[1]
+
+    # Fetch user names, task titles, bug titles in bulk
+    user_names = {}
+    for (uid,) in conn.execute("SELECT id FROM local_users"):
+        row = conn.execute("SELECT display_name, username FROM local_users WHERE id = ?", (uid,)).fetchone()
+        user_names[uid] = (row[0] or row[1]) if row else "?"
+    task_titles = {}
+    for (tid, title) in conn.execute("SELECT id, title FROM pma_tasks"):
+        task_titles[tid] = title or "?"
+    bug_titles = {}
+    for (bid, title) in conn.execute("SELECT id, title FROM pma_bugs"):
+        bug_titles[bid] = title or "?"
+
+    # Group by (user_id, date)
+    from collections import defaultdict
+    groups = defaultdict(list)  # (user_id, date) -> list of entries
+    for table, wl_id, user_id, hours, d in unmigrated_rows:
+        pct = pct_map.get((table, wl_id), 0)
+        if table == "pma_worklogs":
+            task_id = conn.execute("SELECT task_id FROM pma_worklogs WHERE id = ?", (wl_id,)).fetchone()
+            task_id = task_id[0] if task_id else None
+            title = task_titles.get(task_id, "?") if task_id else "?"
+            source = "任务"
+        else:
+            bug_id = conn.execute("SELECT bug_id FROM pma_bug_worklogs WHERE id = ?", (wl_id,)).fetchone()
+            bug_id = bug_id[0] if bug_id else None
+            title = bug_titles.get(bug_id, "?") if bug_id else "?"
+            source = "Bug"
+        groups[(user_id, d)].append((source, title, hours, pct))
+
+    # Sort groups by user then date
+    sorted_groups = sorted(groups.items(), key=lambda kv: (user_names.get(kv[0][0], "?"), kv[0][1]))
+
+    print("\n" + "=" * 70)
+    print("  迁移预览（DRY RUN — 不会写入数据库）")
+    print("=" * 70)
+    for (user_id, d), entries in sorted_groups:
+        name = user_names.get(user_id, "?")
+        total_h = sum(e[2] for e in entries)
+        total_pct = sum(e[3] for e in entries)
+        print(f"\n▎ {name}  {d}   共 {total_h:.1f}h  →  合计 {total_pct}%")
+        for source, title, hours, pct in entries:
+            title_disp = title[:24] if len(str(title)) > 24 else title
+            print(f"     · {source}: {title_disp}")
+            print(f"        {hours:.1f}h → {pct}%")
+    print("\n" + "=" * 70)
+    print(f"  共 {len(unmigrated_rows)} 条记录待迁移")
+    print("=" * 70)
 
 
 def main():
@@ -209,8 +220,8 @@ def main():
         if not candidates:
             print("ERROR: No pma-*.db found in data/ directory. Specify --db-path.")
             sys.exit(1)
-        # Pick the largest one (most likely the active database)
-        db_path = os.path.join(data_dir, max(candidates, key=lambda f: os.path.getsize(os.path.join(data_dir, f))))
+        # Pick the most recently modified one (most likely the active database)
+        db_path = os.path.join(data_dir, max(candidates, key=lambda f: os.path.getmtime(os.path.join(data_dir, f))))
 
     if not os.path.exists(db_path):
         print(f"ERROR: Database not found: {db_path}")

@@ -216,6 +216,8 @@ def update_worklog(db: Session, worklog_id: int, data: dict) -> Optional[dict]:
     has_checkin = False
     if "percentage" in data:
         new_pct = float(data["percentage"] or 0)
+        # Validate: new percentage + other records on the same date <= 100
+        _validate_percentage_not_exceeded(db, w.user_id, w.date, new_pct, exclude_task_id=w.id)
         if new_pct != w.percentage:
             changes.append(f"{w.percentage}% → {new_pct}%")
         w.percentage = new_pct
@@ -226,6 +228,9 @@ def update_worklog(db: Session, worklog_id: int, data: dict) -> Optional[dict]:
     if "date" in data:
         new_date = _parse_date(data["date"]) or w.date
         if new_date != w.date:
+            if w.percentage:
+                # Validate: percentage + records on the NEW date <= 100
+                _validate_percentage_not_exceeded(db, w.user_id, new_date, w.percentage)
             changes.append(f"日期 → {new_date}")
             w.date = new_date
             if w.percentage:
@@ -283,25 +288,26 @@ def delete_worklog(db: Session, worklog_id: int) -> bool:
     return True
 
 
-def _validate_percentage_not_exceeded(db: Session, user_id: int, date_val: date, new_pct: float, exclude_worklog_id: int = None):
+def _validate_percentage_not_exceeded(db: Session, user_id: int, date_val: date, new_pct: float, exclude_task_id: int = None, exclude_bug_id: int = None):
     """Check that existing + new percentage doesn't exceed 100 for a user on a date.
     Raises ValueError if exceeded.
+    exclude_task_id / exclude_bug_id: exclude the record being edited from the sum.
     """
-    # Sum existing worklogs for this user+date
+    # Sum existing task worklogs for this user+date
     existing_task = db.query(sa_func.coalesce(sa_func.sum(WorkLog.percentage), 0)).filter(
         WorkLog.user_id == user_id,
         WorkLog.date == date_val,
     )
-    if exclude_worklog_id:
-        existing_task = existing_task.filter(WorkLog.id != exclude_worklog_id)
+    if exclude_task_id:
+        existing_task = existing_task.filter(WorkLog.id != exclude_task_id)
     task_total = existing_task.scalar() or 0.0
 
     existing_bug = db.query(sa_func.coalesce(sa_func.sum(BugWorkLog.percentage), 0)).filter(
         BugWorkLog.user_id == user_id,
         BugWorkLog.date == date_val,
     )
-    if exclude_worklog_id:
-        existing_bug = existing_bug.filter(BugWorkLog.id != exclude_worklog_id)
+    if exclude_bug_id:
+        existing_bug = existing_bug.filter(BugWorkLog.id != exclude_bug_id)
     bug_total = existing_bug.scalar() or 0.0
 
     total_existing = float(task_total) + float(bug_total)

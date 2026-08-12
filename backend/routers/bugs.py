@@ -180,7 +180,10 @@ def create_worklog_batch(bug_id: int, body: WorklogBatchCreate, db: Session = De
 
 @router.put("/{bug_id}/worklogs/{wl_id}", response_model=dict)
 def update_worklog(bug_id: int, wl_id: int, body: WorklogUpdate, db: Session = Depends(get_db), user=Depends(get_current_user)):
-    w = bug_service.update_worklog(db, wl_id, body.model_dump(exclude_none=True))
+    try:
+        w = bug_service.update_worklog(db, wl_id, body.model_dump(exclude_none=True))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     if not w: raise HTTPException(status_code=404, detail="Worklog not found")
     log_audit(db, user, "bug_worklog_edit", f"Bug #{bug_id} 编辑工时", AUDIT_CAT_BUG, "low")
     return {"code": 0, "data": w, "message": "ok"}

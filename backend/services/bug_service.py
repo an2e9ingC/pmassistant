@@ -210,11 +210,12 @@ def create_worklog(db, data, user_id):
     return _worklog_dict(w, db)
 
 def update_worklog(db, wl_id, data):
-    from backend.services.worklog_service import _calc_calculated_hours, _parse_date
+    from backend.services.worklog_service import _calc_calculated_hours, _parse_date, _validate_percentage_not_exceeded
     w = db.query(BugWorkLog).filter(BugWorkLog.id == wl_id).first()
     if not w: return None
     if "percentage" in data:
         pct = float(data["percentage"] or 0)
+        _validate_percentage_not_exceeded(db, w.user_id, w.date, pct, exclude_bug_id=w.id)
         w.percentage = pct
         calc_h, _ = _calc_calculated_hours(db, w.user_id, w.date, pct)
         w.hours = calc_h
@@ -223,6 +224,8 @@ def update_worklog(db, wl_id, data):
         v = data["date"]
         if isinstance(v, str):
             v = _parse_date(v) or w.date
+        if v != w.date and w.percentage:
+            _validate_percentage_not_exceeded(db, w.user_id, v, w.percentage)
         w.date = v
         if w.percentage:
             calc_h, _ = _calc_calculated_hours(db, w.user_id, w.date, w.percentage)

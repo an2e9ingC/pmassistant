@@ -654,14 +654,16 @@ function _bwlBuildRow(idx, defaultDate) {
       '<div id="bwl-pct-ring-' + idx + '" style="width:80px;flex-shrink:0;cursor:pointer;text-align:center" onclick="_bwlShowPctSlider(' + idx + ')" title="点击调整占比">' +
         _bwlProgressRing(25, 38, 'var(--accent)') +
       '</div>' +
-      '<div id="bwl-pct-slider-' + idx + '" style="display:none;flex-shrink:0;width:80px">' +
-        '<input type="range" id="bwl-pct-' + idx + '" min="5" max="100" step="5" value="25" style="width:100%" oninput="_bwlPctSliderInput(' + idx + ')" onblur="_bwlHidePctSlider(' + idx + ')">' +
+      '<div id="bwl-pct-slider-' + idx + '" style="display:none;flex-shrink:0;align-items:center;gap:4px;width:130px">' +
+        '<input type="range" id="bwl-pct-' + idx + '" min="5" max="100" step="1" value="25" style="flex:1" oninput="_bwlPctSliderInput(' + idx + ')" onblur="_bwlHidePctSlider(' + idx + ')">' +
+        '<span id="bwl-pct-slider-val-' + idx + '" style="font-size:13px;font-weight:600;color:var(--accent);min-width:38px;text-align:right">25%</span>' +
       '</div>' +
       '<div id="bwl-prog-ring-' + idx + '" style="width:80px;flex-shrink:0;cursor:pointer;text-align:center" onclick="_bwlShowProgSlider(' + idx + ')" title="点击调整进度">' +
         _bwlProgressRing(0, 38, 'var(--success)') +
       '</div>' +
-      '<div id="bwl-prog-slider-' + idx + '" style="display:none;flex-shrink:0;width:80px">' +
-        '<input type="range" id="bwl-prog-' + idx + '" min="0" max="100" step="5" value="0" style="width:100%" oninput="_bwlProgSliderInput(' + idx + ')" onblur="_bwlHideProgSlider(' + idx + ')">' +
+      '<div id="bwl-prog-slider-' + idx + '" style="display:none;flex-shrink:0;align-items:center;gap:4px;width:130px">' +
+        '<input type="range" id="bwl-prog-' + idx + '" min="0" max="100" step="5" value="0" style="flex:1" oninput="_bwlProgSliderInput(' + idx + ')" onblur="_bwlHideProgSlider(' + idx + ')">' +
+        '<span id="bwl-prog-slider-val-' + idx + '" style="font-size:13px;font-weight:600;color:var(--success);min-width:38px;text-align:right">0%</span>' +
       '</div>' +
       '<span id="bwl-avail-' + idx + '" style="width:80px;flex-shrink:0;font-size:14px;color:var(--success);text-align:center">可用 100%</span>' +
       '<span style="width:32px;flex-shrink:0;text-align:center">' + iconDelete('_bwlRemoveRow(' + idx + ')', '删除此行') + '</span>' +
@@ -706,7 +708,16 @@ function _bwlOnDateChange(idx) {
     var av = document.getElementById('bwl-avail-' + idx);
     if (av) { av.textContent = '可用 ' + remaining + '%'; av.style.color = remaining > 0 ? 'var(--success)' : 'var(--danger)'; }
     var pctEl = document.getElementById('bwl-pct-' + idx);
-    if (pctEl) { pctEl.max = Math.max(5, remaining); if (parseInt(pctEl.value) > remaining) pctEl.value = Math.max(5, remaining); _bwlUpdatePctRing(idx); }
+    if (remaining <= 0) {
+      var ringEl = document.getElementById('bwl-pct-ring-' + idx);
+      if (ringEl) ringEl.innerHTML = '<span style="font-size:15px;color:var(--muted)">-</span>';
+      var hoursEl = document.getElementById('bwl-hours-' + idx);
+      if (hoursEl) hoursEl.textContent = '-';
+    } else if (pctEl) {
+      pctEl.max = Math.max(5, remaining);
+      if (parseInt(pctEl.value) > remaining) pctEl.value = Math.max(5, remaining);
+      _bwlUpdatePctRing(idx);
+    }
     _bwlCheckOverPct();
   }).catch(function(){});
 }
@@ -716,6 +727,8 @@ function _bwlPctSliderInput(idx) {
   var d = document.getElementById('bwl-date-' + idx).value;
   var checkinH = _bwlCheckinHours[d] || 8;
   document.getElementById('bwl-hours-' + idx).textContent = (pct / 100 * checkinH).toFixed(1);
+  var valEl = document.getElementById('bwl-pct-slider-val-' + idx);
+  if (valEl) valEl.textContent = pct + '%';
   _bwlUpdatePctRing(idx); _bwlCheckOverPct();
 }
 
@@ -726,6 +739,8 @@ function _bwlUpdatePctRing(idx) {
 
 function _bwlProgSliderInput(idx) {
   var prog = parseInt(document.getElementById('bwl-prog-' + idx).value) || 0;
+  var valEl = document.getElementById('bwl-prog-slider-val-' + idx);
+  if (valEl) valEl.textContent = prog + '%';
   document.getElementById('bwl-prog-ring-' + idx).innerHTML = _bwlProgressRing(prog, 32, 'var(--success)');
 }
 

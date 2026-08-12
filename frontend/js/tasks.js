@@ -2121,15 +2121,17 @@ function _wlBuildRow(idx, defaultDate, progress) {
       '<div id="wl-pct-ring-' + idx + '" style="width:80px;flex-shrink:0;cursor:pointer;text-align:center" onclick="_wlShowPctSlider(' + idx + ')" title="点击调整占比">' +
         _wlProgressRing(25, 38, 'var(--accent)') +
       '</div>' +
-      '<div id="wl-pct-slider-' + idx + '" style="display:none;flex-shrink:0;width:80px">' +
-        '<input type="range" id="' + pId + '" min="5" max="100" step="5" value="25" style="width:100%" oninput="_wlPctSliderInput(' + idx + ')" onblur="_wlHidePctSlider(' + idx + ')">' +
+      '<div id="wl-pct-slider-' + idx + '" style="display:none;flex-shrink:0;align-items:center;gap:4px;width:130px">' +
+        '<input type="range" id="' + pId + '" min="5" max="100" step="1" value="25" style="flex:1" oninput="_wlPctSliderInput(' + idx + ')" onblur="_wlHidePctSlider(' + idx + ')">' +
+        '<span id="wl-pct-slider-val-' + idx + '" style="font-size:13px;font-weight:600;color:var(--accent);min-width:38px;text-align:right">25%</span>' +
       '</div>' +
       // Progress: ring by default, click to show inline slider
       '<div id="wl-prog-ring-' + idx + '" style="width:80px;flex-shrink:0;cursor:pointer;text-align:center" onclick="_wlShowProgSlider(' + idx + ')" title="点击调整进度">' +
         _wlProgressRing(progress, 38, 'var(--success)') +
       '</div>' +
-      '<div id="wl-prog-slider-' + idx + '" style="display:none;flex-shrink:0;width:80px">' +
-        '<input type="range" id="' + gId + '" min="0" max="100" step="5" value="' + progress + '" style="width:100%" oninput="_wlProgSliderInput(' + idx + ')" onblur="_wlHideProgSlider(' + idx + ')">' +
+      '<div id="wl-prog-slider-' + idx + '" style="display:none;flex-shrink:0;align-items:center;gap:4px;width:130px">' +
+        '<input type="range" id="' + gId + '" min="0" max="100" step="5" value="' + progress + '" style="flex:1" oninput="_wlProgSliderInput(' + idx + ')" onblur="_wlHideProgSlider(' + idx + ')">' +
+        '<span id="wl-prog-slider-val-' + idx + '" style="font-size:13px;font-weight:600;color:var(--success);min-width:38px;text-align:right">' + progress + '%</span>' +
       '</div>' +
       '<span id="' + aId + '" style="width:80px;flex-shrink:0;font-size:14px;color:var(--success);text-align:center">可用 100%</span>' +
       '<span style="width:32px;flex-shrink:0;text-align:center">' + iconDelete('_wlRemoveRow(' + idx + ')', '删除此行') + '</span>' +
@@ -2204,7 +2206,17 @@ function _wlOnDateChange(idx) {
     var av = document.getElementById('wl-avail-' + idx);
     if (av) { av.textContent = '可用 ' + remaining + '%'; av.style.color = remaining > 0 ? 'var(--success)' : 'var(--danger)'; }
     var pctEl = document.getElementById('wl-pct-' + idx);
-    if (pctEl) { pctEl.max = Math.max(5, remaining); if (parseInt(pctEl.value) > remaining) pctEl.value = Math.max(5, remaining); _wlUpdatePctRing(idx); }
+    if (remaining <= 0) {
+      // 剩余可用为 0%：占比圆环和工时显示 '-'
+      var ringEl = document.getElementById('wl-pct-ring-' + idx);
+      if (ringEl) ringEl.innerHTML = '<span style="font-size:15px;color:var(--muted)">-</span>';
+      var hoursEl = document.getElementById('wl-hours-' + idx);
+      if (hoursEl) hoursEl.textContent = '-';
+    } else if (pctEl) {
+      pctEl.max = Math.max(5, remaining);
+      if (parseInt(pctEl.value) > remaining) pctEl.value = Math.max(5, remaining);
+      _wlUpdatePctRing(idx);
+    }
     _wlCheckOverPct();
   }).catch(function(){});
 }
@@ -2235,6 +2247,8 @@ function _wlPctSliderInput(idx) {
   var d = document.getElementById('wl-date-' + idx).value;
   var checkinH = _wlCheckinHours[d] || 8;
   document.getElementById('wl-hours-' + idx).textContent = (pct / 100 * checkinH).toFixed(1);
+  var valEl = document.getElementById('wl-pct-slider-val-' + idx);
+  if (valEl) valEl.textContent = pct + '%';
   _wlUpdatePctRing(idx);
   _wlCheckOverPct();
 }
@@ -2244,6 +2258,8 @@ function _wlUpdatePctRing(idx) {
 }
 function _wlProgSliderInput(idx) {
   var prog = parseInt(document.getElementById('wl-prog-' + idx).value) || 0;
+  var valEl = document.getElementById('wl-prog-slider-val-' + idx);
+  if (valEl) valEl.textContent = prog + '%';
   document.getElementById('wl-prog-ring-' + idx).innerHTML = _wlProgressRing(prog, 32, 'var(--success)');
 }
 
