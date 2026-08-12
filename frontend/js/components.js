@@ -2167,7 +2167,7 @@ function openDayDetail(dateStr, totalHours, fromWecom) {
           '<td style="text-align:center">' + (t.progress||0) + '%</td>' +
           '<td style="text-align:center;font-weight:600;color:var(--accent)">' + (t.percentage ? t.percentage+'%' : '<span style="color:var(--muted)">—</span>') + '</td>' +
           '<td style="text-align:right;font-weight:500">' + ((t.calculated_hours||t.hours||0)).toFixed(1) + 'h</td>' +
-          '<td style="font-size:11px;color:var(--muted);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escHtml(t.description||'')+'">' + escHtml(desc) + '</td>' +
+          '<td style="font-size:11px;color:var(--muted);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escHtml(t.description||'')+'">' + renderMarkdown(desc) + '</td>' +
           '<td style="white-space:nowrap">' +
             iconEdit('editWorklogEntryById(' + t.id + ',\'' + dateStr + '\')', '编辑') +
             iconDelete('deleteWorklogEntry(' + t.id + ',' + (t.source==='bug'?'true':'false') + ',' + (t.bug_id||'null') + ')', '删除') +
@@ -2475,12 +2475,16 @@ function _getIntensityStyle(hours) {
   return {bg: 'background:var(--danger);color:#fff', text: '#fff'};
 }
 
-/* ── Markdown Rendering ── */
+/* ── Rich Content Rendering (HTML / Markdown) ── */
 function renderMarkdown(md) {
   if (!md) return '';
+  var s = String(md).trim();
+  // Already HTML? Return as-is (HugeRTE stores HTML content)
+  if (/^\s*</.test(s)) return s;
+  // Legacy Markdown content — convert to HTML
   try {
     if (typeof marked !== 'undefined' && marked.parse) {
-      return marked.parse(md);
+      return marked.parse(s);
     }
   } catch(e) {}
   return '<pre style="white-space:pre-wrap;font-size:13px">' + escHtml(md) + '</pre>';
@@ -2506,7 +2510,8 @@ async function uploadAttachment(bugId, file, analysisId) {
   });
 }
 
-/* ── Image Paste Handler ── */
+/* ── Image Paste Handler (DEPRECATED — replaced by HugeRTE) ── */
+// eslint-disable-next-line no-unused-vars
 function initImagePaste(textarea, bugId, onUrlInserted) {
   if (!textarea) return;
   textarea.addEventListener('paste', function(e) {

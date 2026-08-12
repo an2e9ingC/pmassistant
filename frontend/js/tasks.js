@@ -132,12 +132,11 @@ function _startInlineEdit(el) {
     var taId = 'ef-ta-' + taskId + '-' + fieldName;
     field.innerHTML = '<textarea class="search-inp ef-input" id="' + taId + '" rows="4" style="width:100%;box-sizing:border-box;font-size:13px;margin-top:1px;resize:vertical">' + escHtml(currentVal) + '</textarea>' +
       '<div id="' + taId + '-img-preview" style="margin-top:4px;min-height:0;max-height:30vh;overflow-y:auto"></div>' +
-      '<div style="font-size:10px;color:var(--muted);margin-top:2px">支持粘贴图片 (Ctrl+V)</div>' +
       '<div style="display:flex;gap:10px;margin-top:6px"><button class="btn-xs ef-save-btn" onclick="event.stopPropagation();_saveInlineEdit(this)">✓</button><button class="btn-xs ef-cancel-btn" onclick="event.stopPropagation();_cancelInlineEdit(this)">✕</button></div>';
     var inp = field.querySelector('.ef-input');
     if (inp) { setTimeout(function() { inp.focus(); }, 50); }
-    // Init image paste for description textarea
-    setTimeout(function() { _clearNoteImagePreviews(taId + '-img-preview'); initNoteImagePaste(taId); _loadExistingNoteImages(currentVal, taId + '-img-preview'); }, 100);
+    // Init rich text editor for description
+    setTimeout(function() { initRichEditor(taId, {height: 300}); }, 100);
   }
 }
 
@@ -238,10 +237,7 @@ async function _saveInlineEdit(el) {
     return;
   }
 
-  // Upload pasted images for textarea fields
-  if (inputType === 'textarea' && typeof _uploadNoteImages === 'function') {
-    newVal = await _uploadNoteImages(newVal);
-  }
+  // HugeRTE editor syncs content to textarea automatically; no upload needed
 
   var data = {};
   if (inputType === 'number') {
@@ -320,7 +316,7 @@ function _doSaveFieldEdit(taskId, data, field) {
         _refreshTaskWorklogs(taskId);
         _loadDetailComments(taskId);
         setTimeout(function() {
-          initNoteImagePaste('ef-desc');
+          // (editor init moved to dynamic textarea creation)
         }, 100);
       }).catch(function() {});
     }
@@ -352,7 +348,7 @@ function _loadDetailComments(taskId) {
       columns: [
         { key: 'created_at', title: '时间', width: '130px', minWidth: 120, render: function(v) { return '<span style="font-size:10px;color:var(--muted);white-space:nowrap">'+(fmtISODateTime(v)||'')+'</span>'; } },
         { key: 'display_name', title: '用户', width: '80px', minWidth: 90, render: function(v, row) { return '<span style="font-size:12px">'+escHtml(v||row.username)+'</span>'; } },
-        { key: 'content', title: '内容', align: 'left', render: function(v) { return '<span style="font-size:13px">'+escHtml(v||'')+'</span>'; } }
+        { key: 'content', title: '内容', align: 'left', render: function(v) { return '<span style="font-size:13px">'+renderMarkdown(v||'')+'</span>'; } }
       ],
       data: comments,
     });
@@ -1020,7 +1016,7 @@ async function _refreshTaskDetailContent(taskId) {
     setTimeout(function() {
       var descField = document.querySelector('.editable-field[data-field="description"]');
       if (descField && freshTask.description) {
-        initNoteImagePaste('ef-desc');
+        // (editor init moved to dynamic textarea creation)
       }
     }, 200);
   } catch(e) {
@@ -1224,9 +1220,9 @@ function _renderTaskDetailBody(t) {
   html += '<div class="card info-glass-card" style="margin-top:16px;padding:20px">' +
     '<div class="section-hd"><span class="section-title">描述</span></div>' +
     _buildEditableField(t.id, 'description', 'textarea',
-      '<div style="font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word;min-height:20px">' + (t.description ? escHtml(t.description) : '<span style="color:var(--muted)">暂无描述，点击编辑</span>') + '</div>',
+      '<div style="font-size:13px;line-height:1.6;min-height:20px">' + (t.description ? renderMarkdown(t.description) : '<span style="color:var(--muted)">暂无描述，点击编辑</span>') + '</div>',
       t.description || '') +
-    '<div id="ef-desc-img-preview" style="margin-top:4px;min-height:0;max-height:50vh;overflow-y:auto"></div>' +
+    '<div id="ef-desc-img-preview" style="display:none"></div>' +
   '</div>';
 
   // ── Section 4: 产出物 ──
@@ -1297,7 +1293,7 @@ function _loadViewComments(taskId) {
         return '<tr>' +
           '<td style="font-size:10px;color:var(--muted);white-space:nowrap">' + (fmtISODateTime(c.created_at) || '') + '</td>' +
           '<td style="font-size:12px">' + escHtml(c.display_name || c.username) + '</td>' +
-          '<td style="font-size:13px">' + escHtml(c.content) + '</td></tr>';
+          '<td style="font-size:13px">' + renderMarkdown(c.content) + '</td></tr>';
       }).join('') + '</tbody></table>';
   }).catch(function() {});
 }
@@ -1402,8 +1398,6 @@ function _showTaskForm(title, task) {
   bodyHtml += '<div style="' + _card + '">' +
     '<div style="' + _cardHd + '">描述</div>' +
     '<textarea class="search-inp" id="tf-desc" rows="3" style="width:100%;min-height:60px;height:auto;max-height:30vh;box-sizing:border-box;resize:vertical">' + escHtml(t.description || '') + '</textarea>' +
-    '<div style="font-size:10px;color:var(--muted);margin-top:2px">支持粘贴图片 (Ctrl+V)</div>' +
-    '<div id="tf-desc-img-preview" style="margin-top:4px;min-height:0;max-height:50vh;overflow-y:auto"></div>' +
   '</div>';
 
   // ── Section 4: 产出物 ──
@@ -1443,10 +1437,8 @@ function _showTaskForm(title, task) {
   bodyHtml = '<div style="max-height:75vh;overflow-y:auto;padding-right:4px">' + bodyHtml + '</div>';
   var headerExtra = isEdit ? '' : '<button class="btn btn-xs" style="font-size:11px;white-space:nowrap" onclick="_closeTaskDialog();openBatchCreateDialog()">📝 批量创建</button>';
   openDialog(title, bodyHtml, buttons, {maxWidth: '80vw', maxHeight: '90vh', headerExtra: headerExtra});
-  _clearNoteImagePreviews('tf-desc-img-preview');
   setTimeout(function() {
-    initNoteImagePaste('tf-desc');
-    if (t.description) { _loadExistingNoteImages(t.description, 'tf-desc-img-preview'); }
+    initRichEditor('tf-desc', {height: 360});
   }, 150);
 
   // Pre-fill project, assignee, reviewer, and stage from task data (edit mode)
@@ -1584,7 +1576,6 @@ function addOutputRow() {
 
 async function submitTask(taskId) {
   var desc = document.getElementById('tf-desc').value.trim();
-  desc = await _uploadNoteImages(desc);
   var data = {
     title: document.getElementById('tf-title').value.trim(),
     description: desc,
@@ -2036,7 +2027,7 @@ function _initWorklogDt(logs, taskId) {
       { key: 'user', title: '用户', minWidth: 90, render: function(v, row) { return '<span style="font-size:11px">'+escHtml(v||row.username||'?')+'</span>'; } },
       { key: 'percentage', title: '占比', minWidth: 42, render: function(v) { return v ? '<span style="font-weight:600;color:var(--accent)">'+v+'%</span>' : '<span style="color:var(--muted)">—</span>'; } },
       { key: 'calculated_hours', title: '工时(h)', minWidth: 52, render: function(v, row) { var h = v || row.hours || 0; return (h||0).toFixed(1); } },
-      { key: 'description', title: '描述', align: 'left', render: function(v) { return '<span style="white-space:normal;word-break:break-word">'+escHtml(v||'')+'</span>'; } },
+      { key: 'description', title: '描述', align: 'left', render: function(v) { return '<span style="white-space:normal;word-break:break-word">'+renderMarkdown(v||'')+'</span>'; } },
       { key: 'actions', title: '操作', width: '100px', minWidth: 100, render: function(v, row) { return iconEdit('openWorklogEditDialog('+row.id+','+taskId+')','编辑')+iconDelete('deleteWorklogById('+row.id+','+taskId+')','删除'); } }
     ],
     data: logs,
@@ -2535,7 +2526,7 @@ async function _loadComments(taskId) {
     comments.forEach(function(c) {
       html += '<div style="padding:6px 0;border-bottom:1px solid var(--border)">' +
         '<div style="font-size:10px;color:var(--muted);margin-bottom:2px">' + escHtml(c.display_name || c.username) + ' · ' + (fmtISODateTime(c.created_at) || '') + '</div>' +
-        '<div style="font-size:13px">' + escHtml(c.content) + '</div>' +
+        '<div style="font-size:13px">' + renderMarkdown(c.content) + '</div>' +
       '</div>';
     });
     el.innerHTML = html;

@@ -721,7 +721,7 @@ function renderProductNotes(notes) {
       { key: 'recorded_by', title: '记录人', minWidth: 100, width: '70px', render: function(v) { return '<span style="font-size:12.5px;font-weight:540">'+escHtml(_prodUserDisplayMap[v] || v || '')+'</span>'; } },
       { key: 'content', title: '内容', render: function(v, row) {
         var plainText = stripHtml(renderMarkdown?renderMarkdown(v):v).substring(0,80);
-        return '<span style="font-size:13px;line-height:1.5">'+(row.parent_id?'<span style="font-size:10px;color:var(--accent);margin-right:4px">↳ 回复</span>':'')+escHtml(plainText)+(v&&v.length>80?'...':'')+(/!\[.*\]\(.*\)/.test(v)?' <span style="font-size:10px">📷</span>':'')+'</span>';
+        return '<span style="font-size:13px;line-height:1.5">'+(row.parent_id?'<span style="font-size:10px;color:var(--accent);margin-right:4px">↳ 回复</span>':'')+escHtml(plainText)+(v&&v.length>80?'...':'')+(/!\[.*\]\(.*\)/.test(v)||/<img\b/.test(v)?' <span style="font-size:10px">📷</span>':'')+'</span>';
       }},
       { key: 'actions', title: '操作', width: '130px', minWidth: 130, render: function(v, row) {
         var isMine = row.recorded_by === currentUser;
@@ -770,7 +770,11 @@ function openViewProdNoteDialog(noteId) {
     var notes = (result && result.length) ? result : [];
     var note = notes.find(function(n) { return n.id === noteId; });
     if (!note) { showToast('笔记不存在', 'error'); return; }
-    var content = note.content.replace(/!\[\]\((\/api\/note-images\/[^) ]+)\s*=(\d+)x\)/g, '<img src="$1" style="width:$2px;max-width:100%">');
+    // Pre-process legacy custom image size syntax: ![](url =Wx) -> <img>
+    var content = note.content;
+    if (!/^\s*</.test(content)) {
+      content = content.replace(/!\[\]\((\/api\/note-images\/[^) ]+)\s*=(\d+)x\)/g, '<img src="$1" style="width:$2px;max-width:100%">');
+    }
     var contentHtml = (typeof renderMarkdown === 'function') ? renderMarkdown(content) : '<pre>' + escHtml(content) + '</pre>';
     var dialog = document.createElement('div');
     dialog.className = 'note-dialog-overlay';
@@ -791,7 +795,7 @@ function openViewProdNoteDialog(noteId) {
 }
 
 async function showAddProductNoteDialog() {
-  _clearNoteImagePreviews('prod-note-content-img-preview');
+  // DEPRECATED
   // Fetch note categories from product doc template stage_types
   var categoriesHtml = '<option value="">请选择领域...</option>';
   try {
@@ -818,7 +822,7 @@ async function showAddProductNoteDialog() {
     '</div>',
     null,
     {maxWidth: '80vw', maxHeight: '90vh', hideClose: true});
-  setTimeout(function() { initNoteImagePaste('prod-note-content'); }, 100);
+  setTimeout(function() { initRichEditor('prod-note-content', {height: 300}); }, 100);
 }
 
 async function addProductNote() {
@@ -826,7 +830,7 @@ async function addProductNote() {
   var category = document.getElementById('prod-note-category').value;
   if (!content) { showToast('请输入笔记内容', 'error'); return; }
   if (!category) { showToast('请选择涉及领域', 'error'); return; }
-  content = await _uploadNoteImages(content);
+// HugeRTE handles content directly
   closeSharedDialog();
   try {
     await API.post('/products/' + _prodDetailCurCode + '/notes', {content: content, category: category});
@@ -853,12 +857,12 @@ async function deleteProductNote(noteId) {
 
 function openEditProdNoteDialog(noteId) {
   if (!_prodDetailCurCode) return;
-  _clearNoteImagePreviews('edit-prod-note-content-img-preview');
+  // DEPRECATED
   API.get('/products/' + _prodDetailCurCode + '/notes').then(function(result) {
     var notes = (result && result.length) ? result : [];
     var note = notes.find(function(n) { return n.id === noteId; });
     if (!note) { showToast('笔记不存在', 'error'); return; }
-    setTimeout(function() { _loadExistingNoteImages(note.content, 'edit-prod-note-content-img-preview'); }, 150);
+// DEPRECATED
     // Fetch categories
     var catsHtml = '<option value="">请选择领域...</option>';
     API.get('/products/' + _prodDetailCurCode + '/note-categories').then(function(cats) {
@@ -879,7 +883,7 @@ function openEditProdNoteDialog(noteId) {
         [{text: '取消', onclick: 'closeSharedDialog()'},
          {text: '保存', cls: 'btn-primary', onclick: 'saveEditProdNote(' + noteId + ')'}],
         {maxWidth: '80vw', maxHeight: '90vh', hideClose: true});
-    setTimeout(function() { initNoteImagePaste('edit-prod-note-content'); }, 100);
+    setTimeout(function() { initRichEditor('edit-prod-note-content', {height: 300}); }, 100);
     });
   });
 }
@@ -888,7 +892,7 @@ async function saveEditProdNote(noteId) {
   var content = document.getElementById('edit-prod-note-content').value.trim();
   var category = document.getElementById('edit-prod-note-cat').value;
   if (!content) { showToast('请输入内容', 'error'); return; }
-  content = await _uploadNoteImages(content);
+// HugeRTE handles content directly
   closeSharedDialog();
   try {
     await API.put('/products/' + _prodDetailCurCode + '/notes/' + noteId, {content: content, category: category});
@@ -900,7 +904,7 @@ async function saveEditProdNote(noteId) {
 
 function openReplyProdNoteDialog(parentId) {
   if (!_prodDetailCurCode) return;
-  _clearNoteImagePreviews('reply-prod-note-content-img-preview');
+  // DEPRECATED
   API.get('/products/' + _prodDetailCurCode + '/notes').then(function(result) {
     var notes = (result && result.length) ? result : [];
     var parent = notes.find(function(n) { return n.id === parentId; });
@@ -917,14 +921,14 @@ function openReplyProdNoteDialog(parentId) {
       [{text: '取消', onclick: 'closeSharedDialog()'},
        {text: '回复', cls: 'btn-primary', onclick: 'submitReplyProdNote(' + parentId + ',\'' + escHtml(catLabel).replace(/'/g, "\\'") + '\')'}],
       {maxWidth: '80vw', maxHeight: '90vh', hideClose: true});
-    setTimeout(function() { initNoteImagePaste('reply-prod-note-content'); }, 100);
+    setTimeout(function() { initRichEditor('reply-prod-note-content', {height: 300}); }, 100);
   });
 }
 
 async function submitReplyProdNote(parentId, category) {
   var content = document.getElementById('reply-prod-note-content').value.trim();
   if (!content) { showToast('请输入回复内容', 'error'); return; }
-  content = await _uploadNoteImages(content);
+// HugeRTE handles content directly
   closeSharedDialog();
   try {
     await API.post('/products/' + _prodDetailCurCode + '/notes', {content: content, category: category, parent_id: parentId});

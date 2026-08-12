@@ -490,3 +490,172 @@ async function _uploadNoteImages(content) {
   }
   return content;
 }
+
+/* ===================================================================
+   HugeRTE Rich Text Editor — init, content, upload, theme
+   =================================================================== */
+
+var _hugerteSkinInited = false;
+
+/** Inject HugeRTE editor chrome CSS overrides to match PMA theme */
+function _ensureHugerteSkin() {
+  if (_hugerteSkinInited || document.getElementById('hugerte-skin-override')) return;
+  _hugerteSkinInited = true;
+  var style = document.createElement('style');
+  style.id = 'hugerte-skin-override';
+  style.textContent = [
+    '.tox .tox-toolbar, .tox .tox-toolbar__primary { background:var(--surface) !important; border-color:var(--border) !important; }',
+    '.tox .tox-tbtn { color:var(--text) !important; }',
+    '.tox .tox-tbtn:hover { background:var(--surface2) !important; }',
+    '.tox .tox-tbtn--enabled, .tox .tox-tbtn--enabled:hover { background:var(--accent-lt) !important; color:var(--accent) !important; }',
+    '.tox .tox-edit-area__iframe { background:var(--bg) !important; }',
+    '.tox .tox-statusbar { background:var(--surface) !important; border-color:var(--border) !important; color:var(--muted) !important; }',
+    '.tox .tox-dialog { background:var(--surface) !important; border:1px solid var(--border) !important; }',
+    '.tox .tox-dialog__header, .tox .tox-dialog__footer { background:var(--surface) !important; }',
+    '.tox .tox-dialog__title { color:var(--text) !important; }',
+    '.tox .tox-textfield, .tox .tox-listboxfield .tox-listbox, .tox .tox-textarea { background:var(--bg) !important; color:var(--text) !important; border-color:var(--border) !important; }',
+    '.tox .tox-menu { background:var(--surface) !important; border-color:var(--border) !important; }',
+    '.tox .tox-collection__item { color:var(--text) !important; }',
+    '.tox .tox-collection__item--active { background:var(--accent-lt) !important; }',
+    '.tox .tox-collection__item--enabled { color:var(--text) !important; }',
+  ].join('\n');
+  document.head.appendChild(style);
+}
+
+/** Read PMA CSS variables and build content_style for HugeRTE iframe */
+function _getEditorContentStyle() {
+  var cs = getComputedStyle(document.documentElement);
+  var fg = cs.getPropertyValue('--text').trim() || '#17191F';
+  var bg = cs.getPropertyValue('--bg').trim() || '#F4F6FB';
+  var accent = cs.getPropertyValue('--accent').trim() || '#2563EB';
+  var muted = cs.getPropertyValue('--muted').trim() || '#6B7694';
+  var surface2 = cs.getPropertyValue('--surface2').trim() || '#EBEFF5';
+  var border = cs.getPropertyValue('--border').trim() || '#E3E8F4';
+  return [
+    'body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif; font-size:13px;',
+    '  color:' + fg + '; background:' + bg + '; padding:8px 12px; margin:0; line-height:1.6; }',
+    'a { color:' + accent + '; }',
+    'img { max-width:100%; height:auto; }',
+    'code { font-family:ui-monospace,monospace; background:' + surface2 + '; padding:1px 4px; border-radius:3px; }',
+    'pre { background:' + surface2 + '; padding:8px; border-radius:4px; overflow-x:auto; }',
+    'td,th { border:1px solid ' + border + '; padding:4px 8px; }',
+    'table { border-collapse:collapse; width:100%; }',
+    'blockquote { border-left:3px solid ' + accent + '; padding-left:12px; margin-left:0; color:' + muted + '; }'
+  ].join('\n');
+}
+
+/** Image upload handler for HugeRTE -> POST /api/note-images */
+function _hugerteImageUploadHandler(blobInfo, progress) {
+  var formData = new FormData();
+  formData.append('file', blobInfo.blob(), blobInfo.filename());
+  var token = (typeof API !== 'undefined' && API.token) ? API.token : (localStorage.getItem('pma_token') || '');
+  return fetch('/api/note-images', {
+    method: 'POST',
+    body: formData,
+    headers: { 'Authorization': 'Bearer ' + token }
+  }).then(function(r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }).then(function(j) {
+    if (j.code === 0 && j.data && j.data.url) {
+      return j.data.url;
+    }
+    throw new Error(j.message || 'Upload failed');
+  });
+}
+
+/**
+ * Initialize HugeRTE rich text editor on a textarea.
+ * @param {string} textareaId - DOM id of the <textarea>
+ * @param {object} [options]
+ * @param {number} [options.height=360]
+ * @param {string|boolean} [options.toolbar] - toolbar config, false = no toolbar
+ * @param {string} [options.plugins] - plugin list
+ * @param {function} [options.images_upload_handler] - custom upload handler
+ * @param {function} [options.onInit] - called after editor is ready
+ * @returns {string|null} textareaId on success, null if element not found
+ */
+function initRichEditor(textareaId, options) {
+  var ta = document.getElementById(textareaId);
+  if (!ta) return null;
+  options = options || {};
+
+  // Destroy existing instance (idempotent)
+  if (typeof hugerte !== 'undefined' && hugerte.get(textareaId)) {
+    hugerte.get(textareaId).remove();
+  }
+  if (typeof hugerte === 'undefined') {
+    console.error('HugeRTE not loaded');
+    return null;
+  }
+
+  // Ensure theme CSS is injected
+  _ensureHugerteSkin();
+
+  // Get initial content: already HTML, or Markdown -> convert via marked
+  var rawContent = ta.value || '';
+  var htmlContent = rawContent;
+  if (rawContent && typeof marked !== 'undefined' && marked.parse) {
+    try {
+      // Check if already HTML (starts with a tag)
+      if (!/^\s*</.test(rawContent.trim())) {
+        htmlContent = marked.parse(rawContent);
+      }
+    } catch(e) { /* keep raw */ }
+  }
+
+  var defaultToolbar = 'undo redo | blocks fontsize | bold italic underline strikethrough forecolor backcolor |'
+    + ' alignleft aligncenter alignright | bullist numlist | link image table | code removeformat';
+
+  var isSimple = options.toolbar === false;
+
+  hugerte.init({
+    target: ta,
+    height: options.height || 360,
+    menubar: false,
+    statusbar: false,
+    plugins: options.plugins || (isSimple ? 'autolink lists code' : 'autolink image link lists table code'),
+    toolbar: isSimple ? false : (options.toolbar || defaultToolbar),
+    block_formats: '段落=p;标题2=h2;标题3=h3;标题4=h4;代码块=pre',
+    font_size_formats: '12px 13px 14px 16px 18px 20px 24px',
+    branding: false,
+    promotion: false,
+    paste_data_images: true,
+    images_upload_handler: options.images_upload_handler || _hugerteImageUploadHandler,
+    content_style: _getEditorContentStyle(),
+    setup: function(editor) {
+      editor.on('init', function() {
+        if (htmlContent) editor.setContent(htmlContent);
+        // Sync editor content -> hidden textarea value
+        editor.on('change input', function() {
+          ta.value = editor.getContent();
+        });
+        if (options.onInit) options.onInit(editor);
+      });
+    }
+  });
+
+  // Store mapping
+  window._hugerteMap = window._hugerteMap || {};
+  window._hugerteMap[textareaId] = textareaId;
+  return textareaId;
+}
+
+/** Get HTML content from a HugeRTE editor instance */
+function getEditorContent(textareaId) {
+  var ed = hugerte.get(textareaId);
+  return ed ? ed.getContent() : '';
+}
+
+/** Destroy a HugeRTE editor instance and restore the textarea */
+function destroyEditor(textareaId) {
+  if (hugerte.get(textareaId)) { hugerte.get(textareaId).remove(); }
+  delete (window._hugerteMap || {})[textareaId];
+  var ta = document.getElementById(textareaId);
+  if (ta) ta.style.display = '';
+}
+
+/* ── DEPRECATED: Old image paste system (replaced by HugeRTE) ── */
+// initNoteImagePaste, _addNoteImagePreview, _loadExistingNoteImages,
+// _clearNoteImagePreviews, _uploadNoteImages, _noteImgCounter
+// These are kept for reference; new code should use initRichEditor().

@@ -324,7 +324,7 @@ function _loadBugComments(bugId) {
       columns: [
         { key: 'created_at', title: '时间', width: '130px', minWidth: 120, render: function(v) { return '<span style="font-size:10px;color:var(--muted);white-space:nowrap">'+(fmtISODateTime(v)||'')+'</span>'; } },
         { key: 'username', title: '用户', width: '80px', minWidth: 90, render: function(v) { return '<span style="font-size:12px">'+escHtml(v)+'</span>'; } },
-        { key: 'content', title: '内容', align: 'left', render: function(v) { return '<span style="font-size:13px">'+escHtml(v||'')+'</span>'; } }
+        { key: 'content', title: '内容', align: 'left', render: function(v) { return '<span style="font-size:13px">'+renderMarkdown(v||'')+'</span>'; } }
       ],
       data: comments,
     });
@@ -425,22 +425,16 @@ function _showBugForm(b) {
       '<div><span style="' + _bCardHd + ';margin-bottom:0">描述 (Markdown)</span>' +
       '<select class="search-inp" id="bf-desc-tpl" onchange="_bugApplyDescTemplate()" style="margin-left:12px;font-size:11px;padding:2px 6px">' +
         '<option value="">不使用模板</option></select></div>' +
-      '<button class="btn btn-xs" onclick="_bugToggleMdPreview()" style="font-size:10px;padding:1px 6px">预览</button>' +
     '</div>' +
     '<div style="margin-top:6px">' +
-      '<textarea class="search-inp" id="bf-desc" rows="4" style="width:100%;min-height:80px;height:auto;max-height:30vh;box-sizing:border-box;resize:vertical">' + escHtml(t.description || '') + '</textarea>' +
+      '<textarea class="search-inp" id="bf-desc" rows="4" style="width:100%;min-height:80px;height:auto;max-height:30vh;box-sizing:border-box">' + escHtml(t.description || '') + '</textarea>' +
     '</div>' +
-    '<div id="bf-desc-preview" class="markdown-body" style="display:none;overflow-y:auto;padding:8px;border:1px solid var(--border);border-radius:6px;margin-top:6px;font-size:13px;max-height:30vh"></div>' +
-    '<div style="font-size:10px;color:var(--muted);margin-top:4px">支持粘贴图片 (Ctrl+V)</div>' +
-    '<div id="bf-desc-img-preview" style="margin-top:4px;min-height:0;max-height:50vh;overflow-y:auto"></div>' +
   '</div>';
 
   bodyHtml = '<div style="max-height:75vh;overflow-y:auto;padding-right:4px">' + bodyHtml + '</div>';
 
   var title = isEdit ? '编辑Bug #'+t.id : '新建Bug';
-  _clearNoteImagePreviews('bf-desc-img-preview');
-  setTimeout(function() { initNoteImagePaste('bf-desc'); }, 100);
-  setTimeout(function() { _loadExistingNoteImages(t.description||'', 'bf-desc-img-preview'); }, 200);
+  setTimeout(function() { initRichEditor('bf-desc', {height: 360}); }, 100);
   openDialog(title, bodyHtml, [
     {text:'取消',onclick:'closeSharedDialog()'},
     {text:isEdit?'保存':'创建',cls:'btn-primary',onclick:'_submitBug('+(t.id||'null')+')'}], {maxWidth:'80vw', maxHeight:'90vh'});
@@ -527,22 +521,8 @@ function _bugFillComponents(tpls) {
   (tpls||[]).forEach(function(t) { sel.innerHTML += '<option value="'+t.id+'">'+escHtml(t.doc_name)+'</option>'; });
 }
 
-function _bugToggleMdPreview() {
-  var ta = document.getElementById('bf-desc');
-  var pv = document.getElementById('bf-desc-preview');
-  var btn = event && event.target;
-  if (!ta || !pv) return;
-  if (pv.style.display === 'none') {
-    pv.innerHTML = renderMarkdown(ta.value);
-    pv.style.display = '';
-    ta.style.display = 'none';
-    if (btn) btn.textContent = '编辑';
-  } else {
-    pv.style.display = 'none';
-    ta.style.display = '';
-    if (btn) btn.textContent = '预览';
-  }
-}
+// DEPRECATED: HugeRTE is WYSIWYG, no preview toggle needed
+function _bugToggleMdPreview() {}
 
 function _bugApplyDescTemplate() {
   var tplSel = document.getElementById('bf-desc-tpl');
@@ -574,7 +554,6 @@ async function _submitBug(bugId) {
   if (!valid) return;
 
   var desc = document.getElementById('bf-desc').value.trim();
-  desc = await _uploadNoteImages(desc);
   var payload = {
     title:title, product_id:pid,
     description:desc,
@@ -807,7 +786,7 @@ function _initBugWorklogDt(logs, bugId) {
       { key: 'user', title: '用户', width: '44px', minWidth: 90, render: function(v, row) { return '<span style="font-size:11px">'+escHtml(getDisplayName(v||row.username||''))+'</span>'; } },
       { key: 'percentage', title: '占比', width: '42px', minWidth: 42, render: function(v) { return v ? '<span style="font-weight:600;color:var(--accent)">'+v+'%</span>' : '<span style="color:var(--muted)">—</span>'; } },
       { key: 'calculated_hours', title: '工时(h)', width: '52px', minWidth: 52, render: function(v, row) { var h = v || row.hours || 0; return (h||0).toFixed(1); } },
-      { key: 'description', title: '描述', align: 'left', render: function(v) { return '<span style="white-space:normal;word-break:break-word">'+escHtml(v||'')+'</span>'; } },
+      { key: 'description', title: '描述', align: 'left', render: function(v) { return '<span style="white-space:normal;word-break:break-word">'+renderMarkdown(v||'')+'</span>'; } },
       { key: 'actions', title: '', width: '90px', minWidth: 90, render: function(v, row) { return iconEdit('openBugWorklogEditDialog('+bugId+','+row.id+')')+iconDelete('deleteBugWorklog('+bugId+','+row.id+')'); } }
     ],
     data: logs,
@@ -1004,7 +983,7 @@ function _startBugInlineEdit(el) {
       '<div style="display:flex;gap:10px;margin-top:6px"><button class="btn-xs ef-save-btn" onclick="event.stopPropagation();_saveBugInlineEdit(this)">✓</button><button class="btn-xs ef-cancel-btn" onclick="event.stopPropagation();_cancelBugInlineEdit(this)">✕</button></div>';
     var inp = field.querySelector('.ef-input');
     if (inp) { setTimeout(function() { inp.focus(); }, 50); }
-    setTimeout(function() { _clearNoteImagePreviews(taId + '-img-preview'); initNoteImagePaste(taId); _loadExistingNoteImages(currentVal, taId + '-img-preview'); }, 100);
+    setTimeout(function() { initRichEditor(taId, {height: 300}); }, 100);
   } else if (inputType === 'user-select') {
     if (!window._allUsers || !window._allUsers.length) {
       field.innerHTML = '<span style="font-size:12px;color:var(--muted)">加载用户列表...</span>';
@@ -1156,9 +1135,7 @@ async function _saveBugInlineEdit(el) {
   }
 
   // Upload pasted images for textarea fields
-  if (inputType === 'textarea' && typeof _uploadNoteImages === 'function') {
-    newVal = await _uploadNoteImages(newVal);
-  }
+  // HugeRTE editor syncs content to textarea automatically; no upload needed
 
   var data = {};
   if (inputType === 'number') {
