@@ -238,6 +238,7 @@ PYEOF
   │     ├── git rebase origin/trunk（二次 rebase）
   │     ├── ⚠️ 版本号自检：检查 docs/dev-plan.md 今天是否已有同beta号记录，有则递增 → amend commit
   │     ├── 停 worktree 服务 + 清理 data 目录：./server.sh stop -p <PORT> && rm -rf data/
+  │     ├── ├── 释放端口：sed -i "\|^<worktree-name>=|d" $PMA_TRUNK_DIR/.claude/worktrees/used_server_ports
   │     ├── 切换到 trunk 目录：cd $PMA_TRUNK_DIR
   │     ├── git merge --no-ff <worktree-branch>
   │     ├── git push origin trunk
