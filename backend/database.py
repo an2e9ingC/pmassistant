@@ -627,10 +627,11 @@ def init_db():
         # Seed default roles if not exist
         default_roles = [
             ("public", "普通用户", "", "默认角色组，所有登录用户自动拥有（基础访问权限）"),
-            ("admin", "管理员", "admin,sync,project_edit,product_link,customer_link,doc_template,stage_mapping", "系统完整管理权限（不可修改）"),
-            ("ceo", "CEO", "", "查看所有项目数据"),
-            ("cto", "CTO", "", "查看所有项目数据"),
-            ("pm", "项目经理", "sync,project_edit,product_link,customer_link,doc_template,stage_mapping,task_edit", "项目管理+同步+产客关系维护+文档模板+阶段映射+任务"),
+            ("admin", "管理员", "admin,sync,project_edit,product_link,customer_link,doc_template,stage_mapping,manpower_view", "系统完整管理权限（不可修改）"),
+            ("ceo", "CEO", "manpower_view", "查看所有项目数据"),
+            ("cto", "CTO", "manpower_view", "查看所有项目数据"),
+            ("pm", "项目经理", "sync,project_edit,product_link,customer_link,doc_template,stage_mapping,task_edit,manpower_view", "项目管理+同步+产客关系维护+文档模板+阶段映射+任务"),
+            ("hr", "人力", "manpower_view", "人力报表+工时统计查看"),
             ("sales", "销售及售前", "", "查看售前+分配项目"),
             ("hw_dev", "硬件开发", "", "查看分配项目"),
             ("structure", "结构设计及装配", "", "查看分配项目"),
@@ -645,6 +646,17 @@ def init_db():
         for key, label, perms, desc in default_roles:
             if not db.query(Role).filter(Role.key == key).first():
                 db.add(Role(key=key, label=label, permissions=perms, description=desc))
+        db.commit()
+
+        # Ensure manpower_view is in admin/ceo/cto/pm existing roles
+        manpower_roles = ["admin", "ceo", "cto", "pm"]
+        for rk in manpower_roles:
+            role = db.query(Role).filter(Role.key == rk).first()
+            if role:
+                perms = set(role.permissions.split(",")) if role.permissions else set()
+                if "manpower_view" not in perms:
+                    perms.add("manpower_view")
+                    role.permissions = ",".join(sorted(perms))
         db.commit()
 
         if db.query(LocalUser).count() == 0:

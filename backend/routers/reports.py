@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
-from backend.middleware.auth import get_current_user
+from backend.middleware.auth import get_current_user, require_perm
 from backend.services import report_service
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
@@ -128,3 +128,51 @@ def daily_summary(
         },
         "message": "ok",
     }
+
+
+# ── Manpower Report ──
+
+@router.get("/manpower", response_model=dict)
+def manpower_report(
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    user_id: Optional[int] = Query(None),
+    project_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_perm("manpower_view")),
+):
+    """Manpower/hours report — by project, user, product dimensions."""
+    data = report_service.get_manpower_report(
+        db, date_from=date_from, date_to=date_to,
+        user_id=user_id, project_id=project_id,
+    )
+    return {"code": 0, "data": data, "message": "ok"}
+
+
+@router.get("/manpower/export", response_model=dict)
+def manpower_export(
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    user_id: Optional[int] = Query(None),
+    project_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_perm("manpower_view")),
+):
+    """Export manpower report as Excel (.xlsx)."""
+    from fastapi.responses import StreamingResponse
+    import io
+
+    output = io.BytesIO()
+    report_service.export_manpower_excel(
+        db, output,
+        date_from=date_from, date_to=date_to,
+        user_id=user_id, project_id=project_id,
+    )
+    output.seek(0)
+
+    filename = f"manpower_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )

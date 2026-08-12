@@ -618,26 +618,163 @@ async function _submitBug(bugId) {
 /* ── Worklog ── */
 
 function openBugWorklogDialog(bugId) {
-  var html = '<div><div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工时(h) *</label>' +
-    '<input class="search-inp" id="bwl-hours" type="number" step="0.5" value="1" style="width:100%;margin-top:2px"></div>' +
-    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">日期</label>' +
-    '<input class="search-inp" id="bwl-date" type="date" value="'+fmtLocalDate()+'" style="width:100%;margin-top:2px"></div>' +
-    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">描述</label>' +
-    '<textarea class="search-inp" id="bwl-desc" rows="2" style="width:100%;margin-top:2px;resize:vertical"></textarea></div></div>';
+  var today = fmtLocalDate();
+  var rowHtml = _bwlBuildRow(0, today);
+  var html = '<div>' +
+    '<div style="display:flex;gap:10px;align-items:center;border:1px solid transparent;padding:0 10px;margin-bottom:4px;font-size:13px;color:var(--muted);font-weight:600;text-align:center">' +
+      '<span style="width:155px;flex-shrink:0">日期</span>' +
+      '<span style="flex:1;min-width:120px">工作内容</span>' +
+      '<span style="width:60px;flex-shrink:0">工时</span>' +
+      '<span style="width:80px;flex-shrink:0">占比</span>' +
+      '<span style="width:80px;flex-shrink:0">进度</span>' +
+      '<span style="width:80px;flex-shrink:0">可用剩余</span>' +
+      '<span style="width:32px;flex-shrink:0"></span>' +
+    '</div>' +
+    '<div id="bwl-rows">' + rowHtml + '</div>' +
+    '<div style="text-align:center;margin-top:8px">' +
+      '<button class="btn btn-sm" onclick="_bwlAddRow()">+ 添加一行</button>' +
+    '</div>' +
+    '<input type="hidden" id="bwl-row-count" value="1">' +
+  '</div>';
+  
   openDialog('记录工时', html, [
     {text:'取消',onclick:'closeSharedDialog();openBugDetail('+bugId+')'},
-    {text:'提交',cls:'btn-primary',onclick:'_submitBugWorklog('+bugId+')'}], {maxWidth:400});
+    {text:'提交',cls:'btn-primary',onclick:'_submitBatchBugWorklog('+bugId+')'}], {maxWidth: '80vw'});
+
+  // Auto-load available percentage for default row
+  setTimeout(function() { _bwlOnDateChange(0); }, 100);
 }
 
-async function _submitBugWorklog(bugId) {
-  var h = parseFloat(document.getElementById('bwl-hours').value);
-  if (!h||h<=0) { showToast('请输入有效的工时数','error'); return; }
+function _bwlBuildRow(idx, defaultDate) {
+  return '<div class="bwl-row" data-idx="' + idx + '" style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px">' +
+    '<div style="display:flex;gap:10px;align-items:center">' +
+      '<input class="search-inp" id="bwl-date-' + idx + '" type="date" value="' + defaultDate + '" style="width:155px;box-sizing:border-box;font-size:15px;flex-shrink:0" onchange="_bwlOnDateChange(' + idx + ')">' +
+      '<input class="search-inp" id="bwl-desc-' + idx + '" placeholder="工作内容" style="flex:1;min-width:120px;box-sizing:border-box;font-size:15px">' +
+      '<div style="width:60px;flex-shrink:0;text-align:center;font-size:16px;font-weight:600;color:var(--fg)"><span id="bwl-hours-' + idx + '">2.0</span><span style="font-size:14px;color:var(--muted);font-weight:400">h</span></div>' +
+      '<div id="bwl-pct-ring-' + idx + '" style="width:80px;flex-shrink:0;cursor:pointer;text-align:center" onclick="_bwlShowPctSlider(' + idx + ')" title="点击调整占比">' +
+        _bwlProgressRing(25, 38, 'var(--accent)') +
+      '</div>' +
+      '<div id="bwl-pct-slider-' + idx + '" style="display:none;flex-shrink:0;width:80px">' +
+        '<input type="range" id="bwl-pct-' + idx + '" min="5" max="100" step="5" value="25" style="width:100%" oninput="_bwlPctSliderInput(' + idx + ')" onblur="_bwlHidePctSlider(' + idx + ')">' +
+      '</div>' +
+      '<div id="bwl-prog-ring-' + idx + '" style="width:80px;flex-shrink:0;cursor:pointer;text-align:center" onclick="_bwlShowProgSlider(' + idx + ')" title="点击调整进度">' +
+        _bwlProgressRing(0, 38, 'var(--success)') +
+      '</div>' +
+      '<div id="bwl-prog-slider-' + idx + '" style="display:none;flex-shrink:0;width:80px">' +
+        '<input type="range" id="bwl-prog-' + idx + '" min="0" max="100" step="5" value="0" style="width:100%" oninput="_bwlProgSliderInput(' + idx + ')" onblur="_bwlHideProgSlider(' + idx + ')">' +
+      '</div>' +
+      '<span id="bwl-avail-' + idx + '" style="width:80px;flex-shrink:0;font-size:14px;color:var(--success);text-align:center">可用 100%</span>' +
+      '<span style="width:32px;flex-shrink:0;text-align:center">' + iconDelete('_bwlRemoveRow(' + idx + ')', '删除此行') + '</span>' +
+    '</div>' +
+  '</div>';
+}
+
+function _bwlAddRow() { var c=parseInt(document.getElementById('bwl-row-count').value)||1; var lastDate=fmtLocalDate(); var rows=document.querySelectorAll('#bwl-rows .bwl-row'); if(rows.length>0){var li=rows[rows.length-1].getAttribute('data-idx');var ld=document.getElementById('bwl-date-'+li);if(ld&&ld.value){var d=new Date(ld.value+'T00:00:00');d.setDate(d.getDate()-1);lastDate=fmtLocalDate(d);}} var r=_bwlBuildRow(c,lastDate); document.getElementById('bwl-rows').insertAdjacentHTML('beforeend',r); document.getElementById('bwl-row-count').value=c+1; setTimeout(function(){_bwlOnDateChange(c);},50); }
+function _bwlRemoveRow(idx) { var rowsEl=document.getElementById('bwl-rows'); var rows=rowsEl.querySelectorAll('.bwl-row'); if(rows.length<=1){showToast('至少保留1行','warn');return;} var t=rowsEl.querySelector('.bwl-row[data-idx="'+idx+'"]'); if(t)t.remove(); document.getElementById('bwl-row-count').value=rows.length-1; _bwlCheckOverPct(); }
+
+function _bwlProgressRing(pct, size, color) {
+  var r = (size - 4) / 2;
+  var circ = 2 * Math.PI * r;
+  var dash = circ * pct / 100;
+  return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '">' +
+    '<circle cx="' + (size/2) + '" cy="' + (size/2) + '" r="' + r + '" fill="none" stroke="var(--border)" stroke-width="3"/>' +
+    '<circle cx="' + (size/2) + '" cy="' + (size/2) + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="3"' +
+    ' stroke-dasharray="' + dash + ' ' + (circ - dash) + '" stroke-linecap="round" transform="rotate(-90 ' + (size/2) + ' ' + (size/2) + ')"/>' +
+    '<text x="' + (size/2) + '" y="' + (size/2) + '" text-anchor="middle" dominant-baseline="central" font-size="' + (size*0.32) + '" font-weight="600" fill="var(--fg)">' + pct + '%</text></svg>';
+}
+
+var _bwlSavedPct = {};
+var _bwlCheckinHours = {};
+
+// ── Inline ring ↔ slider toggle ──
+function _bwlShowPctSlider(idx) { document.getElementById('bwl-pct-ring-'+idx).style.display='none'; var s=document.getElementById('bwl-pct-slider-'+idx); s.style.display=''; var inp=s.querySelector('input'); if(inp)inp.focus(); }
+function _bwlHidePctSlider(idx) { setTimeout(function(){ document.getElementById('bwl-pct-slider-'+idx).style.display='none'; document.getElementById('bwl-pct-ring-'+idx).style.display=''; },150); }
+function _bwlShowProgSlider(idx) { document.getElementById('bwl-prog-ring-'+idx).style.display='none'; var s=document.getElementById('bwl-prog-slider-'+idx); s.style.display=''; var inp=s.querySelector('input'); if(inp)inp.focus(); }
+function _bwlHideProgSlider(idx) { setTimeout(function(){ document.getElementById('bwl-prog-slider-'+idx).style.display='none'; document.getElementById('bwl-prog-ring-'+idx).style.display=''; },150); }
+
+function _bwlOnDateChange(idx) {
+  var d = document.getElementById('bwl-date-' + idx).value; if (!d) return;
+  var user = getCurrentUser(); var uid = user ? user.id : '';
+  Promise.all([
+    API.get('/worklogs/daily-usage?date=' + d),
+    API.get('/wecom/calendar?user_id=' + uid + '&date_from=' + d + '&date_to=' + d)
+  ]).then(function(results) {
+    var usage = results[0] || {}, wecom = results[1] || {};
+    var remaining = usage.remaining_percentage !== undefined ? usage.remaining_percentage : 100;
+    var checkinH = (wecom.daily && wecom.daily[0]) ? wecom.daily[0].total_hours : 0;
+    _bwlSavedPct[d] = usage.total_percentage_used || 0; _bwlCheckinHours[d] = checkinH;
+    var av = document.getElementById('bwl-avail-' + idx);
+    if (av) { av.textContent = '可用 ' + remaining + '%'; av.style.color = remaining > 0 ? 'var(--success)' : 'var(--danger)'; }
+    var pctEl = document.getElementById('bwl-pct-' + idx);
+    if (pctEl) { pctEl.max = Math.max(5, remaining); if (parseInt(pctEl.value) > remaining) pctEl.value = Math.max(5, remaining); _bwlUpdatePctRing(idx); }
+    _bwlCheckOverPct();
+  }).catch(function(){});
+}
+
+function _bwlPctSliderInput(idx) {
+  var pct = parseInt(document.getElementById('bwl-pct-' + idx).value) || 25;
+  var d = document.getElementById('bwl-date-' + idx).value;
+  var checkinH = _bwlCheckinHours[d] || 8;
+  document.getElementById('bwl-hours-' + idx).textContent = (pct / 100 * checkinH).toFixed(1);
+  _bwlUpdatePctRing(idx); _bwlCheckOverPct();
+}
+
+function _bwlUpdatePctRing(idx) {
+  var pct = parseInt(document.getElementById('bwl-pct-' + idx).value) || 25;
+  document.getElementById('bwl-pct-ring-' + idx).innerHTML = _bwlProgressRing(pct, 32, 'var(--accent)');
+}
+
+function _bwlProgSliderInput(idx) {
+  var prog = parseInt(document.getElementById('bwl-prog-' + idx).value) || 0;
+  document.getElementById('bwl-prog-ring-' + idx).innerHTML = _bwlProgressRing(prog, 32, 'var(--success)');
+}
+
+function _bwlCheckOverPct() {
+  var rows = document.querySelectorAll('#bwl-rows .bwl-row'); var dialogPcts = {}; var overflow = false;
+  rows.forEach(function(r) { var i=r.getAttribute('data-idx'); var de=document.getElementById('bwl-date-'+i); var pe=document.getElementById('bwl-pct-'+i); if(de&&pe){dialogPcts[de.value]=(dialogPcts[de.value]||0)+(parseInt(pe.value)||0);} });
+  rows.forEach(function(r) { var i=r.getAttribute('data-idx'); var de=document.getElementById('bwl-date-'+i); var pe=document.getElementById('bwl-pct-'+i); var ae=document.getElementById('bwl-avail-'+i); if(de&&pe&&ae){var d=de.value;var saved=_bwlSavedPct[d]||0;var total=saved+(dialogPcts[d]||0);if(total>100){pe.style.outline='2px solid var(--danger)';ae.textContent='超'+(total-100).toFixed(0)+'%';ae.style.color='var(--danger)';ae.style.fontWeight='600';overflow=true;}else{pe.style.outline='';}} });
+  var sb = document.querySelector('.dialog-actions .btn-primary'); if(sb) sb.disabled = overflow;
+}
+
+async function _submitBatchBugWorklog(bugId) {
+  var rows = document.querySelectorAll('#bwl-rows .bwl-row'); var entries = []; var maxP=0; var hasErr=false;
+  rows.forEach(function(r) {
+    var i = r.getAttribute('data-idx');
+    var de=document.getElementById('bwl-date-'+i), pe=document.getElementById('bwl-pct-'+i), te=document.getElementById('bwl-desc-'+i), ge=document.getElementById('bwl-prog-'+i);
+    var d=de?de.value:'', p=pe?parseInt(pe.value)||0:0, t=te?te.value.trim():'', g=ge?parseInt(ge.value)||0:0;
+    if(!d){if(de)de.style.outline='2px solid var(--danger)';hasErr=true;}else{if(de)de.style.outline='';}
+    if(!t){if(te)te.style.outline='2px solid var(--danger)';hasErr=true;}else{if(te)te.style.outline='';}
+    if(d&&p>=5&&t){entries.push({date:d,percentage:p,description:t,progress:g});}
+    if(g>maxP)maxP=g;
+  });
+  if(hasErr){showToast('请填写所有行的日期和描述','warn');return;}
+  if(!entries.length){showToast('至少需要一行有效记录','warn');return;}
+  _bwlCheckOverPct(); var sb=document.querySelector('.dialog-actions .btn-primary'); if(sb&&sb.disabled){showToast('日期工时占比超过100%','error');return;}
+
+  // 100% progress confirmation
+  if (maxP >= 100) {
+    openDialog('确认提交工时',
+      '<div style="font-size:13px;margin-bottom:8px">进度 <b>100%</b>，Bug将自动标记为<b>已解决</b>。</div>' +
+      '<div style="font-size:11px;color:var(--muted)">确认后将保存 ' + entries.length + ' 条工时记录。</div>',
+      [{text:'取消'},{text:'确认',cls:'btn-primary',onclick:async function(){
+        closeSharedDialog();
+        await API.post('/bugs/'+bugId+'/worklogs/batch',{entries:entries});
+        if(maxP>=100) await API.put('/bugs/'+bugId,{progress:100,status:'resolved'});
+        showToast('已记录 '+entries.length+' 条工时','success');
+        openBugDetail(bugId);
+        EventBus.emit('worklog:saved',{bugId:bugId});
+      }}],{hideClose:true,keepExisting:true});
+    return;
+  }
+
   try {
-    await API.post('/bugs/'+bugId+'/worklogs', {bug_id:bugId, hours:h, date:document.getElementById('bwl-date').value, description:document.getElementById('bwl-desc').value.trim()});
-    showToast('工时已记录','success');
-    closeSharedDialog();
-    openBugDetail(bugId);
-    EventBus.emit('worklog:saved', {bugId: bugId});
+    await API.post('/bugs/'+bugId+'/worklogs/batch',{entries:entries});
+    if (maxP > 0) {
+      API.get('/bugs/'+bugId).then(function(bug) { if(maxP>(bug.progress||0)) API.put('/bugs/'+bugId,{progress:maxP}); });
+    }
+    showToast('已记录 '+entries.length+' 条工时','success');
+    closeSharedDialog(); openBugDetail(bugId);
+    EventBus.emit('worklog:saved',{bugId:bugId});
   } catch(e) { showToast('记录失败: '+(e.message||''),'error'); }
 }
 
@@ -653,7 +790,8 @@ function _initBugWorklogDt(logs, bugId) {
     columns: [
       { key: 'date', title: '日期', width: '68px', minWidth: 100, render: function(v) { return '<span style="font-size:11px">'+(v||'?')+'</span>'; } },
       { key: 'user', title: '用户', width: '44px', minWidth: 90, render: function(v, row) { return '<span style="font-size:11px">'+escHtml(getDisplayName(v||row.username||''))+'</span>'; } },
-      { key: 'hours', title: '工时(h)', width: '42px', minWidth: 60, render: function(v) { return (v||0).toFixed(1); } },
+      { key: 'percentage', title: '占比', width: '42px', minWidth: 42, render: function(v) { return v ? '<span style="font-weight:600;color:var(--accent)">'+v+'%</span>' : '<span style="color:var(--muted)">—</span>'; } },
+      { key: 'calculated_hours', title: '工时(h)', width: '52px', minWidth: 52, render: function(v, row) { var h = v || row.hours || 0; return (h||0).toFixed(1); } },
       { key: 'description', title: '描述', align: 'left', render: function(v) { return '<span style="white-space:normal;word-break:break-word">'+escHtml(v||'')+'</span>'; } },
       { key: 'actions', title: '', width: '90px', minWidth: 90, render: function(v, row) { return iconEdit('openBugWorklogEditDialog('+bugId+','+row.id+')')+iconDelete('deleteBugWorklog('+bugId+','+row.id+')'); } }
     ],
@@ -667,6 +805,7 @@ function openBugWorklogEditDialog(bugId, wlId) {
     if (!w) { showToast('未找到工时记录','error'); return; }
     editWorklogEntry({
       id: w.id, task_id: null, bug_id: bugId,
+      percentage: w.percentage, calculated_hours: w.calculated_hours,
       hours: w.hours, description: w.description, progress: 0,
       source: 'bug'
     }, w.date || '');

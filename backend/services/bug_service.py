@@ -198,27 +198,38 @@ def get_worklogs(db, bug_id):
             for w in logs]
 
 def create_worklog(db, data, user_id):
-    d = data.get("date")
-    if d and isinstance(d, str):
-        from datetime import datetime as dt
-        d = dt.strptime(d, "%Y-%m-%d").date()
+    from backend.services.worklog_service import _calc_calculated_hours, _parse_date
+    pct = float(data.get("percentage", 0) or 0)
+    d = _parse_date(data.get("date")) or date.today()
+    calc_h, _ = _calc_calculated_hours(db, user_id, d, pct)
     w = BugWorkLog(bug_id=data["bug_id"], user_id=user_id,
-                   hours=data["hours"], date=d or date.today(),
-                   description=data.get("description", ""))
+                   hours=calc_h, percentage=pct, calculated_hours=calc_h,
+                   date=d, description=data.get("description", ""))
     db.add(w); db.commit()
     _recalc_bug_hours(db, data["bug_id"])
     return _worklog_dict(w, db)
 
 def update_worklog(db, wl_id, data):
+    from backend.services.worklog_service import _calc_calculated_hours, _parse_date
     w = db.query(BugWorkLog).filter(BugWorkLog.id == wl_id).first()
     if not w: return None
-    for k in ("hours","date","description"):
-        if k in data:
-            v = data[k]
-            if k == "date" and isinstance(v, str):
-                from datetime import datetime as dt
-                v = dt.strptime(v, "%Y-%m-%d").date()
-            setattr(w, k, v)
+    if "percentage" in data:
+        pct = float(data["percentage"] or 0)
+        w.percentage = pct
+        calc_h, _ = _calc_calculated_hours(db, w.user_id, w.date, pct)
+        w.hours = calc_h
+        w.calculated_hours = calc_h
+    if "date" in data:
+        v = data["date"]
+        if isinstance(v, str):
+            v = _parse_date(v) or w.date
+        w.date = v
+        if w.percentage:
+            calc_h, _ = _calc_calculated_hours(db, w.user_id, w.date, w.percentage)
+            w.hours = calc_h
+            w.calculated_hours = calc_h
+    if "description" in data:
+        w.description = data["description"]
     db.commit(); _recalc_bug_hours(db, w.bug_id)
     return _worklog_dict(w, db)
 
@@ -418,12 +429,23 @@ def _attachment_dict(a):
 
 def _worklog_dict(w, db=None):
     from backend.models.local import LocalUser
+    from backend.models.wecom import WeComCheckin
     result = {"id":w.id,"bug_id":w.bug_id,"user_id":w.user_id,"hours":w.hours,
+              "percentage":w.percentage,"calculated_hours":w.calculated_hours,
               "date":str(w.date) if w.date else None,"description":w.description,
               "created_at":to_local_str(w.created_at) if w.created_at else None}
     if db:
         u = db.query(LocalUser).filter(LocalUser.id == w.user_id).first()
         result["username"] = u.display_name or u.username if u else None
+        # Check has_checkin
+        if u and u.wecom_userid:
+            c = db.query(WeComCheckin).filter(
+                WeComCheckin.user_id == u.wecom_userid,
+                WeComCheckin.date == w.date,
+            ).first()
+            result["has_checkin"] = bool(c and c.work_hours and c.work_hours > 0)
+        else:
+            result["has_checkin"] = False
     return result
 
 def _transfer_dict(t, db=None):
@@ -447,7 +469,9 @@ def _transfer_dict(t, db=None):
 
 def _recalc_bug_hours(db, bug_id):
     total = db.query(BugWorkLog).with_entities(
-        sa_func.coalesce(sa_func.sum(BugWorkLog.hours), 0)
+        sa_func.coalesce(
+            sa_func.sum(sa_func.coalesce(BugWorkLog.calculated_hours, BugWorkLog.hours)),
+        0)
     ).filter(BugWorkLog.bug_id == bug_id).scalar() or 0.0
     db.query(PmaBug).filter(PmaBug.id == bug_id).update({PmaBug.consumed_hours: float(total)})
     db.commit()

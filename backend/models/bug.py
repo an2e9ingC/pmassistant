@@ -89,6 +89,8 @@ class BugWorkLog(Base):
     bug_id = Column(Integer, ForeignKey("pma_bugs.id"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("local_users.id"), nullable=False)
     hours = Column(Float, nullable=False)
+    percentage = Column(Float, nullable=True)         # 工时占比 0-100（用户填写）
+    calculated_hours = Column(Float, nullable=True)   # 根据百分比×打卡工时自动计算的小时数
     date = Column(Date, nullable=False)
     description = Column(Text, nullable=True)
     created_at = Column(DateTime, default=func.now())

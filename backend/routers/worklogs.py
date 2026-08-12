@@ -1,5 +1,5 @@
 """WorkLog and TaskComment API routes."""
-from typing import Optional
+from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -16,15 +16,27 @@ comment_router = APIRouter(prefix="/api/task-comments", tags=["task-comments"])
 
 class WorkLogCreate(BaseModel):
     task_id: int
-    hours: float
+    percentage: float
     date: Optional[str] = None
     description: Optional[str] = None
 
 
 class WorkLogUpdate(BaseModel):
-    hours: Optional[float] = None
+    percentage: Optional[float] = None
     date: Optional[str] = None
     description: Optional[str] = None
+
+
+class WorkLogBatchEntry(BaseModel):
+    date: str
+    percentage: float
+    description: Optional[str] = None
+    progress: Optional[int] = None
+
+
+class WorkLogBatchCreate(BaseModel):
+    task_id: int
+    entries: List[WorkLogBatchEntry]
 
 
 class CommentCreate(BaseModel):
@@ -105,6 +117,36 @@ def delete_worklog(
     if not ok:
         raise HTTPException(status_code=404, detail="WorkLog not found")
     return {"code": 0, "data": None, "message": "ok"}
+
+
+@router.post("/batch", response_model=dict)
+def create_worklog_batch(
+    payload: WorkLogBatchCreate,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    try:
+        created = worklog_service.create_worklog_batch(
+            db, payload.task_id,
+            [e.model_dump() for e in payload.entries],
+            user.id,
+        )
+        return {"code": 0, "data": created, "message": f"已创建 {len(created)} 条工时记录"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/daily-usage", response_model=dict)
+def daily_usage(
+    user_id: Optional[int] = Query(None),
+    date: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    uid = user_id or current_user.id
+    d = worklog_service._parse_date(date) if date else date.today()
+    data = worklog_service.get_daily_usage(db, uid, d)
+    return {"code": 0, "data": data, "message": "ok"}
 
 
 # ── Comments ──
