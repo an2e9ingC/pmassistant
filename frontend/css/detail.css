@@ -44,14 +44,15 @@
 /* Searchable combobox */
 .proj-combo {
   position: relative;
-  min-width: 300px;
+  width: 100%;
 }
 .proj-combo-input {
-  width: 100%; padding: 6px 32px 6px 11px;
+  width: 100%; padding: 7px 32px 7px 11px;
   border-radius: 7px; border: 1px solid var(--border);
   background: var(--surface); color: var(--fg);
   font-family: var(--font); font-size: 13px;
   outline: none; cursor: pointer; transition: border-color 0.12s;
+  box-sizing: border-box;
 }
 .proj-combo-input:focus { border-color: var(--accent); cursor: text; }
 .proj-combo-arrow {

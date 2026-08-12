@@ -106,6 +106,8 @@ var VIEW_REGISTRY = {
   'system-manage':  { title: '系统管理',    label: '系统管理',    perm: 'admin',         initName: 'initSystemManage',      js: '/js/system-manage.js?v=' + APP_VERSION },
   'user-center':    { title: '用户中心',    label: '用户中心',    perm: null,            init: initUserCenter },
   tasks:            { title: '任务管理',    label: '任务管理',    perm: null,            initName: 'initTasks',            js: '/js/tasks.js?v=' + APP_VERSION },
+  'task-create':    { title: '新建任务',    label: '任务管理',    perm: null,            initName: 'initTaskCreate',       js: '/js/tasks.js?v=' + APP_VERSION, _viewEl: 'tasks' },
+  'bug-create':     { title: '新建Bug',     label: 'Bug 管理',    perm: null,            initName: 'initBugCreate',        js: '/js/bugs.js?v=' + APP_VERSION, _viewEl: 'bugs' },
 };
 
 // ── Lazy script loader ──
@@ -226,9 +228,10 @@ function gotoView(view, opts) {
     if (!canAccess(entry.perm, entry.label + '需要 ' + permLabel + ' 权限')) return;
   }
 
-  // Activate view DOM
+  // Activate view DOM (use _viewEl alias if set, e.g. task-create → tasks)
   document.querySelectorAll('.view').forEach(function(v) { v.classList.remove('active'); });
-  var viewEl = document.getElementById('view-' + view);
+  var domView = entry._viewEl || view;
+  var viewEl = document.getElementById('view-' + domView);
   if (viewEl) viewEl.classList.add('active');
 
   // Hide right panel when leaving user-center
@@ -238,7 +241,7 @@ function gotoView(view, opts) {
 
   // Activate nav
   document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
-  var navEl = document.getElementById('nav-' + view);
+  var navEl = document.getElementById('nav-' + domView);
   if (navEl) navEl.classList.add('active');
 
   // Title with optional debug overlay
@@ -3670,14 +3673,17 @@ EventBus.on('fav:toggled', function(e) {
 
 EventBus.on('worklog:saved', function(e) {
   if (typeof _ucLoadCalendar === 'function') { var u = getCurrentUser(); if (u) _ucLoadCalendar(u); }
+  // 详情页模式：只刷新详情内容，不刷新列表（避免 loadTaskData 覆盖全页面详情）
+  var isDetailPage = !!document.querySelector('.task-detail-page');
   if (e.taskId && typeof _refreshTaskDetailContent === 'function') _refreshTaskDetailContent(e.taskId);
-  if (typeof loadTaskData === 'function') loadTaskData();
+  if (!isDetailPage && typeof loadTaskData === 'function') loadTaskData();
   if (typeof _ucLoadTasks === 'function') { var u = getCurrentUser(); if (u) _ucLoadTasks(u); }
 });
 EventBus.on('worklog:deleted', function(e) {
   if (typeof _ucLoadCalendar === 'function') { var u = getCurrentUser(); if (u) _ucLoadCalendar(u); }
+  var isDetailPage = !!document.querySelector('.task-detail-page');
   if (e.taskId && typeof _refreshTaskDetailContent === 'function') _refreshTaskDetailContent(e.taskId);
-  if (typeof loadTaskData === 'function') loadTaskData();
+  if (!isDetailPage && typeof loadTaskData === 'function') loadTaskData();
   if (typeof _ucLoadTasks === 'function') { var u = getCurrentUser(); if (u) _ucLoadTasks(u); }
 });
 

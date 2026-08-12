@@ -124,15 +124,33 @@ def create_bug(db, data):
     _sync_cc_favorites(db, data.get("cc_user_ids"), b.id, 'bug')
     return _bug_dict(b, db)
 
-def update_bug(db, bug_id, data):
+def _fmt_change_val(v):
+    """Format a change value for display (list/date/None → readable string)."""
+    if v is None:
+        return ""
+    if isinstance(v, list):
+        return "、".join(str(x) for x in v) if v else ""
+    if isinstance(v, (date, datetime)):
+        return str(v)[:10]
+    return str(v)
+
+
+def update_bug(db, bug_id, data, user_id=None):
     b = db.query(PmaBug).filter(PmaBug.id == bug_id).first()
     if not b: return None
     old_status = b.status
     old_cc_user_ids = (b.cc_user_ids or [])[:]  # snapshot for CC favorites sync
+    # Collect field-level changes (Zentao-style) for structured history
+    changes = []
     for k in ["title","description","project_id","component_id","status","resolution",
               "severity","priority","type","assignee_id","estimate_hours",
               "gitlab_url","gitlab_iid","resolved_by_id","cc_user_ids","progress"]:
-        if k in data: setattr(b, k, data[k])
+        if k in data:
+            old_val = getattr(b, k)
+            new_val = data[k]
+            if old_val != new_val:
+                setattr(b, k, new_val)
+                changes.append({"field": k, "old_value": _fmt_change_val(old_val), "new_value": _fmt_change_val(new_val)})
     if data.get("status") == "resolved" and not b.resolved_at:
         b.resolved_at = datetime.now(timezone.utc)
     if data.get("status") == "closed" and not b.closed_at:
@@ -175,6 +193,10 @@ def update_bug(db, bug_id, data):
                 db.add(BugAnalysis(bug_id=lb.id, user_id=lb.assignee_id or lb.reporter_id,
                         content=f"关联 Bug #{bug_id} 已解决，自动同步状态"))
         if linked: db.commit()
+    # Record structured change history
+    if changes and user_id:
+        from backend.services.action_service import record_action
+        record_action(db, "bug", b.id, user_id, "updated", changes)
     return _bug_dict(b, db)
 
 def delete_bug(db, bug_id):

@@ -138,7 +138,7 @@ def create_bug(body: BugCreate, db: Session = Depends(get_db), user=Depends(get_
 
 @router.put("/{bug_id}", response_model=dict)
 def update_bug(bug_id: int, body: BugUpdate, db: Session = Depends(get_db), user=Depends(get_current_user)):
-    b = bug_service.update_bug(db, bug_id, body.model_dump(exclude_none=True))
+    b = bug_service.update_bug(db, bug_id, body.model_dump(exclude_none=True), user.id)
     if not b: raise HTTPException(status_code=404, detail="Bug not found")
     log_audit(db, user, "bug_update", f"更新Bug #{bug_id}", AUDIT_CAT_BUG, "medium")
     return {"code": 0, "data": b, "message": "ok"}

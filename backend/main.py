@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from backend.config import settings, SERVER_START_TIME
 from backend.database import init_db
-from backend.routers import auth, config, dashboard, projects, sync, products, delivery, reports, logs, topology, admin_users, maintenance, customers, document_template, product_doc_template, pma_tag, standards, gitlab, db_manage, product_management, notifications, documents, tasks, worklogs, bugs, wecom, uploads_manage, users
+from backend.routers import auth, config, dashboard, projects, sync, products, delivery, reports, logs, topology, admin_users, maintenance, customers, document_template, product_doc_template, pma_tag, standards, gitlab, db_manage, product_management, notifications, documents, tasks, worklogs, bugs, wecom, uploads_manage, users, actions
 
 # File log handler — use same directory as database
 import backend.database as _db_module
@@ -237,6 +237,7 @@ app.include_router(worklogs.router)
 app.include_router(worklogs.comment_router)
 app.include_router(wecom.router)
 app.include_router(bugs.router)
+app.include_router(actions.router)
 app.include_router(uploads_manage.router)
 
 # ── Attachment serving (standalone, not prefixed) ──

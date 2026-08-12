@@ -1461,9 +1461,9 @@ function createCcSelector(opts) {
 
   return '<div style="margin-top:2px">' +
     '<div id="' + tagsId + '" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px"></div>' +
-    '<div class="proj-combo" id="' + comboId + '" style="display:inline-block;min-width:200px">' +
+    '<div class="proj-combo" id="' + comboId + '" style="width:100%">' +
       '<input class="proj-combo-input" id="' + inputId + '" type="text" autocomplete="off" placeholder="' + escHtml(ph) + '" ' +
-        'onclick="' + openFn + '()" oninput="' + filterFn + '(this.value)" onkeydown="' + enterFn + '(event)" style="width:100%;box-sizing:border-box">' +
+        'onclick="' + openFn + '()" oninput="' + filterFn + '(this.value)" onkeydown="' + enterFn + '(event)">' +
       '<svg class="proj-combo-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2,5 7,10 12,5"/></svg>' +
       '<div class="proj-combo-dropdown" id="' + dropdownId + '"></div>' +
     '</div>' +
@@ -1562,9 +1562,9 @@ function createMultiUserSelector(opts) {
 
   return '<div style="margin-top:2px">' +
     '<div id="' + tagsId + '" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px"></div>' +
-    '<div class="proj-combo" id="' + comboId + '" style="display:inline-block;min-width:200px">' +
+    '<div class="proj-combo" id="' + comboId + '" style="width:100%">' +
       '<input class="proj-combo-input" id="' + inputId + '" type="text" autocomplete="off" placeholder="' + escHtml(ph) + '" ' +
-        'onclick="' + openFn + '()" oninput="' + filterFn + '(this.value)" onkeydown="' + enterFn + '(event)" style="width:100%;box-sizing:border-box">' +
+        'onclick="' + openFn + '()" oninput="' + filterFn + '(this.value)" onkeydown="' + enterFn + '(event)">' +
       '<svg class="proj-combo-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2,5 7,10 12,5"/></svg>' +
       '<div class="proj-combo-dropdown" id="' + dropdownId + '"></div>' +
     '</div>' +
@@ -2488,6 +2488,201 @@ function renderMarkdown(md) {
     }
   } catch(e) {}
   return '<pre style="white-space:pre-wrap;font-size:13px">' + escHtml(md) + '</pre>';
+}
+
+/* ── Entity Action Timeline (Zentao-style change history) ── */
+
+var _ENTITY_FIELD_LABELS = {
+  title: '标题', description: '描述', status: '状态', priority: '优先级', type: '类型',
+  execution_id: '迭代', stage_name: '阶段', assignee_id: '负责人', reviewer_id: '审批人',
+  parent_id: '父任务', blocked_by_id: '阻塞任务', cc_user_ids: '抄送人',
+  start_date: '开始日期', due_date: '截止日期', progress: '进度', estimate_hours: '预估工时',
+  severity: '严重程度', project_id: '项目', component_id: '组件', resolution: '解决方案',
+  gitlab_url: 'GitLab链接', gitlab_iid: 'GitLab编号', resolved_by_id: '解决人',
+  product_id: '产品', template: '模板',
+};
+
+var _ACTION_LABELS = {
+  created: '创建了', updated: '更新了', approved: '批准了', rejected: '驳回了', deleted: '删除了',
+};
+
+function _entityFieldLabel(field) {
+  return _ENTITY_FIELD_LABELS[field] || field;
+}
+
+/** Check whether a string contains inline images (HugeRTE <img> or note-images URL). */
+function _hasImages(s) {
+  if (!s) return false;
+  return /<img\b|\/api\/note-images\//.test(s);
+}
+
+var _timelineOrder = 'desc';  // 'desc' = 最新到最旧（默认），'asc' = 最旧到最新
+
+function _timelineOrderLabel() {
+  return _timelineOrder === 'desc' ? '最新优先 ↓' : '最早优先 ↑';
+}
+
+function _toggleTimelineOrder(entityType, entityId, containerId) {
+  _timelineOrder = _timelineOrder === 'desc' ? 'asc' : 'desc';
+  // 更新所有排序按钮文字
+  document.querySelectorAll('.timeline-order-btn').forEach(function(btn) {
+    btn.textContent = _timelineOrderLabel();
+  });
+  renderTimeline(entityType, entityId, containerId);
+}
+
+/**
+ * Render a merged action+comment timeline into a container.
+ * Actions (field changes) are collapsed by default; comments show directly.
+ * Default order: newest first (desc); toggleable via _toggleTimelineOrder.
+ */
+async function renderTimeline(entityType, entityId, containerId) {
+  var el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = '<div style="color:var(--muted);font-size:12px">加载中...</div>';
+  try {
+    var resp = await API.get('/actions?entity_type=' + entityType + '&entity_id=' + entityId);
+    var timeline = (resp && resp.data) ? resp.data : (resp || []);
+    if (!timeline || !timeline.length) {
+      el.innerHTML = '<div style="color:var(--muted);font-size:12px">暂无记录</div>';
+      return;
+    }
+    // 默认最新到最旧（后端返回升序，需倒序）；切换为 asc 时保持升序
+    if (_timelineOrder === 'desc') {
+      timeline = timeline.slice().reverse();
+    }
+    var html = '<div style="position:relative;padding-left:24px">' +
+      '<div style="position:absolute;left:6px;top:8px;bottom:8px;width:2px;background:var(--border);border-radius:1px"></div>';
+    timeline.forEach(function(item) {
+      var author = item.display_name || item.username || '?';
+      var time = (item.created_at ? fmtISODateTime(item.created_at) : '') || '';
+      var isAction = item.type === 'action';
+      var dotColor = isAction ? 'var(--accent)' : 'var(--success)';
+      // 时间线节点圆点（与竖线对齐）
+      var dot = '<span style="position:absolute;left:-24px;top:4px;width:14px;height:14px;border-radius:50%;background:var(--surface);border:2px solid ' + dotColor + ';box-sizing:border-box;z-index:1"></span>';
+      var inner = isAction
+        ? _renderTimelineAction(item, author, time)
+        : _renderTimelineComment(item, author, time);
+      html += '<div style="position:relative;padding:4px 0 12px 0">' + dot + inner + '</div>';
+    });
+    html += '</div>';
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--danger);font-size:12px">加载失败</div>';
+  }
+}
+
+function _renderTimelineAction(item, author, time) {
+  var actionLabel = _ACTION_LABELS[item.action] || item.action;
+  var head = '<div style="display:flex;align-items:baseline;gap:6px;font-size:12px;flex-wrap:wrap">' +
+    '<span style="font-weight:600;color:var(--text)">' + escHtml(author) + '</span>' +
+    '<span style="color:var(--muted)">' + escHtml(actionLabel) + '</span>' +
+    '<span style="color:var(--muted);font-size:10px">' + escHtml(time) + '</span>' +
+  '</div>';
+
+  var changes = item.changes || [];
+  var body = '';
+  if (changes.length) {
+    // 系统自动记录的操作：默认只显示简略摘要（字段名列表），展开才看 old→new 详情
+    var fieldNames = changes.map(function(c) { return _entityFieldLabel(c.field); });
+    var summaryText = '修改了 ' + fieldNames.join('、');
+    body = '<details style="margin-top:4px">' +
+      '<summary style="cursor:pointer;font-size:11px;color:var(--accent);user-select:none">' + escHtml(summaryText) + '</summary>' +
+      '<div style="margin-top:4px;padding:6px 8px;background:var(--bg);border-radius:6px;border:1px solid var(--border)">' +
+        changes.map(function(c) { return _renderTimelineChange(c); }).join('') +
+      '</div>' +
+    '</details>';
+  } else if (item.comment) {
+    body = '<div style="margin-top:4px;font-size:12px">' + renderMarkdown(item.comment) + '</div>';
+  }
+
+  return head + body;
+}
+
+function _renderTimelineChange(c) {
+  var label = _entityFieldLabel(c.field);
+  var oldVal = c.old_value || '';
+  var newVal = c.new_value || '';
+  // 长文本字段（description 等）/含图片 → 默认仅"修改了X"，展开查看完整 diff（含图片，不再单独折叠图片）
+  var isLong = (c.field === 'description') || oldVal.length > 80 || newVal.length > 80 || _hasImages(oldVal) || _hasImages(newVal);
+  if (isLong) {
+    var detailHtml = '<div style="font-size:12px;margin-top:4px;line-height:1.6">' +
+      '<div style="margin-bottom:6px"><div style="color:var(--muted);font-size:10px;margin-bottom:2px">修改前</div><div style="color:var(--danger)">' + (oldVal ? renderMarkdown(oldVal) : '<span style="color:var(--muted)">（空）</span>') + '</div></div>' +
+      '<div><div style="color:var(--muted);font-size:10px;margin-bottom:2px">修改后</div><div style="color:var(--success)">' + (newVal ? renderMarkdown(newVal) : '<span style="color:var(--muted)">（空）</span>') + '</div></div>' +
+    '</div>';
+    return '<div style="margin:4px 0;font-size:12px">' +
+      '<span style="font-weight:500">修改了' + escHtml(label) + '</span>' +
+      '<details style="margin-top:2px"><summary style="cursor:pointer;font-size:10px;color:var(--accent);user-select:none">查看差异</summary>' + detailHtml + '</details>' +
+    '</div>';
+  }
+  return '<div style="margin:4px 0;font-size:12px">' +
+    '<span style="color:var(--muted)">' + escHtml(label) + ':</span> ' +
+    '<span style="color:var(--danger);text-decoration:line-through">' + escHtml(oldVal) + '</span>' +
+    ' → ' +
+    '<span style="color:var(--success)">' + escHtml(newVal) + '</span>' +
+  '</div>';
+}
+
+function _renderTimelineComment(item, author, time) {
+  var head = '<div style="display:flex;align-items:baseline;gap:6px;font-size:12px;flex-wrap:wrap">' +
+    '<span style="font-weight:600;color:var(--text)">' + escHtml(author) + '</span>' +
+    '<span style="color:var(--muted);font-size:10px">' + escHtml(time) + '</span>' +
+  '</div>';
+
+  var content = item.content || '';
+  var body = '<div style="margin-top:4px;font-size:13px;line-height:1.5;color:var(--text)">' + renderMarkdown(content) + '</div>';
+  return head + body;
+}
+
+/* ── Comment Dialog (rich-text) ── */
+
+/** Open a rich-text comment dialog for a task/bug. */
+function openCommentDialog(entityType, entityId) {
+  var dialogId = 'comment-dialog-' + Date.now();
+  var taId = dialogId + '-ta';
+  var html = '<div class="note-dialog-overlay" id="' + dialogId + '">' +
+    '<div class="note-dialog" style="width:80vw;max-width:80vw;max-height:80vh;overflow-y:auto">' +
+      '<div class="note-dialog-head">' +
+        '<span class="note-dialog-title">添加评论</span>' +
+        '<button class="note-dialog-close" onclick="document.getElementById(\'' + dialogId + '\').remove()">&times;</button>' +
+      '</div>' +
+      '<textarea id="' + taId + '" rows="6" style="width:100%;box-sizing:border-box"></textarea>' +
+      '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">' +
+        '<button class="btn" onclick="document.getElementById(\'' + dialogId + '\').remove()">取消</button>' +
+        '<button class="btn btn-primary" onclick="_submitCommentDialog(\'' + entityType + '\', ' + entityId + ', \'' + dialogId + '\')">提交</button>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+  setTimeout(function() { initRichEditor(taId, {height: 400}); }, 50);
+}
+
+/** Submit a rich-text comment from the dialog. */
+async function _submitCommentDialog(entityType, entityId, dialogId) {
+  var taId = dialogId + '-ta';
+  var content = '';
+  var ta = document.getElementById(taId);
+  if (ta) {
+    content = ta.value;  // HugeRTE syncs content to the hidden textarea
+  }
+  if (!content || !content.trim() || content === '<p></p>' || content === '<p><br></p>') {
+    showToast('请输入评论内容', 'error');
+    return;
+  }
+  try {
+    if (entityType === 'task') {
+      await API.post('/task-comments', {task_id: entityId, content: content});
+    } else {
+      await API.post('/bugs/' + entityId + '/comments', {content: content});
+    }
+    document.getElementById(dialogId).remove();
+    showToast('评论成功', 'success');
+    // Refresh timeline
+    var containerId = entityType === 'task' ? 'task-detail-comments' : 'bug-detail-comments';
+    renderTimeline(entityType, entityId, containerId);
+  } catch(e) {
+    showToast('评论失败: ' + (e.message || ''), 'error');
+  }
 }
 
 /* ── Attachment Upload ── */
