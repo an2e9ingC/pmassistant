@@ -132,6 +132,20 @@ function loadViewScript(url, callback) {
   document.head.appendChild(script);
 }
 
+// ── Worklog quick-entry wrappers (lazy-load tasks.js / bugs.js) ──
+function _ucOpenWorklog(taskId) {
+  loadViewScript('/js/tasks.js?v=' + APP_VERSION, function() {
+    if (typeof openWorklogDialog === 'function') openWorklogDialog(taskId);
+    else showToast('任务模块加载失败', 'error');
+  });
+}
+function _ucOpenBugWorklog(bugId) {
+  loadViewScript('/js/bugs.js?v=' + APP_VERSION, function() {
+    if (typeof openBugWorklogDialog === 'function') openBugWorklogDialog(bugId);
+    else showToast('Bug模块加载失败', 'error');
+  });
+}
+
 // ── Nav visibility ──
 
 function updateNavVisibility() {
@@ -1696,7 +1710,7 @@ async function initUserCenter(viewUserId, tab) {
   if (!window._ucRightPanel) {
     var rp = document.createElement('div');
     rp.id = 'uc-right-panel';
-    rp.innerHTML = '<div id="uc-calendar"></div><div id="uc-wecom-calendar"></div><div id="uc-right-stats"></div>';
+    rp.innerHTML = '<div id="uc-calendar"></div><div id="uc-right-stats"></div>';
     document.body.appendChild(rp);
     window._ucRightPanel = rp;
   } else {
@@ -1724,7 +1738,7 @@ async function initUserCenter(viewUserId, tab) {
   window.addEventListener('resize', window._ucUpdateLayout);
 
   // Calendar navigation callback
-  _calChangeCallback = function() { _ucLoadCalendar(user); _ucLoadWecomCalendar(user); };
+  _calChangeCallback = function() { _ucLoadMergedCalendar(user); };
   // Always re-fetch favorites to ensure logged-in user's data is current
   await loadFavorites(true);
   // Determine initial tab from URL or default to tasks
@@ -1923,8 +1937,7 @@ function _ucLoadTasks(user) {
     _renderUcFilterBar();
     _renderUcTaskTable();
     // Re-render calendar with pie charts once task data is available
-    _ucLoadCalendar(user);
-    _ucLoadWecomCalendar(user);
+    _ucLoadMergedCalendar(user);
   }).catch(function() {
     var wrap = document.getElementById('uc-tasks-table-wrap');
     if (wrap) wrap.innerHTML = '<div class="empty-state">加载失败</div>';
@@ -2291,7 +2304,9 @@ function _ucTaskActionsHtml(row) {
   window._ucTeamTasks[row.id] = isTeam;
 
   var html = '<span style="white-space:nowrap;display:flex;align-items:center;gap:2px" onclick="event.stopPropagation()">';
-  html += iconEdit('_ucOpenTask(' + row.id + ')', '查看/编辑');
+  if (!window._ucViewUserId) {
+    html += iconBtn('🕒', '记录工时', '_ucOpenWorklog(' + row.id + ')');
+  }
   html += iconTaskDone((!isDone && canAct) ? '_ucCompleteTask(' + row.id + ')' : '', !(!isDone && canAct));
   html += iconTaskActivate((isDone && canAct) ? '_ucActivateTask(' + row.id + ')' : '', !(isDone && canAct));
   html += iconDelete('_ucDeleteTask(' + row.id + ')', '删除');
@@ -2439,7 +2454,9 @@ function _ucBugActionsHtml(row) {
   var canReopen = showReopen && (isReporter || isAssignee);
 
   var html = '<span style="white-space:nowrap;display:flex;align-items:center;gap:2px" onclick="event.stopPropagation()">';
-  html += iconEdit('openBugDetail(' + row.id + ')', '查看/编辑');
+  if (!window._ucViewUserId) {
+    html += iconBtn('🕒', '记录工时', '_ucOpenBugWorklog(' + row.id + ')');
+  }
   html += iconBugConfirm(canConfirm ? '_ucConfirmBug(' + row.id + ')' : '', !canConfirm);
   html += iconBugResolve(canResolve ? '_ucResolveBug(' + row.id + ')' : '', !canResolve);
   html += iconBugClose(canClose ? '_ucCloseBug(' + row.id + ')' : '', !canClose);
@@ -2868,8 +2885,7 @@ function _ucBuildTaskStats() {
     '</div></div>';
 }
 
-function _ucLoadCalendar(user) {
-  // Use the month currently displayed in the calendar (supports navigation)
+function _ucLoadMergedCalendar(user) {
   var now = new Date();
   var y = (typeof _calYear !== 'undefined') ? _calYear : now.getFullYear();
   var m = (typeof _calMonth !== 'undefined') ? _calMonth : (now.getMonth()+1);
@@ -2877,15 +2893,28 @@ function _ucLoadCalendar(user) {
   var me = new Date(y, m, 0);
   var df = fmtLocalDate(ms), dt = fmtLocalDate(me);
   var cal = document.getElementById('uc-calendar');
-  if(!cal) return;
+  if (!cal) return;
 
-  // Load calendar data + render pie charts + intensity calendar
-  API.get('/worklogs/calendar?user_id='+user.id+'&date_from='+df+'&date_to='+dt).then(function(data) {
-    var dailyMap = {};
-    if(data&&data.daily) data.daily.forEach(function(d){dailyMap[d.date]=d;});
-    var total = data?(data.total||0):0;
+  // Load both worklog + wecom data in parallel
+  Promise.all([
+    API.get('/worklogs/calendar?user_id='+user.id+'&date_from='+df+'&date_to='+dt),
+    API.get('/wecom/calendar?user_id='+user.id+'&date_from='+df+'&date_to='+dt)
+  ]).then(function(results) {
+    var wlData = results[0] || {};
+    var weData = results[1] || {};
 
-    // Calculate this week's total from dailyMap
+    // Build wecom daily map for intensity + checkin status
+    var wecomDailyMap = {};
+    if (weData.daily) weData.daily.forEach(function(d) { wecomDailyMap[d.date] = d; });
+
+    // Build worklog daily map
+    var wlDailyMap = {};
+    if (wlData.daily) wlData.daily.forEach(function(d) { wlDailyMap[d.date] = d; });
+
+    // Use wecom data for intensity; worklog for detail
+    var totalHours = weData.total || 0;
+
+    // Week/month totals from wecom
     var weekTotal = 0;
     var today = new Date();
     var curDow = today.getDay();
@@ -2894,22 +2923,25 @@ function _ucLoadCalendar(user) {
       var wd = new Date(today);
       wd.setDate(today.getDate() + monOff + wi);
       var wds = fmtLocalDate(wd);
-      if (dailyMap[wds]) weekTotal += dailyMap[wds].total_hours || 0;
+      if (wecomDailyMap[wds]) weekTotal += wecomDailyMap[wds].total_hours || 0;
     }
-    var monthTotal = total;
+    var monthTotal = totalHours;
 
-    // Standard working hours
-    var weekStd = 40;
-    var workDays = 0;
-    for (var di = 1; di <= me.getDate(); di++) {
-      var dw = new Date(y, m-1, di).getDay();
-      if (dw !== 0 && dw !== 6) workDays++;
+    // Standard hours from schedule or fallback
+    var weekStd = 40, monthStd = 0;
+    if (weData.schedule && weData.schedule.work_hours > 0) {
+      weekStd = Math.round(weData.schedule.work_hours / weData.schedule.work_days * 5) || 40;
+      monthStd = weData.schedule.work_hours;
+    } else {
+      var workDays = 0;
+      for (var di = 1; di <= me.getDate(); di++) {
+        var dw = new Date(y, m-1, di).getDay();
+        if (dw !== 0 && dw !== 6) workDays++;
+      }
+      monthStd = workDays * 8;
     }
-    var monthStd = workDays * 8;
 
-    // Intensity bar: ratio vs standard working hours
-    // within +-5%: green | below: blue | above: graded like daily
-    function _ucBarCls(hours, std) {
+    function _barCls(hours, std) {
       if (std <= 0) return 'uc-hbar-empty';
       var r = hours / std;
       if (r >= 0.95 && r <= 1.05) return 'uc-hbar-ok';
@@ -2919,32 +2951,42 @@ function _ucLoadCalendar(user) {
       if (r <= 1.75) return 'uc-hbar-high';
       return 'uc-hbar-over';
     }
-    var weekCls = _ucBarCls(weekTotal, weekStd);
-    var monthCls = _ucBarCls(monthTotal, monthStd);
 
     var html = '';
-
-    // Calendar card
     html += '<div class="panel panel-pad">' +
       '<div class="sec-hd" style="display:flex;justify-content:space-between;align-items:center">' +
         '<h2 style="margin:0">工时</h2>' +
         '<div style="display:flex;align-items:center;gap:8px">' +
           '<span style="font-size:11px;color:var(--muted)">周</span>' +
-          '<span class="uc-week-bar ' + weekCls + '">' + (typeof fmtHours === 'function' ? fmtHours(weekTotal) : weekTotal.toFixed(1) + 'h') + '</span>' +
+          '<span class="uc-week-bar ' + _barCls(weekTotal, weekStd) + '">' + (typeof fmtHours === 'function' ? fmtHours(weekTotal) : weekTotal.toFixed(1) + 'h') + '</span>' +
           '<span style="font-size:11px;color:var(--muted)">月</span>' +
-          '<span class="uc-week-bar ' + monthCls + '">' + (typeof fmtHours === 'function' ? fmtHours(monthTotal) : monthTotal.toFixed(1) + 'h') + '</span>' +
+          '<span class="uc-week-bar ' + _barCls(monthTotal, monthStd) + '">' + (typeof fmtHours === 'function' ? fmtHours(monthTotal) : monthTotal.toFixed(1) + 'h') + '</span>' +
         '</div>' +
       '</div>';
+
+    // Render merged month calendar: wecom intensity + red border for no-checkin dates
     if (typeof _renderMonthCalendar === 'function') {
-      html += _renderMonthCalendar(now, dailyMap, data);
+      html += _renderMergedMonthCalendar(now, wecomDailyMap, wlData, weData, wecomDailyMap);
     }
     html += '</div>';
+
+    // Monthly report button
+    html += '<div style="margin-top:8px;text-align:right">' +
+      '<a href="javascript:void(0)" onclick="gotoView(\'reports\');setTimeout(function(){switchReportTab(\'manpower\')},200)" style="font-size:11px;color:var(--accent);text-decoration:none">月度报表 →</a>' +
+    '</div>';
+
     cal.innerHTML = html;
 
-    // Bug stats: only refresh when bugs tab is active
+    // Bug stats refresh
     if (_ucActiveTab === 'bugs') _ucLoadBugStats();
-  }).catch(function(){});
+  }).catch(function(e) {
+    console.error('Merged calendar load failed', e);
+  });
 }
+
+// Keep _ucLoadCalendar as legacy ref, delegates to merged
+function _ucLoadCalendar(user) { _ucLoadMergedCalendar(user); }
+function _ucLoadWecomCalendar(user) { /* merged into _ucLoadMergedCalendar */ }
 
 var _ucPanelOpen = null;
 function _ucTogglePanel(type) {
@@ -3520,7 +3562,8 @@ function openDailySummary() {
 }
 
 /* ── WeCom Checkin Calendar ── */
-function _ucLoadWecomCalendar(user) {
+// _ucLoadWecomCalendar removed — merged into _ucLoadMergedCalendar
+function _ucLoadWecomCalendar_old(user) {
   var cal = document.getElementById('uc-wecom-calendar');
   if (!cal) return;
   var now = new Date();

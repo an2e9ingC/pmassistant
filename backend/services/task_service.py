@@ -688,9 +688,11 @@ def delete_task(db: Session, task_id: int, user=None) -> bool:
 
 
 def recalc_consumed_hours(db: Session, task_id: int):
-    """Update task.consumed_hours from sum of worklogs."""
+    """Update task.consumed_hours from sum of worklog calculated_hours (fallback to hours)."""
     total = db.query(WorkLog).with_entities(
-        sa_func.coalesce(sa_func.sum(WorkLog.hours), 0)
+        sa_func.coalesce(
+            sa_func.sum(sa_func.coalesce(WorkLog.calculated_hours, WorkLog.hours)),
+        0)
     ).filter(WorkLog.task_id == task_id).scalar() or 0.0
     db.query(Task).filter(Task.id == task_id).update({Task.consumed_hours: float(total)})
     db.commit()

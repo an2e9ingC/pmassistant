@@ -47,13 +47,25 @@ class BugUpdate(BaseModel):
 
 class WorklogCreate(BaseModel):
     bug_id: int
-    hours: float
+    percentage: float
     date: Optional[str] = None
     description: Optional[str] = ""
+    progress: Optional[int] = None
+
+
+class WorklogBatchEntry(BaseModel):
+    date: str
+    percentage: float
+    description: Optional[str] = None
+    progress: Optional[int] = None
+
+
+class WorklogBatchCreate(BaseModel):
+    entries: List[WorklogBatchEntry]
 
 
 class WorklogUpdate(BaseModel):
-    hours: Optional[float] = None
+    percentage: Optional[float] = None
     date: Optional[str] = None
     description: Optional[str] = None
 
@@ -151,8 +163,19 @@ def list_worklogs(bug_id: int, db: Session = Depends(get_db), _=Depends(get_curr
 def create_worklog(bug_id: int, body: WorklogCreate, db: Session = Depends(get_db), user=Depends(get_current_user)):
     body.bug_id = bug_id
     w = bug_service.create_worklog(db, body.model_dump(), user.id)
-    log_audit(db, user, "bug_worklog_add", f"Bug #{bug_id} 记录工时 {body.hours}h", AUDIT_CAT_BUG, "low")
+    log_audit(db, user, "bug_worklog_add", f"Bug #{bug_id} 记录工时 {body.percentage}%", AUDIT_CAT_BUG, "low")
     return {"code": 0, "data": w, "message": "ok"}
+
+
+@router.post("/{bug_id}/worklogs/batch", response_model=dict)
+def create_worklog_batch(bug_id: int, body: WorklogBatchCreate, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    created = bug_service.create_worklog_batch(
+        db, bug_id,
+        [e.model_dump() for e in body.entries],
+        user.id,
+    )
+    log_audit(db, user, "bug_worklog_add", f"Bug #{bug_id} 批量记录 {len(created)} 条工时", AUDIT_CAT_BUG, "low")
+    return {"code": 0, "data": created, "message": f"已创建 {len(created)} 条工时记录"}
 
 
 @router.put("/{bug_id}/worklogs/{wl_id}", response_model=dict)

@@ -971,6 +971,13 @@ var EventBus = {
   on: function(event, fn) {
     (this._handlers[event] = this._handlers[event] || []).push(fn);
   },
+  off: function(event, fn) {
+    var list = this._handlers[event];
+    if (list) {
+      var idx = list.indexOf(fn);
+      if (idx >= 0) list.splice(idx, 1);
+    }
+  },
   emit: function(event, data) {
     (this._handlers[event] || []).forEach(function(fn) { fn(data || {}); });
   }
@@ -1769,6 +1776,275 @@ function _renderMonthCalendar(today, dailyMap, calData) {
   return html;
 }
 
+function _renderMergedMonthCalendar(today, wecomDailyMap, wlData, weData, redBorderMap) {
+  if (!_calYear) { _calYear = today.getFullYear(); _calMonth = today.getMonth()+1; }
+  var total = weData ? (weData.total||0) : 0;
+  var monthNames = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+  var dayNames = ['一','二','三','四','五','六','日'];
+
+  var firstDay = new Date(_calYear, _calMonth-1, 1);
+  var lastDay = new Date(_calYear, _calMonth, 0);
+  var startDow = firstDay.getDay()===0 ? 6 : firstDay.getDay()-1;
+  var totalDays = lastDay.getDate();
+  var prevMonthDays = new Date(_calYear, _calMonth-1, 0).getDate();
+
+  // Build wlDailyMap from wlData
+  var wlDailyMap = {};
+  if (wlData && wlData.daily) wlData.daily.forEach(function(d) { wlDailyMap[d.date] = d; });
+
+  var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
+    '<span style="font-size:11px;color:var(--muted)">'+_calYear+'年'+monthNames[_calMonth-1]+' · 打卡工时 '+total.toFixed(1)+'h</span>' +
+    '<span style="display:flex;gap:4px">' +
+      '<button class="btn-xs" style="color:var(--fg);background:var(--bg);border:1px solid var(--border)" onclick="_calShift(-1)">◀</button>' +
+      '<button class="btn-xs" style="font-weight:600;color:var(--fg);background:var(--bg);border:1px solid var(--border)" onclick="_calGoToday()">今天</button>' +
+      '<button class="btn-xs" style="color:var(--fg);background:var(--bg);border:1px solid var(--border)" onclick="_calShift(1)">▶</button>' +
+    '</span></div>';
+
+  html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);text-align:center;margin-bottom:4px">';
+  dayNames.forEach(function(n) { html += '<div style="font-size:10px;color:var(--muted);padding:2px 0">'+n+'</div>'; });
+  html += '</div>';
+
+  var cells = '';
+  var totalCells = Math.ceil((startDow + totalDays)/7)*7;
+  for (var i=0; i<totalCells; i++) {
+    var dayNum = i - startDow + 1;
+    var isCurrentMonth = dayNum >= 1 && dayNum <= totalDays;
+    var displayDay = isCurrentMonth ? dayNum : (dayNum < 1 ? prevMonthDays+dayNum : dayNum-totalDays);
+    var y = _calYear, mm = _calMonth-1;
+    if (dayNum < 1) { mm--; if(mm<0){mm=11;y--;} }
+    else if (dayNum > totalDays) { mm++; if(mm>11){mm=0;y++;} }
+    var dStr = y+'-'+String(mm+1).padStart(2,'0')+'-'+String(displayDay).padStart(2,'0');
+    var weDay = wecomDailyMap[dStr];
+    var wlDay = wlDailyMap[dStr];
+    var h = weDay ? (weDay.total_hours || 0) : 0;
+    var todayStr = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+    var isToday = dStr === todayStr;
+
+    // Check if this date has no checkin data
+    var hasCheckin = !!(weDay && weDay.total_hours > 0);
+    var hasWorklog = !!(wlDay && wlDay.total_hours > 0);
+
+    // Cell color fill based on WeCom checkin hours
+    var cellBg = '', tipText = '';
+    if (isCurrentMonth && h > 0) {
+      tipText = (typeof fmtHours === 'function' ? fmtHours(h) : h.toFixed(1)+'h');
+      if (h < 8) {
+        var pct = h/8*100;
+        var blueColor = 'var(--accent)';
+        cellBg = 'background:linear-gradient(to top,' + blueColor + ' ' + pct + '%,transparent ' + pct + '%);';
+      } else if (h < 8.5) {
+        cellBg = 'background:var(--success);';
+      } else {
+        var otColors = ['#C5B88A','#C9A070','#C88860','#C07054','#B4604C','#A45048','#944444','#843A3A'];
+        var overLevel = Math.min(7, Math.floor(h - 8.5));
+        cellBg = 'background:' + otColors[overLevel] + ';';
+      }
+    }
+
+    // Red border for dates without checkin data (but with worklog records)
+    var borderColor = 'var(--border)';
+    var borderWidth = '1px';
+    if (isCurrentMonth && hasWorklog && !hasCheckin) {
+      borderColor = 'var(--danger)';
+      borderWidth = '2px';
+    } else if (isToday) {
+      borderColor = 'var(--accent)';
+    }
+
+    cells += '<div onclick="_openMergedDayDetail(\''+dStr+'\','+h+','+hasCheckin+')" '+(tipText?'title="'+tipText+'"':'')+' style="border:'+borderWidth+' solid '+borderColor+';border-radius:4px;padding:3px 2px;text-align:center;cursor:pointer;' +
+      cellBg + ';' + (isCurrentMonth ? '' : 'opacity:0.35;') + '">' +
+      '<div style="font-size:11px;font-weight:'+(isToday?'700':'400')+';color:'+(isCurrentMonth?'var(--fg)':'var(--muted)')+'">'+displayDay+'</div>' +
+    '</div>';
+  }
+  html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px">'+cells+'</div>';
+  return html;
+}
+
+function _openMergedDayDetail(dateStr, checkinHours, hasCheckin) {
+  function render(wlData) {
+    var tasks = (wlData && wlData.daily && wlData.daily[0]) ? wlData.daily[0].tasks : [];
+
+    // Build rows
+    var rowsHtml = '';
+    var rowNum = 0;
+    tasks.forEach(function(t) {
+      rowNum++;
+      var desc = t.description || '';
+      if (desc.length > 60) desc = desc.substring(0, 57) + '...';
+      var typeBadge = t.source === 'bug'
+        ? '<span style="font-size:9px;padding:1px 4px;border-radius:3px;background:var(--danger)20;color:var(--danger)">BUG</span>'
+        : '<span style="font-size:9px;padding:1px 4px;border-radius:3px;background:var(--accent)20;color:var(--accent)">任务</span>';
+      rowsHtml += '<tr>' +
+        '<td style="text-align:center">' + rowNum + '</td>' +
+        '<td style="font-size:13px;font-family:var(--mono);color:var(--muted)">' + (t.created_at||'').substring(11,16) + '</td>' +
+        '<td style="font-family:var(--mono);font-size:13px;color:var(--accent)">' + escHtml(t.project_code||'') + '</td>' +
+        '<td style="font-size:14px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(t.project_name||'') + '</td>' +
+        '<td style="font-size:13px;color:var(--muted)">' + escHtml(t.stage_name||t.component_name||'') + '</td>' +
+        '<td style="font-size:14px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escHtml(t.title||'')+'">' + escHtml(t.title||'') + '</td>' +
+        '<td style="text-align:center">' + typeBadge + '</td>' +
+        '<td style="text-align:center">' + (t.progress||0) + '%</td>' +
+        '<td style="text-align:center;font-weight:600;color:var(--accent)">' + (t.percentage ? t.percentage+'%' : '<span style="color:var(--muted)">—</span>') + '</td>' +
+        '<td style="text-align:right;font-weight:500">' + ((t.calculated_hours||t.hours||0)).toFixed(1) + 'h</td>' +
+        '<td style="font-size:13px;color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escHtml(t.description||'')+'">' + escHtml(desc) + '</td>' +
+        '<td style="white-space:nowrap">' +
+          (window._ucViewUserId ? '' :
+            iconEdit('editWorklogEntryById(' + t.id + ',\'' + dateStr + '\')', '编辑') +
+            iconDelete('deleteWorklogEntry(' + t.id + ',' + (t.source==='bug'?'true':'false') + ',' + (t.bug_id||'null') + ')', '删除')) +
+        '</td></tr>';
+    });
+
+    // Summary stats
+    var totalCalcH = 0, entryCount = tasks.length;
+    tasks.forEach(function(t) {
+      totalCalcH += (t.calculated_hours || t.hours || 0);
+    });
+
+    // Merged summary bar: checkin + worklog stats in one row
+    var checkinLabel = hasCheckin
+      ? '<span style="font-size:15px;color:var(--muted)">打卡 <b style="color:var(--success);font-size:17px">' + checkinHours.toFixed(1) + 'h</b></span>'
+      : '<span style="font-size:15px;color:var(--warn)">⚠ 无打卡</span>';
+    var ratioText = totalCalcH > 0 && checkinHours > 0
+      ? '<span style="font-size:15px;color:var(--muted)">工时/打卡 <b style="color:var(--fg);font-size:17px">' + (totalCalcH / checkinHours * 100).toFixed(0) + '%</b></span>'
+      : '';
+
+    var summaryBar = '<div style="display:flex;gap:16px;padding:12px 16px;margin-bottom:12px;background:var(--bg);border-radius:8px;border:1px solid var(--border);align-items:center;flex-wrap:wrap">' +
+      checkinLabel +
+      '<span style="color:var(--border)">|</span>' +
+      '<span style="font-size:15px;color:var(--muted)">记录 <b style="color:var(--fg);font-size:17px">' + totalCalcH.toFixed(1) + 'h</b></span>' +
+      '<span style="font-size:15px;color:var(--muted)">' + entryCount + ' 条</span>' +
+      ratioText +
+    '</div>' +
+    '<div id="wl-checkin-detail" style="font-size:15px;color:var(--muted);margin-bottom:10px;padding:10px 14px;background:var(--bg);border-radius:8px;border:1px solid var(--border);display:none">加载打卡详情...</div>';
+
+    var tableHtml = rowsHtml ? summaryBar + '<div style="max-height:420px;overflow-y:auto;margin:0 -16px 0 -16px"><table class="proj-table" style="font-size:14px;margin:0"><thead><tr>' +
+      '<th style="width:28px">#</th><th style="width:42px">时间</th><th style="width:60px">项目</th><th>项目名</th><th>阶段</th><th>任务</th><th style="width:36px">类型</th><th style="width:40px">进度</th><th style="width:36px">占比</th><th style="width:44px">工时</th><th>内容</th><th style="width:68px">操作</th>' +
+      '</tr></thead><tbody>' + rowsHtml + '</tbody></table></div>' : '<div style="color:var(--muted);text-align:center;padding:20px">当日无工时记录</div>';
+
+    // Update dialog body in-place (reuse the existing dialog if open)
+    var overlay = document.querySelector('.note-dialog-overlay');
+    if (overlay) {
+      var body = overlay.querySelector('.note-dialog');
+      if (body) {
+        // Preserve header, replace body content after header
+        var head = body.querySelector('.note-dialog-head');
+        var afterHead = head ? head.nextElementSibling : null;
+        // Remove all content after head
+        while (body.lastChild && body.lastChild !== head) {
+          body.removeChild(body.lastChild);
+        }
+        // Insert new content
+        var wrapper = document.createElement('div');
+        wrapper.innerHTML = tableHtml;
+        while (wrapper.firstChild) {
+          body.appendChild(wrapper.firstChild);
+        }
+        // Update footer buttons
+        var footer = body.querySelector('.note-dialog-foot');
+        if (!footer) {
+          footer = document.createElement('div');
+          footer.className = 'note-dialog-foot';
+          footer.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)';
+          body.appendChild(footer);
+        }
+        var isViewingOther = !!window._ucViewUserId;
+        footer.innerHTML = (isViewingOther ? '' : '<button class="btn btn-sm btn-primary" onclick="openWorklogFromCalendar(\''+dateStr+'\')">记录工时</button>') +
+          '<button class="btn btn-sm" onclick="document.querySelector(\'.note-dialog-overlay\').remove()">关闭</button>';
+        return;
+      }
+    }
+
+    // First open
+    var isViewingOther = !!window._ucViewUserId;
+    var dlgButtons = isViewingOther
+      ? [{text:'关闭',onclick:"document.querySelector('.note-dialog-overlay').remove()"}]
+      : [{text:'记录工时',cls:'btn-primary',onclick:'openWorklogFromCalendar(\''+dateStr+'\')'},
+         {text:'关闭',onclick:"document.querySelector('.note-dialog-overlay').remove()"}];
+    openDialog(dateStr+' 工时详情',
+      tableHtml,
+      dlgButtons,
+      {maxWidth: '80vw'});
+    // Fetch checkin details
+    _loadCheckinDetail(dateStr);
+  }
+
+  function _loadCheckinDetail(dateStr) {
+    var uid = window._ucViewUserId || (getCurrentUser() ? getCurrentUser().id : '');
+    var detailEl = document.getElementById('wl-checkin-detail');
+    if (!detailEl) return;
+    API.get('/wecom/calendar?user_id=' + uid + '&date_from=' + dateStr + '&date_to=' + dateStr).then(function(data) {
+      if (!data || !data.daily || !data.daily.length) {
+        detailEl.innerHTML = '<span style="color:var(--warn)">无打卡数据</span>';
+        detailEl.style.display = '';
+        return;
+      }
+      var day = data.daily[0];
+      var lines = [];
+      if (day.checkins && day.checkins.length) {
+        day.checkins.forEach(function(c) {
+          var t = c.type || '打卡';
+          var tm = c.time || '?';
+          var ex = c.exception ? ' <span style="color:var(--warn)">(' + c.exception + ')</span>' : '';
+          var loc = c.location ? ' @' + c.location : '';
+          lines.push(t + ': ' + tm + ex + loc);
+        });
+      }
+      if (day.approvals && day.approvals.length) {
+        day.approvals.forEach(function(a) {
+          lines.push('<span style="color:var(--accent)">' + (a.name || '审批') + '</span> ' + (a.start_time||'') + '-' + (a.end_time||''));
+        });
+      }
+      detailEl.innerHTML = lines.length ? lines.join(' | ') : '<span style="color:var(--muted)">无明细</span>';
+      detailEl.style.display = '';
+    }).catch(function() {
+      if (detailEl) { detailEl.innerHTML = ''; detailEl.style.display = 'none'; }
+    });
+  }
+
+  function fetchAndRender() {
+    var uid = window._ucViewUserId || (getCurrentUser() ? getCurrentUser().id : '');
+    API.get('/worklogs/calendar?user_id='+uid+'&date_from='+dateStr+'&date_to='+dateStr).then(function(wlData) {
+      render(wlData);
+      _loadCheckinDetail(dateStr);
+    });
+  }
+
+  // Register event listeners for real-time refresh
+  function onWlChanged(e) {
+    // Check if this event affects the current date
+    fetchAndRender();
+  }
+  EventBus.off('worklog:saved', onWlChanged);
+  EventBus.off('worklog:deleted', onWlChanged);
+  EventBus.on('worklog:saved', onWlChanged);
+  EventBus.on('worklog:deleted', onWlChanged);
+
+  // Cleanup listeners when dialog is closed
+  var cleanup = function() {
+    EventBus.off('worklog:saved', onWlChanged);
+    EventBus.off('worklog:deleted', onWlChanged);
+  };
+  var existingClose = document.querySelector('.note-dialog-overlay');
+  // Use MutationObserver or simply re-register on each open
+  setTimeout(function() {
+    var closeBtn = document.querySelector('.note-dialog-close');
+    if (closeBtn && !closeBtn._wlCleanup) {
+      closeBtn._wlCleanup = true;
+      closeBtn.addEventListener('click', cleanup);
+    }
+    // Also cleanup on cancel button
+    var btns = document.querySelectorAll('.note-dialog-foot .btn-sm');
+    btns.forEach(function(b) {
+      if (b.textContent === '关闭' && !b._wlCleanup) {
+        b._wlCleanup = true;
+        b.addEventListener('click', cleanup);
+      }
+    });
+  }, 100);
+
+  // Initial load
+  fetchAndRender();
+}
+
 var _calChangeCallback = null;
 
 function _calShift(delta) {
@@ -1888,18 +2164,19 @@ function openDayDetail(dateStr, totalHours, fromWecom) {
           '<td style="font-size:12px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escHtml(t.title||'')+'">' + escHtml(t.title||'') + '</td>' +
           '<td style="text-align:center">' + typeBadge + '</td>' +
           '<td style="text-align:center">' + (t.progress||0) + '%</td>' +
-          '<td style="text-align:right;font-weight:500">' + t.hours.toFixed(1) + 'h</td>' +
+          '<td style="text-align:center;font-weight:600;color:var(--accent)">' + (t.percentage ? t.percentage+'%' : '<span style="color:var(--muted)">—</span>') + '</td>' +
+          '<td style="text-align:right;font-weight:500">' + ((t.calculated_hours||t.hours||0)).toFixed(1) + 'h</td>' +
           '<td style="font-size:11px;color:var(--muted);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escHtml(t.description||'')+'">' + escHtml(desc) + '</td>' +
           '<td style="white-space:nowrap">' +
             iconEdit('editWorklogEntryById(' + t.id + ',\'' + dateStr + '\')', '编辑') +
-            iconDelete('deleteWorklogEntry(' + t.id + ',' + (t.source==='bug'?'true':'false') + ')', '删除') +
+            iconDelete('deleteWorklogEntry(' + t.id + ',' + (t.source==='bug'?'true':'false') + ',' + (t.bug_id||'null') + ')', '删除') +
             iconCopy('copyWorklogEntryById(' + t.id + ',\'' + dateStr + '\')', '复制') +
           '</td>' +
         '</tr>';
       });
     }
     var tableHtml = rowsHtml ? '<div style="max-height:420px;overflow-y:auto;margin:-12px -16px 0 -16px"><table class="proj-table" style="font-size:11px;margin:0"><thead><tr>' +
-      '<th style="width:36px">#</th><th style="width:48px">记录时间</th><th style="width:70px">项目编号</th><th>项目名</th><th>阶段/组件</th><th>任务名</th><th style="width:42px">类型</th><th style="width:52px">进度</th><th style="width:52px">工时</th><th>工作内容</th><th style="width:80px">操作</th>' +
+      '<th style="width:36px">#</th><th style="width:48px">记录时间</th><th style="width:70px">项目编号</th><th>项目名</th><th>阶段/组件</th><th>任务名</th><th style="width:42px">类型</th><th style="width:52px">进度</th><th style="width:42px">占比</th><th style="width:52px">工时</th><th>工作内容</th><th style="width:80px">操作</th>' +
       '</tr></thead><tbody>' + rowsHtml + '</tbody></table></div>' : '<div style="color:var(--muted);text-align:center;padding:20px">当日无工时记录</div>';
     openDialog(dateStr+' 工时详情 ('+totalHours.toFixed(1)+'h)',
       tableHtml,
@@ -1971,8 +2248,11 @@ function editWorklogEntry(t, dateStr) {
   var html = '<div>' + projectHtml + stageTaskHtml +
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">日期 *</label>' +
       '<input class="search-inp" id="wl-edit-date" type="date" required value="'+dateStr+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
-    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工时(h) *</label>' +
-      '<input class="search-inp" id="wl-edit-hours" type="number" step="0.5" min="0.5" required value="'+t.hours+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工时占比 (%) *</label>' +
+      '<input type="range" id="wl-edit-pct" min="5" max="100" step="5" value="'+(t.percentage||25)+'" style="width:100%" oninput="document.getElementById(\'wl-edit-pct-val\').textContent=this.value+\'%\'">' +
+      '<div style="display:flex;justify-content:space-between;font-size:9px;color:var(--muted)"><span>5%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>' +
+      '<div style="text-align:center"><span id="wl-edit-pct-val" style="font-size:18px;font-weight:600;color:var(--accent)">'+(t.percentage||25)+'%</span></div>' +
+      '<div style="font-size:10px;color:var(--muted);margin-top:2px">计算工时: ' + ((t.calculated_hours||t.hours||0)).toFixed(1) + 'h</div></div>' +
     (isBug ? '' : '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">进度(%) *</label>' +
       _renderProgressSlider('wl-edit', t.progress||0) + '</div>') +
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工作描述</label>' +
@@ -2026,18 +2306,18 @@ var _wlEditEntryPending = null;
 var _wlEditBugId = null;
 
 async function saveWorklogEntry(wlId, isBug) {
-  var hours = parseFloat(document.getElementById('wl-edit-hours').value);
+  var pct = parseInt(document.getElementById('wl-edit-pct').value) || 0;
   var desc = document.getElementById('wl-edit-desc').value.trim();
   var date = document.getElementById('wl-edit-date').value;
   var taskIdEl = document.getElementById('wl-edit-task-id');
   var progressEl = document.getElementById('wl-edit-slider');
   var newTaskId = taskIdEl ? (parseInt(taskIdEl.value) || 0) : 0;
   var progress = progressEl ? (parseInt(progressEl.value) || 0) : 0;
-  if (!date || !hours || hours <= 0) { showToast('请填写日期和工时', 'error'); return; }
+  if (!date || !pct || pct < 5) { showToast('请填写日期和工时占比(≥5%)', 'error'); return; }
 
   // If progress >= 100 and not a bug, show confirmation before saving
   if (!isBug && progress >= 100) {
-    _wlEditEntryPending = { wlId: wlId, isBug: isBug, newTaskId: newTaskId, hours: hours, progress: progress, desc: desc, date: date };
+    _wlEditEntryPending = { wlId: wlId, isBug: isBug, newTaskId: newTaskId, percentage: pct, progress: progress, desc: desc, date: date };
     var approvalEnabled = window._approvalEnabled;
     var reviewerName = document.getElementById('wl-edit-reviewer-name');
     var rname = reviewerName ? reviewerName.value.trim() : '';
@@ -2066,7 +2346,7 @@ async function saveWorklogEntry(wlId, isBug) {
     return;
   }
 
-  await _doSaveWorklogEntry(wlId, isBug, newTaskId, hours, progress, desc, date);
+  await _doSaveWorklogEntry(wlId, isBug, newTaskId, pct, progress, desc, date);
 }
 
 function _wlEditEntryCancel() {
@@ -2080,13 +2360,13 @@ async function _wlEditEntryConfirm() {
   if (!_wlEditEntryPending) return;
   var p = _wlEditEntryPending;
   _wlEditEntryPending = null;
-  await _doSaveWorklogEntry(p.wlId, p.isBug, p.newTaskId, p.hours, p.progress, p.desc, p.date);
+  await _doSaveWorklogEntry(p.wlId, p.isBug, p.newTaskId, p.percentage, p.progress, p.desc, p.date);
 }
 
-async function _doSaveWorklogEntry(wlId, isBug, newTaskId, hours, progress, desc, date) {
+async function _doSaveWorklogEntry(wlId, isBug, newTaskId, percentage, progress, desc, date) {
   var url = (isBug ? '/bugs/' + _wlEditBugId + '/worklogs/' : '/worklogs/') + wlId;
   try {
-    var payload = {hours: hours, date: date, description: desc};
+    var payload = {percentage: percentage, date: date, description: desc};
     if (newTaskId && !isBug) payload.task_id = newTaskId;
     await API.put(url, payload);
     if (newTaskId && !isBug) {
@@ -2101,13 +2381,14 @@ async function _doSaveWorklogEntry(wlId, isBug, newTaskId, hours, progress, desc
   } catch(e) { showToast('更新失败: '+(e.message||''), 'error'); }
 }
 
-async function deleteWorklogEntry(wlId, isBug) {
+async function deleteWorklogEntry(wlId, isBug, bugId) {
   if (!confirm('确定删除此工时记录？')) return;
-  var url = (isBug ? '/bugs/' + _wlEditBugId + '/worklogs/' : '/worklogs/') + wlId;
+  var realBugId = bugId || _wlEditBugId;
+  var url = (isBug ? '/bugs/' + realBugId + '/worklogs/' : '/worklogs/') + wlId;
   try {
     await API.del(url);
     showToast('已删除', 'success');
-    EventBus.emit('worklog:deleted', {taskId: null, bugId: isBug ? _wlEditBugId : null});
+    EventBus.emit('worklog:deleted', {taskId: null, bugId: isBug ? realBugId : null});
   } catch(e) { showToast('删除失败: '+(e.message||''), 'error'); }
 }
 
@@ -2254,7 +2535,8 @@ function _wlOnStageChange() {
 
 function openWorklogFromCalendar(dateStr) {
   var html = '<div>' +
-    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">项目</label>' +
+    // Project + Stage + Task combo (shared across all rows)
+    '<div style="margin-bottom:8px"><label style="font-size:15px;color:var(--muted)">项目</label>' +
       createProjectCombo({comboId: 'wl-proj', inputId: 'wl-proj-input', dropdownId: 'wl-proj-dd', placeholder: '搜索项目...',
         onSelect: function(p) {
           document.getElementById('wl-project-id').value = p.id;
@@ -2263,53 +2545,147 @@ function openWorklogFromCalendar(dateStr) {
         }}) + '</div>' +
     '<input type="hidden" id="wl-project-id" value="">' +
     '<input type="hidden" id="wl-project-code" value="">' +
-    '<div style="margin-bottom:8px;display:flex;gap:8px">' +
-      '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">阶段</label>' +
+    '<div style="margin-bottom:10px;display:flex;gap:8px">' +
+      '<div style="flex:1"><label style="font-size:15px;color:var(--muted);display:block;margin-bottom:3px">阶段</label>' +
         '<select class="search-inp" id="wl-stage" style="width:100%;box-sizing:border-box" onchange="_wlOnStageChange()"><option value="">全部阶段</option></select></div>' +
-      '<div style="flex:2"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">任务</label>' +
+      '<div style="flex:2"><label style="font-size:15px;color:var(--muted);display:block;margin-bottom:3px">任务</label>' +
         createTaskCombo({comboId: 'wl-task', inputId: 'wl-task-input', dropdownId: 'wl-task-dd',
           projectIdFn: function() { return document.getElementById('wl-project-code').value; },
           stageFilterFn: function() { return document.getElementById('wl-stage').value; },
-          onSelect: function(t) {
-            document.getElementById('wl-task-id').value = t.id;
-            document.getElementById('wl-slider').value = t.progress || 0;
-          }}) + '</div></div>' +
+          onSelect: function(t) { document.getElementById('wl-task-id').value = t.id; }}) + '</div></div>' +
     '<input type="hidden" id="wl-task-id" value="">' +
-    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">日期 *</label>' +
-      '<input class="search-inp" id="wl-date" type="date" required value="'+dateStr+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
-    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工时(h) *</label>' +
-      '<input class="search-inp" id="wl-hours" type="number" step="0.5" min="0.5" required value="1" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
-    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">进度(%) *</label>' +
-      _renderProgressSlider('wl', 0) + '</div>' +
-    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工作描述 *</label>' +
-      '<textarea class="search-inp" id="wl-desc" rows="2" required style="width:100%;box-sizing:border-box;margin-top:2px;resize:vertical"></textarea></div>' +
-    '</div>';
+    // Column header
+    '<div style="display:flex;gap:10px;align-items:center;border:1px solid transparent;padding:0 10px;margin-bottom:4px;font-size:13px;color:var(--muted);font-weight:600;text-align:center">' +
+      '<span style="width:155px;flex-shrink:0">日期</span>' +
+      '<span style="flex:1;min-width:120px">工作内容</span>' +
+      '<span style="width:60px;flex-shrink:0">工时</span>' +
+      '<span style="width:80px;flex-shrink:0">占比</span>' +
+      '<span style="width:80px;flex-shrink:0">可用剩余</span>' +
+      '<span style="width:32px;flex-shrink:0"></span>' +
+    '</div>' +
+    // Batch rows: date + desc + hours + pct slider + remaining
+    '<div id="wl-cal-rows">' + _wlCalBuildRow(0, dateStr) + '</div>' +
+    '<div style="text-align:center;margin-top:8px">' +
+      '<button class="btn btn-sm" onclick="_wlCalAddRow()">+ 添加一行</button>' +
+    '</div>' +
+    '<input type="hidden" id="wl-cal-row-count" value="1">' +
+  '</div>';
   openDialog('记录工时 — ' + dateStr, html, [
     {text:'取消',onclick:'closeSharedDialog()'},
-    {text:'提交',cls:'btn-primary',onclick:'submitGenericWorklog()'}
-  ], {maxWidth:480});
+    {text:'提交',cls:'btn-primary',onclick:'_submitCalBatchWorklog()'}
+  ], {maxWidth: '80vw'});
+  setTimeout(function() { _wlCalOnDateChange(0); }, 100);
 }
 
-async function submitGenericWorklog() {
-  var tid = parseInt(document.getElementById('wl-task-id').value) || 0;
-  var hours = parseFloat(document.getElementById('wl-hours').value);
-  var progress = parseInt(document.getElementById('wl-slider').value);
-  var desc = document.getElementById('wl-desc').value.trim();
-  var date = document.getElementById('wl-date').value;
-  if (!tid) { showToast('请选择任务', 'error'); return; }
-  if (!date) { showToast('请选择日期', 'error'); return; }
-  if (!hours || hours <= 0) { showToast('请输入有效的工时数', 'error'); return; }
-  if (isNaN(progress) || progress < 0 || progress > 100) { showToast('请输入有效的进度(0-100)', 'error'); return; }
-  if (!desc) { showToast('请填写工作描述', 'error'); return; }
-  try {
-    await API.post('/worklogs', {task_id:tid, hours:hours, date:date, description:desc});
-    await API.put('/tasks/'+tid, {progress:progress});
-    closeSharedDialog();
-    showToast('工时记录成功', 'success');
-    EventBus.emit('worklog:saved', {taskId: tid});
-  } catch(e) {
-    showToast('提交失败: ' + (e.message || ''), 'error');
+function _wlCalBuildRow(idx, defaultDate) {
+  return '<div class="wl-cal-row" data-idx="' + idx + '" style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px">' +
+    '<div style="display:flex;gap:10px;align-items:center">' +
+      '<input class="search-inp" id="wl-cal-date-' + idx + '" type="date" value="' + defaultDate + '" style="width:155px;box-sizing:border-box;font-size:15px;flex-shrink:0" onchange="_wlCalOnDateChange(' + idx + ')">' +
+      '<input class="search-inp" id="wl-cal-desc-' + idx + '" placeholder="工作内容" style="flex:1;min-width:120px;box-sizing:border-box;font-size:15px">' +
+      '<div style="width:60px;flex-shrink:0;text-align:center;font-size:16px;font-weight:600;color:var(--fg)"><span id="wl-cal-hours-' + idx + '">2.0</span><span style="font-size:14px;color:var(--muted);font-weight:400">h</span></div>' +
+      '<div id="wl-cal-pct-ring-' + idx + '" style="width:80px;flex-shrink:0;cursor:pointer;text-align:center" onclick="_wlCalShowPct(' + idx + ')" title="点击调整占比">' +
+        _wlCalRing(25, 38, 'var(--accent)') +
+      '</div>' +
+      '<div id="wl-cal-pct-slider-' + idx + '" style="display:none;flex-shrink:0;width:80px">' +
+        '<input type="range" id="wl-cal-pct-' + idx + '" min="5" max="100" step="5" value="25" style="width:100%" oninput="_wlCalPctInput(' + idx + ')" onblur="_wlCalHidePct(' + idx + ')">' +
+      '</div>' +
+      '<span id="wl-cal-avail-' + idx + '" style="width:80px;flex-shrink:0;font-size:14px;color:var(--success);text-align:center">可用 100%</span>' +
+      '<span style="width:32px;flex-shrink:0;text-align:center">' + iconDelete('_wlCalRemoveRow(' + idx + ')', '删除此行') + '</span>' +
+    '</div>' +
+  '</div>';
+}
+
+function _wlCalRing(pct, size, color) {
+  var r = (size - 4) / 2, circ = 2 * Math.PI * r, dash = circ * pct / 100;
+  return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '">' +
+    '<circle cx="' + (size/2) + '" cy="' + (size/2) + '" r="' + r + '" fill="none" stroke="var(--border)" stroke-width="3"/>' +
+    '<circle cx="' + (size/2) + '" cy="' + (size/2) + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="3"' +
+    ' stroke-dasharray="' + dash + ' ' + (circ - dash) + '" stroke-linecap="round" transform="rotate(-90 ' + (size/2) + ' ' + (size/2) + ')"/>' +
+    '<text x="' + (size/2) + '" y="' + (size/2) + '" text-anchor="middle" dominant-baseline="central" font-size="' + (size*0.32) + '" font-weight="600" fill="var(--fg)">' + pct + '%</text></svg>';
+}
+
+var _wlCalCheckinH = {}, _wlCalSavedPct = {};
+
+function _wlCalShowPct(idx) { document.getElementById('wl-cal-pct-ring-'+idx).style.display='none'; var s=document.getElementById('wl-cal-pct-slider-'+idx); s.style.display=''; var inp=s.querySelector('input'); if(inp)inp.focus(); }
+function _wlCalHidePct(idx) { setTimeout(function(){ document.getElementById('wl-cal-pct-slider-'+idx).style.display='none'; document.getElementById('wl-cal-pct-ring-'+idx).style.display=''; },150); }
+
+function _wlCalOnDateChange(idx) {
+  var d = document.getElementById('wl-cal-date-' + idx).value; if (!d) return;
+  var user = getCurrentUser(); var uid = user ? user.id : '';
+  Promise.all([
+    API.get('/worklogs/daily-usage?date=' + d),
+    API.get('/wecom/calendar?user_id=' + uid + '&date_from=' + d + '&date_to=' + d)
+  ]).then(function(results) {
+    var usage = results[0] || {}, wecom = results[1] || {};
+    var remaining = usage.remaining_percentage !== undefined ? usage.remaining_percentage : 100;
+    var checkinH = (wecom.daily && wecom.daily[0]) ? wecom.daily[0].total_hours : 0;
+    _wlCalSavedPct[d] = usage.total_percentage_used || 0; _wlCalCheckinH[d] = checkinH;
+    var av = document.getElementById('wl-cal-avail-' + idx);
+    if (av) { av.textContent = '可用 ' + remaining + '%'; av.style.color = remaining > 0 ? 'var(--success)' : 'var(--danger)'; }
+    var pctEl = document.getElementById('wl-cal-pct-' + idx);
+    if (pctEl) { pctEl.max = Math.max(5, remaining); if (parseInt(pctEl.value) > remaining) pctEl.value = Math.max(5, remaining); _wlCalUpdateRing(idx); }
+  });
+}
+
+function _wlCalPctInput(idx) {
+  var pct = parseInt(document.getElementById('wl-cal-pct-' + idx).value) || 25;
+  var d = document.getElementById('wl-cal-date-' + idx).value;
+  var checkinH = _wlCalCheckinH[d] || 8;
+  document.getElementById('wl-cal-hours-' + idx).textContent = (pct / 100 * checkinH).toFixed(1);
+  _wlCalUpdateRing(idx);
+}
+
+function _wlCalUpdateRing(idx) {
+  var pct = parseInt(document.getElementById('wl-cal-pct-' + idx).value) || 25;
+  document.getElementById('wl-cal-pct-ring-' + idx).innerHTML = _wlCalRing(pct, 32, 'var(--accent)');
+}
+
+function _wlCalAddRow() {
+  var cnt = parseInt(document.getElementById('wl-cal-row-count').value) || 1;
+  var lastDate = document.getElementById('wl-cal-date-0') ? document.getElementById('wl-cal-date-0').value : fmtLocalDate();
+  var rows = document.querySelectorAll('#wl-cal-rows .wl-cal-row');
+  if (rows.length > 0) {
+    var li = rows[rows.length - 1].getAttribute('data-idx');
+    var ld = document.getElementById('wl-cal-date-' + li);
+    if (ld && ld.value) { var dt = new Date(ld.value + 'T00:00:00'); dt.setDate(dt.getDate() - 1); lastDate = fmtLocalDate(dt); }
   }
+  var row = _wlCalBuildRow(cnt, lastDate);
+  document.getElementById('wl-cal-rows').insertAdjacentHTML('beforeend', row);
+  document.getElementById('wl-cal-row-count').value = cnt + 1;
+  setTimeout(function() { _wlCalOnDateChange(cnt); }, 50);
+}
+
+function _wlCalRemoveRow(idx) {
+  var rowsEl = document.getElementById('wl-cal-rows');
+  var rows = rowsEl.querySelectorAll('.wl-cal-row');
+  if (rows.length <= 1) { showToast('至少保留1行', 'warn'); return; }
+  var t = rowsEl.querySelector('.wl-cal-row[data-idx="' + idx + '"]');
+  if (t) t.remove();
+  document.getElementById('wl-cal-row-count').value = rows.length - 1;
+}
+
+async function _submitCalBatchWorklog() {
+  var tid = parseInt(document.getElementById('wl-task-id').value) || 0;
+  if (!tid) { showToast('请选择任务', 'error'); return; }
+  var rows = document.querySelectorAll('#wl-cal-rows .wl-cal-row');
+  var entries = [], hasErr = false;
+  rows.forEach(function(r) {
+    var i = r.getAttribute('data-idx');
+    var de = document.getElementById('wl-cal-date-' + i), te = document.getElementById('wl-cal-desc-' + i),
+        pe = document.getElementById('wl-cal-pct-' + i);
+    var d = de ? de.value : '', t = te ? te.value.trim() : '', p = pe ? parseInt(pe.value) || 0 : 0;
+    if (!d) { if (de) de.style.outline = '2px solid var(--danger)'; hasErr = true; } else { if (de) de.style.outline = ''; }
+    if (!t) { if (te) te.style.outline = '2px solid var(--danger)'; hasErr = true; } else { if (te) te.style.outline = ''; }
+    if (d && p >= 5 && t) entries.push({date: d, percentage: p, description: t});
+  });
+  if (hasErr) { showToast('请填写所有行的日期和描述', 'warn'); return; }
+  if (!entries.length) { showToast('至少需要一行有效记录', 'warn'); return; }
+  try {
+    await API.post('/worklogs/batch', {task_id: tid, entries: entries});
+    closeSharedDialog();
+    showToast('已记录 ' + entries.length + ' 条工时', 'success');
+    EventBus.emit('worklog:saved', {taskId: tid});
+  } catch(e) { showToast('提交失败: ' + (e.message || ''), 'error'); }
 }
 var _selectedTasks = new Set();
 

@@ -243,6 +243,38 @@ async def sync_wecom_data(db: Session) -> dict:
         except Exception as e:
             logger.error(f"WeCom schedule sync failed: {e}")
 
+        # ── Recalculate calculated_hours for affected worklogs ──
+        if created > 0 or updated > 0:
+            try:
+                from backend.services.worklog_service import _recalc_calculated_hours_for_date
+                from backend.services.task_service import recalc_consumed_hours
+                from backend.services.bug_service import _recalc_bug_hours
+                # Recalculate for the last 30 days
+                from datetime import timedelta as td
+                affected_user_ids = {u.id for u in users}
+                for day_offset in range(30):
+                    d = (now - td(days=day_offset)).date()
+                    for uid in affected_user_ids:
+                        _recalc_calculated_hours_for_date(db, uid, d)
+                # Recalc consumed_hours for all affected tasks and bugs
+                from backend.models.task import WorkLog, Task
+                from backend.models.bug import BugWorkLog
+                task_ids = db.query(WorkLog.task_id).filter(
+                    WorkLog.user_id.in_(affected_user_ids),
+                    WorkLog.date >= (now - td(days=30)).date(),
+                ).distinct().all()
+                bug_ids = db.query(BugWorkLog.bug_id).filter(
+                    BugWorkLog.user_id.in_(affected_user_ids),
+                    BugWorkLog.date >= (now - td(days=30)).date(),
+                ).distinct().all()
+                for (tid,) in task_ids:
+                    recalc_consumed_hours(db, tid)
+                for (bid,) in bug_ids:
+                    _recalc_bug_hours(db, bid)
+                logger.info(f"WeCom sync: recalculated hours for {len(users)} users, {len(task_ids)} tasks, {len(bug_ids)} bugs")
+            except Exception as e:
+                logger.error(f"WeCom sync recalc failed: {e}")
+
         return {"fetched": total_fetched, "created": created, "updated": updated}
     finally:
         await client.close()
@@ -498,12 +530,38 @@ def get_checkin_calendar(
 
     checkins = q.order_by(WeComCheckin.date.desc()).all()
 
+    # Collect all time events per date to compute actual work hours
+    # (earliest start to latest end across checkins + approvals)
+    date_events = {}  # date -> list of (timestamp_in_seconds)
     daily_map = {}
     for c in checkins:
         d = str(c.date)
         if d not in daily_map:
-            daily_map[d] = {"date": d, "total_hours": 0.0, "checkin_info": ""}
-        daily_map[d]["total_hours"] += c.work_hours or 0.0
+            daily_map[d] = {"date": d, "total_hours": 0.0, "checkin_info": "", "checkins": [], "approvals": []}
+        if d not in date_events:
+            date_events[d] = []
+        # Collect event timestamps from raw_data
+        try:
+            if c.source == "checkin" and c.raw_data:
+                records = json.loads(c.raw_data or "[]")
+                if isinstance(records, list):
+                    for r in records:
+                        ct = r.get("checkin_time")
+                        if ct: date_events[d].append(ct)
+            elif c.source == "approval" and c.raw_data:
+                raw = json.loads(c.raw_data or "{}")
+                if isinstance(raw, dict):
+                    apply_data = raw.get("apply_data", {})
+                    for content in (apply_data.get("contents") or []):
+                        if content.get("control") == "Attendance" and content.get("id") == "smart-time":
+                            dr = (content.get("value", {}).get("attendance", {}).get("date_range", {}))
+                            begin_ts = dr.get("new_begin", 0)
+                            end_ts = dr.get("new_end", 0)
+                            if begin_ts: date_events[d].append(begin_ts)
+                            if end_ts: date_events[d].append(end_ts)
+                            break
+        except Exception:
+            pass
         # Extract details from raw_data based on source type
         try:
             if c.source == "approval":
@@ -570,6 +628,14 @@ def get_checkin_calendar(
                             })
         except Exception:
             pass
+
+    # Recalculate total_hours from actual min-max timestamps across all sources
+    for d, events in date_events.items():
+        if events:
+            events.sort()
+            earliest = min(events)
+            latest = max(events)
+            daily_map[d]["total_hours"] = round((latest - earliest) / 3600.0, 2)
 
     daily = sorted(daily_map.values(), key=lambda x: x["date"], reverse=True)
     total = sum(d["total_hours"] for d in daily)

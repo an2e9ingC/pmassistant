@@ -1,7 +1,7 @@
 """WorkLog CRUD + calendar aggregation + multi-dimensional summary."""
 from __future__ import annotations
 from datetime import date, datetime, timezone
-from typing import Optional, List
+from typing import Optional, List, Tuple
 
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func as sa_func
@@ -9,7 +9,74 @@ from sqlalchemy.sql import func as sa_func
 from backend.models.task import WorkLog, Task
 from backend.models.bug import BugWorkLog, PmaBug
 from backend.models.local import PmaSetting, LocalUser, ProjectActivity
+from backend.models.wecom import WeComCheckin, WeComSchedule
 from backend.database import to_local_str
+
+
+def _calc_calculated_hours(db: Session, user_id: int, wl_date: date, percentage: float) -> Tuple[float, bool]:
+    """Calculate hours from percentage × day checkin hours.
+    Returns (calculated_hours, has_checkin).
+
+    Priority: WeComCheckin.work_hours → WeComSchedule daily avg → default 8h
+    """
+    has_checkin = False
+    default_hours = 8.0
+
+    # Find LocalUser → wecom_userid
+    user = db.query(LocalUser).filter(LocalUser.id == user_id).first()
+    if user and user.wecom_userid:
+        # Look up checkin hours
+        checkin = db.query(WeComCheckin).filter(
+            WeComCheckin.user_id == user.wecom_userid,
+            WeComCheckin.date == wl_date,
+        ).first()
+        if checkin and checkin.work_hours and checkin.work_hours > 0:
+            has_checkin = True
+            return (round(percentage / 100.0 * float(checkin.work_hours), 2), has_checkin)
+
+        # Fallback: WeComSchedule
+        schedule = db.query(WeComSchedule).filter(
+            WeComSchedule.year == wl_date.year,
+            WeComSchedule.month == wl_date.month,
+        ).first()
+        if schedule and schedule.work_days and schedule.work_days > 0 and schedule.work_hours:
+            daily = float(schedule.work_hours) / int(schedule.work_days)
+            return (round(percentage / 100.0 * daily, 2), has_checkin)
+
+    # Default fallback
+    return (round(percentage / 100.0 * default_hours, 2), has_checkin)
+
+
+def _recalc_calculated_hours_for_date(db: Session, local_user_id: int, wl_date: date):
+    """Recalculate calculated_hours for all worklogs on a given date after WeCom sync.
+    Called from wecom_service after checkin data is updated.
+    """
+    user = db.query(LocalUser).filter(LocalUser.id == local_user_id).first()
+    if not user:
+        return
+
+    # Update task worklogs
+    wls = db.query(WorkLog).filter(
+        WorkLog.user_id == local_user_id,
+        WorkLog.date == wl_date,
+        WorkLog.percentage.isnot(None),
+    ).all()
+    for wl in wls:
+        calc_h, _ = _calc_calculated_hours(db, local_user_id, wl.date, wl.percentage)
+        wl.calculated_hours = calc_h
+
+    # Update bug worklogs
+    bwls = db.query(BugWorkLog).filter(
+        BugWorkLog.user_id == local_user_id,
+        BugWorkLog.date == wl_date,
+        BugWorkLog.percentage.isnot(None),
+    ).all()
+    for bwl in bwls:
+        calc_h, _ = _calc_calculated_hours(db, local_user_id, bwl.date, bwl.percentage)
+        bwl.calculated_hours = calc_h
+
+    if wls or bwls:
+        db.commit()
 
 
 def _auto_update_task_status(db: Session, task_id: int):
@@ -103,11 +170,17 @@ def _log_worklog_activity(db: Session, task_id: int, user_id: int, action: str, 
 
 def create_worklog(db: Session, data: dict, user_id: int) -> dict:
     """Create a worklog entry and recalc task consumed_hours."""
+    pct = float(data.get("percentage", 0) or 0)
+    wl_date = _parse_date(data.get("date")) or date.today()
+    calc_h, has_checkin = _calc_calculated_hours(db, user_id, wl_date, pct)
+
     w = WorkLog(
         task_id=data.get("task_id"),
         user_id=user_id,
-        hours=float(data.get("hours", 0) or 0),
-        date=_parse_date(data.get("date")) or date.today(),
+        hours=calc_h,  # backward compat
+        percentage=pct,
+        calculated_hours=calc_h,
+        date=wl_date,
         description=data.get("description"),
     )
     db.add(w)
@@ -125,8 +198,12 @@ def create_worklog(db: Session, data: dict, user_id: int) -> dict:
     task = db.query(Task).filter(Task.id == w.task_id).first()
     # Log to project activity timeline
     _log_worklog_activity(db, w.task_id, user_id, "工时记录",
-        f"记录工时 {w.hours}h: {w.description or ''}")
-    return _worklog_dict(w, task, db)
+        f"记录工时 {pct}% ({calc_h}h): {w.description or ''}")
+    result = _worklog_dict(w, task, db)
+    result["has_checkin"] = has_checkin
+    result["percentage"] = w.percentage
+    result["calculated_hours"] = w.calculated_hours
+    return result
 
 
 def update_worklog(db: Session, worklog_id: int, data: dict) -> Optional[dict]:
@@ -136,16 +213,25 @@ def update_worklog(db: Session, worklog_id: int, data: dict) -> Optional[dict]:
         return None
 
     changes = []
-    if "hours" in data:
-        new_hours = float(data["hours"] or 0)
-        if new_hours != w.hours:
-            changes.append(f"{w.hours}h → {new_hours}h")
-        w.hours = new_hours
+    has_checkin = False
+    if "percentage" in data:
+        new_pct = float(data["percentage"] or 0)
+        if new_pct != w.percentage:
+            changes.append(f"{w.percentage}% → {new_pct}%")
+        w.percentage = new_pct
+        # Recalculate hours based on new percentage
+        calc_h, has_checkin = _calc_calculated_hours(db, w.user_id, w.date, new_pct)
+        w.hours = calc_h
+        w.calculated_hours = calc_h
     if "date" in data:
         new_date = _parse_date(data["date"]) or w.date
         if new_date != w.date:
             changes.append(f"日期 → {new_date}")
-        w.date = new_date
+            w.date = new_date
+            if w.percentage:
+                calc_h, has_checkin = _calc_calculated_hours(db, w.user_id, new_date, w.percentage)
+                w.hours = calc_h
+                w.calculated_hours = calc_h
     if "description" in data:
         new_desc = data["description"]
         if new_desc != w.description:
@@ -168,7 +254,11 @@ def update_worklog(db: Session, worklog_id: int, data: dict) -> Optional[dict]:
     if changes:
         _log_worklog_activity(db, w.task_id, w.user_id, "工时更新",
             f"更新工时: {'; '.join(changes)}")
-    return _worklog_dict(w, task, db)
+    result = _worklog_dict(w, task, db)
+    result["has_checkin"] = has_checkin
+    result["percentage"] = w.percentage
+    result["calculated_hours"] = w.calculated_hours
+    return result
 
 
 def delete_worklog(db: Session, worklog_id: int) -> bool:
@@ -191,6 +281,129 @@ def delete_worklog(db: Session, worklog_id: int) -> bool:
     # Log to project activity timeline
     _log_worklog_activity(db, task_id, user_id, "工时删除", detail)
     return True
+
+
+def _validate_percentage_not_exceeded(db: Session, user_id: int, date_val: date, new_pct: float, exclude_worklog_id: int = None):
+    """Check that existing + new percentage doesn't exceed 100 for a user on a date.
+    Raises ValueError if exceeded.
+    """
+    # Sum existing worklogs for this user+date
+    existing_task = db.query(sa_func.coalesce(sa_func.sum(WorkLog.percentage), 0)).filter(
+        WorkLog.user_id == user_id,
+        WorkLog.date == date_val,
+    )
+    if exclude_worklog_id:
+        existing_task = existing_task.filter(WorkLog.id != exclude_worklog_id)
+    task_total = existing_task.scalar() or 0.0
+
+    existing_bug = db.query(sa_func.coalesce(sa_func.sum(BugWorkLog.percentage), 0)).filter(
+        BugWorkLog.user_id == user_id,
+        BugWorkLog.date == date_val,
+    )
+    if exclude_worklog_id:
+        existing_bug = existing_bug.filter(BugWorkLog.id != exclude_worklog_id)
+    bug_total = existing_bug.scalar() or 0.0
+
+    total_existing = float(task_total) + float(bug_total)
+    if total_existing + new_pct > 100:
+        raise ValueError(
+            f"日期 {date_val} 已填 {total_existing:.0f}%，加上 {new_pct:.0f}% 超过 100%"
+        )
+
+
+def create_worklog_batch(db: Session, task_id: int, entries: list, user_id: int) -> List[dict]:
+    """Batch-create multiple worklog entries for the same task."""
+    # Pre-validate: group entries by date and check cumulative percentage
+    from collections import defaultdict
+    date_new_pcts = defaultdict(float)
+    for entry in entries:
+        d = _parse_date(entry.get("date")) or date.today()
+        date_new_pcts[d] += float(entry.get("percentage", 0) or 0)
+
+    for d, total_new_pct in date_new_pcts.items():
+        _validate_percentage_not_exceeded(db, user_id, d, total_new_pct)
+
+    created = []
+    for entry in entries:
+        data = {
+            "task_id": task_id,
+            "percentage": entry.get("percentage", 0),
+            "date": entry.get("date"),
+            "description": entry.get("description"),
+        }
+        wl = create_worklog(db, data, user_id)
+        created.append(wl)
+
+        # Update progress if provided
+        progress = entry.get("progress")
+        if progress is not None:
+            task = db.query(Task).filter(Task.id == task_id).first()
+            if task:
+                new_progress = max(task.progress or 0, int(progress))
+                if new_progress > (task.progress or 0):
+                    task.progress = new_progress
+                    from backend.services.task_service import _recalc_stage_progress
+                    if task.stage_id:
+                        _recalc_stage_progress(db, task.stage_id)
+                if int(progress) >= 100:
+                    _handle_100_percent_task(db, task, user_id)
+        db.commit()
+
+    return created
+
+
+def _handle_100_percent_task(db: Session, task: Task, user_id: int):
+    """Handle task progress reaching 100%."""
+    approval_enabled = PmaSetting.get(db, "approval_enabled", "1") == "1"
+    if not approval_enabled:
+        task.status = 'done'
+        task.completed_at = datetime.now(timezone.utc)
+    else:
+        task.status = 'review'
+    # Ensure reviewer is set if possible
+    if not task.reviewer_id and task.stage_id:
+        from backend.services.task_service import _resolve_reviewer_from_stage
+        _resolve_reviewer_from_stage(db, task)
+
+
+def get_daily_usage(db: Session, user_id: int, d: date) -> dict:
+    """Get total percentage used and remaining for a user on a given date."""
+    total_pct = 0.0
+    entries = []
+
+    # Task worklogs
+    wls = db.query(WorkLog).filter(
+        WorkLog.user_id == user_id,
+        WorkLog.date == d,
+    ).all()
+    for wl in wls:
+        total_pct += wl.percentage or 0
+        task = db.query(Task).filter(Task.id == wl.task_id).first()
+        entries.append({
+            "id": wl.id, "source": "task", "task_id": wl.task_id,
+            "title": task.title if task else "(已删除)",
+            "percentage": wl.percentage,
+        })
+
+    # Bug worklogs
+    bwls = db.query(BugWorkLog).filter(
+        BugWorkLog.user_id == user_id,
+        BugWorkLog.date == d,
+    ).all()
+    for bwl in bwls:
+        total_pct += bwl.percentage or 0
+        bug = db.query(PmaBug).filter(PmaBug.id == bwl.bug_id).first()
+        entries.append({
+            "id": bwl.id, "source": "bug", "bug_id": bwl.bug_id,
+            "title": f"Bug #{bwl.bug_id} {bug.title}" if bug else f"Bug #{bwl.bug_id}",
+            "percentage": bwl.percentage,
+        })
+
+    return {
+        "total_percentage_used": round(total_pct, 1),
+        "remaining_percentage": round(max(0, 100 - total_pct), 1),
+        "entries": entries,
+    }
 
 
 def get_calendar(
@@ -281,6 +494,8 @@ def get_calendar(
             "task_id": w.task_id,
             "title": task.title if task else "(已删除)",
             "hours": w.hours,
+            "percentage": w.percentage,
+            "calculated_hours": w.calculated_hours,
             "progress": task.progress if task else 0,
             "created_at": to_local_str(w.created_at) if w.created_at else '',
             "project_id": task.project_id if task else None,
@@ -302,6 +517,8 @@ def get_calendar(
             "bug_id": bw.bug_id,
             "title": ("Bug #" + str(bw.bug_id) + " " + bug.title) if bug else ("Bug #" + str(bw.bug_id)),
             "hours": bw.hours,
+            "percentage": bw.percentage,
+            "calculated_hours": bw.calculated_hours,
             "progress": 0,
             "created_at": to_local_str(bw.created_at) if bw.created_at else '',
             "project_id": bug.project_id if bug else None,
@@ -394,6 +611,19 @@ def get_summary(
 def _worklog_dict(w: WorkLog, task: Task = None, db: Session = None) -> dict:
     from backend.models.local import LocalUser
     user = db.query(LocalUser).filter(LocalUser.id == w.user_id).first() if db and w.user_id else None
+
+    # Determine has_checkin
+    has_checkin = False
+    if db and w.user_id and w.date:
+        from backend.models.wecom import WeComCheckin
+        luser = db.query(LocalUser).filter(LocalUser.id == w.user_id).first()
+        if luser and luser.wecom_userid:
+            checkin = db.query(WeComCheckin).filter(
+                WeComCheckin.user_id == luser.wecom_userid,
+                WeComCheckin.date == w.date,
+            ).first()
+            has_checkin = bool(checkin and checkin.work_hours and checkin.work_hours > 0)
+
     return {
         "id": w.id,
         "task_id": w.task_id,
@@ -401,6 +631,9 @@ def _worklog_dict(w: WorkLog, task: Task = None, db: Session = None) -> dict:
         "username": user.username if user else "?",
         "display_name": user.display_name if user else "?",
         "hours": w.hours,
+        "percentage": w.percentage,
+        "calculated_hours": w.calculated_hours,
+        "has_checkin": has_checkin,
         "date": str(w.date) if w.date else None,
         "description": w.description,
         "task_title": task.title if task else None,

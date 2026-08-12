@@ -10,3 +10,4 @@ python-multipart>=0.0.9
 pysqlcipher3>=1.2.0
 pysmb
 paramiko>=2.6.0
+openpyxl>=3.0

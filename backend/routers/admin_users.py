@@ -40,18 +40,18 @@ class PasswordReset(BaseModel):
 # All company roles
 ROLES = [
     "public",
-    "admin", "ceo", "cto", "pm",
+    "admin", "ceo", "cto", "pm", "hr",
     "sales", "hw_dev", "structure", "hw_test",
     "bsp_dev", "sw_dev", "test_delivery",
     "procurement", "quality", "warehouse", "viewer",
 ]
 
 # Available permissions
-ALL_PERMISSIONS = ["admin", "sync", "project_edit", "product_link", "customer_link", "doc_template", "stage_mapping", "task_edit"]
+ALL_PERMISSIONS = ["admin", "sync", "project_edit", "product_link", "customer_link", "doc_template", "stage_mapping", "task_edit", "manpower_view"]
 
 ROLE_LABELS = {
     "public": "普通用户",
-    "admin": "管理员", "ceo": "CEO", "cto": "CTO", "pm": "项目经理",
+    "admin": "管理员", "ceo": "CEO", "cto": "CTO", "pm": "项目经理", "hr": "人力",
     "sales": "销售及售前", "hw_dev": "硬件开发", "structure": "结构设计及装配",
     "hw_test": "硬件测试", "bsp_dev": "BSP开发", "sw_dev": "业务软件开发",
     "test_delivery": "测试交付", "procurement": "采购", "quality": "质检",
@@ -62,7 +62,7 @@ PERM_LABELS = {
     "admin": "系统管理", "sync": "数据同步", "project_edit": "项目维护",
     "product_link": "产品维护", "customer_link": "客户维护",
     "doc_template": "文档模板配置", "stage_mapping": "阶段映射",
-    "task_edit": "任务管理",
+    "task_edit": "任务管理", "manpower_view": "人力报表",
 }
 
 
