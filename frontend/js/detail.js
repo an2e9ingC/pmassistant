@@ -1777,7 +1777,7 @@ function buildNotes(notes) {
         { key: 'content', title: '内容', align: 'left', className: 'dt-wrap', render: function(v, row) {
           var plainText = stripHtml(renderMarkdown?renderMarkdown(v):v).substring(0,80);
           var replyMark = row.parent_id?'<span style="font-size:10px;color:var(--accent);margin-right:4px">↳ 回复</span>':'';
-          var imgBadge = /!\[.*\]\(.*\)/.test(v)?' <span style="font-size:10px">📷</span>':'';
+          var imgBadge = (/!\[.*\]\(.*\)/.test(v) || /<img\b/.test(v)) ? ' <span style="font-size:10px">📷</span>' : '';
           return '<span style="font-size:13px;line-height:1.5">'+replyMark+escHtml(plainText)+(v&&v.length>80?'...':'')+imgBadge+'</span>';
         }},
         { key: 'actions', title: '操作', width: '130px', minWidth: 130, render: function(v, row) {
@@ -1866,7 +1866,7 @@ async function openNoteDialog() {
   if (!_comboCurCode) return;
 
   // Fetch stages for the selector
-  _clearNoteImagePreviews('note-dialog-input-img-preview');
+  // DEPRECATED: image previews handled by HugeRTE
   var stagesHtml = '<option value="">请选择阶段...</option>';
   try {
     var result = await API.get('/projects/' + _comboCurCode + '/stages');
@@ -1902,7 +1902,7 @@ async function openNoteDialog() {
   setTimeout(function() {
     var inp = document.getElementById('note-dialog-input');
     if (inp) { inp.focus(); }
-    initNoteImagePaste('note-dialog-input');
+    initRichEditor('note-dialog-input', {height: 300});
   }, 100);
 }
 
@@ -1919,8 +1919,11 @@ function openViewNoteDialog(noteId) {
     var notes = (result && result.length) ? result : [];
     var note = notes.find(function(n) { return n.id === noteId; });
     if (!note) { showToast('笔记不存在', 'error'); return; }
-    // Pre-process custom image size syntax: ![](url =Wx) → <img>
-    var content = note.content.replace(/!\[\]\((\/api\/note-images\/[^) ]+)\s*=(\d+)x\)/g, '<img src="$1" style="width:$2px;max-width:100%">');
+    // Pre-process legacy custom image size syntax: ![](url =Wx) -> <img>
+    var content = note.content;
+    if (!/^\s*</.test(content)) {
+      content = content.replace(/!\[\]\((\/api\/note-images\/[^) ]+)\s*=(\d+)x\)/g, '<img src="$1" style="width:$2px;max-width:100%">');
+    }
     var contentHtml = (typeof renderMarkdown === 'function') ? renderMarkdown(content) : '<pre>' + escHtml(content) + '</pre>';
     var dialog = document.createElement('div');
     dialog.className = 'note-dialog-overlay';
@@ -1947,13 +1950,13 @@ function openViewNoteDialog(noteId) {
 
 function openEditNoteDialog(noteId) {
   if (!_comboCurCode) return;
-  _clearNoteImagePreviews('edit-note-content-img-preview');
+  // DEPRECATED
   API.get('/projects/' + _comboCurCode + '/notes').then(function(result) {
     var notes = (result && result.length) ? result : [];
     var note = notes.find(function(n) { return n.id === noteId; });
     if (!note) { showToast('笔记不存在', 'error'); return; }
     // Load existing images into preview
-    setTimeout(function() { _loadExistingNoteImages(note.content, 'edit-note-content-img-preview'); }, 150);
+// DEPRECATED
     var stagesHtml = '<option value="">请选择阶段...</option>';
     // Re-fetch stages for the dropdown
     API.get('/projects/' + _comboCurCode + '/stages').then(function(r) {
@@ -1973,7 +1976,7 @@ function openEditNoteDialog(noteId) {
         [{text: '取消', onclick: 'closeSharedDialog()'},
          {text: '保存', cls: 'btn-primary', onclick: 'saveEditNote(' + noteId + ')'}],
         {maxWidth: '80vw', maxHeight: '90vh', hideClose: true});
-    setTimeout(function() { initNoteImagePaste('edit-note-content'); }, 100);
+    setTimeout(function() { initRichEditor('edit-note-content', {height: 300}); }, 100);
     });
   });
 }
@@ -1982,7 +1985,7 @@ async function saveEditNote(noteId) {
   var content = document.getElementById('edit-note-content').value.trim();
   var stage = document.getElementById('edit-note-stage').value;
   if (!content) { showToast('请输入内容', 'error'); return; }
-  content = await _uploadNoteImages(content);
+// HugeRTE handles content directly
   closeSharedDialog();
   try {
     await API.put('/projects/' + _comboCurCode + '/notes/' + noteId, {content: content, stage_name: stage});
@@ -1994,7 +1997,7 @@ async function saveEditNote(noteId) {
 
 function openReplyNoteDialog(parentId) {
   if (!_comboCurCode) return;
-  _clearNoteImagePreviews('reply-note-content-img-preview');
+  // DEPRECATED
   // Fetch parent note for context
   API.get('/projects/' + _comboCurCode + '/notes').then(function(result) {
     var notes = (result && result.length) ? result : [];
@@ -2012,14 +2015,14 @@ function openReplyNoteDialog(parentId) {
       [{text: '取消', onclick: 'closeSharedDialog()'},
        {text: '回复', cls: 'btn-primary', onclick: 'submitReplyNote(' + parentId + ',\'' + escHtml(stageLabel).replace(/'/g, "\\'") + '\')'}],
       {maxWidth: '80vw', maxHeight: '90vh', hideClose: true});
-    setTimeout(function() { initNoteImagePaste('reply-note-content'); }, 100);
+    setTimeout(function() { initRichEditor('reply-note-content', {height: 300}); }, 100);
   });
 }
 
 async function submitReplyNote(parentId, stageName) {
   var content = document.getElementById('reply-note-content').value.trim();
   if (!content) { showToast('请输入回复内容', 'error'); return; }
-  content = await _uploadNoteImages(content);
+// HugeRTE handles content directly
   closeSharedDialog();
   try {
     await API.post('/projects/' + _comboCurCode + '/notes', {content: content, stage_name: stageName, parent_id: parentId});
@@ -2049,7 +2052,7 @@ async function submitNote() {
   if (!stage) { msg.innerHTML = '<span style="color:var(--danger)">请选择涉及阶段</span>'; return; }
   if (!_comboCurCode) return;
 
-  content = await _uploadNoteImages(content);
+// HugeRTE handles content directly
   try {
     msg.innerHTML = '<span style="color:var(--muted)">保存中...</span>';
     await API.post('/projects/' + _comboCurCode + '/notes', { content: content, stage_name: stage });

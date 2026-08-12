@@ -132,12 +132,11 @@ function _startInlineEdit(el) {
     var taId = 'ef-ta-' + taskId + '-' + fieldName;
     field.innerHTML = '<textarea class="search-inp ef-input" id="' + taId + '" rows="4" style="width:100%;box-sizing:border-box;font-size:13px;margin-top:1px;resize:vertical">' + escHtml(currentVal) + '</textarea>' +
       '<div id="' + taId + '-img-preview" style="margin-top:4px;min-height:0;max-height:30vh;overflow-y:auto"></div>' +
-      '<div style="font-size:10px;color:var(--muted);margin-top:2px">支持粘贴图片 (Ctrl+V)</div>' +
       '<div style="display:flex;gap:10px;margin-top:6px"><button class="btn-xs ef-save-btn" onclick="event.stopPropagation();_saveInlineEdit(this)">✓</button><button class="btn-xs ef-cancel-btn" onclick="event.stopPropagation();_cancelInlineEdit(this)">✕</button></div>';
     var inp = field.querySelector('.ef-input');
     if (inp) { setTimeout(function() { inp.focus(); }, 50); }
-    // Init image paste for description textarea
-    setTimeout(function() { _clearNoteImagePreviews(taId + '-img-preview'); initNoteImagePaste(taId); _loadExistingNoteImages(currentVal, taId + '-img-preview'); }, 100);
+    // Init rich text editor for description
+    setTimeout(function() { initRichEditor(taId, {height: 300}); }, 100);
   }
 }
 
@@ -238,10 +237,7 @@ async function _saveInlineEdit(el) {
     return;
   }
 
-  // Upload pasted images for textarea fields
-  if (inputType === 'textarea' && typeof _uploadNoteImages === 'function') {
-    newVal = await _uploadNoteImages(newVal);
-  }
+  // HugeRTE editor syncs content to textarea automatically; no upload needed
 
   var data = {};
   if (inputType === 'number') {
@@ -320,7 +316,7 @@ function _doSaveFieldEdit(taskId, data, field) {
         _refreshTaskWorklogs(taskId);
         _loadDetailComments(taskId);
         setTimeout(function() {
-          initNoteImagePaste('ef-desc');
+          // (editor init moved to dynamic textarea creation)
         }, 100);
       }).catch(function() {});
     }
@@ -342,30 +338,12 @@ function _cancelInlineEdit(el) {
 }
 
 function _loadDetailComments(taskId) {
-  API.get('/task-comments?task_id=' + taskId).then(function(comments) {
-    var el = document.querySelector('.task-detail-comments');
-    if (!el) return;
-    if (!comments || !comments.length) { el.innerHTML = '<div style="color:var(--muted);font-size:12px">暂无评论</div>'; return; }
-    el.innerHTML = '<div id="task-comments-table"></div>';
-    new DataTable({
-      container: document.getElementById('task-comments-table'),
-      columns: [
-        { key: 'created_at', title: '时间', width: '130px', minWidth: 120, render: function(v) { return '<span style="font-size:10px;color:var(--muted);white-space:nowrap">'+(fmtISODateTime(v)||'')+'</span>'; } },
-        { key: 'display_name', title: '用户', width: '80px', minWidth: 90, render: function(v, row) { return '<span style="font-size:12px">'+escHtml(v||row.username)+'</span>'; } },
-        { key: 'content', title: '内容', align: 'left', render: function(v) { return '<span style="font-size:13px">'+escHtml(v||'')+'</span>'; } }
-      ],
-      data: comments,
-    });
-  }).catch(function() {});
+  renderTimeline('task', taskId, 'task-detail-comments');
 }
 
+// DEPRECATED: replaced by openCommentDialog() (rich-text dialog)
 function _submitDetailComment(taskId) {
-  var input = document.querySelector('.task-detail-comment-input');
-  if (!input || !input.value.trim()) return;
-  API.post('/task-comments', {task_id: taskId, content: input.value.trim()}).then(function() {
-    input.value = '';
-    _loadDetailComments(taskId);
-  }).catch(function(e) { showToast('评论失败: ' + (e.message || ''), 'error'); });
+  openCommentDialog('task', taskId);
 }
 
 var _taskProjectId = null;   // null = show project selector
@@ -378,11 +356,19 @@ var _taskFilterStage = '';    // stage_name filter (set from Gantt click)
 
 /* ── Entry Point ── */
 
-function initTasks() {
+function initTasks(firstArg) {
+  // Route to detail/edit if first arg is a numeric task ID
+  var taskId = parseInt(firstArg);
+  if (!isNaN(taskId) && taskId > 0) {
+    var isEdit = arguments[1] === 'edit';
+    if (isEdit) { initTaskEdit(taskId); } else { initTaskDetail(taskId); }
+    return;
+  }
+  // Default: render task list
   _taskProjectId = null;
   _taskFilterStatus = '';
   _taskFilterExecution = '';
-  _taskFilterAssignee = 'me';  // default: show current user's tasks
+  _taskFilterAssignee = 'me';
   _calChangeCallback = loadTaskData;
   renderTasksPage();
 }
@@ -1020,7 +1006,7 @@ async function _refreshTaskDetailContent(taskId) {
     setTimeout(function() {
       var descField = document.querySelector('.editable-field[data-field="description"]');
       if (descField && freshTask.description) {
-        initNoteImagePaste('ef-desc');
+        // (editor init moved to dynamic textarea creation)
       }
     }, 200);
   } catch(e) {
@@ -1040,12 +1026,131 @@ function _closeWorklogDialog() {
   }
 }
 
-function openTaskDetail(taskId) {
+/* ── Full-page Task Detail / Edit / Create ── */
+
+function initTaskDetail(taskId) {
+  taskId = parseInt(taskId);
+  var viewEl = document.getElementById('view-tasks');
+  if (!viewEl) return;
+  viewEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">加载中...</div>';
+  document.getElementById('topbar-title').textContent = '任务 #' + taskId;
+
   API.get('/tasks/' + taskId).then(function(data) {
-    _showTaskDetail(data);
+    var t = data;
+    var html = '<div class="task-detail-page" style="max-width:1200px;margin:0 auto;padding:20px">' +
+      '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">' +
+        '<span style="font-size:15px;font-weight:620">任务 #' + t.id + ' · ' + escHtml(t.title) + '</span>' +
+        '<span style="flex:1"></span>' +
+        '<button class="btn btn-sm btn-primary" onclick="gotoView(\'tasks\', {params: [String(' + t.id + '), \'edit\']})">编辑</button>' +
+      '</div>' +
+      '<div class="task-detail-body">' +
+        _renderTaskDetailBody(t) +
+      '</div>' +
+    '</div>';
+    viewEl.innerHTML = html;
+    document.getElementById('topbar-title').textContent = '任务 #' + t.id + ' · ' + (t.title || '');
+
+    // Async load worklogs and comments
+    _refreshTaskWorklogs(taskId);
+    _loadDetailComments(taskId);
   }).catch(function(e) {
-    showToast('加载失败: ' + (e.message || ''), 'error');
+    viewEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--danger)">加载失败: ' + escHtml(e.message || '') + '</div>';
   });
+}
+
+function initTaskEdit(taskId) {
+  taskId = parseInt(taskId);
+  var viewEl = document.getElementById('view-tasks');
+  if (!viewEl) return;
+  viewEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">加载中...</div>';
+  document.getElementById('topbar-title').textContent = '编辑任务 #' + taskId;
+
+  API.get('/tasks/' + taskId).then(function(data) {
+    var t = data;
+
+    var formHtml = _buildTaskForm(t, true); // true = edit mode
+    var html = '<div class="task-edit-page" style="max-width:1200px;margin:0 auto;padding:20px">' +
+      '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">' +
+        '<button class="btn btn-sm" onclick="history.back()">← 返回</button>' +
+        '<span style="font-size:15px;font-weight:620">编辑任务 #' + t.id + ' · ' + escHtml(t.title) + '</span>' +
+        '<span style="flex:1"></span>' +
+        '<button class="btn btn-sm btn-primary" onclick="_submitTaskFullPage(' + t.id + ')">保存</button>' +
+      '</div>' +
+      formHtml +
+    '</div>';
+    viewEl.innerHTML = html;
+    document.getElementById('topbar-title').textContent = '编辑任务 #' + t.id + ' · ' + (t.title || '');
+
+    setTimeout(function() { initRichEditor('tf-desc', {height: 360}); }, 100);
+    _initTaskFormSelectors(t, true);
+  }).catch(function(e) {
+    viewEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--danger)">加载失败: ' + escHtml(e.message || '') + '</div>';
+  });
+}
+
+function initTaskCreate() {
+  var viewEl = document.getElementById('view-tasks');
+  if (!viewEl) return;
+
+  var formHtml = _buildTaskForm(null, false); // null = create mode
+  var html = '<div class="task-create-page" style="max-width:1200px;margin:0 auto;padding:20px">' +
+    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">' +
+      '<span style="font-size:15px;font-weight:620">新建任务</span>' +
+      '<span style="flex:1"></span>' +
+      '<button class="btn btn-sm btn-primary" onclick="_submitTaskFullPage(null)">创建</button>' +
+    '</div>' +
+    formHtml +
+  '</div>';
+  viewEl.innerHTML = html;
+  document.getElementById('topbar-title').textContent = '新建任务';
+
+  setTimeout(function() { initRichEditor('tf-desc', {height: 360}); }, 100);
+  _initTaskFormSelectors(null, false);
+}
+
+/** Submit task from full-page create/edit form */
+async function _submitTaskFullPage(taskId) {
+  var desc = document.getElementById('tf-desc').value.trim();
+  var title = (document.getElementById('tf-title') || {}).value || '';
+  if (!title) { showToast('请输入任务标题', 'error'); return; }
+
+  var data = {
+    title: title,
+    description: desc,
+    project_id: _tfProjectId || null,
+    execution_id: parseInt((document.getElementById('tf-execution') || {}).value) || null,
+    assignee_ids: _tfAssigneeIds || [],
+    reviewer_id: _tfReviewerId || null,
+    estimate_hours: parseFloat((document.getElementById('tf-estimate') || {}).value) || null,
+    start_date: (document.getElementById('tf-start-date') || {}).value || null,
+    due_date: (document.getElementById('tf-due') || {}).value || null,
+    priority: (document.getElementById('tf-priority') || {}).value || 'medium',
+    status: (document.getElementById('tf-status') || {}).value || 'todo',
+    progress: parseInt((document.getElementById('tf-progress') || {}).value) || 0,
+  };
+
+  if (!data.project_id) { showToast('请选择所属项目', 'error'); return; }
+  if (!data.execution_id) { showToast('请选择阶段', 'error'); return; }
+  if (!data.assignee_ids.length) { showToast('请选择负责人', 'error'); return; }
+  if (!data.due_date) { showToast('请填写截止日期', 'error'); return; }
+
+  try {
+    if (taskId) {
+      await API.put('/tasks/' + taskId, data);
+      showToast('保存成功', 'success');
+    } else {
+      var result = await API.post('/tasks', data);
+      showToast('创建成功', 'success');
+      taskId = result.id || result.task_id;
+    }
+    setTimeout(function() { history.back(); }, 500);
+  } catch(e) {
+    showToast('操作失败: ' + (e.message || ''), 'error');
+  }
+}
+
+function openTaskDetail(taskId) {
+  gotoView('tasks', { params: [String(taskId)] });
 }
 
 var _card = 'background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:16px;margin-bottom:12px';
@@ -1224,9 +1329,9 @@ function _renderTaskDetailBody(t) {
   html += '<div class="card info-glass-card" style="margin-top:16px;padding:20px">' +
     '<div class="section-hd"><span class="section-title">描述</span></div>' +
     _buildEditableField(t.id, 'description', 'textarea',
-      '<div style="font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word;min-height:20px">' + (t.description ? escHtml(t.description) : '<span style="color:var(--muted)">暂无描述，点击编辑</span>') + '</div>',
+      '<div style="font-size:13px;line-height:1.6;min-height:20px">' + (t.description ? renderMarkdown(t.description) : '<span style="color:var(--muted)">暂无描述，点击编辑</span>') + '</div>',
       t.description || '') +
-    '<div id="ef-desc-img-preview" style="margin-top:4px;min-height:0;max-height:50vh;overflow-y:auto"></div>' +
+    '<div id="ef-desc-img-preview" style="display:none"></div>' +
   '</div>';
 
   // ── Section 4: 产出物 ──
@@ -1246,14 +1351,16 @@ function _renderTaskDetailBody(t) {
     '<div id="tv-worklogs">加载中...</div>' +
   '</div>';
 
-  // ── Section 6: 评论 ──
+  // ── Section 6: 历史记录 ──
   html += '<div class="card info-glass-card" style="margin-top:16px;padding:20px">' +
-    '<div class="section-hd"><span class="section-title">评论</span></div>' +
-    '<div class="task-detail-comments" style="margin-bottom:8px">加载中...</div>' +
-    '<div style="display:flex;gap:8px">' +
-      '<input class="search-inp task-detail-comment-input" placeholder="添加评论..." style="flex:1">' +
-      '<button class="btn-sm btn-primary" onclick="_submitDetailComment(' + t.id + ')">发送</button>' +
+    '<div class="section-hd" style="display:flex;align-items:center;justify-content:space-between">' +
+      '<span class="section-title">历史记录</span>' +
+      '<div style="display:flex;gap:6px;align-items:center">' +
+        '<button class="btn-xs timeline-order-btn" onclick="_toggleTimelineOrder(\'task\', ' + t.id + ', \'task-detail-comments\')">' + _timelineOrderLabel() + '</button>' +
+        '<button class="btn-sm btn-primary" onclick="openCommentDialog(\'task\', ' + t.id + ')">添加评论</button>' +
+      '</div>' +
     '</div>' +
+    '<div class="task-detail-comments" id="task-detail-comments" style="margin-bottom:8px">加载中...</div>' +
   '</div>';
 
   return html;
@@ -1297,7 +1404,7 @@ function _loadViewComments(taskId) {
         return '<tr>' +
           '<td style="font-size:10px;color:var(--muted);white-space:nowrap">' + (fmtISODateTime(c.created_at) || '') + '</td>' +
           '<td style="font-size:12px">' + escHtml(c.display_name || c.username) + '</td>' +
-          '<td style="font-size:13px">' + escHtml(c.content) + '</td></tr>';
+          '<td style="font-size:13px">' + renderMarkdown(c.content) + '</td></tr>';
       }).join('') + '</tbody></table>';
   }).catch(function() {});
 }
@@ -1313,41 +1420,19 @@ function _submitViewComment(taskId) {
 
 function openTaskDialog(taskId) {
   if (taskId) { openTaskDetail(taskId); return; } // route edit to unified detail view
-  var isEdit = !!taskId;
-  var title = isEdit ? '编辑任务' : '新建任务';
-  _tfProjectId = _taskProjectId || window._taskProjectId; _tfProjectCode = _taskProjectCode || window._taskProjectCode || _taskProjectId; // default to page context
-  _tfAssigneeIds = [];
-  _tfReviewerId = null;
-  _tfOriginalStatus = null;
-
-  if (isEdit) {
-    API.get('/tasks/' + taskId).then(function(data) {
-      _tfOriginalStatus = data.status;
-      _showTaskForm(title, data);
-    }).catch(function(e) {
-      showToast('加载任务失败: ' + (e.message || ''), 'error');
-    });
-  } else {
-    _showTaskForm(title, null);
-  }
+  gotoView('task-create'); // full-page create form
 }
 
-function _showTaskForm(title, task) {
-  var isEdit = !!task;
-  var t = task || {};
-
-  var execOpts = '';
-  if (_taskProjectId) {
-    execOpts = '<option value="">加载中...</option>';
-  }
-
+/** Build task form HTML (used by both dialog and full-page modes) */
+function _buildTaskForm(t, isEdit) {
+  t = t || {};
+  var execOpts = _taskProjectId ? '<option value="">加载中...</option>' : '';
   var inp = 'width:100%;box-sizing:border-box;margin-top:1px';
   var row2 = 'display:grid;grid-template-columns:1fr 1fr;gap:10px';
-  var bodyHtml = '';
+  var html = '';
 
-  // ── Row 1: 基本信息 + 状态与进度 side by side ──
-  bodyHtml += '<div style="' + row2 + '">' +
-    // ── 基本信息 ──
+  // ── Row 1: 基本信息 + 状态与进度 ──
+  html += '<div style="' + row2 + '">' +
     '<div style="' + _card + '">' +
       '<div style="' + _cardHd + '">基本信息</div>' +
       '<div style="margin-bottom:6px"><label style="' + _lbl + '">标题 *</label><input class="search-inp" id="tf-title" value="' + escHtml(t.title || '') + '" placeholder="请填入任务标题" style="' + inp + '"></div>' +
@@ -1362,7 +1447,7 @@ function _showTaskForm(title, task) {
         '<div><label style="' + _lbl + '">阶段 *</label><select class="search-inp" id="tf-execution" style="' + inp + '"><option value="">请选择阶段...</option>' + execOpts + '</select><div id="tf-execution-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择阶段</div></div>' +
       '</div>' +
       '<div style="' + _grid2 + '">' +
-        '<div><label style="' + _lbl + '">创建人</label><div style="' + inp + ';padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:13px;color:var(--fg)">' + escHtml(t.reporter_name || '—') + '</div></div>' +
+        '<div><label style="' + _lbl + '">创建人</label><div style="' + inp + ';padding:7px 11px;background:var(--bg);border:1px solid var(--border);border-radius:7px;font-size:13px;color:var(--fg);line-height:1.4">' + escHtml(t.reporter_name || (function(){var u=getCurrentUser();return u?u.display_name||u.username:'—';})()) + '</div></div>' +
         '<div><label style="' + _lbl + '">负责人 *</label><div style="margin-top:2px"><div id="tf-assignee-wrap"></div>' +
         '<div id="tf-assignee-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择负责人</div></div></div>' +
         (window._approvalEnabled ? '<div><label style="' + _lbl + '">审批人</label><div style="margin-top:2px">' + createUserCombo({
@@ -1373,7 +1458,6 @@ function _showTaskForm(title, task) {
         '<div><label style="' + _lbl + '">抄送给</label><div style="margin-top:2px" id="tf-cc-wrap"></div></div>' +
       '</div>' +
     '</div>' +
-    // ── 状态与进度 ──
     '<div style="' + _card + '">' +
       '<div style="' + _cardHd + '">状态与进度</div>' +
       '<div style="' + _grid2 + '">' +
@@ -1399,26 +1483,14 @@ function _showTaskForm(title, task) {
   '</div>';
 
   // ── Section 3: 描述 ──
-  bodyHtml += '<div style="' + _card + '">' +
+  html += '<div style="' + _card + '">' +
     '<div style="' + _cardHd + '">描述</div>' +
     '<textarea class="search-inp" id="tf-desc" rows="3" style="width:100%;min-height:60px;height:auto;max-height:30vh;box-sizing:border-box;resize:vertical">' + escHtml(t.description || '') + '</textarea>' +
-    '<div style="font-size:10px;color:var(--muted);margin-top:2px">支持粘贴图片 (Ctrl+V)</div>' +
-    '<div id="tf-desc-img-preview" style="margin-top:4px;min-height:0;max-height:50vh;overflow-y:auto"></div>' +
-  '</div>';
-
-  // ── Section 4: 产出物 ──
-  var outputs = t.output_items || [];
-  bodyHtml += '<div style="' + _card + '">' +
-    '<div style="' + _cardHd + '">产出物</div>' +
-    '<div id="tf-outputs">';
-  outputs.forEach(function(o, i) { bodyHtml += _renderOutputRow(i, o); });
-  bodyHtml += '</div>' +
-    '<button class="btn-xs" onclick="addOutputRow()" style="margin-top:4px">+ 添加产出物</button>' +
   '</div>';
 
   // ── Section 5 & 6: 工时日志 + 评论 (edit only) ──
   if (isEdit) {
-    bodyHtml += '<div style="' + _card + '">' +
+    html += '<div style="' + _card + '">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
         '<span style="' + _cardHd + ';margin-bottom:0">工时日志 (' + (t.consumed_hours || 0).toFixed(1) + 'h)</span>' +
         '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px;flex-shrink:0" onclick="openWorklogDialog(' + t.id + ')">+ 记录工时</button>' +
@@ -1426,7 +1498,7 @@ function _showTaskForm(title, task) {
       '<div id="tf-worklogs">加载中...</div>' +
     '</div>';
 
-    bodyHtml += '<div style="' + _card + '">' +
+    html += '<div style="' + _card + '">' +
       '<div style="' + _cardHd + '">评论</div>' +
       '<div id="tf-comments" style="margin-bottom:8px">加载中...</div>' +
       '<div style="display:flex;gap:8px">' +
@@ -1434,6 +1506,87 @@ function _showTaskForm(title, task) {
         '<button class="btn-sm btn-primary" onclick="submitComment(' + t.id + ')">发送</button>' +
       '</div></div>';
   }
+
+  return html;
+}
+
+/** Initialize task form selectors (assignee/cc/stage/project-name/worklogs) after form is in DOM */
+function _initTaskFormSelectors(t, isEdit) {
+  t = t || {};
+  // Set form-scope state
+  _tfProjectId = t.project_id || _taskProjectId || null;
+  _tfProjectCode = t.project_code || _taskProjectCode || _tfProjectId;
+  _tfAssigneeIds = (t.assignee_ids && t.assignee_ids.length) ? t.assignee_ids.slice() : (t.assignee_id ? [t.assignee_id] : []);
+  _tfReviewerId = t.reviewer_id || null;
+  window._tfCcIds = (t.cc_user_ids || []).slice();
+
+  // Project name pre-fill + assignee/cc/reviewer selectors
+  setTimeout(function() {
+    // Pre-fill project name
+    var projName = (t.project_code ? '[' + t.project_code + '] ' : '') + (t.project_name || '');
+    if (projName.trim()) {
+      var pi = document.getElementById('tf-project-input');
+      if (pi) pi.value = projName;
+    } else if (!isEdit && _tfProjectId) {
+      loadAllProjects().then(function() {
+        var p = (_allProjects || []).find(function(x) { return x.id == _tfProjectId || x.code == _tfProjectId; });
+        if (p) {
+          var el = document.getElementById('tf-project-input');
+          if (el) el.value = (p.code ? p.code + ' ' : '') + p.name;
+        }
+      });
+    }
+    // Pre-fill reviewer name
+    if (window._approvalEnabled && _tfReviewerId && t.reviewer_name) {
+      var ri = document.getElementById('tf-reviewer-input');
+      if (ri) ri.value = t.reviewer_name;
+    }
+    // Init assignee multi-selector
+    var asgnWrap = document.getElementById('tf-assignee-wrap');
+    if (asgnWrap && !asgnWrap.innerHTML.trim()) {
+      asgnWrap.innerHTML = createMultiUserSelector({
+        containerId: 'tf-assignee',
+        selectedIds: _tfAssigneeIds.slice(),
+        placeholder: '搜索并添加负责人...',
+        onChange: function(ids) { _tfAssigneeIds = ids; }
+      });
+      _muRenderTags('tf-assignee');
+    }
+    // Init CC selector
+    var ccWrap = document.getElementById('tf-cc-wrap');
+    if (ccWrap && !ccWrap.innerHTML.trim()) {
+      ccWrap.innerHTML = createCcSelector({
+        containerId: 'tf-cc',
+        selectedIds: (t.cc_user_ids || []).slice(),
+        placeholder: '搜索抄送人...',
+        onChange: function(ids) { window._tfCcIds = ids; }
+      });
+      setTimeout(function() { _renderCcTags('tf-cc'); }, 180);
+    }
+  }, 50);
+
+  // Load stages for project with task's current stage pre-selected
+  var projId = _tfProjectId || t.project_id;
+  if (projId) {
+    var curExecVal = t.stage_name ? '_' + t.stage_name : '';
+    _loadTfExecutions(projId, curExecVal);
+  }
+
+  // Load worklogs and comments (edit mode)
+  if (isEdit) {
+    API.get('/worklogs?task_id=' + t.id).then(function(logs) {
+      var el = document.getElementById('tf-worklogs');
+      if (el) { el.innerHTML = _renderTaskWorklogTable(logs || [], t.id); _initWorklogDt(logs || [], t.id); }
+    }).catch(function() {});
+    _loadComments(t.id);
+  }
+}
+
+function _showTaskForm(title, task) {
+  var isEdit = !!task;
+  var t = task || {};
+
+  var bodyHtml = _buildTaskForm(t, isEdit);
 
   var buttons = [
     {text: '取消', onclick: '_closeTaskDialog()'},
@@ -1443,76 +1596,12 @@ function _showTaskForm(title, task) {
   bodyHtml = '<div style="max-height:75vh;overflow-y:auto;padding-right:4px">' + bodyHtml + '</div>';
   var headerExtra = isEdit ? '' : '<button class="btn btn-xs" style="font-size:11px;white-space:nowrap" onclick="_closeTaskDialog();openBatchCreateDialog()">📝 批量创建</button>';
   openDialog(title, bodyHtml, buttons, {maxWidth: '80vw', maxHeight: '90vh', headerExtra: headerExtra});
-  _clearNoteImagePreviews('tf-desc-img-preview');
   setTimeout(function() {
-    initNoteImagePaste('tf-desc');
-    if (t.description) { _loadExistingNoteImages(t.description, 'tf-desc-img-preview'); }
+    initRichEditor('tf-desc', {height: 360});
   }, 150);
 
-  // Pre-fill project, assignee, reviewer, and stage from task data (edit mode)
-  _tfProjectId = t.project_id || _taskProjectId;
-  _tfAssigneeIds = (t.assignee_ids && t.assignee_ids.length) ? t.assignee_ids.slice() : (t.assignee_id ? [t.assignee_id] : []);
-  _tfReviewerId = t.reviewer_id || null;
-  if (isEdit && t.project_id) {
-    // Set project name from task data
-    var projName = (t.project_code ? '[' + t.project_code + '] ' : '') + (t.project_name || '');
-    setTimeout(function() {
-      var pi = document.getElementById('tf-project-input');
-      if (pi) pi.value = projName;
-      // Pre-fill reviewer name
-      if (window._approvalEnabled && _tfReviewerId && t.reviewer_name) {
-        var ri = document.getElementById('tf-reviewer-input');
-        if (ri) ri.value = t.reviewer_name;
-      }
-      // Init assignee multi-selector
-      var asgnWrap = document.getElementById('tf-assignee-wrap');
-      if (asgnWrap) {
-        asgnWrap.innerHTML = createMultiUserSelector({
-          containerId: 'tf-assignee',
-          selectedIds: _tfAssigneeIds.slice(),
-          placeholder: '搜索并添加负责人...',
-          onChange: function(ids) { _tfAssigneeIds = ids; }
-        });
-        _muRenderTags('tf-assignee');
-      }
-      // Init CC selector
-      var ccWrap = document.getElementById('tf-cc-wrap');
-      if (ccWrap) {
-        ccWrap.innerHTML = createCcSelector({
-          containerId: 'tf-cc',
-          selectedIds: (t.cc_user_ids || []).slice(),
-          placeholder: '搜索抄送人...',
-          onChange: function(ids) { window._tfCcIds = ids; }
-        });
-        setTimeout(function() { _renderCcTags('tf-cc'); }, 180);
-      }
-    }, 50);
-  }
-  // Init assignee + CC selectors for create mode
-  if (!isEdit) {
-    setTimeout(function() {
-      var asgnWrap = document.getElementById('tf-assignee-wrap');
-      if (asgnWrap && !asgnWrap.innerHTML.trim()) {
-        asgnWrap.innerHTML = createMultiUserSelector({
-          containerId: 'tf-assignee',
-          selectedIds: [],
-          placeholder: '搜索并添加负责人...',
-          onChange: function(ids) { _tfAssigneeIds = ids; }
-        });
-        _muRenderTags('tf-assignee');
-      }
-      var ccWrap = document.getElementById('tf-cc-wrap');
-      if (ccWrap && !ccWrap.innerHTML.trim()) {
-        ccWrap.innerHTML = createCcSelector({
-          containerId: 'tf-cc',
-          selectedIds: [],
-          placeholder: '搜索抄送人...',
-          onChange: function(ids) { window._tfCcIds = ids; }
-        });
-        setTimeout(function() { _renderCcTags('tf-cc'); }, 180);
-      }
-    }, 200);
-  }
+  _initTaskFormSelectors(t, isEdit);
+}
 
 function _loadTfExecutions(projectId, selectedId) {
   // Use project code (e.g. PE0450) for the /projects/{identifier}/... API
@@ -1537,33 +1626,6 @@ function _loadTfExecutions(projectId, selectedId) {
   }).catch(function() {});
 }
 
-  // Async: load stages for project with task's current stage pre-selected
-  var projId = _taskProjectId || t.project_id;
-  if (projId) {
-    var curExecVal = t.stage_name ? '_' + t.stage_name : '';
-    _loadTfExecutions(projId, curExecVal);
-  }
-
-  // Pre-fill project name if context is set (new task from project detail page)
-  if (!isEdit && _tfProjectId) {
-    setTimeout(function() {
-      loadAllProjects().then(function() {
-        var p = _allProjects.find(function(x) { return x.id == _tfProjectId || x.code == _tfProjectId; });
-        if (p) document.getElementById('tf-project-input').value = (p.code ? p.code + ' ' : '') + p.name;
-      });
-    }, 80);
-  }
-
-  // Async: load worklogs and comments (edit mode)
-  if (isEdit) {
-    API.get('/worklogs?task_id=' + t.id).then(function(logs) {
-      var el = document.getElementById('tf-worklogs');
-      if (el) { el.innerHTML = _renderTaskWorklogTable(logs || [], t.id); _initWorklogDt(logs || [], t.id); }
-    }).catch(function() {});
-    _loadComments(t.id);
-  }
-}
-
 function _renderOutputRow(idx, o) {
   return '<div style="display:flex;gap:6px;margin-bottom:4px;align-items:center">' +
     '<input class="search-inp" id="tf-out-name-' + idx + '" value="' + escHtml(o.name || '') + '" placeholder="名称" style="flex:2">' +
@@ -1584,7 +1646,6 @@ function addOutputRow() {
 
 async function submitTask(taskId) {
   var desc = document.getElementById('tf-desc').value.trim();
-  desc = await _uploadNoteImages(desc);
   var data = {
     title: document.getElementById('tf-title').value.trim(),
     description: desc,
@@ -2036,7 +2097,7 @@ function _initWorklogDt(logs, taskId) {
       { key: 'user', title: '用户', minWidth: 90, render: function(v, row) { return '<span style="font-size:11px">'+escHtml(v||row.username||'?')+'</span>'; } },
       { key: 'percentage', title: '占比', minWidth: 42, render: function(v) { return v ? '<span style="font-weight:600;color:var(--accent)">'+v+'%</span>' : '<span style="color:var(--muted)">—</span>'; } },
       { key: 'calculated_hours', title: '工时(h)', minWidth: 52, render: function(v, row) { var h = v || row.hours || 0; return (h||0).toFixed(1); } },
-      { key: 'description', title: '描述', align: 'left', render: function(v) { return '<span style="white-space:normal;word-break:break-word">'+escHtml(v||'')+'</span>'; } },
+      { key: 'description', title: '描述', align: 'left', render: function(v) { return '<span style="white-space:normal;word-break:break-word">'+renderMarkdown(v||'')+'</span>'; } },
       { key: 'actions', title: '操作', width: '100px', minWidth: 100, render: function(v, row) { return iconEdit('openWorklogEditDialog('+row.id+','+taskId+')','编辑')+iconDelete('deleteWorklogById('+row.id+','+taskId+')','删除'); } }
     ],
     data: logs,
@@ -2523,23 +2584,7 @@ function _refreshTaskWorklogs(taskId) {
 /* ── Comments ── */
 
 async function _loadComments(taskId) {
-  var el = document.getElementById('tf-comments');
-  if (!el) return;
-  try {
-    var comments = await API.get('/task-comments?task_id=' + taskId);
-    if (!comments || !comments.length) {
-      el.innerHTML = '<div style="color:var(--muted);font-size:12px">暂无评论</div>';
-      return;
-    }
-    var html = '';
-    comments.forEach(function(c) {
-      html += '<div style="padding:6px 0;border-bottom:1px solid var(--border)">' +
-        '<div style="font-size:10px;color:var(--muted);margin-bottom:2px">' + escHtml(c.display_name || c.username) + ' · ' + (fmtISODateTime(c.created_at) || '') + '</div>' +
-        '<div style="font-size:13px">' + escHtml(c.content) + '</div>' +
-      '</div>';
-    });
-    el.innerHTML = html;
-  } catch(e) { el.innerHTML = '<div style="color:var(--danger)">加载失败</div>'; }
+  renderTimeline('task', taskId, 'tf-comments');
 }
 
 async function submitComment(taskId) {

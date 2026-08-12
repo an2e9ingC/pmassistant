@@ -303,6 +303,8 @@ def create_task(db: Session, data: dict, user) -> dict:
     assignee_names = _resolve_assignee_names(db, t.assignee_ids) if t.assignee_ids else []
     _log_audit(db, t.project_id, uname, "task_create", f"创建任务 #{t.id}: {t.title}",
                task_name=t.title, task_assignee="、".join(assignee_names) if assignee_names else _resolve_assignee_name(db, t.assignee_id), task_id=t.id)
+    from backend.services.action_service import record_action
+    record_action(db, "task", t.id, uid, "created")
     auto_messages = []
     if t.stage_id:
         auto_messages = _recalc_stage_progress(db, t.stage_id)
@@ -406,6 +408,7 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
     old_stage_name = t.stage_name
     old_cc_user_ids = (t.cc_user_ids or [])[:]  # snapshot for CC favorites sync
     changes = []
+    structured_changes = []  # field/old_value/new_value for EntityActionChange
     # Batch-resolve assignee ID → display name for readable logs
     user_name_map = {}
     for fid in ("assignee_id", "reviewer_id"):
@@ -445,6 +448,7 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
                     nv_names = "、".join(user_name_map.get(uid, str(uid)) for uid in new_val)
                     field_label = FIELD_LABEL.get("assignee_id", "assignee_id")
                     changes.append(f"{field_label}: {ov_names or '无'} -> {nv_names or '无'}")
+                    structured_changes.append({"field": "assignee_id", "old_value": ov_names or "无", "new_value": nv_names or "无"})
                 continue
             old_val = getattr(t, field)
             new_val = data[field]
@@ -470,6 +474,7 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
                     nv_display = user_name_map.get(int(new_val), new_val) if new_val else ''
                 field_label = FIELD_LABEL.get(field, field)
                 changes.append(f"{field_label}: {ov_display} -> {nv_display}")
+                structured_changes.append({"field": field, "old_value": str(ov_display) if ov_display is not None else "", "new_value": str(nv_display) if nv_display is not None else ""})
 
     if "stage_name" in data:
         t.stage_name = data["stage_name"] or None
@@ -480,6 +485,7 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
         if new_ids != old_ids:
             t.is_diverged = 1
             changes.append("已脱离模板（责任人变更）")
+            structured_changes.append({"field": "template", "old_value": "跟随模板", "new_value": "已脱离模板"})
     if "estimate_hours" in data:
         t.estimate_hours = float(data["estimate_hours"] or 0)
     if "output_items" in data:
@@ -569,12 +575,9 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
         assignee_names = _resolve_assignee_names(db, t.assignee_ids) if t.assignee_ids else []
         _log_audit(db, t.project_id, uname, "task_update", f"更新任务「{t.title}」: " + "; ".join(changes[:3]),
                    task_name=t.title, task_assignee="、".join(assignee_names) if assignee_names else _resolve_assignee_name(db, t.assignee_id), task_id=t.id)
-        # Also record as task comment for user-visible change history
-        comment_text = "; ".join(changes)
-        if not comment_text:
-            comment_text = "更新任务"
-        db.add(TaskComment(task_id=t.id, user_id=uid, content=comment_text))
-        db.commit()
+        # Record structured change history (Zentao-style action + changes)
+        from backend.services.action_service import record_action
+        record_action(db, "task", t.id, uid, "updated", structured_changes)
 
     result = _task_dict(t, db)
     result["auto_messages"] = auto_messages
@@ -598,13 +601,10 @@ def approve_task(db: Session, task_id: int, user=None) -> Optional[dict]:
         t.progress = 100
     db.commit()
 
-    # Add approval comment
-    comment = TaskComment(
-        task_id=t.id, user_id=uid,
-        content="已批准",
-    )
-    db.add(comment)
-    db.commit()
+    # Record approval as structured action
+    from backend.services.action_service import record_action
+    record_action(db, "task", t.id, uid, "approved",
+                  changes=[{"field": "status", "old_value": "review", "new_value": "done"}])
 
     _log_audit(db, t.project_id, uname, "task_update", f"审批通过「{t.title}」→ 已完成",
                task_name=t.title, task_assignee=_resolve_assignee_name(db, t.assignee_id))
@@ -626,13 +626,11 @@ def reject_task(db: Session, task_id: int, reason: str, user=None) -> Optional[d
     t.progress = 90
     db.commit()
 
-    # Add rejection comment
-    comment = TaskComment(
-        task_id=t.id, user_id=uid,
-        content=f"驳回：{reason}",
-    )
-    db.add(comment)
-    db.commit()
+    # Record rejection as structured action
+    from backend.services.action_service import record_action
+    record_action(db, "task", t.id, uid, "rejected",
+                  changes=[{"field": "status", "old_value": "review", "new_value": "in_progress"}],
+                  comment=reason)
 
     _log_audit(db, t.project_id, uname, "task_update", f"驳回「{t.title}」: {reason}",
                task_name=t.title, task_assignee=_resolve_assignee_name(db, t.assignee_id))

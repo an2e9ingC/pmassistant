@@ -18,7 +18,14 @@ var _bfProjId = null;
 
 /* ── Init & Render ── */
 
-function initBugs() {
+function initBugs(firstArg) {
+  // Route to detail/edit if first arg is a numeric bug ID
+  var bugId = parseInt(firstArg);
+  if (!isNaN(bugId) && bugId > 0) {
+    var isEdit = arguments[1] === 'edit';
+    if (isEdit) { initBugEdit(bugId); } else { initBugDetail(bugId); }
+    return;
+  }
   var c = document.getElementById('view-bugs');
   if (!c) return;
   c.innerHTML = '<div style="display:flex;height:100%">' +
@@ -266,14 +273,16 @@ function _renderBugDetailBody(b) {
     '<div id="bv-worklogs" style="font-size:12px">加载中...</div>' +
   '</div>';
 
-  // ── Section 4: 评论 ──
+  // ── Section 4: 历史记录 ──
   html += '<div class="card info-glass-card" style="margin-top:16px;padding:20px">' +
-    '<div class="section-hd"><span class="section-title">评论</span></div>' +
-    '<div id="bug-detail-comments" style="margin-bottom:8px">加载中...</div>' +
-    '<div style="display:flex;gap:8px">' +
-      '<input class="search-inp" id="bug-comment-input" placeholder="添加评论..." style="flex:1">' +
-      '<button class="btn-sm btn-primary" onclick="_submitBugComment(' + b.id + ')">发送</button>' +
+    '<div class="section-hd" style="display:flex;align-items:center;justify-content:space-between">' +
+      '<span class="section-title">历史记录</span>' +
+      '<div style="display:flex;gap:6px;align-items:center">' +
+        '<button class="btn-xs timeline-order-btn" onclick="_toggleTimelineOrder(\'bug\', ' + b.id + ', \'bug-detail-comments\')">' + _timelineOrderLabel() + '</button>' +
+        '<button class="btn-sm btn-primary" onclick="openCommentDialog(\'bug\', ' + b.id + ')">添加评论</button>' +
+      '</div>' +
     '</div>' +
+    '<div id="bug-detail-comments" style="margin-bottom:8px">加载中...</div>' +
   '</div>';
 
   // ── Section 5: 分析记录 ──
@@ -286,6 +295,131 @@ function _renderBugDetailBody(b) {
   return html;
 }
 
+/* ── Full-page Bug Detail / Edit / Create ── */
+
+function initBugDetail(bugId) {
+  bugId = parseInt(bugId);
+  var viewEl = document.getElementById('view-bugs');
+  if (!viewEl) return;
+  viewEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">加载中...</div>';
+  document.getElementById('topbar-title').textContent = 'Bug #' + bugId;
+
+  API.get('/bugs/' + bugId).then(function(data) {
+    var b = data || {};
+    var html = '<div class="bug-detail-page" style="max-width:1200px;margin:0 auto;padding:20px">' +
+      '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">' +
+        '<span style="font-size:15px;font-weight:620">Bug #' + b.id + ' · ' + escHtml(b.title) + '</span>' +
+        '<span style="flex:1"></span>' +
+        '<button class="btn btn-sm btn-primary" onclick="gotoView(\'bugs\', {params: [String(' + b.id + '), \'edit\']})">编辑</button>' +
+      '</div>' +
+      _renderBugDetailBody(b) +
+    '</div>';
+    viewEl.innerHTML = html;
+    document.getElementById('topbar-title').textContent = 'Bug #' + b.id + ' · ' + (b.title || '');
+
+    // Load worklogs + comments + analyses
+    API.get('/bugs/'+bugId+'/worklogs').then(function(logs) {
+      var el = document.getElementById('bv-worklogs');
+      if (el) { el.innerHTML = _renderBugWorklogTable(logs||[], bugId); _initBugWorklogDt(logs||[], bugId); }
+    });
+    _loadBugComments(bugId);
+    _loadBugAnalyses(bugId);
+  }).catch(function(e) {
+    viewEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--danger)">加载失败: ' + escHtml(e.message || '') + '</div>';
+  });
+}
+
+function initBugEdit(bugId) {
+  bugId = parseInt(bugId);
+  var viewEl = document.getElementById('view-bugs');
+  if (!viewEl) return;
+  viewEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">加载中...</div>';
+
+  API.get('/bugs/' + bugId).then(function(data) {
+    var b = data || {};
+    var formHtml = _buildBugForm(b, true);
+    var html = '<div class="bug-edit-page" style="max-width:1200px;margin:0 auto;padding:20px">' +
+      '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">' +
+        '<button class="btn btn-sm" onclick="history.back()">← 返回</button>' +
+        '<span style="font-size:15px;font-weight:620">编辑 Bug #' + b.id + ' · ' + escHtml(b.title) + '</span>' +
+        '<span style="flex:1"></span>' +
+        '<button class="btn btn-sm btn-primary" onclick="_submitBugFullPage(' + b.id + ')">保存</button>' +
+      '</div>' +
+      formHtml +
+    '</div>';
+    viewEl.innerHTML = html;
+    document.getElementById('topbar-title').textContent = '编辑 Bug #' + b.id;
+    setTimeout(function() { initRichEditor('bf-desc', {height: 360}); }, 100);
+    _initBugFormSelectors(b, true);
+  }).catch(function(e) {
+    viewEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--danger)">加载失败: ' + escHtml(e.message || '') + '</div>';
+  });
+}
+
+function initBugCreate() {
+  var viewEl = document.getElementById('view-bugs');
+  if (!viewEl) return;
+  var formHtml = _buildBugForm(null, false);
+  var html = '<div class="bug-create-page" style="max-width:1200px;margin:0 auto;padding:20px">' +
+    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">' +
+      '<span style="font-size:15px;font-weight:620">新建 Bug</span>' +
+      '<span style="flex:1"></span>' +
+      '<button class="btn btn-sm btn-primary" onclick="_submitBugFullPage(null)">创建</button>' +
+    '</div>' +
+    formHtml +
+  '</div>';
+  viewEl.innerHTML = html;
+  document.getElementById('topbar-title').textContent = '新建 Bug';
+  setTimeout(function() { initRichEditor('bf-desc', {height: 360}); }, 100);
+  _initBugFormSelectors(null, false);
+}
+
+async function _submitBugFullPage(bugId) {
+  var desc = document.getElementById('bf-desc').value.trim();
+  var title = (document.getElementById('bf-title') || {}).value || '';
+  if (!title) { showToast('请输入Bug标题', 'error'); return; }
+
+  var pid = _bfProdId || 0;
+  var projId = _bfProjId || 0;
+  var asgnId = window._bfAsgnId || null;
+  var sev = parseInt(document.getElementById('bf-severity').value) || 0;
+
+  if (!pid) { showToast('请选择所属产品', 'error'); return; }
+  if (!projId) { showToast('请选择所属项目', 'error'); return; }
+  if (!asgnId) { showToast('请选择负责人', 'error'); return; }
+  if (!sev) { showToast('请选择严重程度', 'error'); return; }
+
+  var data = {
+    title: title,
+    description: desc,
+    product_id: pid,
+    project_id: projId,
+    component_id: parseInt(document.getElementById('bf-component').value) || null,
+    type: document.getElementById('bf-type').value,
+    severity: sev,
+    priority: document.getElementById('bf-priority').value,
+    status: document.getElementById('bf-status').value,
+    estimate_hours: parseFloat(document.getElementById('bf-estimate').value) || 0,
+    progress: parseInt(document.getElementById('bf-progress').value) || 0,
+    assignee_id: asgnId,
+    cc_user_ids: (window._bfCcIds && window._bfCcIds.length) ? window._bfCcIds : null,
+  };
+
+  try {
+    if (bugId) {
+      await API.put('/bugs/' + bugId, data);
+      showToast('保存成功', 'success');
+    } else {
+      var result = await API.post('/bugs', data);
+      showToast('创建成功', 'success');
+      bugId = result.id || result.bug_id;
+    }
+    setTimeout(function() { history.back(); }, 500);
+  } catch(e) {
+    showToast('操作失败: ' + (e.message || ''), 'error');
+  }
+}
+
 async function openBugDetail(bugId) {
   var data = await API.get('/bugs/' + bugId);
   var b = data || {};
@@ -295,7 +429,6 @@ async function openBugDetail(bugId) {
   '</div>';
 
   var btns = [
-    {text:'提交到GitLab',cls:'btn',onclick:'_bugSubmitGitlab('+bugId+')'},
     {text:'关闭',onclick:'closeSharedDialog()'}];
   openDialog('Bug #' + bugId, html, btns, {maxWidth: '80vw', maxHeight: '90vh'});
   // Scroll to top when dialog opens
@@ -314,59 +447,28 @@ async function openBugDetail(bugId) {
 }
 
 function _loadBugComments(bugId) {
-  API.get('/bugs/' + bugId + '/comments').then(function(comments) {
-    var el = document.getElementById('bug-detail-comments');
-    if (!el) return;
-    if (!comments || !comments.length) { el.innerHTML = '<div style="color:var(--muted);font-size:12px">暂无评论</div>'; return; }
-    el.innerHTML = '<div id="bug-comments-table"></div>';
-    new DataTable({
-      container: document.getElementById('bug-comments-table'),
-      columns: [
-        { key: 'created_at', title: '时间', width: '130px', minWidth: 120, render: function(v) { return '<span style="font-size:10px;color:var(--muted);white-space:nowrap">'+(fmtISODateTime(v)||'')+'</span>'; } },
-        { key: 'username', title: '用户', width: '80px', minWidth: 90, render: function(v) { return '<span style="font-size:12px">'+escHtml(v)+'</span>'; } },
-        { key: 'content', title: '内容', align: 'left', render: function(v) { return '<span style="font-size:13px">'+escHtml(v||'')+'</span>'; } }
-      ],
-      data: comments,
-    });
-  }).catch(function() {});
+  renderTimeline('bug', bugId, 'bug-detail-comments');
 }
 
+// DEPRECATED: replaced by openCommentDialog() (rich-text dialog)
 function _submitBugComment(bugId) {
-  var input = document.getElementById('bug-comment-input');
-  if (!input || !input.value.trim()) return;
-  API.post('/bugs/' + bugId + '/comments', {content: input.value.trim()}).then(function() {
-    input.value = '';
-    _loadBugComments(bugId);
-  }).catch(function(e) { showToast('发送失败: ' + (e.message || ''), 'error'); });
+  openCommentDialog('bug', bugId);
 }
 
 /* ── Create/Edit Dialog ── */
 
 function openBugDialog(bugId) {
-  if (bugId) { openBugDetail(bugId); return; } // route edit to unified detail view
-  _showBugForm(null);
+  if (bugId) { gotoView('bugs', { params: [String(bugId)] }); return; }
+  gotoView('bug-create');
 }
 
-function _showBugForm(b) {
-  var isEdit = !!b; var t = b || {};
-  // Accept pre-fill context from topbar quick-create (app.js sets _bugPreFill)
-  var ctx = window._bugPreFill || {};
-  if (!isEdit) {
-    if (ctx.product) t.product_id = ctx.product;
-    if (ctx.project) t.project_id = ctx.project;
-  }
-  window._bfProdId = t.product_id || ctx.product || null;
-  window._bfProjId = t.project_id || ctx.project || null;
-  window._bfAsgnId = t.assignee_id || null;
-  window._bfCcIds = (t.cc_user_ids || []).slice();
-  window._bugPreFill = null;  // consume once
-
+function _buildBugForm(t, isEdit) {
+  t = t || {};
   var inp = 'width:100%;box-sizing:border-box;margin-top:1px';
   var bodyHtml = '';
 
-  // ── Row 1: 基本信息 + 状态与进度 side by side ──
+  // ── Row 1: 基本信息 + 状态与进度 ──
   bodyHtml += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
-    // ── 基本信息 Card ──
     '<div style="' + _bCard + '">' +
       '<div style="' + _bCardHd + '">基本信息</div>' +
       '<div style="margin-bottom:6px"><label style="' + _bLbl + '">标题 *</label>' +
@@ -394,10 +496,13 @@ function _showBugForm(b) {
         '<div><label style="' + _bLbl + '">负责人 *</label><div id="bf-assignee-wrap" style="margin-top:2px"></div>' +
           '<div id="bf-assignee-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择负责人</div></div>' +
       '</div>' +
-      '<div style="margin-top:6px"><label style="' + _bLbl + '">抄送给</label>' +
-        '<div id="bf-cc-wrap" style="margin-top:2px"></div></div>' +
+      '<div style="' + _bGrid2 + ';margin-top:6px">' +
+        '<div><label style="' + _bLbl + '">创建人</label>' +
+          '<div style="' + inp + ';padding:7px 11px;background:var(--bg);border:1px solid var(--border);border-radius:7px;font-size:13px;color:var(--fg);line-height:1.4">' + escHtml(t.reporter_name || (function(){var u=getCurrentUser();return u?u.display_name||u.username:'—';})()) + '</div></div>' +
+        '<div><label style="' + _bLbl + '">抄送给</label>' +
+          '<div id="bf-cc-wrap" style="margin-top:2px"></div></div>' +
+      '</div>' +
     '</div>' +
-    // ── 状态与进度 Card ──
     '<div style="' + _bCard + '">' +
       '<div style="' + _bCardHd + '">状态与进度</div>' +
       '<div style="' + _bGrid2 + '">' +
@@ -414,45 +519,67 @@ function _showBugForm(b) {
           '<input class="search-inp" id="bf-estimate" type="number" step="0.5" value="' + (t.estimate_hours || '') + '" style="' + inp + '"></div>' +
         '<div><label style="' + _bLbl + '">进度(%)</label>' +
           '<input class="search-inp" id="bf-progress" type="number" min="0" max="100" step="5" value="' + (t.progress || 0) + '" style="' + inp + '"></div>' +
-        '<div style="grid-column:1/-1"><label style="' + _bLbl + '">创建人</label><div style="' + inp + ';padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:13px;color:var(--fg)">' + escHtml(t.reporter_name || (function(){var u=getCurrentUser();return u?u.display_name||u.username:'—';})()) + '</div></div>' +
       '</div>' +
     '</div>' +
   '</div>';
 
-  // ── Section 2: 描述 Card ──
+  // ── Section 2: 描述 ──
   bodyHtml += '<div style="' + _bCard + ';margin-top:10px">' +
     '<div style="display:flex;align-items:center;justify-content:space-between">' +
-      '<div><span style="' + _bCardHd + ';margin-bottom:0">描述 (Markdown)</span>' +
+      '<div><span style="' + _bCardHd + ';margin-bottom:0">描述</span>' +
       '<select class="search-inp" id="bf-desc-tpl" onchange="_bugApplyDescTemplate()" style="margin-left:12px;font-size:11px;padding:2px 6px">' +
         '<option value="">不使用模板</option></select></div>' +
-      '<button class="btn btn-xs" onclick="_bugToggleMdPreview()" style="font-size:10px;padding:1px 6px">预览</button>' +
     '</div>' +
     '<div style="margin-top:6px">' +
-      '<textarea class="search-inp" id="bf-desc" rows="4" style="width:100%;min-height:80px;height:auto;max-height:30vh;box-sizing:border-box;resize:vertical">' + escHtml(t.description || '') + '</textarea>' +
+      '<textarea class="search-inp" id="bf-desc" rows="4" style="width:100%;min-height:80px;height:auto;max-height:30vh;box-sizing:border-box">' + escHtml(t.description || '') + '</textarea>' +
     '</div>' +
-    '<div id="bf-desc-preview" class="markdown-body" style="display:none;overflow-y:auto;padding:8px;border:1px solid var(--border);border-radius:6px;margin-top:6px;font-size:13px;max-height:30vh"></div>' +
-    '<div style="font-size:10px;color:var(--muted);margin-top:4px">支持粘贴图片 (Ctrl+V)</div>' +
-    '<div id="bf-desc-img-preview" style="margin-top:4px;min-height:0;max-height:50vh;overflow-y:auto"></div>' +
   '</div>';
+
+  return bodyHtml;
+}
+
+function _showBugForm(b) {
+  var isEdit = !!b; var t = b || {}; var ctx = window._bugPreFill || {};
+  if (!isEdit) { if (ctx.product) t.product_id = ctx.product; if (ctx.project) t.project_id = ctx.project; }
+  window._bfProdId = t.product_id || ctx.product || null;
+  window._bfProjId = t.project_id || ctx.project || null;
+  window._bfAsgnId = t.assignee_id || null;
+  window._bfCcIds = (t.cc_user_ids || []).slice();
+  window._bugPreFill = null;
+
+  var bodyHtml = _buildBugForm(t, isEdit);
 
   bodyHtml = '<div style="max-height:75vh;overflow-y:auto;padding-right:4px">' + bodyHtml + '</div>';
 
   var title = isEdit ? '编辑Bug #'+t.id : '新建Bug';
-  _clearNoteImagePreviews('bf-desc-img-preview');
-  setTimeout(function() { initNoteImagePaste('bf-desc'); }, 100);
-  setTimeout(function() { _loadExistingNoteImages(t.description||'', 'bf-desc-img-preview'); }, 200);
+  setTimeout(function() { initRichEditor('bf-desc', {height: 360}); }, 100);
   openDialog(title, bodyHtml, [
     {text:'取消',onclick:'closeSharedDialog()'},
     {text:isEdit?'保存':'创建',cls:'btn-primary',onclick:'_submitBug('+(t.id||'null')+')'}], {maxWidth:'80vw', maxHeight:'90vh'});
+
+  _initBugFormSelectors(t, isEdit);
+}
+
+/** Initialize bug form selectors (product/project/assignee/cc/components/templates) after form is in DOM */
+function _initBugFormSelectors(t, isEdit) {
+  t = t || {};
+  // Set form-scope state (avoid stale values from previous form)
+  var ctx = window._bugPreFill || {};
+  if (!isEdit) { if (ctx.product) t.product_id = ctx.product; if (ctx.project) t.project_id = ctx.project; }
+  window._bfProdId = t.product_id || ctx.product || null;
+  window._bfProjId = t.project_id || ctx.project || null;
+  window._bfAsgnId = t.assignee_id || null;
+  window._bfCcIds = (t.cc_user_ids || []).slice();
+  window._bugPreFill = null;
 
   // Load bug description templates (independent of product selection)
   API.get('/product-doc-templates/bug-templates').then(function(btpls) {
     window._bfDescTemplates = btpls || [];
     var tplSel = document.getElementById('bf-desc-tpl');
-    var defaultTpl = (btpls||[]).find(function(t) { return t.is_default; });
+    var defaultTpl = (btpls||[]).find(function(x) { return x.is_default; });
     if (tplSel) {
       tplSel.innerHTML = '<option value="">不使用模板</option>';
-      (btpls||[]).forEach(function(t) { tplSel.innerHTML += '<option value="'+t.id+'">'+escHtml(t.name)+'</option>'; });
+      (btpls||[]).forEach(function(x) { tplSel.innerHTML += '<option value="'+x.id+'">'+escHtml(x.name)+'</option>'; });
       if (defaultTpl && !isEdit) { tplSel.value = defaultTpl.id; _bugApplyDescTemplate(); }
     }
   });
@@ -482,6 +609,7 @@ function _showBugForm(b) {
   if (isEdit && t.type) { setTimeout(function() { var s=document.getElementById('bf-type'); if(s)s.value=t.type; },100); }
   if (isEdit && t.status) { setTimeout(function() { var s=document.getElementById('bf-status'); if(s)s.value=t.status; },100); }
   if (isEdit && t.component_id) { setTimeout(function() { var s=document.getElementById('bf-component'); if(s)s.value=t.component_id; },200); }
+
   // Create user combo + CC selector
   setTimeout(function() {
     var wrap = document.getElementById('bf-assignee-wrap');
@@ -527,22 +655,8 @@ function _bugFillComponents(tpls) {
   (tpls||[]).forEach(function(t) { sel.innerHTML += '<option value="'+t.id+'">'+escHtml(t.doc_name)+'</option>'; });
 }
 
-function _bugToggleMdPreview() {
-  var ta = document.getElementById('bf-desc');
-  var pv = document.getElementById('bf-desc-preview');
-  var btn = event && event.target;
-  if (!ta || !pv) return;
-  if (pv.style.display === 'none') {
-    pv.innerHTML = renderMarkdown(ta.value);
-    pv.style.display = '';
-    ta.style.display = 'none';
-    if (btn) btn.textContent = '编辑';
-  } else {
-    pv.style.display = 'none';
-    ta.style.display = '';
-    if (btn) btn.textContent = '预览';
-  }
-}
+// DEPRECATED: HugeRTE is WYSIWYG, no preview toggle needed
+function _bugToggleMdPreview() {}
 
 function _bugApplyDescTemplate() {
   var tplSel = document.getElementById('bf-desc-tpl');
@@ -574,7 +688,6 @@ async function _submitBug(bugId) {
   if (!valid) return;
 
   var desc = document.getElementById('bf-desc').value.trim();
-  desc = await _uploadNoteImages(desc);
   var payload = {
     title:title, product_id:pid,
     description:desc,
@@ -807,7 +920,7 @@ function _initBugWorklogDt(logs, bugId) {
       { key: 'user', title: '用户', width: '44px', minWidth: 90, render: function(v, row) { return '<span style="font-size:11px">'+escHtml(getDisplayName(v||row.username||''))+'</span>'; } },
       { key: 'percentage', title: '占比', width: '42px', minWidth: 42, render: function(v) { return v ? '<span style="font-weight:600;color:var(--accent)">'+v+'%</span>' : '<span style="color:var(--muted)">—</span>'; } },
       { key: 'calculated_hours', title: '工时(h)', width: '52px', minWidth: 52, render: function(v, row) { var h = v || row.hours || 0; return (h||0).toFixed(1); } },
-      { key: 'description', title: '描述', align: 'left', render: function(v) { return '<span style="white-space:normal;word-break:break-word">'+escHtml(v||'')+'</span>'; } },
+      { key: 'description', title: '描述', align: 'left', render: function(v) { return '<span style="white-space:normal;word-break:break-word">'+renderMarkdown(v||'')+'</span>'; } },
       { key: 'actions', title: '', width: '90px', minWidth: 90, render: function(v, row) { return iconEdit('openBugWorklogEditDialog('+bugId+','+row.id+')')+iconDelete('deleteBugWorklog('+bugId+','+row.id+')'); } }
     ],
     data: logs,
@@ -1004,7 +1117,7 @@ function _startBugInlineEdit(el) {
       '<div style="display:flex;gap:10px;margin-top:6px"><button class="btn-xs ef-save-btn" onclick="event.stopPropagation();_saveBugInlineEdit(this)">✓</button><button class="btn-xs ef-cancel-btn" onclick="event.stopPropagation();_cancelBugInlineEdit(this)">✕</button></div>';
     var inp = field.querySelector('.ef-input');
     if (inp) { setTimeout(function() { inp.focus(); }, 50); }
-    setTimeout(function() { _clearNoteImagePreviews(taId + '-img-preview'); initNoteImagePaste(taId); _loadExistingNoteImages(currentVal, taId + '-img-preview'); }, 100);
+    setTimeout(function() { initRichEditor(taId, {height: 300}); }, 100);
   } else if (inputType === 'user-select') {
     if (!window._allUsers || !window._allUsers.length) {
       field.innerHTML = '<span style="font-size:12px;color:var(--muted)">加载用户列表...</span>';
@@ -1156,9 +1269,7 @@ async function _saveBugInlineEdit(el) {
   }
 
   // Upload pasted images for textarea fields
-  if (inputType === 'textarea' && typeof _uploadNoteImages === 'function') {
-    newVal = await _uploadNoteImages(newVal);
-  }
+  // HugeRTE editor syncs content to textarea automatically; no upload needed
 
   var data = {};
   if (inputType === 'number') {

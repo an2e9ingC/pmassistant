@@ -106,6 +106,8 @@ var VIEW_REGISTRY = {
   'system-manage':  { title: '系统管理',    label: '系统管理',    perm: 'admin',         initName: 'initSystemManage',      js: '/js/system-manage.js?v=' + APP_VERSION },
   'user-center':    { title: '用户中心',    label: '用户中心',    perm: null,            init: initUserCenter },
   tasks:            { title: '任务管理',    label: '任务管理',    perm: null,            initName: 'initTasks',            js: '/js/tasks.js?v=' + APP_VERSION },
+  'task-create':    { title: '新建任务',    label: '任务管理',    perm: null,            initName: 'initTaskCreate',       js: '/js/tasks.js?v=' + APP_VERSION, _viewEl: 'tasks' },
+  'bug-create':     { title: '新建Bug',     label: 'Bug 管理',    perm: null,            initName: 'initBugCreate',        js: '/js/bugs.js?v=' + APP_VERSION, _viewEl: 'bugs' },
 };
 
 // ── Lazy script loader ──
@@ -226,9 +228,10 @@ function gotoView(view, opts) {
     if (!canAccess(entry.perm, entry.label + '需要 ' + permLabel + ' 权限')) return;
   }
 
-  // Activate view DOM
+  // Activate view DOM (use _viewEl alias if set, e.g. task-create → tasks)
   document.querySelectorAll('.view').forEach(function(v) { v.classList.remove('active'); });
-  var viewEl = document.getElementById('view-' + view);
+  var domView = entry._viewEl || view;
+  var viewEl = document.getElementById('view-' + domView);
   if (viewEl) viewEl.classList.add('active');
 
   // Hide right panel when leaving user-center
@@ -238,7 +241,7 @@ function gotoView(view, opts) {
 
   // Activate nav
   document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
-  var navEl = document.getElementById('nav-' + view);
+  var navEl = document.getElementById('nav-' + domView);
   if (navEl) navEl.classList.add('active');
 
   // Title with optional debug overlay
@@ -406,7 +409,7 @@ function openFeedbackDialog() {
       '</div>' +
       '<div style="margin-bottom:12px">' +
         '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">详细描述 <span style="font-weight:400">（可选）</span></label>' +
-        '<textarea class="search-inp" id="fb-desc" rows="4" placeholder="请详细描述遇到的问题或期望的功能（可选）... 支持粘贴图片" style="width:100%;box-sizing:border-box;resize:vertical" onpaste="handleDescPaste(event)"></textarea>' +
+        '<textarea class="search-inp" id="fb-desc" rows="4" placeholder="请详细描述遇到的问题或期望的功能（可选）... 支持粘贴图片" style="width:100%;box-sizing:border-box;resize:vertical"></textarea>' +
       '</div>' +
       '<div style="margin-bottom:12px">' +
         '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">反馈人 <span style="font-weight:400">（默认当前登录用户）</span></label>' +
@@ -432,6 +435,7 @@ function openFeedbackDialog() {
   selectFeedbackType('bug');
   loadFeedbackMembers();
   document.getElementById('fb-title').focus();
+  setTimeout(function() { initRichEditor('fb-desc', {height: 250}); }, 100);
 }
 
 function toggleFbChip(el) {
@@ -473,39 +477,7 @@ async function loadFeedbackMembers() {
   }
 }
 
-async function handleDescPaste(e) {
-  var items = (e.clipboardData || window.clipboardData).items;
-  if (!items) return;
-  for (var i = 0; i < items.length; i++) {
-    if (items[i].type.indexOf('image') === 0) {
-      e.preventDefault();
-      var blob = items[i].getAsFile();
-      var ta = document.getElementById('fb-desc');
-      var cursorPos = ta.selectionStart;
-      var before = ta.value.substring(0, cursorPos);
-      var after = ta.value.substring(cursorPos);
-      ta.value = before + '[上传图片中...]' + after;
-      try {
-        var formData = new FormData();
-        formData.append('file', blob, 'paste-' + Date.now() + '.png');
-        var resp = await fetch('/api/gitlab/upload', {
-          method: 'POST',
-          headers: { 'Authorization': 'Bearer ' + (localStorage.getItem('pma_token') || '') },
-          body: formData,
-        });
-        if (!resp.ok) throw new Error('Upload failed');
-        var data = await resp.json();
-        var imgUrl = (data.data && data.data.url) || data.url || '';
-        if (imgUrl && !imgUrl.startsWith('http')) imgUrl = 'http://192.168.0.128' + imgUrl;
-        var mdImg = '\n' + (data.data && data.data.markdown ? data.data.markdown : '![image](' + imgUrl + ')') + '\n';
-        ta.value = ta.value.replace('[上传图片中...]', mdImg);
-      } catch(err) {
-        ta.value = ta.value.replace('[上传图片中...]', '[upload failed]');
-      }
-      break;
-    }
-  }
-}
+// DEPRECATED: handleDescPaste replaced by HugeRTE images_upload_handler
 
 function closeFeedbackDialog() {
   var overlay = document.querySelector('.note-dialog-overlay');
@@ -1037,7 +1009,7 @@ async function loadNotifBar() {
         : '';
       var timeStr = n.created_at ? fmtISODateTime(n.created_at) : '';  // YYYY-MM-DD HH:mm
       return '<div class="' + cls + '">' +
-        '<span>' + escHtml(n.content) + ' <span class="notif-bar-author">[@' + escHtml(n.created_by) + ']</span>' +
+        '<span>' + '<span>' + renderMarkdown(n.content) + '</span>' + ' <span class="notif-bar-author">[@' + escHtml(n.created_by) + ']</span>' +
         (timeStr ? ' <span class="notif-bar-author" style="opacity:0.7;font-size:11px">' + timeStr + '</span>' : '') + '</span>' +
         closeBtn +
       '</div>';
@@ -1154,7 +1126,7 @@ async function loadAlertTicker() {
           '<span style="color:var(--muted);margin:0 4px">-</span>' +
           (a.activity_date ? '<span style="color:var(--muted);font-size:11px">' + a.activity_date + '</span>' : '') +
           '<span style="color:var(--muted);margin:0 4px">-</span>' +
-          '<span style="color:var(--fg)">' + escHtml(descDisplay) + '</span>' +
+          '<span style="color:var(--fg)">' + renderMarkdown(descDisplay) + '</span>' +
         '</span>';
       });
       document.getElementById('alert-ticker-inner').innerHTML = actHtml;
@@ -3501,7 +3473,7 @@ async function checkNewVersion() {
       var html = '<div style="font-size:13px;line-height:1.8">' +
         '<div style="font-weight:600;color:var(--accent);margin-bottom:8px">' +
           escHtml(e.version) + (e.date ? ' <span style="font-size:11px;color:var(--muted)">' + escHtml(e.date) + '</span>' : '') + '</div>' +
-        '<div style="white-space:pre-wrap;' + descStyle + '">' + escHtml(e.description) + '</div>' +
+        '<div style="white-space:pre-wrap;' + descStyle + '">' + renderMarkdown(e.description) + '</div>' +
       '</div>';
       var isLast = page >= lastPage;
       var prevBtn = page > 0
@@ -3701,14 +3673,17 @@ EventBus.on('fav:toggled', function(e) {
 
 EventBus.on('worklog:saved', function(e) {
   if (typeof _ucLoadCalendar === 'function') { var u = getCurrentUser(); if (u) _ucLoadCalendar(u); }
+  // 详情页模式：只刷新详情内容，不刷新列表（避免 loadTaskData 覆盖全页面详情）
+  var isDetailPage = !!document.querySelector('.task-detail-page');
   if (e.taskId && typeof _refreshTaskDetailContent === 'function') _refreshTaskDetailContent(e.taskId);
-  if (typeof loadTaskData === 'function') loadTaskData();
+  if (!isDetailPage && typeof loadTaskData === 'function') loadTaskData();
   if (typeof _ucLoadTasks === 'function') { var u = getCurrentUser(); if (u) _ucLoadTasks(u); }
 });
 EventBus.on('worklog:deleted', function(e) {
   if (typeof _ucLoadCalendar === 'function') { var u = getCurrentUser(); if (u) _ucLoadCalendar(u); }
+  var isDetailPage = !!document.querySelector('.task-detail-page');
   if (e.taskId && typeof _refreshTaskDetailContent === 'function') _refreshTaskDetailContent(e.taskId);
-  if (typeof loadTaskData === 'function') loadTaskData();
+  if (!isDetailPage && typeof loadTaskData === 'function') loadTaskData();
   if (typeof _ucLoadTasks === 'function') { var u = getCurrentUser(); if (u) _ucLoadTasks(u); }
 });
 
