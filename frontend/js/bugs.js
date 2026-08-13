@@ -127,7 +127,7 @@ function _renderBugTable(container, bugs) {
         { key: 'priority', title: '优先级', width: '6%', minWidth: 65, render: function(v) { return renderPriorityBadge(v); } },
         { key: 'status', title: '状态', width: '7%', minWidth: 80, render: function(v) { return renderPill(v||'open'); } },
         { key: 'assignee_name', title: '负责人', width: '8%', minWidth: 90, render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'-')+'</span>'; } },
-        { key: 'actions', title: '操作', width: '90px', minWidth: 90, render: function(v, row) { return '<span onclick="event.stopPropagation()">'+iconEdit('openBugDialog('+row.id+')','编辑')+iconDelete('deleteBugById('+row.id+')','删除')+'</span>'; } }
+        { key: 'actions', title: '操作', width: actionColWidth(2) + 'px', minWidth: actionColWidth(2), render: function(v, row) { return '<span onclick="event.stopPropagation()">'+iconEdit('openBugDialog('+row.id+')','编辑')+iconDelete('deleteBugById('+row.id+')','删除')+'</span>'; } }
       ],
     });
   }

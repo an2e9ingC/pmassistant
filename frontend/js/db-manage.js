@@ -351,7 +351,7 @@ function _renderLocalBackupTable(TYPE_LABELS) {
       '<th style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:right;width:70px">' + _sortHeader('大小', 'size', 'local') + '</th>' +
       '<th style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:left;width:135px">' + _sortHeader('备份时间', 'created_at', 'local') + '</th>' +
       '<th style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:center;width:80px">远端状态</th>' +
-      '<th style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:center;width:140px">操作</th>' +
+      '<th style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:center;width:120px">操作</th>' +
     '</tr></thead><tbody>';
 
   if (!sorted.length) {

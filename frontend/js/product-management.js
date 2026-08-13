@@ -184,7 +184,7 @@ function renderProductManagementPage() {
     if (_pmNodeChildren.length) {
       rightHtml += '<div class="table-scroll" id="pm-l1-table"><table class="stage-table"><thead><tr>' +
         '<th>产品系列名称</th><th>型号数</th>' +
-        (_pmIsAdmin ? '<th style="width:100px">操作</th>' : '') +
+        (_pmIsAdmin ? '<th style="width:80px">操作</th>' : '') +
         '</tr></thead><tbody>';
       _pmNodeChildren.forEach(function (l2) {
         var modelCount = (l2.children || []).length;

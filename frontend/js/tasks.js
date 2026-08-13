@@ -631,7 +631,7 @@ function renderTaskTable(tasks, execs) {
       { key: 'priority', title: '优先级', width: '5%', minWidth: 65, render: function(v) { return renderPriorityBadge(v); } },
       { key: 'progress', title: '进度', width: '6%', minWidth: 60, render: function(v) { return renderProgressCircle(v||0, 26, {label:''}); } },
       { key: 'due_date', title: '截止日期', width: '6%', minWidth: 100, render: function(v, row) { return '<span style="color:'+(v&&row.status!=='done'&&row.status!=='done'&&v<fmtLocalDate()?'var(--danger)':'')+'">'+(v||'-')+'</span>'; } },
-      { key: 'actions', title: '操作', width: '130px', minWidth: 130, render: function(v, row) { return iconEdit('openTaskDialog('+row.id+')','编辑任务')+iconCopy('openCopyTaskDialog('+row.id+')','复制任务')+iconDelete('deleteTask('+row.id+',\''+escJs(row.title)+'\')','删除任务'); } }
+      { key: 'actions', title: '操作', width: actionColWidth(3) + 'px', minWidth: actionColWidth(3), render: function(v, row) { return iconEdit('openTaskDialog('+row.id+')','编辑任务')+iconCopy('openCopyTaskDialog('+row.id+')','复制任务')+iconDelete('deleteTask('+row.id+',\''+escJs(row.title)+'\')','删除任务'); } }
     ],
     data: tasks,
     maxHeight: 'calc(100vh - 220px)',
@@ -728,7 +728,7 @@ function renderTaskTableCompact(tasks, execs) {
       { key: 'completed_at', title: '完成日期', width: '7%', minWidth: 100, render: function(v, row) { return row._empty?'—':'<span style="font-size:12px">'+(v?formatDate(v):'—')+'</span>'; } },
       { key: 'latest_activity', title: '最新动态', width: '10%', minWidth: 120, align: 'left', render: function(v, row) { return row._empty?'—':(typeof _renderLatestActivity==='function'?_renderLatestActivity(row):'<span style="font-size:11px;color:var(--muted)">—</span>'); } },
       { key: 'latest_time', title: '时间', width: '6%', render: function(v, row) { return row._empty?'—':''; } },
-      { key: 'actions', title: '操作', width: '100px', minWidth: 100, render: function(v, row) { return row._empty?'<span style="color:var(--muted);font-size:12px">—</span>':'<span style="white-space:nowrap" onclick="event.stopPropagation()">'+iconEdit('openTaskDialog('+row.id+')')+iconDelete('deleteTask('+row.id+',\''+escJs(row.title)+'\')')+'</span>'; } }
+      { key: 'actions', title: '操作', width: actionColWidth(2) + 'px', minWidth: actionColWidth(2), render: function(v, row) { return row._empty?'<span style="color:var(--muted);font-size:12px">—</span>':'<span style="white-space:nowrap" onclick="event.stopPropagation()">'+iconEdit('openTaskDialog('+row.id+')')+iconDelete('deleteTask('+row.id+',\''+escJs(row.title)+'\')')+'</span>'; } }
     ],
     data: flatRows,
     maxHeight: 'calc(100vh - 340px)',
@@ -2098,7 +2098,7 @@ function _initWorklogDt(logs, taskId) {
       { key: 'percentage', title: '占比', minWidth: 42, render: function(v) { return v ? '<span style="font-weight:600;color:var(--accent)">'+v+'%</span>' : '<span style="color:var(--muted)">—</span>'; } },
       { key: 'calculated_hours', title: '工时(h)', minWidth: 52, render: function(v, row) { var h = v || row.hours || 0; return (h||0).toFixed(1); } },
       { key: 'description', title: '描述', align: 'left', render: function(v) { return '<span style="white-space:normal;word-break:break-word">'+renderMarkdown(v||'')+'</span>'; } },
-      { key: 'actions', title: '操作', width: '100px', minWidth: 100, render: function(v, row) { return iconEdit('openWorklogEditDialog('+row.id+','+taskId+')','编辑')+iconDelete('deleteWorklogById('+row.id+','+taskId+')','删除'); } }
+      { key: 'actions', title: '操作', width: actionColWidth(2) + 'px', minWidth: actionColWidth(2), render: function(v, row) { return iconEdit('openWorklogEditDialog('+row.id+','+taskId+')','编辑')+iconDelete('deleteWorklogById('+row.id+','+taskId+')','删除'); } }
     ],
     data: logs,
   });

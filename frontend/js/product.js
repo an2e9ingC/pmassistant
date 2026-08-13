@@ -723,7 +723,7 @@ function renderProductNotes(notes) {
         var plainText = stripHtml(renderMarkdown?renderMarkdown(v):v).substring(0,80);
         return '<span style="font-size:13px;line-height:1.5">'+(row.parent_id?'<span style="font-size:10px;color:var(--accent);margin-right:4px">↳ 回复</span>':'')+escHtml(plainText)+(v&&v.length>80?'...':'')+(/!\[.*\]\(.*\)/.test(v)||/<img\b/.test(v)?' <span style="font-size:10px">📷</span>':'')+'</span>';
       }},
-      { key: 'actions', title: '操作', width: '130px', minWidth: 130, render: function(v, row) {
+      { key: 'actions', title: '操作', width: actionColWidth(3) + 'px', minWidth: actionColWidth(3), render: function(v, row) {
         var isMine = row.recorded_by === currentUser;
         var a = '<span style="cursor:pointer;font-size:12px;color:var(--accent);margin-right:4px" onclick="openViewProdNoteDialog('+row.id+')" title="查看">👁</span>';
         a += isMine ? iconEdit('openEditProdNoteDialog('+row.id+')','编辑')+iconDelete('deleteProductNote('+row.id+')','删除') : '<span style="cursor:pointer;font-size:12px;color:var(--accent)" onclick="openReplyProdNoteDialog('+row.id+')" title="回复">💬</span>';
@@ -1204,7 +1204,7 @@ function _renderProdDocsInline(docs) {
       { key: '_locHtml', title: '路径', align: 'left', className: 'dt-wrap', render: function(v) { return '<span style="font-size:12px;word-break:break-all">'+(v||'')+'</span>'; } },
       { key: '_updatedAt', title: '最后修改时间', minWidth: 140, width: '100px', render: function(v) { return '<span style="font-size:11px;color:var(--muted);white-space:nowrap">'+escHtml(v||'—')+'</span>'; } },
       { key: '_updatedBy', title: '修改人', minWidth: 90, width: '80px', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(v||'')+'</span>'; } },
-      { key: '_actions', title: '操作', width: '100px', minWidth: 100, render: function(v) { return v||''; } }
+      { key: '_actions', title: '操作', width: actionColWidth(2) + 'px', minWidth: actionColWidth(2), render: function(v) { return v||''; } }
     ],
     data: flatRows,
     rowClassFn: function(row) { return row._bg ? { background: row._bg } : null; }
@@ -1616,7 +1616,7 @@ function _renderProdBugs(bugs, container) {
       { key: 'assignee_name', title: '负责人', minWidth: 90, width: '8%', render: function(v, row) { return '<span style="font-size:12px;cursor:pointer" onclick="openBugDetail('+row.id+')">'+escHtml(v||'—')+'</span>'; } },
       { key: 'project_code', title: '项目编号', minWidth: 90, width: '8%', render: function(v, row) { return v?'<span class="proj-code-btn" onclick="event.stopPropagation();openProject(\''+escHtml(v)+'\')" title="'+escHtml(row.project_name||'')+'">'+escHtml(v)+'</span>':'<span style="font-size:12px;color:var(--muted)">—</span>'; } },
       { key: 'created_at', title: '创建时间', minWidth: 100, width: '10%', render: function(v, row) { return '<span style="font-size:11px;color:var(--muted);cursor:pointer" onclick="openBugDetail('+row.id+')">'+formatDate(v)+'</span>'; } },
-      { key: 'actions', title: '操作', width: '50px', minWidth: 50, render: function(v, row) { return '<span style="white-space:nowrap" onclick="event.stopPropagation()">'+iconEdit('openBugDialog('+row.id+')','编辑Bug')+'</span>'; } }
+      { key: 'actions', title: '操作', width: actionColWidth(1) + 'px', minWidth: actionColWidth(1), render: function(v, row) { return '<span style="white-space:nowrap" onclick="event.stopPropagation()">'+iconEdit('openBugDialog('+row.id+')','编辑Bug')+'</span>'; } }
     ],
     data: bugs,
     maxHeight: 'calc(100vh - 280px)',

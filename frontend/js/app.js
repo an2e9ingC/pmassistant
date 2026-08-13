@@ -1259,7 +1259,7 @@ function loadNotifManage() {
         { key: 'created_by', title: '发布者', width: '100px', minWidth: 90, render: function(v) { return '<span style="font-family:var(--mono);font-size:12px">@' + escHtml(v) + '</span>'; } },
         { key: 'is_active', title: '状态', width: '60px', minWidth: 80, render: function(v, row) { return toggleSwitch(v, 'toggleNotifStatus(' + row.id + ')', {id: 'notif-tgl-' + row.id}); } },
         { key: 'created_at', title: '发布时间', width: '130px', minWidth: 120, render: function(v) { return '<span style="color:var(--muted);font-size:12px">' + escHtml(fmtISODateTime(v) || '—') + '</span>'; } },
-        { key: 'actions', title: '操作', width: '90px', minWidth: 90, render: function(v, row) { return '<span style="white-space:nowrap">' + iconEdit('editNotifDialog(' + row.id + ',\'' + escJs(row.content) + '\')') + iconDelete('deleteNotif(' + row.id + ')') + '</span>'; } }
+        { key: 'actions', title: '操作', width: actionColWidth(2) + 'px', minWidth: actionColWidth(2), render: function(v, row) { return '<span style="white-space:nowrap">' + iconEdit('editNotifDialog(' + row.id + ',\'' + escJs(row.content) + '\')') + iconDelete('deleteNotif(' + row.id + ')') + '</span>'; } }
       ],
       maxHeight: 'calc(100vh - 260px)',
     });
@@ -1901,7 +1901,7 @@ function _renderUcApprovalTable() {
         { key: 'progress', title: '进度', width: '6%', minWidth: 60, render: function(v) { return renderProgressCircle(v||0, 30, {label:''}); } },
         { key: 'assignee_name', title: '责任人', width: '12%', minWidth: 150, render: function(v, row) { return '<span style="font-size:12px">'+ (typeof _renderAssigneeDisplay === 'function' ? _renderAssigneeDisplay(row.assignee_names||[], row.id, {fallback: v||''}) : escHtml(v||'')) +'</span>'; } },
         { key: 'due_date', title: '截止', width: '7%', minWidth: 100, render: function(v, row) { var overdue = v && row.status!=='done' && v<fmtLocalDate(); return '<span style="font-size:12px;color:'+(overdue?'var(--danger)':'')+'">'+(v||'-')+'</span>'; } },
-        { key: 'actions', title: '操作', width: '100px', minWidth: 100, render: function(v, row) { return '<span style="white-space:nowrap" onclick="event.stopPropagation()"><button class="btn-icon" onclick="_ucApproveTask('+row.id+',\''+escJs(row.title)+'\')" title="批准" style="color:var(--success)">'+_ucApproveIcon+'</button><button class="btn-icon" onclick="_ucRejectTask('+row.id+',\''+escJs(row.title)+'\')" title="驳回" style="color:var(--danger);margin-left:2px">'+_ucRejectIcon+'</button></span>'; } }
+        { key: 'actions', title: '操作', width: actionColWidth(2) + 'px', minWidth: actionColWidth(2), render: function(v, row) { return '<span style="white-space:nowrap" onclick="event.stopPropagation()"><button class="btn-icon" onclick="_ucApproveTask('+row.id+',\''+escJs(row.title)+'\')" title="批准" style="color:var(--success)">'+_ucApproveIcon+'</button><button class="btn-icon" onclick="_ucRejectTask('+row.id+',\''+escJs(row.title)+'\')" title="驳回" style="color:var(--danger);margin-left:2px">'+_ucRejectIcon+'</button></span>'; } }
       ],
       data: _ucApprovals,
       onRowClick: function(row) { _ucOpenTask(row.id); }
@@ -2271,7 +2271,7 @@ function _renderUcTaskTable() {
         { key: 'priority', title: '优先级', width: '6%', minWidth: 65, render: function(v, row) { return '<span class="prio-tag '+(v||'medium')+'" style="cursor:pointer" onclick="event.stopPropagation();_ucEditTaskField('+row.id+',\'priority\',\''+(v||'medium')+'\',\'low:低,medium:中,high:高,critical:紧急\',\''+escHtml(row.title||'').replace(/'/g,"\\'")+'\')">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[v]||v)+'</span>'; } },
         { key: 'progress', title: '进度', width: '6%', minWidth: 60, render: function(v, row) { var st = row.status || 'todo'; return '<span style="cursor:pointer" onclick="event.stopPropagation();_ucEditTaskNumber('+row.id+',\'progress\',\''+(v||0)+'\',\'进度(%)\',0,100,5,\''+escHtml(row.title||'').replace(/'/g,"\\'")+'\',\''+st+'\')">' + (typeof renderProgressCircle==='function'?renderProgressCircle(v||0,36,{label:''}):(v||0)+'%') + '</span>'; } },
         { key: 'due_date', title: '截止', width: '7%', minWidth: 100, render: function(v, row) { var overdue = v && row.status!=='done' && v<fmtLocalDate(); return '<span style="font-size:12px;color:'+(overdue?'var(--danger)':'')+'">'+(v||'-')+'</span>'; } },
-        { key: 'actions', title: '操作', width: '180px', minWidth: 180, render: function(v, row) { return _ucTaskActionsHtml(row); } }
+        { key: 'actions', title: '操作', width: actionColWidth(4) + 'px', minWidth: actionColWidth(4), render: function(v, row) { return _ucTaskActionsHtml(row); } }
       ],
       data: flatRows,
       maxHeight: '400px',
@@ -2822,7 +2822,7 @@ async function _ucLoadBugs() {
           { key: 'status', title: '状态', width: '72px', minWidth: 80, render: function(v) { var colorMap = {open:'review',in_progress:'in_progress',resolved:'done',closed:'pending'}; var labels = {open:'待确认',in_progress:'处理中',resolved:'已解决',closed:'已关闭'}; return '<span class="pill ' + (colorMap[v]||'pending') + '">' + (labels[v]||v) + '</span>'; } },
           { key: 'priority', title: '优先级', width: '6%', minWidth: 65, render: function(v, row) { return '<span class="prio-tag '+(v||'medium')+'" style="cursor:pointer" onclick="event.stopPropagation();_ucEditBugField('+row.id+',\'priority\',\''+(v||'medium')+'\',\'low:低,medium:中,high:高,critical:紧急\',\''+escHtml(row.title||'').replace(/'/g,"\\'")+'\')">'+({low:'低',medium:'中',high:'高',critical:'紧急'}[v]||v)+'</span>'; } },
           { key: 'progress', title: '进度', width: '6%', minWidth: 60, render: function(v, row) { var st = row.status || 'open'; return '<span style="cursor:pointer" onclick="event.stopPropagation();_ucEditBugNumber('+row.id+',\'progress\',\''+(v||0)+'\',\'进度(%)\',0,100,5,\''+escHtml(row.title||'').replace(/'/g,"\\'")+'\',\''+st+'\')">' + (typeof renderProgressCircle==='function'?renderProgressCircle(v||0,36,{label:''}):(v||0)+'%') + '</span>'; } },
-          { key: 'actions', title: '操作', width: '210px', minWidth: 210, render: function(v, row) { return _ucBugActionsHtml(row); } }
+          { key: 'actions', title: '操作', width: actionColWidth(5) + 'px', minWidth: actionColWidth(5), render: function(v, row) { return _ucBugActionsHtml(row); } }
         ],
         data: bugRows,
       });
