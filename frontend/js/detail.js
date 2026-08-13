@@ -391,7 +391,7 @@ function editProjectBackground() {
       '<textarea id="proj-bg-input" class="search-inp" rows="8" placeholder="支持 Markdown 格式，如 # 标题、**粗体**、- 列表" style="width:100%;box-sizing:border-box;resize:vertical;font-size:13px;font-family:var(--mono)">' + escHtml(currentBg) + '</textarea>' +
     '</div>' +
     '<div id="proj-bg-preview" class="markdown-body" style="display:none;margin-bottom:8px;padding:8px;border:1px solid var(--border);border-radius:6px;min-height:100px;max-height:300px;overflow-y:auto;background:var(--bg);font-size:12.5px;line-height:1.7"></div>' +
-    '<script>setTimeout(function(){var ta=document.getElementById("proj-bg-input");if(ta){ta.oninput=function(){var pv=document.getElementById("proj-bg-preview");if(pv)pv.innerHTML=typeof marked!=="undefined"?marked.parse(ta.value):"<pre>"+ta.value+"</pre>"}}},100)</' + 'script>',
+    '<script>setTimeout(function(){var ta=document.getElementById("proj-bg-input");if(ta){ta.oninput=function(){var pv=document.getElementById("proj-bg-preview");if(pv)pv.innerHTML=(typeof markdownToHtml==="function")?markdownToHtml(ta.value):"<pre>"+ta.value+"</pre>"}}},100)</' + 'script>',
     [
       {text: '取消', onclick: 'document.querySelector(\'.shared-dialog-overlay\').remove()'},
       {text: '保存', cls: 'btn-primary', onclick: 'saveProjectBackground()'},
