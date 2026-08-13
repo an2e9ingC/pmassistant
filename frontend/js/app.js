@@ -293,6 +293,8 @@ function gotoView(view, opts) {
   } else {
     doInit();
   }
+  // 详情页快捷跳转侧栏：进入/离开详情页时刷新可见性
+  if (typeof updateDetailToc === 'function') updateDetailToc();
 }
 
 // Handle browser back/forward buttons
@@ -3731,11 +3733,14 @@ function _ucLoadWecomCalendar_old(user) {
 /* ── EventBus Subscriptions (cross-view data refresh) ── */
 
 EventBus.on('task:saved', function(e) {
-  if (typeof loadTaskData === 'function') loadTaskData();
+  // 详情页模式：不刷新列表（避免 loadTaskData 覆盖全页面详情），由各保存路径自行原位更新
+  var isDetailPage = !!document.querySelector('.task-detail-page');
+  if (!isDetailPage && typeof loadTaskData === 'function') loadTaskData();
   if (typeof _ucLoadTasks === 'function') { var u = getCurrentUser(); if (u) _ucLoadTasks(u); }
 });
 EventBus.on('task:deleted', function(e) {
-  if (typeof loadTaskData === 'function') loadTaskData();
+  var isDetailPage = !!document.querySelector('.task-detail-page');
+  if (!isDetailPage && typeof loadTaskData === 'function') loadTaskData();
   if (typeof _ucLoadTasks === 'function') { var u = getCurrentUser(); if (u) _ucLoadTasks(u); }
 });
 
@@ -3753,6 +3758,14 @@ EventBus.on('bug:field-changed', function(e) {
   if (typeof _ucLoadBugs === 'function') _ucLoadBugs();
 });
 
+EventBus.on('task:field-changed', function(e) {
+  // 任务字段更新（进度等）— 详情页原位更新进度/状态；非详情页才刷新列表，避免整页重渲染
+  var isDetailPage = !!document.querySelector('.task-detail-page');
+  if (!isDetailPage && typeof loadTaskData === 'function') loadTaskData();
+  if (typeof _ucLoadTasks === 'function') { var u = getCurrentUser(); if (u) _ucLoadTasks(u); }
+  if (e.taskId && typeof _refreshTaskProgressField === 'function') _refreshTaskProgressField(e.taskId);
+});
+
 EventBus.on('fav:toggled', function(e) {
   // Refresh filter bars and tables in user center to reflect changed fav counts
   if (_ucActiveTab === 'bugs' && typeof _ucLoadBugs === 'function') {
@@ -3767,6 +3780,7 @@ EventBus.on('worklog:saved', function(e) {
   // 详情页模式：只刷新详情内容，不刷新列表（避免 loadTaskData 覆盖全页面详情）
   var isDetailPage = !!document.querySelector('.task-detail-page');
   if (e.taskId && typeof _refreshTaskDetailContent === 'function') _refreshTaskDetailContent(e.taskId);
+  if (e.bugId && typeof _refreshBugDetailContent === 'function') _refreshBugDetailContent(e.bugId);
   if (!isDetailPage && typeof loadTaskData === 'function') loadTaskData();
   if (typeof _ucLoadTasks === 'function') { var u = getCurrentUser(); if (u) _ucLoadTasks(u); }
 });
@@ -3774,6 +3788,7 @@ EventBus.on('worklog:deleted', function(e) {
   if (typeof _ucLoadCalendar === 'function') { var u = getCurrentUser(); if (u) _ucLoadCalendar(u); }
   var isDetailPage = !!document.querySelector('.task-detail-page');
   if (e.taskId && typeof _refreshTaskDetailContent === 'function') _refreshTaskDetailContent(e.taskId);
+  if (e.bugId && typeof _refreshBugDetailContent === 'function') _refreshBugDetailContent(e.bugId);
   if (!isDetailPage && typeof loadTaskData === 'function') loadTaskData();
   if (typeof _ucLoadTasks === 'function') { var u = getCurrentUser(); if (u) _ucLoadTasks(u); }
 });

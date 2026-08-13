@@ -72,11 +72,13 @@ class WorklogUpdate(BaseModel):
 
 class AnalysisCreate(BaseModel):
     bug_id: int
+    title: Optional[str] = None
     content: str
     attachments: Optional[list] = None
 
 
 class AnalysisUpdate(BaseModel):
+    title: Optional[str] = None
     content: Optional[str] = None
     attachments: Optional[list] = None
 

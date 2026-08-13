@@ -103,6 +103,7 @@ class BugAnalysis(Base):
     id = Column(Integer, primary_key=True)
     bug_id = Column(Integer, ForeignKey("pma_bugs.id"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("local_users.id"), nullable=False)
+    title = Column(String(256), nullable=True)  # 分析标题（时间线默认显示）
     content = Column(Text, nullable=False)  # Markdown
     attachments = Column(JSON, nullable=True)  # [{"filename": "...", "url": "..."}]
     created_at = Column(DateTime, default=func.now())
