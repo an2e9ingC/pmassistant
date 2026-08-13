@@ -123,14 +123,15 @@ async function loadBugStats() {
       '<div class="card" style="padding:0"><div id="rpt-bugs-table"></div></div>';
 
     if (bugs.length) {
+      var sevLabels = {1:'致命',2:'严重',3:'一般',4:'建议'};
       new DataTable({
         container: document.getElementById('rpt-bugs-table'),
         columns: [
-          { key: 'severity_label', title: '严重度', width: '60px', minWidth: 60, render: function(v, row) { var sc = {1:'var(--danger)',2:'var(--warn)',3:'var(--accent)',4:'var(--muted)'}; return '<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:'+(sc[row.severity]||'var(--bg)')+'20;color:'+(sc[row.severity]||'var(--fg)')+';font-weight:600">'+escHtml(v||'')+'</span>'; } },
+          { key: 'severity', title: '严重度', width: '60px', minWidth: 60, render: function(v, row) { var sc = {1:'var(--danger)',2:'var(--warn)',3:'var(--accent)',4:'var(--muted)'}; return '<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:'+(sc[v]||'var(--bg)')+'20;color:'+(sc[v]||'var(--fg)')+';font-weight:600">'+escHtml(sevLabels[v]||v||'')+'</span>'; } },
           { key: 'title', title: '标题', minWidth: 100, align: 'left', render: function(v) { return '<span style="font-size:12.5px">'+escHtml(v||'')+'</span>'; } },
           { key: 'status', title: '状态', width: '80px', minWidth: 80, render: function(v) { return renderPill(v); } },
-          { key: 'assigned_to', title: '指派', width: '90px', minWidth: 90, render: function(v) { return '<span style="font-size:11.5px;color:var(--muted)">'+escHtml(v||'')+'</span>'; } },
-          { key: 'opened_date', title: '创建日期', width: '100px', minWidth: 100, render: function(v) { return '<span style="font-size:11.5px;font-family:var(--mono);color:var(--muted)">'+formatDate(v)+'</span>'; } }
+          { key: 'assignee_name', title: '指派', width: '90px', minWidth: 90, render: function(v) { return '<span style="font-size:11.5px;color:var(--muted)">'+escHtml(v||'')+'</span>'; } },
+          { key: 'created_at', title: '创建日期', width: '100px', minWidth: 100, render: function(v) { return '<span style="font-size:11.5px;font-family:var(--mono);color:var(--muted)">'+formatDate(v)+'</span>'; } }
         ],
         data: bugs,
       });

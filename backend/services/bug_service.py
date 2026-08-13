@@ -1,11 +1,12 @@
 """Bug CRUD, worklog, analysis, attachments, and import logic."""
 from __future__ import annotations
 import logging
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, timedelta
 from typing import Optional
 import os
 import json
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func as sa_func
 
@@ -20,16 +21,55 @@ UPLOAD_ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__fil
 
 # ═══════════════════════════════════════════ Bug CRUD
 
-def get_bugs(db, product_id=None, project_id=None, status=None, assignee_id=None,
-             component_id=None, search=None, reporter_id=None, limit=100):
+def _parse_bug_id(query):
+    """Parse a bare numeric id or '#N' from a search keyword, else None."""
+    s = (query or "").strip()
+    if s.startswith("#"):
+        s = s[1:]
+    if s.isdigit():
+        return int(s)
+    return None
+
+
+def _build_bug_filter(db, product_id=None, project_id=None, status=None, assignee_id=None,
+                      component_id=None, search=None, reporter_id=None, severity=None,
+                      priority=None, type=None, created_from=None, created_to=None):
+    """Build a filtered PmaBug query shared by list + stats."""
     q = db.query(PmaBug)
     if product_id: q = q.filter(PmaBug.product_id == product_id)
     if project_id: q = q.filter(PmaBug.project_id == project_id)
     if status: q = q.filter(PmaBug.status == status)
     if assignee_id: q = q.filter(PmaBug.assignee_id == assignee_id)
     if component_id: q = q.filter(PmaBug.component_id == component_id)
-    if search: q = q.filter(PmaBug.title.ilike(f"%{search}%"))
+    if severity is not None: q = q.filter(PmaBug.severity == int(severity))
+    if priority: q = q.filter(PmaBug.priority == priority)
+    if type: q = q.filter(PmaBug.type == type)
     if reporter_id: q = q.filter(PmaBug.reporter_id == reporter_id)
+    if created_from:
+        try:
+            q = q.filter(PmaBug.created_at >= datetime.strptime(created_from, "%Y-%m-%d"))
+        except (ValueError, TypeError):
+            pass
+    if created_to:
+        try:
+            q = q.filter(PmaBug.created_at <= datetime.strptime(created_to + " 23:59:59", "%Y-%m-%d %H:%M:%S"))
+        except (ValueError, TypeError):
+            pass
+    if search:
+        cond = PmaBug.title.ilike(f"%{search}%")
+        qid = _parse_bug_id(search)
+        if qid is not None:
+            cond = or_(PmaBug.title.ilike(f"%{search}%"), PmaBug.id == qid)
+        q = q.filter(cond)
+    return q
+
+
+def get_bugs(db, product_id=None, project_id=None, status=None, assignee_id=None,
+             component_id=None, search=None, reporter_id=None, severity=None,
+             priority=None, type=None, created_from=None, created_to=None, limit=500):
+    q = _build_bug_filter(db, product_id, project_id, status, assignee_id,
+                          component_id, search, reporter_id, severity,
+                          priority, type, created_from, created_to)
     q = q.order_by(PmaBug.created_at.desc()).limit(limit)
     return [_bug_dict(b, db) for b in q.all()]
 
@@ -367,6 +407,32 @@ def import_batch(db, ids, product_id, reporter_id):
         else: skipped += 1
     return {"imported": imported, "skipped": skipped}
 
+
+def get_zentao_candidates(db, product_id, search=None, limit=200):
+    """List CachedBug rows for a product not yet imported as PmaBug."""
+    from backend.models.bug import CachedBug
+    imported = db.query(PmaBug.source_bug_id).filter(
+        PmaBug.source_bug_id.isnot(None)
+    ).all()
+    imported_ids = {r[0] for r in imported}
+    q = db.query(CachedBug).filter(CachedBug.product_id == product_id)
+    if search:
+        q = q.filter(CachedBug.title.ilike(f"%{search}%"))
+    results = []
+    for cb in q.order_by(CachedBug.id.desc()).limit(limit).all():
+        if cb.id in imported_ids:
+            continue
+        results.append({
+            "id": cb.id,
+            "title": cb.title,
+            "severity": cb.severity,
+            "priority": cb.priority,
+            "status": cb.status,
+            "opened_date": str(cb.opened_date) if cb.opened_date else None,
+            "assigned_to": cb.assigned_to,
+        })
+    return results
+
 # ═══════════════════════════════════════════ Transfer
 
 def transfer_bug(db, bug_id, to_project_id, transfer_type, user_id):
@@ -504,19 +570,105 @@ def _recalc_bug_hours(db, bug_id):
     db.commit()
 
 
-def get_bug_stats(db: Session, project_id: Optional[int] = None) -> dict:
-    """Return bug statistics: total, by status, by severity."""
-    q = db.query(PmaBug)
-    if project_id:
-        q = q.filter(PmaBug.project_id == project_id)
+def _month_bucket(dt):
+    """Return 'YYYY-MM' string for a datetime (or None)."""
+    if not dt:
+        return None
+    try:
+        return dt.strftime("%Y-%m")
+    except Exception:
+        return None
+
+
+def get_bug_stats(db: Session, project_id: Optional[int] = None, product_id: Optional[int] = None,
+                  status: Optional[str] = None, assignee_id: Optional[int] = None,
+                  component_id: Optional[int] = None, search: Optional[str] = None,
+                  reporter_id: Optional[int] = None, severity: Optional[int] = None,
+                  priority: Optional[str] = None, type: Optional[str] = None,
+                  created_from: Optional[str] = None, created_to: Optional[str] = None) -> dict:
+    """Return bug statistics: total, open/resolved/closed/recent_30d, distributions, monthly trend."""
+    q = _build_bug_filter(db, product_id, project_id, status, assignee_id,
+                          component_id, search, reporter_id, severity,
+                          priority, type, created_from, created_to)
     total = q.count()
-    statuses = {}
-    for row in q.with_entities(PmaBug.status, sa_func.count()).group_by(PmaBug.status).all():
-        statuses[row[0] or 'unknown'] = row[1]
-    severities = {}
-    for row in q.with_entities(PmaBug.severity, sa_func.count()).group_by(PmaBug.severity).all():
-        severities[row[0] or 'unknown'] = row[1]
-    return {"total": total, "by_status": statuses, "by_severity": severities}
+
+    def _group(col):
+        return {str(k): c for k, c in q.with_entities(col, sa_func.count()).group_by(col).all()}
+
+    by_status = _group(PmaBug.status)
+    by_severity = {str(k): c for k, c in q.with_entities(PmaBug.severity, sa_func.count()).group_by(PmaBug.severity).all()}
+    by_priority = _group(PmaBug.priority)
+    by_type = _group(PmaBug.type)
+
+    open_statuses = ("open", "confirmed", "in_progress", "gitlab_submitted")
+    open_n = sum(c for s, c in by_status.items() if s in open_statuses)
+    resolved_n = int(by_status.get("resolved", 0))
+    closed_n = int(by_status.get("closed", 0))
+
+    now = datetime.now()
+    recent_30d = q.filter(PmaBug.created_at >= (now - timedelta(days=30))).count()
+
+    # Distribution by product
+    product_rows = q.with_entities(PmaBug.product_id, sa_func.count()).group_by(PmaBug.product_id).all()
+    pid_set = [r[0] for r in product_rows if r[0]]
+    prod_names = {}
+    if pid_set:
+        from backend.models.zentao import PmaProduct
+        prod_names = {p.id: p.name for p in db.query(PmaProduct).filter(PmaProduct.id.in_(pid_set)).all()}
+    by_product = [{"id": rid, "name": prod_names.get(rid, f"产品#{rid}"), "count": c}
+                  for rid, c in product_rows if rid][:20]
+
+    # Distribution by assignee
+    assignee_rows = q.with_entities(PmaBug.assignee_id, sa_func.count()).group_by(PmaBug.assignee_id).all()
+    uid_set = [r[0] for r in assignee_rows if r[0]]
+    uname_map = {}
+    if uid_set:
+        from backend.models.local import LocalUser
+        uname_map = {u.id: (u.display_name or u.username)
+                     for u in db.query(LocalUser).filter(LocalUser.id.in_(uid_set)).all()}
+    by_assignee = [{"id": rid, "name": uname_map.get(rid, f"用户#{rid}"), "count": c}
+                   for rid, c in assignee_rows if rid][:20]
+
+    # Distribution by project
+    project_rows = q.with_entities(PmaBug.project_id, sa_func.count()).group_by(PmaBug.project_id).all()
+    proj_id_set = [r[0] for r in project_rows if r[0]]
+    proj_map = {}
+    if proj_id_set:
+        from backend.models.zentao import CachedProject
+        proj_map = {p.id: (p.name, p.code) for p in db.query(CachedProject).filter(CachedProject.id.in_(proj_id_set)).all()}
+    by_project = [{"id": rid, "name": (proj_map.get(rid) or (None, None))[0] or f"项目#{rid}",
+                   "code": (proj_map.get(rid) or (None, None))[1],
+                   "count": c}
+                  for rid, c in project_rows if rid][:20]
+
+    # Monthly trend — last 12 months created (by created_at) + resolved (by resolved_at)
+    created_rows = q.with_entities(PmaBug.created_at, sa_func.count()).group_by(PmaBug.created_at).all()
+    resolved_rows = q.with_entities(PmaBug.resolved_at, sa_func.count()).group_by(PmaBug.resolved_at).all()
+    created_buckets = {}
+    for dt, c in created_rows:
+        m = _month_bucket(dt)
+        if m:
+            created_buckets[m] = created_buckets.get(m, 0) + c
+    resolved_buckets = {}
+    for dt, c in resolved_rows:
+        m = _month_bucket(dt)
+        if m:
+            resolved_buckets[m] = resolved_buckets.get(m, 0) + c
+    trend = []
+    for i in range(11, -1, -1):
+        d = now.replace(day=1) - timedelta(days=0)
+        y, mo = (now.year, now.month - i)
+        while mo <= 0:
+            y -= 1
+            mo += 12
+        month_key = f"{y:04d}-{mo:02d}"
+        trend.append({"month": month_key, "created": created_buckets.get(month_key, 0),
+                      "resolved": resolved_buckets.get(month_key, 0)})
+
+    return {"total": total, "open": open_n, "resolved": resolved_n, "closed": closed_n,
+            "recent_30d": recent_30d, "by_status": by_status, "by_severity": by_severity,
+            "by_priority": by_priority, "by_type": by_type,
+            "by_product": by_product, "by_assignee": by_assignee, "by_project": by_project, "trend": trend}
 
 
 def get_bug_list(db: Session, project_id: Optional[int] = None, product_id: Optional[int] = None,
@@ -597,3 +749,54 @@ def get_user_bugs(db, user_id, limit=500):
         -(d.get("id") or 0)
     ))
     return result[:limit * 2]
+
+
+# ═══════════════════════════════════════════ Batch operations
+
+def batch_update_status(db, bug_ids, status, user_id=None):
+    """Change status of multiple bugs. Returns updated count."""
+    updated = 0
+    for bid in bug_ids:
+        bug = db.query(PmaBug).filter(PmaBug.id == bid).first()
+        if not bug:
+            continue
+        update_bug(db, bid, {"status": status}, user_id=user_id)
+        updated += 1
+    db.commit()
+    return updated
+
+
+def batch_assign(db, bug_ids, assignee_id, user_id=None):
+    """Reassign multiple bugs. Returns updated count."""
+    updated = 0
+    for bid in bug_ids:
+        bug = db.query(PmaBug).filter(PmaBug.id == bid).first()
+        if not bug:
+            continue
+        update_bug(db, bid, {"assignee_id": assignee_id}, user_id=user_id)
+        updated += 1
+    db.commit()
+    return updated
+
+
+def batch_delete(db, bug_ids):
+    """Delete multiple bugs. Returns deleted count."""
+    deleted = 0
+    for bid in bug_ids:
+        if delete_bug(db, bid):
+            deleted += 1
+    db.commit()
+    return deleted
+
+
+def batch_transfer(db, bug_ids, to_project_id, transfer_type, user_id=None):
+    """Move/copy multiple bugs to another project. Returns processed count."""
+    processed = 0
+    for bid in bug_ids:
+        bug = db.query(PmaBug).filter(PmaBug.id == bid).first()
+        if not bug:
+            continue
+        transfer_bug(db, bid, to_project_id, transfer_type, user_id)
+        processed += 1
+    db.commit()
+    return processed

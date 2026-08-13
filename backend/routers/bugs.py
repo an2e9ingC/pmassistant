@@ -4,13 +4,37 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, 
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from backend.database import get_db
-from backend.middleware.auth import get_current_user, require_perm, require_any_perm
+from backend.middleware.auth import get_current_user, require_perm, require_any_perm, has_perm
+from backend.models.bug import PmaBug
 from backend.services import bug_service
+from backend.services.entity_resolver import resolve_project
 from backend.audit_categories import AUDIT_CAT_BUG
 from backend.routers.logs import log_audit
 from fastapi.responses import StreamingResponse
 
 router = APIRouter(prefix="/api/bugs", tags=["bugs"])
+
+
+def _can_edit_bug(db, user, bug_id):
+    """Only admin users, or the bug's reporter/assignee, may edit a bug."""
+    if has_perm(user, "admin"):
+        return True
+    bug = db.query(PmaBug).filter(PmaBug.id == bug_id).first()
+    if not bug:
+        return False
+    return bug.reporter_id == user.id or bug.assignee_id == user.id
+
+
+def _filter_editable_bug_ids(db, user, bug_ids):
+    """Return only the bug ids the user is allowed to edit."""
+    if has_perm(user, "admin"):
+        return list(bug_ids)
+    result = []
+    for bid in bug_ids:
+        bug = db.query(PmaBug).filter(PmaBug.id == bid).first()
+        if bug and (bug.reporter_id == user.id or bug.assignee_id == user.id):
+            result.append(bid)
+    return result
 
 
 class BugCreate(BaseModel):
@@ -99,15 +123,45 @@ class BatchImportRequest(BaseModel):
     product_id: int
 
 
+class BugBatchIds(BaseModel):
+    bug_ids: List[int]
+
+
+class BugBatchStatus(BaseModel):
+    bug_ids: List[int]
+    status: str
+
+
+class BugBatchAssign(BaseModel):
+    bug_ids: List[int]
+    assignee_id: int
+
+
+class BugBatchTransfer(BaseModel):
+    bug_ids: List[int]
+    to_project_id: int
+    transfer_type: str = "move"  # move / copy
+
+
 # ── Bug CRUD ──
 
 @router.get("", response_model=dict)
-def list_bugs(product_id: Optional[int] = Query(None), project_id: Optional[int] = Query(None),
+def list_bugs(product_id: Optional[int] = Query(None), project_id: Optional[str] = Query(None),
               status: Optional[str] = Query(None), assignee_id: Optional[int] = Query(None),
               component_id: Optional[int] = Query(None), search: Optional[str] = Query(None),
-              reporter_id: Optional[int] = Query(None),
+              reporter_id: Optional[int] = Query(None), severity: Optional[int] = Query(None),
+              priority: Optional[str] = Query(None), type: Optional[str] = Query(None),
+              created_from: Optional[str] = Query(None), created_to: Optional[str] = Query(None),
+              limit: Optional[int] = Query(500),
               db: Session = Depends(get_db), _=Depends(get_current_user)):
-    bugs = bug_service.get_bugs(db, product_id, project_id, status, assignee_id, component_id, search, reporter_id=reporter_id)
+    pid = None
+    if project_id:
+        p = resolve_project(db, project_id)
+        pid = p.id
+    bugs = bug_service.get_bugs(db, product_id, pid, status, assignee_id, component_id, search,
+                                reporter_id=reporter_id, severity=severity, priority=priority,
+                                type=type, created_from=created_from, created_to=created_to,
+                                limit=limit)
     return {"code": 0, "data": bugs, "message": "ok"}
 
 
@@ -122,6 +176,64 @@ def get_user_bugs(user_id: int, db: Session = Depends(get_db), _=Depends(get_cur
     """返回某用户的所有相关 Bug：负责人 + 创建人 + 被抄送"""
     bugs = bug_service.get_user_bugs(db, user_id)
     return {"code": 0, "data": bugs, "message": "ok"}
+
+
+@router.get("/stats", response_model=dict)
+def bug_stats(product_id: Optional[int] = Query(None), project_id: Optional[str] = Query(None),
+              status: Optional[str] = Query(None), assignee_id: Optional[int] = Query(None),
+              component_id: Optional[int] = Query(None), search: Optional[str] = Query(None),
+              reporter_id: Optional[int] = Query(None), severity: Optional[int] = Query(None),
+              priority: Optional[str] = Query(None), type: Optional[str] = Query(None),
+              created_from: Optional[str] = Query(None), created_to: Optional[str] = Query(None),
+              db: Session = Depends(get_db), _=Depends(get_current_user)):
+    pid = None
+    if project_id:
+        p = resolve_project(db, project_id)
+        pid = p.id
+    stats = bug_service.get_bug_stats(db, project_id=pid, product_id=product_id, status=status,
+                                      assignee_id=assignee_id, component_id=component_id,
+                                      search=search, reporter_id=reporter_id, severity=severity,
+                                      priority=priority, type=type, created_from=created_from,
+                                      created_to=created_to)
+    return {"code": 0, "data": stats, "message": "ok"}
+
+
+@router.get("/zentao-candidates", response_model=dict)
+def zentao_candidates(product_id: int = Query(...), search: Optional[str] = Query(None),
+                      db: Session = Depends(get_db), _=Depends(require_perm("sync"))):
+    items = bug_service.get_zentao_candidates(db, product_id, search=search)
+    return {"code": 0, "data": items, "message": "ok"}
+
+
+@router.post("/batch-status", response_model=dict)
+def batch_update_status(body: BugBatchStatus, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    ids = _filter_editable_bug_ids(db, user, body.bug_ids)
+    updated = bug_service.batch_update_status(db, ids, body.status, user.id)
+    log_audit(db, user, "bug_batch_status", f"批量更新 {updated} 个Bug状态为 {body.status}", AUDIT_CAT_BUG, "medium")
+    return {"code": 0, "data": {"updated": updated}, "message": "ok"}
+
+
+@router.post("/batch-assign", response_model=dict)
+def batch_assign_bugs(body: BugBatchAssign, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    ids = _filter_editable_bug_ids(db, user, body.bug_ids)
+    updated = bug_service.batch_assign(db, ids, body.assignee_id, user.id)
+    log_audit(db, user, "bug_batch_assign", f"批量指派 {updated} 个Bug给用户#{body.assignee_id}", AUDIT_CAT_BUG, "medium")
+    return {"code": 0, "data": {"updated": updated}, "message": "ok"}
+
+
+@router.post("/batch-transfer", response_model=dict)
+def batch_transfer_bugs(body: BugBatchTransfer, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    ids = _filter_editable_bug_ids(db, user, body.bug_ids)
+    processed = bug_service.batch_transfer(db, ids, body.to_project_id, body.transfer_type, user.id)
+    log_audit(db, user, "bug_batch_transfer", f"批量{'移动' if body.transfer_type == 'move' else '复制'} {processed} 个Bug到项目#{body.to_project_id}", AUDIT_CAT_BUG, "medium")
+    return {"code": 0, "data": {"processed": processed}, "message": "ok"}
+
+
+@router.delete("/batch", response_model=dict)
+def batch_delete_bugs(body: BugBatchIds, db: Session = Depends(get_db), user=Depends(require_perm("task_edit"))):
+    deleted = bug_service.batch_delete(db, body.bug_ids)
+    log_audit(db, user, "bug_batch_delete", f"批量删除 {deleted} 个Bug", AUDIT_CAT_BUG, "high")
+    return {"code": 0, "data": {"deleted": deleted}, "message": "ok"}
 
 
 @router.get("/{bug_id}", response_model=dict)
@@ -140,6 +252,8 @@ def create_bug(body: BugCreate, db: Session = Depends(get_db), user=Depends(get_
 
 @router.put("/{bug_id}", response_model=dict)
 def update_bug(bug_id: int, body: BugUpdate, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    if not _can_edit_bug(db, user, bug_id):
+        raise HTTPException(status_code=403, detail="无权修改该Bug：仅创建人或负责人可修改")
     b = bug_service.update_bug(db, bug_id, body.model_dump(exclude_none=True), user.id)
     if not b: raise HTTPException(status_code=404, detail="Bug not found")
     log_audit(db, user, "bug_update", f"更新Bug #{bug_id}", AUDIT_CAT_BUG, "medium")
@@ -257,6 +371,8 @@ def import_batch(body: BatchImportRequest, db: Session = Depends(get_db), user=D
 
 @router.post("/{bug_id}/transfer", response_model=dict)
 def transfer_bug(bug_id: int, body: TransferCreate, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    if not _can_edit_bug(db, user, bug_id):
+        raise HTTPException(status_code=403, detail="无权转移该Bug：仅创建人或负责人可操作")
     b = bug_service.transfer_bug(db, bug_id, body.to_project_id, body.transfer_type, user.id)
     if not b: raise HTTPException(status_code=404, detail="Bug not found")
     log_audit(db, user, "bug_transfer", f"Bug #{bug_id} {body.transfer_type}→项目{body.to_project_id}", AUDIT_CAT_BUG, "medium")
@@ -287,6 +403,8 @@ def create_comment(bug_id: int, body: CommentCreate, db: Session = Depends(get_d
 @router.post("/{bug_id}/gitlab-submit", response_model=dict)
 async def submit_to_gitlab(bug_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
     """Submit bug as GitLab issue using the component's doc_path."""
+    if not _can_edit_bug(db, user, bug_id):
+        raise HTTPException(status_code=403, detail="无权提交该Bug：仅创建人或负责人可操作")
     b = bug_service.get_bug(db, bug_id)
     if not b: raise HTTPException(status_code=404, detail="Bug not found")
     if not b.get("component_id"):
