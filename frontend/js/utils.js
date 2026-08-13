@@ -505,19 +505,19 @@ function _ensureHugerteSkin() {
   style.id = 'hugerte-skin-override';
   style.textContent = [
     '.tox .tox-toolbar, .tox .tox-toolbar__primary { background:var(--surface) !important; border-color:var(--border) !important; }',
-    '.tox .tox-tbtn { color:var(--text) !important; }',
+    '.tox .tox-tbtn { color:var(--fg) !important; }',
     '.tox .tox-tbtn:hover { background:var(--surface2) !important; }',
     '.tox .tox-tbtn--enabled, .tox .tox-tbtn--enabled:hover { background:var(--accent-lt) !important; color:var(--accent) !important; }',
     '.tox .tox-edit-area__iframe { background:var(--bg) !important; }',
     '.tox .tox-statusbar { background:var(--surface) !important; border-color:var(--border) !important; color:var(--muted) !important; }',
     '.tox .tox-dialog { background:var(--surface) !important; border:1px solid var(--border) !important; }',
     '.tox .tox-dialog__header, .tox .tox-dialog__footer { background:var(--surface) !important; }',
-    '.tox .tox-dialog__title { color:var(--text) !important; }',
-    '.tox .tox-textfield, .tox .tox-listboxfield .tox-listbox, .tox .tox-textarea { background:var(--bg) !important; color:var(--text) !important; border-color:var(--border) !important; }',
+    '.tox .tox-dialog__title { color:var(--fg) !important; }',
+    '.tox .tox-textfield, .tox .tox-listboxfield .tox-listbox, .tox .tox-textarea { background:var(--bg) !important; color:var(--fg) !important; border-color:var(--border) !important; }',
     '.tox .tox-menu { background:var(--surface) !important; border-color:var(--border) !important; }',
-    '.tox .tox-collection__item { color:var(--text) !important; }',
+    '.tox .tox-collection__item { color:var(--fg) !important; }',
     '.tox .tox-collection__item--active { background:var(--accent-lt) !important; }',
-    '.tox .tox-collection__item--enabled { color:var(--text) !important; }',
+    '.tox .tox-collection__item--enabled { color:var(--fg) !important; }',
   ].join('\n');
   document.head.appendChild(style);
 }
@@ -525,7 +525,7 @@ function _ensureHugerteSkin() {
 /** Read PMA CSS variables and build content_style for HugeRTE iframe */
 function _getEditorContentStyle() {
   var cs = getComputedStyle(document.documentElement);
-  var fg = cs.getPropertyValue('--text').trim() || '#17191F';
+  var fg = cs.getPropertyValue('--fg').trim() || '#17191F';
   var bg = cs.getPropertyValue('--bg').trim() || '#F4F6FB';
   var accent = cs.getPropertyValue('--accent').trim() || '#2563EB';
   var muted = cs.getPropertyValue('--muted').trim() || '#6B7694';
@@ -608,12 +608,15 @@ function initRichEditor(textareaId, options) {
     + ' alignleft aligncenter alignright | bullist numlist | link image table | code removeformat';
 
   var isSimple = options.toolbar === false;
+  var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
 
   hugerte.init({
     target: ta,
     height: options.height || 360,
     menubar: false,
     statusbar: false,
+    skin: isDark ? 'oxide-dark' : 'oxide',
+    content_css: isDark ? 'dark' : 'default',
     plugins: options.plugins || (isSimple ? 'autolink lists code' : 'autolink image link lists table code'),
     toolbar: isSimple ? false : (options.toolbar || defaultToolbar),
     block_formats: '段落=p;标题2=h2;标题3=h3;标题4=h4;代码块=pre',
@@ -635,9 +638,9 @@ function initRichEditor(textareaId, options) {
     }
   });
 
-  // Store mapping
+  // Store mapping (textareaId -> original init options, for theme re-build)
   window._hugerteMap = window._hugerteMap || {};
-  window._hugerteMap[textareaId] = textareaId;
+  window._hugerteMap[textareaId] = options;
   return textareaId;
 }
 
@@ -654,6 +657,35 @@ function destroyEditor(textareaId) {
   var ta = document.getElementById(textareaId);
   if (ta) ta.style.display = '';
 }
+
+/** Re-build all open editors to match the current theme (content is preserved). */
+function refreshEditorThemes() {
+  if (typeof hugerte === 'undefined') return;
+  var map = window._hugerteMap || {};
+  Object.keys(map).forEach(function(taId) {
+    var ed = hugerte.get(taId);
+    var ta = document.getElementById(taId);
+    if (!ed || !ta) return;
+    // Preserve current content back to the textarea before rebuilding with the new skin
+    ta.value = ed.getContent();
+    ed.remove();
+    initRichEditor(taId, map[taId] || {});
+  });
+}
+
+// Watch the `data-theme` attribute so open editors re-theme in real time.
+(function() {
+  var root = document.documentElement;
+  if (!root || typeof MutationObserver === 'undefined') return;
+  var last = root.getAttribute('data-theme');
+  new MutationObserver(function() {
+    var cur = root.getAttribute('data-theme');
+    if (cur !== last) {
+      last = cur;
+      refreshEditorThemes();
+    }
+  }).observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+})();
 
 /* ── DEPRECATED: Old image paste system (replaced by HugeRTE) ── */
 // initNoteImagePaste, _addNoteImagePreview, _loadExistingNoteImages,
