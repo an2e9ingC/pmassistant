@@ -7,6 +7,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 
+from backend.config import settings
 from backend.models.wecom import WeComCheckin, WeComSchedule
 from backend.models.local import LocalUser
 
@@ -159,10 +160,11 @@ async def sync_wecom_data(db: Session) -> dict:
             # ── Lunch deduction: only for single-pair days with raw >= 9h ──
             # Threshold of 9h raw span: only full workdays that include lunch break
             # Weekend/short days (<9h raw) won't trigger the deduction
+            # Lunch hours configurable via 数据源→企业微信 配置窗口 (default 1.5h)
             lunch_deducted = False
             if (hours >= 9.0 and len(d["checkins_in"]) == 1 and len(d["checkins_out"]) == 1
                     and has_valid_punch):
-                hours -= 1.5
+                hours -= float(getattr(settings, "WECOM_LUNCH_HOURS", 1.5) or 1.5)
                 lunch_deducted = True
 
             hours = max(0, hours)
@@ -530,38 +532,17 @@ def get_checkin_calendar(
 
     checkins = q.order_by(WeComCheckin.date.desc()).all()
 
-    # Collect all time events per date to compute actual work hours
-    # (earliest start to latest end across checkins + approvals)
-    date_events = {}  # date -> list of (timestamp_in_seconds)
+    # Use stored work_hours (synced: validity-filtered + lunch-deducted).
+    # Checkin dominates; approval fills the gap for days without valid punches.
     daily_map = {}
     for c in checkins:
         d = str(c.date)
         if d not in daily_map:
-            daily_map[d] = {"date": d, "total_hours": 0.0, "checkin_info": "", "checkins": [], "approvals": []}
-        if d not in date_events:
-            date_events[d] = []
-        # Collect event timestamps from raw_data
-        try:
-            if c.source == "checkin" and c.raw_data:
-                records = json.loads(c.raw_data or "[]")
-                if isinstance(records, list):
-                    for r in records:
-                        ct = r.get("checkin_time")
-                        if ct: date_events[d].append(ct)
-            elif c.source == "approval" and c.raw_data:
-                raw = json.loads(c.raw_data or "{}")
-                if isinstance(raw, dict):
-                    apply_data = raw.get("apply_data", {})
-                    for content in (apply_data.get("contents") or []):
-                        if content.get("control") == "Attendance" and content.get("id") == "smart-time":
-                            dr = (content.get("value", {}).get("attendance", {}).get("date_range", {}))
-                            begin_ts = dr.get("new_begin", 0)
-                            end_ts = dr.get("new_end", 0)
-                            if begin_ts: date_events[d].append(begin_ts)
-                            if end_ts: date_events[d].append(end_ts)
-                            break
-        except Exception:
-            pass
+            daily_map[d] = {"date": d, "total_hours": 0.0, "checkin_info": "", "checkins": [], "approvals": [], "_checkin_h": 0.0, "_approval_h": 0.0}
+        if c.source == "checkin":
+            daily_map[d]["_checkin_h"] = max(daily_map[d]["_checkin_h"], c.work_hours or 0)
+        elif c.source == "approval":
+            daily_map[d]["_approval_h"] = max(daily_map[d]["_approval_h"], c.work_hours or 0)
         # Extract details from raw_data based on source type
         try:
             if c.source == "approval":
@@ -629,13 +610,11 @@ def get_checkin_calendar(
         except Exception:
             pass
 
-    # Recalculate total_hours from actual min-max timestamps across all sources
-    for d, events in date_events.items():
-        if events:
-            events.sort()
-            earliest = min(events)
-            latest = max(events)
-            daily_map[d]["total_hours"] = round((latest - earliest) / 3600.0, 2)
+    # Resolve total_hours from stored work_hours (checkin wins; approval fills gap)
+    for m in daily_map.values():
+        ch = m.pop("_checkin_h", 0.0)
+        ah = m.pop("_approval_h", 0.0)
+        m["total_hours"] = round(max(ch, ah), 2)
 
     daily = sorted(daily_map.values(), key=lambda x: x["date"], reverse=True)
     total = sum(d["total_hours"] for d in daily)

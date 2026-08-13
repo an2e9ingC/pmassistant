@@ -77,6 +77,7 @@ var _configSections = [
     { key: 'corp_id', label: '企业ID (Corp ID)', type: 'text', ph: 'ww...' },
     { key: 'secret', label: '应用 Secret', type: 'password', ph: '' },
     { key: 'sync_interval', label: '同步间隔(分钟)', type: 'number', ph: '60（0=关闭自动同步）' },
+    { key: 'lunch_hours', label: '午休时长(小时)', type: 'number', ph: '1.5' },
   ]},
 ];
 

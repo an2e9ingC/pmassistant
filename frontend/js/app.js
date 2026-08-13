@@ -3030,7 +3030,7 @@ function _ucLoadMergedCalendar(user) {
       '</div>';
 
     // Render merged month calendar: wecom intensity + red border for no-checkin dates
-    if (typeof _renderMonthCalendar === 'function') {
+    if (typeof _renderMergedMonthCalendar === 'function') {
       html += _renderMergedMonthCalendar(now, wecomDailyMap, wlData, weData, wecomDailyMap);
     }
     html += '</div>';
@@ -3624,110 +3624,6 @@ function openDailySummary() {
       _dailySummaryLoading = false;
     }
   })();
-}
-
-/* ── WeCom Checkin Calendar ── */
-// _ucLoadWecomCalendar removed — merged into _ucLoadMergedCalendar
-function _ucLoadWecomCalendar_old(user) {
-  var cal = document.getElementById('uc-wecom-calendar');
-  if (!cal) return;
-  var now = new Date();
-  var y = (typeof _calYear !== 'undefined') ? _calYear : now.getFullYear();
-  var m = (typeof _calMonth !== 'undefined') ? _calMonth : (now.getMonth() + 1);
-  var ms = new Date(y, m - 1, 1);
-  var me = new Date(y, m, 0);
-  var df = fmtLocalDate(ms), dt = fmtLocalDate(me);
-
-  API.get('/wecom/calendar?user_id=' + user.id + '&date_from=' + df + '&date_to=' + dt).then(function(data) {
-    if (!data) data = {};
-    var dailyMap = {};
-    if (data.daily) data.daily.forEach(function(d) { dailyMap[d.date] = d; });
-    var total = data.total || 0;
-    var status = data.status || 'ok';
-
-    // Status-based rendering
-    if (status === 'unlinked') {
-      cal.innerHTML = '<div class="panel panel-pad" style="text-align:center;padding:20px">' +
-        '<div style="font-size:13px;color:var(--muted);margin-bottom:8px">未关联企业微信账号</div>' +
-        '<div style="font-size:11px;color:var(--muted)">请在用户管理中绑定企业微信账号</div></div>';
-      return;
-    }
-    if (status === 'no_data') {
-      cal.innerHTML = '<div class="panel panel-pad">' +
-        '<div class="sec-hd"><h2>打卡工时</h2></div>' +
-        '<div style="text-align:center;padding:12px;color:var(--muted);font-size:12px">暂无打卡数据</div>' +
-        (data.last_sync_at ? '<div style="text-align:center;font-size:10px;color:var(--muted);padding-bottom:8px">上次同步: ' + data.last_sync_at.substring(11, 19) + '</div>' : '') +
-        '</div>';
-      return;
-    }
-
-    // Week total
-    var weekTotal = 0;
-    var today = new Date();
-    var curDow = today.getDay();
-    var monOff = curDow === 0 ? -6 : 1 - curDow;
-    for (var wi = 0; wi < 7; wi++) {
-      var wd = new Date(today);
-      wd.setDate(today.getDate() + monOff + wi);
-      var wds = fmtLocalDate(wd);
-      if (dailyMap[wds]) weekTotal += dailyMap[wds].total_hours || 0;
-    }
-    var monthTotal = total;
-
-    // Standard: use WeCom schedule if available, else legal 40h/week
-    var weekStd = 40, monthStd = 0, scheduleSrc = '法定';
-    if (data.schedule && data.schedule.work_hours > 0) {
-      var daysInMonth = me.getDate();
-      weekStd = Math.round(data.schedule.work_hours / data.schedule.work_days * 5) || 40;
-      monthStd = data.schedule.work_hours;
-      scheduleSrc = '企业微信';
-    } else {
-      var workDays = 0;
-      for (var di = 1; di <= me.getDate(); di++) {
-        var dw = new Date(y, m - 1, di).getDay();
-        if (dw !== 0 && dw !== 6) workDays++;
-      }
-      monthStd = workDays * 8;
-    }
-
-    function _wcBarCls(hours, std) {
-      if (std <= 0) return 'uc-hbar-empty';
-      var r = hours / std;
-      if (r >= 0.95 && r <= 1.05) return 'uc-hbar-ok';
-      if (r < 0.95) return 'uc-hbar-under';
-      if (r <= 1.25) return 'uc-hbar-low';
-      if (r <= 1.50) return 'uc-hbar-mid';
-      if (r <= 1.75) return 'uc-hbar-high';
-      return 'uc-hbar-over';
-    }
-    var weekCls = _wcBarCls(weekTotal, weekStd);
-    var monthCls = _wcBarCls(monthTotal, monthStd);
-
-    var html = '<div class="panel panel-pad">' +
-      '<div class="sec-hd" style="display:flex;justify-content:space-between;align-items:center">' +
-        '<h2 style="margin:0">打卡工时</h2>' +
-        '<div style="display:flex;align-items:center;gap:8px">' +
-          '<span style="font-size:10px;color:var(--muted)">[' + scheduleSrc + ']</span>' +
-          '<span style="font-size:11px;color:var(--muted)">周</span>' +
-          '<span class="uc-week-bar ' + weekCls + '">' + (typeof fmtHours === 'function' ? fmtHours(weekTotal) : weekTotal.toFixed(1) + 'h') + '</span>' +
-          '<span style="font-size:11px;color:var(--muted)">月</span>' +
-          '<span class="uc-week-bar ' + monthCls + '">' + (typeof fmtHours === 'function' ? fmtHours(monthTotal) : monthTotal.toFixed(1) + 'h') + '</span>' +
-        '</div>' +
-      '</div>';
-    if (typeof _renderMonthCalendar === 'function') {
-      data._wecom = true;
-      html += _renderMonthCalendar(now, dailyMap, data);
-    }
-    if (data.last_sync_at) {
-      html += '<div style="text-align:right;font-size:10px;color:var(--muted);margin-top:4px">上次同步: ' + data.last_sync_at.substring(11, 19) + '</div>';
-    }
-    html += '</div>';
-    cal.innerHTML = html;
-  }).catch(function(e) {
-    cal.innerHTML = '<div class="panel panel-pad" style="text-align:center;padding:20px">' +
-      '<div style="font-size:13px;color:var(--muted);margin-bottom:4px">打卡工时</div>' +
-      '<div style="font-size:11px;color:var(--danger)">加载失败</div></div>';
-  });
 }
 
 /* ── EventBus Subscriptions (cross-view data refresh) ── */
