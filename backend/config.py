@@ -45,6 +45,7 @@ class Settings:
     GITLAB_OAUTH_REDIRECT_URI: str = "" # OAuth callback URL
     WECOM_CORP_ID: str = ""            # 企业微信 CorpID
     WECOM_SECRET: str = ""             # 企业微信应用 Secret
+    WECOM_LUNCH_HOURS: float = 1.5     # 午休时长（小时），打卡工时扣减用
     JWT_SECRET_KEY: str = "dev-secret-change-in-production"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 480
@@ -64,6 +65,8 @@ class Settings:
                 val = str(val).lower() in ("1", "true", "yes")
             elif isinstance(default, int):
                 val = int(val)
+            elif isinstance(default, float):
+                val = float(val)
             setattr(self, key, val)
         # Docker secrets: if SQLCIPHER_KEY_FILE is set, read key from the file
         if self.SQLCIPHER_KEY_FILE and os.path.exists(self.SQLCIPHER_KEY_FILE):

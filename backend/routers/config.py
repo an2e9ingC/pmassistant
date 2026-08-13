@@ -75,6 +75,7 @@ class WeComConfig(BaseModel):
     corp_id: str = ""
     secret: str = ""
     sync_interval: str = "60"
+    lunch_hours: str = "1.5"
     enabled: bool = True
 
 
@@ -137,6 +138,7 @@ def _load_config() -> dict:
             "corp_id": os.environ.get("WECOM_CORP_ID", ""),
             "secret": os.environ.get("WECOM_SECRET", ""),
             "sync_interval": os.environ.get("WECOM_SYNC_INTERVAL", "60"),
+            "lunch_hours": os.environ.get("WECOM_LUNCH_HOURS", "1.5"),
             "enabled": os.environ.get("WECOM_ENABLED", "true").lower() in ("1", "true", "yes"),
         },
     }
@@ -194,6 +196,7 @@ def _save_config(cfg: dict) -> None:
         "wecom.corp_id": "WECOM_CORP_ID",
         "wecom.secret": "WECOM_SECRET",
         "wecom.sync_interval": "WECOM_SYNC_INTERVAL",
+        "wecom.lunch_hours": "WECOM_LUNCH_HOURS",
         "wecom.enabled": "WECOM_ENABLED",
     }
 
