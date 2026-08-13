@@ -670,7 +670,7 @@ function _initRolesDt() {
       { key: 'leader_display', title: 'Leader', width: '100px', minWidth: 70, render: function(v) { return v || '<span style="font-size:11px;color:var(--muted)">未设置</span>'; } },
       { key: 'perm_badges', title: '特殊权限', minWidth: 80, align: 'left', render: function(v) { return v || '<span style="font-size:11px;color:var(--muted)">无</span>'; } },
       { key: 'user_names', title: '成员', minWidth: 120, align: 'left', render: function(v) { return v || '<span style="font-size:11px;color:var(--muted)">暂无成员</span>'; } },
-      { key: 'actions', title: '操作', width: '130px', minWidth: 130, render: function(v) { return v; } }
+      { key: 'actions', title: '操作', width: actionColWidth(2) + 'px', minWidth: actionColWidth(2), render: function(v) { return v; } }
     ],
     maxHeight: 'calc(100vh - 340px)',
   });
@@ -955,7 +955,7 @@ function _initUsersDt() {
       { key: 'login_html', title: '登录状态', width: '8%', minWidth: 80, render: function(v) { return v; } },
       { key: 'last_login', title: '上次登录', width: '10%', minWidth: 120, render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(fmtISODateTime(v)||'—')+'</span>'; } },
       { key: 'created_at', title: '创建时间', width: '8%', minWidth: 120, render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(fmtISODateTime(v)||'')+'</span>'; } },
-      { key: 'actions', title: '操作', width: '180px', minWidth: 180, render: function(v, row) { return v; } }
+      { key: 'actions', title: '操作', width: actionColWidth(3) + 'px', minWidth: actionColWidth(3), render: function(v, row) { return v; } }
     ],
     maxHeight: 'calc(100vh - 340px)',
   });

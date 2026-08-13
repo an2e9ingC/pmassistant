@@ -78,12 +78,14 @@
    .btn-xs   — table row inline buttons
    .btn-icon — icon-only buttons (edit/delete/copy)
 ═══════════════════════════════════════════════════ */
-.btn-sm   { font-size: 11px; padding: 3px 10px; }
-.btn-xs   { font-size: 10px; padding: 2px 6px;  }
+/* Compact button classes must beat .btn (components.css) which loads later and sets
+   6px 14px padding. The compound .btn.btn-* (0,2,0) outranks .btn (0,1,0) regardless of order. */
+.btn-sm,   .btn.btn-sm   { font-size: 11px; padding: 3px 10px; }
+.btn-xs,   .btn.btn-xs   { font-size: 10px; padding: 2px 6px;  }
 .btn-danger { background: var(--danger); color: #fff; border-color: var(--danger); }
 .btn-danger:hover { background: var(--danger-dark, #c0392b); }
-.btn-icon { font-size: 13px; padding: 2px 6px; line-height: 1; margin-right: 4px; }
-.btn-icon:last-child { margin-right: 0; }
+.btn-icon, .btn.btn-icon { font-size: 13px; padding: 2px 6px; line-height: 1; margin-right: 4px; }
+.btn-icon:last-child, .btn.btn-icon:last-child { margin-right: 0; }
 
 /* ═══════════════════════════════════════════════════
    BUTTON SIZE USAGE GUIDE

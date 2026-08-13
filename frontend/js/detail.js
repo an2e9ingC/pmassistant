@@ -1151,7 +1151,7 @@ function buildDocs(data) {
       { key: '_locHtml', title: '路径', align: 'left', className: 'dt-wrap', render: function(v, row) { return '<span style="font-size:12px;word-break:break-all">'+(v||'')+'</span>'; } },
       { key: '_updatedAt', title: '最后修改时间', width: '12%', minWidth: 120, render: function(v) { return '<span style="font-size:11px;color:var(--muted);white-space:nowrap">'+escHtml(v||'—')+'</span>'; } },
       { key: '_updatedBy', title: '修改人', width: '7%', minWidth: 90, render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(getDisplayName(v)||'')+'</span>'; } },
-      { key: '_actions', title: '操作', width: '150px', minWidth: 150, render: function(v, row) { return '<span style="white-space:nowrap">'+(v||'')+'</span>'; } }
+      { key: '_actions', title: '操作', width: actionColWidth(4) + 'px', minWidth: actionColWidth(4), render: function(v, row) { return '<span style="white-space:nowrap">'+(v||'')+'</span>'; } }
     ],
     data: flatRows,
     maxHeight: 'calc(100vh - 320px)',
@@ -1780,7 +1780,7 @@ function buildNotes(notes) {
           var imgBadge = (/!\[.*\]\(.*\)/.test(v) || /<img\b/.test(v)) ? ' <span style="font-size:10px">📷</span>' : '';
           return '<span style="font-size:13px;line-height:1.5">'+replyMark+escHtml(plainText)+(v&&v.length>80?'...':'')+imgBadge+'</span>';
         }},
-        { key: 'actions', title: '操作', width: '130px', minWidth: 130, render: function(v, row) {
+        { key: 'actions', title: '操作', width: actionColWidth(3) + 'px', minWidth: actionColWidth(3), render: function(v, row) {
           var isMine = row.recorded_by === currentUser;
           var a = '<span style="cursor:pointer;font-size:12px;color:var(--accent);margin-right:4px" onclick="openViewNoteDialog('+row.id+')" title="查看">👁</span>';
           if (isMine) a += iconEdit('openEditNoteDialog('+row.id+')','编辑')+iconDelete('deleteProjectNote('+row.id+')','删除');
@@ -3449,7 +3449,7 @@ function _renderMaintStages(stages, container, canEditStage) {
         { key: 'task_count', title: '任务数', width: '7%', minWidth: 50, render: function(v, row) { var n=escHtml(row.name||'').replace(/'/g,"\\'"); return '<span style="cursor:pointer;color:var(--accent);font-weight:500" onclick="gotoStageTasksFromMaint(\''+n+'\')" title="跳转到任务详情">'+(v||0)+'</span>'; } },
         { key: 'progress', title: '进度', width: '7%', minWidth: 60, render: function(v, row) { var n=escHtml(row.name||'').replace(/'/g,"\\'"); return '<span style="cursor:pointer" onclick="gotoStageTasksFromMaint(\''+n+'\')" title="跳转到任务详情">'+(typeof renderProgressRing==='function'?'<div style="display:inline-block">'+renderProgressRing(v||0)+'</div>':(v||0)+'%')+'</span>'; } },
         { key: 'completed_date', title: '完成日期', width: '8%', minWidth: 100, render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'—')+'</span>'; } },
-        { key: 'actions', title: '操作', width: '100px', minWidth: 100, render: function(v, row) { return '<span style="white-space:nowrap">'+(row.id&&canEditStage?iconEdit('openStageDialog('+row.id+')','编辑阶段')+iconDelete('deleteMaintStage('+row.id+',\''+escHtml(row.name||'').replace(/'/g,"\\'")+'\')','删除阶段'):'')+'</span>'; } }
+        { key: 'actions', title: '操作', width: actionColWidth(2) + 'px', minWidth: actionColWidth(2), render: function(v, row) { return '<span style="white-space:nowrap">'+(row.id&&canEditStage?iconEdit('openStageDialog('+row.id+')','编辑阶段')+iconDelete('deleteMaintStage('+row.id+',\''+escHtml(row.name||'').replace(/'/g,"\\'")+'\')','删除阶段'):'')+'</span>'; } }
       ],
       maxHeight: 'calc(100vh - 400px)'
     });

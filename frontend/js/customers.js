@@ -11,7 +11,7 @@ function _initCustDt() {
       { key: 'full_name', title: '全称', width: '18%', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">' + escHtml(v||'—') + '</span>'; } },
       { key: 'project_count', title: '关联项目', width: '10%', minWidth: 50, render: function(v, row) { var n = escHtml(row.name||'').replace(/'/g, "\\'"); return '<span onclick="event.stopPropagation();openCustomerDetail(\'' + n + '\')" style="cursor:pointer;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:540;background:var(--accent-lt);color:var(--accent)" title="查看客户详情">' + (v||0) + '</span>'; } },
       { key: 'product_count', title: '关联产品', width: '10%', minWidth: 50, render: function(v, row) { var n = escHtml(row.name||'').replace(/'/g, "\\'"); return '<span onclick="event.stopPropagation();openCustomerDetail(\'' + n + '\')" style="cursor:pointer;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:540;background:var(--success-lt);color:var(--success)" title="查看客户详情">' + (v||0) + '</span>'; } },
-      { key: 'actions', title: '操作', width: '100px', minWidth: 100, render: function(v, row) { return '<span style="white-space:nowrap">' + iconEdit('openCustEditDialog(' + row.id + ')') + iconDelete('deleteCust(' + row.id + ',\'' + escHtml(row.name) + '\')') + '</span>'; } }
+      { key: 'actions', title: '操作', width: actionColWidth(2) + 'px', minWidth: actionColWidth(2), render: function(v, row) { return '<span style="white-space:nowrap">' + iconEdit('openCustEditDialog(' + row.id + ')') + iconDelete('deleteCust(' + row.id + ',\'' + escHtml(row.name) + '\')') + '</span>'; } }
     ],
     maxHeight: 'calc(100vh - 200px)',
   });

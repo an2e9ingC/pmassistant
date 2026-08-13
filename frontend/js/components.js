@@ -50,6 +50,25 @@ function iconSync(onclick, title) {
   return iconBtn(svg, title || '同步到远端', onclick);
 }
 
+/* ── Optional/Required toggle (模板管理操作列) ──
+   可选 = 空心圆, 必选 = 实心圆; 点击在两者间切换 */
+function iconOptional(isOptional, onclick) {
+  var glyph = isOptional ? '○' : '●';
+  var title = isOptional ? '可选（点击改为必选）' : '必选（点击改为可选）';
+  var color = isOptional ? 'var(--accent)' : 'var(--muted)';
+  return '<button class="btn btn-icon" style="color:' + color + '" onclick="' + onclick + '" title="' + title + '">' + glyph + '</button>';
+}
+
+/* ── Operation column width (derived from icon button count) ──
+   Every 操作 column should size itself by the number of icon buttons it renders,
+   not by an arbitrary hardcoded width. One .btn-icon ≈ 30px wide
+   (icon ~14px + 6px×2 padding + 1px×2 border) + 4px right margin (last excluded);
+   the cell adds 10px×2 horizontal padding. Rounded up to the nearest 10px. */
+function actionColWidth(n) {
+  n = Math.max(1, n | 0);
+  return Math.ceil((20 + n * 30 + Math.max(0, n - 1) * 4) / 10) * 10;
+}
+
 /* ── Bug Action Icon Buttons ── */
 
 function iconBugConfirm(onclick, disabled) {
