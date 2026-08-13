@@ -2575,7 +2575,7 @@ async function renderTimeline(entityType, entityId, containerId) {
 function _renderTimelineAction(item, author, time) {
   var actionLabel = _ACTION_LABELS[item.action] || item.action;
   var head = '<div style="display:flex;align-items:baseline;gap:6px;font-size:12px;flex-wrap:wrap">' +
-    '<span style="font-weight:600;color:var(--text)">' + escHtml(author) + '</span>' +
+    '<span style="font-weight:600;color:var(--fg)">' + escHtml(author) + '</span>' +
     '<span style="color:var(--muted)">' + escHtml(actionLabel) + '</span>' +
     '<span style="color:var(--muted);font-size:10px">' + escHtml(time) + '</span>' +
   '</div>';
@@ -2625,12 +2625,12 @@ function _renderTimelineChange(c) {
 
 function _renderTimelineComment(item, author, time) {
   var head = '<div style="display:flex;align-items:baseline;gap:6px;font-size:12px;flex-wrap:wrap">' +
-    '<span style="font-weight:600;color:var(--text)">' + escHtml(author) + '</span>' +
+    '<span style="font-weight:600;color:var(--fg)">' + escHtml(author) + '</span>' +
     '<span style="color:var(--muted);font-size:10px">' + escHtml(time) + '</span>' +
   '</div>';
 
   var content = item.content || '';
-  var body = '<div style="margin-top:4px;font-size:13px;line-height:1.5;color:var(--text)">' + renderMarkdown(content) + '</div>';
+  var body = '<div style="margin-top:4px;font-size:13px;line-height:1.5;color:var(--fg)">' + renderMarkdown(content) + '</div>';
   return head + body;
 }
 
