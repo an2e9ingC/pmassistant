@@ -1562,7 +1562,6 @@ async function initUserCenter(viewUserId, tab) {
   _ucBugTab = 'pending';
   _ucFilterProd = '';
   _ucFilterProj = '';
-  _ucBugFilterStatus = '';
   _ucBugFilterProd = '';
   _ucBugFilterProj = '';
 
@@ -2040,9 +2039,7 @@ function _renderUcFilterBar() {
     dataSource: prodItems,
     selectedIdFn: function() { return ''; },
     onSelect: function(p) { _ucFilterProd = p.name;
-      var inp = document.getElementById('uc-task-prod-filter-input');
-      if (inp) { var display = p.code ? p.code + ' ' + p.name : p.name; inp.value = display; inp.title = display; }
-      _renderUcTaskTable(); _ucRefreshTaskStats(); }
+      _renderUcFilterBar(); _renderUcTaskTable(); _ucRefreshTaskStats(); }
   });
 
   // Project search combo (from user's tasks)
@@ -2052,9 +2049,7 @@ function _renderUcFilterBar() {
     dataSource: projItems,
     selectedIdFn: function() { return ''; },
     onSelect: function(p) { _ucFilterProj = p.name;
-      var inp = document.getElementById('uc-task-proj-filter-input');
-      if (inp) { var display = p.code ? p.code + ' ' + p.name : p.name; inp.value = display; inp.title = display; }
-      _renderUcTaskTable(); _ucRefreshTaskStats(); }
+      _renderUcFilterBar(); _renderUcTaskTable(); _ucRefreshTaskStats(); }
   });
 
   var projClearBtn = _ucFilterProj ? '<span class="combo-clear" onclick="_ucClearFilter(\'proj\')" title="清除项目过滤">✕</span>' : '';
@@ -2064,6 +2059,17 @@ function _renderUcFilterBar() {
     '<div style="width:100%">' + cardsHtml + '</div>'
     + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px">'
     + projSelHtml + projClearBtn + prodSelHtml + prodClearBtn + '</div>';
+  // Re-apply selected product/project display to combo inputs (filter bar rebuilt above)
+  if (_ucFilterProj) {
+    var jInp = document.getElementById('uc-task-proj-filter-input');
+    var jItem = projItems.find(function(x) { return x.name === _ucFilterProj; });
+    if (jInp && jItem) { var jd = jItem.code ? jItem.code + ' ' + jItem.name : jItem.name; jInp.value = jd; jInp.title = jd; }
+  }
+  if (_ucFilterProd) {
+    var pInp = document.getElementById('uc-task-prod-filter-input');
+    var pItem = prodItems.find(function(x) { return x.name === _ucFilterProd; });
+    if (pInp && pItem) { var pd = pItem.code ? pItem.code + ' ' + pItem.name : pItem.name; pInp.value = pd; pInp.title = pd; }
+  }
 }
 
 function _ucClearFilter(type) {
@@ -2602,7 +2608,6 @@ async function _ucReopenBug(bugId) {
 var _ucBugTab = 'pending'; // 'pending' | 'resolved' | 'reporter' | 'watched' | 'cc'
 var _ucBugFilterProd = '';
 var _ucBugFilterProj = '';
-var _ucBugFilterStatus = '';
 var _ucBugsReqId = 0;  // request counter to ignore stale async responses
 
 function _ucRenderBugFilter(bugs, uid) {
@@ -2611,21 +2616,54 @@ function _ucRenderBugFilter(bugs, uid) {
   var resolvedBugs = assigned.filter(function(b) { return b.status === 'resolved' || b.status === 'closed'; });
   var reported = (bugs||[]).filter(function(b) { return b.reporter_id === uid; });
   var cc = (bugs||[]).filter(function(b) { return (b.cc_user_ids || []).indexOf(uid) >= 0; });
-  // Collect unique product and project names from all bugs
-  var prodSet = {}, projSet = {};
+  // Build product items from user's bugs only (same implementation as task filters)
+  var prodItems = [], prodSeen = {};
   (bugs||[]).forEach(function(b) {
-    if (b.product_name) prodSet[b.product_name] = 1;
-    if (b.project_name) projSet[b.project_name] = 1;
+    var key = b.product_code || b.product_name || '';
+    if (key && !prodSeen[key]) {
+      prodSeen[key] = true;
+      prodItems.push({ id: 'p' + prodItems.length, code: b.product_code, name: b.product_name });
+    }
   });
-  var projs = Object.keys(projSet).sort();
-  var statuses = [{v:'',l:'全部状态'},{v:'open',l:'待确认'},{v:'in_progress',l:'处理中'},{v:'resolved',l:'已解决'},{v:'closed',l:'已关闭'}];
-  var statusSel = '<select class="proj-select" onchange="_ucBugFilterStatus=this.value;_ucLoadBugs()">' + statuses.map(function(s) { return '<option value="'+s.v+'"'+(_ucBugFilterStatus===s.v?' selected':'')+'>'+s.l+'</option>'; }).join('') + '</select>';
-  var prodSelHtml = createProductCombo({
+  prodItems.sort(function(a, b) { return (a.code || a.name || '').localeCompare(b.code || b.name || ''); });
+
+  // Build project items from user's bugs only
+  var projItems = [], projSeen = {};
+  (bugs||[]).forEach(function(b) {
+    var key = b.project_code || b.project_name || '';
+    if (key && !projSeen[key]) {
+      projSeen[key] = true;
+      projItems.push({ id: 'j' + projItems.length, code: b.project_code, name: b.project_name });
+    }
+  });
+  projItems.sort(function(a, b) { return (a.code || a.name || '').localeCompare(b.code || b.name || ''); });
+
+  // Project search combo (from user's bugs) — same implementation as task filters
+  var projSelHtml = createSearchCombo({
+    comboId: 'uc-bug-proj-filter', inputId: 'uc-bug-proj-filter-input', dropdownId: 'uc-bug-proj-filter-dropdown',
+    placeholder: '全部项目',
+    dataSource: projItems,
+    selectedIdFn: function() { return ''; },
+    onSelect: function(p) { _ucBugFilterProj = p.name;
+      var inp = document.getElementById('uc-bug-proj-filter-input');
+      if (inp) { var display = p.code ? p.code + ' ' + p.name : p.name; inp.value = display; inp.title = display; }
+      _ucLoadBugs(); }
+  });
+
+  // Product search combo (from user's bugs)
+  var prodSelHtml = createSearchCombo({
     comboId: 'uc-bug-prod-filter', inputId: 'uc-bug-prod-filter-input', dropdownId: 'uc-bug-prod-filter-dropdown',
     placeholder: '全部产品',
-    onSelect: function(p) { _ucBugFilterProd = p.name; _ucLoadBugs(); }
+    dataSource: prodItems,
+    selectedIdFn: function() { return ''; },
+    onSelect: function(p) { _ucBugFilterProd = p.name;
+      var inp = document.getElementById('uc-bug-prod-filter-input');
+      if (inp) { var display = p.code ? p.code + ' ' + p.name : p.name; inp.value = display; inp.title = display; }
+      _ucLoadBugs(); }
   });
-  var projSel = projs.length ? '<select class="proj-select" onchange="_ucBugFilterProj=this.value;_ucLoadBugs()"><option value="">全部项目</option>' + projs.map(function(p) { return '<option value="'+escHtml(p)+'"'+(_ucBugFilterProj===p?' selected':'')+'>'+escHtml(p)+'</option>'; }).join('') + '</select>' : '';
+
+  var projClearBtn = _ucBugFilterProj ? '<span class="combo-clear" onclick="_ucClearBugFilter(\'proj\')" title="清除项目过滤">✕</span>' : '';
+  var prodClearBtn = _ucBugFilterProd ? '<span class="combo-clear" onclick="_ucClearBugFilter(\'prod\')" title="清除产品过滤">✕</span>' : '';
   // Labels depend on whether viewing self or another user
   var isSelf = !window._ucViewUserId;
   var pendingLabel = isSelf ? '⏳ 待处理' : '⏳ 待TA处理';
@@ -2659,7 +2697,18 @@ function _ucRenderBugFilter(bugs, uid) {
           + '<div class="kpi-label" title="' + ccMeta + '">' + ccLabel + '</div><div class="kpi-value">' + cc.length + '</div></div>' +
       '</div>' +
     '</div>' +
-    '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px">' + statusSel + '<span style="display:inline-block;vertical-align:middle">' + prodSelHtml + '</span>' + projSel + '</div>';
+    '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px">' + projSelHtml + projClearBtn + prodSelHtml + prodClearBtn + '</div>';
+  // Re-apply selected product/project display to combo inputs (filter bar rebuilt above)
+  if (_ucBugFilterProj) {
+    var jInp = document.getElementById('uc-bug-proj-filter-input');
+    var jItem = projItems.find(function(x) { return x.name === _ucBugFilterProj; });
+    if (jInp && jItem) { var jd = jItem.code ? jItem.code + ' ' + jItem.name : jItem.name; jInp.value = jd; jInp.title = jd; }
+  }
+  if (_ucBugFilterProd) {
+    var pInp = document.getElementById('uc-bug-prod-filter-input');
+    var pItem = prodItems.find(function(x) { return x.name === _ucBugFilterProd; });
+    if (pInp && pItem) { var pd = pItem.code ? pItem.code + ' ' + pItem.name : pItem.name; pInp.value = pd; pInp.title = pd; }
+  }
   var result;
   if (_ucBugTab === 'pending') result = pending;
   else if (_ucBugTab === 'resolved') result = resolvedBugs;
@@ -2669,11 +2718,23 @@ function _ucRenderBugFilter(bugs, uid) {
     return viewFavBugs ? viewFavBugs.indexOf(b.id) >= 0 : isFav('bug', b.id);
   });
   else result = pending;
-  // Apply product/project/status filters
-  if (_ucBugFilterStatus) result = result.filter(function(b) { return (b.status || 'open') === _ucBugFilterStatus; });
+  // Apply product/project filters
   if (_ucBugFilterProd) result = result.filter(function(b) { return b.product_name === _ucBugFilterProd; });
   if (_ucBugFilterProj) result = result.filter(function(b) { return b.project_name === _ucBugFilterProj; });
   return result;
+}
+
+function _ucClearBugFilter(type) {
+  if (type === 'proj') {
+    _ucBugFilterProj = '';
+    var inp = document.getElementById('uc-bug-proj-filter-input');
+    if (inp) inp.value = '';
+  } else if (type === 'prod') {
+    _ucBugFilterProd = '';
+    var inp = document.getElementById('uc-bug-prod-filter-input');
+    if (inp) inp.value = '';
+  }
+  _ucLoadBugs();
 }
 
 var _ucBugsDt = null;
@@ -2778,8 +2839,7 @@ function _ucLoadBugStats() {
     } else {
       filtered = (bugs||[]).filter(function(b) { return b.assignee_id === uid; });
     }
-    // Apply product/project/status filters from dropdowns
-    if (_ucBugFilterStatus) filtered = filtered.filter(function(b) { return (b.status || 'open') === _ucBugFilterStatus; });
+    // Apply product/project filters from dropdowns
     if (_ucBugFilterProd) filtered = filtered.filter(function(b) { return b.product_name === _ucBugFilterProd; });
     if (_ucBugFilterProj) filtered = filtered.filter(function(b) { return b.project_name === _ucBugFilterProj; });
     // Exclude resolved/closed for active bugs

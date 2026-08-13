@@ -74,8 +74,8 @@
 }
 .combo-opt:hover { background: var(--bg); }
 
-/* Wider combos in task filter bar */
-.task-filter-bar .proj-combo { min-width: 210px; max-width: 400px; }
+/* Wider combos in task filter bar — fixed width so project/product sit side by side */
+.task-filter-bar .proj-combo { width: 260px; flex: 0 0 260px; max-width: 400px; }
 .task-filter-bar .proj-combo-input {
   text-overflow: ellipsis; overflow: hidden; white-space: nowrap;
 }
@@ -371,7 +371,13 @@
   display: flex; align-items: center; justify-content: center; gap: 8px;
   padding: 6px 16px; font-size: 13px; font-weight: 500; line-height: 1.4;
   border-bottom: 1px solid rgba(255,255,255,0.15);
+  white-space: nowrap;
 }
+.notif-bar-item > span {
+  overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+/* Markdown content renders as block <p> — force inline so text stays on one line */
+.notif-bar-item p { display: inline; margin: 0; }
 .notif-bar-general  { background: #3b82f6; color: #fff; }
 .notif-bar-important { background: #e6a817; color: #fff; }
 .notif-bar-severe    { background: #e53e3e; color: #fff; }
@@ -570,6 +576,8 @@
 #alert-ticker:hover #alert-ticker-inner {
   animation-play-state: paused;
 }
+/* Markdown renders block <p> — keep ticker content on one line */
+#alert-ticker p { display: inline; margin: 0; }
 body.has-ticker .view.active { padding-bottom: 28px; }
 
 /* ── Inline Document Editing ── */
