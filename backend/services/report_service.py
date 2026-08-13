@@ -11,6 +11,7 @@ from backend.models.delivery import DeliveryRecord
 from backend.models.task import WorkLog, Task
 from backend.models.bug import BugWorkLog, PmaBug
 from backend.models.local import LocalUser
+from backend.models.wecom import WeComCheckin
 
 
 def get_project_summary(db: Session) -> dict:
@@ -321,16 +322,40 @@ def get_manpower_report(
             "project_id": pdata["project_id"], "project_code": pdata["project_code"],
             "project_name": pdata["project_name"],
             "total_hours": round(pdata["total_hours"], 1),
+            "total_share": round(pdata["total_hours"] / total_hours * 100, 1) if total_hours > 0 else 0.0,
             "percentage_avg": round(pdata["total_percentage"] / max(pdata["count"], 1), 1),
             "users": users_list, "tasks": tasks_list[:20], "bugs": bugs_list[:20],
         })
 
+    # ── 打卡工时（企业微信）：wecom_userid → 打卡工时 ──
+    checkin_map = {}
+    if uid_set:
+        wecom_by_uid = {u.id: u.wecom_userid for u in user_map.values() if u.wecom_userid}
+        if wecom_by_uid:
+            wuids = list(wecom_by_uid.values())
+            for wuid, hrs in db.query(
+                WeComCheckin.user_id,
+                sa_func.sum(WeComCheckin.work_hours),
+            ).filter(
+                WeComCheckin.user_id.in_(wuids),
+                WeComCheckin.date >= from_date,
+                WeComCheckin.date <= to_date,
+            ).group_by(WeComCheckin.user_id).all():
+                checkin_map[wuid] = float(hrs or 0.0)
+
     formatted_users = []
     for uid, udata in sorted(by_user.items(), key=lambda x: -x[1]["total_hours"]):
+        u = user_map.get(uid)
+        checkin_hours = checkin_map.get(u.wecom_userid, 0.0) if u and u.wecom_userid else 0.0
+        pma_hours = round(udata["total_hours"], 1)
+        ratio = round(pma_hours / checkin_hours * 100, 1) if checkin_hours > 0 else None
         formatted_users.append({
             "user_id": udata["user_id"], "display_name": udata["display_name"],
             "username": udata["username"],
-            "total_hours": round(udata["total_hours"], 1),
+            "total_hours": pma_hours,
+            "checkin_hours": round(checkin_hours, 1),
+            "pma_hours": pma_hours,
+            "ratio": ratio,  # 记录/打卡占比（%），无打卡为 None
             "percentage_avg": round(udata["total_percentage"] / max(udata["count"], 1), 1),
             "project_count": len(udata["projects"]),
         })
@@ -358,6 +383,120 @@ def get_manpower_report(
     }
 
 
+def get_user_manpower_detail(
+    db: Session,
+    user_id: int,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+) -> dict:
+    """Per-user manpower detail: project breakdown (pie) + daily breakdown."""
+    from_date, to_date = _parse_date_range(date_from, date_to)
+
+    twls = db.query(WorkLog).filter(
+        WorkLog.user_id == user_id,
+        WorkLog.date >= from_date,
+        WorkLog.date <= to_date,
+    ).all()
+    bws = db.query(BugWorkLog).filter(
+        BugWorkLog.user_id == user_id,
+        BugWorkLog.date >= from_date,
+        BugWorkLog.date <= to_date,
+    ).all()
+
+    task_ids = {w.task_id for w in twls}
+    bug_ids = {w.bug_id for w in bws}
+    task_map = {t.id: t for t in db.query(Task).filter(Task.id.in_(task_ids)).all()} if task_ids else {}
+    bug_map = {b.id: b for b in db.query(PmaBug).filter(PmaBug.id.in_(bug_ids)).all()} if bug_ids else {}
+    proj_ids = {t.project_id for t in task_map.values() if t and t.project_id}
+    proj_ids.update(b.project_id for b in bug_map.values() if b and b.project_id)
+    proj_map = {}
+    prod_map = {}
+    if proj_ids:
+        for p in db.query(CachedProject).filter(CachedProject.id.in_(proj_ids)).all():
+            proj_map[p.id] = p
+        for p in db.query(PmaProduct).filter(PmaProduct.id.in_(proj_ids)).all():
+            prod_map[p.id] = p
+
+    def _proj_meta(pid):
+        proj = proj_map.get(pid) or prod_map.get(pid)
+        return {
+            "project_id": pid,
+            "project_code": getattr(proj, "code", "") or "",
+            "project_name": getattr(proj, "name", "") or "",
+        }
+
+    # ── Project breakdown ──
+    proj_hours = {}
+    for w in twls:
+        t = task_map.get(w.task_id)
+        if not t or not t.project_id:
+            continue
+        proj_hours[t.project_id] = proj_hours.get(t.project_id, 0.0) + _get_effective_hours(w)
+    for w in bws:
+        b = bug_map.get(w.bug_id)
+        if not b or not b.project_id:
+            continue
+        proj_hours[b.project_id] = proj_hours.get(b.project_id, 0.0) + _get_effective_hours(w)
+
+    total_hours = sum(proj_hours.values())
+    projects = []
+    for pid, hrs in sorted(proj_hours.items(), key=lambda x: -x[1]):
+        meta = _proj_meta(pid)
+        meta["hours"] = round(hrs, 1)
+        meta["percentage"] = round(hrs / total_hours * 100, 1) if total_hours > 0 else 0.0
+        projects.append(meta)
+
+    # ── Daily breakdown ──
+    daily_map = {}
+    for w in twls:
+        t = task_map.get(w.task_id)
+        pid = t.project_id if t and t.project_id else None
+        daily_map.setdefault(str(w.date), {}).setdefault(pid, 0.0)
+        daily_map[str(w.date)][pid] += _get_effective_hours(w)
+    for w in bws:
+        b = bug_map.get(w.bug_id)
+        pid = b.project_id if b and b.project_id else None
+        daily_map.setdefault(str(w.date), {}).setdefault(pid, 0.0)
+        daily_map[str(w.date)][pid] += _get_effective_hours(w)
+
+    daily = []
+    for d in sorted(daily_map.keys(), reverse=True):
+        day_hours = sum(daily_map[d].values())
+        proj_list = []
+        for pid, hrs in sorted(daily_map[d].items(), key=lambda x: -x[1]):
+            meta = _proj_meta(pid) if pid else {"project_id": None, "project_code": "", "project_name": "其他"}
+            meta["hours"] = round(hrs, 1)
+            meta["percentage"] = round(hrs / day_hours * 100, 1) if day_hours > 0 else 0.0
+            proj_list.append(meta)
+        daily.append({"date": d, "hours": round(day_hours, 1), "projects": proj_list})
+
+    # ── Checkin hours ──
+    user = db.query(LocalUser).filter(LocalUser.id == user_id).first()
+    checkin_hours = 0.0
+    if user and user.wecom_userid:
+        row = db.query(sa_func.sum(WeComCheckin.work_hours)).filter(
+            WeComCheckin.user_id == user.wecom_userid,
+            WeComCheckin.date >= from_date,
+            WeComCheckin.date <= to_date,
+        ).first()
+        checkin_hours = float(row[0] or 0.0) if row and row[0] is not None else 0.0
+
+    pma_hours = round(total_hours, 1)
+    ratio = round(pma_hours / checkin_hours * 100, 1) if checkin_hours > 0 else None
+
+    return {
+        "summary": {
+            "user_id": user_id,
+            "display_name": (user.display_name or user.username) if user else "?",
+            "checkin_hours": round(checkin_hours, 1),
+            "pma_hours": pma_hours,
+            "ratio": ratio,
+        },
+        "projects": projects,
+        "daily": daily,
+    }
+
+
 def export_manpower_excel(
     db: Session,
     output,
@@ -377,12 +516,7 @@ def export_manpower_excel(
 
     wb = openpyxl.Workbook()
 
-    # Sheet 1: 工时明细
-    ws1 = wb.active
-    ws1.title = "工时明细"
-    ws1.append(["人员", "项目编号", "项目名", "产品编号", "产品名", "日期", "工时占比(%)", "计算工时(h)", "工作内容", "来源"])
-    # Query full detail
-    from backend.services.worklog_service import _parse_date as _pd
+    # 数据查询（供各 sheet 复用）
     twls = db.query(WorkLog).filter(WorkLog.date >= from_date, WorkLog.date <= to_date)
     if user_id: twls = twls.filter(WorkLog.user_id == user_id)
     twls = twls.order_by(WorkLog.date.desc()).all()
@@ -399,11 +533,46 @@ def export_manpower_excel(
     for p in db.query(CachedProject).all(): proj_map[p.id] = (p.code, p.name)
     for p in db.query(PmaProduct).all(): proj_map[p.id] = (p.code, p.name)
 
+    # Sheet 1: 按人员-项目工时占比（财务核算每人各项目人力投入）
+    ws1 = wb.active
+    ws1.title = "按人员-项目占比"
+    ws1.append(["人员", "项目编号", "项目名", "工时(h)", "占该人总工时比例(%)"])
+
+    user_proj = {}
+    for w in twls:
+        t = task_map.get(w.task_id)
+        if not t or not t.project_id:
+            continue
+        uid = w.user_id
+        if uid not in user_proj:
+            user_proj[uid] = {}
+        user_proj[uid][t.project_id] = user_proj[uid].get(t.project_id, 0.0) + _get_effective_hours(w)
+    for w in bws:
+        b = bug_map.get(w.bug_id)
+        if not b or not b.project_id:
+            continue
+        uid = w.user_id
+        if uid not in user_proj:
+            user_proj[uid] = {}
+        user_proj[uid][b.project_id] = user_proj[uid].get(b.project_id, 0.0) + _get_effective_hours(w)
+
+    for uid in sorted(user_proj.keys(), key=lambda u: -sum(user_proj[u].values())):
+        u = user_map.get(uid)
+        uname = (u.display_name or u.username) if u else "?"
+        total = sum(user_proj[uid].values())
+        for pid, hrs in sorted(user_proj[uid].items(), key=lambda x: -x[1]):
+            code, name = proj_map.get(pid, ("", ""))
+            pct = round(hrs / total * 100, 1) if total > 0 else 0.0
+            ws1.append([uname, code, name, round(hrs, 1), pct])
+
+    # Sheet 2: 工时明细
+    ws2 = wb.create_sheet("工时明细")
+    ws2.append(["人员", "项目编号", "项目名", "产品编号", "产品名", "日期", "工时占比(%)", "计算工时(h)", "工作内容", "来源"])
     for w in twls:
         t = task_map.get(w.task_id)
         proj_info = proj_map.get(t.project_id, ("", "")) if t and t.project_id else ("", "")
         u = user_map.get(w.user_id)
-        ws1.append([
+        ws2.append([
             (u.display_name or u.username) if u else "?", proj_info[0], proj_info[1], "", "",
             str(w.date), w.percentage or "", w.calculated_hours or w.hours or "",
             w.description or "", "task",
@@ -412,28 +581,27 @@ def export_manpower_excel(
         b = bug_map.get(w.bug_id)
         proj_info = proj_map.get(b.project_id, ("", "")) if b and b.project_id else ("", "")
         u = user_map.get(w.user_id)
-        ws1.append([
+        ws2.append([
             (u.display_name or u.username) if u else "?", proj_info[0], proj_info[1], "", "",
             str(w.date), w.percentage or "", w.calculated_hours or w.hours or "",
             w.description or "", "bug",
         ])
 
-    # Sheet 2: 按项目汇总
-    ws2 = wb.create_sheet("按项目汇总")
-    ws2.append(["项目编号", "项目名", "总工时(h)", "人均占比(%)"])
+    # Sheet 3: 按项目汇总
+    ws3 = wb.create_sheet("按项目汇总")
+    ws3.append(["项目编号", "项目名", "总工时(h)", "人均占比(%)"])
     for p in data.get("by_project", []):
-        ws2.append([p["project_code"], p["project_name"], p["total_hours"], p["percentage_avg"]])
+        ws3.append([p["project_code"], p["project_name"], p["total_hours"], p["percentage_avg"]])
 
-    # Sheet 3: 按人员汇总
-    ws3 = wb.create_sheet("按人员汇总")
-    ws3.append(["人员", "用户名", "总工时(h)", "涉及项目数", "平均占比(%)"])
+    # Sheet 4: 按人员汇总
+    ws4 = wb.create_sheet("按人员汇总")
+    ws4.append(["人员", "用户名", "打卡工时(h)", "PMA记录工时(h)", "记录/打卡占比(%)", "涉及项目数"])
     for u in data.get("by_user", []):
-        ws3.append([u["display_name"], u["username"], u["total_hours"], u["project_count"], u["percentage_avg"]])
-
-    # Sheet 4: 按产品汇总
-    ws4 = wb.create_sheet("按产品汇总")
-    ws4.append(["产品编号", "产品名", "总工时(h)", "平均占比(%)"])
-    for p in data.get("by_product", []):
-        ws4.append([p["product_code"], p["product_name"], p["total_hours"], p["percentage_avg"]])
+        ws4.append([
+            u["display_name"], u["username"],
+            u.get("checkin_hours", ""), u["pma_hours"],
+            u["ratio"] if u.get("ratio") is not None else "",
+            u["project_count"],
+        ])
 
     wb.save(output)

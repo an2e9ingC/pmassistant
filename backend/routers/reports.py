@@ -176,3 +176,18 @@ def manpower_export(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+@router.get("/manpower/user/{user_id}/detail", response_model=dict)
+def manpower_user_detail(
+    user_id: int,
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_perm("manpower_view")),
+):
+    """Per-user manpower detail: project breakdown + daily breakdown."""
+    data = report_service.get_user_manpower_detail(
+        db, user_id, date_from=date_from, date_to=date_to,
+    )
+    return {"code": 0, "data": data, "message": "ok"}

@@ -3210,7 +3210,8 @@ function renderDonutChart(container, segments, opts) {
       'fill="none" stroke="' + color + '" stroke-width="' + strokeW + '" ' +
       'stroke-dasharray="' + dashLen + ' ' + dashGap + '" ' +
       'stroke-dashoffset="' + (-offset * circumference / total) + '" ' +
-      'stroke-linecap="butt" style="transition: stroke-dasharray 0.5s, stroke-dashoffset 0.5s"/>';
+      'data-seg-i="' + i + '" ' +
+      'stroke-linecap="butt" style="cursor:pointer;transition: stroke-dasharray 0.5s, stroke-dashoffset 0.5s"/>';
     offset += s.value;
   });
 
@@ -3235,4 +3236,50 @@ function renderDonutChart(container, segments, opts) {
     svgCircles + centerHtml +
     '</svg></div>' +
     legendHtml;
+
+  // 扇区悬停（鼠标聚焦即显示，信息跟随鼠标位置；移出隐藏）
+  var svg = el.querySelector('svg');
+  if (svg) {
+    svg.addEventListener('mouseover', function(e) {
+      var c = e.target && e.target.closest ? e.target.closest('circle[data-seg-i]') : null;
+      if (!c) return;
+      var idx = parseInt(c.getAttribute('data-seg-i'), 10);
+      if (isNaN(idx) || idx < 0 || idx >= segments.length) return;
+      var seg = segments[idx];
+      var pct = (seg.value || 0) / total * 100;
+      var namePart = (seg.name && seg.name !== seg.label) ? ' ' + escHtml(seg.name) : '';
+      _showDonutClickTip(e, '<b>' + escHtml(seg.label || '') + '</b>' + namePart + '：' + (seg.value || 0).toFixed(1) + 'h (' + pct.toFixed(1) + '%)');
+      if (opts.onSegmentClick) opts.onSegmentClick(seg, idx);
+    });
+    svg.addEventListener('mouseout', function(e) {
+      _hideDonutClickTip();
+    });
+  }
 }
+
+// 饼图扇区点击提示：在鼠标点击位置显示（点击空白处隐藏）
+function _showDonutClickTip(e, html) {
+  var tip = document.getElementById('donut-click-tip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = 'donut-click-tip';
+    tip.style.cssText = 'position:fixed;pointer-events:none;z-index:9999;padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;font-size:12px;box-shadow:var(--sh-md);white-space:nowrap;max-width:320px;';
+    document.body.appendChild(tip);
+  }
+  tip.innerHTML = html;
+  var z = (typeof _getZoom === 'function') ? _getZoom() : 1;
+  tip.style.left = (e.clientX / z + 14) + 'px';
+  tip.style.top = (e.clientY / z + 12) + 'px';
+  tip.style.display = 'block';
+}
+
+function _hideDonutClickTip() {
+  var tip = document.getElementById('donut-click-tip');
+  if (tip) tip.style.display = 'none';
+}
+
+// 点击非扇区（圆环外）区域时，自动隐藏饼图点击提示
+document.addEventListener('click', function(e) {
+  var onCircle = e.target && e.target.closest && e.target.closest('circle[data-seg-i]');
+  if (!onCircle) _hideDonutClickTip();
+});

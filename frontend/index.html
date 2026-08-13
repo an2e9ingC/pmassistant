@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="app-version" content="v2026.08.13-beta14">
+  <meta name="app-version" content="v2026.08.13-beta25">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>PM Assistant · 集成禅道 & GitLab</title>
 <script>
@@ -523,15 +523,15 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
     <!-- ══════════════════════ VIEW 4 — REPORTS ══════════════════════ -->
     <div class="view" id="view-reports">
       <div class="map-tabs">
-        <div class="map-tab active" id="rpttab-weekly" onclick="switchReportTab('weekly')">周报</div>
+        <div class="map-tab active" id="rpttab-manpower" onclick="switchReportTab('manpower')" style="display:none">人力</div>
+        <div class="map-tab" id="rpttab-weekly" onclick="switchReportTab('weekly')">周报</div>
         <div class="map-tab" id="rpttab-monthly" onclick="switchReportTab('monthly')">月报</div>
         <div class="map-tab" id="rpttab-bugs" onclick="switchReportTab('bugs')">Bug统计</div>
-        <div class="map-tab" id="rpttab-manpower" onclick="switchReportTab('manpower')" style="display:none">人力</div>
       </div>
-      <div id="rpt-sec-weekly" style="display:block"><div class="loading-spinner">加载中...</div></div>
+      <div id="rpt-sec-manpower" style="display:block"><div class="loading-spinner">加载中...</div></div>
+      <div id="rpt-sec-weekly" style="display:none"><div class="loading-spinner">加载中...</div></div>
       <div id="rpt-sec-monthly" style="display:none"><div class="loading-spinner">加载中...</div></div>
       <div id="rpt-sec-bugs" style="display:none"><div class="loading-spinner">加载中...</div></div>
-      <div id="rpt-sec-manpower" style="display:none"><div class="loading-spinner">加载中...</div></div>
     </div>
 
     <!-- ══════════════════════ VIEW 5 — LOGS ══════════════════════ -->
