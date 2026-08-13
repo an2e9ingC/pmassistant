@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="app-version" content="v2026.08.13-beta11">
+  <meta name="app-version" content="v2026.08.13-beta13">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>PM Assistant · 集成禅道 & GitLab</title>
 <script>
@@ -440,6 +440,7 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
         <div class="dtab active" onclick="switchDTab('info',this)">基本信息</div>
         <div class="dtab" onclick="switchDTab('gantt',this)">甘特图</div>
         <div class="dtab" id="dt-pma-tasks" onclick="switchDTab('pma-tasks',this)">任务详情</div>
+        <div class="dtab" onclick="switchDTab('bugs',this)">Bug列表</div>
         <div class="dtab" onclick="switchDTab('docs',this)">项目文档</div>
         <div class="dtab" onclick="switchDTab('resources',this)">产品文档</div>
         <div class="dtab" onclick="switchDTab('delivery',this)">交付状态</div>
@@ -472,6 +473,9 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
       </div>
       <div class="dsec" id="dsec-pma-tasks">
         <div id="pma-tasks-content"><div class="empty-state" style="padding:20px">请选择项目</div></div>
+      </div>
+      <div class="dsec" id="dsec-bugs">
+        <div id="proj-bugs-content"><div class="empty-state" style="padding:20px">请选择项目</div></div>
       </div>
       <div class="dsec" id="dsec-docs">
         <div class="section-hd"><div class="section-title">项目文档</div><div style="display:flex;align-items:center;gap:8px;margin-left:auto"><button class="btn btn-sm" onclick="importTemplateDocs()" style="font-size:11px;padding:4px 12px;color:var(--accent);border-color:var(--accent)">📋 导入模板文档</button><button class="btn btn-sm" onclick="addCustomDoc()" style="font-size:11px;padding:4px 12px;background:var(--accent);color:#fff;border-color:var(--accent)">+ 新增文档</button><a id="proj-docs-template-link" href="javascript:void(0)" style="font-size:11px;color:var(--accent);text-decoration:none">模板详情 →</a></div></div>
@@ -707,7 +711,7 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
         <div style="background:var(--accent-lt);border:1px solid var(--accent);border-radius:var(--r-lg);padding:12px 16px">
           <div style="font-size:13px;font-weight:600;color:var(--accent);margin-bottom:6px">💡 模糊搜索</div>
-          <div style="font-size:10.5px;color:var(--muted);margin-bottom:8px">输入任一关键字，全局匹配项目编号/名称、产品编号/名称、客户名称（OR 逻辑）</div>
+          <div style="font-size:10.5px;color:var(--muted);margin-bottom:8px">输入任一关键字，匹配项目编号/名称、产品编号/名称、客户名称，以及 Bug 标题/编号、任务标题/编号（OR 逻辑）</div>
           <div class="search-wrap" style="width:100%">
             <svg class="search-ico" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>
             <input class="search-inp" id="topo-fuzzy" placeholder="输入关键字..." oninput="onFuzzySearch()" style="font-size:13px;width:100%">
@@ -724,7 +728,17 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
           </div>
         </div>
       </div>
-      <div class="card" style="padding:0"><div id="topo-table"></div></div>
+      <div class="card" style="padding:0">
+        <div id="topo-table"></div>
+        <div id="topo-bug-section" style="display:none;border-top:1px solid var(--border)">
+          <div class="section-hd" style="padding:10px 16px"><div class="section-title">Bug 结果</div></div>
+          <div id="topo-bug-table"></div>
+        </div>
+        <div id="topo-task-section" style="display:none;border-top:1px solid var(--border)">
+          <div class="section-hd" style="padding:10px 16px"><div class="section-title">任务结果</div></div>
+          <div id="topo-task-table"></div>
+        </div>
+      </div>
     </div>
 
     <!-- ══════════════════════ VIEW — GITLAB RELEASES ══════════════════════ -->

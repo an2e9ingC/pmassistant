@@ -2091,6 +2091,13 @@ function switchDTab(id, el) {
       loadViewScript('/js/tasks.js?v=250630', function() { initProjectTasks(_comboCurCode, projName); });
     }
   }
+  if (id === 'bugs' && _comboCurCode) {
+    if (typeof loadProjectBugs === 'function') {
+      loadProjectBugs(_comboCurCode);
+    } else if (typeof loadViewScript === 'function') {
+      loadViewScript('/js/bugs.js?v=' + APP_VERSION, function() { loadProjectBugs(_comboCurCode); });
+    }
+  }
   // Update hash: user clicks push, initial load skip (history is handled by loadProjectDetail)
   if (_comboCurCode && typeof buildHash === 'function' && el) {
     history.pushState({ view: 'detail', params: [String(_comboCurCode), id] }, '', buildHash('detail', String(_comboCurCode), id));
