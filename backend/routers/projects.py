@@ -328,14 +328,14 @@ async def sync_stage_name_to_zentao(
 
 
 @router.get("/{identifier}/documents", response_model=dict)
-def get_documents(
+async def get_documents(
     identifier: str,
     include_removed: bool = Query(False),
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
     project = resolve_project(db, identifier)
-    docs = project_service.get_project_documents(db, project.id, include_removed=include_removed)
+    docs = await project_service.get_project_documents(db, project.id, include_removed=include_removed)
     return {"code": 0, "data": docs, "message": "ok"}
 
 
@@ -344,7 +344,7 @@ class DocSyncBody(BaseModel):
 
 
 @router.post("/{identifier}/documents/sync", response_model=dict)
-def sync_documents(
+async def sync_documents(
     identifier: str,
     body: DocSyncBody,
     db: Session = Depends(get_db),
@@ -387,7 +387,7 @@ def sync_documents(
                   f"project={project.code} 强制恢复 {len(restored_names)} 个文档: {', '.join(restored_names)}",
                   AUDIT_CAT_PROJECT, "medium")
 
-    docs = project_service.get_project_documents(db, project.id)
+    docs = await project_service.get_project_documents(db, project.id)
     return {"code": 0, "data": docs, "message": f"同步完成，强制恢复 {force_count} 个文档"}
 
 

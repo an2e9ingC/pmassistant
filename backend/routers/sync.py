@@ -115,7 +115,7 @@ async def trigger_single_sync(source: str, db: Session = Depends(get_db), user: 
                 total_matched += r.get("total_matched", 0)
             # Scan project documents
             for proj in db.query(CachedProject).all():
-                r = check_project_docs(db, proj.id)
+                r = await check_project_docs(db, proj.id)
                 total_scanned += r.get("scanned", 0)
                 total_submitted += r.get("auto_submitted", 0)
                 total_reverted += r.get("reverted", 0)
