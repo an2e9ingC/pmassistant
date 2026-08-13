@@ -1538,6 +1538,11 @@ function _bwlCheckOverPct() {
   var sb = document.querySelector('.dialog-actions .btn-primary'); if(sb) sb.disabled = overflow;
 }
 
+function _bwlCloseConfirm() {
+  var d = document.querySelector('.bwl-submit-confirm-overlay');
+  if (d) d.remove();
+}
+
 async function _submitBatchBugWorklog(bugId) {
   var rows = document.querySelectorAll('#bwl-rows .bwl-row'); var entries = []; var maxP=0; var hasErr=false;
   rows.forEach(function(r) {
@@ -1558,14 +1563,15 @@ async function _submitBatchBugWorklog(bugId) {
     openDialog('确认提交工时',
       '<div style="font-size:13px;margin-bottom:8px">进度 <b>100%</b>，Bug将自动标记为<b>已解决</b>。</div>' +
       '<div style="font-size:11px;color:var(--muted)">确认后将保存 ' + entries.length + ' 条工时记录。</div>',
-      [{text:'取消'},{text:'确认',cls:'btn-primary',onclick:async function(){
+      [{text:'取消', onclick:'_bwlCloseConfirm()'},{text:'确认',cls:'btn-primary',onclick:async function(){
+        var d = document.querySelector('.bwl-submit-confirm-overlay'); if (d) d.remove();
         closeSharedDialog();
         await API.post('/bugs/'+bugId+'/worklogs/batch',{entries:entries});
         if(maxP>=100) await API.put('/bugs/'+bugId,{progress:100,status:'resolved'});
         showToast('已记录 '+entries.length+' 条工时','success');
         _refreshBugDetailContent(bugId);
         EventBus.emit('worklog:saved',{bugId:bugId});
-      }}],{hideClose:true,keepExisting:true});
+      }}],{hideClose:true,keepExisting:true,overlayClass:'bwl-submit-confirm-overlay'});
     return;
   }
 

@@ -525,7 +525,7 @@ def get_calendar(
             "hours": bw.hours,
             "percentage": bw.percentage,
             "calculated_hours": bw.calculated_hours,
-            "progress": 0,
+            "progress": bug.progress if bug else 0,
             "created_at": to_local_str(bw.created_at) if bw.created_at else '',
             "project_id": bug.project_id if bug else None,
             "project_code": getattr(proj_map.get(bug.project_id), 'code', '') if bug and bug.project_id else '',

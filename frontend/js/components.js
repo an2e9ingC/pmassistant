@@ -536,9 +536,9 @@ function openDialog(title, bodyHtml, buttons, opts) {
 
   var btnHtml = '';
   if (buttons && buttons.length) {
-    btnHtml = '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">' +
+    btnHtml = '<div class="dialog-actions" style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">' +
       buttons.map(function(b) {
-        return '<button class="btn ' + (b.cls || '') + '" onclick="' + b.onclick + '">' + b.text + '</button>';
+        return '<button class="btn ' + (b.cls || '') + '">' + b.text + '</button>';
       }).join('') +
     '</div>';
   }
@@ -559,9 +559,23 @@ function openDialog(title, bodyHtml, buttons, opts) {
     '</div></div>';
   document.body.insertAdjacentHTML('beforeend', html);
 
-  // Auto-focus: prefer "取消" button, otherwise first focusable element
-  var overlay = document.querySelector('.' + overlayClass);
+  // Attach button click handlers + auto-focus.
+  // Use the LAST overlay with overlayClass: when keepExisting stacks a second
+  // dialog, the newly inserted one is last in document order.
+  var overlays = document.querySelectorAll('.' + overlayClass);
+  var overlay = overlays.length ? overlays[overlays.length - 1] : null;
   if (overlay) {
+    if (buttons && buttons.length) {
+      overlay.querySelectorAll('.dialog-actions .btn').forEach(function(btn, i) {
+        var b = buttons[i];
+        if (!b || b.onclick == null) return;
+        if (typeof b.onclick === 'function') {
+          btn.addEventListener('click', b.onclick);
+        } else if (typeof b.onclick === 'string' && b.onclick.trim()) {
+          btn.setAttribute('onclick', b.onclick);
+        }
+      });
+    }
     setTimeout(function() {
       // Prefer "取消" button so Enter doesn't accidentally confirm
       var cancelBtn = overlay.querySelector('.note-dialog .btn');

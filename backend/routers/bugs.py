@@ -285,11 +285,14 @@ def create_worklog(bug_id: int, body: WorklogCreate, db: Session = Depends(get_d
 
 @router.post("/{bug_id}/worklogs/batch", response_model=dict)
 def create_worklog_batch(bug_id: int, body: WorklogBatchCreate, db: Session = Depends(get_db), user=Depends(get_current_user)):
-    created = bug_service.create_worklog_batch(
-        db, bug_id,
-        [e.model_dump() for e in body.entries],
-        user.id,
-    )
+    try:
+        created = bug_service.create_worklog_batch(
+            db, bug_id,
+            [e.model_dump() for e in body.entries],
+            user.id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     log_audit(db, user, "bug_worklog_add", f"Bug #{bug_id} 批量记录 {len(created)} 条工时", AUDIT_CAT_BUG, "low")
     return {"code": 0, "data": created, "message": f"已创建 {len(created)} 条工时记录"}
 

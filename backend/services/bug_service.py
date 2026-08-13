@@ -254,6 +254,8 @@ def get_worklogs(db, bug_id):
     users = {u.id: (u.display_name or u.username) for u in db.query(LocalUser).filter(LocalUser.id.in_(uids)).all()}
     return [{"id": w.id, "bug_id": w.bug_id, "user_id": w.user_id,
              "username": users.get(w.user_id, "?"), "hours": w.hours,
+             "percentage": w.percentage,
+             "calculated_hours": w.calculated_hours,
              "date": str(w.date) if w.date else None,
              "description": w.description,
              "created_at": to_local_str(w.created_at) if w.created_at else None}
@@ -270,6 +272,44 @@ def create_worklog(db, data, user_id):
     db.add(w); db.commit()
     _recalc_bug_hours(db, data["bug_id"])
     return _worklog_dict(w, db)
+
+def create_worklog_batch(db, bug_id, entries, user_id):
+    """Batch-create multiple worklog entries for the same bug."""
+    from collections import defaultdict
+    from backend.services.worklog_service import _parse_date, _validate_percentage_not_exceeded
+
+    # Pre-validate: group entries by date and check cumulative percentage
+    date_new_pcts = defaultdict(float)
+    for entry in entries:
+        d = _parse_date(entry.get("date")) or date.today()
+        date_new_pcts[d] += float(entry.get("percentage", 0) or 0)
+    for d, total_new_pct in date_new_pcts.items():
+        _validate_percentage_not_exceeded(db, user_id, d, total_new_pct)
+
+    created = []
+    max_progress = None
+    for entry in entries:
+        data = {
+            "bug_id": bug_id,
+            "percentage": entry.get("percentage", 0),
+            "date": entry.get("date"),
+            "description": entry.get("description"),
+        }
+        wl = create_worklog(db, data, user_id)
+        created.append(wl)
+        progress = entry.get("progress")
+        if progress is not None:
+            max_progress = max(max_progress or 0, int(progress))
+
+    # Only-up-not-down: bump bug progress to the highest entry progress
+    if max_progress is not None:
+        bug = db.query(PmaBug).filter(PmaBug.id == bug_id).first()
+        if bug:
+            new_progress = max(bug.progress or 0, max_progress)
+            if new_progress > (bug.progress or 0):
+                bug.progress = new_progress
+                db.commit()
+    return created
 
 def update_worklog(db, wl_id, data):
     from backend.services.worklog_service import _calc_calculated_hours, _parse_date, _validate_percentage_not_exceeded
