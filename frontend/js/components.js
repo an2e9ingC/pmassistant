@@ -2538,14 +2538,23 @@ function _hasImages(s) {
 var _timelineOrder = 'desc';  // 'desc' = 最新到最旧（默认），'asc' = 最旧到最新
 
 function _timelineOrderLabel() {
-  return _timelineOrder === 'desc' ? '最新优先 ↓' : '最早优先 ↑';
+  return _timelineOrder === 'desc' ? '最新优先' : '最早优先';
+}
+
+function _timelineOrderIcon() {
+  return _timelineOrder === 'desc' ? '↓' : '↑';
+}
+
+function _timelineOrderBtn(entityType, entityId, containerId) {
+  return '<button class="btn btn-icon timeline-order-btn" onclick="_toggleTimelineOrder(\'' + entityType + '\', ' + entityId + ', \'' + containerId + '\')" title="' + _timelineOrderLabel() + '">' + _timelineOrderIcon() + '</button>';
 }
 
 function _toggleTimelineOrder(entityType, entityId, containerId) {
   _timelineOrder = _timelineOrder === 'desc' ? 'asc' : 'desc';
-  // 更新所有排序按钮文字
+  // 更新所有排序按钮图标与提示
   document.querySelectorAll('.timeline-order-btn').forEach(function(btn) {
-    btn.textContent = _timelineOrderLabel();
+    btn.textContent = _timelineOrderIcon();
+    btn.title = _timelineOrderLabel();
   });
   renderTimeline(entityType, entityId, containerId);
 }
@@ -2562,6 +2571,12 @@ async function renderTimeline(entityType, entityId, containerId) {
   try {
     var resp = await API.get('/actions?entity_type=' + entityType + '&entity_id=' + entityId);
     var timeline = (resp && resp.data) ? resp.data : (resp || []);
+    // 标题显示数量（类似工时日志）
+    var card = el.closest('.card');
+    var titleEl = card ? card.querySelector('.section-title') : null;
+    if (titleEl) titleEl.textContent = '历史记录 (' + timeline.length + ')';
+    // 导航标签同步数量
+    if (typeof updateDetailToc === 'function') updateDetailToc();
     if (!timeline || !timeline.length) {
       el.innerHTML = '<div style="color:var(--muted);font-size:12px">暂无记录</div>';
       return;
@@ -2601,8 +2616,11 @@ function _renderTimelineAction(item, author, time) {
 
   var changes = item.changes || [];
   var body = '';
-  if (changes.length) {
-    // 系统自动记录的操作：默认只显示简略摘要（字段名列表），展开才看 old→new 详情
+  if (changes.length === 1) {
+    // 单字段修改：直接渲染，避免外层"修改了X"摘要与内层字段标签重复折叠
+    body = '<div style="margin-top:4px">' + _renderTimelineChange(changes[0]) + '</div>';
+  } else if (changes.length > 1) {
+    // 多字段修改：折叠在"修改了 X、Y"摘要下，展开再看各字段 old→new
     var fieldNames = changes.map(function(c) { return _entityFieldLabel(c.field); });
     var summaryText = '修改了 ' + fieldNames.join('、');
     body = '<details style="margin-top:4px">' +
@@ -2622,17 +2640,17 @@ function _renderTimelineChange(c) {
   var label = _entityFieldLabel(c.field);
   var oldVal = c.old_value || '';
   var newVal = c.new_value || '';
-  // 长文本字段（description 等）/含图片 → 默认仅"修改了X"，展开查看完整 diff（含图片，不再单独折叠图片）
+  // 长文本字段（description 等）/含图片 → 折叠为单个"修改了X"，展开直接看完整 diff
   var isLong = (c.field === 'description') || oldVal.length > 80 || newVal.length > 80 || _hasImages(oldVal) || _hasImages(newVal);
   if (isLong) {
     var detailHtml = '<div style="font-size:12px;margin-top:4px;line-height:1.6">' +
       '<div style="margin-bottom:6px"><div style="color:var(--muted);font-size:10px;margin-bottom:2px">修改前</div><div style="color:var(--danger)">' + (oldVal ? renderMarkdown(oldVal) : '<span style="color:var(--muted)">（空）</span>') + '</div></div>' +
       '<div><div style="color:var(--muted);font-size:10px;margin-bottom:2px">修改后</div><div style="color:var(--success)">' + (newVal ? renderMarkdown(newVal) : '<span style="color:var(--muted)">（空）</span>') + '</div></div>' +
     '</div>';
-    return '<div style="margin:4px 0;font-size:12px">' +
-      '<span style="font-weight:500">修改了' + escHtml(label) + '</span>' +
-      '<details style="margin-top:2px"><summary style="cursor:pointer;font-size:10px;color:var(--accent);user-select:none">查看差异</summary>' + detailHtml + '</details>' +
-    '</div>';
+    return '<details style="margin:4px 0;font-size:12px">' +
+      '<summary style="cursor:pointer;color:var(--accent);user-select:none;font-weight:500">修改了 ' + escHtml(label) + '</summary>' +
+      detailHtml +
+    '</details>';
   }
   return '<div style="margin:4px 0;font-size:12px">' +
     '<span style="color:var(--muted)">' + escHtml(label) + ':</span> ' +
@@ -2652,6 +2670,130 @@ function _renderTimelineComment(item, author, time) {
   var body = '<div style="margin-top:4px;font-size:13px;line-height:1.5;color:var(--fg)">' + renderMarkdown(content) + '</div>';
   return head + body;
 }
+
+/* ── Description Inline Edit (button-triggered, read-only display by default) ── */
+
+function _editDescription(entityType, entityId) {
+  var container = document.getElementById((entityType === 'task' ? 'task-desc-' : 'bug-desc-') + entityId);
+  if (!container) return;
+  var currentVal = container.getAttribute('data-desc') || '';
+  var taId = 'desc-ta-' + entityType + '-' + entityId;
+  container.innerHTML =
+    '<textarea class="search-inp ef-input" id="' + taId + '" rows="4" style="width:100%;box-sizing:border-box;font-size:13px;margin-top:1px;resize:vertical">' + escHtml(currentVal) + '</textarea>' +
+    '<div style="display:flex;gap:10px;margin-top:6px">' +
+      '<button class="btn btn-primary" onclick="_saveDescription(\'' + entityType + '\',' + entityId + ')">保存</button>' +
+      '<button class="btn" onclick="_cancelDescription(\'' + entityType + '\',' + entityId + ')">取消</button>' +
+    '</div>';
+  setTimeout(function() { initRichEditor(taId, {height: 300}); }, 100);
+}
+
+async function _saveDescription(entityType, entityId) {
+  var ta = document.getElementById('desc-ta-' + entityType + '-' + entityId);
+  var val = ta ? ta.value : '';
+  var url = (entityType === 'task' ? '/tasks/' : '/bugs/') + entityId;
+  try {
+    await API.put(url, {description: val});
+    showToast('已更新', 'success');
+    _refreshDescriptionDetail(entityType, entityId);
+  } catch(e) { showToast('更新失败: ' + (e.message || ''), 'error'); }
+}
+
+function _cancelDescription(entityType, entityId) {
+  _refreshDescriptionDetail(entityType, entityId);
+}
+
+function _refreshDescriptionDetail(entityType, entityId) {
+  if (entityType === 'task' && typeof _refreshTaskDetailContent === 'function') {
+    _refreshTaskDetailContent(entityId);
+  } else if (entityType === 'bug' && typeof _refreshBugDetailContent === 'function') {
+    _refreshBugDetailContent(entityId);
+  }
+}
+
+/* ── Detail Page Quick-Jump Sidebar (markdown-style TOC) ── */
+
+/**
+ * Build/refresh the fixed right-side quick-jump menu for task/bug detail pages.
+ * Scans section cards (.card.info-glass-card with a .section-title) and creates
+ * anchor links that smooth-scroll to each section. Hides when no detail page.
+ */
+function updateDetailToc() {
+  var toc = document.getElementById('detail-toc');
+  // 只取当前激活视图内的详情页（隐藏视图的旧内容仍在 DOM 中，不能作为跳转依据）
+  var page = document.querySelector('.view.active .task-detail-page, .view.active .bug-detail-page');
+  // 清理所有旧的跳转 id，避免与隐藏视图残留 id 冲突导致 getElementById 取错
+  document.querySelectorAll('.task-detail-page [id^="dtoc-"], .bug-detail-page [id^="dtoc-"]').forEach(function(el) {
+    el.removeAttribute('id');
+  });
+  if (!page) { if (toc) toc.style.display = 'none'; return; }
+  if (!toc) {
+    toc = document.createElement('div');
+    toc.id = 'detail-toc';
+    toc.innerHTML = '<div class="detail-toc-label">跳转</div><div class="detail-toc-links"></div>';
+    document.body.appendChild(toc);
+  }
+  toc.style.display = '';
+  var body = page.querySelector('.task-detail-body, .bug-detail-body') || page;
+  var linksHtml = '';
+  var idx = 0;
+  // 遍历详情主体顶层区块：并排卡片行（基本信息+状态与进度）合并为一个锚点，其余每卡一个
+  Array.prototype.slice.call(body.children).forEach(function(child) {
+    var card = null;
+    if (child.classList && child.classList.contains('card')) {
+      card = child;
+    } else {
+      card = child.querySelector('.card.info-glass-card');
+    }
+    if (!card) return;
+    var titleEl = card.querySelector('.section-title');
+    if (!titleEl) return;
+    var label = titleEl.textContent.trim();
+    if (!label) return;
+    var id = 'dtoc-' + (idx++);
+    child.id = id;
+    linksHtml += '<a class="detail-toc-link" data-toc="' + id + '" title="' + escHtml(label) + '" onclick="event.preventDefault();scrollToDetailSection(\'' + id + '\', this)">' + escHtml(label) + '</a>';
+  });
+  toc.querySelector('.detail-toc-links').innerHTML = linksHtml;
+  updateDetailTocActive();
+}
+
+function scrollToDetailSection(id, link) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  // 立即高亮点击的导航项（不必等滚动事件）
+  var toc = document.getElementById('detail-toc');
+  if (toc) {
+    toc.querySelectorAll('.detail-toc-link').forEach(function(a) { a.classList.toggle('active', a === link); });
+  }
+  // 目标区块闪烁反馈
+  el.classList.remove('toc-flash');
+  void el.offsetWidth; // 重置动画
+  el.classList.add('toc-flash');
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function updateDetailTocActive() {
+  var toc = document.getElementById('detail-toc');
+  if (!toc || toc.style.display === 'none') return;
+  var links = toc.querySelectorAll('.detail-toc-link');
+  if (!links.length) return;
+  var scrollY = window.scrollY + 80;
+  var active = null;
+  // 已滚到底部时高亮最后一项（末项可能无法滚动到顶部）
+  var atBottom = (window.innerHeight + window.scrollY) >= (document.documentElement.scrollHeight - 2);
+  if (atBottom) {
+    active = links[links.length - 1];
+  } else {
+    links.forEach(function(a) {
+      var el = document.getElementById(a.getAttribute('data-toc'));
+      if (el && (el.getBoundingClientRect().top + window.scrollY) <= scrollY) active = a;
+    });
+  }
+  links.forEach(function(a) { a.classList.toggle('active', a === active); });
+}
+document.addEventListener('scroll', function() {
+  if (typeof updateDetailTocActive === 'function') updateDetailTocActive();
+}, true);
 
 /* ── Comment Dialog (rich-text) ── */
 

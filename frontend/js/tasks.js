@@ -11,8 +11,8 @@ EventBus.on('task:before-save', function(e) {
   if (p >= 100 && s !== 'review' && s !== 'done') { e.data.status = window._approvalEnabled ? 'review' : 'done'; e.status = e.data.status; }
   // done + progress drops below 100 → back to in_progress
   if (s === 'done' && p < 100) { e.data.status = 'in_progress'; e.status = 'in_progress'; }
-  // todo + progress > 0 → inconsistent, reset to 0
-  if (s === 'todo' && p > 0) { e.data.progress = 0; e.progress = 0; }
+  // 仍为 todo 却有进度 → 不一致，回退为 0（用 e.status 而非原始 s，避免误覆盖上面已推进的状态）
+  if (e.status === 'todo' && p > 0) { e.data.progress = 0; e.progress = 0; }
   // review + progress drops below 100 → back to in_progress
   if (s === 'review' && p < 100) { e.data.status = 'in_progress'; e.status = 'in_progress'; }
 });
@@ -166,11 +166,39 @@ function _openProgressInlineEdit(field) {
 async function _saveProgressInline(taskId) {
   var val = parseInt(document.getElementById('ef-p-slider').value) || 0;
   try {
-    await API.put('/tasks/' + taskId, {progress: val});
+    // 进度驱动状态自动更新（状态不可手动改，只能由进度自动更新）
+    var statusEl = document.getElementById('task-status-' + taskId);
+    var data = {progress: val};
+    var evt = {data: data, progress: val, status: statusEl ? statusEl.getAttribute('data-status') : 'todo'};
+    EventBus.emit('task:before-save', evt);
+    await API.put('/tasks/' + taskId, data);
     closeSharedDialog();
     showToast('进度已更新: ' + val + '%', 'success');
-    EventBus.emit('task:saved', {taskId: taskId});
+    // 发出事件，由注册的监听刷新页面（原位更新，避免整页重渲染）
+    EventBus.emit('task:field-changed', {taskId: taskId, payload: data});
   } catch(e) { showToast('更新失败: ' + (e.message || ''), 'error'); }
+}
+
+/** 详情页进度/状态原位更新（事件驱动，不整页重渲染） */
+async function _refreshTaskProgressField(taskId) {
+  if (!document.querySelector('.task-detail-page')) return;
+  try {
+    var t = await API.get('/tasks/' + taskId);
+    var progField = document.querySelector('.editable-field[data-field="progress"]');
+    if (progField) {
+      progField.dataset.currentValue = String(t.progress || 0);
+      var wrap = progField.querySelector('.ring-wrap');
+      if (wrap) wrap.outerHTML = renderProgressCircle(t.progress || 0, 30, {label:''});
+    }
+    var statusEl = document.getElementById('task-status-' + taskId);
+    if (statusEl) {
+      statusEl.setAttribute('data-status', t.status || 'todo');
+      var reviewerLine = (t.status === 'review' && t.reviewer_name)
+        ? '<div style="font-size:10px;color:var(--muted);margin-top:2px">审批人: ' + escHtml(t.reviewer_name) + '</div>'
+        : '';
+      statusEl.innerHTML = renderPill(t.status || 'todo') + reviewerLine;
+    }
+  } catch(e) { /* non-critical */ }
 }
 
 function _renderUserSelect(field, currentVal) {
@@ -262,16 +290,13 @@ async function _saveInlineEdit(el) {
     data[fieldName] = newVal;
   }
 
-  // Bidirectional sync: progress <-> status (via EventBus)
-  if (fieldName === 'progress' || fieldName === 'status') {
-    var progressEl = document.querySelector('.editable-field[data-field="progress"]');
-    var statusEl = document.querySelector('.editable-field[data-field="status"]');
-    var progress = fieldName === 'progress' ? parseInt(newVal) || 0 : parseInt(progressEl ? progressEl.dataset.currentValue : 0) || 0;
-    var status = fieldName === 'status' ? newVal : (statusEl ? statusEl.dataset.currentValue : 'todo');
-    var evt = {data: data, progress: progress, status: status};
+  // 进度驱动状态自动更新（状态不可手动改，只能由进度自动更新）
+  if (fieldName === 'progress') {
+    var statusEl = document.getElementById('task-status-' + taskId);
+    var evt = {data: data, progress: parseInt(newVal) || 0, status: statusEl ? statusEl.getAttribute('data-status') : 'todo'};
     EventBus.emit('task:before-save', evt);
     // Confirm dialog when progress reaches 100 in review mode
-    if (evt.progress >= 100 && evt.status === 'review' && fieldName === 'progress') {
+    if (evt.progress >= 100 && evt.status === 'review') {
       var titleEl = document.querySelector('.note-dialog-title');
       var taskTitle = titleEl ? titleEl.textContent : '';
       _pendingConfirmField = { el: field, taskId: taskId, data: data, taskTitle: taskTitle };
@@ -1002,6 +1027,8 @@ async function _refreshTaskDetailContent(taskId) {
     _refreshTaskWorklogs(taskId);
     // Re-load comments
     _loadDetailComments(taskId);
+    // 快捷跳转侧栏（区块 id 可能变化，重建链接）
+    if (typeof updateDetailToc === 'function') updateDetailToc();
     // Re-init image paste for description
     setTimeout(function() {
       var descField = document.querySelector('.editable-field[data-field="description"]');
@@ -1035,13 +1062,18 @@ function initTaskDetail(taskId) {
   viewEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">加载中...</div>';
   document.getElementById('topbar-title').textContent = '任务 #' + taskId;
 
-  API.get('/tasks/' + taskId).then(function(data) {
-    var t = data;
+  // 先加载收藏列表再渲染，确保标题栏星星在直接访问/刷新时状态正确
+  Promise.all([
+    API.get('/tasks/' + taskId),
+    (typeof loadFavorites === 'function' ? loadFavorites() : Promise.resolve())
+  ]).then(function(results) {
+    var t = results[0];
     var html = '<div class="task-detail-page" style="max-width:1200px;margin:0 auto;padding:20px">' +
       '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">' +
+        favStar('task', t.id, {size: '20px'}) +
         '<span style="font-size:15px;font-weight:620">任务 #' + t.id + ' · ' + escHtml(t.title) + '</span>' +
         '<span style="flex:1"></span>' +
-        '<button class="btn btn-sm btn-primary" onclick="gotoView(\'tasks\', {params: [String(' + t.id + '), \'edit\']})">编辑</button>' +
+        iconEdit('gotoView(\'tasks\', {params: [String(' + t.id + '), \'edit\']})', '编辑') +
       '</div>' +
       '<div class="task-detail-body">' +
         _renderTaskDetailBody(t) +
@@ -1053,6 +1085,8 @@ function initTaskDetail(taskId) {
     // Async load worklogs and comments
     _refreshTaskWorklogs(taskId);
     _loadDetailComments(taskId);
+    // 快捷跳转侧栏
+    if (typeof updateDetailToc === 'function') updateDetailToc();
   }).catch(function(e) {
     viewEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--danger)">加载失败: ' + escHtml(e.message || '') + '</div>';
   });
@@ -1250,28 +1284,25 @@ function _renderTaskDetailBody(t) {
     '</style>';
 
   // ── Row 1: 基本信息 + 状态与进度 side by side ──
-  html += '<div style="display:flex;gap:16px">' +
+  html += '<div style="display:flex;gap:16px;align-items:stretch">' +
     // ── 基本信息 ──
-    '<div class="card info-glass-card" style="flex:1;min-width:0;padding:20px">' +
+    '<div class="card info-glass-card" style="flex:1;min-width:0;padding:20px;display:flex;flex-direction:column">' +
       '<div class="section-hd"><span class="section-title">基本信息</span></div>' +
-      '<div class="delivery-kpi" style="grid-template-columns:1fr 1fr">' +
-        // Title
-        '<div class="dkpi"><div class="dkpi-lbl">标题' + (t.template_id ? ' <span style="color:var(--accent);font-size:10px" title="由模板控制">🔒</span>' : '') + '</div>' +
-          (t.template_id
-            ? '<span class="dkpi-val" style="color:var(--muted)">' + escHtml(t.title || '—') + '</span>'
-            : _buildEditableField(t.id, 'title', 'text', '<span class="dkpi-val">' + escHtml(t.title || '—') + '</span>', t.title || '')) + '</div>' +
+      '<div class="delivery-kpi" style="grid-template-columns:1fr 1fr;flex:1;grid-auto-rows:1fr;align-content:start">' +
+        // Product (read-only)
+        '<div class="dkpi"><div class="dkpi-lbl">产品</div><div class="dkpi-val">' + (t.product_code ? '<span class="proj-code-btn" onclick="openProductDetail(\'' + escHtml(t.product_code) + '\')" title="' + escHtml(t.product_name || '') + '">' + escHtml(t.product_code) + '</span> ' + escHtml(t.product_name || '') : escHtml(t.product_name || '-')) + '</div></div>' +
         // Project (read-only)
         '<div class="dkpi"><div class="dkpi-lbl">项目</div><div class="dkpi-val">' + projHtml + '</div></div>' +
-        // Stage (editable unless template task)
-        '<div class="dkpi"><div class="dkpi-lbl">阶段' + (t.template_id ? ' <span style="color:var(--accent);font-size:10px" title="由模板控制">🔒</span>' : '') + '</div>' +
-          (t.template_id
-            ? '<span class="dkpi-val" style="color:var(--muted)">' + stageName + '</span>'
-            : _buildEditableField(t.id, 'stage_name', 'stage-select', '<span class="dkpi-val">' + stageName + '</span>', t.stage_name || t.execution_name || '', {v:'',l:''}, ' data-project-id="' + (t.project_id || '') + '" data-project-code="' + escHtml(t.project_code || '') + '"')) + '</div>' +
         // Reporter (read-only)
         '<div class="dkpi"><div class="dkpi-lbl">创建人</div><div class="dkpi-val">' + escHtml(t.reporter_name || '—') + '</div></div>' +
         // Assignee (editable)
         '<div class="dkpi"><div class="dkpi-lbl">负责人</div>' +
           _buildEditableField(t.id, 'assignee_id', 'user-select', '<span class="dkpi-val">' + _renderAssigneeDisplay(t.assignee_names || [], t.id, {fallback: t.assignee_name || t.assignee_username || '—'}) + '</span>', (t.assignee_ids || []).join(',') || (t.assignee_id || '')) + '</div>' +
+        // Stage (editable unless template task)
+        '<div class="dkpi"><div class="dkpi-lbl">阶段' + (t.template_id ? ' <span style="color:var(--accent);font-size:10px" title="由模板控制">🔒</span>' : '') + '</div>' +
+          (t.template_id
+            ? '<span class="dkpi-val" style="color:var(--muted)">' + stageName + '</span>'
+            : _buildEditableField(t.id, 'stage_name', 'stage-select', '<span class="dkpi-val">' + stageName + '</span>', t.stage_name || t.execution_name || '', {v:'',l:''}, ' data-project-id="' + (t.project_id || '') + '" data-project-code="' + escHtml(t.project_code || '') + '"')) + '</div>' +
         // Per-person progress (team tasks only)
         _renderTeamProgress(t) +
         // Reviewer (editable, only if approval enabled)
@@ -1279,59 +1310,42 @@ function _renderTaskDetailBody(t) {
           '<div class="dkpi"><div class="dkpi-lbl">审批人</div>' +
             _buildEditableField(t.id, 'reviewer_id', 'user-select', '<span class="dkpi-val">' + escHtml(t.reviewer_name || '—') + '</span>', t.reviewer_id || '') + '</div>'
           : '') +
+      '</div>' +
+    '</div>' +
+    // ── 状态与进度 ──
+    '<div class="card info-glass-card" style="flex:1;min-width:0;padding:20px;display:flex;flex-direction:column">' +
+      '<div class="section-hd"><span class="section-title">状态与进度</span></div>' +
+      '<div class="delivery-kpi" style="grid-template-columns:1fr 1fr;flex:1;grid-auto-rows:1fr;align-content:start">' +
+        // Status (read-only — 只能由进度自动更新)
+        '<div class="dkpi"><div class="dkpi-lbl">状态 <span style="font-size:10px;color:var(--accent)">(自动)</span></div><div id="task-status-' + t.id + '" data-status="' + (t.status || 'todo') + '">' + renderPill(t.status || 'todo') +
+          (t.status === 'review' && t.reviewer_name ? '<div style="font-size:10px;color:var(--muted);margin-top:2px">审批人: ' + escHtml(t.reviewer_name) + '</div>' : '') +
+        '</div></div>' +
+        // Priority (editable)
+        '<div class="dkpi"><div class="dkpi-lbl">优先级</div>' + _buildEditableField(t.id, 'priority', 'select', renderPriorityBadge(t.priority || 'medium'), t.priority || 'medium', _PRIORITY_OPTS) + '</div>' +
         // Start date (editable)
         '<div class="dkpi"><div class="dkpi-lbl">计划开始</div>' +
           _buildEditableField(t.id, 'start_date', 'date', '<span class="dkpi-val">' + (t.start_date || '—') + '</span>', t.start_date || '') + '</div>' +
         // Due date (editable)
         '<div class="dkpi"><div class="dkpi-lbl">截止日期</div>' +
           _buildEditableField(t.id, 'due_date', 'date', '<span class="dkpi-val" style="color:' + (overdue ? 'var(--danger)' : '') + '">' + (t.due_date || '—') + '<span style="font-size:11px;color:' + (overdue ? 'var(--danger)' : 'var(--muted)') + '">' + daysInfo + '</span></span>', t.due_date || '') + '</div>' +
-      '</div>' +
-    '</div>' +
-    // ── 状态与进度 ──
-    '<div class="card info-glass-card" style="flex:1;min-width:0;padding:20px">' +
-      '<div class="section-hd"><span class="section-title">状态与进度</span></div>' +
-      '<div class="delivery-kpi" style="grid-template-columns:1fr 1fr">' +
-        // Status: auto-calculated for team tasks
-        ((t.assignee_ids && t.assignee_ids.length > 1)
-          ? '<div class="dkpi"><div class="dkpi-lbl">状态 <span style="font-size:10px;color:var(--accent)">(自动)</span></div><div style="margin-top:6px">' + renderPill(t.status || 'todo') +
-            (t.status === 'review' && t.reviewer_name ? '<div style="font-size:10px;color:var(--muted);margin-top:2px">审批人: ' + escHtml(t.reviewer_name) + '</div>' : '') + '</div></div>'
-          : '<div class="dkpi"><div class="dkpi-lbl">状态</div>' + _buildEditableField(t.id, 'status', 'select',
-            '<div style="margin-top:6px">' + renderPill(t.status || 'todo') +
-            (t.status === 'review' && t.reviewer_name ? '<div style="font-size:10px;color:var(--muted);margin-top:2px">审批人: ' + escHtml(t.reviewer_name) + '</div>' : '') + '</div>',
-            t.status || 'todo', _STATUS_OPTS) + '</div>') +
-        // Priority (editable)
-        '<div class="dkpi"><div class="dkpi-lbl">优先级</div><div style="margin-top:6px">' + _buildEditableField(t.id, 'priority', 'select', renderPriorityBadge(t.priority || 'medium'), t.priority || 'medium', _PRIORITY_OPTS) + '</div></div>' +
         // Progress: auto-calculated for team tasks
         ((t.assignee_ids && t.assignee_ids.length > 1)
-          ? '<div class="dkpi"><div class="dkpi-lbl">团队进度 <span style="font-size:10px;color:var(--accent)">(自动)</span></div><div style="margin-top:6px">' + renderProgressCircle(t.progress || 0, 30, {label:''}) + '</div></div>'
-          : '<div class="dkpi"><div class="dkpi-lbl">进度(%)</div>' + _buildEditableField(t.id, 'progress', 'number', '<div style="margin-top:6px">' + renderProgressCircle(t.progress || 0, 30, {label:''}) + '</div>', String(t.progress || 0), {min:0,max:100,step:5}) + '</div>') +
-        // Estimate hours (editable)
-        '<div class="dkpi"><div class="dkpi-lbl">预估工时(h)</div>' + _buildEditableField(t.id, 'estimate_hours', 'number', '<span class="dkpi-val">' + (t.estimate_hours || 0).toFixed(1) + 'h</span>', String(t.estimate_hours || 0), {min:0,step:0.5}) + '</div>' +
-        // Hours display (read-only)
-        (function() {
-          var orig = t.original_estimate_hours || t.estimate_hours || 0;
-          var est = t.estimate_hours || 0;
-          var cons = t.consumed_hours || 0;
-          var overtime = cons - orig;
-          var h = '<div class="dkpi"><div class="dkpi-lbl">工时</div><div class="dkpi-val">';
-          h += '预估 ' + est.toFixed(1) + 'h / 实际 ' + cons.toFixed(1) + 'h';
-          if (overtime > 0 && t.status !== 'done' && t.status !== 'done') {
-            h += '<br><span style="color:var(--warn);font-size:11px">超时 ' + overtime.toFixed(1) + 'h (原计划 ' + orig.toFixed(1) + 'h)</span>';
-          }
-          h += '</div></div>';
-          return h;
-        })() +
+          ? '<div class="dkpi"><div class="dkpi-lbl">团队进度 <span style="font-size:10px;color:var(--accent)">(自动)</span></div>' + renderProgressCircle(t.progress || 0, 30, {label:''}) + '</div>'
+          : '<div class="dkpi"><div class="dkpi-lbl">进度(%)</div>' + _buildEditableField(t.id, 'progress', 'number', renderProgressCircle(t.progress || 0, 30, {label:''}), String(t.progress || 0), {min:0,max:100,step:5}) + '</div>') +
+        // Hours info (read-only — 实际/预估，与 Bug 页一致)
+        '<div class="dkpi"><div class="dkpi-lbl">工时信息</div><div class="dkpi-val">实际 ' + (t.consumed_hours || 0).toFixed(1) + 'h / 预估 ' + (t.estimate_hours || 0).toFixed(1) + 'h</div></div>' +
       '</div>' +
     '</div>' +
   '</div>';
 
   // ── Section 3: 描述 ──
   html += '<div class="card info-glass-card" style="margin-top:16px;padding:20px">' +
-    '<div class="section-hd"><span class="section-title">描述</span></div>' +
-    _buildEditableField(t.id, 'description', 'textarea',
-      '<div style="font-size:13px;line-height:1.6;min-height:20px">' + (t.description ? renderMarkdown(t.description) : '<span style="color:var(--muted)">暂无描述，点击编辑</span>') + '</div>',
-      t.description || '') +
-    '<div id="ef-desc-img-preview" style="display:none"></div>' +
+    '<div class="section-hd"><span class="section-title">描述</span>' +
+      (_hasTaskEditPerm() ? iconEdit('_editDescription(\'task\', ' + t.id + ')', '编辑描述') : '') +
+    '</div>' +
+    '<div id="task-desc-' + t.id + '" data-desc="' + escHtml(t.description || '') + '" style="font-size:13px;line-height:1.6;min-height:20px">' +
+      (t.description ? renderMarkdown(t.description) : '<span style="color:var(--muted)">暂无描述</span>') +
+    '</div>' +
   '</div>';
 
   // ── Section 4: 产出物 ──
@@ -1356,8 +1370,8 @@ function _renderTaskDetailBody(t) {
     '<div class="section-hd" style="display:flex;align-items:center;justify-content:space-between">' +
       '<span class="section-title">历史记录</span>' +
       '<div style="display:flex;gap:6px;align-items:center">' +
-        '<button class="btn-xs timeline-order-btn" onclick="_toggleTimelineOrder(\'task\', ' + t.id + ', \'task-detail-comments\')">' + _timelineOrderLabel() + '</button>' +
-        '<button class="btn-sm btn-primary" onclick="openCommentDialog(\'task\', ' + t.id + ')">添加评论</button>' +
+        _timelineOrderBtn('task', t.id, 'task-detail-comments') +
+        '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openCommentDialog(\'task\', ' + t.id + ')">添加评论</button>' +
       '</div>' +
     '</div>' +
     '<div class="task-detail-comments" id="task-detail-comments" style="margin-bottom:8px">加载中...</div>' +

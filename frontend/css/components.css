@@ -1045,3 +1045,56 @@ input[type="checkbox"] { accent-color: var(--accent); }
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* ═══════════════════════════════════════════════════
+   DETAIL PAGE QUICK-JUMP SIDEBAR (markdown-style TOC)
+═══════════════════════════════════════════════════ */
+.task-detail-body > div,
+.bug-detail-body > div { scroll-margin-top: 70px; }
+
+#detail-toc {
+  position: fixed;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 500;
+  max-height: 72vh;
+  overflow-y: auto;
+  min-width: 84px;
+  padding: 8px 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.10);
+}
+#detail-toc .detail-toc-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 8px 6px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+#detail-toc .detail-toc-link {
+  display: block;
+  font-size: 12px;
+  color: var(--fg);
+  white-space: nowrap;
+  padding: 6px 10px;
+  margin: 2px 0;
+  border-radius: 5px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.12s, color 0.12s;
+}
+#detail-toc .detail-toc-link:hover { background: var(--accent-lt); color: var(--accent); }
+#detail-toc .detail-toc-link.active { background: var(--accent); color: #fff; }
+/* 点击跳转后目标区块的闪烁反馈 */
+.toc-flash { animation: toc-flash 1.4s ease-out; border-radius: 8px; }
+@keyframes toc-flash {
+  0% { box-shadow: 0 0 0 3px var(--accent), 0 0 22px var(--accent-lt); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@media (max-width: 1500px) { #detail-toc { display: none !important; } }
+

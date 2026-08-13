@@ -199,14 +199,11 @@ function _renderBugDetailBody(b) {
     '</style>';
 
   // ── Row 1: 基本信息 + 状态与进度 side by side ──
-  html += '<div style="display:flex;gap:16px">' +
+  html += '<div style="display:flex;gap:16px;align-items:stretch">' +
     // ── 基本信息 ──
     '<div class="card info-glass-card" style="flex:1;min-width:0;padding:20px">' +
-      '<div class="section-hd"><span class="section-title">' + favStar('bug', b.id, {size: '18px'}) + ' 基本信息</span></div>' +
+      '<div class="section-hd"><span class="section-title">基本信息</span></div>' +
       '<div class="delivery-kpi" style="grid-template-columns:1fr 1fr">' +
-        // Title (editable)
-        '<div class="dkpi"><div class="dkpi-lbl">标题</div>' +
-          _buildBugEditableField(b.id, 'title', 'text', '<span class="bd-val">' + escHtml(b.title || '—') + '</span>', b.title || '') + '</div>' +
         // Product (read-only)
         '<div class="dkpi"><div class="dkpi-lbl">产品</div><div class="bd-val">' + (b.product_code ? '<span class="proj-code-btn" onclick="openProductDetail(\'' + escHtml(b.product_code) + '\')" title="' + escHtml(b.product_name || '') + '">' + escHtml(b.product_code) + '</span> ' + escHtml(b.product_name || '') : escHtml(b.product_name || '-')) + '</div></div>' +
         // Project (read-only)
@@ -219,36 +216,38 @@ function _renderBugDetailBody(b) {
         // Type (editable)
         '<div class="dkpi"><div class="dkpi-lbl">类型</div>' +
           _buildBugEditableField(b.id, 'type', 'select', '<span class="bd-val">' + escHtml(typeLabel) + '</span>', b.type || 'codeerror', _TYPE_OPTS) + '</div>' +
+        // Reporter (read-only)
+        '<div class="dkpi"><div class="dkpi-lbl">创建人</div><div class="bd-val">' + escHtml(b.reporter_name || '-') + '</div></div>' +
         // Assignee (editable)
         '<div class="dkpi"><div class="dkpi-lbl">负责人</div>' +
           _buildBugEditableField(b.id, 'assignee_id', 'user-select', '<span class="bd-val">' + escHtml(b.assignee_name || '未分配') + '</span>', b.assignee_id || '') + '</div>' +
-        // Reporter (read-only)
-        '<div class="dkpi"><div class="dkpi-lbl">创建人</div><div class="bd-val">' + escHtml(b.reporter_name || '-') + '</div></div>' +
-        // CC (editable)
-        '<div class="dkpi" style="grid-column:1/-1"><div class="dkpi-lbl">抄送</div>' +
+      '</div>' +
+      // 抄送（基本信息的一部分，整行展示）
+      '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">' +
+        '<div class="dkpi"><div class="dkpi-lbl">抄送</div>' +
           _buildBugEditableField(b.id, 'cc_user_ids', 'cc-select',
             '<span class="bd-val">' + ((b.cc_user_names && b.cc_user_names.length) ? escHtml(b.cc_user_names.join(', ')) : '无') + '</span>',
-            JSON.stringify(b.cc_user_ids || [])) + '</div>' +
+            JSON.stringify(b.cc_user_ids || [])) +
+        '</div>' +
       '</div>' +
     '</div>' +
     // ── 状态与进度 ──
     '<div class="card info-glass-card" style="flex:1;min-width:0;padding:20px">' +
       '<div class="section-hd"><span class="section-title">状态与进度</span></div>' +
       '<div class="delivery-kpi" style="grid-template-columns:1fr 1fr">' +
-        // Status (read-only — changed via quick action buttons)
-        '<div class="dkpi"><div class="dkpi-lbl">状态</div><div style="margin-top:6px">' + renderPill(b.status || 'open') + '</div></div>' +
+        // Status (read-only — 只能由进度自动更新)
+        '<div class="dkpi"><div class="dkpi-lbl">状态 <span style="font-size:10px;color:var(--accent)">(自动)</span></div><div id="bug-status-' + b.id + '" data-status="' + (b.status || 'open') + '">' + renderPill(b.status || 'open') + '</div></div>' +
         // Severity (editable)
-        '<div class="dkpi"><div class="dkpi-lbl">严重程度</div><div style="margin-top:6px">' + _buildBugEditableField(b.id, 'severity', 'select',
+        '<div class="dkpi"><div class="dkpi-lbl">严重程度</div>' + _buildBugEditableField(b.id, 'severity', 'select',
           '<span style="font-size:13px;color:' + (sevColors[b.severity] || 'var(--muted)') + ';font-weight:500">' + (sevs[b.severity] || b.severity) + '</span>',
-          String(b.severity || 3), _SEV_OPTS) + '</div></div>' +
+          String(b.severity || 3), _SEV_OPTS) + '</div>' +
         // Priority (editable)
-        '<div class="dkpi"><div class="dkpi-lbl">优先级</div><div style="margin-top:6px">' + _buildBugEditableField(b.id, 'priority', 'select', renderPriorityBadge(b.priority || 'medium'), b.priority || 'medium', _PRIO_OPTS) + '</div></div>' +
-        // Estimate (editable)
-        '<div class="dkpi"><div class="dkpi-lbl">预估工时(h)</div>' +
-          _buildBugEditableField(b.id, 'estimate_hours', 'number', '<span class="bd-val">' + (b.estimate_hours || 0).toFixed(1) + 'h</span>', String(b.estimate_hours || 0), {min:0,step:0.5}) + '</div>' +
-        // Progress (editable)
+        '<div class="dkpi"><div class="dkpi-lbl">优先级</div>' + _buildBugEditableField(b.id, 'priority', 'select', renderPriorityBadge(b.priority || 'medium'), b.priority || 'medium', _PRIO_OPTS) + '</div>' +
+        // Hours info (read-only — 实际/预估)
+        '<div class="dkpi"><div class="dkpi-lbl">工时信息</div><div class="bd-val">实际 ' + (b.consumed_hours || 0).toFixed(1) + 'h / 预估 ' + (b.estimate_hours || 0).toFixed(1) + 'h</div></div>' +
+        // Progress (editable — 圆圈显示，点击滑杆编辑，与任务页一致)
         '<div class="dkpi"><div class="dkpi-lbl">进度(%)</div>' +
-          _buildBugEditableField(b.id, 'progress', 'number', '<span class="bd-val">' + (b.progress || 0) + '%</span>', String(b.progress || 0), {min:0,max:100,step:5}) + '</div>' +
+          _buildBugEditableField(b.id, 'progress', 'number', renderProgressCircle(b.progress || 0, 30, {label:''}), String(b.progress || 0), {min:0,max:100,step:5}) + '</div>' +
         // Resolution (editable — bug解决方式)
         '<div class="dkpi"><div class="dkpi-lbl">解决方式</div>' +
           _buildBugEditableField(b.id, 'resolution', 'select',
@@ -260,10 +259,12 @@ function _renderBugDetailBody(b) {
 
   // ── Section 2: 描述 ──
   html += '<div class="card info-glass-card" style="margin-top:16px;padding:20px">' +
-    '<div class="section-hd"><span class="section-title">描述</span></div>' +
-    _buildBugEditableField(b.id, 'description', 'textarea',
-      '<div class="markdown-body" style="font-size:13px;line-height:1.6;min-height:20px">' + (b.description ? renderMarkdown(b.description) : '<span style="color:var(--muted)">暂无描述，点击编辑</span>') + '</div>',
-      b.description || '') +
+    '<div class="section-hd"><span class="section-title">描述</span>' +
+      (_hasBugEditPerm() ? iconEdit('_editDescription(\'bug\', ' + b.id + ')', '编辑描述') : '') +
+    '</div>' +
+    '<div id="bug-desc-' + b.id + '" data-desc="' + escHtml(b.description || '') + '" class="markdown-body" style="font-size:13px;line-height:1.6;min-height:20px">' +
+      (b.description ? renderMarkdown(b.description) : '<span style="color:var(--muted)">暂无描述</span>') +
+    '</div>' +
   '</div>';
 
   // ── Section 3: 工时日志 ──
@@ -278,8 +279,8 @@ function _renderBugDetailBody(b) {
     '<div class="section-hd" style="display:flex;align-items:center;justify-content:space-between">' +
       '<span class="section-title">历史记录</span>' +
       '<div style="display:flex;gap:6px;align-items:center">' +
-        '<button class="btn-xs timeline-order-btn" onclick="_toggleTimelineOrder(\'bug\', ' + b.id + ', \'bug-detail-comments\')">' + _timelineOrderLabel() + '</button>' +
-        '<button class="btn-sm btn-primary" onclick="openCommentDialog(\'bug\', ' + b.id + ')">添加评论</button>' +
+        _timelineOrderBtn('bug', b.id, 'bug-detail-comments') +
+        '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openCommentDialog(\'bug\', ' + b.id + ')">添加评论</button>' +
       '</div>' +
     '</div>' +
     '<div id="bug-detail-comments" style="margin-bottom:8px">加载中...</div>' +
@@ -304,15 +305,22 @@ function initBugDetail(bugId) {
   viewEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">加载中...</div>';
   document.getElementById('topbar-title').textContent = 'Bug #' + bugId;
 
-  API.get('/bugs/' + bugId).then(function(data) {
-    var b = data || {};
+  // 先加载收藏列表再渲染，确保标题栏星星在直接访问/刷新时状态正确
+  Promise.all([
+    API.get('/bugs/' + bugId),
+    (typeof loadFavorites === 'function' ? loadFavorites() : Promise.resolve())
+  ]).then(function(results) {
+    var b = results[0] || {};
     var html = '<div class="bug-detail-page" style="max-width:1200px;margin:0 auto;padding:20px">' +
       '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">' +
+        favStar('bug', b.id, {size: '20px'}) +
         '<span style="font-size:15px;font-weight:620">Bug #' + b.id + ' · ' + escHtml(b.title) + '</span>' +
         '<span style="flex:1"></span>' +
-        '<button class="btn btn-sm btn-primary" onclick="gotoView(\'bugs\', {params: [String(' + b.id + '), \'edit\']})">编辑</button>' +
+        iconEdit('gotoView(\'bugs\', {params: [String(' + b.id + '), \'edit\']})', '编辑') +
       '</div>' +
-      _renderBugDetailBody(b) +
+      '<div class="bug-detail-body">' +
+        _renderBugDetailBody(b) +
+      '</div>' +
     '</div>';
     viewEl.innerHTML = html;
     document.getElementById('topbar-title').textContent = 'Bug #' + b.id + ' · ' + (b.title || '');
@@ -324,6 +332,8 @@ function initBugDetail(bugId) {
     });
     _loadBugComments(bugId);
     _loadBugAnalyses(bugId);
+    // 快捷跳转侧栏
+    if (typeof updateDetailToc === 'function') updateDetailToc();
   }).catch(function(e) {
     viewEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--danger)">加载失败: ' + escHtml(e.message || '') + '</div>';
   });
@@ -420,30 +430,34 @@ async function _submitBugFullPage(bugId) {
   }
 }
 
-async function openBugDetail(bugId) {
-  var data = await API.get('/bugs/' + bugId);
-  var b = data || {};
+function openBugDetail(bugId) {
+  gotoView('bugs', { params: [String(bugId)] });
+}
 
-  var html = '<div class="bug-detail-body" style="max-height:75vh;overflow-y:auto;padding-right:4px">' +
-    _renderBugDetailBody(b) +
-  '</div>';
-
-  var btns = [
-    {text:'关闭',onclick:'closeSharedDialog()'}];
-  openDialog('Bug #' + bugId, html, btns, {maxWidth: '80vw', maxHeight: '90vh'});
-  // Scroll to top when dialog opens
-  setTimeout(function() {
-    var body = document.querySelector('.bug-detail-body');
-    if (body) body.scrollTop = 0;
-  }, 50);
-
-  // Load worklogs + comments + analyses
-  API.get('/bugs/'+bugId+'/worklogs').then(function(logs) {
-    var el = document.getElementById('bv-worklogs');
-    if (el) { el.innerHTML = _renderBugWorklogTable(logs||[], bugId); _initBugWorklogDt(logs||[], bugId); }
-  });
-  _loadBugComments(bugId);
-  _loadBugAnalyses(bugId);
+async function _refreshBugDetailContent(bugId) {
+  // In-place refresh of the full-page bug detail (worklogs/comments/analyses)
+  if (!document.querySelector('.bug-detail-page')) return;
+  try {
+    var freshBug = await API.get('/bugs/' + bugId);
+    var bodyEl = document.querySelector('.bug-detail-body');
+    if (bodyEl) {
+      bodyEl.innerHTML = _renderBugDetailBody(freshBug);
+    }
+    API.get('/bugs/'+bugId+'/worklogs').then(function(logs) {
+      var el = document.getElementById('bv-worklogs');
+      if (el) { el.innerHTML = _renderBugWorklogTable(logs||[], bugId); _initBugWorklogDt(logs||[], bugId); }
+    });
+    _loadBugComments(bugId);
+    _loadBugAnalyses(bugId);
+    // 快捷跳转侧栏（区块 id 可能变化，重建链接）
+    if (typeof updateDetailToc === 'function') updateDetailToc();
+  } catch(e) {
+    // Fallback: still refresh worklogs
+    API.get('/bugs/'+bugId+'/worklogs').then(function(logs) {
+      var el = document.getElementById('bv-worklogs');
+      if (el) { el.innerHTML = _renderBugWorklogTable(logs||[], bugId); _initBugWorklogDt(logs||[], bugId); }
+    });
+  }
 }
 
 function _loadBugComments(bugId) {
@@ -751,7 +765,7 @@ function openBugWorklogDialog(bugId) {
   '</div>';
   
   openDialog('记录工时', html, [
-    {text:'取消',onclick:'closeSharedDialog();openBugDetail('+bugId+')'},
+    {text:'取消',onclick:'closeSharedDialog()'},
     {text:'提交',cls:'btn-primary',onclick:'_submitBatchBugWorklog('+bugId+')'}], {maxWidth: '80vw'});
 
   // Auto-load available percentage for default row
@@ -889,7 +903,7 @@ async function _submitBatchBugWorklog(bugId) {
         await API.post('/bugs/'+bugId+'/worklogs/batch',{entries:entries});
         if(maxP>=100) await API.put('/bugs/'+bugId,{progress:100,status:'resolved'});
         showToast('已记录 '+entries.length+' 条工时','success');
-        openBugDetail(bugId);
+        _refreshBugDetailContent(bugId);
         EventBus.emit('worklog:saved',{bugId:bugId});
       }}],{hideClose:true,keepExisting:true});
     return;
@@ -901,7 +915,7 @@ async function _submitBatchBugWorklog(bugId) {
       API.get('/bugs/'+bugId).then(function(bug) { if(maxP>(bug.progress||0)) API.put('/bugs/'+bugId,{progress:maxP}); });
     }
     showToast('已记录 '+entries.length+' 条工时','success');
-    closeSharedDialog(); openBugDetail(bugId);
+    closeSharedDialog(); _refreshBugDetailContent(bugId);
     EventBus.emit('worklog:saved',{bugId:bugId});
   } catch(e) { showToast('记录失败: '+(e.message||''),'error'); }
 }
@@ -947,7 +961,7 @@ async function _submitBugWorklogEdit(bugId, wlId) {
     await API.put('/bugs/'+bugId+'/worklogs/'+wlId, {hours:h, date:document.getElementById('bwl-date').value, description:document.getElementById('bwl-desc').value.trim()});
     showToast('工时已更新','success');
     closeSharedDialog();
-    openBugDetail(bugId);
+    _refreshBugDetailContent(bugId);
   } catch(e) { showToast('编辑失败: '+(e.message||''),'error'); }
 }
 
@@ -956,7 +970,7 @@ async function deleteBugWorklog(bugId, wlId) {
   try {
     await API.del('/bugs/'+bugId+'/worklogs/'+wlId);
     showToast('已删除','success');
-    openBugDetail(bugId);
+    _refreshBugDetailContent(bugId);
     EventBus.emit('worklog:deleted', {bugId: bugId});
   } catch(e) { showToast('删除失败: '+(e.message||''),'error'); }
 }
@@ -964,21 +978,27 @@ async function deleteBugWorklog(bugId, wlId) {
 /* ── Analysis ── */
 
 function openBugAnalysisDialog(bugId) {
-  var html = '<div><label style="font-size:11px;color:var(--muted)">分析内容（Markdown）</label>' +
-    '<textarea class="search-inp" id="ba-content" rows="5" style="width:100%;box-sizing:border-box;margin-top:4px;resize:vertical"></textarea></div>';
+  var html = '<div>' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">标题 <span style="color:var(--danger)">*</span></label>' +
+      '<input class="search-inp" id="ba-title" placeholder="请输入分析标题" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
+    '<div><label style="font-size:11px;color:var(--muted)">正文（Markdown）<span style="color:var(--danger)">*</span></label>' +
+      '<textarea class="search-inp" id="ba-content" rows="5" style="width:100%;box-sizing:border-box;margin-top:4px;resize:vertical"></textarea></div>' +
+  '</div>';
   openDialog('添加分析记录', html, [
-    {text:'取消',onclick:'closeSharedDialog();openBugDetail('+bugId+')'},
+    {text:'取消',onclick:'closeSharedDialog()'},
     {text:'提交',cls:'btn-primary',onclick:'_submitBugAnalysis('+bugId+')'}], {maxWidth:500});
 }
 
 async function _submitBugAnalysis(bugId) {
-  var c = document.getElementById('ba-content').value.trim();
-  if (!c) { showToast('请输入分析内容','error'); return; }
+  var title = (document.getElementById('ba-title') || {}).value || '';
+  var c = (document.getElementById('ba-content') || {}).value || '';
+  if (!title.trim()) { showToast('请输入分析标题','error'); return; }
+  if (!c.trim()) { showToast('请输入分析内容','error'); return; }
   try {
-    await API.post('/bugs/'+bugId+'/analysis', {bug_id:bugId, content:c});
+    await API.post('/bugs/'+bugId+'/analysis', {bug_id:bugId, title:title.trim(), content:c.trim()});
     showToast('分析已添加','success');
     closeSharedDialog();
-    openBugDetail(bugId);
+    _refreshBugDetailContent(bugId);
   } catch(e) { showToast('提交失败: '+(e.message||''),'error'); }
 }
 
@@ -987,14 +1007,33 @@ function _loadBugAnalyses(bugId) {
     var el = document.getElementById('bv-analyses');
     if (!el) return;
     var analyses = d.analyses || [];
+    // 标题显示数量（类似工时日志）
+    var card = el.closest('.card');
+    var titleEl = card ? card.querySelector('.section-title') : null;
+    if (titleEl) titleEl.textContent = '分析记录 (' + analyses.length + ')';
+    // 导航标签同步数量
+    if (typeof updateDetailToc === 'function') updateDetailToc();
     if (!analyses.length) { el.innerHTML = '<div style="color:var(--muted);font-size:12px">暂无分析记录</div>'; return; }
-    var h = '';
+    // 时间线效果：默认显示标题，正文折叠
+    var h = '<div style="position:relative;padding-left:24px">' +
+      '<div style="position:absolute;left:6px;top:8px;bottom:8px;width:2px;background:var(--border);border-radius:1px"></div>';
     analyses.forEach(function(a) {
       var userHtml = a.username ? ' · ' + escHtml(getDisplayName(a.display_name || a.username)) : '';
-      h += '<div style="border-left:2px solid var(--accent);padding:4px 0 8px 12px;margin-bottom:4px">' +
-        '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">'+(fmtISODateTime(a.created_at)||'?') + userHtml + '</div>' +
-        '<div class="markdown-body" style="font-size:13px;line-height:1.6">'+renderMarkdown(a.content)+'</div></div>';
+      var time = (a.created_at ? fmtISODateTime(a.created_at) : '') || '';
+      var title = (a.title && a.title.trim()) ? a.title.trim() : ('分析 #' + a.id);
+      h += '<div style="position:relative;padding:4px 0 12px 0">' +
+        '<span style="position:absolute;left:-24px;top:4px;width:14px;height:14px;border-radius:50%;background:var(--surface);border:2px solid var(--accent);box-sizing:border-box;z-index:1"></span>' +
+        '<div style="display:flex;align-items:baseline;gap:6px;font-size:12px;flex-wrap:wrap">' +
+          '<span style="font-weight:600;color:var(--fg)">' + escHtml(title) + '</span>' +
+          '<span style="color:var(--muted);font-size:10px">' + userHtml + ' ' + time + '</span>' +
+        '</div>' +
+        '<details style="margin-top:4px">' +
+          '<summary style="cursor:pointer;font-size:11px;color:var(--accent);user-select:none">查看正文</summary>' +
+          '<div class="markdown-body" style="font-size:13px;line-height:1.6;margin-top:4px">' + renderMarkdown(a.content || '') + '</div>' +
+        '</details>' +
+      '</div>';
     });
+    h += '</div>';
     el.innerHTML = h;
   });
 }
@@ -1056,6 +1095,34 @@ function _hasBugEditPerm() {
   return true;
 }
 
+/* ── Bug Progress Edit (slider dialog — same as task page) ── */
+
+function _openBugProgressInlineEdit(field) {
+  var bugId = field.dataset.bugId;
+  var currentPct = parseInt(field.dataset.currentValue) || 0;
+  var html = _renderProgressSlider('bf-p', currentPct);
+  openDialog('修改进度', html, [
+    {text: '取消', onclick: 'closeSharedDialog()'},
+    {text: '保存', cls: 'btn-primary', onclick: '_saveBugProgressInline(' + bugId + ')'}
+  ], {maxWidth: 360});
+}
+
+async function _saveBugProgressInline(bugId) {
+  var val = parseInt(document.getElementById('bf-p-slider').value) || 0;
+  try {
+    // 进度驱动状态自动更新（与行内编辑同一套 bug:before-save 规则）
+    var statusEl = document.getElementById('bug-status-' + bugId);
+    var data = {progress: val};
+    var evt = {data: data, progress: val, status: statusEl ? statusEl.getAttribute('data-status') : 'open'};
+    EventBus.emit('bug:before-save', evt);
+    await API.put('/bugs/' + bugId, data);
+    closeSharedDialog();
+    showToast('进度已更新: ' + val + '%', 'success');
+    EventBus.emit('bug:field-changed', {bugId: bugId, payload: data});
+    _refreshBugDetailContent(bugId);
+  } catch(e) { showToast('更新失败: ' + (e.message || ''), 'error'); }
+}
+
 function _buildBugEditableField(bugId, field, inputType, displayHtml, currentVal, opts, extraAttrs) {
   if (!_hasBugEditPerm()) return '<span>' + displayHtml + '</span>';
   var optsJson = opts ? encodeURIComponent(JSON.stringify(opts)) : '';
@@ -1095,6 +1162,12 @@ function _startBugInlineEdit(el) {
     var sel = field.querySelector('.ef-input');
     if (sel) { setTimeout(function() { sel.focus(); }, 50); }
   } else if (inputType === 'number') {
+    if (fieldName === 'progress') {
+      // 进度编辑统一采用任务页面的滑杆对话框
+      _cancelBugInlineEdit(el);
+      _openBugProgressInlineEdit(field);
+      return;
+    }
     var min = field.dataset.min || '';
     var max = field.dataset.max || '';
     var step = field.dataset.step || '1';
@@ -1284,13 +1357,10 @@ async function _saveBugInlineEdit(el) {
     data[fieldName] = newVal;
   }
 
-  // Bidirectional sync: progress <-> status (via EventBus, same as tasks)
-  if (fieldName === 'progress' || fieldName === 'status') {
-    var progressEl = document.querySelector('.bug-detail-body .editable-field[data-field="progress"]');
-    var statusEl = document.querySelector('.bug-detail-body .editable-field[data-field="status"]');
-    var progress = fieldName === 'progress' ? parseInt(newVal) || 0 : parseInt(progressEl ? progressEl.dataset.currentValue : 0) || 0;
-    var status = fieldName === 'status' ? newVal : (statusEl ? statusEl.dataset.currentValue : 'open');
-    var evt = {data: data, progress: progress, status: status};
+  // 进度驱动状态自动更新（状态不可手动改，只能由进度自动更新）
+  if (fieldName === 'progress') {
+    var statusEl = document.getElementById('bug-status-' + bugId);
+    var evt = {data: data, progress: parseInt(newVal) || 0, status: statusEl ? statusEl.getAttribute('data-status') : 'open'};
     EventBus.emit('bug:before-save', evt);
   }
 
@@ -1301,13 +1371,9 @@ async function _doSaveBugFieldEdit(bugId, data, field) {
   try {
     await API.put('/bugs/' + bugId, data);
     EventBus.emit('bug:field-changed', {bugId: bugId, payload: data});
-    // Refresh the detail view
-    var fresh = await API.get('/bugs/' + bugId);
-    if (fresh) {
-      var bodyEl = document.querySelector('.bug-detail-body');
-      if (bodyEl) bodyEl.innerHTML = _renderBugDetailBody(fresh);
-    }
     showToast('已更新','success');
+    // Refresh the full-page detail (body + worklogs + comments + analyses)
+    _refreshBugDetailContent(bugId);
   } catch(e) { showToast('更新失败: '+(e.message||''),'error'); _cancelBugInlineEdit(field); }
 }
 

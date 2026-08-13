@@ -268,7 +268,8 @@ def delete_worklog(db, wl_id):
 # ═══════════════════════════════════════════ Analysis
 
 def create_analysis(db, data, user_id):
-    a = BugAnalysis(bug_id=data["bug_id"], user_id=user_id, content=data["content"],
+    a = BugAnalysis(bug_id=data["bug_id"], user_id=user_id,
+                    title=data.get("title"), content=data["content"],
                     attachments=data.get("attachments"))
     db.add(a); db.commit()
     return _analysis_dict(a, db)
@@ -276,6 +277,7 @@ def create_analysis(db, data, user_id):
 def update_analysis(db, aid, data):
     a = db.query(BugAnalysis).filter(BugAnalysis.id == aid).first()
     if not a: return None
+    if "title" in data: a.title = data["title"]
     if "content" in data: a.content = data["content"]
     if "attachments" in data: a.attachments = data["attachments"]
     db.commit()
@@ -440,7 +442,7 @@ def _bug_dict(b, db=None):
 
 def _analysis_dict(a, db=None):
     from backend.models.local import LocalUser
-    result = {"id":a.id,"bug_id":a.bug_id,"user_id":a.user_id,"content":a.content,"attachments":a.attachments or [],
+    result = {"id":a.id,"bug_id":a.bug_id,"user_id":a.user_id,"title":a.title,"content":a.content,"attachments":a.attachments or [],
               "created_at":to_local_str(a.created_at) if a.created_at else None}
     if db:
         u = db.query(LocalUser).filter(LocalUser.id == a.user_id).first()
