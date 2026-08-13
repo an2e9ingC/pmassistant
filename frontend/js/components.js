@@ -903,7 +903,8 @@ function previewDocument(url, filename) {
     return res.text();
   }).then(function(data) {
     if (ext === 'md') {
-      body.innerHTML = '<div style="padding:20px;max-width:900px;margin:0 auto;line-height:1.7">' + marked.parse(data) + '</div>';
+      // 原始 .md 文件始终按 Markdown 解析（含图片尺寸后缀预处理），不做 HTML 直通判断
+      body.innerHTML = '<div style="padding:20px;max-width:900px;margin:0 auto;line-height:1.7">' + markdownToHtml(data, true) + '</div>';
     } else {
       body.innerHTML = '<pre style="padding:20px;white-space:pre-wrap;font-size:13px;line-height:1.6">' + escHtml(data || '') + '</pre>';
     }
@@ -2496,6 +2497,9 @@ function _getIntensityStyle(hours) {
 
 /* ── Rich Content Rendering (HTML / Markdown) ── */
 function renderMarkdown(md) {
+  // Delegate to shared markdownToHtml (utils.js): handles HugeRTE HTML passthrough,
+  // legacy markdown parsing, and the ` =WxH` image-size suffix (marked can't parse it).
+  if (typeof markdownToHtml === 'function') return markdownToHtml(md);
   if (!md) return '';
   var s = String(md).trim();
   // Already HTML? Return as-is (HugeRTE stores HTML content)

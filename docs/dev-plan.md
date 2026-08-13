@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-当前版本：v2026.08.13-beta10 | 最后更新：2026-08-13
+当前版本：v2026.08.13-beta11 | 最后更新：2026-08-13
 
 ---
 
@@ -231,6 +231,7 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-08-13 | v2026.08.13-beta11 | fix: 富文本化后 legacy markdown 图片尺寸后缀( =WxH)无法解析 — 新增 mdImgSizeToHtml/markdownToHtml 兼容层，renderMarkdown/initRichEditor/.md文档预览统一接入，编辑保存后自动迁移为 HTML |
 | 2026-08-13 | v2026.08.13-beta10 | feat: Bug独立URL页面+详情页导航/布局/交互优化 — 描述编辑按钮、收藏星标前置、状态进度自动联动、右侧快捷跳转导航、分析记录时间线（含标题） |
 | 2026-08-13 | v2026.08.13-beta9 | fix: 模板路径变更后项目文档未重新匹配 — doc_path变更时同步清空location+重置status |
 | 2026-08-13 | v2026.08.13-beta8 | fix: 文档模板glob与regex混用导致GitLab release匹配失败 + 正则生成器UI + 存量glob迁移脚本 |

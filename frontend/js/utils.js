@@ -491,6 +491,46 @@ async function _uploadNoteImages(content) {
   return content;
 }
 
+/* ── Legacy Markdown Compatibility (image-size suffix ` =WxH`) ── */
+
+/**
+ * Convert legacy markdown image-size syntax `![alt](url =WxH)` to <img> HTML.
+ * Syntax variants handled: ` =200x` (width only), ` =200x300`, ` =200x*` (auto height).
+ * `=` must be preceded by whitespace (`\s+`), matching how ZenTao/PMA write the suffix —
+ * this avoids false positives on URLs with query strings like `image.png?size=200x300`,
+ * where the greedy URL capture would otherwise backtrack and swallow the `=NNNxNNN`.
+ * marked v15 has no support for this suffix and would render the whole `![](...)` literally.
+ */
+function mdImgSizeToHtml(md) {
+  return String(md).replace(/!\[([^\]]*)\]\(([^)\s]+)\s+=(\d{1,4})x(\d{1,4}|[*])?\)/g,
+    function(m, alt, url, w, h) {
+      var html = '<img src="' + escHtml(url) + '" alt="' + escHtml(alt) + '" width="' + w + '"';
+      if (h && h !== '*') html += ' height="' + h + '"';
+      return html + '>';
+    });
+}
+
+/**
+ * Convert content to HTML for display and rich-editor init.
+ * - HugeRTE HTML content (starts with a tag) is passed through unchanged.
+ * - Legacy Markdown is parsed via marked, with image-size suffix support (mdImgSizeToHtml).
+ * @param {boolean} [forceMarkdown] - if true, always parse as Markdown (used for raw .md
+ *   file previews); do not short-circuit content that starts with an HTML tag.
+ */
+function markdownToHtml(md, forceMarkdown) {
+  if (!md) return '';
+  var s = String(md).trim();
+  // Already HTML (HugeRTE stores HTML content) — return as-is, unless forceMarkdown
+  if (!forceMarkdown && /^\s*</.test(s)) return s;
+  // Legacy Markdown content — preprocess image-size suffix, then convert to HTML
+  try {
+    if (typeof marked !== 'undefined' && marked.parse) {
+      return marked.parse(mdImgSizeToHtml(s));
+    }
+  } catch(e) {}
+  return '<pre style="white-space:pre-wrap;font-size:13px">' + escHtml(md) + '</pre>';
+}
+
 /* ===================================================================
    HugeRTE Rich Text Editor — init, content, upload, theme
    =================================================================== */
@@ -592,17 +632,10 @@ function initRichEditor(textareaId, options) {
   // Ensure theme CSS is injected
   _ensureHugerteSkin();
 
-  // Get initial content: already HTML, or Markdown -> convert via marked
+  // Get initial content: already HTML, or Markdown -> convert via markdownToHtml
+  // (handles HugeRTE HTML passthrough + legacy markdown image-size syntax)
   var rawContent = ta.value || '';
-  var htmlContent = rawContent;
-  if (rawContent && typeof marked !== 'undefined' && marked.parse) {
-    try {
-      // Check if already HTML (starts with a tag)
-      if (!/^\s*</.test(rawContent.trim())) {
-        htmlContent = marked.parse(rawContent);
-      }
-    } catch(e) { /* keep raw */ }
-  }
+  var htmlContent = markdownToHtml(rawContent);
 
   var defaultToolbar = 'undo redo | blocks fontsize | bold italic underline strikethrough forecolor backcolor |'
     + ' alignleft aligncenter alignright | bullist numlist | link image table | code removeformat';
