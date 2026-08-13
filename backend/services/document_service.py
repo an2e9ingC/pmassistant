@@ -699,6 +699,10 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
                     pd.doc_path = expected_path
                     pd.base_path = tpl.base_path
                     pd.file_pattern = tpl.file_pattern
+                    # 路径变更，清空旧的匹配结果，等待重新扫描重新匹配
+                    pd.location = None
+                    pd.status = "pending"
+                    pd.completed_at = None
                     changed = True
                 matched_template_ids.add(tpl.id)
             else:
