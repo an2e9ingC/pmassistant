@@ -467,14 +467,14 @@ async def fetch_document(
 
 
 @router.post("/projects/{project_id}/docs/check")
-def check_project_docs_endpoint(
+async def check_project_docs_endpoint(
     project_id: int,
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
     """Manually trigger project document scan for one project."""
     from backend.services.doc_scanner import check_project_docs
-    result = check_project_docs(db, project_id)
+    result = await check_project_docs(db, project_id)
     from backend.routers.logs import log_audit
     from backend.audit_categories import AUDIT_CAT_PROJECT
     log_audit(db, user, "project_doc_scan", f"项目ID={project_id} 匹配数={result.get('total_matched',0)}", AUDIT_CAT_PROJECT, "low")

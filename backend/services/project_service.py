@@ -256,7 +256,7 @@ def _build_deliverables(db: Session, e: CachedExecution) -> list[dict]:
     return deliverables
 
 
-def get_project_documents(db: Session, project_id: int, include_removed: bool = False) -> dict:
+async def get_project_documents(db: Session, project_id: int, include_removed: bool = False) -> dict:
     """Return documents grouped by standard stage, showing all standard stages.
 
     Standard stages with no documents are shown as empty placeholders
@@ -273,7 +273,7 @@ def get_project_documents(db: Session, project_id: int, include_removed: bool = 
 
     # Auto-scan SVN docs — check if files exist at template paths
     from backend.services.doc_scanner import check_project_docs
-    scan_result = check_project_docs(db, project_id)
+    scan_result = await check_project_docs(db, project_id)
     logger.info(f"[project-docs] project_id={project_id} scanned={scan_result.get('scanned',0)} matched={scan_result.get('total_matched',0)} submitted={scan_result.get('auto_submitted',0)}")
 
     # Group existing docs by stage_type (standard stage name)

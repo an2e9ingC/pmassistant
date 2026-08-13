@@ -70,25 +70,46 @@ def _relative_path(base_url: str, full_url: str) -> str:
     return ""
 
 
-def _glob_to_regex(pattern: str) -> str:
-    """Convert a shell-style glob pattern to a regex pattern.
-    *  → .*  (any sequence)
-    ?  → .   (any single char)
+def _to_regex(pattern: str) -> str:
+    """Ensure pattern is a valid regex for matching file/directory names.
+
+    - If already regex (contains \\d, \\w, .*, .+, [, etc. without bare * or ?),
+      return as-is with $ anchor.
+    - If glob wildcards (*, ?) present, convert to regex via re.escape + replacement.
+    - Otherwise, escape literal text.
     """
-    # Escape regex special chars except * and ?
-    escaped = re.escape(pattern)
-    # Unescape and replace glob wildcards
-    escaped = escaped.replace(r"\*", ".*")
-    escaped = escaped.replace(r"\?", ".")
-    return escaped + "$"
+    if not pattern:
+        return pattern
+    has_glob = '*' in pattern or '?' in pattern
+    has_regex_meta = bool(re.search(r'\\[dDwWsS]|[\[\]\(\)\{\}\+\^\$\|]|\.\*|\.\+', pattern))
+    if has_regex_meta and not has_glob:
+        # Already regex — just ensure end anchor
+        return pattern if pattern.endswith('$') else pattern + '$'
+    if has_glob:
+        # Convert glob to regex: re.escape then replace \* → .*, \? → .
+        escaped = re.escape(pattern)
+        escaped = escaped.replace(r"\*", ".*")
+        escaped = escaped.replace(r"\?", ".")
+        return escaped + '$'
+    # Literal text
+    return '^' + re.escape(pattern) + '$'
+
+
+# Backward-compat alias
+_glob_to_regex = _to_regex
 
 
 def _parse_doc_path(doc_path: str) -> tuple:
-    """Parse a doc_path into (base_url, file_pattern).
+    """Parse a doc_path into (base_url, file_regex).
 
-    Example: 'http://host/svn/.../dir/*/sub/*-FINAL.rar'
+    The doc_path is a URL whose path portion may contain regex patterns
+    (e.g. .*, .+, \\d, \\w, [...]).  We find the first "variable" segment,
+    split the URL into a stable base_url (for directory listing) and a
+    file_regex (for matching entries).
+
+    Example: 'http://host/svn/.../dir/PE0454.*/售前部/.*_技术协议\\..*'
       → base_url: 'http://host/svn/.../dir/'
-      → file_pattern: '.*/.*/.*-FINAL\\.rar$' (regex)
+      → file_regex: 'PE0454.*/售前部/.*_技术协议\\..*$'
     """
     if not doc_path:
         return None, None
@@ -96,34 +117,30 @@ def _parse_doc_path(doc_path: str) -> tuple:
     # Normalize common URL typos: http:/ → http:// (but not http:// → http:///)
     doc_path = re.sub(r'^(https?:)/(?!/)', r'\1//', doc_path)
 
-    # Find the position of the first wildcard in the URL path
     parsed = urlparse(doc_path)
     path = parsed.path
-    wildcard_pos = -1
-    for i, c in enumerate(path):
-        if c in ('*', '?'):
-            wildcard_pos = i
-            break
 
-    if wildcard_pos < 0:
-        # No wildcards — the entire path is literal
+    # Find the first variable/wildcard position.
+    # Supports both:
+    #   - legacy glob:  *  ?
+    #   - regex:        .*  .+  \\d  \\w  \\s  [  (
+    m = re.search(r'\.\*|\.\+|\\[dDwWsS]|\[|\(|\*|\?', path)
+    if not m:
+        # No variable patterns — the entire path is literal
         return doc_path, None
 
-    # Split into base (before last / before wildcard) and rest
+    wildcard_pos = m.start()
+
+    # Split: everything before the last "/" before the wildcard is base
     last_slash = path.rfind('/', 0, wildcard_pos)
     if last_slash < 0:
-        # Wildcard at start of path, use root
         base_path = '/'
     else:
         base_path = path[:last_slash + 1]
 
-    # Build base URL
     base_url = f"{parsed.scheme}://{parsed.netloc}{base_path}"
-
-    # Build regex for matching file paths
-    # The wildcard pattern covers the relative path from base
     relative_pattern = path[last_slash + 1:] if last_slash >= 0 else path
-    file_regex = _glob_to_regex(relative_pattern)
+    file_regex = _to_regex(relative_pattern)
 
     logger.debug(f"[_parse_doc_path] doc_path={doc_path[:120]} -> base_url={base_url} file_regex={file_regex}")
     return base_url, file_regex
@@ -280,20 +297,20 @@ def _resolve_pdm_path(template_path: str):  # -> Tuple[Optional[str], int, bool]
         # Split into segments and resolve wildcards level by level
         segments = rel_path.split("\\")
 
-        # Folder-level template: last segment is literally "*" (not "*.pdf" etc.)
-        is_folder = len(segments) > 0 and segments[-1] == "*"
+        # Folder-level template: last segment is literally "*" or ".*" (not "*.pdf" etc.)
+        is_folder = len(segments) > 0 and segments[-1] in ("*", ".*")
         if is_folder:
-            segments = segments[:-1]  # strip the "*" — target is the parent folder
+            segments = segments[:-1]  # strip the wildcard — target is the parent folder
             if not segments:
                 return None, 0, True  # path was just "*" — nothing to resolve
 
         resolved = []
 
         for seg_idx, seg in enumerate(segments):
-            if "*" in seg or "?" in seg:
+            if "*" in seg or "?" in seg or re.search(r'\.\*|\.\+|\\[dDwWsS]|\[|\(', seg):
                 current_dir = "\\".join([base_path] + resolved)
                 entries = _list_directory_pdm(ssh, current_dir)
-                regex_str = _glob_to_regex(seg)
+                regex_str = _to_regex(seg)
                 matched = [e for e in entries if re.match(regex_str, e, re.IGNORECASE)]
                 if matched:
                     resolved.append(matched[0])
@@ -302,7 +319,8 @@ def _resolve_pdm_path(template_path: str):  # -> Tuple[Optional[str], int, bool]
                         return _build_pdm_url(full_path), 1, False
                 else:
                     remaining = "\\".join(segments[len(resolved):])
-                    file_regex = _glob_to_regex(remaining) if ("*" in remaining or "?" in remaining) else re.escape(remaining)
+                    has_wildcard = "*" in remaining or "?" in remaining or bool(re.search(r'\.\*|\.\+|\\[dDwWsS]|\[|\(', remaining))
+                    file_regex = _to_regex(remaining) if has_wildcard else '^' + re.escape(remaining) + '$'
                     matched_files = [e for e in entries if re.match(file_regex, e, re.IGNORECASE)]
                     if matched_files:
                         full_path = "\\".join([base_path] + resolved + [matched_files[0]])
@@ -423,9 +441,9 @@ def get_svn_metadata(url: str) -> tuple:
         return None, None, None
 
 
-def _resolve_wildcard_dir(base_url: str, dir_glob: str) -> list:
+def _resolve_wildcard_dir(base_url: str, dir_pattern: str) -> list:
     """Resolve a single wildcard directory segment to concrete directory names.
-    e.g. dir_glob='PE0454*', base_url='http://.../04_项目文档/' → ['PE0454-LSJ0530-研发-双K7中频板采集板', ...]
+    dir_pattern is already a regex (e.g. 'PE0454.*' or legacy glob 'PE0454*').
     """
     entries = _list_directory_svn(base_url)
     if not entries:
@@ -433,7 +451,7 @@ def _resolve_wildcard_dir(base_url: str, dir_glob: str) -> list:
     if not entries:
         return []
 
-    dir_regex = _glob_to_regex(dir_glob)  # PE0454.*$
+    dir_regex = _to_regex(dir_pattern)
     compiled = re.compile(dir_regex, re.IGNORECASE)
     matches = []
     for entry in entries:
@@ -484,28 +502,29 @@ def scan_doc_path(doc_path: str):
     first_slash = file_regex.find('/')
     if first_slash > 0:
         # Multi-level pattern: first segment is a wildcard directory
-        # Extract the original glob pattern from doc_path for the first segment
+        # Extract the first segment from the original doc_path
         parsed = urlparse(doc_path)
         path = parsed.path
-        wildcard_pos = -1
-        for i, c in enumerate(path):
-            if c in ('*', '?'):
-                wildcard_pos = i
-                break
-        last_slash = path.rfind('/', 0, wildcard_pos)
+        # Find first variable position in path (regex or legacy glob)
+        m = re.search(r'\.\*|\.\+|\\[dDwWsS]|\[|\(|\*|\?', path)
+        if m:
+            wildcard_pos = m.start()
+        else:
+            wildcard_pos = -1
+        last_slash = path.rfind('/', 0, wildcard_pos) if wildcard_pos >= 0 else -1
         relative_pattern = path[last_slash + 1:] if last_slash >= 0 else path
         first_sep = relative_pattern.find('/')
         if first_sep > 0:
-            dir_glob = relative_pattern[:first_sep]      # e.g. PE0454*
-            rest_glob = relative_pattern[first_sep + 1:]  # e.g. 售前部/*_技术协议.*
+            dir_pattern = relative_pattern[:first_sep]      # e.g. PE0454.* or PE0454*
+            rest_pattern = relative_pattern[first_sep + 1:] # e.g. 售前部/.*_技术协议.*
 
             # Resolve wildcard directory to concrete names
-            resolved_dirs = _resolve_wildcard_dir(base_url, dir_glob)
-            logger.warning(f"[scan_doc_path] resolving dir_glob={dir_glob} -> {len(resolved_dirs)} matches: {resolved_dirs[:5]}")
+            resolved_dirs = _resolve_wildcard_dir(base_url, dir_pattern)
+            logger.warning(f"[scan_doc_path] resolving dir_pattern={dir_pattern} -> {len(resolved_dirs)} matches: {resolved_dirs[:5]}")
 
             for dir_name in resolved_dirs:
                 # Build new doc_path with wildcard directory resolved
-                new_doc_path = base_url.rstrip("/") + "/" + dir_name + "/" + rest_glob
+                new_doc_path = base_url.rstrip("/") + "/" + dir_name + "/" + rest_pattern
                 logger.warning(f"[scan_doc_path] resolved dir: {new_doc_path[:120]}")
                 # Recursively scan the resolved path
                 matched_url = scan_doc_path(new_doc_path)
@@ -628,25 +647,14 @@ async def _scan_gitlab_releases_batch(docs: list) -> dict:
 
 
 def _build_tag_regex(tag_pattern: str) -> str:
-    """Convert a tag pattern to a regex for matching GitLab tag names.
+    """Return the tag pattern as-is — it is already a regex.
 
-    - If pattern contains glob wildcards (*, ?), convert to regex via _glob_to_regex
-    - If pattern contains regex metacharacters (\\d, \\w, [, etc.), use as-is
-    - Otherwise, treat as literal text (exact match)
+    Callers use re.match() which anchors at start; users control end-anchoring
+    with $ in their patterns.
     """
     if not tag_pattern:
         return ".*"  # match any
-    if "*" in tag_pattern or "?" in tag_pattern:
-        # Glob pattern: convert to regex
-        return _glob_to_regex(tag_pattern)
-    # Check for regex metacharacters (backslash sequences, brackets, etc.)
-    if re.search(r'[\\\.\[\]\{\}\(\)\+\^\$\|]', tag_pattern):
-        # Already regex-like, use as-is but ensure it matches full tag name
-        if not tag_pattern.endswith("$"):
-            tag_pattern = tag_pattern + "$"
-        return tag_pattern
-    # Literal text: exact match
-    return "^" + re.escape(tag_pattern) + "$"
+    return tag_pattern
 
 
 def _is_gitlab_doc(doc_type: str, template_path: str) -> bool:
@@ -1262,13 +1270,17 @@ async def check_product_docs(db, product_id: int, skip_gitlab: bool = False) -> 
     }
 
 
-def check_project_docs(db, project_id: int) -> dict:
+async def check_project_docs(db, project_id: int) -> dict:
     """Scan all docs for a project and auto-update statuses.
+
+    GitLab-type docs are validated via the GitLab Release API; SVN/NAS and
+    solidworks docs via HTTP/SSH scanning.
 
     Returns:
         dict with scanned_count, auto_submitted_count, and per-doc results.
     """
     from backend.models.document import ProjectDocument
+    from backend.models.zentao import CachedProject
 
     docs = db.query(ProjectDocument).filter(
         ProjectDocument.project_id == project_id
@@ -1283,7 +1295,95 @@ def check_project_docs(db, project_id: int) -> dict:
 
     from datetime import datetime as _dt
 
+    # Separate GitLab docs from SVN/NAS/solidworks docs
+    gitlab_docs = []   # list of (doc, template_path)
+    other_docs = []    # list of doc
+
     for doc in docs:
+        template_path = doc.doc_path or ""
+        check_path = doc.location or template_path
+        if not check_path:
+            continue
+        doc_type = doc.doc_type or ""
+        if not doc_type and template_path:
+            if "svn" in template_path.lower():
+                doc_type = "svn"
+            elif "gitlab" in template_path.lower() or "git" in template_path:
+                doc_type = "gitlab"
+            elif "solidworks" in template_path.lower() or "solidworkspdm" in template_path.lower():
+                doc_type = "solidworks"
+        if _is_gitlab_doc(doc_type, template_path):
+            gitlab_docs.append((doc, template_path))
+        else:
+            other_docs.append(doc)
+
+    # ── GitLab batch scan ──
+    if gitlab_docs:
+        _proj = db.query(CachedProject).filter(CachedProject.id == project_id).first()
+        _pcode = _proj.code if _proj else f'#{project_id}'
+        def _lbl(d):
+            stage = d.stage_type or ''
+            name = d.doc_name or '?'
+            return f"{_pcode}/{stage}/{name}" if stage and stage != '通用' else f"{_pcode}/{name}"
+        gitlab_docs_labeled = [(d, _lbl(d), tp) for d, tp in gitlab_docs]
+        try:
+            gitlab_results = await _scan_gitlab_releases_batch(gitlab_docs_labeled)
+        except Exception as e:
+            logger.warning(f"[doc-scanner] project GitLab batch scan failed: {e}")
+            gitlab_results = {}
+
+        for doc, template_path in gitlab_docs:
+            scanned += 1
+            matched_url = gitlab_results.get(doc.id)
+            exists = matched_url is not None
+
+            # If pattern didn't match but doc has a manually set location,
+            # validate the existing location before reverting
+            if not exists and doc.location and doc.status == "submitted":
+                try:
+                    from backend.services.gitlab_service import validate_release_url
+                    vr = await validate_release_url(doc.location)
+                    if vr.get("valid"):
+                        matched_url = doc.location
+                        exists = True
+                        logger.info(f"[doc-scanner] project doc#{doc.id} '{doc.doc_name}': "
+                                    f"pattern not matched but existing location is valid")
+                except Exception:
+                    pass
+
+            doc_type = doc.doc_type or "gitlab"
+            results.append({
+                "doc_id": doc.id, "doc_name": doc.doc_name,
+                "path": matched_url or template_path, "template_path": template_path,
+                "found": exists, "mismatch": "", "prev_status": doc.status,
+                "doc_type": doc_type,
+            })
+
+            now = _dt.utcnow()
+            if exists and matched_url:
+                total_matched += 1
+                loc_url = unquote(matched_url)
+                if not doc.location or doc.location != loc_url:
+                    doc.location = loc_url
+                    location_filled += 1
+                if doc.status != "submitted":
+                    doc.status = "submitted"
+                    doc.completed_at = now
+                    auto_submitted += 1
+                doc.updated_by = "auto-scanner"
+                doc.updated_at = now
+
+            if not exists and doc.status == "submitted":
+                doc.status = "pending"
+                doc.completed_at = None
+                doc.updated_by = "auto-scanner"
+                doc.updated_at = now
+                reverted += 1
+                logger.warning(f"[doc-scanner] project doc#{doc.id} '{doc.doc_name}' "
+                               f"reverted to pending: GitLab release not found")
+
+    # ── SVN/NAS/solidworks scan (existing logic) ──
+    for doc in other_docs:
         template_path = doc.doc_path or ""
         check_path = doc.location or template_path
         if not check_path:

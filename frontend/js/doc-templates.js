@@ -87,6 +87,124 @@ function _roleSelect(selected) {
   return html;
 }
 
+/* ── Regex Generator (inline panel for template edit dialogs) ── */
+
+// Regex snippets the user can insert into the full path template at the cursor.
+var REGEX_SNIPPETS = [
+  { label: '{code}', value: '{code}', title: '项目/产品代号占位符' },
+  { label: '.*', value: '.*', title: '匹配任意字符（目录/文件名通配）' },
+  { label: '\\d+', value: '\\d+', title: '一个或多个数字' },
+  { label: '\\d{4}', value: '\\d{4}', title: '恰好4个数字' },
+  { label: '\\d{2}', value: '\\d{2}', title: '恰好2个数字' },
+  { label: '\\.', value: '\\.', title: '字面量点号' },
+  { label: '[A-Z]+', value: '[A-Z]+', title: '一个或多个大写字母' },
+  { label: '[0-9]', value: '[0-9]', title: '单个数字' },
+  { label: '$', value: '$', title: '字符串结尾锚定' },
+  { label: '^', value: '^', title: '字符串开头锚定' },
+];
+
+function _renderRegexGenerator(inputId, docType) {
+  var uniq = inputId.replace(/[^a-zA-Z0-9]/g, '_');
+  var snippetBtns = REGEX_SNIPPETS.map(function(s) {
+    return '<button type="button" class="btn btn-xs" style="font-size:11px;padding:2px 8px;font-family:var(--mono);margin:0 4px 4px 0" title="' + escHtml(s.title) + '" onclick="_rgInsertSnippet(\'' + inputId + '\',\'' + s.value.replace(/'/g, "\\'").replace(/\\/g, '\\\\') + '\')">' + escHtml(s.label) + '</button>';
+  }).join('');
+
+  var html = '';
+  html += '<div style="margin-top:6px;padding:10px 12px;background:var(--accent-lt);border:1px solid var(--border);border-radius:6px;font-size:12px">';
+  html += '<div style="font-size:11px;font-weight:600;margin-bottom:6px">🧩 正则生成器</div>';
+
+  // Preview (read-only, reflects the target input value)
+  html += '<div style="margin-bottom:8px">';
+  html += '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:2px">完整路径预览</label>';
+  html += '<code id="rg-preview-' + uniq + '" style="display:block;padding:6px 8px;background:var(--bg);border-radius:4px;font-size:12px;word-break:break-all;min-height:18px"></code>';
+  html += '</div>';
+
+  // Snippets
+  html += '<div style="margin-bottom:8px">';
+  html += '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:2px">快捷插入（点击插入到路径光标位置）</label>';
+  html += '<div style="line-height:1.6">' + snippetBtns + '</div>';
+  html += '</div>';
+
+  // Code placeholder assumption value
+  html += '<div style="margin-bottom:8px">';
+  html += '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:2px">{code} 假设值（测试时替换占位符）</label>';
+  html += '<input class="search-inp" id="rg-codeval-' + uniq + '" placeholder="如 PE0445 / LNS677A-V010" style="width:100%;box-sizing:border-box;font-family:var(--mono);font-size:12px;padding:4px 6px" oninput="_rgTest(\'' + inputId + '\')">';
+  html += '</div>';
+
+  // Test
+  html += '<div style="margin-bottom:4px">';
+  html += '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:2px">快速测试（输入实际完整路径）</label>';
+  html += '<input class="search-inp" id="rg-test-' + uniq + '" placeholder="粘贴实际路径测试匹配..." style="width:100%;box-sizing:border-box;font-family:var(--mono);font-size:12px;padding:4px 6px" oninput="_rgTest(\'' + inputId + '\')">';
+  html += '<span id="rg-test-result-' + uniq + '" style="font-size:11px;margin-top:2px;display:inline-block"></span>';
+  html += '</div>';
+
+  html += '</div>';
+
+  return html;
+}
+
+function _initRegexGenerator(inputId, docType) {
+  _rgSync(inputId);
+}
+
+// Sync the read-only preview from the target input field, then re-run test.
+function _rgSync(inputId) {
+  var uniq = inputId.replace(/[^a-zA-Z0-9]/g, '_');
+  var target = document.getElementById(inputId);
+  var preview = document.getElementById('rg-preview-' + uniq);
+  if (!target) return;
+  if (preview) preview.textContent = target.value || '(空)';
+  _rgTest(inputId);
+}
+
+// Insert a snippet at the cursor position in the target input field.
+function _rgInsertSnippet(inputId, snippet) {
+  var target = document.getElementById(inputId);
+  if (!target) return;
+  var start = target.selectionStart != null ? target.selectionStart : target.value.length;
+  var end = target.selectionEnd != null ? target.selectionEnd : target.value.length;
+  target.value = target.value.substring(0, start) + snippet + target.value.substring(end);
+  target.selectionStart = target.selectionEnd = start + snippet.length;
+  target.focus();
+  _rgSync(inputId);
+}
+
+function _rgTest(inputId) {
+  var uniq = inputId.replace(/[^a-zA-Z0-9]/g, '_');
+  var target = document.getElementById(inputId);
+  var testEl = document.getElementById('rg-test-' + uniq);
+  var resultEl = document.getElementById('rg-test-result-' + uniq);
+  var codevalEl = document.getElementById('rg-codeval-' + uniq);
+  if (!target || !testEl || !resultEl) return;
+  var pattern = target.value || '';
+  var testVal = testEl.value.trim();
+  var codeVal = codevalEl ? codevalEl.value.trim() : '';
+  if (!testVal) { resultEl.textContent = ''; resultEl.style.color = ''; return; }
+  if (!pattern) { resultEl.textContent = '❌ 正则表达式为空'; resultEl.style.color = 'var(--danger)'; return; }
+  // Replace {code} placeholder with the assumed value (regex-escaped)
+  if (codeVal) {
+    pattern = pattern.split('{code}').join(_escapeRegex(codeVal));
+  }
+  try {
+    var re = new RegExp(pattern);
+    if (re.test(testVal)) {
+      resultEl.textContent = '✅ 匹配成功';
+      resultEl.style.color = 'var(--success)';
+    } else {
+      resultEl.textContent = '❌ 不匹配';
+      resultEl.style.color = 'var(--danger)';
+    }
+  } catch(e) {
+    resultEl.textContent = '⚠ 正则语法错误: ' + e.message;
+    resultEl.style.color = 'var(--danger)';
+  }
+}
+
+// Escape regex metacharacters so an assumed code value can be inlined safely.
+function _escapeRegex(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function _onRoleSelectChange() {
   var sel = document.getElementById('dt-role');
   var warnEl = document.getElementById('dt-role-leader-warn');
@@ -451,7 +569,7 @@ function renderTemplatesPage() {
           { key: 'doc_name', title: '文档名称', minWidth: 100, render: function(v) { return '<span style="font-weight:500">'+escHtml(v||'')+'</span>'; } },
           { key: 'responsible_role', title: '责任人', minWidth: 90, width: '80px', render: function(v) { return '<span style="font-size:12px;white-space:nowrap">'+escHtml(v||'—')+'</span>'; } },
           { key: 'doc_type', title: '类型', minWidth: 65, width: '60px', render: function(v) { return '<span style="font-size:11px">'+escHtml(typeLabels[v]||'—')+'</span>'; } },
-          { key: 'path_info', title: '路径', render: function(v, row) { return '<span style="font-size:11px">'+(row.base_path||row.file_pattern?(row.base_path?'<div style="color:var(--muted)">'+escHtml(row.base_path)+'</div>':'')+(row.file_pattern?'<div style="font-family:var(--mono);color:var(--accent)">'+escHtml(row.file_pattern)+'</div>':''):(row.doc_path?'<a href="'+escHtml(row.doc_path)+'" target="_blank" style="color:var(--accent);text-decoration:none">'+escHtml(row.doc_path)+' ↗</a>':'—'))+'</span>'; } },
+          { key: 'path_info', title: '路径', render: function(v, row) { var p = row.doc_path || ''; if (!p && row.base_path) p = (row.base_path + '/' + (row.file_pattern || '')).replace(/([^:])\/{2,}/g, '$1/'); return '<span style="font-size:11px">'+(p?'<span style="font-family:var(--mono);color:var(--accent);word-break:break-all">'+escHtml(p)+'</span>':'—')+'</span>'; } },
           { key: 'description', title: '说明', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(v||'')+'</span>'; } }
         ];
         if (canEdit) cols.push({ key: 'actions', title: '操作', width: (actionColWidth(4) + 20) + 'px', minWidth: actionColWidth(4) + 20, render: function(v, row) {
@@ -681,16 +799,9 @@ function showAddTemplateForm() {
       '</div>' +
     '</div>' +
     '<div style="margin-bottom:10px">' +
-      '<label class="dt-path-label" style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">路径 <span style="color:var(--danger)">*必填</span> &nbsp;<span class="dt-path-hint" style="font-weight:400;font-size:10px">{code} = 项目代号占位符</span></label>' +
-      '<input class="search-inp" id="dt-base-path" placeholder="http://.../项目/{code}/" style="width:100%;box-sizing:border-box;margin-bottom:6px" oninput="_updateProjPathPreview()">' +
-    '</div>' +
-    '<div style="margin-bottom:10px">' +
-      '<label class="dt-file-label" style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名 <span style="color:var(--danger)">*必填</span> &nbsp;<span class="dt-file-hint" style="font-weight:400;font-size:10px">{code} = 项目代号占位符</span></label>' +
-      '<input class="search-inp" id="dt-file-pattern" placeholder="01_{code}_SCH-FINAL.rar" style="width:100%;box-sizing:border-box" oninput="_updateProjPathPreview()">' +
-    '</div>' +
-    '<div style="margin-bottom:10px">' +
-      '<label class="dt-preview-label" style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">最终路径预览 &nbsp;<span style="font-weight:400;font-size:10px">* 替换为项目代号</span></label>' +
-      '<input class="search-inp" id="dt-path-preview" value="" style="width:100%;box-sizing:border-box;color:var(--accent);font-size:11px;font-family:var(--mono)" disabled>' +
+      '<label class="dt-path-label" style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">完整路径 <span style="color:var(--danger)">*必填</span> &nbsp;<span class="dt-path-hint" style="font-weight:400;font-size:10px">{code} = 项目代号占位符</span></label>' +
+      '<input class="search-inp" id="dt-full-path" placeholder="http://.../项目/{code}/文档名.pdf" style="width:100%;box-sizing:border-box" oninput="_rgSync(\'dt-full-path\')">' +
+      _renderRegexGenerator('dt-full-path', 'gitlab') +
     '</div>' +
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer">' +
@@ -703,23 +814,16 @@ function showAddTemplateForm() {
     '</div>',
     [{text: '取消', cls: '', onclick: 'closeSharedDialog()'},
      {text: '确定', cls: 'btn-primary', onclick: 'saveTemplate()'}], {hideClose: true, maxWidth: 780}, 'gitlab');
-  setTimeout(_updateProjPathPreview, 80);
+  setTimeout(function() { _initRegexGenerator('dt-full-path', 'gitlab'); }, 80);
 }
 
 function showEditTemplateForm(id) {
   var docs = _templatesGrouped[_selectedStage] || [];
   var d = docs.find(function(x) { return x.id === id; });
   if (!d) { showToast('未找到该模板数据，请刷新页面', 'error'); return; }
-  // Fallback: if base_path/file_pattern empty but doc_path exists, parse doc_path
-  var bp = d.base_path || '';
-  var fp = d.file_pattern || '';
-  if (!bp && !fp && d.doc_path) {
-    var lastSlash = d.doc_path.lastIndexOf('/');
-    if (lastSlash > 0) {
-      bp = d.doc_path.substring(0, lastSlash + 1);
-      fp = d.doc_path.substring(lastSlash + 1);
-    }
-  }
+  // Full path: prefer doc_path, fallback to base_path + file_pattern
+  var fullPath = d.doc_path || '';
+  if (!fullPath && d.base_path) fullPath = (d.base_path + '/' + (d.file_pattern || '')).replace(/([^:])\/{2,}/g, '$1/');
   _openDocDialog('编辑文档模板',
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名称</label>' +
@@ -738,16 +842,9 @@ function showEditTemplateForm(id) {
       '</div>' +
     '</div>' +
     '<div style="margin-bottom:10px">' +
-      '<label class="dt-path-label" style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">路径 <span style="color:var(--danger)">*必填</span> &nbsp;<span class="dt-path-hint" style="font-weight:400;font-size:10px">{code} = 项目代号占位符</span></label>' +
-      '<input class="search-inp" id="dt-base-path" value="' + escHtml(bp) + '" placeholder="http://.../项目/{code}/" style="width:100%;box-sizing:border-box;margin-bottom:6px" oninput="_updateProjPathPreview()">' +
-    '</div>' +
-    '<div style="margin-bottom:10px">' +
-      '<label class="dt-file-label" style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名 <span style="color:var(--danger)">*必填</span> &nbsp;<span class="dt-file-hint" style="font-weight:400;font-size:10px">{code} = 项目代号占位符</span></label>' +
-      '<input class="search-inp" id="dt-file-pattern" value="' + escHtml(fp) + '" placeholder="01_{code}_SCH-FINAL.rar" style="width:100%;box-sizing:border-box" oninput="_updateProjPathPreview()">' +
-    '</div>' +
-    '<div style="margin-bottom:10px">' +
-      '<label class="dt-preview-label" style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">最终路径预览 &nbsp;<span style="font-weight:400;font-size:10px">* 替换为项目代号</span></label>' +
-      '<input class="search-inp" id="dt-path-preview" value="" style="width:100%;box-sizing:border-box;color:var(--accent);font-size:11px;font-family:var(--mono)" disabled>' +
+      '<label class="dt-path-label" style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">完整路径 <span style="color:var(--danger)">*必填</span> &nbsp;<span class="dt-path-hint" style="font-weight:400;font-size:10px">{code} = 项目代号占位符</span></label>' +
+      '<input class="search-inp" id="dt-full-path" value="' + escHtml(fullPath) + '" placeholder="http://.../项目/{code}/文档名.pdf" style="width:100%;box-sizing:border-box" oninput="_rgSync(\'dt-full-path\')">' +
+      _renderRegexGenerator('dt-full-path', 'gitlab') +
     '</div>' +
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer">' +
@@ -760,7 +857,7 @@ function showEditTemplateForm(id) {
     '</div>',
     [{text: '取消', cls: '', onclick: 'closeSharedDialog()'},
      {text: '确定', cls: 'btn-primary', onclick: 'saveTemplate(' + id + ')'}], {hideClose: true, maxWidth: 780}, d.doc_type || 'gitlab');
-  setTimeout(_updateProjPathPreview, 80);
+  setTimeout(function() { _initRegexGenerator('dt-full-path', 'gitlab'); }, 80);
 }
 
 function saveTemplate(id) {
@@ -768,8 +865,7 @@ function saveTemplate(id) {
   var sortEl = document.getElementById('dt-sort');
   var roleEl = document.getElementById('dt-role');
   var descEl = document.getElementById('dt-desc');
-  var basePathEl = document.getElementById('dt-base-path');
-  var patternEl = document.getElementById('dt-file-pattern');
+  var fullPathEl = document.getElementById('dt-full-path');
   if (!nameEl || !sortEl) { showToast('表单数据异常，请重新打开', 'error'); return; }
 
   var name = nameEl.value.trim();
@@ -777,13 +873,15 @@ function saveTemplate(id) {
   var sort = sortVal !== '' ? parseInt(sortVal) : 0;
   var role = roleEl ? roleEl.value.trim() : '';
   var desc = descEl ? descEl.value.trim() : '';
-  var basePath = basePathEl ? basePathEl.value.trim() : '';
-  var filePattern = patternEl ? patternEl.value.trim() : '';
-  var path = (basePath + '/' + filePattern).replace(/([^:])\/{2,}/g, '$1/');
+  var path = fullPathEl ? fullPathEl.value.trim() : '';
+  // Split into base_path (last / inclusive) + file_pattern (last segment)
+  var lastSlash = path.lastIndexOf('/');
+  var basePath = lastSlash > 0 ? path.substring(0, lastSlash + 1) : '';
+  var filePattern = lastSlash >= 0 ? path.substring(lastSlash + 1) : path;
   var typeEl = document.getElementById('dt-doctype');
   var docType = typeEl ? typeEl.value : '';
   if (!name) { showToast('请输入文档名称', 'error'); return; }
-  if (!basePath && !filePattern) { showToast('请输入路径或文档名', 'error'); return; }
+  if (!path) { showToast('请输入完整路径', 'error'); return; }
   if (!docType) { showToast('请选择文档类型', 'error'); return; }
   if (!role) { showToast('请选择责任人', 'error'); return; }
   if (isNaN(sort) || sort < 0) sort = 0;
@@ -1917,7 +2015,7 @@ function _applyDocTypePlaceholder(dialog, type) {
   if (pathLabel) {
     pathLabel.innerHTML = isSolidworks
       ? 'PDM 目录路径 <span style="color:var(--danger)">*必填</span>'
-      : '路径 <span style="color:var(--danger)">*必填</span>';
+      : '完整路径 <span style="color:var(--danger)">*必填</span>';
   }
   if (pathHint) {
     pathHint.textContent = isSolidworks
@@ -1925,29 +2023,7 @@ function _applyDocTypePlaceholder(dialog, type) {
       : '{code} = 项目代号占位符';
   }
 
-  // Update file pattern label and hint
-  var fileLabel = dialog.querySelector('.dt-file-label');
-  var fileHint = dialog.querySelector('.dt-file-hint');
-  if (fileLabel) {
-    fileLabel.innerHTML = isSolidworks
-      ? '文件名模式 <span style="color:var(--danger)">*必填</span>'
-      : '文档名 <span style="color:var(--danger)">*必填</span>';
-  }
-  if (fileHint) {
-    fileHint.textContent = isSolidworks
-      ? '{code} = 项目代号, *.pdf = 匹配所有PDF'
-      : '{code} = 项目代号占位符';
-  }
-
-  // Update preview label
-  var previewLabel = dialog.querySelector('.dt-preview-label');
-  if (previewLabel) {
-    previewLabel.innerHTML = isSolidworks
-      ? 'PDM 完整路径预览 &nbsp;<span style="font-weight:400;font-size:10px">* 替换为项目代号</span>'
-      : '最终路径预览 &nbsp;<span style="font-weight:400;font-size:10px">* 替换为项目代号</span>';
-  }
-
-  // Update placeholders
+  // Update placeholder on the single full-path input
   var placeholders = {
     gitlab: 'GitLab 发布链接，如 http://192.168.0.128/.../-/releases/...',
     svn: 'SVN 地址，如 http://192.168.0.124:8443/svn/...',
@@ -1955,13 +2031,9 @@ function _applyDocTypePlaceholder(dialog, type) {
     solidworks: 'http://192.168.0.191/SOLIDWORKSPDM/LM-PDM/1.结构项目/{code}*/3.项目输出/',
     pma: 'PMA 系统内部链接'
   };
-  var pathInput = dialog.querySelector('input[id*="base-path"]');
+  var pathInput = dialog.querySelector('input[id*="full-path"]');
   if (pathInput && placeholders[type]) {
     pathInput.placeholder = placeholders[type];
-  }
-  var fileInput = dialog.querySelector('input[id*="file-pattern"]');
-  if (fileInput) {
-    fileInput.placeholder = isSolidworks ? '*.pdf' : '01_{code}_SCH-FINAL.rar';
   }
 }
 var _dtBreadcrumbIds = [];       // cached breadcrumb node IDs for click nav
@@ -2226,28 +2298,6 @@ function _selectProductStage(stage) {
 
 /* ── Product Template CRUD (direct API, no pending queue) ── */
 
-function _updateProjPathPreview() {
-  var baseEl = document.getElementById('dt-base-path');
-  var patEl = document.getElementById('dt-file-pattern');
-  var previewEl = document.getElementById('dt-path-preview');
-  if (!previewEl) return;
-  var base = baseEl ? baseEl.value.trim() : '';
-  var pat = patEl ? patEl.value.trim() : '';
-  if (!base && !pat) { previewEl.value = ''; return; }
-  previewEl.value = (base + '/' + pat).replace(/([^:])\/{2,}/g, '$1/');
-}
-
-function _updatePathPreview() {
-  var baseEl = document.getElementById('ptf-base-path');
-  var patEl = document.getElementById('ptf-file-pattern');
-  var previewEl = document.getElementById('ptf-path-preview');
-  if (!previewEl) return;
-  var base = baseEl ? baseEl.value.trim() : '';
-  var pat = patEl ? patEl.value.trim() : '';
-  if (!base && !pat) { previewEl.value = ''; return; }
-  previewEl.value = (base + '/' + pat).replace(/([^:])\/{2,}/g, '$1/');
-}
-
 function showAddProductTemplateForm() {
   var selNode = _findNodeById(_selectedNodeId);
   var name = selNode ? selNode.name : '';
@@ -2276,16 +2326,9 @@ function showAddProductTemplateForm() {
       '</div>' +
     '</div>' +
     '<div style="margin-bottom:10px">' +
-      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">路径 <span style="color:var(--danger)">*必填</span> &nbsp;<span style="font-weight:400;font-size:10px">{code} = 产品代号占位符</span></label>' +
-      '<input class="search-inp" id="ptf-base-path" placeholder="http://.../信号板/{code}/" style="width:100%;box-sizing:border-box;margin-bottom:8px" oninput="_updatePathPreview()">' +
-    '</div>' +
-    '<div style="margin-bottom:10px">' +
-      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名 <span style="color:var(--danger)">*必填</span> &nbsp;<span style="font-weight:400;font-size:10px">{code} = 产品代号占位符</span></label>' +
-      '<input class="search-inp" id="ptf-file-pattern" placeholder="01_{code}_SCH-FINAL.rar" style="width:100%;box-sizing:border-box" oninput="_updatePathPreview()">' +
-    '</div>' +
-    '<div style="margin-bottom:10px">' +
-      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">最终路径预览 &nbsp;<span style="font-weight:400;font-size:10px">* 替换为产品代号</span></label>' +
-      '<input class="search-inp" id="ptf-path-preview" value="" style="width:100%;box-sizing:border-box;color:var(--accent);font-size:11px;font-family:var(--mono)" disabled>' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">完整路径 <span style="color:var(--danger)">*必填</span> &nbsp;<span style="font-weight:400;font-size:10px">{code} = 产品代号占位符</span></label>' +
+      '<input class="search-inp" id="ptf-full-path" placeholder="http://.../信号板/{code}/文档名.pdf" style="width:100%;box-sizing:border-box" oninput="_rgSync(\'ptf-full-path\')">' +
+      _renderRegexGenerator('ptf-full-path', 'gitlab') +
     '</div>' +
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer">' +
@@ -2298,7 +2341,7 @@ function showAddProductTemplateForm() {
     '</div>',
     [{text: '取消', cls: '', onclick: 'closeSharedDialog()'},
      {text: '确定', cls: 'btn-primary', onclick: 'saveProductTemplate()'}], {hideClose: true, maxWidth: 780}, 'gitlab');
-  setTimeout(_updatePathPreview, 80);
+  setTimeout(function() { _initRegexGenerator('ptf-full-path', 'gitlab'); }, 80);
 }
 
 function showEditProductTemplateForm(id) {
@@ -2308,16 +2351,9 @@ function showEditProductTemplateForm(id) {
   }
   if (!tpl) return;
   var tplStage = tpl.stage_type || '通用';
-  // Fallback: if base_path/file_pattern empty but doc_path exists, parse doc_path
-  var bp = tpl.base_path || '';
-  var fp = tpl.file_pattern || '';
-  if (!bp && !fp && tpl.doc_path) {
-    var lastSlash = tpl.doc_path.lastIndexOf('/');
-    if (lastSlash > 0) {
-      bp = tpl.doc_path.substring(0, lastSlash + 1);
-      fp = tpl.doc_path.substring(lastSlash + 1);
-    }
-  }
+  // Full path: prefer doc_path, fallback to base_path + file_pattern
+  var fullPath = tpl.doc_path || '';
+  if (!fullPath && tpl.base_path) fullPath = (tpl.base_path + '/' + (tpl.file_pattern || '')).replace(/([^:])\/{2,}/g, '$1/');
   _openDocDialog('编辑文档模板',
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名称</label>' +
@@ -2342,16 +2378,9 @@ function showEditProductTemplateForm(id) {
       '</div>' +
     '</div>' +
     '<div style="margin-bottom:10px">' +
-      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">路径 <span style="color:var(--danger)">*必填</span> &nbsp;<span style="font-weight:400;font-size:10px">{code} = 产品代号占位符，如 LNS677A-V010</span></label>' +
-      '<input class="search-inp" id="ptf-base-path" value="' + escHtml(bp) + '" placeholder="http://.../信号板/{code}/" style="width:100%;box-sizing:border-box;margin-bottom:8px" oninput="_updatePathPreview()">' +
-    '</div>' +
-    '<div style="margin-bottom:10px">' +
-      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名 <span style="color:var(--danger)">*必填</span> &nbsp;<span style="font-weight:400;font-size:10px">{code} = 产品代号占位符</span></label>' +
-      '<input class="search-inp" id="ptf-file-pattern" value="' + escHtml(fp) + '" placeholder="01_{code}_SCH-FINAL.rar" style="width:100%;box-sizing:border-box" oninput="_updatePathPreview()">' +
-    '</div>' +
-    '<div style="margin-bottom:10px">' +
-      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">最终路径预览 &nbsp;<span style="font-weight:400;font-size:10px">* 替换为产品代号</span></label>' +
-      '<input class="search-inp" id="ptf-path-preview" value="" style="width:100%;box-sizing:border-box;color:var(--accent);font-size:11px;font-family:var(--mono)" disabled>' +
+      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">完整路径 <span style="color:var(--danger)">*必填</span> &nbsp;<span style="font-weight:400;font-size:10px">{code} = 产品代号占位符，如 LNS677A-V010</span></label>' +
+      '<input class="search-inp" id="ptf-full-path" value="' + escHtml(fullPath) + '" placeholder="http://.../信号板/{code}/文档名.pdf" style="width:100%;box-sizing:border-box" oninput="_rgSync(\'ptf-full-path\')">' +
+      _renderRegexGenerator('ptf-full-path', 'gitlab') +
     '</div>' +
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer">' +
@@ -2364,7 +2393,7 @@ function showEditProductTemplateForm(id) {
     '</div>',
     [{text: '取消', cls: '', onclick: 'closeSharedDialog()'},
      {text: '确定', cls: 'btn-primary', onclick: 'saveProductTemplate(' + id + ')'}], {hideClose: true, maxWidth: 780}, tpl.doc_type || 'gitlab');
-  setTimeout(_updatePathPreview, 80);
+  setTimeout(function() { _initRegexGenerator('ptf-full-path', 'gitlab'); }, 80);
 }
 
 function renderProductAfterReorder() {
@@ -2388,26 +2417,26 @@ function saveProductTemplate(id) {
   var orderEl = document.getElementById('ptf-order');
   var descEl = document.getElementById('ptf-desc');
   var roleEl = document.getElementById('dt-role');
-  var basePathEl = document.getElementById('ptf-base-path');
-  var filePatEl = document.getElementById('ptf-file-pattern');
+  var fullPathEl = document.getElementById('ptf-full-path');
   var stageEl = document.getElementById('ptf-stage');
 
-  if (!nameEl || !orderEl || !descEl || !basePathEl || !filePatEl) { showToast('表单数据异常，请重新打开对话框', 'error'); return; }
+  if (!nameEl || !orderEl || !descEl || !fullPathEl) { showToast('表单数据异常，请重新打开对话框', 'error'); return; }
 
   var order = parseInt(orderEl.value) || 0;
   var desc = descEl.value.trim();
   var role = roleEl ? roleEl.value : '';
-  var basePath = basePathEl.value.trim();
-  var filePattern = filePatEl.value.trim();
-  // Compute full doc_path for legacy compatibility
-  var fullPath = basePath && filePattern ? basePath.replace(/\/*$/, '') + '/' + filePattern.replace(/^\/*/, '') : '';
+  var fullPath = fullPathEl.value.trim();
+  // Split into base_path (last / inclusive) + file_pattern (last segment)
+  var lastSlash = fullPath.lastIndexOf('/');
+  var basePath = lastSlash > 0 ? fullPath.substring(0, lastSlash + 1) : '';
+  var filePattern = lastSlash >= 0 ? fullPath.substring(lastSlash + 1) : fullPath;
   var stage = stageEl ? stageEl.value : (_productStage || '通用');
   var typeEl = document.getElementById('ptf-doctype');
   var docType = typeEl ? typeEl.value : '';
   var isOptEl = document.getElementById('ptf-is-optional');
   var isOptional = isOptEl && isOptEl.checked ? 1 : 0;
   if (!nameEl.value.trim()) { showToast('请输入文档名称', 'error'); return; }
-  if (!basePath && !filePattern) { showToast('请填写路径或文档名', 'error'); return; }
+  if (!fullPath) { showToast('请输入完整路径', 'error'); return; }
   if (!docType) { showToast('请选择文档类型', 'error'); return; }
   if (!role) { showToast('请选择责任人', 'error'); return; }
   var name = nameEl.value.trim();
