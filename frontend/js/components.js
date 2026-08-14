@@ -1734,7 +1734,7 @@ function _hidePieTooltip() {
 
 var _calYear, _calMonth;
 
-function _renderMergedMonthCalendar(today, wecomDailyMap, wlData, weData, redBorderMap) {
+function _renderMergedMonthCalendar(today, wecomDailyMap, wlData, weData) {
   if (!_calYear) { _calYear = today.getFullYear(); _calMonth = today.getMonth()+1; }
   var total = weData ? (weData.total||0) : 0;
   var monthNames = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
@@ -1749,12 +1749,6 @@ function _renderMergedMonthCalendar(today, wecomDailyMap, wlData, weData, redBor
   // Build wlDailyMap from wlData
   var wlDailyMap = {};
   if (wlData && wlData.daily) wlData.daily.forEach(function(d) { wlDailyMap[d.date] = d; });
-
-  // Standard daily hours for the filled/not-filled dot: schedule daily avg, fallback 8h
-  var expectedDaily = 8;
-  if (weData && weData.schedule && weData.schedule.work_hours > 0 && weData.schedule.work_days > 0) {
-    expectedDaily = weData.schedule.work_hours / weData.schedule.work_days;
-  }
 
   var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
     '<span style="font-size:11px;color:var(--muted)">'+_calYear+'年'+monthNames[_calMonth-1]+' · 打卡工时 '+total.toFixed(1)+'h</span>' +
@@ -1784,21 +1778,19 @@ function _renderMergedMonthCalendar(today, wecomDailyMap, wlData, weData, redBor
     var todayStr = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
     var isToday = dStr === todayStr;
 
-    // Check if this date has no checkin data
+    // Check if this date has checkin data
     var hasCheckin = !!(weDay && weDay.total_hours > 0);
-    var hasWorklog = !!(wlDay && wlDay.total_hours > 0);
 
-    // Filled/not-filled dot (top-right): green = recorded work hours reached standard daily hours, red = not
-    var wlH = wlDay ? (wlDay.total_hours || 0) : 0;
+    // 圆点：有打卡即显示；红/绿 = PMA 记录工时 vs 打卡工时（记录覆盖打卡 = 100% 绿）
+    var wlH = 0;
+    if (wlDay && wlDay.tasks) {
+      wlDay.tasks.forEach(function(t) { wlH += (t.calculated_hours || t.hours || 0); });
+    }
     var dotHtml = '';
-    if (isCurrentMonth && dStr <= todayStr) {
-      var dow = new Date(y, mm, displayDay).getDay();
-      var isWeekend = (dow === 0 || dow === 6);
-      if (!isWeekend || wlDay) {
-        var filled = wlH >= expectedDaily;
-        dotHtml = '<span style="position:absolute;top:1px;right:2px;width:6px;height:6px;border-radius:50%;background:' +
-                  (filled ? 'var(--success)' : 'var(--danger)') + '"></span>';
-      }
+    if (isCurrentMonth && hasCheckin) {
+      var filled = wlH >= h;
+      dotHtml = '<span style="position:absolute;top:1px;right:2px;width:6px;height:6px;border-radius:50%;background:' +
+                (filled ? 'var(--success)' : 'var(--danger)') + '"></span>';
     }
 
     // Cell color fill based on WeCom checkin hours
@@ -1818,10 +1810,12 @@ function _renderMergedMonthCalendar(today, wecomDailyMap, wlData, weData, redBor
       }
     }
 
-    // Red border for dates without checkin data (but with worklog records)
+    // 工作日（周一~五）无打卡 → 红边框；今天 → accent
+    var dow = new Date(y, mm, displayDay).getDay();
+    var isWorkday = dow >= 1 && dow <= 5;
     var borderColor = 'var(--border)';
     var borderWidth = '1px';
-    if (isCurrentMonth && hasWorklog && !hasCheckin) {
+    if (isCurrentMonth && isWorkday && !hasCheckin) {
       borderColor = 'var(--danger)';
       borderWidth = '2px';
     } else if (isToday) {
@@ -3188,7 +3182,9 @@ function renderDonutChart(container, segments, opts) {
   opts = opts || {};
   var size = opts.size || 180;
   var strokeW = size * 0.18;
-  var radius = (size - strokeW) / 2;
+  var HOVER_SCALE = 1.3;  // 悬停放大倍数（与 mouseover 处理保持一致）
+  // 预留放大外扩余量，避免悬停放大后扇区被 SVG 边缘裁切
+  var radius = (size - strokeW * HOVER_SCALE) / 2 - 1;
   var center = size / 2;
   var circumference = 2 * Math.PI * radius;
   var total = 0;
@@ -3197,21 +3193,27 @@ function renderDonutChart(container, segments, opts) {
 
   var titleHtml = opts.title ? '<div style="font-size:12px;font-weight:600;color:var(--muted);text-align:center;margin-bottom:8px">' + escHtml(opts.title) + '</div>' : '';
 
+  // 斜纹填充图案：用于「未记录」等需以灰色线条绘制、而非纯色填充的段
+  var hatchId = 'donut-hatch-' + Math.random().toString(36).slice(2, 8);
+  var defsHtml = '<defs><pattern id="' + hatchId + '" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">' +
+    '<line x1="0" y1="0" x2="0" y2="4" stroke="var(--muted)" stroke-width="2"/></pattern></defs>';
+
   // Build SVG ring segments
   var svgCircles = '';
   var offset = 0;
-  var colors = ['var(--accent)', 'var(--success)', 'var(--warn)', 'var(--info)', 'var(--danger)', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#6366f1'];
+  var colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316', '#6366F1', '#84CC16'];
   segments.forEach(function(s, i) {
     var pct = s.value / total;
     var dashLen = Math.max(pct * circumference, 0.5); // min visible sliver
     var dashGap = circumference - dashLen;
-    var color = s.color || colors[i % colors.length];
+    var color = s.hatch ? 'url(#' + hatchId + ')' : (s.color || colors[i % colors.length]);
+    var dashOffset = (-offset * circumference / total);
     svgCircles += '<circle cx="' + center + '" cy="' + center + '" r="' + radius + '" ' +
       'fill="none" stroke="' + color + '" stroke-width="' + strokeW + '" ' +
       'stroke-dasharray="' + dashLen + ' ' + dashGap + '" ' +
-      'stroke-dashoffset="' + (-offset * circumference / total) + '" ' +
+      'stroke-dashoffset="' + dashOffset + '" ' +
       'data-seg-i="' + i + '" ' +
-      'stroke-linecap="butt" style="cursor:pointer;transition: stroke-dasharray 0.5s, stroke-dashoffset 0.5s"/>';
+      'stroke-linecap="butt" style="cursor:pointer;transition: stroke-dasharray 0.5s, stroke-dashoffset 0.5s, stroke-width 0.15s"/>';
     offset += s.value;
   });
 
@@ -3228,9 +3230,11 @@ function renderDonutChart(container, segments, opts) {
   var legendHtml = '<div style="display:flex;flex-wrap:wrap;gap:6px 14px;justify-content:center;margin-top:10px;font-size:11px">';
   segments.forEach(function(s, i) {
     var pct = total > 0 ? Math.round(s.value / total * 100) : 0;
-    var color = s.color || colors[i % colors.length];
+    var swatchBg = s.hatch
+      ? 'repeating-linear-gradient(45deg, var(--muted) 0 2px, transparent 2px 4px)'
+      : (s.color || colors[i % colors.length]);
     legendHtml += '<span style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap">' +
-      '<span style="width:8px;height:8px;border-radius:2px;background:' + color + ';flex-shrink:0"></span>' +
+      '<span style="width:8px;height:8px;border-radius:2px;background:' + swatchBg + ';flex-shrink:0"></span>' +
       escHtml(s.label) + ' ' + pct + '%' +
       '</span>';
   });
@@ -3239,44 +3243,64 @@ function renderDonutChart(container, segments, opts) {
   el.innerHTML = titleHtml +
     '<div style="display:flex;justify-content:center">' +
     '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '">' +
-    svgCircles + centerHtml +
+    defsHtml + svgCircles + centerHtml +
     '</svg></div>' +
     legendHtml;
 
-  // 扇区悬停（鼠标聚焦即显示，信息跟随鼠标位置；移出隐藏）
+  // 扇区悬停（鼠标聚焦即显示，信息跟随鼠标位置；移出隐藏；聚焦扇区放大突出）
   var svg = el.querySelector('svg');
   if (svg) {
+    var hovered = null;
     svg.addEventListener('mouseover', function(e) {
       var c = e.target && e.target.closest ? e.target.closest('circle[data-seg-i]') : null;
+      if (hovered === c) return;
+      if (hovered) hovered.setAttribute('stroke-width', strokeW);
+      hovered = c;
       if (!c) return;
       var idx = parseInt(c.getAttribute('data-seg-i'), 10);
       if (isNaN(idx) || idx < 0 || idx >= segments.length) return;
       var seg = segments[idx];
       var pct = (seg.value || 0) / total * 100;
       var namePart = (seg.name && seg.name !== seg.label) ? ' ' + escHtml(seg.name) : '';
+      c.setAttribute('stroke-width', (strokeW * HOVER_SCALE).toFixed(1));
       _showDonutClickTip(e, '<b>' + escHtml(seg.label || '') + '</b>' + namePart + '：' + (seg.value || 0).toFixed(1) + 'h (' + pct.toFixed(1) + '%)');
       if (opts.onSegmentClick) opts.onSegmentClick(seg, idx);
     });
     svg.addEventListener('mouseout', function(e) {
+      var c = e.target && e.target.closest ? e.target.closest('circle[data-seg-i]') : null;
+      if (c) {
+        c.setAttribute('stroke-width', strokeW);
+        if (hovered === c) hovered = null;
+      }
       _hideDonutClickTip();
     });
   }
 }
 
-// 饼图扇区点击提示：在鼠标点击位置显示（点击空白处隐藏）
+// 饼图扇区悬停提示：跟随鼠标显示；自动夹紧到视口内，超出边缘时翻转到光标另一侧
 function _showDonutClickTip(e, html) {
   var tip = document.getElementById('donut-click-tip');
   if (!tip) {
     tip = document.createElement('div');
     tip.id = 'donut-click-tip';
-    tip.style.cssText = 'position:fixed;pointer-events:none;z-index:9999;padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;font-size:12px;box-shadow:var(--sh-md);white-space:nowrap;max-width:320px;';
+    tip.style.cssText = 'position:fixed;pointer-events:none;z-index:9999;padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;font-size:12px;line-height:1.5;box-shadow:var(--sh-md);white-space:normal;overflow-wrap:break-word;max-width:320px;';
     document.body.appendChild(tip);
   }
   tip.innerHTML = html;
-  var z = (typeof _getZoom === 'function') ? _getZoom() : 1;
-  tip.style.left = (e.clientX / z + 14) + 'px';
-  tip.style.top = (e.clientY / z + 12) + 'px';
   tip.style.display = 'block';
+  var z = (typeof _getZoom === 'function') ? _getZoom() : 1;
+  var rect = tip.getBoundingClientRect();
+  var tipW = rect.width, tipH = rect.height;
+  var margin = 8;
+  // 在视口坐标下计算位置；右/下溢出则翻转到光标另一侧，再夹紧到视口内
+  var vx = e.clientX + 14;
+  var vy = e.clientY + 12;
+  if (vx + tipW + margin > window.innerWidth) vx = e.clientX - tipW - 14;
+  vx = Math.max(margin, Math.min(vx, window.innerWidth - tipW - margin));
+  if (vy + tipH + margin > window.innerHeight) vy = e.clientY - tipH - 12;
+  vy = Math.max(margin, Math.min(vy, window.innerHeight - tipH - margin));
+  tip.style.left = (vx / z) + 'px';
+  tip.style.top = (vy / z) + 'px';
 }
 
 function _hideDonutClickTip() {

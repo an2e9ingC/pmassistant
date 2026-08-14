@@ -3,7 +3,6 @@ from datetime import date, datetime, timedelta
 from typing import Optional
 
 from sqlalchemy.orm import Session
-from sqlalchemy.sql import func as sa_func
 
 from backend.models.zentao import CachedProject, CachedExecution, CachedTask, PmaProduct
 from backend.models.bug import CachedBug
@@ -147,6 +146,35 @@ def _parse_date_range(date_from: Optional[str], date_to: Optional[str]) -> tuple
 def _get_effective_hours(worklog) -> float:
     """Get effective hours from worklog: calculated_hours or hours."""
     return float(worklog.calculated_hours or worklog.hours or 0)
+
+
+def _sum_checkin_hours(db: Session, wuids: list, from_date: date, to_date: date) -> dict:
+    """打卡总工时（wecom_userid → hours）：按 (user, date) 取 checkin/approval 的 work_hours 最大值后求和。
+
+    与 wecom_service.get_checkin_calendar 的「每日 max(checkin, approval)」口径一致，
+    避免同日既有打卡又有审批时被重复叠加（用户中心与人力报表因此不一致）。
+    """
+    if not wuids:
+        return {}
+    rows = db.query(
+        WeComCheckin.user_id, WeComCheckin.date,
+        WeComCheckin.source, WeComCheckin.work_hours,
+    ).filter(
+        WeComCheckin.user_id.in_(wuids),
+        WeComCheckin.date >= from_date,
+        WeComCheckin.date <= to_date,
+    ).all()
+    per_day = {}  # (wuid, date) -> {"checkin": max, "approval": max}
+    for uid, d, src, hrs in rows:
+        m = per_day.setdefault((uid, str(d)), {"checkin": 0.0, "approval": 0.0})
+        if src == "checkin":
+            m["checkin"] = max(m["checkin"], float(hrs or 0.0))
+        elif src == "approval":
+            m["approval"] = max(m["approval"], float(hrs or 0.0))
+    totals = {}
+    for (uid, _), m in per_day.items():
+        totals[uid] = totals.get(uid, 0.0) + max(m["checkin"], m["approval"])
+    return totals
 
 
 def get_manpower_report(
@@ -337,15 +365,7 @@ def get_manpower_report(
     if wecom_users:
         wecom_user_by_id = {u.wecom_userid: u for u in wecom_users}
         wuids = list(wecom_user_by_id.keys())
-        for wuid, hrs in db.query(
-            WeComCheckin.user_id,
-            sa_func.sum(WeComCheckin.work_hours),
-        ).filter(
-            WeComCheckin.user_id.in_(wuids),
-            WeComCheckin.date >= from_date,
-            WeComCheckin.date <= to_date,
-        ).group_by(WeComCheckin.user_id).all():
-            checkin_map[wuid] = float(hrs or 0.0)
+        checkin_map = _sum_checkin_hours(db, wuids, from_date, to_date)
 
     # 补充：有打卡、但无 PMA 工时记录的人员，使其也出现在报表中
     for wuid, u in wecom_user_by_id.items():
@@ -491,12 +511,7 @@ def get_user_manpower_detail(
     user = db.query(LocalUser).filter(LocalUser.id == user_id).first()
     checkin_hours = 0.0
     if user and user.wecom_userid:
-        row = db.query(sa_func.sum(WeComCheckin.work_hours)).filter(
-            WeComCheckin.user_id == user.wecom_userid,
-            WeComCheckin.date >= from_date,
-            WeComCheckin.date <= to_date,
-        ).first()
-        checkin_hours = float(row[0] or 0.0) if row and row[0] is not None else 0.0
+        checkin_hours = _sum_checkin_hours(db, [user.wecom_userid], from_date, to_date).get(user.wecom_userid, 0.0)
 
     pma_hours = round(total_hours, 1)
     ratio = round(pma_hours / checkin_hours * 100, 1) if checkin_hours > 0 else None
@@ -581,6 +596,19 @@ def export_manpower_excel(
             code, name = proj_map.get(pid, ("", ""))
             pct = round(hrs / total * 100, 1) if total > 0 else 0.0
             ws1.append([uname, code, name, round(hrs, 1), pct])
+
+    # Sheet 1b: 按人员-项目工时占企微打卡工时百分比
+    checkin_by_uid = {u["user_id"]: u.get("checkin_hours", 0.0) for u in data.get("by_user", [])}
+    ws1b = wb.create_sheet("按人员-项目占比(打卡)")
+    ws1b.append(["人员", "项目编号", "项目名", "工时(h)", "占企微打卡工时比例(%)"])
+    for uid in sorted(user_proj.keys(), key=lambda u: -sum(user_proj[u].values())):
+        u = user_map.get(uid)
+        uname = (u.display_name or u.username) if u else "?"
+        checkin = checkin_by_uid.get(uid, 0.0)
+        for pid, hrs in sorted(user_proj[uid].items(), key=lambda x: -x[1]):
+            code, name = proj_map.get(pid, ("", ""))
+            pct = round(hrs / checkin * 100, 1) if checkin > 0 else 0.0
+            ws1b.append([uname, code, name, round(hrs, 1), pct])
 
     # Sheet 2: 工时明细
     ws2 = wb.create_sheet("工时明细")
