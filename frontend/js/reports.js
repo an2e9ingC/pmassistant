@@ -176,14 +176,16 @@ async function loadManpowerReport() {
   try {
     var data = await API.get('/reports/manpower');
     var s = data.summary || {};
+    var checkinTotal = (data.by_user || []).reduce(function(acc, u) { return acc + (u.checkin_hours || 0); }, 0);
 
     container.innerHTML =
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">' +
         '<div class="section-title" style="margin:0">人力工时报表</div>' +
         '<button class="btn btn-primary btn-sm" onclick="_exportManpower()">导出 Excel</button>' +
       '</div>' +
-      '<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">' +
+      '<div class="kpi-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:16px">' +
         '<div class="kpi-card"><div class="kpi-label">总工时</div><div class="kpi-value" style="font-size:22px">' + (s.total_hours||0).toFixed(1) + 'h</div></div>' +
+        '<div class="kpi-card"><div class="kpi-label">企微打卡总工时</div><div class="kpi-value" style="font-size:22px">' + checkinTotal.toFixed(1) + 'h</div></div>' +
         '<div class="kpi-card"><div class="kpi-label">参与人数</div><div class="kpi-value" style="font-size:22px">' + (s.person_count||0) + '</div></div>' +
         '<div class="kpi-card"><div class="kpi-label">涉及项目</div><div class="kpi-value" style="font-size:22px">' + (s.project_count||0) + '</div></div>' +
         '<div class="kpi-card"><div class="kpi-label">涉及产品</div><div class="kpi-value" style="font-size:22px">' + (s.product_count||0) + '</div></div>' +
