@@ -2087,10 +2087,18 @@ function openWorklogDialog(taskId) {
       '<input class="search-inp" id="wl-remaining" type="number" step="0.5" min="0" style="width:100%;box-sizing:border-box;margin-top:2px" placeholder="还需多少小时完成？">' +
     '</div>';
 
-    // Default: 1 row with today's date
-    var rowHtml = _wlBuildRow(0, today, task.progress || 0);
-
     var isTeamTask = task.assignee_ids && task.assignee_ids.length > 1;
+    // 团队任务：进度默认显示当前用户的个人进度，而非任务总进度
+    var defaultProgress = task.progress || 0;
+    if (isTeamTask) {
+      var curUser = (typeof getCurrentUser === 'function' && getCurrentUser()) || {};
+      var curUid = curUser ? (curUser.id || null) : null;
+      var pmap = task.assignee_progress || {};
+      defaultProgress = parseInt(pmap[String(curUid)] || pmap[curUid] || 0);
+    }
+
+    // Default: 1 row with today's date
+    var rowHtml = _wlBuildRow(0, today, defaultProgress);
     var html = '<div>' +
       '<input type="hidden" id="wl-reviewer-name" value="' + escHtml(task.reviewer_name || '') + '">' +
       '<input type="hidden" id="wl-reviewer-id" value="' + (task.reviewer_id || '') + '">' +
@@ -2111,7 +2119,7 @@ function openWorklogDialog(taskId) {
       '</div>' +
       '<div id="wl-rows">' + rowHtml + '</div>' +
       '<div style="text-align:center;margin-top:8px">' +
-        '<button class="btn btn-sm" onclick="_wlAddRow(' + taskId + ',' + (task.progress||0) + ')">+ 添加一行</button>' +
+        '<button class="btn btn-sm" onclick="_wlAddRow(' + taskId + ',' + defaultProgress + ')">+ 添加一行</button>' +
       '</div>' +
       '<input type="hidden" id="wl-row-count" value="1">' +
     '</div>';
@@ -2433,11 +2441,18 @@ async function _doSubmitBatchWorklog(taskId, entries, maxProgress, isTeam) {
     // Update task progress (only-up-not-down)
     if (maxProgress >= 0) {
       var task = await API.get('/tasks/' + taskId);
-      var currentP = task.progress || 0;
-      if (maxProgress > currentP) {
-        if (isTeam) {
+      if (isTeam) {
+        // 多人任务：只更新个人进度（assignee_progress），由后端重算任务总进度
+        var curUser = (typeof getCurrentUser === 'function' && getCurrentUser()) || {};
+        var curUid = curUser ? (curUser.id || null) : null;
+        var pmap = task.assignee_progress || {};
+        var myP = parseInt(pmap[String(curUid)] || pmap[curUid] || 0);
+        if (maxProgress > myP) {
           await API.put('/tasks/' + taskId + '/my-progress', {progress: maxProgress});
-        } else {
+        }
+      } else {
+        var currentP = task.progress || 0;
+        if (maxProgress > currentP) {
           var taskRes = await API.put('/tasks/' + taskId, {progress: maxProgress});
           if (taskRes && taskRes.auto_messages && taskRes.auto_messages.length) {
             taskRes.auto_messages.forEach(function(msg) { showToast(msg, 'success'); });

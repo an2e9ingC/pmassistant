@@ -1,7 +1,6 @@
 # PMA 开发计划与进度
 
-当前版本：v2026.08.14-beta9 | 最后更新：2026-08-14
-当前版本：v2026.08.14-beta8 | 最后更新：2026-08-14
+当前版本：v2026.08.14-beta10 | 最后更新：2026-08-14
 
 ---
 
@@ -232,6 +231,7 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-08-14 | v2026.08.14-beta10 | fix: 多人任务记录工时误写任务总进度 — 批量工时后端移除task.progress直接赋值+死代码_handle_100_percent_task+前端团队任务按个人进度比较走my-progress+工时对话框默认进度显示个人进度(非任务总进度) |
 | 2026-08-14 | v2026.08.14-beta9 | feat: 事件总线统一事件常量(events.js)+跨视图原位刷新 — 新增events.js集中管理事件名常量+isViewActive()守卫仅刷新可见视图+用户/角色/产品线/文档模板等保存删除后原位刷新+任务变更联动甘特图 |
 | 2026-08-14 | v2026.08.14-beta8 | feat: 移除Zentao执行/任务缓存层 — 删除zenta_executions/zenta_tasks缓存表+CachedExecution/CachedTask模型+pma_tasks/project_documents的execution_id列(DB迁移重建表)+服务层/路由移除execution关联+前端清理execution残留 |
 | 2026-08-14 | v2026.08.14-beta7 | feat: 人力报表访问权限优化+用户中心跳转链接调整 — 人力报表放开访问(所有用户可进入,普通用户self-scope仅本人)+普通用户隐藏按项目维度+后端3端点require_perm改get_current_user+打卡补充循环尊重user_id+用户中心删除月度报表链接(打卡xxh·记录xxh可点击跳转人力页) |

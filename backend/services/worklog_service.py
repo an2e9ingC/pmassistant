@@ -340,36 +340,7 @@ def create_worklog_batch(db: Session, task_id: int, entries: list, user_id: int)
         wl = create_worklog(db, data, user_id)
         created.append(wl)
 
-        # Update progress if provided
-        progress = entry.get("progress")
-        if progress is not None:
-            task = db.query(Task).filter(Task.id == task_id).first()
-            if task:
-                new_progress = max(task.progress or 0, int(progress))
-                if new_progress > (task.progress or 0):
-                    task.progress = new_progress
-                    from backend.services.task_service import _recalc_stage_progress
-                    if task.stage_id:
-                        _recalc_stage_progress(db, task.stage_id)
-                if int(progress) >= 100:
-                    _handle_100_percent_task(db, task, user_id)
-        db.commit()
-
     return created
-
-
-def _handle_100_percent_task(db: Session, task: Task, user_id: int):
-    """Handle task progress reaching 100%."""
-    approval_enabled = PmaSetting.get(db, "approval_enabled", "1") == "1"
-    if not approval_enabled:
-        task.status = 'done'
-        task.completed_at = datetime.now(timezone.utc)
-    else:
-        task.status = 'review'
-    # Ensure reviewer is set if possible
-    if not task.reviewer_id and task.stage_id:
-        from backend.services.task_service import _resolve_reviewer_from_stage
-        _resolve_reviewer_from_stage(db, task)
 
 
 def get_daily_usage(db: Session, user_id: int, d: date) -> dict:
