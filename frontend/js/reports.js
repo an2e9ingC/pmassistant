@@ -7,19 +7,11 @@ var _reportTab = 'manpower';
 var _reportTabs = ['manpower', 'weekly', 'monthly', 'bugs'];
 
 async function renderReports(initialTab) {
-  var mpPerm = hasPerm('manpower_view');
-
-  // Show/hide manpower tab based on permission
-  var mpTab = document.getElementById('rpttab-manpower');
-  if (mpTab) mpTab.style.display = mpPerm ? '' : 'none';
-
-  // 根据 URL 参数决定初始 tab（#/reports/manpower 等）
+  // 所有用户均可进入人力 tab；普通用户仅查看本人报表（后端自动 self-scope）
   var want = (initialTab && _reportTabs.indexOf(initialTab) >= 0) ? initialTab : _reportTab;
-  // 无 manpower_view 权限的用户不可停留在人力 tab（默认与 URL 均回退周报）
-  if (!mpPerm && want === 'manpower') want = 'weekly';
   _reportTab = want;
 
-  // 先同步收起非目标 section，避免无权限用户闪现人力区
+  // 先同步收起非目标 section，避免闪现其他区
   ['weekly', 'monthly', 'bugs', 'manpower'].forEach(function(s) {
     var sec = document.getElementById('rpt-sec-' + s);
     if (sec) sec.style.display = s === want ? 'block' : 'none';
@@ -174,6 +166,8 @@ async function loadManpowerReport() {
   container.innerHTML = '<div class="loading-spinner">加载人力报表...</div>';
 
   try {
+    var mpPerm = hasPerm('manpower_view');
+    if (!mpPerm) _manpowerGroupBy = 'user';  // 普通用户仅"按人员"维度
     var data = await API.get('/reports/manpower');
     var s = data.summary || {};
     var checkinTotal = (data.by_user || []).reduce(function(acc, u) { return acc + (u.checkin_hours || 0); }, 0);
@@ -192,7 +186,7 @@ async function loadManpowerReport() {
       '</div>' +
       '<div class="map-tabs" style="margin-bottom:12px">' +
         '<div class="map-tab' + (_manpowerGroupBy === 'user' ? ' active' : '') + '" onclick="_switchManpowerDim(\'user\')">按人员</div>' +
-        '<div class="map-tab' + (_manpowerGroupBy === 'project' ? ' active' : '') + '" onclick="_switchManpowerDim(\'project\')">按项目</div>' +
+        (mpPerm ? '<div class="map-tab' + (_manpowerGroupBy === 'project' ? ' active' : '') + '" onclick="_switchManpowerDim(\'project\')">按项目</div>' : '') +
       '</div>' +
       '<div id="mp-table-area"></div>' +
       '<div style="font-size:11px;color:var(--muted);margin-top:8px">' + data.period.from + ' ~ ' + data.period.to + '</div>';

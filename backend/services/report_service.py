@@ -369,6 +369,8 @@ def get_manpower_report(
 
     # 补充：有打卡、但无 PMA 工时记录的人员，使其也出现在报表中
     for wuid, u in wecom_user_by_id.items():
+        if user_id is not None and u.id != user_id:
+            continue  # 个人视角（user_id 指定）只补充本人，避免泄漏他人
         if u.id not in by_user and wuid in checkin_map:
             by_user[u.id] = {
                 "user_id": u.id,

@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
-from backend.middleware.auth import get_current_user, require_perm
+from backend.middleware.auth import get_current_user, has_perm
 from backend.services import report_service
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
@@ -139,9 +139,15 @@ def manpower_report(
     user_id: Optional[int] = Query(None),
     project_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    _=Depends(require_perm("manpower_view")),
+    user=Depends(get_current_user),
 ):
-    """Manpower/hours report — by project, user, product dimensions."""
+    """Manpower/hours report — by project, user, product dimensions.
+
+    普通用户（无 manpower_view 权限）只能查看自己的报表：强制 self-scope。
+    """
+    if not has_perm(user, "manpower_view"):
+        user_id = user.id
+        project_id = None
     data = report_service.get_manpower_report(
         db, date_from=date_from, date_to=date_to,
         user_id=user_id, project_id=project_id,
@@ -156,9 +162,12 @@ def manpower_export(
     user_id: Optional[int] = Query(None),
     project_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    _=Depends(require_perm("manpower_view")),
+    user=Depends(get_current_user),
 ):
     """Export manpower report as Excel (.xlsx)."""
+    if not has_perm(user, "manpower_view"):
+        user_id = user.id
+        project_id = None
     from fastapi.responses import StreamingResponse
     import io
 
@@ -184,9 +193,14 @@ def manpower_user_detail(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     db: Session = Depends(get_db),
-    _=Depends(require_perm("manpower_view")),
+    user=Depends(get_current_user),
 ):
-    """Per-user manpower detail: project breakdown + daily breakdown."""
+    """Per-user manpower detail: project breakdown + daily breakdown.
+
+    普通用户（无 manpower_view 权限）只能查看自己的详情。
+    """
+    if not has_perm(user, "manpower_view") and user_id != user.id:
+        raise HTTPException(status_code=403, detail="无权限查看他人报表")
     data = report_service.get_user_manpower_detail(
         db, user_id, date_from=date_from, date_to=date_to,
     )

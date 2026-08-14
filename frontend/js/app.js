@@ -3060,14 +3060,9 @@ function _ucLoadMergedCalendar(user) {
     html += '<div class="panel panel-pad" style="margin-top:12px">' +
       '<div class="sec-hd" style="display:flex;justify-content:space-between;align-items:center">' +
         '<h2 style="margin:0">项目工时占比</h2>' +
-        '<span style="font-size:11px;color:var(--muted)">打卡 ' + checkinTotal.toFixed(1) + 'h · 记录 ' + pieTotal.toFixed(1) + 'h</span>' +
+        '<a href="javascript:void(0)" onclick="gotoView(\'reports\');setTimeout(function(){switchReportTab(\'manpower\')},200)" style="font-size:11px;color:var(--accent);text-decoration:none">打卡 ' + checkinTotal.toFixed(1) + 'h · 记录 ' + pieTotal.toFixed(1) + 'h</a>' +
       '</div>' +
       '<div id="uc-proj-pie"></div>' +
-    '</div>';
-
-    // Monthly report button
-    html += '<div style="margin-top:8px;text-align:right">' +
-      '<a href="javascript:void(0)" onclick="gotoView(\'reports\');setTimeout(function(){switchReportTab(\'manpower\')},200)" style="font-size:11px;color:var(--accent);text-decoration:none">月度报表 →</a>' +
     '</div>';
 
     cal.innerHTML = html;
