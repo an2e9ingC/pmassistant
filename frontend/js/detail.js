@@ -65,6 +65,9 @@ async function loadProjectDetail(code) {
       API.get('/users/names').catch(function() { return []; }),
       API.get('/users/customers/names').catch(function() { return []; }),
       API.get('/users/options').catch(function() { return []; }),
+      // Task/Bug counts for the info card (non-blocking)
+      API.get('/tasks/stats?project_id=' + encodeURIComponent(code)).catch(function() { return null; }),
+      API.get('/bugs/stats?project_id=' + encodeURIComponent(code)).catch(function() { return null; }),
     ]);
 
     var detail = results[0];
@@ -85,6 +88,8 @@ async function loadProjectDetail(code) {
     var userNames = results[7] || [];
     var customerNames = results[8] || [];
     var userOptions = results[9] || [];
+    var taskStats = results[10] || null;
+    var bugStats = results[11] || null;
 
     // Store linked products for delivery form dropdown
     _projectProducts = (detail && detail.products) ? detail.products : [];
@@ -104,7 +109,7 @@ async function loadProjectDetail(code) {
     _deliveryProgress = (delivery && delivery.progress) || 0;
     buildDetailHeader(detail);
     buildDelivery(delivery);
-    buildInfo(detail, notes, delivery, docs);
+    buildInfo(detail, notes, delivery, docs, taskStats, bugStats);
     buildGantt(ganttData);
     buildStages(stages);
     buildDocs(docs);
@@ -180,9 +185,16 @@ function buildDetailHeader(p) {
 
 /* Info Tab — Basic Info */
 
-function buildInfo(p, notes, delivery, docs) {
+function buildInfo(p, notes, delivery, docs, taskStats, bugStats) {
   if (!p) return;
   var del = delivery || {};
+
+  // Task/Bug counts for the overview cards (n = incomplete/open, m = total)
+  var taskTotal = (taskStats && taskStats.total) || 0;
+  var taskDone = (((taskStats && taskStats.by_status) || {}).done || 0) + (((taskStats && taskStats.by_status) || {}).closed || 0);
+  var taskIncomplete = Math.max(0, taskTotal - taskDone);
+  var bugTotal = (bugStats && bugStats.total) || 0;
+  var bugOpen = (bugStats && bugStats.open) || 0;
 
   // Status display mapping
   var statusMap = {
@@ -238,28 +250,36 @@ function buildInfo(p, notes, delivery, docs) {
   var allLinked = p.linked_projects || [];
   var linkedOpportunities = allLinked.filter(function(lp) { return lp.code && /^LSJ/i.test(lp.code); });
   var linkedPeers = allLinked.filter(function(lp) { return !lp.code || !/^LSJ/i.test(lp.code); });
+  var isOpportunity = p.project_type && p.project_type !== 'RD' && p.project_type !== 'SC';
 
-  // KPI row 2 — key timeline + delivery + linked opportunities
+  // KPI row 2 — key timeline + delivery + linked opportunities + linked projects
   html += '<div class="delivery-kpi" style="grid-template-columns:repeat(4, 1fr);margin-bottom:16px">' +
     '<div class="dkpi"><div class="dkpi-lbl">计划结束</div><div class="dkpi-val" style="font-size:16px;font-weight:600">' + (p.end ? formatDate(p.end) : '<span style="color:var(--muted)">—</span>') + '</div></div>' +
     '<div class="dkpi"><div class="dkpi-lbl">交付数量</div><div class="dkpi-val" style="font-size:16px;font-weight:600">' +
       '<span style="color:var(--success)">' + (del.done || 0) + '</span>' +
       '<span style="color:var(--muted);font-weight:400"> / ' + (del.planned || 0) + '</span>' +
     '</div></div>' +
-    '<div class="dkpi" style="grid-column:span 2"><div class="dkpi-lbl">关联商机（' + linkedOpportunities.length + '）' +
+    '<div class="dkpi"><div class="dkpi-lbl">关联商机（' + linkedOpportunities.length + '）' +
       (_hasProjectEditPerm() ? '<a href="javascript:void(0)" onclick="event.stopPropagation();editLinkedProjects()" title="编辑关联商机" style="text-decoration:none;font-size:14px">&#x1F517;</a>' : '') +
     '</div><div class="dkpi-val" style="font-size:12px;line-height:1.6">' +
     (linkedOpportunities.length
-      ? linkedOpportunities.map(function(lp) { return '<span class="proj-code-btn" onclick="loadProjectDetail(' + lp.id + ')" title="' + escHtml(lp.name || '') + '">' + escHtml(lp.code || lp.name) + '</span>'; }).join(' ')
+      ? '<div style="display:flex;flex-wrap:wrap;gap:4px">' + linkedOpportunities.map(function(lp) { return '<span class="proj-code-btn" onclick="loadProjectDetail(' + lp.id + ')" title="' + escHtml(lp.name || '') + '">' + escHtml(lp.code || lp.name) + '</span>'; }).join('') + '</div>'
+      : '<span style="color:var(--muted)">—</span>') +
+    '</div></div>' +
+    '<div class="dkpi"><div class="dkpi-lbl">关联项目（' + linkedPeers.length + '）' +
+      (isOpportunity && _hasProjectEditPerm() ? ' <a href="javascript:void(0)" onclick="event.stopPropagation();showLsjConvertDialog()" title="商机转化" style="text-decoration:none;font-size:14px">&#x1F504;</a>' : '') +
+      (_hasProjectEditPerm() ? ' ' + '<a href="javascript:void(0)" onclick="event.stopPropagation();editLinkedProjects()" title="编辑关联项目" style="text-decoration:none;font-size:14px">&#x1F517;</a>' : '') +
+    '</div><div class="dkpi-val" style="font-size:12px;line-height:1.6">' +
+    (linkedPeers.length
+      ? '<div style="display:flex;flex-wrap:wrap;gap:4px">' + linkedPeers.map(function(lp) { return '<span class="proj-code-btn" onclick="loadProjectDetail('+lp.id+')" title="'+escHtml(lp.name||'')+'">'+escHtml(lp.code||lp.name)+'</span>'; }).join('') + '</div>'
       : '<span style="color:var(--muted)">—</span>') +
     '</div></div>' +
   '</div>';
 
-  // Linked products + Linked projects — side-by-side cards
+  // Linked products + task/bug overview cards — side-by-side
   var products = p.linked_products || [];
-  var isOpportunity = p.project_type && p.project_type !== 'RD' && p.project_type !== 'SC';
-  html += '<div style="display:flex;gap:16px;margin-bottom:16px">' +
-    '<div class="card card-pad" style="flex:1;min-width:0">' +
+  html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">' +
+    '<div class="card card-pad" style="grid-column:span 2;min-width:0">' +
       '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">关联产品（' + products.length + '）</div>';
   if (products.length) {
     html += '<div style="display:flex;flex-wrap:wrap;gap:8px">' +
@@ -275,19 +295,18 @@ function buildInfo(p, notes, delivery, docs) {
     html += '<div style="font-size:12px;color:var(--muted);font-style:italic">暂无</div>';
   }
   html += '</div>' +
-    '<div class="card card-pad" style="flex:1;min-width:0">' +
-      '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">关联项目（' + linkedPeers.length + '）' +
-        (isOpportunity && _hasProjectEditPerm() ? ' <a href="javascript:void(0)" onclick="event.stopPropagation();showLsjConvertDialog()" title="商机转化" style="text-decoration:none;font-size:14px">&#x1F504;</a>' : '') +
-        (_hasProjectEditPerm() ? ' ' + '<a href="javascript:void(0)" onclick="event.stopPropagation();editLinkedProjects()" title="编辑关联项目" style="text-decoration:none;font-size:14px">&#x1F517;</a>' : '') +
-      '</div>';
-  if (linkedPeers.length) {
-    html += '<div style="display:flex;flex-wrap:wrap;gap:4px">' +
-      linkedPeers.map(function(lp) { return '<span class="proj-code-btn" onclick="loadProjectDetail('+lp.id+')" title="'+escHtml(lp.name||'')+'">'+escHtml(lp.code||lp.name)+'</span>'; }).join('') +
-    '</div>';
-  } else {
-    html += '<div style="font-size:12px;color:var(--muted);font-style:italic">暂无</div>';
-  }
-  html += '</div>' +
+    '<div class="card card-pad" style="min-width:0;cursor:pointer" onclick="switchDTab(\'pma-tasks\')" title="未完成 ' + taskIncomplete + ' / 总数 ' + taskTotal + '">' +
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">项目任务</div>' +
+      '<div style="font-size:22px;font-weight:650;line-height:1">' +
+        '<span style="color:' + (taskIncomplete === 0 ? 'var(--success)' : 'var(--blue)') + '">' + taskIncomplete + '</span><span style="font-size:13px;color:var(--muted);font-weight:400"> / ' + taskTotal + '</span>' +
+      '</div>' +
+    '</div>' +
+    '<div class="card card-pad" style="min-width:0;cursor:pointer" onclick="switchDTab(\'bugs\')" title="未解决 ' + bugOpen + ' / 总数 ' + bugTotal + '">' +
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">项目Bug</div>' +
+      '<div style="font-size:22px;font-weight:650;line-height:1">' +
+        '<span style="color:' + (bugOpen === 0 ? 'var(--success)' : 'var(--blue)') + '">' + bugOpen + '</span><span style="font-size:13px;color:var(--muted);font-weight:400"> / ' + bugTotal + '</span>' +
+      '</div>' +
+    '</div>' +
   '</div>';
 
   // Additional info row (minimal)
