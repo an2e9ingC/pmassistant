@@ -327,9 +327,7 @@ async function _sysSaveParam(key, newVal) {
 
     var result = await API.put('/admin/system-params', payload);
     showToast(result.message || '已保存', 'success');
-    // Refresh params cache and re-render
-    _sysParamsCache = await API.get('/admin/system-params');
-    _loadSysSettingsPanel();
+    EventBus.emit(EVENTS.SETTING_SAVED, { scope: 'settings' });
   } catch(e) {
     showToast('保存失败: ' + (e.message || ''), 'error');
   }
@@ -377,11 +375,9 @@ function _sysImportConfig(input) {
       if (json.code === 0) {
         if (msgEl) msgEl.innerHTML = '<span style="color:var(--success)">&#10003; ' + escHtml(json.message) + '</span>';
         showToast('配置导入成功', 'success');
-        // Reload config
+        // Reload config via event
         _adminFormData = null;
-        delete _sysPanelsLoaded.config;
-        _switchSysTab('config');
-        setTimeout(function() { _loadConfigPanel(); }, 300);
+        EventBus.emit(EVENTS.SETTING_SAVED, { scope: 'config' });
       } else {
         if (msgEl) msgEl.innerHTML = '<span style="color:var(--danger)">' + escHtml(json.message) + '</span>';
         showToast('导入失败: ' + (json.message || ''), 'error');

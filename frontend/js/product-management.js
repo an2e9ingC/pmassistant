@@ -398,7 +398,7 @@ async function _pmTreeDrop(e, targetNodeId, targetLevel) {
 
   _pmDragNodeId = null;
   _pmDragLevel = null;
-  renderProductManagementPage();
+  EventBus.emit(EVENTS.PRODUCT_LINE_SAVED, {});
 }
 
 /* ── Selection ── */
@@ -433,7 +433,7 @@ async function _pmAddChildNode(parentId) {
   try {
     await API.post('/product-doc-templates/product-nodes', {name: name, parent_id: parentId, sort_order: 0});
     showToast('已添加: ' + name, 'ok');
-    await refreshPMData();
+    EventBus.emit(EVENTS.PRODUCT_LINE_SAVED, {});
   } catch (e) {
     showToast('添加失败: ' + (e.detail || e.message), 'error');
   }
@@ -462,7 +462,7 @@ async function _pmRenameNode(nodeId) {
   try {
     await API.put('/product-doc-templates/product-nodes/' + nodeId, {name: name});
     showToast('已重命名', 'ok');
-    await refreshPMData();
+    EventBus.emit(EVENTS.PRODUCT_LINE_SAVED, {});
   } catch (e) {
     showToast('重命名失败: ' + (e.detail || e.message), 'error');
   }
@@ -477,12 +477,7 @@ async function _pmDeleteNode(nodeId) {
   try {
     await API.del('/product-doc-templates/product-nodes/' + nodeId);
     showToast('已删除: ' + node.name, 'ok');
-    await refreshPMData();
-    // If selected node was deleted, select first available
-    if (!_pmFindNodeById(_pmSelectedNodeId)) {
-      var firstL2 = _pmFindFirstL2(_pmTree);
-      _pmSelectedNodeId = firstL2 || (_pmTree.length ? _pmTree[0].id : null);
-    }
+    EventBus.emit(EVENTS.PRODUCT_LINE_DELETED, {});
   } catch (e) {
     showToast('删除失败: ' + (e.detail || e.message), 'error');
   }
@@ -506,7 +501,7 @@ async function _pmAddProductLine() {
   try {
     await API.post('/product-doc-templates/product-nodes', {name: name, parent_id: null, sort_order: 0});
     showToast('已添加产品线: ' + name, 'ok');
-    await refreshPMData();
+    EventBus.emit(EVENTS.PRODUCT_LINE_SAVED, {});
   } catch (e) {
     showToast('添加失败: ' + (e.detail || e.message), 'error');
   }
@@ -595,7 +590,7 @@ async function _pmLinkProducts() {
   }
   if (success) showToast('已关联 ' + success + ' 个产品' + (fail ? '，' + fail + ' 个失败' : ''), fail ? 'warn' : 'ok');
   else showToast('关联失败', 'error');
-  await refreshPMData();
+  EventBus.emit(EVENTS.PRODUCT_SAVED, {});
 }
 
 async function _pmUnlinkProduct(productId) {
@@ -605,7 +600,7 @@ async function _pmUnlinkProduct(productId) {
   try {
     await API.del('/product-management/link-product-node?product_id=' + productId + '&node_id=' + _pmSelectedNodeId);
     showToast('已移除关联', 'ok');
-    await refreshPMData();
+    EventBus.emit(EVENTS.PRODUCT_SAVED, {});
   } catch (e) {
     showToast('移除失败: ' + (e.detail || e.message), 'error');
   }
@@ -669,7 +664,7 @@ async function _pmSaveEditProduct(productId) {
       code: code, name: name, status: status,
     });
     showToast('产品已更新', 'success');
-    await refreshPMData();
+    EventBus.emit(EVENTS.PRODUCT_SAVED, {});
   } catch (e) {
     showToast('更新失败: ' + (e.detail || e.message), 'error');
   }
@@ -682,7 +677,7 @@ async function _pmDeleteProduct(productId, productName) {
   try {
     await API.del('/product-management/products/' + productId);
     showToast('已删除产品「' + productName + '」', 'success');
-    await refreshPMData();
+    EventBus.emit(EVENTS.PRODUCT_DELETED, {});
   } catch (e) {
     showToast('删除失败: ' + (e.detail || e.message), 'error');
   }
@@ -915,7 +910,7 @@ async function _pmSubmitNamingProduct() {
     showToast('产品已创建: ' + fullCode, 'success');
     var d = document.querySelector('.shared-dialog-overlay');
     if (d) d.remove();
-    await refreshPMData();
+    EventBus.emit(EVENTS.PRODUCT_SAVED, {});
   } catch(e) {
     showToast('创建失败: ' + (e.message || e.detail || '未知错误'), 'error');
   }
@@ -996,7 +991,7 @@ async function _pmCreateProduct() {
       status: status, project_ids: projectIds
     });
     showToast('产品已创建: ' + name, 'ok');
-    await refreshPMData();
+    EventBus.emit(EVENTS.PRODUCT_SAVED, {});
   } catch (e) {
     showToast('创建失败: ' + (e.detail || e.message), 'error');
   }
@@ -1045,8 +1040,8 @@ async function _pmSaveProductProjects(productId) {
   try {
     await API.put('/product-management/products/' + productId + '/projects', { project_ids: projectIds });
     showToast('项目关联已更新', 'ok');
-    if (typeof invalidateAllProjects === 'function') invalidateAllProjects();
-    await refreshPMData();
+    EventBus.emit(EVENTS.PRODUCT_SAVED, {});
+    EventBus.emit(EVENTS.PROJECT_SAVED, {});
   } catch (e) {
     showToast('更新失败: ' + (e.detail || e.message), 'error');
   }
@@ -1065,13 +1060,27 @@ function _resizePMTable() {
 /* ── Refresh ── */
 
 async function refreshPMData() {
+  // 保留表格滚动位置与选中节点（增删产品/产品线后原位刷新，不跳回顶部）
+  var prevNodeId = _pmSelectedNodeId;
+  var scrollEl = document.querySelector('#view-product-management .table-scroll');
+  var prevScroll = scrollEl ? scrollEl.scrollTop : 0;
   try {
     _pmTree = (await API.get('/product-management/tree')) || [];
     _pmAllProducts = (await API.get('/product-management/all-products')) || [];
     _pmAllProjects = (await API.get('/product-management/all-projects')) || [];
   } catch (e) { /* ignore */ }
+  // If selected node no longer exists, select first available
+  if (!_pmFindNodeById(_pmSelectedNodeId)) {
+    var firstL2 = _pmFindFirstL2(_pmTree);
+    _pmSelectedNodeId = firstL2 || (_pmTree.length ? _pmTree[0].id : null);
+  }
   await _pmLoadContent();
   renderProductManagementPage();
   _resizePMTable();
+  // 选中节点未变时恢复表格滚动位置（节点变了内容完全不同，无需恢复）
+  if (_pmSelectedNodeId === prevNodeId && prevScroll > 0) {
+    var scrollEl2 = document.querySelector('#view-product-management .table-scroll');
+    if (scrollEl2) scrollEl2.scrollTop = prevScroll;
+  }
 }
 window.addEventListener('resize', _resizePMTable);

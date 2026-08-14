@@ -34,6 +34,16 @@ async function initDbManage(containerId) {
   renderDbManage();
 }
 
+async function refreshDbManage() {
+  try {
+    var backups = await API.get('/admin/db/backups');
+    _dbBackups = backups || [];
+    var rbacks = await API.get('/admin/db/remote-backups');
+    _dbRemoteBackups = (rbacks && rbacks.files) ? rbacks.files : [];
+  } catch(e) { return; }
+  renderDbManage();
+}
+
 function renderDbManage() {
   var html = '<div class="db-manage-grid">';
 
@@ -445,7 +455,7 @@ function backupNow() {
   API.post('/admin/db/backup-now')
     .then(function() {
       showToast('备份完成', 'success');
-      initDbManage();
+      EventBus.emit(EVENTS.BACKUP_SAVED, {});
     })
     .catch(function(e) {
       showToast('备份失败: ' + (e.message || '未知错误'), 'error');
@@ -459,7 +469,7 @@ function syncAllToRemote() {
     .then(function(res) {
       var msg = (res && res.message) || '同步完成';
       showToast(msg, 'success');
-      initDbManage();
+      EventBus.emit(EVENTS.BACKUP_SAVED, {});
     })
     .catch(function(e) {
       showToast('批量同步失败: ' + (e.message || '未知错误'), 'error');
@@ -473,7 +483,7 @@ function syncSingleToRemote(name) {
     .then(function() {
       showToast(name + ' 已同步到远端', 'success');
       // Reload both lists
-      initDbManage();
+      EventBus.emit(EVENTS.BACKUP_SAVED, {});
     })
     .catch(function(e) {
       showToast('同步失败: ' + (e.message || '未知错误'), 'error');
@@ -485,7 +495,7 @@ function deleteRemoteBackup(name) {
   API.del('/admin/db/remote-backups/' + encodeURIComponent(name))
     .then(function() {
       showToast('已删除远端备份 ' + name, 'success');
-      initDbManage();
+      EventBus.emit(EVENTS.BACKUP_DELETED, {});
     })
     .catch(function(e) {
       showToast('删除失败: ' + (e.message || '未知错误'), 'error');
@@ -515,7 +525,7 @@ function _doRestoreRemote(name) {
   API.post('/admin/db/remote-backups/' + encodeURIComponent(name) + '/restore')
     .then(function() {
       showToast(name + ' 已从远端恢复', 'success');
-      setTimeout(function() { initDbManage(); }, 500);
+      setTimeout(function() { EventBus.emit(EVENTS.BACKUP_SAVED, {}); }, 500);
     })
     .catch(function(e) {
       showToast('恢复失败: ' + (e.message || '未知错误'), 'error');

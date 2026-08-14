@@ -402,6 +402,34 @@ async function initDocTemplates(tab, sub1, sub2) {
   }
 }
 
+// 原位刷新当前 tab（不重建 shell、不丢 _currentTab / _selectedStage / _selectedNodeId）
+async function refreshDocTemplates(section) {
+  try {
+    if (section === 'project') {
+      var ptypes = await API.get('/doc-templates/project-types');
+      if (ptypes && ptypes.length) _projectTypes = ptypes;
+      try {
+        var unnecRes = await API.get('/doc-templates/stage-unnecessary?project_type=' + encodeURIComponent(_currentProjectType));
+        if (unnecRes) { _stageUnnecDocs = unnecRes.docs || []; _stageUnnecTasks = unnecRes.tasks || []; }
+      } catch(e) {}
+      var savedStage = _selectedStage;
+      await loadTemplatesForType(_currentProjectType);
+      if (savedStage) _selectedStage = savedStage;
+      renderTemplatesPage();
+    } else if (section === 'product') {
+      renderProductTreePage();
+    } else if (section === 'tags') {
+      await initTags();
+    } else if (section === 'naming') {
+      await initNamingOptions();
+    } else if (section === 'bugtpl') {
+      await initBugTemplates();
+    }
+  } catch(e) {
+    showToast('刷新失败: ' + e.message, 'error');
+  }
+}
+
 async function loadTemplatesForType(ptype) {
   _currentProjectType = ptype;
   _selectedStage = null;
@@ -461,7 +489,7 @@ async function createProjectType() {
     await API.post('/doc-templates/project-types?project_type=' + encodeURIComponent(id) + '&label=' + encodeURIComponent(label) + '&code_prefix=' + encodeURIComponent(prefix || 'PE'));
     document.querySelector('.note-dialog-overlay').remove();
     showToast('项目类型已创建: ' + label, 'success');
-    initDocTemplates();
+    EventBus.emit(EVENTS.PROJECT_TYPE_SAVED, {});
   } catch(e) {
     showToast('创建失败: ' + (e.message || ''), 'error');
   }
@@ -1039,7 +1067,7 @@ function toggleStageDocsUnnecessary(stageName, current) {
       var idx = _stageUnnecDocs.indexOf(stageName);
       if (newVal && idx < 0) _stageUnnecDocs.push(stageName);
       if (!newVal && idx >= 0) _stageUnnecDocs.splice(idx, 1);
-      renderTemplatesPage();
+      EventBus.emit(EVENTS.STAGE_TYPE_SAVED, {});
     }).catch(function(e) { showToast('操作失败: ' + (e.message || ''), 'error'); });
   }
 }
@@ -1077,7 +1105,7 @@ function toggleStageTasksUnnecessary(stageName, current) {
       var idx = _stageUnnecTasks.indexOf(stageName);
       if (newVal && idx < 0) _stageUnnecTasks.push(stageName);
       if (!newVal && idx >= 0) _stageUnnecTasks.splice(idx, 1);
-      renderTemplatesPage();
+      EventBus.emit(EVENTS.STAGE_TYPE_SAVED, {});
     }).catch(function(e) { showToast('操作失败: ' + (e.message || ''), 'error'); });
   }
 }
@@ -1085,14 +1113,14 @@ function toggleTemplateUnnecessary(id, current) {
   var newVal = current ? 0 : 1;
   API.put('/doc-templates/' + id, { is_unnecessary: newVal }).then(function() {
     showToast(newVal ? '已标记为无需文档' : '已取消标记', 'success');
-    loadTemplatesForType(_currentProjectType).then(function() { renderTemplatesPage(); });
+    EventBus.emit(EVENTS.DOC_TEMPLATE_SAVED, {});
   }).catch(function(e) { showToast('操作失败: ' + (e.message || ''), 'error'); });
 }
 function toggleTaskUnnecessary(id, current) {
   var newVal = current ? 0 : 1;
   API.put('/doc-templates/tasks/' + id, { is_unnecessary: newVal }).then(function() {
     showToast(newVal ? '已标记为无需任务' : '已取消标记', 'success');
-    loadTemplatesForType(_currentProjectType).then(function() { renderTemplatesPage(); });
+    EventBus.emit(EVENTS.DOC_TEMPLATE_SAVED, {});
   }).catch(function(e) { showToast('操作失败: ' + (e.message || ''), 'error'); });
 }
 
@@ -1220,7 +1248,7 @@ async function _doDeleteDocTemplate(id, hardDelete) {
     var fresh = await API.get('/doc-templates?project_type=' + encodeURIComponent(_currentProjectType));
     if (fresh && Object.keys(fresh).length) _templatesGrouped = fresh;
   } catch(e) {}
-  renderTemplatesPage();
+  EventBus.emit(EVENTS.DOC_TEMPLATE_DELETED, {});
 }
 
 /* ── Task Template CRUD ── */
@@ -1425,7 +1453,7 @@ async function _doDeleteTaskTemplate(id, hardDelete) {
     var taskFresh = await API.get('/task-templates?project_type=' + encodeURIComponent(_currentProjectType));
     if (taskFresh && Object.keys(taskFresh).length) _taskTemplatesGrouped = taskFresh;
   } catch(e) {}
-  renderTemplatesPage();
+  EventBus.emit(EVENTS.DOC_TEMPLATE_DELETED, {});
 }
 
 function copyTaskTemplate(id) {
@@ -1508,7 +1536,7 @@ async function saveAllTaskChanges() {
     var tdata = await API.get('/task-templates?project_type=' + encodeURIComponent(_currentProjectType));
     _taskTemplatesGrouped = tdata || {};
   } catch(e) {}
-  renderTemplatesPage();
+  EventBus.emit(EVENTS.DOC_TEMPLATE_SAVED, {});
 }
 
 function discardTaskChanges() {
@@ -1591,7 +1619,7 @@ async function renameStageType(oldName) {
   } catch(e) {}
 
   if (_selectedStage === oldName) _selectedStage = newName;
-  renderTemplatesPage();
+  EventBus.emit(EVENTS.STAGE_TYPE_SAVED, {});
 }
 
 async function _doRenameSyncAll(oldName, newName) {
@@ -1710,7 +1738,7 @@ async function _doDeleteStage(stageType, hardDelete) {
   } catch(e) {}
 
   if (_selectedStage === stageType) _selectedStage = null;
-  renderTemplatesPage();
+  EventBus.emit(EVENTS.STAGE_TYPE_DELETED, {});
 }
 
 /* ── Project Type Rename / Delete ── */
@@ -1753,7 +1781,7 @@ async function renameProjectType(ptypeId) {
     document.querySelector('.note-dialog-overlay').remove();
     if (current) { current.label = newLabel; if (newPrefix) current.code_prefix = newPrefix; }
     showToast('项目类型已更新: ' + newLabel, 'success');
-    renderTemplatesPage();
+    EventBus.emit(EVENTS.PROJECT_TYPE_SAVED, {});
   } catch(e) {
     showToast('更新失败: ' + (e.message || ''), 'error');
   }
@@ -1782,7 +1810,7 @@ async function confirmDeleteProjectType(ptypeId) {
       await loadTemplatesForType(_currentProjectType);
     }
     showToast('项目类型已删除', 'success');
-    renderTemplatesPage();
+    EventBus.emit(EVENTS.PROJECT_TYPE_DELETED, {});
   } catch(e) {
     showToast('删除失败: ' + (e.message || ''), 'error');
   }
@@ -1896,7 +1924,7 @@ async function saveAllChanges() {
     var fresh = await API.get('/doc-templates?project_type=' + encodeURIComponent(_currentProjectType));
     if (fresh && Object.keys(fresh).length) _templatesGrouped = fresh;
   } catch(e) {}
-  renderTemplatesPage();
+  EventBus.emit(EVENTS.DOC_TEMPLATE_SAVED, {});
 }
 
 function discardChanges() {
@@ -2593,7 +2621,7 @@ async function saveProductChanges() {
   } catch(e) {}
   if (_selectedNodeId) await _loadTemplatesForNode(_selectedNodeId);
   showToast('保存完成: ' + success + ' 成功' + (fail > 0 ? ', ' + fail + ' 失败' : ''), success === ops.length ? 'success' : 'error');
-  renderProductTreePage();
+  EventBus.emit(EVENTS.DOC_TEMPLATE_SAVED, {});
 }
 
 async function discardProductChanges() {
@@ -2808,7 +2836,7 @@ async function saveTag(id) {
       var created = await API.post('/tags', {name: name, category: cat || null});
       _tags.push(created);
     }
-    renderTagsPage();
+    EventBus.emit(EVENTS.TEMPLATE_TAG_SAVED, {});
     showToast(id ? '标签已更新' : '标签已创建', 'ok');
   } catch(e) {
     showToast('保存失败: ' + e.message, 'error');
@@ -2822,7 +2850,7 @@ async function deleteTag(id) {
   try {
     await API.del('/tags/' + id);
     _tags = _tags.filter(function(t) { return t.id !== id; });
-    renderTagsPage();
+    EventBus.emit(EVENTS.TEMPLATE_TAG_DELETED, {});
     showToast('标签已删除', 'ok');
   } catch(e) {
     showToast('删除失败: ' + e.message, 'error');
@@ -2928,7 +2956,7 @@ async function _namingSave(id, fk) {
       await API.post('/product-doc-templates/naming-options', {field_key: fk, code: code, description: desc});
     }
     closeSharedDialog();
-    initNamingOptions();
+    EventBus.emit(EVENTS.NAMING_OPTION_SAVED, {});
   } catch(e) {
     showToast('保存失败: ' + (e.message || ''), 'error');
   }
@@ -2938,7 +2966,7 @@ async function _namingDelete(id, fk) {
   if (!confirm('确定删除此选项？')) return;
   try {
     await API.del('/product-doc-templates/naming-options/' + id);
-    initNamingOptions();
+    EventBus.emit(EVENTS.NAMING_OPTION_DELETED, {});
   } catch(e) {
     showToast('删除失败: ' + (e.message || ''), 'error');
   }
@@ -3000,17 +3028,17 @@ async function _bugTplSave(id) {
   try {
     if (id) await API.put('/product-doc-templates/bug-templates/'+id, {name:name, content:content});
     else await API.post('/product-doc-templates/bug-templates', {name:name, content:content});
-    closeSharedDialog(); initBugTemplates();
+    closeSharedDialog(); EventBus.emit(EVENTS.BUG_TEMPLATE_SAVED, {});
   } catch(e) { showToast('保存失败: '+(e.message||''),'error'); }
 }
 
 async function _bugTplSetDefault(id) {
-  try { await API.put('/product-doc-templates/bug-templates/'+id, {is_default: 1}); initBugTemplates(); }
+  try { await API.put('/product-doc-templates/bug-templates/'+id, {is_default: 1}); EventBus.emit(EVENTS.BUG_TEMPLATE_SAVED, {}); }
   catch(e) { showToast('设置失败: '+(e.message||''),'error'); }
 }
 
 async function _bugTplDelete(id) {
   if (!confirm('确定删除此模板？')) return;
-  try { await API.del('/product-doc-templates/bug-templates/'+id); initBugTemplates(); }
+  try { await API.del('/product-doc-templates/bug-templates/'+id); EventBus.emit(EVENTS.BUG_TEMPLATE_DELETED, {}); }
   catch(e) { showToast('删除失败: '+(e.message||''),'error'); }
 }

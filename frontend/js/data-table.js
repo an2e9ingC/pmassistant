@@ -487,7 +487,13 @@ var DataTable = (function() {
   DataTable.prototype.setData = function(data) {
     this._data = data || [];
     this._selected.clear();
-    this.refresh();
+    // Re-apply active sort so in-place refreshes preserve the user's sort state
+    // (_applySort renders the body + selection UI + sort indicators when sorted).
+    if (this._sortCol) {
+      this._applySort();
+    } else {
+      this.refresh();
+    }
   };
 
   DataTable.prototype.refresh = function() {

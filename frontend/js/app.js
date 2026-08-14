@@ -205,6 +205,13 @@ function buildHash(view) {
   return url;
 }
 
+// Is the given view container currently active/visible?
+// Used by EventBus subscribers to skip refreshing hidden views (they reload on switch).
+function isViewActive(view) {
+  var el = document.getElementById('view-' + view);
+  return !!(el && el.classList.contains('active'));
+}
+
 function gotoView(view, opts) {
   // Auth guard
   if (!isLoggedIn()) {
@@ -3648,16 +3655,28 @@ function openDailySummary() {
 
 /* ── EventBus Subscriptions (cross-view data refresh) ── */
 
+function _refreshDetailGanttResources() {
+  // 项目详情页：任务变更后联动刷新甘特图（保留滚动位置）。资源区块与任务无关，不刷新。
+  if (!isViewActive('detail')) return;
+  var code = (typeof _comboCurCode !== 'undefined') ? _comboCurCode : null;
+  if (!code) return;
+  if (typeof buildGantt === 'function') {
+    API.get('/projects/' + code + '/gantt').then(function(g) { buildGantt(g); }).catch(function() {});
+  }
+}
+
 EventBus.on('task:saved', function(e) {
   // 详情页模式：不刷新列表（避免 loadTaskData 覆盖全页面详情），由各保存路径自行原位更新
   var isDetailPage = !!document.querySelector('.task-detail-page');
   if (!isDetailPage && typeof loadTaskData === 'function') loadTaskData();
   if (typeof _ucLoadTasks === 'function') { var u = getCurrentUser(); if (u) _ucLoadTasks(u); }
+  _refreshDetailGanttResources();
 });
 EventBus.on('task:deleted', function(e) {
   var isDetailPage = !!document.querySelector('.task-detail-page');
   if (!isDetailPage && typeof loadTaskData === 'function') loadTaskData();
   if (typeof _ucLoadTasks === 'function') { var u = getCurrentUser(); if (u) _ucLoadTasks(u); }
+  _refreshDetailGanttResources();
 });
 
 EventBus.on('bug:saved', function(e) {
@@ -3680,6 +3699,7 @@ EventBus.on('task:field-changed', function(e) {
   if (!isDetailPage && typeof loadTaskData === 'function') loadTaskData();
   if (typeof _ucLoadTasks === 'function') { var u = getCurrentUser(); if (u) _ucLoadTasks(u); }
   if (e.taskId && typeof _refreshTaskProgressField === 'function') _refreshTaskProgressField(e.taskId);
+  _refreshDetailGanttResources();
 });
 
 EventBus.on('fav:toggled', function(e) {
@@ -3708,6 +3728,139 @@ EventBus.on('worklog:deleted', function(e) {
   if (!isDetailPage && typeof loadTaskData === 'function') loadTaskData();
   if (typeof _ucLoadTasks === 'function') { var u = getCurrentUser(); if (u) _ucLoadTasks(u); }
 });
+
+/* ── 组织架构（用户/角色/企微）事件订阅 — 原位刷新，仅当前可见视图 ── */
+function _refreshOrgIfActive() {
+  if (isViewActive('users') && typeof refreshOrg === 'function') refreshOrg();
+}
+EventBus.on(EVENTS.USER_SAVED, _refreshOrgIfActive);
+EventBus.on(EVENTS.USER_DELETED, _refreshOrgIfActive);
+EventBus.on(EVENTS.ROLE_SAVED, _refreshOrgIfActive);
+EventBus.on(EVENTS.ROLE_DELETED, _refreshOrgIfActive);
+EventBus.on(EVENTS.WECOM_LINKED, function() {
+  _refreshOrgIfActive();
+  if (isViewActive('users') && typeof loadWecomUserList === 'function') loadWecomUserList();
+});
+
+function _dtRefreshActive() {
+  if (isViewActive('doc-templates') && typeof refreshDocTemplates === 'function') {
+    refreshDocTemplates(typeof window._currentTab === 'string' ? window._currentTab : 'project');
+  }
+}
+EventBus.on(EVENTS.PROJECT_TYPE_SAVED, _dtRefreshActive);
+EventBus.on(EVENTS.PROJECT_TYPE_DELETED, _dtRefreshActive);
+EventBus.on(EVENTS.STAGE_TYPE_SAVED, _dtRefreshActive);
+EventBus.on(EVENTS.STAGE_TYPE_DELETED, _dtRefreshActive);
+EventBus.on(EVENTS.DOC_TEMPLATE_SAVED, _dtRefreshActive);
+EventBus.on(EVENTS.DOC_TEMPLATE_DELETED, _dtRefreshActive);
+EventBus.on(EVENTS.TEMPLATE_TAG_SAVED, _dtRefreshActive);
+EventBus.on(EVENTS.TEMPLATE_TAG_DELETED, _dtRefreshActive);
+EventBus.on(EVENTS.NAMING_OPTION_SAVED, _dtRefreshActive);
+EventBus.on(EVENTS.NAMING_OPTION_DELETED, _dtRefreshActive);
+EventBus.on(EVENTS.BUG_TEMPLATE_SAVED, _dtRefreshActive);
+EventBus.on(EVENTS.BUG_TEMPLATE_DELETED, _dtRefreshActive);
+
+function _pmRefreshIfActive() {
+  if (isViewActive('product-management') && typeof refreshPMData === 'function') refreshPMData();
+}
+EventBus.on(EVENTS.PRODUCT_LINE_SAVED, _pmRefreshIfActive);
+EventBus.on(EVENTS.PRODUCT_LINE_DELETED, _pmRefreshIfActive);
+
+function _productSaved() {
+  _pmRefreshIfActive();
+  if (isViewActive('product-detail') && typeof refreshProductDetail === 'function') refreshProductDetail();
+}
+EventBus.on(EVENTS.PRODUCT_SAVED, _productSaved);
+
+function _productDeleted() {
+  _pmRefreshIfActive();
+  if (isViewActive('product-list') && typeof refreshProductList === 'function') refreshProductList();
+}
+EventBus.on(EVENTS.PRODUCT_DELETED, _productDeleted);
+
+function _notesChanged() {
+  if (isViewActive('product-detail') && typeof refreshProductNotes === 'function') refreshProductNotes();
+  if (isViewActive('detail') && typeof refreshProjectNotes === 'function') refreshProjectNotes();
+}
+EventBus.on(EVENTS.NOTE_SAVED, _notesChanged);
+EventBus.on(EVENTS.NOTE_DELETED, _notesChanged);
+
+function _productDocsChanged() {
+  if (isViewActive('product-detail') && typeof refreshProductDocs === 'function') refreshProductDocs();
+}
+EventBus.on(EVENTS.PRODUCT_DOC_SAVED, _productDocsChanged);
+EventBus.on(EVENTS.PRODUCT_DOC_DELETED, _productDocsChanged);
+
+function _productDiagramsChanged() {
+  if (isViewActive('product-detail') && typeof loadBlockDiagrams === 'function') loadBlockDiagrams();
+}
+EventBus.on(EVENTS.DIAGRAM_SAVED, _productDiagramsChanged);
+EventBus.on(EVENTS.DIAGRAM_DELETED, _productDiagramsChanged);
+
+function _projectSaved() {
+  if (typeof invalidateAllProjects === 'function') invalidateAllProjects();
+  if (isViewActive('detail') && typeof refreshProjectDetail === 'function') refreshProjectDetail();
+  if (isViewActive('dashboard') && typeof loadProjectTable === 'function') loadProjectTable();
+  if (isViewActive('dashboard') && typeof loadKpiCards === 'function') loadKpiCards();
+}
+EventBus.on(EVENTS.PROJECT_SAVED, _projectSaved);
+
+function _projectDeleted() {
+  if (typeof invalidateAllProjects === 'function') invalidateAllProjects();
+  if (isViewActive('dashboard') && typeof loadProjectTable === 'function') loadProjectTable();
+  if (isViewActive('dashboard') && typeof loadKpiCards === 'function') loadKpiCards();
+}
+EventBus.on(EVENTS.PROJECT_DELETED, _projectDeleted);
+
+function _projectDocsChanged() {
+  if (isViewActive('detail') && typeof refreshDocs === 'function') refreshDocs();
+  if (isViewActive('dashboard') && typeof loadKpiCards === 'function') loadKpiCards();
+}
+EventBus.on(EVENTS.PROJECT_DOC_SAVED, _projectDocsChanged);
+EventBus.on(EVENTS.PROJECT_DOC_DELETED, _projectDocsChanged);
+
+function _projectDeliveryChanged() {
+  if (isViewActive('detail') && typeof refreshProjectDelivery === 'function') refreshProjectDelivery();
+  if (isViewActive('dashboard') && typeof loadKpiCards === 'function') loadKpiCards();
+}
+EventBus.on(EVENTS.DELIVERY_SAVED, _projectDeliveryChanged);
+EventBus.on(EVENTS.DELIVERY_DELETED, _projectDeliveryChanged);
+
+function _projectStagesChanged() {
+  if (isViewActive('detail') && typeof refreshProjectStages === 'function') refreshProjectStages();
+}
+EventBus.on(EVENTS.STAGE_SAVED, _projectStagesChanged);
+EventBus.on(EVENTS.STAGE_DELETED, _projectStagesChanged);
+
+function _projectMaintChanged() {
+  if (isViewActive('detail') && typeof refreshProjectMaintenance === 'function') refreshProjectMaintenance();
+}
+EventBus.on(EVENTS.MAINT_SAVED, _projectMaintChanged);
+
+function _customerChanged() {
+  if (isViewActive('customers') && typeof loadCustTable === 'function') loadCustTable();
+}
+EventBus.on(EVENTS.CUSTOMER_SAVED, _customerChanged);
+EventBus.on(EVENTS.CUSTOMER_DELETED, _customerChanged);
+
+function _standardChanged() {
+  if (isViewActive('standards') && typeof refreshStandards === 'function') refreshStandards();
+}
+EventBus.on(EVENTS.STANDARD_SAVED, _standardChanged);
+
+function _backupChanged() {
+  if ((isViewActive('db-manage') || isViewActive('system-manage')) && typeof refreshDbManage === 'function') refreshDbManage();
+}
+EventBus.on(EVENTS.BACKUP_SAVED, _backupChanged);
+EventBus.on(EVENTS.BACKUP_DELETED, _backupChanged);
+
+function _settingSaved(payload) {
+  if (!isViewActive('system-manage')) return;
+  var scope = payload && payload.scope;
+  if ((!scope || scope === 'config') && typeof _loadConfigPanel === 'function') _loadConfigPanel();
+  if ((!scope || scope === 'settings') && typeof _loadSysSettingsPanel === 'function') _loadSysSettingsPanel();
+}
+EventBus.on(EVENTS.SETTING_SAVED, _settingSaved);
 
 document.addEventListener('DOMContentLoaded', function() {
   init();
