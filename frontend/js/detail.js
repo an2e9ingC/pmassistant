@@ -2159,38 +2159,6 @@ function _scrollToStageTasks(stageName) {
   setTimeout(doScroll, 200);
 }
 
-/* ⚠ showStageMismatchDialog / showStageNameEdit are now in components.js */
-
-async function saveStageNameMapping(presetName) {
-  var name;
-  if (presetName) {
-    name = presetName;  // one-click mapping from dialog button
-  } else {
-    if (!_mismatchExecId) { showToast('请重新点击告警标记', 'error'); return; }
-    var sel = document.getElementById('stage-name-select');
-    if (!sel) { showToast('表单已失效，请重新打开', 'error'); return; }
-    name = sel.value.trim();
-    if (!name) { showToast('请选择标准阶段名', 'error'); return; }
-  }
-  if (!_mismatchExecId) { showToast('请重新点击告警标记', 'error'); return; }
-
-  try {
-    await API.put('/projects/' + _comboCurCode + '/stages/' + _mismatchExecId + '/sync-to-zentao', { stage_name: name });
-    showToast('PMA 映射已保存（请在禅道中手动修改执行名）', 'success');
-    var dlg = document.querySelector('.stage-mismatch-dialog-overlay');
-    if (dlg) dlg.remove();
-    _mismatchExecId = null;
-    var p = await Promise.all([
-      API.get('/projects/' + _comboCurCode + '/stages'),
-      API.get('/projects/' + _comboCurCode + '/documents'),
-    ]);
-    buildStages(p[0]);
-    buildDocs(p[1]);
-  } catch(e) {
-    showToast('保存失败: ' + (e.message || '未知错误'), 'error');
-  }
-}
-
 /* ── Project Maintenance ── */
 
 function buildMaintenance() {

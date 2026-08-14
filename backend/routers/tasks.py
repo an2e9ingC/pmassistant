@@ -38,7 +38,6 @@ router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 class TaskCreate(BaseModel):
     project_id: int
-    execution_id: Optional[int] = None
     stage_name: Optional[str] = None
     progress: Optional[int] = 0
     title: str
@@ -66,7 +65,6 @@ class TaskBatchCreate(BaseModel):
 class TaskImport(BaseModel):
     task_ids: List[int]
     target_project_id: int
-    execution_mapping: Optional[dict] = None  # {source_exec_id: target_exec_id}
 
 
 class TaskUpdate(BaseModel):
@@ -75,7 +73,6 @@ class TaskUpdate(BaseModel):
     status: Optional[str] = None
     priority: Optional[str] = None
     type: Optional[str] = None
-    execution_id: Optional[int] = None
     stage_name: Optional[str] = None
     progress: Optional[int] = None
     assignee_id: Optional[int] = None
@@ -94,7 +91,7 @@ class TaskUpdate(BaseModel):
 @router.get("", response_model=dict)
 def list_tasks(
     project_id: Optional[str] = Query(None),
-    execution_id: Optional[int] = Query(None),
+    stage_name: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     assignee_id: Optional[int] = Query(None),
     reviewer_id: Optional[int] = Query(None),
@@ -105,7 +102,7 @@ def list_tasks(
     if project_id:
         p = resolve_project(db, project_id)
         pid = p.id
-    tasks = task_service.get_tasks(db, pid, execution_id, status, assignee_id, reviewer_id)
+    tasks = task_service.get_tasks(db, pid, stage_name, status, assignee_id, reviewer_id)
     return {"code": 0, "data": tasks, "message": "ok"}
 
 
@@ -316,9 +313,6 @@ def create_tasks_batch(
             logger.warning(f"[task-batch] skipping task #{i}: empty title")
             continue
         # Ensure numeric fields are valid
-        if d.get("execution_id") is not None:
-            try: d["execution_id"] = int(d["execution_id"])
-            except (ValueError, TypeError): d["execution_id"] = None
         if d.get("assignee_id") is not None:
             try: d["assignee_id"] = int(d["assignee_id"])
             except (ValueError, TypeError): d["assignee_id"] = None
@@ -339,8 +333,7 @@ def import_tasks(
     user=Depends(require_perm("task_edit")),
 ):
     tasks = task_service.import_tasks(
-        db, payload.task_ids, payload.target_project_id,
-        payload.execution_mapping or {}, user
+        db, payload.task_ids, payload.target_project_id, user
     )
     return {"code": 0, "data": tasks, "message": "ok"}
 

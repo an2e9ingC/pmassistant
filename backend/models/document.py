@@ -33,7 +33,6 @@ class ProjectDocument(Base):
 
     id = Column(Integer, primary_key=True)
     project_id = Column(Integer, ForeignKey("zenta_projects.id"), nullable=False, index=True)
-    execution_id = Column(Integer, ForeignKey("zenta_executions.id"), nullable=False, index=True)
     template_id = Column(Integer, ForeignKey("document_templates.id"), nullable=True, index=True)
     stage_type = Column(String(64), nullable=False)
     doc_name = Column(String(256), nullable=False)

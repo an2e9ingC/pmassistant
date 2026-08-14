@@ -1498,8 +1498,6 @@ async function init() {
         if (statsEl) {
           var parts = [];
           if (p.projects_total) parts.push('项目 ' + (p.projects_done||0) + '/' + p.projects_total);
-          if (p.execs_total) parts.push('执行 ' + (p.execs_done||0) + '/' + p.execs_total);
-          if (p.tasks_total) parts.push('任务 ' + p.tasks_total);
           // GitLab phases don't have counters yet, just show phase name
           if (p.phase === '发布版本' || p.phase === 'GitLab校验') parts.push(p.phase);
           statsEl.textContent = parts.join(' · ') || '';
@@ -1522,14 +1520,6 @@ async function init() {
           }
           if (n.nas && n.nas.status !== 'pending') {
             _notifySource('NAS', n.nas.status, n.nas.summary);
-          }
-          // Stage mismatch warning
-          var mm = n.mismatches;
-          if (mm && (mm.total_unmatched > 0 || mm.total_fuzzy > 0)) {
-            var mmParts = [];
-            if (mm.total_unmatched > 0) mmParts.push(mm.total_unmatched + ' 个非标准阶段');
-            if (mm.total_fuzzy > 0) mmParts.push(mm.total_fuzzy + ' 个模糊匹配');
-            showToast('⚠ ' + mmParts.join('，') + '，影响 ' + (mm.affected_projects || []).length + ' 个项目', 'warn', 8000);
           }
           // Reset for next sync
           _zentaoNotified = false;

@@ -781,52 +781,6 @@ function createFloatingCard(opts) {
   return api;
 }
 
-/* ═══════════════════════════════════════════════════
-   STAGE MISMATCH DIALOG (shared by stages + gantt)
-═══════════════════════════════════════════════════ */
-
-var STAGE_OPTIONS = ['售前', '项目立项', '需求分解', '硬件开发', '结构设计', 'BSP开发', '软件开发', '测试', '产品发货', '项目总结'];
-var _mismatchExecId = null;
-
-function showStageMismatchDialog(execId, stageName, suggestedName, event) {
-  _mismatchExecId = execId;
-  if (event) event.stopPropagation();
-
-  var zentaoUrl = '';
-  if (execId && typeof _zentaoWebBase !== 'undefined' && _zentaoWebBase) {
-    zentaoUrl = _zentaoWebBase + '/index.php?m=execution&f=view&executionID=' + execId;
-  }
-
-  var bodyHtml = '<div style="padding:8px 0;line-height:1.8">';
-  if (suggestedName) {
-    bodyHtml +=
-      '<p style="margin-bottom:10px">当前阶段名 <b style="color:var(--warn)">"' + escHtml(stageName) + '"</b> 与标准名不一致。</p>' +
-      '<p style="margin-bottom:6px">请在禅道中将阶段名修改为：</p>' +
-      '<p style="padding:12px 16px;background:var(--accent-lt);border:1px solid var(--accent);border-radius:8px;font-size:16px;font-weight:700;color:var(--accent);text-align:center;margin:10px 0">' + escHtml(suggestedName) + '</p>';
-  } else {
-    var standards = (typeof _standardStages !== 'undefined' && _standardStages.length)
-      ? _standardStages : STAGE_OPTIONS;
-    var stageListHtml = standards.map(function(st) {
-      return '<li style="padding:2px 0;font-weight:500">' + escHtml(st) + '</li>';
-    }).join('');
-    bodyHtml +=
-      '<p style="margin-bottom:10px">当前阶段名 <b style="color:var(--warn)">"' + escHtml(stageName) + '"</b> 不在标准阶段列表中。</p>' +
-      '<p style="margin-bottom:6px;color:var(--muted)">请修改禅道阶段名为以下标准名称之一：</p>' +
-      '<ul style="margin:0;padding-left:20px;color:var(--fg);font-size:13px">' + stageListHtml + '</ul>';
-  }
-  if (zentaoUrl) {
-    bodyHtml += '<div style="margin-top:10px;padding:8px 12px;background:var(--bg);border-radius:6px;font-size:12px">' +
-      '<a href="' + zentaoUrl + '" target="_blank" style="color:var(--accent);text-decoration:none;font-weight:500">&#x2197; 打开禅道阶段设置页面</a>' +
-      '<span style="color:var(--muted);margin-left:6px">修改后重新同步即可</span></div>';
-  }
-  bodyHtml += '<p style="margin-top:12px;font-size:11px;color:var(--muted);font-style:italic">修改后下次禅道同步生效，系统将自动匹配并显示正常数据。</p>';
-  bodyHtml += '</div>';
-
-  var buttons = [{ text: '关闭', cls: '', onclick: "this.closest('.note-dialog-overlay').remove()" }];
-
-  openDialog('⚠ 请修改禅道阶段名为标准名字', bodyHtml, buttons, { overlayClass: 'stage-mismatch-dialog-overlay' });
-}
-
 /* ── Document Preview ── */
 
 var _PREVIEWABLE_EXTS = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'md', 'txt', 'docx', 'vsdx'];

@@ -128,8 +128,8 @@ class ZentaoClient:
             # Response key varies by endpoint
             key = None
             for candidate in (
-                "projects", "products", "users", "executions",
-                "tasks", "bugs", "plans", "releases", "stories",
+                "projects", "products", "users",
+                "bugs", "plans", "releases", "stories",
             ):
                 if candidate in resp:
                     key = candidate
@@ -175,21 +175,6 @@ class ZentaoClient:
     async def get_project(self, project_id: int) -> dict:
         return await self._request("GET", f"/projects/{project_id}")
 
-    async def get_executions(self, project_id: Optional[int] = None) -> list:
-        params = {}
-        if project_id:
-            params["project"] = project_id
-        return await self._get_all_pages("/executions", params)
-
-    async def get_execution(self, execution_id: int) -> dict:
-        return await self._request("GET", f"/executions/{execution_id}")
-
-    async def get_tasks(self, execution_id: int) -> list:
-        return await self._get_all_pages(f"/executions/{execution_id}/tasks")
-
-    async def get_task(self, task_id: int) -> dict:
-        return await self._request("GET", f"/tasks/{task_id}")
-
     async def get_product_bugs(self, product_id: int, status: Optional[str] = None) -> list:
         params = {}
         if status:
@@ -198,22 +183,6 @@ class ZentaoClient:
 
     async def get_product_stories(self, product_id: int) -> list:
         return await self._get_all_pages(f"/products/{product_id}/stories")
-
-    async def update_execution(self, execution_id: int, name: str) -> dict:
-        """Update an execution's name in Zentao.
-
-        Sends ALL current fields back with only the name changed.
-        Zentao's REST API may require a complete object for PUT.
-        """
-        current = await self.get_execution(execution_id)
-        payload = dict(current)  # copy all fields
-        payload["name"] = name
-        # Remove read-only fields that Zentao may reject on PUT
-        for k in ("id", "project", "parent", "path", "grade", "days",
-                  "realBegan", "realEnd", "firstEnd", "hasProduct",
-                  "percent", "synced_at", "raw_json"):
-            payload.pop(k, None)
-        return await self._request("PUT", f"/executions/{execution_id}", json=payload)
 
     async def get_product_releases(self, product_id: int) -> list:
         return await self._get_all_pages(f"/products/{product_id}/releases")

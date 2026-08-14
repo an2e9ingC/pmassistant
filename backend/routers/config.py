@@ -497,7 +497,7 @@ def clear_database(_=Depends(require_admin), cu = Depends(get_current_user)):
     """Clear all cached Zentao data (keep config and users)."""
     from backend.database import SessionLocal
     from backend.models.zentao import (
-        CachedProject, CachedExecution, CachedTask, CachedUser,
+        CachedProject, CachedUser,
         PmaProduct, ProductProjectLink, PmaCustomer, CustomerProjectLink,
     )
     from backend.models.bug import CachedBug
@@ -511,7 +511,7 @@ def clear_database(_=Depends(require_admin), cu = Depends(get_current_user)):
         count += db.query(CachedProject).filter(CachedProject.is_local != True).delete()
         # Remaining Zentao-only cached tables (all rows are synced)
         tables = [
-            CachedTask, CachedExecution, CachedUser,
+            CachedUser,
             ProductProjectLink, PmaCustomer, CustomerProjectLink,
             CachedBug, DeliveryRecord,
         ]

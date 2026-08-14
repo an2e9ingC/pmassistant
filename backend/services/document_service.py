@@ -8,11 +8,11 @@ from sqlalchemy import or_
 
 from backend.database import to_local_str
 from backend.models.document import DocumentTemplate, ProjectDocument, ProductDocTemplate, ProductLine, PmaTag, TaskTemplate
-from backend.models.zentao import CachedExecution, CachedProject
+from backend.models.zentao import CachedProject
 from backend.models.task import Task
 
 # Standard stage names from requirements spec (Section 4.1 Project Lifecycle).
-# These are the authoritative stage definitions; Zentao execution names must
+# These are the authoritative stage definitions; local task stage_name must
 # match one of these exactly (or have stage_name set to one of these).
 #
 # R&D project stages (10 stages):
@@ -578,7 +578,6 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
     """Sync project documents from templates for all standard stages.
 
     Directly iterates standard stages — no longer depends on Zentao executions.
-    All documents use execution_id=0 since we no longer track Zentao executions.
 
     Matching priority: template_id (FK) > doc_name (legacy fallback).
     Always updates matched docs so renames and reorders propagate.
@@ -709,7 +708,7 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
                 # New doc from template
                 doc_path = _build_doc_path(tpl, project_code)
                 pd = ProjectDocument(
-                    project_id=project_id, execution_id=0,
+                    project_id=project_id,
                     template_id=tpl.id,
                     stage_type=st, doc_name=tpl.doc_name,
                     sort_order=seq_idx, status="pending",
@@ -760,62 +759,40 @@ def _build_doc_path(tpl, project_code: str) -> str:
 
 def _query_project_documents(db: Session, project_id: int, include_removed: bool = False) -> list[dict]:
     """Return all ProjectDocument rows for a project with computed warn flag.
-    Uses outer join to include execution_id=0 placeholder docs (unmatched stages)."""
-    q = (
-        db.query(ProjectDocument, CachedExecution.status.label("exec_status"))
-        .outerjoin(CachedExecution, CachedExecution.id == ProjectDocument.execution_id)
-        .filter(ProjectDocument.project_id == project_id)
-    )
+    Stage name/status come from the local ProjectStage model (matched by stage_type)."""
+    from backend.models.project_stage import ProjectStage
+    q = db.query(ProjectDocument).filter(ProjectDocument.project_id == project_id)
     if not include_removed:
         q = q.filter(or_(ProjectDocument.is_removed == 0, ProjectDocument.is_removed == None))
-    rows = q.order_by(ProjectDocument.execution_id, ProjectDocument.sort_order).all()
+    rows = q.order_by(ProjectDocument.sort_order).all()
 
-    # Also get execution names + task output status for display
-    exec_names: dict[int, str] = {}
-    exec_end_dates: dict[int, Optional[str]] = {}
-    exec_statuses: dict[int, str] = {}
-    exec_has_output: dict[int, bool] = {}  # execution has done tasks with files
-    for pd_doc, exec_status in rows:
-        if pd_doc.execution_id not in exec_names:
-            e = db.query(CachedExecution).filter(
-                CachedExecution.id == pd_doc.execution_id
-            ).first()
-            if e:
-                exec_names[pd_doc.execution_id] = e.name or ""
-                exec_end_dates[pd_doc.execution_id] = (
-                    to_local_str(e.end) if e.end else None
-                )
-                exec_statuses[pd_doc.execution_id] = e.status or ""
-                # Check if any task in this execution is done with files
-                from backend.models.zentao import CachedTask
-                tasks_with_files = db.query(CachedTask).filter(
-                    CachedTask.execution_id == pd_doc.execution_id,
-                    CachedTask.status.in_(["done", "closed"]),
-                    CachedTask.has_files == True,
-                ).count()
-                exec_has_output[pd_doc.execution_id] = tasks_with_files > 0
+    # Load local stages and index by name for status/date resolution
+    stages = db.query(ProjectStage).filter(ProjectStage.project_id == project_id).all()
+    stage_status: dict[str, str] = {}
+    stage_completed: dict[str, Optional[str]] = {}
+    for s in stages:
+        stage_status[s.name] = s.status or ""
+        if s.completed_date:
+            stage_completed[s.name] = to_local_str(s.completed_date)
+        elif s.status == "completed" and s.end_date:
+            stage_completed[s.name] = to_local_str(s.end_date)
 
     docs: list[dict] = []
-    auto_updated = False
-    for pd_doc, _ in rows:
-        exec_status = exec_statuses.get(pd_doc.execution_id, "")
-        is_done = exec_status in ("done", "closed")
-        is_pending = pd_doc.status == "pending"
-        has_task_output = exec_has_output.get(pd_doc.execution_id, False)
-        if is_pending and has_task_output and is_done:
-            pd_doc.status = "submitted"
+    for pd_doc in rows:
+        st_name = pd_doc.stage_type or ""
+        st_status = stage_status.get(st_name, "")
+        is_done = st_status == "completed"
         warn = is_done and pd_doc.status == "pending"
 
         docs.append({
             "id": pd_doc.id,
             "project_id": pd_doc.project_id,
-            "execution_id": pd_doc.execution_id,
             "template_id": pd_doc.template_id,
-            "stage_name": exec_names.get(pd_doc.execution_id, ""),
-            "stage_status": exec_status,
+            "stage_name": st_name,
+            "stage_status": st_status,
             "stage_completed_date": (
-                to_local_str(exec_end_dates.get(pd_doc.execution_id) or pd_doc.completed_at)[:10]
-                if (pd_doc.completed_at or exec_end_dates.get(pd_doc.execution_id))
+                stage_completed.get(st_name, "")[:10]
+                if stage_completed.get(st_name)
                 else None
             ) if pd_doc.status == "submitted" or is_done else None,
             "doc_name": pd_doc.doc_name,
@@ -893,7 +870,6 @@ def _doc_dict(pd: ProjectDocument) -> dict:
     return {
         "id": pd.id,
         "project_id": pd.project_id,
-        "execution_id": pd.execution_id,
         "template_id": pd.template_id,
         "stage_type": pd.stage_type,
         "doc_name": pd.doc_name,
@@ -1143,7 +1119,7 @@ def _sync_tasks_from_templates(
 ) -> int:
     """Sync project tasks from task templates for all standard stages.
 
-    No longer depends on Zentao executions. All tasks use execution_id=0.
+    No longer depends on Zentao executions.
     Deduplication key: (template_id, project_id, stage_name).
 
     Updates existing tasks (title, sort_order, description) from template,
@@ -1241,7 +1217,6 @@ def _sync_tasks_from_templates(
 
             task = Task(
                 project_id=project_id,
-                execution_id=0,
                 stage_name=st,
                 title=tpl.task_name,
                 description=tpl.description or None,

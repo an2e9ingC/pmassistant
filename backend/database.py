@@ -504,6 +504,107 @@ def _migrate_task_is_deleted():
         logger.warning(f"_migrate_task_is_deleted: {e}")
 
 
+def _rebuild_table_dropping_execution_id(cursor, table_name):
+    """Rebuild `table_name` without the `execution_id` column (and its FK/index).
+
+    SQLite 3.31 < 3.35 has no `ALTER TABLE DROP COLUMN`, so we recreate the table
+    from its own CREATE TABLE DDL, surgically stripping the execution_id column
+    and its FOREIGN KEY clause, then copy data back and restore surviving indexes.
+    Returns True if a rebuild happened, False if execution_id was already absent.
+    """
+    import re
+
+    cursor.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table_name,)
+    )
+    row = cursor.fetchone()
+    if not row or "execution_id" not in row[0]:
+        return False
+    create_sql = row[0]
+
+    # 1. Drop the execution_id column definition (handles optional NOT NULL + backticks)
+    new_sql = re.sub(r"`?execution_id`?\s+INTEGER(\s+NOT\s+NULL)?,", "", create_sql)
+    # 2. Drop the FOREIGN KEY clause referencing zenta_executions
+    new_sql = re.sub(
+        r"\n\s*FOREIGN KEY\s*\(\s*`?execution_id`?\s*\)\s*REFERENCES\s+`?zenta_executions`?\s*\(\s*id\s*\),?",
+        "",
+        new_sql,
+    )
+    # 2b. If execution_id's FK was the last constraint (no trailing comma), the
+    #     preceding constraint line now ends with a dangling comma before ")".
+    new_sql = re.sub(r",\s*\n\s*\)", "\n)", new_sql)
+    # 3. Point the CREATE at the temporary table name
+    for quote in ("", "`", '"'):
+        new_sql = new_sql.replace(
+            f"CREATE TABLE {quote}{table_name}{quote}",
+            f"CREATE TABLE {quote}{table_name}_new{quote}",
+        )
+
+    # Column list for data copy (all columns except execution_id)
+    cursor.execute(f"PRAGMA table_info(`{table_name}`)")
+    col_names = [r[1] for r in cursor.fetchall() if r[1] != "execution_id"]
+    col_list = ", ".join(f"`{c}`" for c in col_names)
+
+    # Capture surviving indexes (skip any referencing execution_id)
+    cursor.execute(
+        "SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name=? AND sql IS NOT NULL",
+        (table_name,),
+    )
+    keep_indexes = [s for (s,) in cursor.fetchall() if "execution_id" not in s]
+
+    # Clean up any orphan temp table left by an earlier interrupted run.
+    cursor.execute(f"DROP TABLE IF EXISTS `{table_name}_new`")
+    cursor.execute(new_sql)
+    cursor.execute(
+        f"INSERT INTO `{table_name}_new` ({col_list}) SELECT {col_list} FROM `{table_name}`"
+    )
+    cursor.execute(f"DROP TABLE `{table_name}`")
+    cursor.execute(f"ALTER TABLE `{table_name}_new` RENAME TO `{table_name}`")
+    for idx_sql in keep_indexes:
+        cursor.execute(idx_sql)
+    return True
+
+
+def _migrate_drop_execution():
+    """Remove the Zentao execution/task cache layer.
+
+    1. DROP the (empty) zenta_executions / zenta_tasks cache tables.
+    2. Drop the now-obsolete execution_id column from pma_tasks and
+       project_documents via table rebuild.
+    """
+    import sqlite3
+
+    # isolation_level=None → autocommit mode, so we control the transaction
+    # explicitly. This makes the DDL (CREATE/DROP/RENAME) atomic: a failure in
+    # the second table rebuild won't leave a half-migrated schema behind.
+    sqlite_conn = sqlite3.connect(_db_path, isolation_level=None)
+    cursor = sqlite_conn.cursor()
+
+    try:
+        cursor.execute("PRAGMA foreign_keys=OFF")
+        cursor.execute("BEGIN")
+
+        # Drop empty cache tables (dependency order: tasks references executions)
+        cursor.execute("DROP TABLE IF EXISTS `zenta_tasks`")
+        cursor.execute("DROP TABLE IF EXISTS `zenta_executions`")
+
+        # Drop execution_id from local tables
+        rebuilt_tasks = _rebuild_table_dropping_execution_id(cursor, "pma_tasks")
+        rebuilt_docs = _rebuild_table_dropping_execution_id(cursor, "project_documents")
+
+        cursor.execute("COMMIT")
+        if rebuilt_tasks or rebuilt_docs:
+            logger.info(
+                "_migrate_drop_execution: dropped zenta_executions/zenta_tasks, "
+                f"removed execution_id from pma_tasks={rebuilt_tasks}, project_documents={rebuilt_docs}"
+            )
+    except Exception as e:
+        cursor.execute("ROLLBACK")
+        logger.warning(f"_migrate_drop_execution warning: {e}")
+    finally:
+        sqlite_conn.close()
+
+
 def _clear_gitlab_tokens():
     """Clear all GitLab OAuth access tokens on server restart.
     Forces users to re-authenticate via GitLab after a restart.
@@ -582,8 +683,6 @@ def init_db():
     from backend.models.project_stage import ProjectStage  # noqa: F401
     from backend.models.zentao import (  # noqa: F401
         CachedProject,
-        CachedExecution,
-        CachedTask,
         CachedUser,
         PmaProduct,
         ProductProjectLink,
@@ -597,6 +696,7 @@ def init_db():
     logger.info(f"Database path: {_db_path}")
     Base.metadata.create_all(bind=engine)
     _migrate_sqlite()
+    _migrate_drop_execution()   # remove Zentao execution/task cache layer + execution_id columns
     _migrate_password_hash_nullable()
     _migrate_product_hierarchy()
     _migrate_project_doc_template_id()  # backfill template_id on project_documents

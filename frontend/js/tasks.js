@@ -276,16 +276,6 @@ async function _saveInlineEdit(el) {
     data[fieldName] = newVal === '' ? null : (parseFloat(newVal) || 0);
   } else if (fieldName === 'start_date' || fieldName === 'due_date') {
     data[fieldName] = newVal || null;
-  } else if (fieldName === 'execution_id') {
-    data[fieldName] = parseInt(newVal) || null;
-    data.stage_name = newVal && newVal.startsWith && newVal.startsWith('_') ? newVal.slice(1) : null;
-  } else if (fieldName === 'stage_name') {
-    var selId = field.dataset.executionId || '';
-    if (selId && selId.startsWith('_')) {
-      data.execution_id = null;
-      data.stage_name = newVal;
-    }
-    data[fieldName] = newVal;
   } else {
     data[fieldName] = newVal;
   }
@@ -377,8 +367,6 @@ var _taskProjectName = '';
 var _taskFilterStatus = '';
 var _taskFilterExecution = '';
 var _taskFilterAssignee = '';
-var _taskFilterStage = '';    // stage_name filter (set from Gantt click)
-
 /* ── Entry Point ── */
 
 function initTasks(firstArg) {
@@ -566,7 +554,7 @@ async function loadTaskData() {
     var params = [];
     if (projId) params.push('project_id=' + projId);
     if (_taskFilterStatus) params.push('status=' + _taskFilterStatus);
-    if (_taskFilterExecution) params.push('execution_id=' + _taskFilterExecution);
+    if (_taskFilterExecution) params.push('stage_name=' + encodeURIComponent(_taskFilterExecution));
     var assigneeId = '';
     if (_taskFilterAssignee === 'me') {
       var user = getCurrentUser();
@@ -603,7 +591,7 @@ function populateTaskFilters(tasks, execs) {
   if (execSel && execSel.options.length <= 1 && execs.length) {
     execs.forEach(function(s) {
       var opt = document.createElement('option');
-      opt.value = s.execution_id || '';
+      opt.value = s.name || s.standard_stage || '';
       opt.textContent = s.name || s.standard_stage || '';
       execSel.appendChild(opt);
     });
@@ -630,13 +618,6 @@ function renderTaskTable(tasks, execs) {
   }
 
   // Standalone view: full table with project info
-  var stageMap = {};
-  if (execs) {
-    execs.forEach(function(s) {
-      stageMap[s.execution_id || s.id || ''] = s.name || s.standard_stage || '未分类';
-    });
-  }
-
   _selectedTasks = new Set();
   content.innerHTML = '<div id="task-full-table"></div>';
   var dt = new DataTable({
@@ -961,30 +942,6 @@ async function initProjectStages() {
   } catch(e) { showToast('初始化失败: ' + (e.message || ''), 'error'); }
 }
 
-function _renderTaskRow(t, stageMap) {
-  var stageName = t.stage_name || t.execution_name || '';
-  var progressPct = t.progress || 0;
-  var overdue = t.due_date && t.status !== 'done' && t.status !== 'done' && t.due_date < fmtLocalDate();
-  var projCode = t.project_code || '';
-  return '<tr class="clickable">' +
-    '<td style="font-size:11px;font-family:var(--mono);color:var(--muted)">#' + t.id + '</td>' +
-    '<td>' + (projCode ? projCodeTag(projCode, 'openProject(\'' + escHtml(projCode).replace(/'/g, "\\'") + '\')', t.project_name) : '-') + '</td>' +
-    '<td style="text-align:left;font-size:12px">' + escHtml(t.project_name || '-') + '</td>' +
-    '<td style="text-align:center;width:22px" onclick="event.stopPropagation();if(event.target!==this.firstElementChild){var cb=this.firstElementChild;if(cb){cb.checked=!cb.checked;cb.onchange()}}"><input type="checkbox" value="' + t.id + '" onchange="_onTaskCheckbox(this)" class="task-checkbox"></td>' +
-    '<td style="text-align:left"><a href="javascript:void(0)" onclick="openTaskDetail(' + t.id + ')" style="color:var(--accent)">' + escHtml(t.title) + '</a></td>' +
-    '<td>' + (stageName ? '<span style="font-size:11px;color:var(--muted)">' + escHtml(stageName) + '</span>' : '-') + '</td>' +
-    '<td style="' + (window._approvalEnabled ? 'cursor:pointer' : '') + '"' + (window._approvalEnabled ? ' onclick="event.stopPropagation();openReviewerDialog(' + t.id + ')" title="' + (t.reviewer_name ? '审批人: ' + escHtml(t.reviewer_name) + ' — 点击修改' : '点击设置审批人') + '"' : '') + '>' + renderPill(t.status || 'todo') + '</td>' +
-    '<td>' + renderPriorityBadge(t.priority) + '</td>' +
-    '<td>' + renderProgressCircle(progressPct, 26, {label:''}) + '</td>' +
-    '<td style="color:' + (overdue ? 'var(--danger)' : '') + '">' + (t.due_date || '-') + '</td>' +
-    '<td>' +
-      iconEdit('openTaskDialog(' + t.id + ')', '编辑任务') +
-      iconCopy('openCopyTaskDialog(' + t.id + ')', '复制任务') +
-      iconDelete('deleteTask(' + t.id + ',\'' + escJs(t.title) + '\')', '删除任务') +
-    '</td>' +
-  '</tr>';
-}
-
 /* ── Board View (simplified — drag-and-drop in later iteration) ── */
 
 /* Pie charts & calendar moved to components.js */
@@ -1000,9 +957,7 @@ var _tfOriginalStatus = null; // original status when editing
 function _tfStageName() {
   var sel = document.getElementById('tf-execution');
   if (!sel) return null;
-  var val = sel.value;
-  if (val && val[0] === '_') return val.substring(1); // synthetic key
-  return null;
+  return sel.value || null;
 }
 
 function _resolveProjectId() {
@@ -1152,7 +1107,6 @@ async function _submitTaskFullPage(taskId) {
     title: title,
     description: desc,
     project_id: _tfProjectId || null,
-    execution_id: parseInt((document.getElementById('tf-execution') || {}).value) || null,
     stage_name: _tfStageName(),
     assignee_ids: _tfAssigneeIds || [],
     reviewer_id: _tfReviewerId || null,
@@ -1165,7 +1119,7 @@ async function _submitTaskFullPage(taskId) {
   };
 
   if (!data.project_id) { showToast('请选择所属项目', 'error'); return; }
-  if (!data.execution_id && !data.stage_name) { showToast('请选择阶段', 'error'); return; }
+  if (!data.stage_name) { showToast('请选择阶段', 'error'); return; }
   if (!data.assignee_ids.length) { showToast('请选择负责人', 'error'); return; }
   if (!data.due_date) { showToast('请填写截止日期', 'error'); return; }
 
@@ -1265,7 +1219,7 @@ function _renderTaskDetailBody(t) {
   var overdue = t.due_date && t.status !== 'done' && t.status !== 'done' && t.due_date < fmtLocalDate();
   var daysInfo = _daysLeft(t.due_date);
   var projHtml = t.project_code ? projCodeTag(t.project_code, null, t.project_name) + ' ' + escHtml(t.project_name || '') : escHtml(t.project_name || '-');
-  var stageName = escHtml(t.stage_name || t.execution_name || '-');
+  var stageName = escHtml(t.stage_name || '-');
 
   var html = '';
 
@@ -1303,7 +1257,7 @@ function _renderTaskDetailBody(t) {
         '<div class="dkpi"><div class="dkpi-lbl">阶段' + (t.template_id ? ' <span style="color:var(--accent);font-size:10px" title="由模板控制">🔒</span>' : '') + '</div>' +
           (t.template_id
             ? '<span class="dkpi-val" style="color:var(--muted)">' + stageName + '</span>'
-            : _buildEditableField(t.id, 'stage_name', 'stage-select', '<span class="dkpi-val">' + stageName + '</span>', t.stage_name || t.execution_name || '', {v:'',l:''}, ' data-project-id="' + (t.project_id || '') + '" data-project-code="' + escHtml(t.project_code || '') + '"')) + '</div>' +
+            : _buildEditableField(t.id, 'stage_name', 'stage-select', '<span class="dkpi-val">' + stageName + '</span>', t.stage_name || '', {v:'',l:''}, ' data-project-id="' + (t.project_id || '') + '" data-project-code="' + escHtml(t.project_code || '') + '"')) + '</div>' +
         // Per-person progress (team tasks only)
         _renderTeamProgress(t) +
         // Reviewer (editable, only if approval enabled)
@@ -1583,7 +1537,7 @@ function _initTaskFormSelectors(t, isEdit) {
   // Load stages for project with task's current stage pre-selected
   var projId = _tfProjectId || t.project_id;
   if (projId) {
-    var curExecVal = t.stage_name ? '_' + t.stage_name : '';
+    var curExecVal = t.stage_name || '';
     _loadTfExecutions(projId, curExecVal);
   }
 
@@ -1628,12 +1582,10 @@ function _loadTfExecutions(projectId, selectedId) {
     sel.innerHTML = '<option value="">选择阶段...</option>';
     if (data && data.stages) {
       data.stages.forEach(function(s) {
-        var eid = s.execution_id || '';
-        var label = s.name || s.standard_stage || '';
-        if (!eid && label) eid = '_' + label;
+        var eid = s.name || s.standard_stage || '';
         var opt = document.createElement('option');
         opt.value = eid;
-        opt.textContent = label;
+        opt.textContent = eid;
         if (eid === prevVal) opt.selected = true;
         sel.appendChild(opt);
       });
@@ -1673,7 +1625,6 @@ async function submitTask(taskId) {
     estimate_hours: parseFloat(document.getElementById('tf-estimate').value) || 0,
     start_date: document.getElementById('tf-start-date').value || null,
     due_date: document.getElementById('tf-due').value || null,
-    execution_id: parseInt(document.getElementById('tf-execution').value) || null,
     stage_name: _tfStageName(),
     project_id: _resolveProjectId(),
     cc_user_ids: (window._tfCcIds && window._tfCcIds.length) ? window._tfCcIds : null,
@@ -1686,7 +1637,7 @@ async function submitTask(taskId) {
   var valid = true;
   if (!data.title) { var h = document.getElementById('tf-title-hint'); if (h) h.style.display = ''; valid = false; }
   if (!data.project_id) { var h = document.getElementById('tf-project-hint'); if (h) h.style.display = ''; valid = false; }
-  if (!data.execution_id && !data.stage_name) { var h = document.getElementById('tf-execution-hint'); if (h) h.style.display = ''; valid = false; }
+  if (!data.stage_name) { var h = document.getElementById('tf-execution-hint'); if (h) h.style.display = ''; valid = false; }
   if (!data.assignee_ids || !data.assignee_ids.length) { var h = document.getElementById('tf-assignee-hint'); if (h) h.style.display = ''; valid = false; }
   if (!data.due_date) { var h = document.getElementById('tf-due-hint'); if (h) h.style.display = ''; valid = false; }
   if (!valid) return;
@@ -1794,7 +1745,7 @@ var _batchProjectId = null;
 function _batchExecOptions(selId) {
   return '<select class="search-inp" id="' + selId + '" style="flex:1.5"><option value="">选择阶段 *</option>' +
     _batchExecutions.map(function(s) {
-      return '<option value="' + (s.execution_id || s.id || '') + '">' + escHtml(s.name || s.standard_stage || '') + '</option>';
+      return '<option value="' + escHtml(s.name || s.standard_stage || '') + '">' + escHtml(s.name || s.standard_stage || '') + '</option>';
     }).join('') + '</select>';
 }
 
@@ -1917,19 +1868,12 @@ function _loadBatchExecs(projectId) {
 function _refreshBatchExecSelects() {
   var opts = '<option value="">选择阶段 *</option>' +
     _batchExecutions.map(function(s) {
-      var eid = s.execution_id || '';
       var label = s.name || s.standard_stage || '';
-      if (!eid && label) eid = '_' + label;
-      return '<option value="' + eid + '">' + escHtml(label) + '</option>';
+      return '<option value="' + escHtml(label) + '">' + escHtml(label) + '</option>';
     }).join('');
   document.querySelectorAll('[id^="bt-exec-"]').forEach(function(sel) {
     sel.innerHTML = opts;
   });
-}
-
-function _batchStageName(val) {
-  if (val && val[0] === '_') return val.substring(1);
-  return null;
 }
 
 function _batchAddRow() {
@@ -1991,8 +1935,7 @@ async function _submitBatchCreate() {
     if (!execVal || !assigneeIds.length || !estVal || !dueVal) continue;
     tasks.push({
       title: title,
-      execution_id: execVal && execVal[0] !== '_' ? (parseInt(execVal) || null) : null,
-      stage_name: _batchStageName(execVal),
+      stage_name: execVal,
       status: statusEl ? statusEl.value : 'todo',
       priority: priorityEl ? priorityEl.value : 'medium',
       assignee_id: assigneeIds[0],
@@ -2088,7 +2031,7 @@ async function _submitImportTasks() {
   if (!taskIds.length) { showToast('请选择要导入的任务', 'error'); return; }
 
   try {
-    await API.post('/tasks/import', {task_ids: taskIds, target_project_id: _taskProjectId, execution_mapping: {}});
+    await API.post('/tasks/import', {task_ids: taskIds, target_project_id: _taskProjectId});
     showToast('已导入 ' + taskIds.length + ' 个任务', 'success');
     _closeTaskDialog();
     EventBus.emit('task:saved', {});

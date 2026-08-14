@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db, to_local_str
 from backend.middleware.auth import get_current_user, require_perm
 from backend.models.local import ProjectNote, ProjectActivity
-from backend.models.zentao import CachedProject, CachedExecution
+from backend.models.zentao import CachedProject
 from backend.services.entity_resolver import resolve_project
 from backend.services.project_service import (
     log_project_activity,
@@ -263,70 +263,6 @@ def delete_stage(
     return {"code": 0, "data": {"id": stage_id, "name": name}, "message": f"阶段「{name}」已删除"}
 
 
-class StageNameUpdate(BaseModel):
-    stage_name: str
-
-
-@router.put("/{identifier}/stages/{execution_id}/stage-name", response_model=dict)
-def update_stage_name(
-    identifier: str,
-    execution_id: int,
-    body: StageNameUpdate,
-    db: Session = Depends(get_db),
-    user=Depends(require_perm("stage_mapping")),
-):
-    project = resolve_project(db, identifier)
-    e = db.query(CachedExecution).filter(
-        CachedExecution.id == execution_id,
-        CachedExecution.project_id == project.id,
-    ).first()
-    if not e:
-        raise HTTPException(status_code=404, detail="Execution not found")
-    e.stage_name = body.stage_name.strip()
-    db.commit()
-    return {"code": 0, "data": {"id": e.id, "stage_name": e.stage_name}, "message": "ok"}
-
-
-@router.put("/{identifier}/stages/{execution_id}/sync-to-zentao", response_model=dict)
-async def sync_stage_name_to_zentao(
-    identifier: str,
-    execution_id: int,
-    body: StageNameUpdate,
-    db: Session = Depends(get_db),
-    user=Depends(require_perm("stage_mapping")),
-):
-    """Set PMA-local stage_name mapping for matching purposes.
-
-    This does NOT push to Zentao (REST API v1 doesn't support execution
-    updates via PUT). The user should manually update the execution name
-    in Zentao's web interface. Once synced, the exact match will apply.
-    """
-    project = resolve_project(db, identifier)
-    e = db.query(CachedExecution).filter(
-        CachedExecution.id == execution_id,
-        CachedExecution.project_id == project.id,
-    ).first()
-    if not e:
-        raise HTTPException(status_code=404, detail="Execution not found")
-
-    new_name = body.stage_name.strip()
-    old_name = e.name
-    e.stage_name = new_name
-    db.commit()
-    log_project_activity(db, project.id, user.username, "阶段映射",
-        f"name:'{old_name}'->'{new_name}'")
-
-    return {
-        "code": 0,
-        "data": {
-            "id": e.id,
-            "name": e.name,
-            "stage_name": e.stage_name,
-        },
-        "message": f"PMA 阶段映射已保存: {e.name} → {new_name}（请在禅道中手动修改执行名为标准名）",
-    }
-
-
 @router.get("/{identifier}/documents", response_model=dict)
 async def get_documents(
     identifier: str,
@@ -424,7 +360,6 @@ def add_custom_document(
 
     pd = ProjectDocument(
         project_id=project.id,
-        execution_id=0,
         stage_type=body.stage_type,
         doc_name=body.doc_name,
         sort_order=99,
@@ -1236,7 +1171,7 @@ def delete_project(
     db: Session = Depends(get_db),
     user=Depends(require_perm("project_edit")),
 ):
-    """Delete a project and all related data (executions, tasks, documents, notes, links, activities, delivery records)."""
+    """Delete a project and all related data (tasks, documents, notes, links, activities, delivery records)."""
     project = resolve_project(db, identifier)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -1249,16 +1184,11 @@ def delete_project(
     from backend.models.local import ProjectNote, ProjectActivity
     from backend.models.delivery import DeliveryRecord
     from backend.models.bug import CachedBug
-    from backend.models.zentao import CachedTask
 
     # Product-project links
     db.query(ProductProjectLink).filter(ProductProjectLink.project_id == project.id).delete()
     # Customer-project links
     db.query(CustomerProjectLink).filter(CustomerProjectLink.project_id == project.id).delete()
-    # Tasks
-    db.query(CachedTask).filter(CachedTask.project_id == project.id).delete()
-    # Executions
-    db.query(CachedExecution).filter(CachedExecution.project_id == project.id).delete()
     # Bugs
     db.query(CachedBug).filter(CachedBug.project_id == project.id).delete()
     # Documents

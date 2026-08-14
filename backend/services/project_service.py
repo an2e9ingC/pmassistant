@@ -2,16 +2,14 @@ from __future__ import annotations
 from typing import Optional
 import logging
 
-from sqlalchemy import or_
+from sqlalchemy import or_, and_
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
 
 import re
 
 from backend.config import settings, zentao_project_url, zentao_product_url
-from backend.database import to_local_str
 from backend.models.zentao import (
-    CachedProject, CachedExecution, CachedTask, PmaProduct, ProductProjectLink,
+    CachedProject, PmaProduct, ProductProjectLink,
     CustomerProjectLink, PmaCustomer,
 )
 from backend.models.document import ProjectDocument
@@ -33,18 +31,24 @@ def log_project_activity(db: Session, project_id: int, username: str, action: st
 
 
 def _get_pending_doc_counts(db: Session, project_ids: list[int]) -> dict:
-    """Return {project_id: bool} — True if project has pending docs for done/closed stages."""
+    """Return {project_id: bool} — True if project has pending docs for completed stages."""
     if not project_ids:
         return {}
     from backend.models.document import ProjectDocument
+    from backend.models.project_stage import ProjectStage
     rows = (
         db.query(ProjectDocument.project_id)
-        .join(CachedExecution, ProjectDocument.execution_id == CachedExecution.id)
+        .join(
+            ProjectStage,
+            and_(
+                ProjectStage.project_id == ProjectDocument.project_id,
+                ProjectStage.name == ProjectDocument.stage_type,
+            ),
+        )
         .filter(
             ProjectDocument.project_id.in_(project_ids),
-            ProjectDocument.execution_id > 0,
             ProjectDocument.status == "pending",
-            CachedExecution.status.in_(["done", "closed"]),
+            ProjectStage.status == "completed",
         )
         .distinct()
         .all()
@@ -56,11 +60,13 @@ def _get_incomplete_task_counts(db: Session, project_ids: list[int]) -> dict:
     """Return {project_id: bool} — True if project has tasks not done/closed (not 100%)."""
     if not project_ids:
         return {}
+    from backend.models.task import Task
     rows = (
-        db.query(CachedTask.project_id)
+        db.query(Task.project_id)
         .filter(
-            CachedTask.project_id.in_(project_ids),
-            CachedTask.status.notin_(["done", "closed"]),
+            Task.project_id.in_(project_ids),
+            Task.status.notin_(["done", "closed"]),
+            or_(Task.is_deleted == 0, Task.is_deleted == None),
         )
         .distinct()
         .all()
@@ -68,54 +74,11 @@ def _get_incomplete_task_counts(db: Session, project_ids: list[int]) -> dict:
     return {row[0]: True for row in rows}
 
 
-def _get_stage_anomaly_counts(db: Session, project_ids: list[int]) -> dict:
-    """Return {project_id: bool} — True if any execution has stage-level anomalies.
-
-    A stage is anomalous if ANY of:
-    1. Name match is fuzzy or unmatched (not exact)
-    2. Stage is overdue (end < today, not done/closed)
-    """
-    if not project_ids:
-        return {}
-    from datetime import date
-    from backend.services.document_service import get_stage_types_for_project_type
-
-    anomalous: set[int] = set()
-    today = date.today()
-
-    # Check each project's executions for non-exact matches and overdue
-    projects = db.query(CachedProject).filter(CachedProject.id.in_(project_ids)).all()
-    for p in projects:
-        standard_stages = get_stage_types_for_project_type(db, p.project_type or "RD")
-        executions = db.query(CachedExecution).filter(
-            CachedExecution.project_id == p.id
-        ).all()
-        for e in executions:
-            # Check 1: non-exact stage name match
-            name = (e.name or "").strip()
-            if name:
-                # stage matching always exact now — no fuzzy check needed
-                result = None  # all stages are standard now
-                if False:  # all stages are standard, no anomalies from fuzzy matching
-                    anomalous.add(p.id)
-                    break  # one anomaly is enough for this project
-
-            # Check 2: overdue (end date passed, not done/closed)
-            if e.end and e.status not in ("done", "closed"):
-                e_end = e.end if isinstance(e.end, date) else date.fromisoformat(str(e.end))
-                if e_end < today:
-                    anomalous.add(p.id)
-                    break
-
-    return {pid: True for pid in anomalous}
-
-
 def get_projects(db: Session) -> list[dict]:
     projects = db.query(CachedProject).order_by(CachedProject.id).all()
     pids = [p.id for p in projects]
     pending_map = _get_pending_doc_counts(db, pids)
     incomplete_task_map = _get_incomplete_task_counts(db, pids)
-    stage_anomaly_map = _get_stage_anomaly_counts(db, pids)
     # Batch-load linked customers
     cust_map = _batch_cust_map(db, pids)
     # Calculate project progress from stage averages
@@ -124,7 +87,7 @@ def get_projects(db: Session) -> list[dict]:
         _project_brief(p,
             pending_map.get(p.id, False),
             incomplete_task_map.get(p.id, False),
-            stage_anomaly_map.get(p.id, False),
+            False,
             cust_map.get(p.id, []),
             stage_prog_map.get(p.id))
         for p in projects
@@ -138,12 +101,11 @@ def get_project_detail(db: Session, project_id: int) -> Optional[dict]:
     pids = [p.id]
     pending_map = _get_pending_doc_counts(db, pids)
     incomplete_task_map = _get_incomplete_task_counts(db, pids)
-    stage_anomaly_map = _get_stage_anomaly_counts(db, pids)
     cust_map = _batch_cust_map(db, pids)
     result = _project_detail(p, db,
         pending_map.get(p.id, False),
         incomplete_task_map.get(p.id, False),
-        stage_anomaly_map.get(p.id, False),
+        False,
         cust_map.get(p.id, []))
     result["linked_products"] = get_project_products(db, project_id)
     return result
@@ -228,32 +190,6 @@ def get_project_stages(db: Session, project_id: int) -> dict:
     stages = [s for s in stages if not (s["name"] == UNKNOWN_STAGE_NAME and s["task_count"] == 0)]
 
     return {"stages": stages, "standard_stages": [s.name for s in stages_rows]}
-
-
-def _build_deliverables(db: Session, e: CachedExecution) -> list[dict]:
-    """Build deliverables list for an execution from ProjectDocument table.
-    Only includes docs with execution_id > 0 (excludes placeholder docs for unmatched stages)."""
-    pd_rows = (
-        db.query(ProjectDocument)
-        .filter(ProjectDocument.execution_id == e.id,
-                ProjectDocument.execution_id > 0)
-        .order_by(ProjectDocument.sort_order)
-        .all()
-    )
-    deliverables = []
-    for pd in pd_rows:
-        is_done = e.status in ("done", "closed")
-        is_pending = pd.status == "pending"
-        deliverables.append({
-            "id": pd.id,
-            "name": pd.doc_name,
-            "done": pd.status == "submitted",
-            "warn": is_done and is_pending,
-            "completed_at": to_local_str(pd.completed_at)[:10] if pd.completed_at else None,
-            "location": pd.location,
-            "responsible_role": pd.responsible_role,
-        })
-    return deliverables
 
 
 async def get_project_documents(db: Session, project_id: int, include_removed: bool = False) -> dict:
@@ -936,43 +872,6 @@ def _handle_transition_to_doing(db: Session, project) -> dict:
             "docs": doc_count,
             "tasks": task_count if isinstance(task_count, int) else 0,
         }
-
-
-def _find_blocker(tasks: list[CachedTask]) -> Optional[str]:
-    for t in tasks:
-        if t.is_blocker and t.blocker_note:
-            return t.blocker_note
-        if t.is_blocker:
-            return f"任务被标记为卡点: {t.name}"
-    return None
-
-
-def _get_who(tasks: list[CachedTask], execution: CachedExecution = None, project: CachedProject = None) -> str:
-    """Get responsible persons from task assignees, deduplicated.
-    Falls back: task assignees → execution openedBy → project PM → ''"""
-    names = []
-    seen = set()
-    for t in tasks:
-        name = (t.assigned_realname or "").strip()
-        if name and name not in seen:
-            names.append(name)
-            seen.add(name)
-    if names:
-        return "、".join(names)
-    # Fallback 1: execution's openedBy
-    if execution and execution.raw_json:
-        try:
-            import json as _json
-            data = _json.loads(execution.raw_json)
-            ob = data.get("openedBy", {})
-            if isinstance(ob, dict) and ob.get("realname"):
-                return ob["realname"].strip()
-        except Exception:
-            pass
-    # Fallback 2: project PM
-    if project and project.pm_name:
-        return project.pm_name.strip()
-    return ""
 
 
 def _zentao_url(entity_type: str, entity_id: int) -> str:
