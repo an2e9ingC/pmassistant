@@ -1153,6 +1153,7 @@ async function _submitTaskFullPage(taskId) {
     description: desc,
     project_id: _tfProjectId || null,
     execution_id: parseInt((document.getElementById('tf-execution') || {}).value) || null,
+    stage_name: _tfStageName(),
     assignee_ids: _tfAssigneeIds || [],
     reviewer_id: _tfReviewerId || null,
     estimate_hours: parseFloat((document.getElementById('tf-estimate') || {}).value) || null,
@@ -1164,7 +1165,7 @@ async function _submitTaskFullPage(taskId) {
   };
 
   if (!data.project_id) { showToast('请选择所属项目', 'error'); return; }
-  if (!data.execution_id) { showToast('请选择阶段', 'error'); return; }
+  if (!data.execution_id && !data.stage_name) { showToast('请选择阶段', 'error'); return; }
   if (!data.assignee_ids.length) { showToast('请选择负责人', 'error'); return; }
   if (!data.due_date) { showToast('请填写截止日期', 'error'); return; }
 

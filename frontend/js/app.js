@@ -1961,7 +1961,8 @@ function _ucMatchFilter(status, task) {
   }
   if (_ucFilterStatus === 'reported') {
     if (!task) return false;
-    return task._source === 'reported';
+    var _rUid = window._ucViewUserId || (getCurrentUser() ? getCurrentUser().id : null);
+    return !!_rUid && task.reporter_id == _rUid;
   }
   // Other filters: only show tasks assigned to the user
   if (task && task._source !== 'assigned') return false;
@@ -2014,9 +2015,10 @@ function _renderUcFilterBar() {
   var watchedLabel = isSelf ? '⭐ 关注任务' : '⭐ TA的关注';
   var watchedMeta = isSelf ? '关注的任务' : '该用户关注的任务';
 
-  // Reported (created by me) count: use all tasks (not just assigned)
+  // Reported (created by me) count: use reporter_id (includes self-assigned tasks)
+  var _rUid = window._ucViewUserId || (getCurrentUser() ? getCurrentUser().id : null);
   var reportedCount = _ucTasks.reduce(function(s, t) {
-    return s + (t._source === 'reported' ? 1 : 0);
+    return s + (_rUid && t.reporter_id == _rUid ? 1 : 0);
   }, 0);
   var reportedLabel = isSelf ? '📝 我创建的' : '📝 TA创建的';
   var reportedMeta = isSelf ? '我创建的任务' : '该用户创建的任务';
