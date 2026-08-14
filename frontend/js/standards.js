@@ -55,6 +55,11 @@ function renderStandards() {
   });
 }
 
+async function refreshStandards() {
+  _standardsGrouped = await API.get('/standards') || {};
+  renderStandards();
+}
+
 function showStdEdit(id) {
   var found = null;
   Object.keys(_standardsGrouped).forEach(function(cat) {
@@ -91,8 +96,8 @@ async function saveStdEdit(id) {
   try {
     await API.put('/standards/' + id, { value: value, description: desc });
     showToast('已保存', 'success');
-    markPageClean(); _standardsGrouped = await API.get('/standards');
-    renderStandards();
+    markPageClean();
+    EventBus.emit(EVENTS.STANDARD_SAVED, {});
   } catch(e) {
     showToast('保存失败: ' + (e.message || '未知错误'), 'error');
   }
@@ -114,9 +119,8 @@ async function saveStandardsChanges() {
     } catch(e) { fail++; }
   }
   showToast('保存完成: ' + success + ' 成功' + (fail > 0 ? ', ' + fail + ' 失败' : ''), fail ? 'error' : 'success');
-  _standardsGrouped = await API.get('/standards');
   markPageClean();
-  renderStandards();
+  EventBus.emit(EVENTS.STANDARD_SAVED, {});
 }
 
 function discardStandardsChanges() {

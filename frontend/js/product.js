@@ -21,8 +21,7 @@ var _prodCatColors = ['var(--accent)', 'var(--success)', 'var(--warn)', 'var(--d
 var _prodCatCls = ['pov-self', 'pov-integ', 'pov-purch', 'pov-inner'];
 var _prodCatIcons = ['⊞', '⊡', '⊕', '⊟'];
 
-async function initProductList() {
-  _allProducts = [];
+async function _loadProductListData() {
   try {
     var data = await API.get('/products?limit=200');
     _allProducts = data.items || [];
@@ -30,25 +29,52 @@ async function initProductList() {
   try {
     _prodTree = (await API.get('/product-doc-templates/product-tree')) || [];
   } catch(e) { _prodTree = []; }
-
   await loadFavProducts();
-  // Apply saved default filter preference for product list
-  var savedProdFilter = localStorage.getItem('pma_default_product_filter');
-  if (savedProdFilter === 'fav' || !savedProdFilter) {
-    _prodActiveL1 = null;
-  } else if (savedProdFilter && _prodTree) {
-    // Check if the saved category still exists in the tree
-    var found = _prodTree.find(function(t) { return String(t.id) === String(savedProdFilter); });
-    _prodActiveL1 = found ? found.id : null;
-  } else {
-    _prodActiveL1 = null;
+}
+
+var _prodListInitialized = false;
+
+async function initProductList() {
+  _allProducts = [];
+  await _loadProductListData();
+  // 首次进入应用默认筛选偏好；之后保留用户浏览的分类（删除产品等操作不跳走筛选）
+  if (!_prodListInitialized) {
+    var savedProdFilter = localStorage.getItem('pma_default_product_filter');
+    if (savedProdFilter === 'fav' || !savedProdFilter) {
+      _prodActiveL1 = null;
+    } else if (savedProdFilter && _prodTree) {
+      // Check if the saved category still exists in the tree
+      var found = _prodTree.find(function(t) { return String(t.id) === String(savedProdFilter); });
+      _prodActiveL1 = found ? found.id : null;
+    } else {
+      _prodActiveL1 = null;
+    }
+    _prodActiveL2 = null;
+    _prodListInitialized = true;
   }
-  _prodActiveL2 = null;
   renderProdOverview();
   setTimeout(function() {
     var el = document.getElementById('prod-search');
     if (el) { el.focus(); el.select(); }
   }, 300);
+}
+
+// 原位刷新产品列表：保留分类筛选（_prodActiveL1/L2），只重拉数据 + 重渲染
+async function refreshProductList() {
+  await _loadProductListData();
+  // 校验当前选中分类仍存在，否则回退
+  if (_prodActiveL1 && !_prodTree.find(function(t) { return t.id === _prodActiveL1; })) {
+    _prodActiveL1 = null;
+    _prodActiveL2 = null;
+  }
+  if (_prodActiveL2) {
+    var still = false;
+    _prodTree.forEach(function(t) {
+      (t.children || []).forEach(function(c) { if (c.id === _prodActiveL2) still = true; });
+    });
+    if (!still) _prodActiveL2 = null;
+  }
+  renderProdOverview();
 }
 
 function _prodTotal(l1, l2) {
@@ -409,6 +435,42 @@ async function loadProductDetail(code) {
   if (_prodDetailCurCode && typeof buildHash === 'function') {
     history.replaceState({ view: 'product-detail', params: [_prodDetailCurCode, targetTab] }, '', buildHash('product-detail', _prodDetailCurCode, targetTab));
   }
+}
+
+// ── In-place refresh (EventBus-driven, preserves current tab/state) ──
+
+async function refreshProductDetail() {
+  var code = _prodDetailCurCode;
+  if (!code) return;
+  try {
+    var detail = await API.get('/products/' + code);
+    _prodDetail = detail;
+    var docs = [];
+    try { docs = await API.get('/products/' + code + '/documents') || []; } catch(e) {}
+    renderProdDetailHeader(detail, docs);
+    renderProdInfo(detail, docs);
+    renderProdDocs(detail, docs);
+  } catch(e) {
+    showToast('刷新失败: ' + (e.message || ''), 'error');
+  }
+}
+
+async function refreshProductNotes() {
+  var code = _prodDetailCurCode;
+  if (!code) return;
+  try {
+    var notes = await API.get('/products/' + code + '/notes');
+    renderProductNotes(notes || []);
+  } catch(e) {}
+}
+
+async function refreshProductDocs() {
+  var code = _prodDetailCurCode;
+  if (!code) return;
+  try {
+    var docs = await API.get('/products/' + code + '/documents');
+    _renderProdDocsInline(docs || []);
+  } catch(e) {}
 }
 
 function renderProdDetailHeader(p, docs) {
@@ -835,9 +897,7 @@ async function addProductNote() {
   try {
     await API.post('/products/' + _prodDetailCurCode + '/notes', {content: content, category: category});
     showToast('已添加', 'ok');
-    // Reload notes
-    var notes = await API.get('/products/' + _prodDetailCurCode + '/notes');
-    renderProductNotes(notes || []);
+    EventBus.emit(EVENTS.NOTE_SAVED, {});
   } catch(e) {
     showToast('添加失败: ' + (e.message || ''), 'error');
   }
@@ -848,8 +908,7 @@ async function deleteProductNote(noteId) {
   try {
     await API.del('/products/' + _prodDetailCurCode + '/notes/' + noteId);
     showToast('已删除', 'ok');
-    var notes = await API.get('/products/' + _prodDetailCurCode + '/notes');
-    renderProductNotes(notes || []);
+    EventBus.emit(EVENTS.NOTE_DELETED, {});
   } catch(e) {
     showToast('删除失败: ' + (e.message || ''), 'error');
   }
@@ -897,8 +956,7 @@ async function saveEditProdNote(noteId) {
   try {
     await API.put('/products/' + _prodDetailCurCode + '/notes/' + noteId, {content: content, category: category});
     showToast('已更新', 'success');
-    var notes = await API.get('/products/' + _prodDetailCurCode + '/notes');
-    renderProductNotes(notes || []);
+    EventBus.emit(EVENTS.NOTE_SAVED, {});
   } catch(e) { showToast('编辑失败: ' + (e.message || ''), 'error'); }
 }
 
@@ -933,8 +991,7 @@ async function submitReplyProdNote(parentId, category) {
   try {
     await API.post('/products/' + _prodDetailCurCode + '/notes', {content: content, category: category, parent_id: parentId});
     showToast('已回复', 'success');
-    var notes = await API.get('/products/' + _prodDetailCurCode + '/notes');
-    renderProductNotes(notes || []);
+    EventBus.emit(EVENTS.NOTE_SAVED, {});
   } catch(e) { showToast('回复失败: ' + (e.message || ''), 'error'); }
 }
 
@@ -973,7 +1030,7 @@ async function uploadBlockDiagram(input) {
     var json = await res.json();
     if (json.code === 0) {
       showToast('上传成功', 'ok');
-      loadBlockDiagrams();
+      EventBus.emit(EVENTS.DIAGRAM_SAVED, {});
     } else {
       showToast('上传失败: ' + (json.message || json.detail || ''), 'error');
     }
@@ -1064,7 +1121,7 @@ async function confirmDeleteBlockDiagram(bdId) {
   try {
     await API.del('/products/' + _prodDetailCurCode + '/block-diagrams/' + bdId);
     showToast('已删除', 'ok');
-    loadBlockDiagrams();
+    EventBus.emit(EVENTS.DIAGRAM_DELETED, {});
   } catch (e) {
     showToast('删除失败: ' + (e.message || ''), 'error');
   }
@@ -1219,9 +1276,7 @@ async function removeOptionalProductDoc(docId) {
   try {
     await API.put('/products/' + _prodDetailCurCode + '/documents/' + docId, { is_removed: 1 });
     showToast('已移除可选项', 'success');
-    // Re-fetch and re-render docs only (don't reload entire page)
-    var docs = await API.get('/products/' + _prodDetailCurCode + '/documents');
-    _renderProdDocsInline(docs);
+    EventBus.emit(EVENTS.PRODUCT_DOC_SAVED, {});
   } catch(e) { showToast('移除失败: ' + (e.message || ''), 'error'); }
 }
 
@@ -1390,7 +1445,7 @@ async function saveProdEdit() {
       var inp = document.getElementById('prod-combo-input');
       if (inp) inp.value = code;
     }
-    loadProductDetail(_prodDetailCurCode);
+    EventBus.emit(EVENTS.PRODUCT_SAVED, {});
   } catch(e) {
     showToast('更新失败: ' + (e.message || ''), 'error');
   }
@@ -1405,7 +1460,8 @@ function showProdLinkProjectsDialog() {
     }, function(ids) {
       API.put('/product-management/products/' + _prodDetailCurCode + '/projects', { project_ids: ids }).then(function() {
         showToast('关联项目已更新', 'success');
-        loadProductDetail(_prodDetailCurCode);
+        EventBus.emit(EVENTS.PRODUCT_SAVED, {});
+        EventBus.emit(EVENTS.PROJECT_SAVED, {});
       }).catch(function(e) { showToast('更新失败: ' + (e.message || ''), 'error'); });
     });
   });
@@ -1420,7 +1476,7 @@ function showProdCustomersDialog() {
       var nameStr = names.join('、');
       API.put('/products/' + _prodDetailCurCode, { pma_customer: nameStr }).then(function() {
         showToast('关联客户已更新', 'success');
-        loadProductDetail(_prodDetailCurCode);
+        EventBus.emit(EVENTS.PRODUCT_SAVED, {});
       }).catch(function(e) { showToast('更新失败: ' + (e.message || ''), 'error'); });
     });
   }).catch(function() { showToast('获取客户列表失败', 'error'); });
@@ -1433,6 +1489,7 @@ async function deleteCurrentProduct() {
   try {
     await API.del('/product-management/products/' + _prodDetailCurCode);
     showToast('产品已删除', 'success');
+    EventBus.emit(EVENTS.PRODUCT_DELETED, {});
     gotoView('product-list');
   } catch(e) {
     showToast('删除失败: ' + (e.message || ''), 'error');
@@ -1465,7 +1522,7 @@ async function saveProdTags() {
   try {
     await API.put('/products/' + _prodDetailCurCode, { tags: tags.join(',') });
     showToast('标签已更新', 'success');
-    loadProductDetail(_prodDetailCurCode);
+    EventBus.emit(EVENTS.PRODUCT_SAVED, {});
   } catch(e) {
     showToast('更新失败: ' + (e.message || ''), 'error');
   }

@@ -137,6 +137,72 @@ async function loadProjectDetail(code) {
   }
 }
 
+/* ── In-place refresh (EventBus-driven, preserves current tab/state) ── */
+
+async function refreshProjectDetail() {
+  var code = _comboCurCode;
+  if (!code) return;
+  try {
+    var detail = await API.get('/projects/' + code);
+    _projDetail = detail;
+    _comboCurCode = detail.code || String(detail.id);
+    _comboCurId = detail.id;
+    var comboInput = document.getElementById('combo-input');
+    if (comboInput) comboInput.value = _comboCurCode;
+    var docs = []; var notes = [];
+    try { docs = await API.get('/projects/' + code + '/documents') || []; } catch(e) {}
+    try { notes = await API.get('/projects/' + code + '/notes') || []; } catch(e) {}
+    buildDetailHeader(detail);
+    buildInfo(detail, notes, _deliveryData, docs);
+  } catch(e) {
+    showToast('刷新失败: ' + (e.message || ''), 'error');
+  }
+}
+
+async function refreshProjectNotes() {
+  var code = _comboCurCode;
+  if (!code) return;
+  try {
+    var notes = await API.get('/projects/' + code + '/notes');
+    buildNotes(notes || []);
+  } catch(e) {}
+}
+
+async function refreshProjectDelivery() {
+  var code = _comboCurCode;
+  if (!code) return;
+  try {
+    var data = await API.get('/projects/' + code + '/delivery');
+    _deliveryData = data;
+    _deliveryProgress = data.progress || 0;
+    buildDelivery(data);
+    if (_projDetail) buildDetailHeader(_projDetail);
+  } catch(e) {}
+}
+
+async function refreshProjectStages() {
+  var code = _comboCurCode;
+  if (!code) return;
+  try {
+    var stages = await API.get('/projects/' + code + '/stages');
+    buildStages(stages);
+  } catch(e) {}
+  loadMaintProjectStages();
+  try {
+    var ganttData = await API.get('/projects/' + code + '/gantt');
+    buildGantt(ganttData);
+  } catch(e) {}
+  if (typeof loadTaskData === 'function') loadTaskData();
+}
+
+function refreshProjectMaintenance() {
+  if (!_comboCurCode) return;
+  loadMaintProjectStages();
+  loadMaintProjectProducts();
+  loadMaintProjectCustomers();
+  loadMaintProjectTags();
+}
+
 /* Detail Header */
 
 function buildDetailHeader(p) {
@@ -513,7 +579,7 @@ window.saveLinkedProjects = async function() {
   try {
     await API.put('/projects/' + _comboCurCode + '/linked-projects', { ids: ids });
     showToast('关联项目已更新', 'ok');
-    loadProjectDetail(_comboCurCode);
+    EventBus.emit(EVENTS.PROJECT_SAVED, {});
   } catch(e) {
     showToast('保存失败: ' + (e.message || '未知错误'), 'error');
   }
@@ -813,6 +879,12 @@ function renderProgressRing(pct) {
 // ── Main render ──
 
 function buildGantt(data) {
+  // 记录刷新前的滚动位置：任务增删改联动刷新时保留横向滚动，避免"跳回开头"的整页刷新感
+  var _ganttRootEl = document.getElementById('gantt-root');
+  var _isRefresh = !!(_ganttRootEl && _ganttRootEl.querySelector('.gantt-row'));
+  var _prevWrap = document.querySelector('.gantt-wrap');
+  var _prevScroll = _prevWrap ? _prevWrap.scrollLeft : 0;
+
   var stages = (data && data.stages) ? data.stages : (Array.isArray(data) ? data : []);
   _lastGanttStages = stages;  // store for gotoStageDetail
   var projBegin = data && data.project_begin ? data.project_begin : null;
@@ -954,15 +1026,19 @@ function buildGantt(data) {
       '<div class="gantt-timeline-head" style="min-width:' + displayWidth + 'px;width:' + displayWidth + 'px">' + mHdrs + '</div>' +
     '</div>' + rows;
 
-  // Start scroll at first stage
+  // 首次加载滚动到第一个阶段；刷新场景保留原滚动位置
   setTimeout(function() {
     var wrap = document.querySelector('.gantt-wrap');
     if (!wrap) return;
-    var firstStartPx = 0;
-    if (stages && stages.length) {
-      firstStartPx = ganttPx(stages[0].start, range, totalWidth);
+    if (_isRefresh) {
+      wrap.scrollLeft = _prevScroll;
+    } else {
+      var firstStartPx = 0;
+      if (stages && stages.length) {
+        firstStartPx = ganttPx(stages[0].start, range, totalWidth);
+      }
+      wrap.scrollLeft = Math.max(0, firstStartPx - 40);
     }
-    wrap.scrollLeft = Math.max(0, firstStartPx - 40);
   }, 50);
 
   initGanttDrag();
@@ -1235,11 +1311,7 @@ async function _confirmDeleteOrphanDoc(docId, docName) {
   try {
     await API.del('/projects/' + _comboCurCode + '/documents/' + docId);
     showToast('文档「' + docName + '」已删除', 'success');
-    // Refresh docs
-    if (typeof buildDocs === 'function') {
-      var data = await API.get('/projects/' + _comboCurCode + '/documents');
-      if (data) buildDocs(data);
-    }
+    EventBus.emit(EVENTS.PROJECT_DOC_DELETED, {});
   } catch(e) {
     showToast('删除失败: ' + (e.message || ''), 'error');
   }
@@ -1250,7 +1322,7 @@ async function _confirmRemoveDoc(docId, docName) {
   try {
     await API.put('/projects/' + _comboCurCode + '/documents/' + docId, { is_removed: 1 });
     showToast('已移除可选项', 'success');
-    API.get('/projects/' + _comboCurCode + '/documents').then(function(docs) { buildDocs(docs); });
+    EventBus.emit(EVENTS.PROJECT_DOC_SAVED, {});
   } catch(e) { showToast('移除失败: ' + (e.message || ''), 'error'); }
 }
 
@@ -1275,8 +1347,7 @@ async function saveDocStatus(docId, status) {
     await API.put('/projects/' + _comboCurCode + '/documents/' + docId, body);
     var msgs = {submitted:'已标记为提交', unnecessary:'已标记为无需文档', deleted:'已删除'};
     showToast(msgs[status] || '状态已更新', 'success');
-    var docs = await API.get('/projects/' + _comboCurCode + '/documents');
-    buildDocs(docs);
+    EventBus.emit(EVENTS.PROJECT_DOC_SAVED, {});
   } catch(e) {
     showToast('操作失败: ' + (e.message || '未知错误'), 'error');
   }
@@ -1329,7 +1400,7 @@ function doImportTemplateDocs() {
   API.post('/projects/' + _comboCurCode + '/documents/sync', {doc_ids: ids}).then(function(r) {
     showToast(r.message || '导入完成', 'success');
     closeSharedDialog();
-    refreshDocs();
+    EventBus.emit(EVENTS.PROJECT_DOC_SAVED, {});
   }).catch(function(e) { showToast('导入失败: ' + (e.message || ''), 'error'); });
 }
 
@@ -1375,7 +1446,7 @@ function submitCustomDoc() {
   }).then(function(r) {
     showToast(r.message || '文档已添加', 'success');
     closeSharedDialog();
-    refreshDocs();
+    EventBus.emit(EVENTS.PROJECT_DOC_SAVED, {});
   }).catch(function(e) { showToast('添加失败: ' + (e.message || ''), 'error'); });
 }
 
@@ -1551,12 +1622,7 @@ async function _savePlanInline(updates) {
   try {
     await API.put('/projects/' + _comboCurCode + '/delivery-plan', updates);
     showToast('计划已更新', 'success');
-    var data = await API.get('/projects/' + _comboCurCode + '/delivery');
-    _deliveryData = data;
-    _deliveryProgress = data.progress || 0;
-    buildDelivery(data);
-    // Refresh header ring
-    if (_projDetail) buildDetailHeader(_projDetail);
+    EventBus.emit(EVENTS.DELIVERY_SAVED, {});
   } catch(e) {
     showToast('更新失败: ' + (e.message || ''), 'error');
   }
@@ -1727,11 +1793,7 @@ async function saveDeliveryRecord(recordId) {
     }
     showToast(recordId ? '修改成功' : '添加成功', 'success');
     cancelDeliveryForm();
-    var data = await API.get('/projects/' + _comboCurCode + '/delivery');
-    _deliveryData = data;
-    _deliveryProgress = data.progress || 0;
-    buildDelivery(data);
-    if (_projDetail) buildDetailHeader(_projDetail);
+    EventBus.emit(EVENTS.DELIVERY_SAVED, {});
   } catch(e) {
     showToast('操作失败: ' + (e.message || '未知错误'), 'error');
     if (saveBtn) saveBtn.disabled = false;
@@ -1745,11 +1807,7 @@ async function deleteDeliveryRecord(id) {
   try {
     await API.del('/delivery/records/' + id);
     showToast('删除成功', 'success');
-    var data = await API.get('/projects/' + _comboCurCode + '/delivery');
-    _deliveryData = data;
-    _deliveryProgress = data.progress || 0;
-    buildDelivery(data);
-    if (_projDetail) buildDetailHeader(_projDetail);
+    EventBus.emit(EVENTS.DELIVERY_DELETED, {});
   } catch(e) {
     showToast('删除失败: ' + (e.message || '未知错误'), 'error');
   }
@@ -2009,8 +2067,7 @@ async function saveEditNote(noteId) {
   try {
     await API.put('/projects/' + _comboCurCode + '/notes/' + noteId, {content: content, stage_name: stage});
     showToast('已更新', 'success');
-    var notes = await API.get('/projects/' + _comboCurCode + '/notes');
-    buildNotes(notes || []);
+    EventBus.emit(EVENTS.NOTE_SAVED, {});
   } catch(e) { showToast('编辑失败: ' + (e.message || ''), 'error'); }
 }
 
@@ -2046,8 +2103,7 @@ async function submitReplyNote(parentId, stageName) {
   try {
     await API.post('/projects/' + _comboCurCode + '/notes', {content: content, stage_name: stageName, parent_id: parentId});
     showToast('已回复', 'success');
-    var notes = await API.get('/projects/' + _comboCurCode + '/notes');
-    buildNotes(notes || []);
+    EventBus.emit(EVENTS.NOTE_SAVED, {});
   } catch(e) { showToast('回复失败: ' + (e.message || ''), 'error'); }
 }
 
@@ -2056,8 +2112,7 @@ async function deleteProjectNote(noteId) {
   try {
     await API.del('/projects/' + _comboCurCode + '/notes/' + noteId);
     showToast('已删除', 'success');
-    var notes = await API.get('/projects/' + _comboCurCode + '/notes');
-    buildNotes(notes || []);
+    EventBus.emit(EVENTS.NOTE_DELETED, {});
   } catch(e) { showToast('删除失败: ' + (e.message || ''), 'error'); }
 }
 
@@ -2076,8 +2131,7 @@ async function submitNote() {
     msg.innerHTML = '<span style="color:var(--muted)">保存中...</span>';
     await API.post('/projects/' + _comboCurCode + '/notes', { content: content, stage_name: stage });
     closeNoteDialog();
-    var notes = await API.get('/projects/' + _comboCurCode + '/notes');
-    buildNotes(notes);
+    EventBus.emit(EVENTS.NOTE_SAVED, {});
   } catch(e) {
     msg.innerHTML = '<span style="color:var(--danger)">失败: ' + escHtml(e.message) + '</span>';
   }
@@ -2799,7 +2853,7 @@ async function saveProjectForm(isEdit) {
       _projFormConvertSource = null;
       if (result && result.code) {
         _comboCurCode = result.code;
-        if (typeof invalidateAllProjects === 'function') invalidateAllProjects();
+        EventBus.emit(EVENTS.PROJECT_SAVED, {});
         document.getElementById('combo-input').value = result.code;
         loadProjectDetail(result.code);
       }
@@ -2914,15 +2968,7 @@ async function saveProjectForm(isEdit) {
     } else {
       showToast('项目已创建', 'success');
     }
-    if (isEdit) {
-      loadProjectDetail(_comboCurCode);
-      if (typeof invalidateAllProjects === 'function') invalidateAllProjects();
-    } else {
-      // Refresh dashboard
-      if (typeof loadKpiCards === 'function') loadKpiCards();
-      if (typeof loadProjectTable === 'function') loadProjectTable();
-      if (typeof invalidateAllProjects === 'function') invalidateAllProjects();
-    }
+    EventBus.emit(EVENTS.PROJECT_SAVED, {});
   } catch(e) {
     showToast('保存失败: ' + (e.message || '未知错误'), 'error');
   }
@@ -2938,14 +2984,10 @@ async function deleteCurrentProject() {
   if (!ok) return;
   try {
     await API.del('/projects/' + _comboCurCode);
-    if (typeof invalidateAllProjects === 'function') invalidateAllProjects();
     showToast('项目已删除', 'success');
+    EventBus.emit(EVENTS.PROJECT_DELETED, {});
     // Navigate back to project list
-    if (typeof gotoView === 'function') {
-      gotoView('project-list');
-    } else {
-      location.reload();
-    }
+    if (typeof gotoView === 'function') gotoView('project-list');
   } catch(e) {
     showToast('删除失败: ' + (e.message || '未知错误'), 'error');
   }
@@ -3048,7 +3090,7 @@ function _maintSaveProducts() {
   });
   closeSharedDialog();
   API.put('/maintenance/projects/' + _comboCurCode + '/products', { items: items }).then(function() {
-    loadMaintProjectProducts();
+    EventBus.emit(EVENTS.MAINT_SAVED, {});
   });
 }
 
@@ -3060,7 +3102,7 @@ function maintRemove_prod(pid) {
     var items = _maintLinkedProds
       .filter(function(p) { return p.id !== pid; })
       .map(function(p) { return { product_id: p.id, quantity: p.quantity || 1 }; });
-    API.put('/maintenance/projects/' + _comboCurCode + '/products', { items: items }).then(function() { loadMaintProjectProducts(); });
+    API.put('/maintenance/projects/' + _comboCurCode + '/products', { items: items }).then(function() { EventBus.emit(EVENTS.MAINT_SAVED, {}); });
   });
 }
 
@@ -3086,7 +3128,7 @@ function maintOpenDialog_cust() {
   multiSelectDialog('编辑关联客户', _maintAllCustomers, linkedIds, {
     placeholder: '搜索客户...', maxWidth: 450
   }, function(ids) {
-    API.put('/maintenance/projects/' + _comboCurCode + '/customers', { ids: ids }).then(function() { loadMaintProjectCustomers(); });
+    API.put('/maintenance/projects/' + _comboCurCode + '/customers', { ids: ids }).then(function() { EventBus.emit(EVENTS.MAINT_SAVED, {}); });
   });
 }
 
@@ -3096,7 +3138,7 @@ function maintRemove_cust(cid) {
   verifyPassword('移除客户关联: ' + name, 'pw_verify_maint_remove').then(function(ok) {
     if (!ok) return;
     var ids = _maintLinkedCustomers.map(function(c) { return c.id; }).filter(function(id) { return id !== cid; });
-    API.put('/maintenance/projects/' + _comboCurCode + '/customers', { ids: ids }).then(function() { loadMaintProjectCustomers(); });
+    API.put('/maintenance/projects/' + _comboCurCode + '/customers', { ids: ids }).then(function() { EventBus.emit(EVENTS.MAINT_SAVED, {}); });
   });
 }
 
@@ -3245,7 +3287,7 @@ function _renderMaintTagDialogContent() {
 
 function maintRemove_tag(name) {
   var tags = _maintLinkedTags.filter(function(t) { return t !== name; });
-  API.put('/maintenance/projects/' + _comboCurCode + '/tags', { tags: tags }).then(function() { loadMaintProjectTags(); });
+  API.put('/maintenance/projects/' + _comboCurCode + '/tags', { tags: tags }).then(function() { EventBus.emit(EVENTS.MAINT_SAVED, {}); });
 }
 
 /* ── Add Stage Dialog ── */
@@ -3293,7 +3335,7 @@ async function submitAddStage() {
   try {
     await API.post('/projects/' + _comboCurCode + '/stages', data);
     showToast('阶段已添加', 'success');
-    loadMaintProjectStages();
+    EventBus.emit(EVENTS.STAGE_SAVED, {});
   } catch(e) { showToast('添加失败: ' + (e.message || ''), 'error'); }
 }
 
@@ -3372,15 +3414,7 @@ async function saveStageData(stageId, projectCode) {
   try {
     await API.put('/projects/' + projectCode + '/stages/' + stageId, data);
     showToast('阶段已更新', 'success');
-    // Refresh Gantt chart
-    try {
-      var ganttData = await API.get('/projects/' + projectCode + '/gantt');
-      if (typeof buildGantt === 'function') buildGantt(ganttData);
-    } catch(e) { /* non-critical */ }
-    // Refresh maintenance stage list
-    loadMaintProjectStages();
-    // Refresh task table if loaded
-    if (typeof loadTaskData === 'function') loadTaskData();
+    EventBus.emit(EVENTS.STAGE_SAVED, {});
   } catch(e) { showToast('保存失败: ' + (e.message || ''), 'error'); }
 }
 
@@ -3395,7 +3429,7 @@ async function deleteMaintStage(stageId, stageName) {
   try {
     await API.del('/projects/' + _comboCurCode + '/stages/' + stageId);
     showToast('阶段「' + stageName + '」已删除', 'success');
-    loadMaintProjectStages();
+    EventBus.emit(EVENTS.STAGE_DELETED, {});
   } catch(e) { showToast('删除失败: ' + (e.message || ''), 'error'); }
 }
 

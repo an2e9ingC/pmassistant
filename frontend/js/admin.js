@@ -527,6 +527,11 @@ async function initUserManagement() {
   _initUsersDt(); _usersDt.setData([]);
   _initRolesDt(); _rolesDt.setData([]);
 
+  await _loadOrgData(isAdmin);
+}
+
+// Fetch + render users/roles (shared by init and in-place refresh)
+async function _loadOrgData(isAdmin) {
   try {
     if (isAdmin) {
       if (typeof invalidateAllUsers === 'function') invalidateAllUsers();
@@ -568,6 +573,15 @@ async function initUserManagement() {
   } catch(e) {
     showToast('加载失败: ' + e.message, 'error');
   }
+}
+
+// In-place refresh after a mutation — preserves search/filter/tab (no table-clear flash)
+function refreshOrg() {
+  var user = getCurrentUser();
+  var perms = (user && user.permissions) ? user.permissions.split(',').filter(Boolean) : [];
+  var isAdmin = (user && user.role === 'admin') || (perms.indexOf('admin') >= 0);
+  window._orgIsAdmin = isAdmin;
+  return _loadOrgData(isAdmin);
 }
 
 // ── Apply non-admin restrictions to the unified org-chart page ──
@@ -756,7 +770,7 @@ async function saveRole(editId) {
       await API.post('/admin/users/roles', { key: key, label: label, description: desc });
     }
     showToast(editId ? '角色已更新' : '角色已创建', 'success');
-    initUserManagement();
+    EventBus.emit(EVENTS.ROLE_SAVED, {});
   } catch(e) {
     showToast('保存失败: ' + (e.message || '未知错误'), 'error');
   }
@@ -799,7 +813,7 @@ async function saveRoleLeader(roleId) {
     // Close dialog
     var overlay = document.querySelector('.note-dialog-overlay');
     if (overlay) overlay.remove();
-    initUserManagement();
+    EventBus.emit(EVENTS.ROLE_SAVED, {});
   } catch(e) {
     showToast('保存失败: ' + (e.message || '未知错误'), 'error');
   }
@@ -877,7 +891,7 @@ async function saveRoleUsers(roleId) {
   try {
     await Promise.all(promises);
     showToast('成员已更新', 'success');
-    initUserManagement();
+    EventBus.emit(EVENTS.ROLE_SAVED, {});
   } catch(e) {
     showToast('保存失败: ' + (e.message || '未知错误'), 'error');
   }
@@ -927,7 +941,7 @@ function _delRoleSubmit(dlgId) {
   _delRoleClose(dlgId);
   API.del('/admin/users/roles/' + data.id).then(function() {
     showToast('角色已删除', 'success');
-    initUserManagement();
+    EventBus.emit(EVENTS.ROLE_DELETED, {});
   }).catch(function(e) {
     showToast('删除失败: ' + (e.message || '未知错误'), 'error');
   });
@@ -1239,7 +1253,7 @@ async function linkWecomUser(userId, wecomUserid) {
     await API.put('/admin/users/' + userId, payload);
     showToast(wecomUserid ? '已关联企业微信' : '已解除关联', 'success');
     closeUserDialog();
-    initUserManagement();
+    EventBus.emit(EVENTS.WECOM_LINKED, {});
   } catch(e) {
     showToast('操作失败: ' + (e.message || ''), 'error');
   }
@@ -1307,7 +1321,7 @@ async function submitUserCreate() {
     if (errors.length > 3) errSummary += ' ...等' + errors.length + '个错误';
     msg.innerHTML = '<span style="color:var(--danger)">成功 ' + success + ' 个, 失败 ' + fail + ' 个: ' + escHtml(errSummary) + '</span>';
   }
-  initUserManagement();
+  EventBus.emit(EVENTS.USER_SAVED, {});
 }
 
 function openUserEditDialog(id) {
@@ -1375,7 +1389,7 @@ async function submitUserEdit(id) {
     // Update role assignments
     await API.put('/admin/users/' + id + '/roles', { role_ids: roleIds });
     closeUserDialog();
-    initUserManagement();
+    EventBus.emit(EVENTS.USER_SAVED, {});
   } catch(e) {
     msg.innerHTML = '<span style="color:var(--danger)">' + escHtml(e.message) + '</span>';
   }
@@ -1384,7 +1398,7 @@ async function submitUserEdit(id) {
 async function toggleUserActive(id, currentActive) {
   try {
     await API.put('/admin/users/' + id, { is_active: !currentActive });
-    initUserManagement();
+    EventBus.emit(EVENTS.USER_SAVED, {});
   } catch(e) {
     showToast('操作失败: ' + e.message, 'error');
   }
@@ -1396,7 +1410,7 @@ async function deleteUser(id, username) {
   if (!ok) return;
   try {
     await API.del('/admin/users/' + id);
-    initUserManagement();
+    EventBus.emit(EVENTS.USER_DELETED, {});
     showToast('用户已删除', 'success');
   } catch(e) {
     showToast('删除失败: ' + e.message, 'error');

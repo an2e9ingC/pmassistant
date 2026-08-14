@@ -59,7 +59,7 @@ async function submitCustCreate() {
   try {
     await API.post('/customers', { name: name, full_name: fullName });
     closeCustDialog();
-    loadCustTable();
+    EventBus.emit(EVENTS.CUSTOMER_SAVED, {});
   } catch(e) { msg.innerHTML = '<span style="color:var(--danger)">' + escHtml(e.message) + '</span>'; }
 }
 
@@ -90,7 +90,7 @@ async function submitCustEdit(id) {
   try {
     await API.put('/customers/' + id, { name: name, full_name: fullName });
     closeCustDialog();
-    loadCustTable();
+    EventBus.emit(EVENTS.CUSTOMER_SAVED, {});
   } catch(e) { msg.innerHTML = '<span style="color:var(--danger)">' + escHtml(e.message) + '</span>'; }
 }
 
@@ -98,7 +98,7 @@ async function deleteCust(id, name) {
   if (!confirm('确认删除客户 "' + name + '"？将同时解除所有项目/产品关联。')) return;
   var ok = await verifyPassword('删除客户: ' + name, 'pw_verify_delete_cust');
   if (!ok) return;
-  try { await API.del('/customers/' + id); loadCustTable(); } catch(e) { showToast('删除失败: ' + e.message, 'error'); }
+  try { await API.del('/customers/' + id); EventBus.emit(EVENTS.CUSTOMER_DELETED, {}); } catch(e) { showToast('删除失败: ' + e.message, 'error'); }
 }
 
 /* ── Customer Detail ── */
