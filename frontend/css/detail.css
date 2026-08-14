@@ -41,6 +41,11 @@
   display: flex; align-items: center; gap: 10px; margin-bottom: 18px;
 }
 
+/* Keep the project/product selector compact instead of stretching full width */
+.proj-select-bar .proj-combo {
+  width: 320px; flex: 0 0 320px; max-width: 100%;
+}
+
 /* Searchable combobox */
 .proj-combo {
   position: relative;
