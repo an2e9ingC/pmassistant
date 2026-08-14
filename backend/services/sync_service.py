@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from backend.database import SessionLocal
 from backend.models.bug import CachedBug
 from backend.models.zentao import (
-    CachedProject, CachedExecution, CachedTask,
+    CachedProject,
     CachedUser, PmaProduct, ProductProjectLink,
     PmaCustomer, CustomerProjectLink,
 )
@@ -138,7 +138,7 @@ def _finish_log(db: Session, log: SyncLog, status: str, items_fetched: int = 0,
 
 # Auto-sync notification state — per-source results, each source notifies independently
 _auto_sync_notify = {
-    "completed": False, "time": "", "mismatches": None,
+    "completed": False, "time": "",
     "zentao": {"status": "pending", "notified": False},
     "gitlab": {"status": "pending", "notified": False},
     "nas": {"status": "pending", "notified": False},
@@ -149,56 +149,11 @@ _auto_sync_notify = {
 }
 
 
-def _check_stage_mismatches(db) -> dict:
-    """After sync, count executions with non-standard stage names."""
-    from backend.models.zentao import CachedProject, CachedExecution
-    from backend.services.document_service import get_stage_types_for_project
-
-    projects = db.query(CachedProject).all()
-    total_unmatched = 0
-    total_fuzzy = 0
-    affected_projects = []
-
-    for p in projects:
-        standard_stages = get_stage_types_for_project(p.project_type or "RD")
-        executions = db.query(CachedExecution).filter(
-            CachedExecution.project_id == p.id
-        ).all()
-        proj_unmatched = 0
-        proj_fuzzy = 0
-        for e in executions:
-            actual_name = (e.name or "").strip()
-            if not actual_name:
-                continue
-            result = None  # no more fuzzy matching
-            if not result:
-                proj_unmatched += 1
-                total_unmatched += 1
-            elif result[1] == "fuzzy":
-                proj_fuzzy += 1
-                total_fuzzy += 1
-
-        if proj_unmatched > 0 or proj_fuzzy > 0:
-            affected_projects.append({
-                "project_id": p.id,
-                "code": p.code or "",
-                "name": (p.name or "")[:40],
-                "unmatched": proj_unmatched,
-                "fuzzy": proj_fuzzy,
-            })
-
-    return {
-        "total_unmatched": total_unmatched,
-        "total_fuzzy": total_fuzzy,
-        "affected_projects": affected_projects[:20],  # top 20
-    }
-
 # Global sync progress state
 _sync_progress = {
     "running": False, "paused": False, "cancelled": False,
     "phase": "", "current": 0, "total": 0,
-    "projects_total": 0, "execs_total": 0, "tasks_total": 0,
-    "projects_done": 0, "execs_done": 0, "tasks_done": 0,
+    "projects_total": 0, "projects_done": 0,
     "current_item": "",
 }
 
@@ -223,8 +178,7 @@ class SyncService:
         global _sync_progress
         _sync_progress = {
             "running": True, "phase": "认证", "current": 0, "total": 0,
-            "projects_total": 0, "execs_total": 0, "tasks_total": 0,
-            "projects_done": 0, "execs_done": 0, "tasks_done": 0,
+            "projects_total": 0, "projects_done": 0,
             "current_item": "",
         }
         db = SessionLocal()
@@ -248,16 +202,12 @@ class SyncService:
                 logger.info("[禅道] 产品同步已禁用（产品由PMA本地维护）")
                 _sync_progress["phase"] = "项目"; t0 = time.time(); results["projects"] = await self._sync_projects(db); timings["projects"] = round(time.time() - t0, 1)
                 logger.info(f"[禅道] 项目同步完成: {results['projects']}")
-                _sync_progress["phase"] = "执行与任务"; t0 = time.time(); results["executions_tasks"] = await self._sync_executions_and_tasks(db); timings["execs_tasks"] = round(time.time() - t0, 1)
-                logger.info(f"[禅道] 执行与任务同步完成: {results['executions_tasks']}")
                 _sync_progress["phase"] = "Bug"; t0 = time.time(); results["bugs"] = await self._sync_bugs(db); timings["bugs"] = round(time.time() - t0, 1)
                 logger.info(f"[禅道] Bug同步完成: {results['bugs']}")
 
-                zs = {k: v for k, v in results.items() if k in ("users", "projects", "executions_tasks", "bugs")}
-                z_total = sum(v.get("fetched", v.get("executions_fetched", 0)) + v.get("tasks_fetched", 0) for v in zs.values() if isinstance(v, dict))
                 zentao_summary = {
                     "status": "success",
-                    "summary": f"用户{results.get('users',{}).get('fetched',0)} / 产品{results.get('products',{}).get('fetched',0)} / 项目{results.get('projects',{}).get('fetched',0)} / 执行{results.get('executions_tasks',{}).get('executions_fetched',0)} / 任务{results.get('executions_tasks',{}).get('tasks_fetched',0)} / Bug{results.get('bugs',{}).get('fetched',0)}",
+                    "summary": f"用户{results.get('users',{}).get('fetched',0)} / 产品{results.get('products',{}).get('fetched',0)} / 项目{results.get('projects',{}).get('fetched',0)} / Bug{results.get('bugs',{}).get('fetched',0)}",
                 }
                 _auto_sync_notify["zentao"] = zentao_summary
             except Exception as e:
@@ -437,12 +387,8 @@ class SyncService:
             results["svn_summary"] = svn_summary
             results["wecom_summary"] = wecom_summary
 
-            # Post-sync: check stage name mismatches
-            mismatch = _check_stage_mismatches(db)
-            results["stage_mismatches"] = mismatch
             _auto_sync_notify["completed"] = True
             _auto_sync_notify["time"] = time.strftime("%H:%M:%S")
-            _auto_sync_notify["mismatches"] = mismatch
 
             return {"code": 0, "data": results, "message": f"sync completed in {timings['total']}s"}
         except Exception as e:
@@ -592,8 +538,6 @@ class SyncService:
                 if not keep:
                     to_delete.append(sp)
             for sp in to_delete:
-                db.query(CachedTask).filter(CachedTask.project_id == sp.id).delete()
-                db.query(CachedExecution).filter(CachedExecution.project_id == sp.id).delete()
                 db.query(ProductProjectLink).filter(ProductProjectLink.project_id == sp.id).delete()
                 db.query(CustomerProjectLink).filter(CustomerProjectLink.project_id == sp.id).delete()
                 db.delete(sp)
@@ -618,189 +562,6 @@ class SyncService:
 
             _finish_log(db, log, "success", len(projects), created + deleted, updated)
             return {"fetched": len(projects), "created": created, "updated": updated, "deleted": deleted}
-        except Exception as e:
-            _finish_log(db, log, "failed", error=str(e))
-            raise
-
-    async def _sync_executions_and_tasks(self, db: Session) -> dict:
-        log = _log_sync(db, "executions_tasks")
-        total_execs, total_tasks = 0, 0
-        created_e, updated_e, deleted_e = 0, 0, 0
-        created_t, updated_t, deleted_t = 0, 0, 0
-        try:
-            projects = db.query(CachedProject).all()
-            # Apply project filter
-            from backend.config import settings
-            from backend.models.local import PmaSetting
-            pf = (PmaSetting.get(db, "project_filter", "") or
-                  getattr(settings, "ZENTAO_PROJECT_FILTER", "") or
-                  os.environ.get("ZENTAO_PROJECT_FILTER", ""))
-            if pf:
-                prefixes = [x.strip() for x in pf.split(",") if x.strip()]
-                projects = [p for p in projects if p.code and any(p.code.startswith(px) for px in prefixes)]
-            _sync_progress["total"] = len(projects)
-
-            # Phase 1: fetch all executions
-            all_executions = []  # [(exec_data, project_id), ...]
-            _sync_progress["phase"] = "获取执行列表"
-            filtered_project_ids = {p.id for p in projects}
-
-            # Try fetching all executions at once (much faster if API supports it)
-            try:
-                all_execs_raw = await self.client.get_executions()
-                # Filter to only keep executions belonging to synced projects
-                kept = 0; skipped = 0
-                for e in all_execs_raw:
-                    proj_id = e.get("project", 0)
-                    if proj_id and proj_id in filtered_project_ids:
-                        all_executions.append((e, proj_id))
-                        kept += 1
-                    else:
-                        skipped += 1
-                logger.info(f"Fetched {len(all_execs_raw)} execs total, kept {kept} (filtered), skipped {skipped}")
-            except Exception:
-                logger.warning("Failed to fetch all executions, falling back to per-project")
-                # Fallback: per-project fetching
-                for idx, proj in enumerate(projects):
-                    _sync_progress["current"] = idx + 1
-                    try:
-                        executions = await self.client.get_executions(project_id=proj.id)
-                    except Exception:
-                        logger.warning(f"Failed to fetch executions for project {proj.id}")
-                        continue
-                    if len(executions) > 10:
-                        logger.info(f"Project {proj.code or proj.id}: {len(executions)} executions")
-                    for e in executions:
-                        all_executions.append((e, proj.id))
-
-            # Log execution distribution
-            proj_exec_counts = {}
-            for e, pid in all_executions:
-                proj_exec_counts[pid] = proj_exec_counts.get(pid, 0) + 1
-            logger.info(f"Execution distribution: {len(all_executions)} total across {len(proj_exec_counts)} projects")
-            for pid, cnt in sorted(proj_exec_counts.items(), key=lambda x: -x[1])[:10]:
-                proj_info = next((p for p in projects if p.id == pid), None)
-                code = proj_info.code if proj_info else f"id={pid}"
-                logger.info(f"  {code}: {cnt} executions")
-
-            # Phase 2: save all executions first, then fetch tasks concurrently
-            _sync_progress["phase"] = "保存执行"
-            for e, proj_id in all_executions:
-                existing = db.query(CachedExecution).filter(CachedExecution.id == e["id"]).first()
-                if existing: updated_e += self._update_execution(existing, e)
-                else: db.add(self._build_execution(e, proj_id)); created_e += 1
-                total_execs += 1
-            db.commit()
-
-            # Phase 3: fetch tasks concurrently (20 at a time), skip unchanged
-            import asyncio
-            total = len(all_executions)
-            _sync_progress["execs_total"] = total
-            _sync_progress["total"] = total
-            _sync_progress["execs_done"] = 0
-            _sync_progress["tasks_total"] = 0
-            _sync_progress["tasks_done"] = 0
-            exec_task_ids = {}
-            _sync_progress["phase"] = "执行与任务"
-
-            # Pre-load existing executions for change detection
-            all_exec_ids = [e[0]["id"] for e in all_executions]
-            existing_execs = {
-                ex.id: ex for ex in db.query(CachedExecution).filter(
-                    CachedExecution.id.in_(all_exec_ids)
-                ).all()
-            }
-            # Pre-count existing tasks per execution (skip unchanged only if already has tasks)
-            from backend.models.zentao import CachedTask as CT
-            from sqlalchemy import func as sa_func
-            task_counts = dict(
-                db.query(CT.execution_id, sa_func.count(CT.id))
-                .filter(CT.execution_id.in_(all_exec_ids))
-                .group_by(CT.execution_id)
-                .all()
-            )
-
-            sem = asyncio.Semaphore(20)
-            skipped_count = 0
-
-            async def _sync_one_exec(idx, e, proj_id):
-                nonlocal skipped_count
-                async with sem:
-                    await _check_pause_cancel()
-                    existing = existing_execs.get(e["id"])
-                    has_tasks = task_counts.get(e["id"], 0) > 0
-                    # Skip only if execution unchanged AND already has tasks cached
-                    if existing and existing.raw_json == json.dumps(e, ensure_ascii=False) and existing.synced_at and has_tasks:
-                        skipped_count += 1
-                        return None  # signal to skip
-                    try:
-                        tasks = await self.client.get_tasks(e["id"])
-                        return tasks
-                    except Exception:
-                        return []
-
-            # Process in batches for progress
-            batch_size = 20
-            for batch_start in range(0, total, batch_size):
-                batch_end = min(batch_start + batch_size, total)
-                batch = [(idx, all_executions[idx][0], all_executions[idx][1]) for idx in range(batch_start, batch_end)]
-                results = await asyncio.gather(*[_sync_one_exec(idx, e, pid) for idx, e, pid in batch])
-
-                for (idx, e, proj_id), tasks in zip(batch, results):
-                    _sync_progress["execs_done"] = idx + 1
-                    _sync_progress["current"] = idx + 1
-                    _sync_progress["current_item"] = e.get("name", str(e["id"]))
-                    if tasks is None:
-                        continue  # skip unchanged execution
-                    total_tasks += len(tasks)
-                    _sync_progress["tasks_total"] = total_tasks
-                    _sync_progress["tasks_done"] += len(tasks)
-                    task_ids = set()
-                    for t in tasks:
-                        task_ids.add(t["id"])
-                        texisting = db.query(CachedTask).filter(CachedTask.id == t["id"]).first()
-                        if texisting: updated_t += self._update_task(texisting, t)
-                        else: db.add(self._build_task(t, proj_id, e["id"])); created_t += 1
-                    exec_task_ids[e["id"]] = task_ids
-                db.commit()
-
-                if total_tasks:
-                    pct = round(_sync_progress["execs_done"] / total * 100)
-                    logger.info(f"Sync: {_sync_progress['execs_done']}/{total} ({pct}%) | 任务 {total_tasks} | 跳过 {skipped_count}")
-
-            # Cleanup stale executions per project
-            for proj in projects:
-                proj_exec_ids = {e[0]["id"] for e in all_executions if e[1] == proj.id}
-                if proj_exec_ids:
-                    stale_execs = db.query(CachedExecution).filter(
-                        CachedExecution.project_id == proj.id,
-                        ~CachedExecution.id.in_(proj_exec_ids)
-                    ).all()
-                    for se in stale_execs:
-                        db.query(CachedTask).filter(CachedTask.execution_id == se.id).delete()
-                        db.delete(se)
-                        deleted_e += 1
-
-                # Cleanup stale tasks using cached task IDs
-                for exec_id, task_api_ids in exec_task_ids.items():
-                    if task_api_ids:
-                        stale_tasks = db.query(CachedTask).filter(
-                            CachedTask.execution_id == exec_id,
-                            ~CachedTask.id.in_(task_api_ids)
-                        ).delete()
-                        deleted_t += stale_tasks
-
-                db.commit()
-
-            _finish_log(db, log, "success", total_execs + total_tasks,
-                        created_e + created_t + deleted_e + deleted_t,
-                        updated_e + updated_t)
-            return {
-                "executions_fetched": total_execs, "executions_created": created_e,
-                "executions_updated": updated_e, "executions_deleted": deleted_e,
-                "tasks_fetched": total_tasks, "tasks_created": created_t,
-                "tasks_updated": updated_t, "tasks_deleted": deleted_t,
-            }
         except Exception as e:
             _finish_log(db, log, "failed", error=str(e))
             raise
@@ -1057,60 +818,3 @@ class SyncService:
         existing.synced_at = datetime.now(timezone.utc)
         return 1
 
-    def _build_execution(self, e: dict, project_id: int) -> CachedExecution:
-        return CachedExecution(
-            id=e["id"], project_id=project_id,
-            name=e.get("name", ""), type=e.get("type", ""),
-            status=e.get("status", ""),
-            begin=_parse_date(e.get("begin")), end=_parse_date(e.get("end")),
-            progress=e.get("progress", "0"),
-            raw_json=json.dumps(e, ensure_ascii=False),
-        )
-
-    def _update_execution(self, existing: CachedExecution, e: dict) -> int:
-        existing.name = e.get("name", existing.name)
-        existing.type = e.get("type", existing.type)
-        existing.status = e.get("status", existing.status)
-        existing.begin = _parse_date(e.get("begin")) or existing.begin
-        existing.end = _parse_date(e.get("end")) or existing.end
-        existing.progress = e.get("progress", existing.progress)
-        existing.raw_json = json.dumps(e, ensure_ascii=False)
-        existing.synced_at = datetime.now(timezone.utc)
-        return 1
-
-    def _build_task(self, t: dict, project_id: int, execution_id: int) -> CachedTask:
-        assigned = t.get("assignedTo", {}) or {}
-        has_files = bool(t.get("files"))
-        return CachedTask(
-            id=t["id"], execution_id=execution_id, project_id=project_id,
-            parent_id=t.get("parent", 0) or 0,
-            name=t.get("name", ""), type=t.get("type", ""),
-            status=t.get("status", ""), priority=t.get("pri", 3),
-            estimate=_parse_float(t.get("estimate")) or 0.0, consumed=_parse_float(t.get("consumed")) or 0.0,
-            deadline=_parse_date(t.get("deadline")),
-            assigned_to=assigned.get("account", ""),
-            assigned_realname=assigned.get("realname", ""),
-            real_started=_parse_datetime(t.get("realStarted")),
-            finished_date=_parse_datetime(t.get("finishedDate")),
-            has_files=has_files,
-            description=t.get("desc", ""),
-            raw_json=json.dumps(t, ensure_ascii=False),
-        )
-
-    def _update_task(self, existing: CachedTask, t: dict) -> int:
-        assigned = t.get("assignedTo", {}) or {}
-        existing.name = t.get("name", existing.name)
-        existing.status = t.get("status", existing.status)
-        existing.priority = t.get("pri", existing.priority)
-        existing.estimate = _parse_float(t.get("estimate")) or existing.estimate
-        existing.consumed = _parse_float(t.get("consumed")) or existing.consumed
-        existing.deadline = _parse_date(t.get("deadline")) or existing.deadline
-        existing.assigned_to = assigned.get("account", existing.assigned_to)
-        existing.assigned_realname = assigned.get("realname", existing.assigned_realname)
-        existing.real_started = _parse_datetime(t.get("realStarted")) or existing.real_started
-        existing.finished_date = _parse_datetime(t.get("finishedDate")) or existing.finished_date
-        existing.has_files = bool(t.get("files"))
-        existing.description = t.get("desc", existing.description)
-        existing.raw_json = json.dumps(t, ensure_ascii=False)
-        existing.synced_at = datetime.now(timezone.utc)
-        return 1

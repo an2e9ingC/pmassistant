@@ -53,56 +53,6 @@ class CachedProject(Base):
     reporter_id = Column(Integer, ForeignKey("local_users.id"), nullable=True)
 
 
-class CachedExecution(Base):
-    __tablename__ = "zenta_executions"
-
-    id = Column(Integer, primary_key=True)
-    project_id = Column(Integer, ForeignKey("zenta_projects.id"), nullable=False, index=True)
-    name = Column(String(256), nullable=False)
-    type = Column(String(32))
-    status = Column(String(32))
-    begin = Column(Date)
-    end = Column(Date)
-    progress = Column(String(16))
-    # PMA-local enrichments
-    stage_name = Column(String(128), nullable=True)
-    stage_order = Column(Integer, nullable=True)
-    raw_json = Column(Text)
-    synced_at = Column(DateTime, default=func.now())
-
-    project = relationship("CachedProject", backref="executions")
-
-
-class CachedTask(Base):
-    __tablename__ = "zenta_tasks"
-
-    id = Column(Integer, primary_key=True)
-    execution_id = Column(Integer, ForeignKey("zenta_executions.id"), nullable=False, index=True)
-    project_id = Column(Integer, nullable=False, index=True)
-    parent_id = Column(Integer, nullable=True)
-    name = Column(String(512), nullable=False)
-    type = Column(String(32))
-    status = Column(String(32))
-    priority = Column(Integer, default=3)
-    estimate = Column(Float, default=0.0)
-    consumed = Column(Float, default=0.0)
-    deadline = Column(Date, nullable=True)
-    assigned_to = Column(String(64), nullable=True)
-    assigned_realname = Column(String(128), nullable=True)
-    real_started = Column(DateTime, nullable=True)
-    finished_date = Column(DateTime, nullable=True)
-    has_files = Column(Boolean, default=False)
-    description = Column(Text, nullable=True)
-    # PMA-local enrichments
-    is_blocker = Column(Boolean, default=False)
-    blocker_note = Column(Text, nullable=True)
-    output_items = Column(Text, nullable=True)  # JSON list of expected output files
-    raw_json = Column(Text)
-    synced_at = Column(DateTime, default=func.now())
-
-    execution = relationship("CachedExecution", backref="tasks")
-
-
 class CachedUser(Base):
     __tablename__ = "zenta_users"
 

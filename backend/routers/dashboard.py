@@ -77,11 +77,10 @@ def get_projects(
             name = cnames.get(cl.customer_id)
             if name:
                 cust_map.setdefault(cl.project_id, []).append(name)
-    # Batch-load completion checks (4-condition: project + docs + tasks + stages)
-    from backend.services.project_service import _get_pending_doc_counts, _get_incomplete_task_counts, _get_stage_anomaly_counts
+    # Batch-load completion checks (docs + tasks)
+    from backend.services.project_service import _get_pending_doc_counts, _get_incomplete_task_counts
     pending_map = _get_pending_doc_counts(db, proj_ids)
     incomplete_task_map = _get_incomplete_task_counts(db, proj_ids)
-    stage_anomaly_map = _get_stage_anomaly_counts(db, proj_ids)
     return {
         "code": 0,
         "data": {
@@ -92,8 +91,7 @@ def get_projects(
                 _project_list_item(p,
                     cust_map.get(p.id, []),
                     pending_map.get(p.id, False),
-                    incomplete_task_map.get(p.id, False),
-                    stage_anomaly_map.get(p.id, False))
+                    incomplete_task_map.get(p.id, False))
                 for p in items
             ],
         },
@@ -207,12 +205,16 @@ def get_bug_stats(
 
 
 def _project_list_item(p, linked_customers=None, has_pending_docs: bool = False, has_incomplete_tasks: bool = False, has_stage_anomalies: bool = False) -> dict:
-    # Determine current stage
-    exc = getattr(p, "executions", None)
+    # Determine current stage from local project stages
     current_stage = None
-    if exc and len(exc) > 0:
-        active = [e for e in exc if e.status in ("doing",)]
-        current_stage = (active[0].name if active else exc[-1].name) if exc else None
+    from sqlalchemy.orm import object_session as _object_session
+    from backend.models.project_stage import ProjectStage as _PS
+    _sess = _object_session(p)
+    if _sess:
+        _stages = _sess.query(_PS).filter(_PS.project_id == p.id).order_by(_PS.sort_order).all()
+        if _stages:
+            _active = [s for s in _stages if s.status == "active"]
+            current_stage = (_active[0].name if _active else _stages[-1].name)
 
     # Customer: from linked customers only (p.customer_name is deprecated stale text)
     customer = "、".join(linked_customers or [])

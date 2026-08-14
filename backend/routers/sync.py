@@ -395,12 +395,12 @@ def sync_sources(db: Session = Depends(get_db), _=Depends(get_current_user)):
         zentao_status = zentao_log.status if zentao_log.status != "running" else "ok"
     zentao_detail = "暂无同步数据"
     if zentao_log:
-        entity_types = ["users", "projects", "executions", "tasks", "bugs"]
+        entity_types = ["users", "projects", "bugs"]
         parts = []
         for et in entity_types:
             log = db.query(SyncLog).filter(SyncLog.entity_type == et).order_by(SyncLog.started_at.desc()).first()
             if log and log.items_fetched is not None:
-                label = {"users": "用户", "projects": "项目", "executions": "执行", "tasks": "任务", "bugs": "Bug"}.get(et, et)
+                label = {"users": "用户", "projects": "项目", "bugs": "Bug"}.get(et, et)
                 parts.append(f"{label}{log.items_fetched}")
         if parts:
             zentao_detail = " / ".join(parts)
@@ -411,7 +411,7 @@ def sync_sources(db: Session = Depends(get_db), _=Depends(get_current_user)):
         "enabled": _enabled("zentao"),
         "sync_status": zentao_status,
         "last_sync": to_local_str(zentao_log.finished_at) if (zentao_log and zentao_log.finished_at) else None,
-        "description": "项目管理（项目/迭代/任务/Bug/发布版本）",
+        "description": "项目管理（项目/Bug/发布版本）",
         "detail": zentao_detail,
     })
 

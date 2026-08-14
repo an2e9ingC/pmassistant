@@ -445,39 +445,21 @@ def get_calendar(
     bug_ids = {b.bug_id for b in bug_logs}
     bug_map = {b.id: b for b in db.query(PmaBug).filter(PmaBug.id.in_(bug_ids)).all()} if bug_ids else {}
 
-    # Batch-load project info (PmaProduct + CachedProject) and executions
+    # Batch-load project info (PmaProduct + CachedProject)
     proj_ids = {t.project_id for t in task_map.values() if t and t.project_id}
     # Also load bug project IDs for calendar display
     if bug_map:
         proj_ids.update(b.project_id for b in bug_map.values() if b and b.project_id)
     proj_map = {}
-    exec_map = {}
     if proj_ids:
         from backend.models.zentao import PmaProduct, CachedProject
         projs = db.query(PmaProduct).filter(PmaProduct.id.in_(proj_ids)).all()
         proj_map.update({p.id: p for p in projs})
         zprojs = db.query(CachedProject).filter(CachedProject.id.in_(proj_ids)).all()
         proj_map.update({p.id: p for p in zprojs})
-    exec_ids = {t.execution_id for t in task_map.values() if t and t.execution_id}
-    exec_map = {}
-    if exec_ids:
-        from backend.models.zentao import CachedExecution
-        execs = db.query(CachedExecution).filter(CachedExecution.id.in_(exec_ids)).all()
-        exec_map = {e.id: e for e in execs}
-    # Bug worklogs: resolve stage info from the bug's project executions
-    bug_stage_map = {}
+    # Resolve bug component names
     bug_comp_map = {}
     if bug_map:
-        bug_proj_ids = {b.project_id for b in bug_map.values() if b and b.project_id}
-        if bug_proj_ids:
-            from backend.models.zentao import CachedExecution
-            bug_execs = db.query(CachedExecution).filter(CachedExecution.project_id.in_(bug_proj_ids)).all()
-            _bug_proj_execs = {}
-            for e in bug_execs:
-                _bug_proj_execs.setdefault(e.project_id, []).append(e)
-            for pid, execs in _bug_proj_execs.items():
-                bug_stage_map[pid] = ', '.join(sorted(set((e.stage_name or e.name) for e in execs if (e.stage_name or e.name))))
-        # Resolve bug component names
         bug_comp_ids = {b.component_id for b in bug_map.values() if b and b.component_id}
         if bug_comp_ids:
             from backend.models.document import ProductDocTemplate
@@ -492,8 +474,7 @@ def get_calendar(
             daily_map[d] = {"date": d, "total_hours": 0.0, "tasks": []}
         task = task_map.get(w.task_id)
         proj = proj_map.get(task.project_id) if task else None
-        exe = exec_map.get(task.execution_id) if task and task.execution_id else None
-        stage = (exe.name if exe else '') or (task.stage_name if task else '')
+        stage = task.stage_name if task else ''
         daily_map[d]["total_hours"] += w.hours or 0.0
         daily_map[d]["tasks"].append({
             "id": w.id,
@@ -530,7 +511,7 @@ def get_calendar(
             "project_id": bug.project_id if bug else None,
             "project_code": getattr(proj_map.get(bug.project_id), 'code', '') if bug and bug.project_id else '',
             "project_name": getattr(proj_map.get(bug.project_id), 'name', '') if bug and bug.project_id else '',
-            "stage_name": bug_stage_map.get(bug.project_id, '') if bug and bug.project_id else '',
+            "stage_name": '',
             "component_name": bug_comp_map.get(bug.component_id, '') if bug and bug.component_id else '',
             "description": bw.description,
             "source": "bug",

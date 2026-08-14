@@ -20,7 +20,7 @@ from backend.audit_categories import FIELD_LABEL
 def get_tasks(
     db: Session,
     project_id: Optional[int] = None,
-    execution_id: Optional[int] = None,
+    stage_name: Optional[str] = None,
     status: Optional[str] = None,
     assignee_id: Optional[int] = None,
     reviewer_id: Optional[int] = None,
@@ -29,8 +29,8 @@ def get_tasks(
     q = db.query(Task)
     if project_id:
         q = q.filter(Task.project_id == project_id)
-    if execution_id:
-        q = q.filter(Task.execution_id == execution_id)
+    if stage_name:
+        q = q.filter(Task.stage_name == stage_name)
     if status:
         q = q.filter(Task.status == status)
     if assignee_id:
@@ -51,8 +51,8 @@ def get_tasks(
         )
         if project_id:
             extra_q = extra_q.filter(Task.project_id == project_id)
-        if execution_id:
-            extra_q = extra_q.filter(Task.execution_id == execution_id)
+        if stage_name:
+            extra_q = extra_q.filter(Task.stage_name == stage_name)
         if status:
             extra_q = extra_q.filter(Task.status == status)
         extra_q = extra_q.order_by(Task.sort_order, Task.created_at.desc())
@@ -201,7 +201,7 @@ def _sync_cc_favorites(db: Session, cc_user_ids: list, item_id: int, item_type: 
 
 
 def get_task_stats(db: Session, project_id: Optional[int] = None) -> dict:
-    """Task statistics grouped by status, priority, and execution."""
+    """Task statistics grouped by status and priority."""
     q = db.query(Task).filter(or_(Task.is_deleted == 0, Task.is_deleted == None))
     if project_id:
         q = q.filter(Task.project_id == project_id)
@@ -209,26 +209,16 @@ def get_task_stats(db: Session, project_id: Optional[int] = None) -> dict:
 
     by_status = {}
     by_priority = {}
-    by_execution = {}
     for t in tasks:
         s = t.status or "todo"
         by_status[s] = by_status.get(s, 0) + 1
         p = t.priority or "medium"
         by_priority[p] = by_priority.get(p, 0) + 1
-        eid = t.execution_id or 0
-        if eid not in by_execution:
-            by_execution[eid] = {"execution_id": eid, "total": 0, "done": 0, "consumed": 0.0, "estimate": 0.0}
-        by_execution[eid]["total"] += 1
-        if t.status in ("done", "closed"):
-            by_execution[eid]["done"] += 1
-        by_execution[eid]["consumed"] += t.consumed_hours or 0.0
-        by_execution[eid]["estimate"] += t.estimate_hours or 0.0
 
     return {
         "total": len(tasks),
         "by_status": by_status,
         "by_priority": by_priority,
-        "by_execution": list(by_execution.values()),
     }
 
 
@@ -275,7 +265,6 @@ def create_task(db: Session, data: dict, user) -> dict:
         assignee_ids = None
     t = Task(
         project_id=data.get("project_id"),
-        execution_id=data.get("execution_id"),
         stage_name=data.get("stage_name") or None,
         title=data.get("title", ""),
         description=data.get("description"),
@@ -328,7 +317,6 @@ def create_tasks_batch(db: Session, tasks_data: list, user) -> List[dict]:
             assignee_ids = None
         t = Task(
             project_id=data.get("project_id"),
-            execution_id=data.get("execution_id"),
             stage_name=data.get("stage_name"),
             title=data.get("title", ""),
             description=data.get("description"),
@@ -358,18 +346,17 @@ def create_tasks_batch(db: Session, tasks_data: list, user) -> List[dict]:
     return [_task_dict(t, db) for t in created]
 
 
-def import_tasks(db: Session, task_ids: list, target_project_id: int, execution_mapping: dict, user) -> List[dict]:
-    """Import tasks from other projects."""
+def import_tasks(db: Session, task_ids: list, target_project_id: int, user) -> List[dict]:
+    """Import tasks from other projects. Copies the source stage_name and re-links to the target project's stage."""
     uid, uname = _get_user_info(user)
     created = []
     for sid in task_ids:
         src = db.query(Task).filter(Task.id == sid).first()
         if not src:
             continue
-        target_exec_id = execution_mapping.get(str(src.execution_id or 0)) if execution_mapping else src.execution_id
         t = Task(
             project_id=target_project_id,
-            execution_id=target_exec_id,
+            stage_name=src.stage_name,
             title=src.title,
             description=src.description,
             status="todo",
@@ -386,6 +373,7 @@ def import_tasks(db: Session, task_ids: list, target_project_id: int, execution_
     db.commit()
     for t in created:
         db.refresh(t)
+        _link_task_to_stage(db, t)
     _log_audit(db, target_project_id, uname, "task_import", f"从其他项目导入 {len(created)} 个任务")
     return [_task_dict(t, db) for t in created]
 
@@ -432,7 +420,7 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
                 if u.id not in user_name_map:
                     user_name_map[u.id] = u.display_name or u.username
     for field in ("assignee_ids", "title", "description", "status", "priority", "type",
-                   "execution_id", "stage_name", "assignee_id", "reviewer_id",
+                   "stage_name", "assignee_id", "reviewer_id",
                    "parent_id", "blocked_by_id",
                    "start_date", "due_date", "sort_order", "progress", "cc_user_ids"):
         if field in data:
@@ -453,9 +441,7 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
             old_val = getattr(t, field)
             new_val = data[field]
             if old_val != new_val:
-                if field == "execution_id":
-                    setattr(t, field, int(new_val) if new_val else None)
-                elif field in ("reviewer_id", "parent_id", "blocked_by_id"):
+                if field in ("reviewer_id", "parent_id", "blocked_by_id"):
                     setattr(t, field, int(new_val) if new_val else None)
                 elif field == "assignee_id":
                     new_id = int(new_val) if new_val else None
@@ -703,16 +689,10 @@ def _task_dict(t: Task, db=None) -> dict:
             output = json.loads(t.output_items)
         except (json.JSONDecodeError, TypeError):
             pass
-    # Resolve execution name, assignee name, and project name
-    exec_name = None
+    # Resolve assignee name and project name
     assignee_name = None
     proj_code = None
     proj_name = None
-    if t.execution_id:
-        from backend.models.zentao import CachedExecution
-        exc = db.query(CachedExecution).filter(CachedExecution.id == t.execution_id).first() if db else None
-        if exc:
-            exec_name = exc.name
     if t.assignee_id:
         from backend.models.local import LocalUser
         u = db.query(LocalUser).filter(LocalUser.id == t.assignee_id).first() if db else None
@@ -781,9 +761,7 @@ def _task_dict(t: Task, db=None) -> dict:
         "product_id": prod_id,
         "product_name": prod_name,
         "product_code": prod_code,
-        "execution_id": t.execution_id,
         "stage_name": t.stage_name,
-        "execution_name": exec_name or t.stage_name,
         "title": t.title,
         "description": t.description,
         "status": t.status,

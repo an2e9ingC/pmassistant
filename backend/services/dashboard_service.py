@@ -4,9 +4,9 @@ from datetime import date, datetime
 from typing import Optional
 
 from sqlalchemy import desc as _desc, asc as _asc, case
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 
-from backend.models.zentao import CachedProject, CachedExecution, CachedTask
+from backend.models.zentao import CachedProject
 import json
 
 RISK_CONFIG_DEFAULT = {
@@ -142,18 +142,16 @@ def get_project_list(
         if category == "active":
             q = q.filter(CachedProject.status == "doing")
         elif category == "completed":
-            # Use PMA 4-condition check (not raw status)
-            from backend.services.project_service import _get_pending_doc_counts, _get_incomplete_task_counts, _get_stage_anomaly_counts
+            # Use PMA completed check (pending docs + incomplete tasks)
+            from backend.services.project_service import _get_pending_doc_counts, _get_incomplete_task_counts
             q = q.filter(CachedProject.status.in_(["done", "closed"]))
-            all_items = q.options(joinedload(CachedProject.executions)).order_by(CachedProject.id).all()
+            all_items = q.order_by(CachedProject.id).all()
             pids_done = [p.id for p in all_items]
             pending_map = _get_pending_doc_counts(db, pids_done)
             incomplete_task_map = _get_incomplete_task_counts(db, pids_done)
-            stage_anomaly_map = _get_stage_anomaly_counts(db, pids_done)
             all_items = [p for p in all_items if not (
                 pending_map.get(p.id) or
-                incomplete_task_map.get(p.id) or
-                stage_anomaly_map.get(p.id)
+                incomplete_task_map.get(p.id)
             )]
             total = len(all_items)
             start = (page - 1) * limit
@@ -177,7 +175,7 @@ def get_project_list(
         "code": CachedProject.code,
     }.get(sort_by, CachedProject.id)
     direction = _asc if sort_order == "asc" else _desc
-    items = q.options(joinedload(CachedProject.executions)).order_by(
+    items = q.order_by(
         direction(case((sort_col.is_(None), 1), else_=0)),
         direction(sort_col),
     ).offset((page - 1) * limit).limit(limit).all()
@@ -206,13 +204,12 @@ def _get_category_counts(db: Session, alerts: list[dict], active: list[CachedPro
     - high_risk: projects with red alerts (stage overdue)
     - incomplete_docs: projects with yellow alerts (doc/task/stage warnings)
     """
-    from backend.services.project_service import _get_pending_doc_counts, _get_incomplete_task_counts, _get_stage_anomaly_counts
+    from backend.services.project_service import _get_pending_doc_counts, _get_incomplete_task_counts
 
     projects = db.query(CachedProject).all()
     pids = [p.id for p in projects]
     pending_map = _get_pending_doc_counts(db, pids)
     incomplete_task_map = _get_incomplete_task_counts(db, pids)
-    stage_anomaly_map = _get_stage_anomaly_counts(db, pids)
 
     # active_count: only truly in-progress (doing), matches _map_status(doing) → active
     active_count = len(active) if active is not None else sum(1 for p in projects if p.status == "doing")
@@ -222,8 +219,7 @@ def _get_category_counts(db: Session, alerts: list[dict], active: list[CachedPro
         if p.status in ("done", "closed"):
             has_pending = pending_map.get(p.id, False)
             has_incomplete_tasks = incomplete_task_map.get(p.id, False)
-            has_stage_anomalies = stage_anomaly_map.get(p.id, False)
-            if not has_pending and not has_incomplete_tasks and not has_stage_anomalies:
+            if not has_pending and not has_incomplete_tasks:
                 completed_count += 1
 
     # Apply risk config thresholds

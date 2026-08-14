@@ -3,9 +3,11 @@ from datetime import date, datetime, timedelta
 from typing import Optional
 
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
+from sqlalchemy.sql import func as sa_func
 
-from backend.models.zentao import CachedProject, CachedExecution, CachedTask, PmaProduct
-from backend.models.bug import CachedBug
+from backend.models.zentao import CachedProject, PmaProduct
+from backend.models.project_stage import ProjectStage
 from backend.models.delivery import DeliveryRecord
 from backend.models.task import WorkLog, Task
 from backend.models.bug import BugWorkLog, PmaBug
@@ -37,29 +39,29 @@ def get_weekly_report(db: Session, project_id: Optional[int] = None) -> dict:
     today = date.today()
     week_ago = today - timedelta(days=7)
 
-    # Completed tasks this week
-    tasks_q = db.query(CachedTask)
+    # Completed tasks this week (local pma_tasks, exclude soft-deleted)
+    tasks_q = db.query(Task).filter(or_(Task.is_deleted == 0, Task.is_deleted == None))
     if project_id:
-        tasks_q = tasks_q.filter(CachedTask.project_id == project_id)
+        tasks_q = tasks_q.filter(Task.project_id == project_id)
     recent_done_tasks = tasks_q.filter(
-        CachedTask.status == "done",
-        CachedTask.finished_date >= week_ago,
+        Task.status == "done",
+        Task.completed_at >= week_ago,
     ).count()
 
-    # New bugs this week
-    bugs_q = db.query(CachedBug)
+    # New bugs this week (local pma_bugs)
+    bugs_q = db.query(PmaBug)
     if project_id:
-        bugs_q = bugs_q.filter(CachedBug.project_id == project_id)
-    new_bugs = bugs_q.filter(CachedBug.opened_date >= week_ago).count()
+        bugs_q = bugs_q.filter(PmaBug.project_id == project_id)
+    new_bugs = bugs_q.filter(PmaBug.created_at >= week_ago).count()
     resolved_bugs = bugs_q.filter(
-        CachedBug.resolved_date >= week_ago,
+        PmaBug.resolved_at >= week_ago,
     ).count()
 
-    # Active stages
-    execs_q = db.query(CachedExecution)
+    # Active stages (local pma_project_stages)
+    stages_q = db.query(ProjectStage)
     if project_id:
-        execs_q = execs_q.filter(CachedExecution.project_id == project_id)
-    active_stages = execs_q.filter(CachedExecution.status == "doing").all()
+        stages_q = stages_q.filter(ProjectStage.project_id == project_id)
+    active_stages = stages_q.filter(ProjectStage.status == "active").all()
 
     # Delivery this week
     del_q = db.query(DeliveryRecord)
@@ -87,18 +89,19 @@ def get_monthly_report(db: Session) -> dict:
     projects = db.query(CachedProject).all()
     summary = get_project_summary(db)
 
-    # Monthly task completion
-    done_tasks = db.query(CachedTask).filter(
-        CachedTask.status == "done",
-        CachedTask.finished_date >= month_start,
+    # Monthly task completion (local pma_tasks, exclude soft-deleted)
+    done_tasks = db.query(Task).filter(
+        or_(Task.is_deleted == 0, Task.is_deleted == None),
+        Task.status == "done",
+        Task.completed_at >= month_start,
     ).count()
 
-    # Monthly bugs
-    new_bugs = db.query(CachedBug).filter(
-        CachedBug.opened_date >= month_start,
+    # Monthly bugs (local pma_bugs)
+    new_bugs = db.query(PmaBug).filter(
+        PmaBug.created_at >= month_start,
     ).count()
-    resolved_bugs = db.query(CachedBug).filter(
-        CachedBug.resolved_date >= month_start,
+    resolved_bugs = db.query(PmaBug).filter(
+        PmaBug.resolved_at >= month_start,
     ).count()
 
     # Monthly deliveries
@@ -110,12 +113,14 @@ def get_monthly_report(db: Session) -> dict:
     # Per-project breakdown
     project_details = []
     for p in projects:
-        p_tasks_done = db.query(CachedTask).filter(
-            CachedTask.project_id == p.id,
-            CachedTask.status == "done",
+        p_tasks_done = db.query(Task).filter(
+            Task.project_id == p.id,
+            or_(Task.is_deleted == 0, Task.is_deleted == None),
+            Task.status == "done",
         ).count()
-        p_tasks_total = db.query(CachedTask).filter(
-            CachedTask.project_id == p.id,
+        p_tasks_total = db.query(Task).filter(
+            Task.project_id == p.id,
+            or_(Task.is_deleted == 0, Task.is_deleted == None),
         ).count()
         project_details.append({
             "id": p.id, "name": p.name, "code": p.code,

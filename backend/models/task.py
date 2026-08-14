@@ -12,8 +12,7 @@ class Task(Base):
 
     id = Column(Integer, primary_key=True)
     project_id = Column(Integer, ForeignKey("zenta_projects.id"), nullable=False, index=True)
-    execution_id = Column(Integer, ForeignKey("zenta_executions.id"), nullable=True, index=True)
-    stage_name = Column(String(128), nullable=True)  # template stage name when no Zentao execution exists
+    stage_name = Column(String(128), nullable=True)  # template stage name
     stage_id = Column(Integer, ForeignKey("pma_project_stages.id"), nullable=True, index=True)  # FK to ProjectStage
     title = Column(String(256), nullable=False)
     description = Column(Text, nullable=True)
