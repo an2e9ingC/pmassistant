@@ -344,6 +344,7 @@ function _loadMpUserDetail(userId, displayName) {
 function _renderMpUserDetail(el, d) {
   var s = d.summary || {};
   var ratioTxt = (s.ratio == null || s.ratio === undefined) ? '—' : s.ratio + '%';
+  var checkinH = s.checkin_hours || 0;
   var segments = (d.projects || []).filter(function(p) { return p.hours > 0; }).map(function(p, i) {
     return {
       label: (p.project_code || p.project_name || '其他'),
@@ -353,6 +354,17 @@ function _renderMpUserDetail(el, d) {
       percentage: p.percentage || 0,
     };
   });
+  // 未记录 = 打卡总工时 - 记录总工时（灰色斜纹线条，无纯色填充）；百分比统一以打卡工时为分母
+  var unrecorded = Math.max(0, checkinH - (s.pma_hours || 0));
+  if (unrecorded > 0) {
+    segments.push({
+      label: '未记录',
+      value: unrecorded,
+      hatch: true,
+      name: '',
+      percentage: 0,
+    });
+  }
 
   var dailyRows = '';
   (d.daily || []).forEach(function(day) {
@@ -393,7 +405,7 @@ function _renderMpUserDetail(el, d) {
     renderDonutChart(pieEl, segments, {
       title: '项目工时占比',
       size: 150,
-      centerText: (s.pma_hours || 0).toFixed(1) + 'h',
+      centerText: (s.checkin_hours || 0).toFixed(1) + 'h',
     });
   }
 }

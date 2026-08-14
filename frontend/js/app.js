@@ -3033,9 +3033,37 @@ function _ucLoadMergedCalendar(user) {
 
     // Render merged month calendar: wecom intensity + red border for no-checkin dates
     if (typeof _renderMergedMonthCalendar === 'function') {
-      html += _renderMergedMonthCalendar(now, wecomDailyMap, wlData, weData, wecomDailyMap);
+      html += _renderMergedMonthCalendar(now, wecomDailyMap, wlData, weData);
     }
     html += '</div>';
+
+    // 项目工时占比饼图（按当月 worklog 聚合，复用 renderDonutChart）
+    var projMap = {};
+    (wlData.daily || []).forEach(function(d) {
+      (d.tasks || []).forEach(function(t) {
+        var key = t.project_id || t.project_name || '其他';
+        if (!projMap[key]) projMap[key] = { hours: 0, code: t.project_code || '', name: t.project_name || '' };
+        projMap[key].hours += (t.calculated_hours || t.hours || 0);
+      });
+    });
+    var projSegments = Object.keys(projMap).map(function(k) {
+      var p = projMap[k];
+      return { label: p.code || p.name || '其他', value: p.hours, name: p.name, percentage: 0 };
+    }).sort(function(a, b) { return b.value - a.value; });
+    var pieTotal = projSegments.reduce(function(acc, s) { return acc + s.value; }, 0);
+    // 未记录 = 打卡总工时 - 记录总工时（灰色斜纹）；百分比以打卡工时为分母
+    var checkinTotal = weData.total || 0;
+    var unrecorded = Math.max(0, checkinTotal - pieTotal);
+    if (unrecorded > 0) {
+      projSegments.push({ label: '未记录', value: unrecorded, hatch: true, name: '', percentage: 0 });
+    }
+    html += '<div class="panel panel-pad" style="margin-top:12px">' +
+      '<div class="sec-hd" style="display:flex;justify-content:space-between;align-items:center">' +
+        '<h2 style="margin:0">项目工时占比</h2>' +
+        '<span style="font-size:11px;color:var(--muted)">打卡 ' + checkinTotal.toFixed(1) + 'h · 记录 ' + pieTotal.toFixed(1) + 'h</span>' +
+      '</div>' +
+      '<div id="uc-proj-pie"></div>' +
+    '</div>';
 
     // Monthly report button
     html += '<div style="margin-top:8px;text-align:right">' +
@@ -3043,6 +3071,11 @@ function _ucLoadMergedCalendar(user) {
     '</div>';
 
     cal.innerHTML = html;
+
+    // 渲染项目工时占比饼图（容器已插入 DOM）
+    if (typeof renderDonutChart === 'function') {
+      renderDonutChart('uc-proj-pie', projSegments, { title: '', size: 150, centerText: checkinTotal.toFixed(1) + 'h' });
+    }
 
     // Bug stats refresh
     if (_ucActiveTab === 'bugs') _ucLoadBugStats();
