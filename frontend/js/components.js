@@ -3215,6 +3215,12 @@ function renderDonutChart(container, segments, opts) {
     offset += s.value;
   });
 
+  // 无数据（如 PMA 记录工时为 0）时，用灰色底环占位
+  if (segments.length === 0) {
+    svgCircles = '<circle cx="' + center + '" cy="' + center + '" r="' + radius + '" ' +
+      'fill="none" stroke="var(--muted)" stroke-width="' + strokeW + '" stroke-opacity="0.35"/>';
+  }
+
   var centerText = opts.centerText || (total > 0 ? '' : '暂无数据');
   var centerHtml = centerText ? '<text x="' + center + '" y="' + center + '" text-anchor="middle" dominant-baseline="middle" font-size="' + (size * 0.13) + '" fill="var(--fg)">' + escHtml(centerText) + '</text>' : '';
 

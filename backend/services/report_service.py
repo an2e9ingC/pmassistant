@@ -327,21 +327,38 @@ def get_manpower_report(
             "users": users_list, "tasks": tasks_list[:20], "bugs": bugs_list[:20],
         })
 
-    # ── 打卡工时（企业微信）：wecom_userid → 打卡工时 ──
+    # ── 打卡工时（企业微信）：覆盖所有绑定 wecom_userid 的本地用户，wecom_userid → 打卡工时 ──
     checkin_map = {}
-    if uid_set:
-        wecom_by_uid = {u.id: u.wecom_userid for u in user_map.values() if u.wecom_userid}
-        if wecom_by_uid:
-            wuids = list(wecom_by_uid.values())
-            for wuid, hrs in db.query(
-                WeComCheckin.user_id,
-                sa_func.sum(WeComCheckin.work_hours),
-            ).filter(
-                WeComCheckin.user_id.in_(wuids),
-                WeComCheckin.date >= from_date,
-                WeComCheckin.date <= to_date,
-            ).group_by(WeComCheckin.user_id).all():
-                checkin_map[wuid] = float(hrs or 0.0)
+    wecom_user_by_id = {}
+    wecom_users = db.query(LocalUser).filter(
+        LocalUser.wecom_userid.isnot(None),
+        LocalUser.wecom_userid != "",
+    ).all()
+    if wecom_users:
+        wecom_user_by_id = {u.wecom_userid: u for u in wecom_users}
+        wuids = list(wecom_user_by_id.keys())
+        for wuid, hrs in db.query(
+            WeComCheckin.user_id,
+            sa_func.sum(WeComCheckin.work_hours),
+        ).filter(
+            WeComCheckin.user_id.in_(wuids),
+            WeComCheckin.date >= from_date,
+            WeComCheckin.date <= to_date,
+        ).group_by(WeComCheckin.user_id).all():
+            checkin_map[wuid] = float(hrs or 0.0)
+
+    # 补充：有打卡、但无 PMA 工时记录的人员，使其也出现在报表中
+    for wuid, u in wecom_user_by_id.items():
+        if u.id not in by_user and wuid in checkin_map:
+            by_user[u.id] = {
+                "user_id": u.id,
+                "display_name": u.display_name or u.username,
+                "username": u.username,
+                "total_hours": 0.0, "total_percentage": 0.0, "count": 0,
+                "projects": {},
+            }
+            user_map[u.id] = u
+    person_count = len(by_user)
 
     formatted_users = []
     for uid, udata in sorted(by_user.items(), key=lambda x: -x[1]["total_hours"]):
