@@ -763,20 +763,127 @@ async function loadProjectBugs(projectCode) {
   if (!container || !projectCode) return;
   container.innerHTML = '<div class="loading-spinner">加载Bug...</div>';
   try {
-    var bugs = await API.get('/bugs?project_id=' + encodeURIComponent(projectCode) + '&limit=200');
-    bugs = bugs || [];
-    _renderProjectBugs(bugs, container);
+    var results = await Promise.all([
+      API.get('/bugs?project_id=' + encodeURIComponent(projectCode) + '&limit=200'),
+      API.get('/bugs/stats?project_id=' + encodeURIComponent(projectCode)).catch(function() { return null; })
+    ]);
+    var bugs = results[0] || [];
+    var stats = results[1] || null;
+    _renderProjectBugs(bugs, stats, container);
   } catch(e) {
     container.innerHTML = '<div class="empty-state" style="color:var(--danger);padding:20px">加载失败: ' + escHtml(e.message || '') + '</div>';
   }
 }
 
-function _renderProjectBugs(bugs, container) {
-  if (!bugs.length) { container.innerHTML = '<div class="card" style="padding:20px"><div class="empty-state">暂无Bug</div></div>'; return; }
+var _projBugsAll = [];
+var _projBugsDt = null;
+var _projBugStats = null;
+var _projBugFilterStatus = '';
+
+function _projBugAssignees(bugs) {
+  var seen = {};
+  (bugs || []).forEach(function(b) {
+    var n = b.assignee_name || '';
+    if (n) seen[n] = true;
+  });
+  return Object.keys(seen).sort();
+}
+
+function _projBugFilterValues() {
+  var sev = document.getElementById('pbuf-severity');
+  var prio = document.getElementById('pbuf-priority');
+  var asg = document.getElementById('pbuf-assignee');
+  return {
+    status: _projBugFilterStatus,
+    severity: sev ? sev.value : '',
+    priority: prio ? prio.value : '',
+    assignee: asg ? asg.value : ''
+  };
+}
+
+function _applyProjBugFilters() {
+  var f = _projBugFilterValues();
+  var clearBtnMap = {severity: 'pbuf-clear-severity', priority: 'pbuf-clear-priority', assignee: 'pbuf-clear-assignee'};
+  Object.keys(clearBtnMap).forEach(function(key) {
+    var cb = document.getElementById(clearBtnMap[key]);
+    if (cb) cb.style.display = f[key] ? 'inline-flex' : 'none';
+  });
+  var filtered = _projBugsAll.filter(function(b) {
+    if (f.status && b.status !== f.status) return false;
+    if (f.severity && String(b.severity) !== f.severity) return false;
+    if (f.priority && b.priority !== f.priority) return false;
+    if (f.assignee && (b.assignee_name || '') !== f.assignee) return false;
+    return true;
+  });
+  if (_projBugsDt) _projBugsDt.setData(filtered);
+  _renderProjBugStats(_projBugStats);
+}
+
+function _clearProjBugFilters() {
+  _projBugFilterStatus = '';
+  ['pbuf-severity', 'pbuf-priority', 'pbuf-assignee'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  _applyProjBugFilters();
+}
+
+function _clearProjBugFilter(field) {
+  var map = {severity: 'pbuf-severity', priority: 'pbuf-priority', assignee: 'pbuf-assignee'};
+  var el = document.getElementById(map[field]);
+  if (el) el.value = '';
+  _applyProjBugFilters();
+}
+
+function _projBugFilterByStatus(status) {
+  _projBugFilterStatus = status;
+  _applyProjBugFilters();
+}
+
+function _renderProjBugStats(stats) {
+  _projBugStats = stats || null;
+  var el = document.getElementById('proj-bug-stats');
+  if (!el) return;
+  if (!_projBugStats) { el.innerHTML = ''; return; }
+  var statusLabels = {open:'待确认', confirmed:'已确认', in_progress:'处理中', gitlab_submitted:'GitLab已提交', resolved:'已解决', closed:'已关闭'};
+  var statusColors = {open:'var(--warn)', confirmed:'var(--accent)', in_progress:'var(--accent)', gitlab_submitted:'var(--purple)', resolved:'var(--success)', closed:'var(--muted)'};
+  var statusKeys = ['open','confirmed','in_progress','resolved','closed'];
+  var f = _projBugFilterValues();
+  var hasFilter = !!(f.status || f.severity || f.priority || f.assignee);
+  var cards = _bugKpiCard('全部', _projBugStats.total, 'var(--fg)', 'var(--surface2)', !hasFilter, '_clearProjBugFilters()');
+  statusKeys.forEach(function(k) {
+    var cnt = (_projBugStats.by_status && _projBugStats.by_status[k]) || 0;
+    cards += _bugKpiCard(statusLabels[k], cnt, statusColors[k], _bugStatusLt[k], f.status === k, "_projBugFilterByStatus('" + k + "')");
+  });
+  el.innerHTML = '<div class="kpi-grid" style="grid-template-columns:repeat(6,1fr)">' + cards + '</div>';
+}
+
+function _renderProjectBugs(bugs, stats, container) {
+  _projBugsAll = bugs || [];
+  _projBugsDt = null;
+  if (!_projBugsAll.length) { container.innerHTML = '<div class="card" style="padding:20px"><div class="empty-state">暂无Bug</div></div>'; return; }
   var sevLabels = {1:'致命',2:'严重',3:'一般',4:'建议'};
   var sevColors = {1:'var(--danger)',2:'var(--warn)',3:'var(--accent)',4:'var(--muted)'};
-  container.innerHTML = '<div id="proj-bugs-table"></div>';
-  new DataTable({
+
+  var assigneeOpts = _projBugAssignees(_projBugsAll).map(function(n) { return '<option value="' + escHtml(n) + '">' + escHtml(n) + '</option>'; }).join('');
+
+  var filterBar =
+    '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);margin-bottom:12px">' +
+      '<span style="font-size:11px;color:var(--muted);white-space:nowrap">筛选</span>' +
+      '<label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px">严重程度' +
+        '<select class="search-inp" id="pbuf-severity" onchange="_applyProjBugFilters()" style="width:110px;font-size:11px;padding:2px 6px"><option value="">全部</option><option value="1">1-致命</option><option value="2">2-严重</option><option value="3">3-一般</option><option value="4">4-建议</option></select>' +
+        '<span class="combo-clear" id="pbuf-clear-severity" onclick="_clearProjBugFilter(\'severity\')" title="清除严重程度筛选" style="display:none">✕</span></label>' +
+      '<label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px">优先级' +
+        '<select class="search-inp" id="pbuf-priority" onchange="_applyProjBugFilters()" style="width:100px;font-size:11px;padding:2px 6px"><option value="">全部</option><option value="low">低</option><option value="medium">中</option><option value="high">高</option><option value="critical">紧急</option></select>' +
+        '<span class="combo-clear" id="pbuf-clear-priority" onclick="_clearProjBugFilter(\'priority\')" title="清除优先级筛选" style="display:none">✕</span></label>' +
+      '<label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px">责任人' +
+        '<select class="search-inp" id="pbuf-assignee" onchange="_applyProjBugFilters()" style="width:110px;font-size:11px;padding:2px 6px"><option value="">全部</option>' + assigneeOpts + '</select>' +
+        '<span class="combo-clear" id="pbuf-clear-assignee" onclick="_clearProjBugFilter(\'assignee\')" title="清除责任人筛选" style="display:none">✕</span></label>' +
+    '</div>';
+
+  container.innerHTML = '<div id="proj-bug-stats" style="margin-bottom:12px"></div>' + filterBar + '<div id="proj-bugs-table"></div>';
+  _renderProjBugStats(stats);
+  _projBugsDt = new DataTable({
     container: document.getElementById('proj-bugs-table'),
     columns: [
       { key: 'id', title: '#', minWidth: 60, width: '6%', render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);cursor:pointer" onclick="openBugDetail('+v+')">#'+v+'</span>'; } },
@@ -788,8 +895,8 @@ function _renderProjectBugs(bugs, container) {
       { key: 'assignee_name', title: '负责人', minWidth: 90, width: '8%', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'—')+'</span>'; } },
       { key: 'created_at', title: '创建时间', minWidth: 100, width: '10%', render: function(v) { return '<span style="font-size:11px;color:var(--muted)">'+formatDate(v)+'</span>'; } }
     ],
-    data: bugs,
-    maxHeight: 'calc(100vh - 280px)',
+    data: _projBugsAll,
+    maxHeight: 'calc(100vh - 320px)',
   });
 }
 
