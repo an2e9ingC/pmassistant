@@ -2956,7 +2956,7 @@ function _showTeamMembers(event, namesJson) {
   var popover = document.createElement('div');
   popover.className = 'team-popover';
   popover.innerHTML = html;
-  popover.style.cssText = 'position:fixed;z-index:10000;background:var(--card-bg, #fff);border:1px solid var(--border);border-radius:12px;padding:14px 18px;box-shadow:0 8px 32px rgba(0,0,0,0.15);backdrop-filter:blur(8px);min-width:180px;max-width:300px;max-height:360px;overflow-y:auto;animation:popoverIn 0.2s ease';
+  popover.style.cssText = 'position:fixed;z-index:10000;background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:12px;padding:14px 18px;box-shadow:0 8px 32px rgba(0,0,0,0.15);backdrop-filter:blur(8px);min-width:180px;max-width:300px;max-height:360px;overflow-y:auto;animation:popoverIn 0.2s ease';
   popover.style.left = Math.min(rect.left, window.innerWidth - 320) + 'px';
   popover.style.top = Math.min(rect.bottom + 6, window.innerHeight - 380) + 'px';
   popover.onclick = function(e) { e.stopPropagation(); };

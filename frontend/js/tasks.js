@@ -1243,7 +1243,7 @@ function _renderTaskDetailBody(t) {
     // ── 基本信息 ──
     '<div class="card info-glass-card" style="flex:1;min-width:0;padding:20px;display:flex;flex-direction:column">' +
       '<div class="section-hd"><span class="section-title">基本信息</span></div>' +
-      '<div class="delivery-kpi" style="grid-template-columns:1fr 1fr;flex:1;grid-auto-rows:1fr;align-content:start">' +
+      '<div class="delivery-kpi" style="grid-template-columns:1fr 1fr;flex:1;align-content:start">' +
         // Product (read-only)
         '<div class="dkpi"><div class="dkpi-lbl">产品</div><div class="dkpi-val">' + (t.product_code ? '<span class="proj-code-btn" onclick="openProductDetail(\'' + escHtml(t.product_code) + '\')" title="' + escHtml(t.product_name || '') + '">' + escHtml(t.product_code) + '</span> ' + escHtml(t.product_name || '') : escHtml(t.product_name || '-')) + '</div></div>' +
         // Project (read-only)
@@ -1270,7 +1270,7 @@ function _renderTaskDetailBody(t) {
     // ── 状态与进度 ──
     '<div class="card info-glass-card" style="flex:1;min-width:0;padding:20px;display:flex;flex-direction:column">' +
       '<div class="section-hd"><span class="section-title">状态与进度</span></div>' +
-      '<div class="delivery-kpi" style="grid-template-columns:1fr 1fr;flex:1;grid-auto-rows:1fr;align-content:start">' +
+      '<div class="delivery-kpi" style="grid-template-columns:1fr 1fr;flex:1;align-content:start">' +
         // Status (read-only — 只能由进度自动更新)
         '<div class="dkpi"><div class="dkpi-lbl">状态 <span style="font-size:10px;color:var(--accent)">(自动)</span></div><div id="task-status-' + t.id + '" data-status="' + (t.status || 'todo') + '">' + renderPill(t.status || 'todo') +
           (t.status === 'review' && t.reviewer_name ? '<div style="font-size:10px;color:var(--muted);margin-top:2px">审批人: ' + escHtml(t.reviewer_name) + '</div>' : '') +
@@ -2051,10 +2051,10 @@ function _initWorklogDt(logs, taskId) {
   new DataTable({
     container: document.getElementById('worklog-table-' + taskId),
     columns: [
-      { key: 'date', title: '日期', minWidth: 100, render: function(v) { return v||'?'; } },
-      { key: 'user', title: '用户', minWidth: 90, render: function(v, row) { return '<span style="font-size:11px">'+escHtml(v||row.username||'?')+'</span>'; } },
-      { key: 'percentage', title: '占比', minWidth: 42, render: function(v) { return v ? '<span style="font-weight:600;color:var(--accent)">'+v+'%</span>' : '<span style="color:var(--muted)">—</span>'; } },
-      { key: 'calculated_hours', title: '工时(h)', minWidth: 52, render: function(v, row) { var h = v || row.hours || 0; return (h||0).toFixed(1); } },
+      { key: 'date', title: '日期', width: '92px', minWidth: 80, render: function(v) { return v||'?'; } },
+      { key: 'user', title: '用户', width: '78px', minWidth: 60, render: function(v, row) { return '<span style="font-size:11px">'+escHtml(v||row.username||'?')+'</span>'; } },
+      { key: 'percentage', title: '占比', width: '48px', minWidth: 40, render: function(v) { return v ? '<span style="font-weight:600;color:var(--accent)">'+v+'%</span>' : '<span style="color:var(--muted)">—</span>'; } },
+      { key: 'calculated_hours', title: '工时(h)', width: '58px', minWidth: 48, render: function(v, row) { var h = v || row.hours || 0; return (h||0).toFixed(1); } },
       { key: 'description', title: '描述', align: 'left', render: function(v) { return '<span style="white-space:normal;word-break:break-word">'+renderMarkdown(v||'')+'</span>'; } },
       { key: 'actions', title: '操作', width: actionColWidth(2) + 'px', minWidth: actionColWidth(2), render: function(v, row) { return iconEdit('openWorklogEditDialog('+row.id+','+taskId+')','编辑')+iconDelete('deleteWorklogById('+row.id+','+taskId+')','删除'); } }
     ],

@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-当前版本：v2026.08.14-beta10 | 最后更新：2026-08-14
+当前版本：v2026.08.15-beta1 | 最后更新：2026-08-15
 
 ---
 
@@ -231,6 +231,7 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-08-15 | v2026.08.15-beta1 | fix: 团队弹窗暗色主题适配+任务详情KPI布局/工时表列宽调整 — 团队成员popover改用--surface/--fg变量(修复暗色白底)+任务详情delivery-kpi移除grid-auto-rows(卡片行高不强制拉伸)+工时表格日期/用户/占比/工时列改固定宽度 |
 | 2026-08-14 | v2026.08.14-beta10 | fix: 多人任务记录工时误写任务总进度 — 批量工时后端移除task.progress直接赋值+死代码_handle_100_percent_task+前端团队任务按个人进度比较走my-progress+工时对话框默认进度显示个人进度(非任务总进度) |
 | 2026-08-14 | v2026.08.14-beta9 | feat: 事件总线统一事件常量(events.js)+跨视图原位刷新 — 新增events.js集中管理事件名常量+isViewActive()守卫仅刷新可见视图+用户/角色/产品线/文档模板等保存删除后原位刷新+任务变更联动甘特图 |
 | 2026-08-14 | v2026.08.14-beta8 | feat: 移除Zentao执行/任务缓存层 — 删除zenta_executions/zenta_tasks缓存表+CachedExecution/CachedTask模型+pma_tasks/project_documents的execution_id列(DB迁移重建表)+服务层/路由移除execution关联+前端清理execution残留 |
