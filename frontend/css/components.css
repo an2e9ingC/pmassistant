@@ -1045,8 +1045,8 @@ input[type="checkbox"] { accent-color: var(--accent); }
 /* ═══════════════════════════════════════════════════
    DETAIL PAGE QUICK-JUMP SIDEBAR (markdown-style TOC)
 ═══════════════════════════════════════════════════ */
-.task-detail-body > div,
-.bug-detail-body > div { scroll-margin-top: 70px; }
+.task-detail-body .info-glass-card,
+.bug-detail-body .info-glass-card { scroll-margin-top: 70px; }
 
 #detail-toc {
   position: fixed;

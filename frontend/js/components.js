@@ -2481,21 +2481,14 @@ function updateDetailToc() {
   var body = page.querySelector('.task-detail-body, .bug-detail-body') || page;
   var linksHtml = '';
   var idx = 0;
-  // 遍历详情主体顶层区块：并排卡片行（基本信息+状态与进度）合并为一个锚点，其余每卡一个
-  Array.prototype.slice.call(body.children).forEach(function(child) {
-    var card = null;
-    if (child.classList && child.classList.contains('card')) {
-      card = child;
-    } else {
-      card = child.querySelector('.card.info-glass-card');
-    }
-    if (!card) return;
+  // 遍历详情主体所有信息卡片（含左右分栏嵌套），每卡一个锚点
+  Array.prototype.slice.call(body.querySelectorAll('.card.info-glass-card')).forEach(function(card) {
     var titleEl = card.querySelector('.section-title');
     if (!titleEl) return;
     var label = titleEl.textContent.trim();
     if (!label) return;
     var id = 'dtoc-' + (idx++);
-    child.id = id;
+    card.id = id;
     linksHtml += '<a class="detail-toc-link" data-toc="' + id + '" title="' + escHtml(label) + '" onclick="event.preventDefault();scrollToDetailSection(\'' + id + '\', this)">' + escHtml(label) + '</a>';
   });
   toc.querySelector('.detail-toc-links').innerHTML = linksHtml;

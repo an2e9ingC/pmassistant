@@ -965,99 +965,112 @@ function _renderBugDetailBody(b) {
     '.bug-detail-body .bd-lbl{font-size:11px}' +
     '</style>';
 
-  // ── Row 1: 基本信息 + 状态与进度 side by side ──
-  html += '<div style="display:flex;gap:16px;align-items:stretch">' +
-    // ── 基本信息 ──
-    '<div class="card info-glass-card" style="flex:1;min-width:0;padding:20px">' +
-      '<div class="section-hd"><span class="section-title">基本信息</span></div>' +
-      '<div class="delivery-kpi" style="grid-template-columns:1fr 1fr">' +
-        // Product (read-only)
-        '<div class="dkpi"><div class="dkpi-lbl">产品</div><div class="bd-val">' + (b.product_code ? '<span class="proj-code-btn" onclick="openProductDetail(\'' + escHtml(b.product_code) + '\')" title="' + escHtml(b.product_name || '') + '">' + escHtml(b.product_code) + '</span> ' + escHtml(b.product_name || '') : escHtml(b.product_name || '-')) + '</div></div>' +
-        // Project (read-only)
-        '<div class="dkpi"><div class="dkpi-lbl">项目</div><div class="bd-val">' + projHtml + '</div></div>' +
-        // Component (editable)
-        '<div class="dkpi"><div class="dkpi-lbl">组件</div>' +
-          _buildBugEditableField(b.id, 'component_id', 'component-select',
-            '<span class="bd-val">' + escHtml(b.component_name || '-') + '</span>',
-            String(b.component_id || ''), null, ' data-product-id="' + (b.product_id || '') + '"') + '</div>' +
-        // Type (editable)
-        '<div class="dkpi"><div class="dkpi-lbl">类型</div>' +
-          _buildBugEditableField(b.id, 'type', 'select', '<span class="bd-val">' + escHtml(typeLabel) + '</span>', b.type || 'codeerror', _TYPE_OPTS) + '</div>' +
-        // Reporter (read-only)
-        '<div class="dkpi"><div class="dkpi-lbl">创建人</div><div class="bd-val">' + escHtml(b.reporter_name || '-') + '</div></div>' +
-        // Assignee (editable)
-        '<div class="dkpi"><div class="dkpi-lbl">负责人</div>' +
-          _buildBugEditableField(b.id, 'assignee_id', 'user-select', '<span class="bd-val">' + escHtml(b.assignee_name || '未分配') + '</span>', b.assignee_id || '') + '</div>' +
-      '</div>' +
-      // 抄送（基本信息的一部分，整行展示）
-      '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">' +
-        '<div class="dkpi"><div class="dkpi-lbl">抄送</div>' +
-          _buildBugEditableField(b.id, 'cc_user_ids', 'cc-select',
-            '<span class="bd-val">' + ((b.cc_user_names && b.cc_user_names.length) ? escHtml(b.cc_user_names.join(', ')) : '无') + '</span>',
-            JSON.stringify(b.cc_user_ids || [])) +
+  // ── 布局：左侧其他卡片，右侧基本信息 + 状态与进度（上下摆放）──
+  html += '<div style="display:flex;gap:16px;align-items:flex-start">' +
+
+    // ── 左侧：描述 / 工时日志 / 历史记录 / 分析记录 ──
+    '<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:16px">' +
+
+      // ── 描述 ──
+      '<div class="card info-glass-card" style="padding:20px">' +
+        '<div class="section-hd"><span class="section-title">描述</span>' +
+          (_bugDetailCanEdit ? iconEdit('_editDescription(\'bug\', ' + b.id + ')', '编辑描述') : '') +
+        '</div>' +
+        '<div id="bug-desc-' + b.id + '" data-desc="' + escHtml(b.description || '') + '" class="markdown-body" style="font-size:13px;line-height:1.6;min-height:20px">' +
+          (b.description ? renderMarkdown(b.description) : '<span style="color:var(--muted)">暂无描述</span>') +
         '</div>' +
       '</div>' +
-    '</div>' +
-    // ── 状态与进度 ──
-    '<div class="card info-glass-card" style="flex:1;min-width:0;padding:20px">' +
-      '<div class="section-hd"><span class="section-title">状态与进度</span></div>' +
-      '<div class="delivery-kpi" style="grid-template-columns:1fr 1fr">' +
-        // Status (read-only — 只能由进度自动更新)
-        '<div class="dkpi"><div class="dkpi-lbl">状态 <span style="font-size:10px;color:var(--accent)">(自动)</span></div><div id="bug-status-' + b.id + '" data-status="' + (b.status || 'open') + '">' + renderPill(b.status || 'open') + '</div></div>' +
-        // Severity (editable)
-        '<div class="dkpi"><div class="dkpi-lbl">严重程度</div>' + _buildBugEditableField(b.id, 'severity', 'select',
-          '<span style="font-size:13px;color:' + (sevColors[b.severity] || 'var(--muted)') + ';font-weight:500">' + (sevs[b.severity] || b.severity) + '</span>',
-          String(b.severity || 3), _SEV_OPTS) + '</div>' +
-        // Priority (editable)
-        '<div class="dkpi"><div class="dkpi-lbl">优先级</div>' + _buildBugEditableField(b.id, 'priority', 'select', renderPriorityBadge(b.priority || 'medium'), b.priority || 'medium', _PRIO_OPTS) + '</div>' +
-        // Hours info (read-only — 实际/预估)
-        '<div class="dkpi"><div class="dkpi-lbl">工时信息</div><div class="bd-val">实际 ' + (b.consumed_hours || 0).toFixed(1) + 'h / 预估 ' + (b.estimate_hours || 0).toFixed(1) + 'h</div></div>' +
-        // Progress (editable — 圆圈显示，点击滑杆编辑，与任务页一致)
-        '<div class="dkpi"><div class="dkpi-lbl">进度(%)</div>' +
-          _buildBugEditableField(b.id, 'progress', 'number', renderProgressCircle(b.progress || 0, 30, {label:''}), String(b.progress || 0), {min:0,max:100,step:5}) + '</div>' +
-        // Resolution (editable — bug解决方式)
-        '<div class="dkpi"><div class="dkpi-lbl">解决方式</div>' +
-          _buildBugEditableField(b.id, 'resolution', 'select',
-            '<span class="bd-val">' + ({resolved:'已解决',duplicate:'重复',wontfix:'不予解决',invalid:'无效',postponed:'延期处理'}[b.resolution] || b.resolution || '—') + '</span>',
-            b.resolution || '', [{v:'',l:'—'},{v:'resolved',l:'已解决'},{v:'duplicate',l:'重复'},{v:'wontfix',l:'不予解决'},{v:'invalid',l:'无效'},{v:'postponed',l:'延期处理'}]) + '</div>' +
+
+      // ── 工时日志 ──
+      '<div class="card info-glass-card" style="padding:20px">' +
+        '<div class="section-hd"><span class="section-title">工时日志 (' + (b.consumed_hours || 0).toFixed(1) + 'h)</span>' +
+          '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openBugWorklogDialog(' + b.id + ')">+ 记录</button></div>' +
+        '<div id="bv-worklogs" style="font-size:12px">加载中...</div>' +
       '</div>' +
-    '</div>' +
-  '</div>';
 
-  // ── Section 2: 描述 ──
-  html += '<div class="card info-glass-card" style="margin-top:16px;padding:20px">' +
-    '<div class="section-hd"><span class="section-title">描述</span>' +
-      (_bugDetailCanEdit ? iconEdit('_editDescription(\'bug\', ' + b.id + ')', '编辑描述') : '') +
-    '</div>' +
-    '<div id="bug-desc-' + b.id + '" data-desc="' + escHtml(b.description || '') + '" class="markdown-body" style="font-size:13px;line-height:1.6;min-height:20px">' +
-      (b.description ? renderMarkdown(b.description) : '<span style="color:var(--muted)">暂无描述</span>') +
-    '</div>' +
-  '</div>';
-
-  // ── Section 3: 工时日志 ──
-  html += '<div class="card info-glass-card" style="margin-top:16px;padding:20px">' +
-    '<div class="section-hd"><span class="section-title">工时日志 (' + (b.consumed_hours || 0).toFixed(1) + 'h)</span>' +
-      '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openBugWorklogDialog(' + b.id + ')">+ 记录</button></div>' +
-    '<div id="bv-worklogs" style="font-size:12px">加载中...</div>' +
-  '</div>';
-
-  // ── Section 4: 历史记录 ──
-  html += '<div class="card info-glass-card" style="margin-top:16px;padding:20px">' +
-    '<div class="section-hd" style="display:flex;align-items:center;justify-content:space-between">' +
-      '<span class="section-title">历史记录</span>' +
-      '<div style="display:flex;gap:6px;align-items:center">' +
-        _timelineOrderBtn('bug', b.id, 'bug-detail-comments') +
-        '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openCommentDialog(\'bug\', ' + b.id + ')">添加评论</button>' +
+      // ── 历史记录 ──
+      '<div class="card info-glass-card" style="padding:20px">' +
+        '<div class="section-hd" style="display:flex;align-items:center;justify-content:space-between">' +
+          '<span class="section-title">历史记录</span>' +
+          '<div style="display:flex;gap:6px;align-items:center">' +
+            _timelineOrderBtn('bug', b.id, 'bug-detail-comments') +
+            '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openCommentDialog(\'bug\', ' + b.id + ')">添加评论</button>' +
+          '</div>' +
+        '</div>' +
+        '<div id="bug-detail-comments" style="margin-bottom:8px">加载中...</div>' +
       '</div>' +
-    '</div>' +
-    '<div id="bug-detail-comments" style="margin-bottom:8px">加载中...</div>' +
-  '</div>';
 
-  // ── Section 5: 分析记录 ──
-  html += '<div class="card info-glass-card" style="margin-top:16px;padding:20px">' +
-    '<div class="section-hd"><span class="section-title">分析记录</span>' +
-      '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openBugAnalysisDialog(' + b.id + ')">+ 添加</button></div>' +
-    '<div id="bv-analyses">加载中...</div>' +
+      // ── 分析记录 ──
+      '<div class="card info-glass-card" style="padding:20px">' +
+        '<div class="section-hd"><span class="section-title">分析记录</span>' +
+          '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openBugAnalysisDialog(' + b.id + ')">+ 添加</button></div>' +
+        '<div id="bv-analyses">加载中...</div>' +
+      '</div>' +
+
+    '</div>' +
+
+    // ── 右侧：基本信息 + 状态与进度（上下摆放）──
+    '<div style="flex:0 0 400px;min-width:0;display:flex;flex-direction:column;gap:16px">' +
+
+      // ── 基本信息 ──
+      '<div class="card info-glass-card" style="padding:20px">' +
+        '<div class="section-hd"><span class="section-title">基本信息</span></div>' +
+        '<div class="delivery-kpi" style="grid-template-columns:1fr 1fr">' +
+          // Product (read-only)
+          '<div class="dkpi"><div class="dkpi-lbl">产品</div><div class="bd-val">' + (b.product_code ? '<span class="proj-code-btn" onclick="openProductDetail(\'' + escHtml(b.product_code) + '\')" title="' + escHtml(b.product_name || '') + '">' + escHtml(b.product_code) + '</span> ' + escHtml(b.product_name || '') : escHtml(b.product_name || '-')) + '</div></div>' +
+          // Project (read-only)
+          '<div class="dkpi"><div class="dkpi-lbl">项目</div><div class="bd-val">' + projHtml + '</div></div>' +
+          // Component (editable)
+          '<div class="dkpi"><div class="dkpi-lbl">组件</div>' +
+            _buildBugEditableField(b.id, 'component_id', 'component-select',
+              '<span class="bd-val">' + escHtml(b.component_name || '-') + '</span>',
+              String(b.component_id || ''), null, ' data-product-id="' + (b.product_id || '') + '"') + '</div>' +
+          // Type (editable)
+          '<div class="dkpi"><div class="dkpi-lbl">类型</div>' +
+            _buildBugEditableField(b.id, 'type', 'select', '<span class="bd-val">' + escHtml(typeLabel) + '</span>', b.type || 'codeerror', _TYPE_OPTS) + '</div>' +
+          // Reporter (read-only)
+          '<div class="dkpi"><div class="dkpi-lbl">创建人</div><div class="bd-val">' + escHtml(b.reporter_name || '-') + '</div></div>' +
+          // Assignee (editable)
+          '<div class="dkpi"><div class="dkpi-lbl">负责人</div>' +
+            _buildBugEditableField(b.id, 'assignee_id', 'user-select', '<span class="bd-val">' + escHtml(b.assignee_name || '未分配') + '</span>', b.assignee_id || '') + '</div>' +
+        '</div>' +
+        // 抄送（基本信息的一部分，整行展示）
+        '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">' +
+          '<div class="dkpi"><div class="dkpi-lbl">抄送</div>' +
+            _buildBugEditableField(b.id, 'cc_user_ids', 'cc-select',
+              '<span class="bd-val">' + ((b.cc_user_names && b.cc_user_names.length) ? escHtml(b.cc_user_names.join(', ')) : '无') + '</span>',
+              JSON.stringify(b.cc_user_ids || [])) +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+
+      // ── 状态与进度 ──
+      '<div class="card info-glass-card" style="padding:20px">' +
+        '<div class="section-hd"><span class="section-title">状态与进度</span></div>' +
+        '<div class="delivery-kpi" style="grid-template-columns:1fr 1fr">' +
+          // Status (read-only — 只能由进度自动更新)
+          '<div class="dkpi"><div class="dkpi-lbl">状态 <span style="font-size:10px;color:var(--accent)">(自动)</span></div><div id="bug-status-' + b.id + '" data-status="' + (b.status || 'open') + '">' + renderPill(b.status || 'open') + '</div></div>' +
+          // Severity (editable)
+          '<div class="dkpi"><div class="dkpi-lbl">严重程度</div>' + _buildBugEditableField(b.id, 'severity', 'select',
+            '<span style="font-size:13px;color:' + (sevColors[b.severity] || 'var(--muted)') + ';font-weight:500">' + (sevs[b.severity] || b.severity) + '</span>',
+            String(b.severity || 3), _SEV_OPTS) + '</div>' +
+          // Priority (editable)
+          '<div class="dkpi"><div class="dkpi-lbl">优先级</div>' + _buildBugEditableField(b.id, 'priority', 'select', renderPriorityBadge(b.priority || 'medium'), b.priority || 'medium', _PRIO_OPTS) + '</div>' +
+          // Hours info (read-only — 实际/预估)
+          '<div class="dkpi"><div class="dkpi-lbl">工时信息</div><div class="bd-val">实际 ' + (b.consumed_hours || 0).toFixed(1) + 'h / 预估 ' + (b.estimate_hours || 0).toFixed(1) + 'h</div></div>' +
+          // Progress (editable — 圆圈显示，点击滑杆编辑，与任务页一致)
+          '<div class="dkpi"><div class="dkpi-lbl">进度(%)</div>' +
+            _buildBugEditableField(b.id, 'progress', 'number', renderProgressCircle(b.progress || 0, 30, {label:''}), String(b.progress || 0), {min:0,max:100,step:5}) + '</div>' +
+          // Resolution (editable — bug解决方式)
+          '<div class="dkpi"><div class="dkpi-lbl">解决方式</div>' +
+            _buildBugEditableField(b.id, 'resolution', 'select',
+              '<span class="bd-val">' + ({resolved:'已解决',duplicate:'重复',wontfix:'不予解决',invalid:'无效',postponed:'延期处理'}[b.resolution] || b.resolution || '—') + '</span>',
+              b.resolution || '', [{v:'',l:'—'},{v:'resolved',l:'已解决'},{v:'duplicate',l:'重复'},{v:'wontfix',l:'不予解决'},{v:'invalid',l:'无效'},{v:'postponed',l:'延期处理'}]) + '</div>' +
+        '</div>' +
+      '</div>' +
+
+    '</div>' +
+
   '</div>';
 
   return html;
@@ -1078,7 +1091,7 @@ function initBugDetail(bugId) {
     (typeof loadFavorites === 'function' ? loadFavorites() : Promise.resolve())
   ]).then(function(results) {
     var b = results[0] || {};
-    var html = '<div class="bug-detail-page" style="max-width:1200px;margin:0 auto;padding:20px">' +
+    var html = '<div class="bug-detail-page" style="width:80%;margin:0 auto;padding:20px">' +
       '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">' +
         favStar('bug', b.id, {size: '20px'}) +
         '<span style="font-size:15px;font-weight:620">Bug #' + b.id + ' · ' + escHtml(b.title) + '</span>' +

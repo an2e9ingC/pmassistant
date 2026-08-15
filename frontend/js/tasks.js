@@ -1023,7 +1023,7 @@ function initTaskDetail(taskId) {
     (typeof loadFavorites === 'function' ? loadFavorites() : Promise.resolve())
   ]).then(function(results) {
     var t = results[0];
-    var html = '<div class="task-detail-page" style="max-width:1200px;margin:0 auto;padding:20px">' +
+    var html = '<div class="task-detail-page" style="width:80%;margin:0 auto;padding:20px">' +
       '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">' +
         favStar('task', t.id, {size: '20px'}) +
         '<span style="font-size:15px;font-weight:620">任务 #' + t.id + ' · ' + escHtml(t.title) + '</span>' +
@@ -1238,98 +1238,111 @@ function _renderTaskDetailBody(t) {
     '.ef-cancel-btn:hover{background:var(--warn);color:#fff;border-color:var(--warn)}' +
     '</style>';
 
-  // ── Row 1: 基本信息 + 状态与进度 side by side ──
-  html += '<div style="display:flex;gap:16px;align-items:stretch">' +
-    // ── 基本信息 ──
-    '<div class="card info-glass-card" style="flex:1;min-width:0;padding:20px;display:flex;flex-direction:column">' +
-      '<div class="section-hd"><span class="section-title">基本信息</span></div>' +
-      '<div class="delivery-kpi" style="grid-template-columns:1fr 1fr;flex:1;align-content:start">' +
-        // Product (read-only)
-        '<div class="dkpi"><div class="dkpi-lbl">产品</div><div class="dkpi-val">' + (t.product_code ? '<span class="proj-code-btn" onclick="openProductDetail(\'' + escHtml(t.product_code) + '\')" title="' + escHtml(t.product_name || '') + '">' + escHtml(t.product_code) + '</span> ' + escHtml(t.product_name || '') : escHtml(t.product_name || '-')) + '</div></div>' +
-        // Project (read-only)
-        '<div class="dkpi"><div class="dkpi-lbl">项目</div><div class="dkpi-val">' + projHtml + '</div></div>' +
-        // Reporter (read-only)
-        '<div class="dkpi"><div class="dkpi-lbl">创建人</div><div class="dkpi-val">' + escHtml(t.reporter_name || '—') + '</div></div>' +
-        // Assignee (editable)
-        '<div class="dkpi"><div class="dkpi-lbl">负责人</div>' +
-          _buildEditableField(t.id, 'assignee_id', 'user-select', '<span class="dkpi-val">' + _renderAssigneeDisplay(t.assignee_names || [], t.id, {fallback: t.assignee_name || t.assignee_username || '—'}) + '</span>', (t.assignee_ids || []).join(',') || (t.assignee_id || '')) + '</div>' +
-        // Stage (editable unless template task)
-        '<div class="dkpi"><div class="dkpi-lbl">阶段' + (t.template_id ? ' <span style="color:var(--accent);font-size:10px" title="由模板控制">🔒</span>' : '') + '</div>' +
-          (t.template_id
-            ? '<span class="dkpi-val" style="color:var(--muted)">' + stageName + '</span>'
-            : _buildEditableField(t.id, 'stage_name', 'stage-select', '<span class="dkpi-val">' + stageName + '</span>', t.stage_name || '', {v:'',l:''}, ' data-project-id="' + (t.project_id || '') + '" data-project-code="' + escHtml(t.project_code || '') + '"')) + '</div>' +
-        // Per-person progress (team tasks only)
-        _renderTeamProgress(t) +
-        // Reviewer (editable, only if approval enabled)
-        (window._approvalEnabled ?
-          '<div class="dkpi"><div class="dkpi-lbl">审批人</div>' +
-            _buildEditableField(t.id, 'reviewer_id', 'user-select', '<span class="dkpi-val">' + escHtml(t.reviewer_name || '—') + '</span>', t.reviewer_id || '') + '</div>'
-          : '') +
+  // ── 布局：左侧其他卡片，右侧基本信息 + 状态与进度（上下摆放）──
+  html += '<div style="display:flex;gap:16px;align-items:flex-start">' +
+
+    // ── 左侧：描述 / 产出物 / 工时日志 / 历史记录 ──
+    '<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:16px">' +
+
+      // ── 描述 ──
+      '<div class="card info-glass-card" style="padding:20px">' +
+        '<div class="section-hd"><span class="section-title">描述</span>' +
+          (_hasTaskEditPerm() ? iconEdit('_editDescription(\'task\', ' + t.id + ')', '编辑描述') : '') +
+        '</div>' +
+        '<div id="task-desc-' + t.id + '" data-desc="' + escHtml(t.description || '') + '" style="font-size:13px;line-height:1.6;min-height:20px">' +
+          (t.description ? renderMarkdown(t.description) : '<span style="color:var(--muted)">暂无描述</span>') +
+        '</div>' +
       '</div>' +
-    '</div>' +
-    // ── 状态与进度 ──
-    '<div class="card info-glass-card" style="flex:1;min-width:0;padding:20px;display:flex;flex-direction:column">' +
-      '<div class="section-hd"><span class="section-title">状态与进度</span></div>' +
-      '<div class="delivery-kpi" style="grid-template-columns:1fr 1fr;flex:1;align-content:start">' +
-        // Status (read-only — 只能由进度自动更新)
-        '<div class="dkpi"><div class="dkpi-lbl">状态 <span style="font-size:10px;color:var(--accent)">(自动)</span></div><div id="task-status-' + t.id + '" data-status="' + (t.status || 'todo') + '">' + renderPill(t.status || 'todo') +
-          (t.status === 'review' && t.reviewer_name ? '<div style="font-size:10px;color:var(--muted);margin-top:2px">审批人: ' + escHtml(t.reviewer_name) + '</div>' : '') +
-        '</div></div>' +
-        // Priority (editable)
-        '<div class="dkpi"><div class="dkpi-lbl">优先级</div>' + _buildEditableField(t.id, 'priority', 'select', renderPriorityBadge(t.priority || 'medium'), t.priority || 'medium', _PRIORITY_OPTS) + '</div>' +
-        // Start date (editable)
-        '<div class="dkpi"><div class="dkpi-lbl">计划开始</div>' +
-          _buildEditableField(t.id, 'start_date', 'date', '<span class="dkpi-val">' + (t.start_date || '—') + '</span>', t.start_date || '') + '</div>' +
-        // Due date (editable)
-        '<div class="dkpi"><div class="dkpi-lbl">截止日期</div>' +
-          _buildEditableField(t.id, 'due_date', 'date', '<span class="dkpi-val" style="color:' + (overdue ? 'var(--danger)' : '') + '">' + (t.due_date || '—') + '<span style="font-size:11px;color:' + (overdue ? 'var(--danger)' : 'var(--muted)') + '">' + daysInfo + '</span></span>', t.due_date || '') + '</div>' +
-        // Progress: auto-calculated for team tasks
-        ((t.assignee_ids && t.assignee_ids.length > 1)
-          ? '<div class="dkpi"><div class="dkpi-lbl">团队进度 <span style="font-size:10px;color:var(--accent)">(自动)</span></div>' + renderProgressCircle(t.progress || 0, 30, {label:''}) + '</div>'
-          : '<div class="dkpi"><div class="dkpi-lbl">进度(%)</div>' + _buildEditableField(t.id, 'progress', 'number', renderProgressCircle(t.progress || 0, 30, {label:''}), String(t.progress || 0), {min:0,max:100,step:5}) + '</div>') +
-        // Hours info (read-only — 实际/预估，与 Bug 页一致)
-        '<div class="dkpi"><div class="dkpi-lbl">工时信息</div><div class="dkpi-val">实际 ' + (t.consumed_hours || 0).toFixed(1) + 'h / 预估 ' + (t.estimate_hours || 0).toFixed(1) + 'h</div></div>' +
+
+      // ── 产出物 ──
+      (t.output_items && t.output_items.length
+        ? '<div class="card info-glass-card" style="padding:20px">' +
+          '<div class="section-hd"><span class="section-title">产出物</span></div>' +
+          t.output_items.map(function(o) {
+            return '<div style="margin-bottom:4px"><a href="' + escHtml(o.url) + '" target="_blank" style="color:var(--accent);font-size:13px">' + escHtml(o.name) + '</a></div>';
+          }).join('') +
+          '</div>'
+        : '') +
+
+      // ── 工时日志 ──
+      '<div class="card info-glass-card" style="padding:20px">' +
+        '<div class="section-hd"><span class="section-title">工时日志 (' + (t.consumed_hours || 0).toFixed(1) + 'h)</span>' +
+          '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openWorklogDialog(' + t.id + ')">+ 记录工时</button></div>' +
+        '<div id="tv-worklogs">加载中...</div>' +
       '</div>' +
-    '</div>' +
-  '</div>';
 
-  // ── Section 3: 描述 ──
-  html += '<div class="card info-glass-card" style="margin-top:16px;padding:20px">' +
-    '<div class="section-hd"><span class="section-title">描述</span>' +
-      (_hasTaskEditPerm() ? iconEdit('_editDescription(\'task\', ' + t.id + ')', '编辑描述') : '') +
-    '</div>' +
-    '<div id="task-desc-' + t.id + '" data-desc="' + escHtml(t.description || '') + '" style="font-size:13px;line-height:1.6;min-height:20px">' +
-      (t.description ? renderMarkdown(t.description) : '<span style="color:var(--muted)">暂无描述</span>') +
-    '</div>' +
-  '</div>';
-
-  // ── Section 4: 产出物 ──
-  if (t.output_items && t.output_items.length) {
-    html += '<div class="card info-glass-card" style="margin-top:16px;padding:20px">' +
-      '<div class="section-hd"><span class="section-title">产出物</span></div>' +
-      t.output_items.map(function(o) {
-        return '<div style="margin-bottom:4px"><a href="' + escHtml(o.url) + '" target="_blank" style="color:var(--accent);font-size:13px">' + escHtml(o.name) + '</a></div>';
-      }).join('') +
-    '</div>';
-  }
-
-  // ── Section 5: 工时日志 ──
-  html += '<div class="card info-glass-card" style="margin-top:16px;padding:20px">' +
-    '<div class="section-hd"><span class="section-title">工时日志 (' + (t.consumed_hours || 0).toFixed(1) + 'h)</span>' +
-      '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openWorklogDialog(' + t.id + ')">+ 记录工时</button></div>' +
-    '<div id="tv-worklogs">加载中...</div>' +
-  '</div>';
-
-  // ── Section 6: 历史记录 ──
-  html += '<div class="card info-glass-card" style="margin-top:16px;padding:20px">' +
-    '<div class="section-hd" style="display:flex;align-items:center;justify-content:space-between">' +
-      '<span class="section-title">历史记录</span>' +
-      '<div style="display:flex;gap:6px;align-items:center">' +
-        _timelineOrderBtn('task', t.id, 'task-detail-comments') +
-        '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openCommentDialog(\'task\', ' + t.id + ')">添加评论</button>' +
+      // ── 历史记录 ──
+      '<div class="card info-glass-card" style="padding:20px">' +
+        '<div class="section-hd" style="display:flex;align-items:center;justify-content:space-between">' +
+          '<span class="section-title">历史记录</span>' +
+          '<div style="display:flex;gap:6px;align-items:center">' +
+            _timelineOrderBtn('task', t.id, 'task-detail-comments') +
+            '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openCommentDialog(\'task\', ' + t.id + ')">添加评论</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="task-detail-comments" id="task-detail-comments" style="margin-bottom:8px">加载中...</div>' +
       '</div>' +
+
     '</div>' +
-    '<div class="task-detail-comments" id="task-detail-comments" style="margin-bottom:8px">加载中...</div>' +
+
+    // ── 右侧：基本信息 + 状态与进度（上下摆放）──
+    '<div style="flex:0 0 400px;min-width:0;display:flex;flex-direction:column;gap:16px">' +
+
+      // ── 基本信息 ──
+      '<div class="card info-glass-card" style="padding:20px">' +
+        '<div class="section-hd"><span class="section-title">基本信息</span></div>' +
+        '<div class="delivery-kpi" style="grid-template-columns:1fr 1fr">' +
+          // Product (read-only)
+          '<div class="dkpi"><div class="dkpi-lbl">产品</div><div class="dkpi-val">' + (t.product_code ? '<span class="proj-code-btn" onclick="openProductDetail(\'' + escHtml(t.product_code) + '\')" title="' + escHtml(t.product_name || '') + '">' + escHtml(t.product_code) + '</span> ' + escHtml(t.product_name || '') : escHtml(t.product_name || '-')) + '</div></div>' +
+          // Project (read-only)
+          '<div class="dkpi"><div class="dkpi-lbl">项目</div><div class="dkpi-val">' + projHtml + '</div></div>' +
+          // Reporter (read-only)
+          '<div class="dkpi"><div class="dkpi-lbl">创建人</div><div class="dkpi-val">' + escHtml(t.reporter_name || '—') + '</div></div>' +
+          // Assignee (editable)
+          '<div class="dkpi"><div class="dkpi-lbl">负责人</div>' +
+            _buildEditableField(t.id, 'assignee_id', 'user-select', '<span class="dkpi-val">' + _renderAssigneeDisplay(t.assignee_names || [], t.id, {fallback: t.assignee_name || t.assignee_username || '—'}) + '</span>', (t.assignee_ids || []).join(',') || (t.assignee_id || '')) + '</div>' +
+          // Stage (editable unless template task)
+          '<div class="dkpi"><div class="dkpi-lbl">阶段' + (t.template_id ? ' <span style="color:var(--accent);font-size:10px" title="由模板控制">🔒</span>' : '') + '</div>' +
+            (t.template_id
+              ? '<span class="dkpi-val" style="color:var(--muted)">' + stageName + '</span>'
+              : _buildEditableField(t.id, 'stage_name', 'stage-select', '<span class="dkpi-val">' + stageName + '</span>', t.stage_name || '', {v:'',l:''}, ' data-project-id="' + (t.project_id || '') + '" data-project-code="' + escHtml(t.project_code || '') + '"')) + '</div>' +
+          // Per-person progress (team tasks only)
+          _renderTeamProgress(t) +
+          // Reviewer (editable, only if approval enabled)
+          (window._approvalEnabled ?
+            '<div class="dkpi"><div class="dkpi-lbl">审批人</div>' +
+              _buildEditableField(t.id, 'reviewer_id', 'user-select', '<span class="dkpi-val">' + escHtml(t.reviewer_name || '—') + '</span>', t.reviewer_id || '') + '</div>'
+            : '') +
+        '</div>' +
+      '</div>' +
+
+      // ── 状态与进度 ──
+      '<div class="card info-glass-card" style="padding:20px">' +
+        '<div class="section-hd"><span class="section-title">状态与进度</span></div>' +
+        '<div class="delivery-kpi" style="grid-template-columns:1fr 1fr">' +
+          // Status (read-only — 只能由进度自动更新)
+          '<div class="dkpi"><div class="dkpi-lbl">状态 <span style="font-size:10px;color:var(--accent)">(自动)</span></div><div id="task-status-' + t.id + '" data-status="' + (t.status || 'todo') + '">' + renderPill(t.status || 'todo') +
+            (t.status === 'review' && t.reviewer_name ? '<div style="font-size:10px;color:var(--muted);margin-top:2px">审批人: ' + escHtml(t.reviewer_name) + '</div>' : '') +
+          '</div></div>' +
+          // Priority (editable)
+          '<div class="dkpi"><div class="dkpi-lbl">优先级</div>' + _buildEditableField(t.id, 'priority', 'select', renderPriorityBadge(t.priority || 'medium'), t.priority || 'medium', _PRIORITY_OPTS) + '</div>' +
+          // Start date (editable)
+          '<div class="dkpi"><div class="dkpi-lbl">计划开始</div>' +
+            _buildEditableField(t.id, 'start_date', 'date', '<span class="dkpi-val">' + (t.start_date || '—') + '</span>', t.start_date || '') + '</div>' +
+          // Due date (editable)
+          '<div class="dkpi"><div class="dkpi-lbl">截止日期</div>' +
+            _buildEditableField(t.id, 'due_date', 'date', '<span class="dkpi-val" style="color:' + (overdue ? 'var(--danger)' : '') + '">' + (t.due_date || '—') + '<span style="font-size:11px;color:' + (overdue ? 'var(--danger)' : 'var(--muted)') + '">' + daysInfo + '</span></span>', t.due_date || '') + '</div>' +
+          // Progress: auto-calculated for team tasks
+          ((t.assignee_ids && t.assignee_ids.length > 1)
+            ? '<div class="dkpi"><div class="dkpi-lbl">团队进度 <span style="font-size:10px;color:var(--accent)">(自动)</span></div>' + renderProgressCircle(t.progress || 0, 30, {label:''}) + '</div>'
+            : '<div class="dkpi"><div class="dkpi-lbl">进度(%)</div>' + _buildEditableField(t.id, 'progress', 'number', renderProgressCircle(t.progress || 0, 30, {label:''}), String(t.progress || 0), {min:0,max:100,step:5}) + '</div>') +
+          // Hours info (read-only — 实际/预估，与 Bug 页一致)
+          '<div class="dkpi"><div class="dkpi-lbl">工时信息</div><div class="dkpi-val">实际 ' + (t.consumed_hours || 0).toFixed(1) + 'h / 预估 ' + (t.estimate_hours || 0).toFixed(1) + 'h</div></div>' +
+        '</div>' +
+      '</div>' +
+
+    '</div>' +
+
   '</div>';
 
   return html;
