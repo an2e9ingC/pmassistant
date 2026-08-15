@@ -1218,7 +1218,7 @@ function _daysLeft(dueDate) {
 function _renderTaskDetailBody(t) {
   var overdue = t.due_date && t.status !== 'done' && t.status !== 'done' && t.due_date < fmtLocalDate();
   var daysInfo = _daysLeft(t.due_date);
-  var projHtml = t.project_code ? projCodeTag(t.project_code, null, t.project_name) + ' ' + escHtml(t.project_name || '') : escHtml(t.project_name || '-');
+  var projHtml = t.project_code ? projCodeTag(t.project_code, 'openProject(\'' + escHtml(t.project_code).replace(/'/g, "\\'") + '\')', t.project_name) + ' ' + escHtml(t.project_name || '') : escHtml(t.project_name || '-');
   var stageName = escHtml(t.stage_name || '-');
 
   var html = '';

@@ -940,7 +940,7 @@ function _renderBugDetailBody(b) {
   _bugDetailCanEdit = _bugCanEdit(b);
   var sevs = {1:'致命',2:'严重',3:'一般',4:'建议'};
   var sevColors = {1:'var(--danger)',2:'var(--warn)',3:'var(--accent)',4:'var(--muted)'};
-  var projHtml = b.project_code ? projCodeTag(b.project_code, b.project_id, b.project_name) + ' ' + escHtml(b.project_name || '') : escHtml(b.project_name || '-');
+  var projHtml = b.project_code ? projCodeTag(b.project_code, 'openProject(\'' + escHtml(b.project_code).replace(/'/g, "\\'") + '\')', b.project_name) + ' ' + escHtml(b.project_name || '') : escHtml(b.project_name || '-');
   var typeLabel = {codeerror:'代码错误',design:'设计缺陷',security:'安全问题',performance:'性能问题',other:'其他'}[b.type]||b.type;
 
   var _STATUS_OPTS = [
