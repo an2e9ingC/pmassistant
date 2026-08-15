@@ -348,6 +348,7 @@ function _renderBugTable(container, bugs) {
     clickable: true,
     onRowClick: function(row) { openBugDetail(row.id); },
     columns: [
+      { key: 'fav', title: '', width: '24px', minWidth: 24, className: 'dt-fav-cell', render: function(v, row) { return favStar('bug', row.id, {stopPropagation: true}); } },
       { key: 'id', title: '编号', width: '6%', minWidth: 70, sortable: true, render: function(v) { return '<span style="font-family:var(--mono);font-size:11px">#' + v + '</span>'; } },
       { key: 'title', title: '标题', align: 'left', minWidth: 130, sortable: true, render: function(v) { return '<span style="font-weight:530">'+escHtml(v||'')+'</span>'; } },
       { key: 'product_code', title: '产品', width: '8%', minWidth: 90, sortable: true, render: function(v, row) { return v ? projCodeTag(v, 'openProductDetail(\'' + escHtml(v).replace(/'/g, "\\'") + '\')', row.product_name) : '<span style="font-size:12px;color:var(--muted)">-</span>'; } },
@@ -355,7 +356,7 @@ function _renderBugTable(container, bugs) {
       { key: 'severity', title: '严重', width: '5%', minWidth: 60, sortable: true, render: function(v) { return _renderSev(sevs[v]||'一般', v); } },
       { key: 'priority', title: '优先级', width: '6%', minWidth: 65, sortable: true, render: function(v) { return renderPriorityBadge(v); } },
       { key: 'status', title: '状态', width: '10%', minWidth: 100, sortable: true, render: function(v) { return renderPill(v || 'open'); } },
-      { key: 'assignee_name', title: '负责人', width: '9%', minWidth: 100, sortable: true, render: function(v, row) {
+      { key: 'assignee_name', title: '负责人', width: '60px', minWidth: 60, sortable: true, render: function(v, row) {
           if (!_bugCanEdit(row)) return '<span style="font-size:12px">'+escHtml(v||'-')+'</span>';
           var opts = '<option value="">未分配</option>' + (_bugUserOptions||[]).map(function(u) { return '<option value="'+u.id+'"'+(String(u.id)===String(row.assignee_id||'')?' selected':'')+'>'+escHtml(u.name||u.code)+'</option>'; }).join('');
           return '<span onclick="event.stopPropagation()"><select data-id="'+row.id+'" onchange="_bugQuickAssign('+row.id+', this.value)" style="font-size:11px;padding:1px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg);max-width:100px">'+opts+'</select></span>';
@@ -892,7 +893,7 @@ function _renderProjectBugs(bugs, stats, container) {
       { key: 'severity', title: '严重程度', minWidth: 70, width: '7%', render: function(v, row) { var c=sevColors[v]||'var(--muted)'; return '<span style="color:'+c+';font-weight:500;font-size:12px;cursor:pointer" onclick="openBugDetail('+row.id+')">'+(sevLabels[v]||v)+'</span>'; } },
       { key: 'priority', title: '优先级', minWidth: 65, width: '7%', render: function(v) { return renderPriorityBadge(v); } },
       { key: 'component_name', title: '组件', minWidth: 90, width: '10%', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'—')+'</span>'; } },
-      { key: 'assignee_name', title: '负责人', minWidth: 90, width: '8%', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'—')+'</span>'; } },
+      { key: 'assignee_name', title: '负责人', minWidth: 60, width: '60px', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'—')+'</span>'; } },
       { key: 'created_at', title: '创建时间', minWidth: 100, width: '10%', render: function(v) { return '<span style="font-size:11px;color:var(--muted)">'+formatDate(v)+'</span>'; } }
     ],
     data: _projBugsAll,

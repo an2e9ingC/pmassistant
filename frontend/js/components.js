@@ -1764,12 +1764,12 @@ function _renderMergedMonthCalendar(today, wecomDailyMap, wlData, weData) {
       }
     }
 
-    // 工作日（周一~五）无打卡 → 红边框；今天 → accent
+    // 工作日（周一~五）无打卡 → 红边框（仅限过去日期，未来未打卡属正常）；今天 → accent
     var dow = new Date(y, mm, displayDay).getDay();
     var isWorkday = dow >= 1 && dow <= 5;
     var borderColor = 'var(--border)';
     var borderWidth = '1px';
-    if (isCurrentMonth && isWorkday && !hasCheckin) {
+    if (isCurrentMonth && isWorkday && !hasCheckin && dStr < todayStr) {
       borderColor = 'var(--danger)';
       borderWidth = '2px';
     } else if (isToday) {

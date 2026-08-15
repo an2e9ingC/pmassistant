@@ -103,6 +103,11 @@
   width: 15px; height: 15px; cursor: pointer; accent-color: var(--accent);
 }
 
+/* ── Favorite (star) column — fixed to star size, star centered ── */
+.dt-table td.dt-fav-cell {
+  width: 24px; min-width: 24px; padding: 4px 2px; text-align: center;
+}
+
 /* ── Empty state ── */
 .dt-table td.dt-wrap { white-space: normal; word-break: break-word; overflow: visible; }
 .dt-empty { text-align: center; padding: 30px; color: var(--muted); font-style: italic; }

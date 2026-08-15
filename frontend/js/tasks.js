@@ -623,10 +623,10 @@ function renderTaskTable(tasks, execs) {
   var dt = new DataTable({
     container: document.getElementById('task-full-table'),
     columns: [
-      { key: 'id', title: '任务编号', width: '7%', minWidth: 75, render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted)">#' + v + '</span>'; } },
+      { key: 'fav', title: '', width: '24px', minWidth: 24, className: 'dt-fav-cell', render: function(v, row) { return favStar('task', row.id, {stopPropagation: true}); } },
+      { key: 'id', title: '编号', width: '7%', minWidth: 75, render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted)">#' + v + '</span>'; } },
       { key: 'project_code', title: '项目编号', width: '8%', minWidth: 90, render: function(v, row) { return v ? projCodeTag(v, 'openProject(\''+escHtml(v).replace(/'/g,"\\'")+'\')', row.project_name) : '-'; } },
       { key: 'project_name', title: '项目名称', width: '10%', minWidth: 100, align: 'left', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'-')+'</span>'; } },
-      { key: 'fav', title: '', width: '28px', minWidth: 28, render: function(v, row) { return favStar('task', row.id, {stopPropagation: true}); } },
       { key: 'title', title: '标题', minWidth: 100, align: 'left', className: 'dt-wrap', render: function(v, row) { return '<a href="javascript:void(0)" onclick="openTaskDetail('+row.id+')" style="color:var(--accent)">'+escHtml(v||'')+'</a>'; } },
       { key: 'stage_name', title: '阶段', width: '9%', minWidth: 100, render: function(v) { return v ? '<span style="font-size:11px;color:var(--muted)">'+escHtml(v)+'</span>' : '-'; } },
       { key: 'status', title: '状态', width: '6%', minWidth: 80, render: function(v, row) {
@@ -642,7 +642,7 @@ function renderTaskTable(tasks, execs) {
     data: tasks,
     maxHeight: 'calc(100vh - 220px)',
     selectable: true,
-    checkboxPosition: 3,
+    checkboxPosition: 0,
     onSelectChange: function(rows) {
       _selectedTasks = new Set(rows.map(function(r) { return r.id; }));
       _ensureBatchToolbar();
@@ -720,10 +720,10 @@ function renderTaskTableCompact(tasks, execs) {
         return '<div>' + cell + ' <sup style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:8px">' + (count||row._stageCount||1) + '</sup></div>';
       }},
       { key: 'title', title: '任务标题', minWidth: 100, align: 'left', render: function(v, row) { return row._empty?'—':'<span style="cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" onclick="openTaskDetail('+row.id+')" title="查看任务详情">'+escHtml(v||'')+'</span>'; } },
-      { key: 'fav', title: '', width: '28px', minWidth: 28, render: function(v, row) { return row._empty ? '' : favStar('task', row.id, {stopPropagation: true}); } },
+      { key: 'fav', title: '', width: '24px', minWidth: 24, className: 'dt-fav-cell', render: function(v, row) { return row._empty ? '' : favStar('task', row.id, {stopPropagation: true}); } },
       { key: 'status', title: '状态', width: '6%', minWidth: 80, render: function(v, row) { return row._empty?'—':renderPill(v||'todo'); } },
       { key: 'priority', title: '优先级', width: '5%', minWidth: 65, render: function(v, row) { return row._empty?'—':(typeof renderPriorityBadge==='function'?renderPriorityBadge(v):escHtml(v||'medium')); } },
-      { key: 'assignee_name', title: '负责人', width: '13%', minWidth: 160, render: function(v, row) { return row._empty?'—':'<span style="font-size:12px;cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();openAssignDialog('+row.id+')" title="指派任务">'+_renderAssigneeDisplay(row.assignee_names||[], row.id, {fallback: v||'—'})+'</span>'; } },
+      { key: 'assignee_name', title: '负责人', width: '60px', minWidth: 60, render: function(v, row) { return row._empty?'—':'<span style="font-size:12px;cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();openAssignDialog('+row.id+')" title="指派任务">'+_renderAssigneeDisplay(row.assignee_names||[], row.id, {fallback: v||'—'})+'</span>'; } },
       { key: 'progress', title: '进度', width: '7%', minWidth: 60, render: function(v, row) { return row._empty?'—':(typeof renderProgressRing==='function'?'<div style="display:inline-block;vertical-align:middle">'+renderProgressRing(v||0)+'</div>':'<span>'+(v||0)+'%</span>'); } },
       { key: 'start_date', title: '计划开始', width: '7%', minWidth: 100, render: function(v, row) {
         if (row._empty) return '—';
@@ -2065,7 +2065,7 @@ function _initWorklogDt(logs, taskId) {
     container: document.getElementById('worklog-table-' + taskId),
     columns: [
       { key: 'date', title: '日期', width: '92px', minWidth: 80, render: function(v) { return v||'?'; } },
-      { key: 'user', title: '用户', width: '78px', minWidth: 60, render: function(v, row) { return '<span style="font-size:11px">'+escHtml(v||row.username||'?')+'</span>'; } },
+      { key: 'user', title: '用户', width: '78px', minWidth: 60, render: function(v, row) { return '<span style="font-size:11px">'+escHtml(row.display_name || v || row.username || '?')+'</span>'; } },
       { key: 'percentage', title: '占比', width: '48px', minWidth: 40, render: function(v) { return v ? '<span style="font-weight:600;color:var(--accent)">'+v+'%</span>' : '<span style="color:var(--muted)">—</span>'; } },
       { key: 'calculated_hours', title: '工时(h)', width: '58px', minWidth: 48, render: function(v, row) { var h = v || row.hours || 0; return (h||0).toFixed(1); } },
       { key: 'description', title: '描述', align: 'left', render: function(v) { return '<span style="white-space:normal;word-break:break-word">'+renderMarkdown(v||'')+'</span>'; } },
