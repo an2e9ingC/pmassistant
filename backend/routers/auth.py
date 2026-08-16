@@ -180,6 +180,7 @@ def update_password(
     if not verify_password(payload.old_password, user.password_hash):
         raise HTTPException(status_code=400, detail="原密码错误")
     user.password_hash = hash_password(payload.new_password)
+    user.must_change_password = False
     db.commit()
     return {"code": 0, "message": "密码已更新"}
 

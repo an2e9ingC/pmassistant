@@ -72,6 +72,15 @@ class Settings:
         if self.SQLCIPHER_KEY_FILE and os.path.exists(self.SQLCIPHER_KEY_FILE):
             with open(self.SQLCIPHER_KEY_FILE) as f:
                 self.SQLCIPHER_KEY = f.read().strip()
+            # 弱分离警告：密钥文件落在项目目录内（与 DB 同目录树），提示改用 Docker secrets / 外部路径
+            key_abs = os.path.abspath(self.SQLCIPHER_KEY_FILE)
+            proj_abs = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+            if key_abs.startswith(proj_abs + os.sep):
+                print(
+                    f"[config] WARNING: SQLCIPHER_KEY_FILE ({key_abs}) is inside the project "
+                    f"directory — key is not separated from the DB. Consider Docker secrets or an external path.",
+                    flush=True,
+                )
 
     @classmethod
     def _defaults(cls):

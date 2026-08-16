@@ -3,8 +3,12 @@
 import json
 import os
 import re
+import base64
+import hashlib
 from pathlib import Path
 from typing import Optional
+
+from cryptography.fernet import Fernet, InvalidToken
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
@@ -21,6 +25,53 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 _port = os.environ.get("PMA_PORT", "8800")
 CONFIG_FILE = Path(f"data/source_config-{_port}.json")
 ENV_FILE = Path(".env")
+
+# ── 密码加密落盘 ──
+# source_config JSON 中的密码字段用 Fernet 对称加密后落盘，密钥由 JWT_SECRET_KEY 派生。
+# 注意：JWT_SECRET_KEY 必须配置为强随机值，否则加密形同虚设。
+_SECRET_FIELDS = {
+    "zentao": ["password"],
+    "gitlab": ["token", "app_secret"],
+    "nas": ["password"],
+    "svn": ["password"],
+    "pdm": ["password", "ssh_password"],
+    "wecom": ["secret"],
+}
+
+
+def _fernet() -> Fernet:
+    key = hashlib.sha256(settings.JWT_SECRET_KEY.encode()).digest()
+    return Fernet(base64.urlsafe_b64encode(key))
+
+
+def _encrypt_secret_fields(cfg: dict) -> dict:
+    """Return a copy of cfg with secret fields encrypted (prefix 'enc:')."""
+    f = _fernet()
+    out = {s: dict(fields) for s, fields in cfg.items()}
+    for section, fields in _SECRET_FIELDS.items():
+        if section not in out:
+            continue
+        for field in fields:
+            val = out[section].get(field)
+            if val:
+                out[section][field] = "enc:" + f.encrypt(val.encode()).decode()
+    return out
+
+
+def _decrypt_secret_fields(cfg: dict) -> dict:
+    """Decrypt 'enc:'-prefixed secret fields in-place (backward-compatible with plaintext)."""
+    f = _fernet()
+    for section, fields in _SECRET_FIELDS.items():
+        if section not in cfg:
+            continue
+        for field in fields:
+            val = cfg[section].get(field)
+            if isinstance(val, str) and val.startswith("enc:"):
+                try:
+                    cfg[section][field] = f.decrypt(val[4:].encode()).decode()
+                except InvalidToken:
+                    cfg[section][field] = ""  # 密钥变更导致无法解密，回退为空
+    return cfg
 
 
 # ── Models ──
@@ -91,7 +142,11 @@ class DataSourceConfig(BaseModel):
 # ── Persistence ──
 
 def _load_config() -> dict:
-    """Load config from JSON file, fall back to env vars."""
+    """Load config: JSON (UI-saved, 单一配置源) 覆盖 env（仅作初始 seed）。
+
+    优先级：data/source_config-{PORT}.json > 环境变量/.env。
+    UI 保存时写 JSON（密码加密）并同步到 .env 供后端 settings 读取，保证两处一致。
+    """
     cfg = {
         "zentao": {
             "base_url": os.environ.get("ZENTAO_BASE_URL", ""),
@@ -146,6 +201,7 @@ def _load_config() -> dict:
         try:
             with open(CONFIG_FILE) as f:
                 saved = json.load(f)
+            saved = _decrypt_secret_fields(saved)
             for section in cfg:
                 if section in saved:
                     cfg[section].update(saved[section])
@@ -155,10 +211,11 @@ def _load_config() -> dict:
 
 
 def _save_config(cfg: dict) -> None:
-    """Save config to JSON file and sync env vars to .env file."""
+    """Save config to JSON file (secret fields encrypted) and sync env vars to .env file."""
     CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    encrypted = _encrypt_secret_fields(cfg)
     with open(CONFIG_FILE, "w") as f:
-        json.dump(cfg, f, indent=2, ensure_ascii=False)
+        json.dump(encrypted, f, indent=2, ensure_ascii=False)
 
     # Sync to .env file
     env_map = {

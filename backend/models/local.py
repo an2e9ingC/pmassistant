@@ -26,6 +26,7 @@ class LocalUser(Base):
     favorites = Column(Text, default="[]")  # JSON array of product IDs
     seen_version = Column(String(32), nullable=True)  # last seen changelog version
     need_guide = Column(Boolean, default=True, nullable=False)  # whether to show new user guide
+    must_change_password = Column(Boolean, default=False, nullable=True)  # force password change on next login
     last_login_at = Column(DateTime, nullable=True)  # last login timestamp
     last_login_ip = Column(String(64), nullable=True)  # last login IP address
     last_login_ua = Column(String(256), nullable=True)  # last login User-Agent (browser info)

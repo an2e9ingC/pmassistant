@@ -33,7 +33,7 @@ class ZentaoClient:
 
         # Try MD5 first (some Zentao versions require it), then raw password
         for attempt, pw in enumerate([pw_md5, password]):
-            logger.info(f"Zentao auth request: POST {url} account={account} pw_method={'md5' if attempt==0 else 'raw'}")
+            logger.info(f"Zentao auth request: POST {url} account=*** pw_method={'md5' if attempt==0 else 'raw'}")
             resp = await client.post(url, json={"account": account, "password": pw})
             logger.info(f"Zentao auth response: HTTP {resp.status_code}")
             try:
@@ -57,7 +57,7 @@ class ZentaoClient:
         raise RuntimeError(
             f"Zentao auth failed after trying both MD5 and raw password\n"
             f"URL: {url}\n"
-            f"Account: {account}"
+            f"Account: ***"
         )
 
     async def _request(self, method: str, path: str, **kwargs) -> dict:

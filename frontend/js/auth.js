@@ -57,6 +57,9 @@ async function onLogin(e) {
     API.token = json.data.access_token;
     localStorage.setItem('pma_token', json.data.access_token);
     localStorage.setItem('pma_user', JSON.stringify(json.data.user));
+    if (json.data.user.must_change_password) {
+      localStorage.setItem('pma_must_change_password', '1');
+    }
     // Preload preferences before redirect to prevent theme flash
     try {
       var prefsResp = await fetch('/api/auth/preferences', {

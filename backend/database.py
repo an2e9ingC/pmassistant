@@ -768,10 +768,28 @@ def init_db():
                 role="admin",
                 zentao_account=None,
                 is_active=True,
+                must_change_password=True,
             )
             db.add(admin)
             db.commit()
             logger.info("Default admin user created")
+
+        # Flag existing local admin to force password change if still using default admin123
+        try:
+            admin_user = db.query(LocalUser).filter(
+                LocalUser.username == "admin", LocalUser.auth_source == "local"
+            ).first()
+            if admin_user and admin_user.password_hash and not admin_user.must_change_password:
+                import bcrypt as _bcrypt_check
+                try:
+                    if _bcrypt_check.checkpw(b"admin123", admin_user.password_hash.encode()):
+                        admin_user.must_change_password = True
+                        db.commit()
+                        logger.info("Flagged existing admin (default password) for forced change")
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.warning(f"must_change_password backfill warning: {e}")
 
         # Ensure system user (id=99999) exists for template task creation
         from backend.models.local import get_system_user_id

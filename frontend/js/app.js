@@ -1559,23 +1559,27 @@ async function init() {
   });
 }
 
-function changePassword() {
+function changePassword(forced) {
   var user = getCurrentUser();
   if (user && user.auth_source === 'gitlab') {
     showToast('GitLab 用户请前往 GitLab 管理密码', 'warning');
     return;
   }
+  var title = forced ? '首次登录 · 请修改默认密码' : '修改密码';
+  var closeBtn = forced ? '' : '<button class="note-dialog-close" onclick="closePwDialog()">&times;</button>';
+  var cancelBtn = forced ? '' : '<button class="btn" onclick="closePwDialog()">取消</button>';
+  var hint = forced ? '<div style="font-size:11px;color:var(--warn);margin-bottom:8px">为安全起见，请先修改默认密码后再继续使用。</div>' : '';
   var html = '<div class="note-dialog-overlay">' +
     '<div class="note-dialog">' +
-      '<div class="note-dialog-head"><span class="note-dialog-title">修改密码</span>' +
-        '<button class="note-dialog-close" onclick="closePwDialog()">&times;</button></div>' +
+      '<div class="note-dialog-head"><span class="note-dialog-title">' + title + '</span>' + closeBtn + '</div>' +
+      hint +
       '<div style="margin-bottom:10px"><label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">原密码</label>' +
         '<input class="config-input" id="pw-old" type="password" style="width:100%;box-sizing:border-box"></div>' +
       '<div style="margin-bottom:10px"><label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">新密码</label>' +
         '<input class="config-input" id="pw-new" type="password" style="width:100%;box-sizing:border-box"></div>' +
       '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:12px">' +
         '<span id="pw-msg" style="font-size:11px"></span>' +
-        '<button class="btn" onclick="closePwDialog()">取消</button>' +
+        cancelBtn +
         '<button class="btn btn-primary" onclick="submitPassword()">保存</button></div>' +
     '</div></div>';
   document.body.insertAdjacentHTML('beforeend', html);
@@ -1586,6 +1590,11 @@ async function initUserCenter(viewUserId, tab) {
   if (!container) return;
   var currentUser = getCurrentUser();
   if (!currentUser) { container.innerHTML = '<div class="error-state">未登录</div>'; return; }
+
+  // 强制改密：默认密码首次登录，强制弹出改密对话框（不可取消）
+  if (localStorage.getItem('pma_must_change_password') === '1' && currentUser.auth_source !== 'gitlab') {
+    setTimeout(function() { changePassword(true); }, 200);
+  }
 
   // Reset filter state to defaults on each entry (saved prefs will override below)
   _ucFilterStatus = 'watched';
@@ -3398,6 +3407,7 @@ async function submitPassword() {
   try {
     msg.innerHTML = '<span style="color:var(--muted)">保存中...</span>';
     await API.put('/auth/password', { old_password: oldPw, new_password: newPw });
+    localStorage.removeItem('pma_must_change_password');
     closePwDialog();
     showToast('密码已更新', 'success');
   } catch(e) {
