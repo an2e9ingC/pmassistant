@@ -186,7 +186,7 @@ function renderDbManage() {
         '</label>' +
         '<label style="flex:3;min-width:260px">' +
           '<span style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">远端路径</span>' +
-          '<input type="text" id="db-remote-path" value="' + escHtml(rPath) + '" placeholder="NAS 路径，如 //192.168.0.180/PMABackup 或 /mnt/nas-backup" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;box-sizing:border-box;height:35px">' +
+          '<input type="text" id="db-remote-path" value="' + escHtml(rPath) + '" placeholder="NAS 路径，如 //192.168.0.100/your-backup 或 /mnt/nas-backup" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px;box-sizing:border-box;height:35px">' +
         '</label>' +
       '</div>' +
 

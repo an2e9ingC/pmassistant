@@ -945,7 +945,7 @@ def generate_report(
     parts.append('<table><thead><tr><th>项目</th><th>值</th></tr></thead><tbody>')
     parts.append(f'<tr><td>当前版本</td><td class="mono">{H(version)}</td></tr>')
     parts.append(f'<tr><td>报告生成时间</td><td>{until.strftime("%Y-%m-%d %H:%M:%S")} (UTC+8)</td></tr>')
-    parts.append(f'<tr><td>Git 仓库</td><td class="mono">bsp_dev/fake_it/pma</td></tr>')
+    parts.append(f'<tr><td>Git 仓库</td><td class="mono">group/subgroup/project</td></tr>')
     parts.append(f'<tr><td>报告周期</td><td>{since.strftime("%Y-%m-%d %H:%M")} → {until.strftime("%Y-%m-%d %H:%M")}</td></tr>')
     parts.append(f'<tr><td>变更文件数</td><td>{len(changed_files)} 个文件</td></tr>')
     parts.append('</tbody></table></div></div>')

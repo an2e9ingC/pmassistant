@@ -119,7 +119,7 @@ function switchAccount() {
       '</div>' +
       '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:8px">' +
         '<button class="btn" onclick="closePwDialog()">取消</button>' +
-        '<a href="http://192.168.0.128" target="_blank" class="btn" style="text-decoration:none;background:var(--warn);color:#fff" onclick="localStorage.clear();sessionStorage.clear();closePwDialog();window.location.href=\'/login\'">打开 GitLab 退出当前账号</a>' +
+        '<a href="http://192.168.0.100" target="_blank" class="btn" style="text-decoration:none;background:var(--warn);color:#fff" onclick="localStorage.clear();sessionStorage.clear();closePwDialog();window.location.href=\'/login\'">打开 GitLab 退出当前账号</a>' +
       '</div>' +
     '</div></div>';
   document.body.insertAdjacentHTML('beforeend', html);

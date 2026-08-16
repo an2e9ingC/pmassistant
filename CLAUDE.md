@@ -254,12 +254,12 @@ if not p and code.isdigit():
 
 | 环境 | 地址 | 用途 |
 |------|------|------|
-| 生产禅道 | `192.168.0.124:8800` | **只读访问，禁止修改任何内容** |
-| 测试禅道 | `192.168.3.22` | 开发测试（API: `/zentao/api.php/v1`） |
-| PMA 测试账号 | `PM_Assistant` / `123456` | 只读 role: pm |
+| 生产禅道 | `192.168.0.100:8800` | **只读访问，禁止修改任何内容** |
+| 测试禅道 | `192.168.0.100` | 开发测试（API: `/zentao/api.php/v1`） |
+| PMA 测试账号 | `your_zentao_account` / `your_zentao_password` | 只读 role: pm |
 
 - **严禁用生产服务器测试**
-- **PM_Assistant 是只读账户**，所有 ZenTao API 调用仅用 GET
+- **your_zentao_account 是只读账户**，所有 ZenTao API 调用仅用 GET
 
 ---
 

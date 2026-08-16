@@ -2053,10 +2053,10 @@ function _applyDocTypePlaceholder(dialog, type) {
 
   // Update placeholder on the single full-path input
   var placeholders = {
-    gitlab: 'GitLab 发布链接，如 http://192.168.0.128/.../-/releases/...',
-    svn: 'SVN 地址，如 http://192.168.0.124:8443/svn/...',
+    gitlab: 'GitLab 发布链接，如 http://192.168.0.100/.../-/releases/...',
+    svn: 'SVN 地址，如 http://192.168.0.100:8443/svn/...',
     nas: 'NAS 路径，如 \\\\192.168.0.x\\share\\...',
-    solidworks: 'http://192.168.0.191/SOLIDWORKSPDM/LM-PDM/1.结构项目/{code}*/3.项目输出/',
+    solidworks: 'http://192.168.0.100/SOLIDWORKSPDM/your-vault/1.结构项目/{code}*/3.项目输出/',
     pma: 'PMA 系统内部链接'
   };
   var pathInput = dialog.querySelector('input[id*="full-path"]');

@@ -225,7 +225,7 @@ echo "$WORKTREE_NAME=$PORT" >> "$PMA_TRUNK_DIR/.claude/worktrees/used_server_por
 |------|-----|
 | **端口** | `<PORT>` |
 | **分支** | `<branch>` |
-| **访问地址** | `http://192.168.100.100:<PORT>` |
+| **访问地址** | `http://192.168.0.100:<PORT>` |
 ```
 
 > 端口已记录到 `.claude/worktrees/used_server_ports`，上线时自动释放。

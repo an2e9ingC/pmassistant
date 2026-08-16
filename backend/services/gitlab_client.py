@@ -275,7 +275,7 @@ class GitLabClient:
     @property
     def _gitlab_root_url(self) -> str:
         """Derive GitLab root URL from the API base URL.
-        e.g. http://192.168.0.128/api/v4 -> http://192.168.0.128
+        e.g. http://192.168.0.100/api/v4 -> http://192.168.0.100
         """
         return self.base_url.rsplit("/api", 1)[0]
 

@@ -38,8 +38,8 @@ async function initAdmin(containerId) {
 
 var _configSections = [
   { key: 'zentao', title: '禅道 (Zentao)', summaryKey: 'base_url', summaryPrefix: 'API: ', fields: [
-    { key: 'base_url', label: 'API 地址', type: 'url', ph: 'http://192.168.3.22/zentao/api.php/v1' },
-    { key: 'account', label: '账号', type: 'text', ph: 'PM_Assistant' },
+    { key: 'base_url', label: 'API 地址', type: 'url', ph: 'http://192.168.0.100/zentao/api.php/v1' },
+    { key: 'account', label: '账号', type: 'text', ph: 'your_zentao_account' },
     { key: 'password', label: '密码', type: 'password', ph: '' },
     { key: 'project_filter', label: '项目筛选', type: 'text', ph: '如 PE04,PE05（逗号分隔前缀，留空=全部）' },
     { key: 'sync_interval', label: '自动同步(分)', type: 'number', ph: '30（0=关闭）' },
@@ -47,7 +47,7 @@ var _configSections = [
   ]},
   { key: 'gitlab', title: 'GitLab', summaryKey: 'base_url', summaryPrefix: 'API: ', fields: [
     { key: 'project_path', label: 'PMA 项目路径 (Issue/成员)', type: 'text', ph: 'group/subgroup/pma', group: 'project' },
-    { key: 'base_url', label: 'API 地址', type: 'url', ph: 'http://192.168.0.128/api/v4', group: 'sync' },
+    { key: 'base_url', label: 'API 地址', type: 'url', ph: 'http://192.168.0.100/api/v4', group: 'sync' },
     { key: 'token', label: 'Access Token (数据同步)', type: 'password', ph: '', group: 'sync' },
     { key: 'oauth_enabled', label: '启用 GitLab OAuth 登录', type: 'toggle', ph: '', group: 'oauth' },
     { key: 'app_id', label: 'OAuth Application ID', type: 'text', ph: '', group: 'oauth' },
@@ -60,18 +60,18 @@ var _configSections = [
     { key: 'password', label: '密码', type: 'password', ph: '' },
   ]},
   { key: 'svn', title: 'SVN 版本管理', summaryKey: 'base_url', summaryPrefix: '地址: ', fields: [
-    { key: 'base_url', label: 'SVN 地址', type: 'url', ph: 'http://192.168.0.124:8443/svn' },
+    { key: 'base_url', label: 'SVN 地址', type: 'url', ph: 'http://192.168.0.100:8443/svn' },
     { key: 'username', label: '用户名', type: 'text', ph: '' },
     { key: 'password', label: '密码', type: 'password', ph: '' },
   ]},
   { key: 'pdm', title: 'SOLIDWORKS PDM', summaryKey: 'base_url', summaryPrefix: '地址: ', fields: [
-    { key: 'base_url', label: 'PDM 地址', type: 'url', ph: 'http://192.168.0.191/SOLIDWORKSPDM' },
+    { key: 'base_url', label: 'PDM 地址', type: 'url', ph: 'http://192.168.0.100/SOLIDWORKSPDM' },
     { key: 'username', label: 'HTTP 用户名', type: 'text', ph: '' },
     { key: 'password', label: 'HTTP 密码', type: 'password', ph: '' },
-    { key: 'ssh_host', label: 'SSH 主机', type: 'text', ph: '192.168.0.191' },
+    { key: 'ssh_host', label: 'SSH 主机', type: 'text', ph: '192.168.0.100' },
     { key: 'ssh_username', label: 'SSH 用户名', type: 'text', ph: '' },
     { key: 'ssh_password', label: 'SSH 密码', type: 'password', ph: '' },
-    { key: 'base_path', label: 'Windows 磁盘路径', type: 'text', ph: 'D:\\LMPDM' },
+    { key: 'base_path', label: 'Windows 磁盘路径', type: 'text', ph: 'D:\\your-vault' },
   ]},
   { key: 'wecom', title: '企业微信 (WeCom)', summaryKey: 'corp_id', summaryPrefix: 'CorpID: ', fields: [
     { key: 'corp_id', label: '企业ID (Corp ID)', type: 'text', ph: 'ww...' },

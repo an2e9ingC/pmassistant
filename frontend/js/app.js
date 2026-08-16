@@ -399,7 +399,7 @@ function openFeedbackDialog() {
 
   var html = '<div class="note-dialog-overlay">' +
     '<div class="note-dialog" style="max-width:500px">' +
-      '<div class="note-dialog-head"><span class="note-dialog-title">提交反馈 <a href="http://192.168.0.128/bsp_dev/fake_it/pma/-/issues" target="_blank" class="zentao-link" title="在 GitLab 中查看所有 Issue">↗ GitLab</a></span>' +
+      '<div class="note-dialog-head"><span class="note-dialog-title">提交反馈 <a href="http://192.168.0.100/group/subgroup/project/-/issues" target="_blank" class="zentao-link" title="在 GitLab 中查看所有 Issue">↗ GitLab</a></span>' +
         '<button class="note-dialog-close" onclick="closeFeedbackDialog()">&times;</button></div>' +
       '<div style="margin-bottom:12px">' +
         '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">类型</label>' +
@@ -508,7 +508,7 @@ async function handleDescPaste(e) {
         if (!resp.ok) throw new Error('Upload failed');
         var data = await resp.json();
         var imgUrl = (data.data && data.data.url) || data.url || '';
-        if (imgUrl && !imgUrl.startsWith('http')) imgUrl = 'http://192.168.0.128' + imgUrl;
+        if (imgUrl && !imgUrl.startsWith('http')) imgUrl = 'http://192.168.0.100' + imgUrl;
         var mdImg = '\n' + (data.data && data.data.markdown ? data.data.markdown : '![image](' + imgUrl + ')') + '\n';
         ta.value = ta.value.replace('[上传图片中...]', mdImg);
       } catch(err) {
@@ -3099,7 +3099,7 @@ function _ucTogglePanel(type) {
         (isGitlab ? '' +
           '<div class="integration-row"><span class="integration-row-lbl">用户名</span><span class="integration-row-val">@'+escHtml(user.username)+'</span></div>' +
           '<div class="integration-row"><span class="integration-row-lbl">Token 状态</span><span class="integration-row-val ok">'+(user.gitlab_token_valid?'有效':'无效')+'</span></div>' +
-          '<a class="integration-link" href="http://192.168.0.128/'+escHtml(user.username)+'" target="_blank">GitLab 个人主页 ↗</a>'
+          '<a class="integration-link" href="http://192.168.0.100/'+escHtml(user.username)+'" target="_blank">GitLab 个人主页 ↗</a>'
         : '<div class="integration-row"><span class="integration-row-lbl">状态</span><span class="integration-row-val">未启用，请使用本地密码登录</span></div>') +
       '</div>';
   } else if (type === 'security') {
@@ -3111,7 +3111,7 @@ function _ucTogglePanel(type) {
         '<div class="integration-row"><span class="integration-row-lbl">账户来源</span><span class="integration-row-val">'+(isGitlab?'GitLab OAuth':'本地账户')+'</span></div>' +
         '<div class="integration-row"><span class="integration-row-lbl">登录方式</span><span class="integration-row-val">'+(isGitlab?'GitLab 账户登录':'本地密码登录')+'</span></div>' +
         (isGitlab
-          ? '<a class="integration-link" href="http://192.168.0.128/-/profile/password/edit" target="_blank">在 GitLab 中管理密码 ↗</a>'
+          ? '<a class="integration-link" href="http://192.168.0.100/-/profile/password/edit" target="_blank">在 GitLab 中管理密码 ↗</a>'
           : '<button class="btn btn-sm" onclick="changePassword()">修改密码</button>') +
       '</div>';
   } else if (type === 'preferences') {

@@ -2,7 +2,7 @@
 
 > **适用版本**: GitLab CE/EE 15.2
 > **API 版本**: REST API v4
-> **本地实例**: `http://192.168.0.128`
+> **本地实例**: `http://192.168.0.100`
 > **编写日期**: 2026-06-09
 > **用途**: PMA 系统二次开发 — GitLab 数据集成
 
@@ -30,7 +30,7 @@
 
 ```bash
 # 通过 API 获取版本信息
-curl -H "PRIVATE-TOKEN: <token>" http://192.168.0.128/api/v4/version
+curl -H "PRIVATE-TOKEN: <token>" http://192.168.0.100/api/v4/version
 ```
 
 返回示例:
@@ -62,14 +62,14 @@ GitLab API v4 支持以下认证方式，PMA 系统使用 **Personal Access Toke
 
 **PMA 配置** (`.env`):
 ```bash
-GITLAB_BASE_URL=http://192.168.0.128/api/v4
+GITLAB_BASE_URL=http://192.168.0.100/api/v4
 GITLAB_TOKEN=glpat-xxxxxxxxxxxx
 ```
 
 ### 1.3 通用请求格式
 
 ```
-Base URL: http://192.168.0.128/api/v4
+Base URL: http://192.168.0.100/api/v4
 Content-Type: application/json
 Authentication: PRIVATE-TOKEN: <token>
 ```
@@ -132,7 +132,7 @@ GET /api/v4/projects
 **请求示例**:
 ```bash
 curl -H "PRIVATE-TOKEN: glpat-xxx" \
-  "http://192.168.0.128/api/v4/projects?search=PE0444&per_page=100&simple=true"
+  "http://192.168.0.100/api/v4/projects?search=PE0444&per_page=100&simple=true"
 ```
 
 **响应示例** (关键字段):
@@ -145,9 +145,9 @@ curl -H "PRIVATE-TOKEN: glpat-xxx" \
     "path": "pe0444_cdya",
     "path_with_namespace": "rd/pe0444_cdya",
     "description": "国产采集存储",
-    "web_url": "http://192.168.0.128/rd/pe0444_cdya",
-    "http_url_to_repo": "http://192.168.0.128/rd/pe0444_cdya.git",
-    "ssh_url_to_repo": "git@192.168.0.128:rd/pe0444_cdya.git",
+    "web_url": "http://192.168.0.100/rd/pe0444_cdya",
+    "http_url_to_repo": "http://192.168.0.100/rd/pe0444_cdya.git",
+    "ssh_url_to_repo": "git@192.168.0.100:rd/pe0444_cdya.git",
     "default_branch": "main",
     "created_at": "2024-01-15T08:00:00.000Z",
     "last_activity_at": "2026-06-08T14:30:00.000Z",
@@ -250,7 +250,7 @@ GET /api/v4/projects/:id/releases
         {
           "id": 1,
           "name": "BSP固件包",
-          "url": "http://192.168.0.128/rd/pe0444/-/releases/v1.2.0/downloads/bsp.bin",
+          "url": "http://192.168.0.100/rd/pe0444/-/releases/v1.2.0/downloads/bsp.bin",
           "link_type": "other"
         }
       ]
@@ -284,7 +284,7 @@ POST /api/v4/projects/:id/releases
     "links": [
       {
         "name": "软件安装包",
-        "url": "http://192.168.0.128/rd/pe0444/-/releases/v1.3.0/downloads/app.tar.gz",
+        "url": "http://192.168.0.100/rd/pe0444/-/releases/v1.3.0/downloads/app.tar.gz",
         "filepath": "/binaries/app.tar.gz",
         "link_type": "package"
       }
@@ -295,7 +295,7 @@ POST /api/v4/projects/:id/releases
 
 ### 3.4 公司发布规范验证
 
-> **参考**: `http://192.168.0.128/standardization/rd/standard/git-rel`
+> **参考**: `http://192.168.0.100/standardization/rd/standard/git-rel`
 
 PMA 系统需要校验的发布合规要素（可配置）:
 
@@ -364,7 +364,7 @@ GET /api/v4/projects/:id/repository/commits
 **请求示例（获取一周内所有提交）**:
 ```bash
 curl -H "PRIVATE-TOKEN: glpat-xxx" \
-  "http://192.168.0.128/api/v4/projects/42/repository/commits?ref_name=main&since=2026-06-02T00:00:00Z&until=2026-06-09T00:00:00Z&with_stats=true&first_parent=true&per_page=100"
+  "http://192.168.0.100/api/v4/projects/42/repository/commits?ref_name=main&since=2026-06-02T00:00:00Z&until=2026-06-09T00:00:00Z&with_stats=true&first_parent=true&per_page=100"
 ```
 
 **响应示例**:
@@ -383,7 +383,7 @@ curl -H "PRIVATE-TOKEN: glpat-xxx" \
     "created_at": "2026-06-08T14:30:00.000+08:00",
     "message": "feat(gantt): 图例今日线呼吸动画与甘特图同步\n",
     "parent_ids": ["b2c3d4e5f6..."],
-    "web_url": "http://192.168.0.128/rd/pe0444/-/commit/a1b2c3d4...",
+    "web_url": "http://192.168.0.100/rd/pe0444/-/commit/a1b2c3d4...",
     "stats": {
       "additions": 45,
       "deletions": 12,
@@ -536,7 +536,7 @@ GET /api/v4/projects/:id/repository/tree
 **请求示例（检查交付资料目录）**:
 ```bash
 curl -H "PRIVATE-TOKEN: glpat-xxx" \
-  "http://192.168.0.128/api/v4/projects/42/repository/tree?path=docs/交付资料&ref=main&recursive=true&per_page=100"
+  "http://192.168.0.100/api/v4/projects/42/repository/tree?path=docs/交付资料&ref=main&recursive=true&per_page=100"
 ```
 
 **PMA 用途**: 检查交付资料完整性 (FR-007/FR-008)，列出某项目仓库中所有文档文件。
@@ -1087,19 +1087,19 @@ await client.get_projects(search="PE0444")
 ```javascript
 // 生成 GitLab Web URL
 function gitlabProjectUrl(pathWithNamespace) {
-    return `http://192.168.0.128/${pathWithNamespace}`;
+    return `http://192.168.0.100/${pathWithNamespace}`;
 }
 
 function gitlabCommitUrl(pathWithNamespace, sha) {
-    return `http://192.168.0.128/${pathWithNamespace}/-/commit/${sha}`;
+    return `http://192.168.0.100/${pathWithNamespace}/-/commit/${sha}`;
 }
 
 function gitlabReleaseUrl(pathWithNamespace, tagName) {
-    return `http://192.168.0.128/${pathWithNamespace}/-/releases/${tagName}`;
+    return `http://192.168.0.100/${pathWithNamespace}/-/releases/${tagName}`;
 }
 
 function gitlabFileUrl(pathWithNamespace, filePath, ref) {
-    return `http://192.168.0.128/${pathWithNamespace}/-/blob/${ref}/${filePath}`;
+    return `http://192.168.0.100/${pathWithNamespace}/-/blob/${ref}/${filePath}`;
 }
 ```
 

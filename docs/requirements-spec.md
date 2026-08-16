@@ -64,9 +64,9 @@
 
 | System / 系统 | URL / 地址 | Purpose / 用途 |
 |--------------|-----------|---------------|
-| 禅道 (Zentao) | http://192.168.0.124:8800 | Project tasks, milestones, releases |
-| Gitlab | http://192.168.0.128/ | Source code, releases, documentation |
-| NAS File Server | 192.168.0.180 | Pre-sales documents, delivery files |
+| 禅道 (Zentao) | http://192.168.0.100:8800 | Project tasks, milestones, releases |
+| Gitlab | http://192.168.0.100/ | Source code, releases, documentation |
+| NAS File Server | 192.168.0.100 | Pre-sales documents, delivery files |
 
 **Data Strategy / 数据策略**: 
 - Primary: Read-only integration from 禅道/Gitlab/NAS
@@ -163,7 +163,7 @@
 > **📝 权限管理说明 / Permission Note**:
 > - 对于有权限管理要求的交付资料，统一放到NAS服务器（方便控制权限）
 > - 在禅道上只需要提供NAS链接即可，本系统检测时仅检查链接是否存在，**暂不验证链接有效性**
-> - 链接格式示例: `\\192.168.0.180\硬件资料\PE0444\原理图.pdf` 或 `NAS://硬件资料/PE0444/原理图.pdf`
+> - 链接格式示例: `\\192.168.0.100\硬件资料\PE0444\原理图.pdf` 或 `NAS://硬件资料/PE0444/原理图.pdf`
 
 ### 3.4 Delivery Status Tracking / 交付状态追踪
 
@@ -332,7 +332,7 @@ BSP开发 (BSP Development) [仅研发]
 
 4. **Gitlab发布检测**:
    - 需要版本发布的阶段，检测Gitlab对应发布界面是否满足公司规范
-   - 参考: http://192.168.0.128/standardization/rd/standard/git-rel
+   - 参考: http://192.168.0.100/standardization/rd/standard/git-rel
 
 5. **告警触发**:
    - 如果禅道任务已完成但无对应输出件 → 告警
@@ -538,7 +538,7 @@ Phase → Deliverable: One-to-Many
 - `/api/v4/projects/:id/repository/commits` - 获取提交记录
 
 **Release Validation / 发布验证**:
-- 参考公司规范: http://192.168.0.128/standardization/rd/standard/git-rel
+- 参考公司规范: http://192.168.0.100/standardization/rd/standard/git-rel
 
 ### 7.3 NAS Integration
 

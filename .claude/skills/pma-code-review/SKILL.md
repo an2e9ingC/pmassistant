@@ -167,7 +167,7 @@ query_graph("MATCH (f:Function) WHERE f.cyclomatic > 15 ...")  # 高复杂度函
 - **日期时间**：DateTime 字段返回前端前必须通过 `to_iso_str()` 序列化
 - **异常处理**：外部 API 调用必须记录 URL + 状态码 + 响应预览；用 `logger.exception` 记录堆栈
 - **密码/Token**：不得在日志中记录密码或 Token
-- **只读原则**：生产禅道 (192.168.0.124:8800) 仅允许 GET 请求
+- **只读原则**：生产禅道 (192.168.0.100:8800) 仅允许 GET 请求
 
 ### 4. 设计一致性
 

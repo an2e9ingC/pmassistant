@@ -33,12 +33,12 @@ _load_dotenv()
 class Settings:
     PROJECT_NAME: str = "PMA"
     DATABASE_URL: str = "sqlite:///./data/pma-8000.db"  # server.sh 按端口动态覆盖
-    ZENTAO_BASE_URL: str = "http://192.168.3.22/zentao/api.php/v1"
+    ZENTAO_BASE_URL: str = "http://192.168.0.100/zentao/api.php/v1"
     ZENTAO_AUTH_ACCOUNT: str = ""
     ZENTAO_AUTH_PASSWORD: str = ""
-    GITLAB_BASE_URL: str = "http://192.168.0.128/api/v4"
+    GITLAB_BASE_URL: str = "http://192.168.0.100/api/v4"
     GITLAB_TOKEN: str = ""
-    GITLAB_PROJECT_PATH: str = ""       # PMA project path on GitLab, e.g. "bsp_dev/fake_it/pma"
+    GITLAB_PROJECT_PATH: str = ""       # PMA project path on GitLab, e.g. "group/subgroup/project"
     GITLAB_APP_ID: str = ""             # GitLab OAuth Application ID
     GITLAB_APP_SECRET: str = ""         # GitLab OAuth Application Secret
     GITLAB_OAUTH_ENABLED: bool = False  # Enable GitLab OAuth login
@@ -83,7 +83,7 @@ class Settings:
 
 def get_zentao_web_base() -> str:
     """Derive Zentao web UI base URL from the API base URL.
-    e.g. http://192.168.3.22/zentao/api.php/v1 -> http://192.168.3.22/zentao"""
+    e.g. http://192.168.0.100/zentao/api.php/v1 -> http://192.168.0.100/zentao"""
     api = settings.ZENTAO_BASE_URL.rstrip("/")
     return api.rsplit("/api.php", 1)[0]
 

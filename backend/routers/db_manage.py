@@ -67,7 +67,7 @@ class BackupConfig(BaseModel):
 class RemoteBackupConfig(BaseModel):
     enabled: bool = False
     remote_type: str = "nas"       # "nas" | "svn"
-    remote_path: str = ""          # local mount path (/mnt/nas-backup) or SMB URL (//192.168.0.180/PMABackup)
+    remote_path: str = ""          # local mount path (/mnt/nas-backup) or SMB URL (//192.168.0.100/your-backup)
     remote_username: str = ""      # SMB username (optional, for SMB auth)
     remote_password: str = ""      # SMB password (optional, for SMB auth)
 

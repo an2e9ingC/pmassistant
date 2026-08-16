@@ -24,9 +24,9 @@ def parse_gitlab_release_url(url: str) -> Optional[tuple[str, str, str]]:
     """Parse a GitLab release/tag URL into (base_host, project_path, tag_name).
 
     Supported URL formats:
-      - http://192.168.0.128/rd/product/-/releases/v1.0
-      - http://192.168.0.128/rd/product/-/tags/v1.0
-      - http://192.168.0.128/group/subgroup/proj/-/releases/v1.0.0
+      - http://192.168.0.100/rd/product/-/releases/v1.0
+      - http://192.168.0.100/rd/product/-/tags/v1.0
+      - http://192.168.0.100/group/subgroup/proj/-/releases/v1.0.0
 
     Returns (base_host, project_path, tag_name) or None if parsing fails.
     """
@@ -43,7 +43,7 @@ def parse_gitlab_release_url(url: str) -> Optional[tuple[str, str, str]]:
         logger.debug(f"Failed to parse GitLab URL: {url!r}")
         return None
 
-    base_host = m.group(1)      # e.g. http://192.168.0.128
+    base_host = m.group(1)      # e.g. http://192.168.0.100
     project_path = m.group(2)   # e.g. rd/product or group/subgroup/proj
     tag_name = m.group(4)       # e.g. v1.0.0
 
@@ -60,8 +60,8 @@ def parse_gitlab_release_pattern(url: str) -> Optional[tuple[str, str, str]]:
     Unlike parse_gitlab_release_url which requires a concrete tag name,
     this accepts glob/regex patterns in the tag portion.
 
-    Example: 'http://192.168.0.128/bsp_dev/mcu/apm32f407/-/releases/LNS677A-V010_V\\d{4}\\.\\d{2}\\.\\d{2}$'
-      -> ('http://192.168.0.128', 'bsp_dev/mcu/apm32f407', 'LNS677A-V010_V\\d{4}\\.\\d{2}\\.\\d{2}$')
+    Example: 'http://192.168.0.100/bsp_dev/mcu/apm32f407/-/releases/LNS677A-V010_V\\d{4}\\.\\d{2}\\.\\d{2}$'
+      -> ('http://192.168.0.100', 'bsp_dev/mcu/apm32f407', 'LNS677A-V010_V\\d{4}\\.\\d{2}\\.\\d{2}$')
 
     Returns (base_url, project_path, tag_pattern) or None if parsing fails.
     """
@@ -78,7 +78,7 @@ def parse_gitlab_release_pattern(url: str) -> Optional[tuple[str, str, str]]:
         logger.debug(f"Failed to parse GitLab release pattern URL: {url!r}")
         return None
 
-    base_url = m.group(1)       # e.g. http://192.168.0.128
+    base_url = m.group(1)       # e.g. http://192.168.0.100
     project_path = m.group(2)   # e.g. bsp_dev/mcu/apm32f407
     tag_pattern = m.group(4)    # e.g. LNS677A-V010_V\d{4}\.\d{2}\.\d{2}$
 

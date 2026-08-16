@@ -390,7 +390,7 @@ def get_project_resources(db: Session, project_id: int) -> list[dict]:
     zentao_web_base = re.sub(r"/api\.php/v1$", "", settings.ZENTAO_BASE_URL)
     links = [
         {"label": "禅道项目页面", "url": f"{zentao_web_base}/project-index-{project_id}.html", "description": "查看禅道项目详情"},
-        {"label": "GitLab 仓库", "url": "http://192.168.0.128/", "description": "代码仓库和发布管理"},
+        {"label": "GitLab 仓库", "url": "http://192.168.0.100/", "description": "代码仓库和发布管理"},
     ]
     # Add product NAS/Git links
     link_records = (

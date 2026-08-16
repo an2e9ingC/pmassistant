@@ -67,8 +67,8 @@ def _parse_float(val) -> Optional[float]:
 def _extract_gitlab_url(text: str) -> Optional[str]:
     """Extract the first GitLab release URL from a text (release desc).
     Supports formats like:
-      - Plain text: http://192.168.0.128/rd/product/-/releases/v1.0
-      - HTML links: <a href="http://192.168.0.128/rd/product/-/releases/v1.0">text</a>
+      - Plain text: http://192.168.0.100/rd/product/-/releases/v1.0
+      - HTML links: <a href="http://192.168.0.100/rd/product/-/releases/v1.0">text</a>
     Returns the full URL string or None.
     """
     if not text:

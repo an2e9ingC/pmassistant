@@ -7,7 +7,7 @@
 | Python（直接运行） | 3.9+ |
 | Docker（容器运行） | 24+ |
 | 磁盘 | 2GB（含 draw.io 依赖约 800MB） |
-| 网络 | 可访问禅道服务器 `192.168.0.124:8800` |
+| 网络 | 可访问禅道服务器 `192.168.0.100:8800` |
 | draw.io AppImage + xvfb（直接运行） | 26.x+ | VSDX→PDF 高还原度转换（Docker 已内置） |
 
 ---
@@ -178,14 +178,14 @@ cd docker-package && sudo bash install.sh
 
 ```bash
 # Registry API（不需要登录）
-curl -s http://192.168.0.128:5050/v2/bsp_dev/fake_it/pma/pma/tags/list | python3 -m json.tool
+curl -s http://192.168.0.100:5050/v2/group/subgroup/project/pma/tags/list | python3 -m json.tool
 ```
 
 返回示例：
 
 ```json
 {
-    "name": "bsp_dev/fake_it/pma/pma",
+    "name": "group/subgroup/project/pma",
     "tags": [
         "v2026.08.02-beta14",
         "v2026.08.04-beta1"
@@ -193,7 +193,7 @@ curl -s http://192.168.0.128:5050/v2/bsp_dev/fake_it/pma/pma/tags/list | python3
 }
 ```
 
-> 也可以在浏览器查看：`http://192.168.0.128/bsp_dev/fake_it/pma/container_registry`
+> 也可以在浏览器查看：`http://192.168.0.100/group/subgroup/project/container_registry`
 
 **获取版本后，在后续部署步骤中替换 `<version>`**：
 
@@ -201,8 +201,8 @@ curl -s http://192.168.0.128:5050/v2/bsp_dev/fake_it/pma/pma/tags/list | python3
 # 假设要部署 v2026.08.04-beta1
 VERSION="v2026.08.04-beta1"
 
-sudo docker pull 192.168.0.128:5050/bsp_dev/fake_it/pma/pma:${VERSION}
-sudo docker tag 192.168.0.128:5050/bsp_dev/fake_it/pma/pma:${VERSION} pma:latest
+sudo docker pull 192.168.0.100:5050/group/subgroup/project/pma:${VERSION}
+sudo docker tag 192.168.0.100:5050/group/subgroup/project/pma:${VERSION} pma:latest
 ```
 
 #### 首次部署
@@ -212,7 +212,7 @@ sudo docker tag 192.168.0.128:5050/bsp_dev/fake_it/pma/pma:${VERSION} pma:latest
 docker --version          # 需要 >= 20.10
 sudo docker info > /dev/null 2>&1 && echo "Docker OK"
 df -h . | tail -1         # 确认磁盘空间 >= 1GB
-curl -s -o /dev/null -w "%{http_code}" http://192.168.0.128:5050/v2/  # 确认 Registry 可达（返回 401 为正常）
+curl -s -o /dev/null -w "%{http_code}" http://192.168.0.100:5050/v2/  # 确认 Registry 可达（返回 401 为正常）
 
 # 1. 创建部署目录（可改为任意路径）
 mkdir -p ~/pma && cd ~/pma
@@ -221,21 +221,21 @@ mkdir -p ~/pma && cd ~/pma
 # snap 版: /var/snap/docker/current/config/daemon.json
 # apt 版:  /etc/docker/daemon.json
 sudo tee /var/snap/docker/current/config/daemon.json << 'EOF'
-{"insecure-registries":["192.168.0.128:5050"]}
+{"insecure-registries":["192.168.0.100:5050"]}
 EOF
 sudo snap restart docker           # snap 版
 # sudo systemctl restart docker    # apt 版
 
 # 3. 登录 GitLab Registry（仅首次）
-sudo docker login 192.168.0.128:5050 -u <GitLab用户名>
+sudo docker login 192.168.0.100:5050 -u <GitLab用户名>
 # 输入密码
 
 # 3. 拉取镜像（路径 = GitLab仓库地址 + /pma + :版本号）
-sudo docker pull 192.168.0.128:5050/bsp_dev/fake_it/pma/pma:<version>
+sudo docker pull 192.168.0.100:5050/group/subgroup/project/pma:<version>
 # 镜像路径说明: <GitLab地址>:5050/<group>/<project>/<repo>/pma:<version>
 
 # 4. 打短标签
-sudo docker tag 192.168.0.128:5050/bsp_dev/fake_it/pma/pma:<version> pma:latest
+sudo docker tag 192.168.0.100:5050/group/subgroup/project/pma:<version> pma:latest
 sudo docker run --rm pma:latest cat /app/deploy/docker-compose.prod.yml > docker-compose.yml
 sudo docker run --rm pma:latest cat /app/deploy/.env.example > .env
 
@@ -252,7 +252,7 @@ sudo docker compose up -d
 
 ```bash
 # 1. 拉取新镜像
-sudo docker pull 192.168.0.128:5050/bsp_dev/fake_it/pma/pma:<新版本>
+sudo docker pull 192.168.0.100:5050/group/subgroup/project/pma:<新版本>
 
 # 2. 更新标签 + 重启（data/ 和 .env 不受影响）
 sudo docker tag <新镜像> pma:latest
@@ -459,13 +459,13 @@ http: server gave HTTP response to HTTPS client
 ```bash
 # snap 版 Docker
 sudo tee /var/snap/docker/current/config/daemon.json << 'EOF'
-{"insecure-registries":["192.168.0.128:5050"]}
+{"insecure-registries":["192.168.0.100:5050"]}
 EOF
 sudo snap restart docker
 
 # apt 版 Docker
 sudo tee /etc/docker/daemon.json << 'EOF'
-{"insecure-registries":["192.168.0.128:5050"]}
+{"insecure-registries":["192.168.0.100:5050"]}
 EOF
 sudo systemctl restart docker
 ```
@@ -476,7 +476,7 @@ sudo systemctl restart docker
 access forbidden
 ```
 
-先登录：`sudo docker login 192.168.0.128:5050 -u <用户名>`
+先登录：`sudo docker login 192.168.0.100:5050 -u <用户名>`
 
 ### 6.3 Docker 权限不足
 
@@ -497,7 +497,7 @@ Zentao API unreachable
 ```
 
 - 检查 `ZENTAO_BASE_URL` 配置是否正确
-- 从服务器测试：`curl http://192.168.0.124:8800`
+- 从服务器测试：`curl http://192.168.0.100:8800`
 - 确认禅道 API 路径前缀（详见 [附录A](#附录a--禅道-api-配置)）
 
 ### 6.5 端口被占用
@@ -584,8 +584,8 @@ pma/
 
 **确定 API 地址**：
 
-- 如果禅道访问地址为 `http://192.168.0.124:8800/`，则 API 为 `http://192.168.0.124:8800/api.php/v1`
-- 如果禅道访问地址为 `http://192.168.3.22/zentao/`，则 API 为 `http://192.168.3.22/zentao/api.php/v1`
+- 如果禅道访问地址为 `http://192.168.0.100:8800/`，则 API 为 `http://192.168.0.100:8800/api.php/v1`
+- 如果禅道访问地址为 `http://192.168.0.100/zentao/`，则 API 为 `http://192.168.0.100/zentao/api.php/v1`
 
 验证：`curl http://<API地址>/users` 应返回 JSON（不是 404 HTML）。
 
@@ -631,7 +631,7 @@ pip install pysmb
 
 配置路径：PMA 管理后台 → 数据源配置 → NAS 存储，填写主机地址、用户名、密码。
 
-文档 URL 格式：`\\192.168.0.180\共享名\路径\文件.pdf`，无需额外挂载。
+文档 URL 格式：`\\192.168.0.100\共享名\路径\文件.pdf`，无需额外挂载。
 
 ---
 

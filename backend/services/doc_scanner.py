@@ -243,8 +243,8 @@ def _list_directory_pdm(ssh, folder_path: str) -> list:
 def _pdm_path_to_windows(template_path: str) -> str:
     """Convert a PDM template URL to a Windows filesystem path.
     Example:
-      http://192.168.0.191/SOLIDWORKSPDM/LM-PDM/1.结构项目/{code}*/3.项目输出/*.pdf
-      → D:\LMPDM\1.结构项目\{code}*\3.项目输出\*.pdf
+      http://192.168.0.100/SOLIDWORKSPDM/your-vault/1.结构项目/{code}*/3.项目输出/*.pdf
+      → D:\your-vault\1.结构项目\{code}*\3.项目输出\*.pdf
     """
     import os as _os
     base_path = _os.environ.get("PDM_BASE_PATH", "")
@@ -252,16 +252,16 @@ def _pdm_path_to_windows(template_path: str) -> str:
     if not base_path:
         return template_path
 
-    # Strip the PDM base URL prefix (with or without trailing LM-PDM/)
+    # Strip the PDM base URL prefix (with or without trailing your-vault/)
     p = template_path
     if base_url:
-        # Remove the base URL prefix (e.g., http://192.168.0.191/SOLIDWORKSPDM)
+        # Remove the base URL prefix (e.g., http://192.168.0.100/SOLIDWORKSPDM)
         url_prefix = base_url.rstrip("/")
         if p.startswith(url_prefix):
             p = p[len(url_prefix):]
-        # Also remove /LM-PDM prefix if present (LM-PDM maps to D:\LMPDM)
+        # Also remove /your-vault prefix if present (your-vault maps to D:\your-vault)
         p = p.lstrip("/")
-        # The first path segment (vault name like LM-PDM) maps to base_path
+        # The first path segment (vault name like your-vault) maps to base_path
         # Remove it since we prepend base_path directly
         parts = p.split("/", 1)
         if len(parts) > 1:
@@ -359,9 +359,9 @@ def _build_pdm_url(resolved_path: str) -> str:
     import os as _os
     base_path = _os.environ.get("PDM_BASE_PATH", "")
     base_url = _os.environ.get("PDM_BASE_URL", "")
-    # Extract vault name from base_path (last component, e.g. LM-PDM from D:\LM-PDM)
+    # Extract vault name from base_path (last component, e.g. your-vault from D:\your-vault)
     vault = base_path.rstrip("\\").rsplit("\\", 1)[-1] if base_path else ""
-    # Convert D:\LM-PDM\1.结构项目\...\file.pdf → /LM-PDM/1.结构项目/.../file.pdf
+    # Convert D:\your-vault\1.结构项目\...\file.pdf → /your-vault/1.结构项目/.../file.pdf
     rel = resolved_path
     if base_path and rel.upper().startswith(base_path.upper()):
         rel = rel[len(base_path):]
