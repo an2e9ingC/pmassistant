@@ -18,7 +18,7 @@ class UserInfo(BaseModel):
     gitlab_token_valid: bool = False  # OAuth token present and usable
     seen_version: Optional[str] = None  # last seen changelog version
     need_guide: bool = True  # whether to show new user guide
-    must_change_password: bool = False  # force password change on next login
+    must_change_password: Optional[bool] = False  # force password change on next login
     wecom_userid: Optional[str] = None   # 企业微信关联账号
     preferences: Optional[str] = None     # JSON user preferences
     favorites: Optional[str] = None       # JSON favorites {products,projects,tasks,bugs}
