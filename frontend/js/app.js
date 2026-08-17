@@ -3557,7 +3557,7 @@ async function showGuideWelcome() {
       '<div style="margin-top:6px;line-height:2">' + contactsHtml + '</div>' +
     '</div>';
   openDialog('&#x1F44B; 欢迎使用 PMA', html,
-    [{ text: '开始使用', cls: 'btn-primary', onclick: "var d=document.querySelector('.shared-dialog-overlay,.note-dialog-overlay');if(d)d.remove();API.put('/auth/guide/done',{});checkNewVersion()" }],
+    [{ text: '开始使用', cls: 'btn-primary', onclick: "closeSharedDialog();API.put('/auth/guide/done',{});checkNewVersion()" }],
     { maxWidth: 460 }
   );
 }
@@ -3624,7 +3624,7 @@ async function checkNewVersion() {
     }
     window._clPrevPage = function() { if (page > 0) { page--; renderPage(); } };
     window._clNextPage = function() { if (page < lastPage) { page++; renderPage(); } };
-    window._clClose = function() { var d=document.querySelector('.shared-dialog-overlay,.note-dialog-overlay'); if(d) d.remove(); };
+    window._clClose = function() { closeSharedDialog(); };
 
     var bodyHtml = '<div id="clog-body"></div>';
     openDialog('系统更新日志', bodyHtml, null, { maxWidth: 520 });
