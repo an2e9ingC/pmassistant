@@ -3395,7 +3395,7 @@ setInterval(function() {
 }, 300000);
 
 function closePwDialog() {
-  var overlay = document.querySelector('.note-dialog-overlay');
+  var overlay = document.querySelector('.note-dialog-overlay:not(.shared-dialog-overlay)');
   if (overlay) overlay.remove();
 }
 
