@@ -55,6 +55,7 @@ class BugCreate(BaseModel):
 class BugUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
+    product_id: Optional[int] = None
     project_id: Optional[int] = None
     component_id: Optional[int] = None
     status: Optional[str] = None

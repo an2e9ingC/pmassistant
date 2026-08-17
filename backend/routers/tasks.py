@@ -38,6 +38,7 @@ router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 class TaskCreate(BaseModel):
     project_id: int
+    product_id: Optional[int] = None
     stage_name: Optional[str] = None
     progress: Optional[int] = 0
     title: str
@@ -70,6 +71,8 @@ class TaskImport(BaseModel):
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
+    project_id: Optional[int] = None
+    product_id: Optional[int] = None
     status: Optional[str] = None
     priority: Optional[str] = None
     type: Optional[str] = None

@@ -12,6 +12,7 @@ class Task(Base):
 
     id = Column(Integer, primary_key=True)
     project_id = Column(Integer, ForeignKey("zenta_projects.id"), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("pma_products.id"), nullable=True, index=True)  # 可选：多产品项目时显式指定归属产品
     stage_name = Column(String(128), nullable=True)  # template stage name
     stage_id = Column(Integer, ForeignKey("pma_project_stages.id"), nullable=True, index=True)  # FK to ProjectStage
     title = Column(String(256), nullable=False)

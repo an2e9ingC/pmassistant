@@ -1270,21 +1270,28 @@ function _buildBugForm(t, isEdit) {
         '<input class="search-inp" id="bf-title" value="' + escHtml(t.title || '') + '" placeholder="请填入Bug标题" style="' + inp + '">' +
         '<div id="bf-title-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请填入Bug标题</div></div>' +
       '<div style="' + _bGrid2 + '">' +
-        '<div><label style="' + _bLbl + '">产品 *</label>' +
-          '<div style="margin-top:2px">' + createProductCombo({
-            comboId: 'bf-prod', inputId: 'bf-prod-input', dropdownId: 'bf-prod-drop',
-            placeholder: '搜索产品...',
-            selectedIdFn: function() { return t.product_id || null; },
-            onSelect: function(p) { _bfProdId = p.id; _bugLoadComponents(); }
-          }) + '<div id="bf-prod-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择产品</div></div></div>' +
         '<div><label style="' + _bLbl + '">项目 *</label>' +
           '<div style="margin-top:2px">' + createSearchCombo({
             comboId: 'bf-proj', inputId: 'bf-proj-input', dropdownId: 'bf-proj-drop',
             placeholder: '搜索项目...',
-            dataSource: function() { return API.get('/products/' + (_bfProdId || 0) + '/projects').then(function(d) { return d || []; }).catch(function() { return []; }); },
+            dataSource: function() {
+              if (_bfProdId) return API.get('/products/' + _bfProdId + '/projects');
+              return loadAllProjects().then(function() { return _allProjects || []; });
+            },
             selectedIdFn: function() { return t.project_id || null; },
-            onSelect: function(p) { _bfProjId = p.id; }
+            onSelect: function(p) { _bfProjId = p.id; _bugLoadProducts(p.id); }
           }) + '<div id="bf-proj-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择项目</div></div></div>' +
+        '<div><label style="' + _bLbl + '">产品 *</label>' +
+          '<div style="margin-top:2px">' + createSearchCombo({
+            comboId: 'bf-prod', inputId: 'bf-prod-input', dropdownId: 'bf-prod-drop',
+            placeholder: '搜索产品...',
+            dataSource: function() {
+              if (_bfProjId) return API.get('/projects/' + _bfProjId + '/products');
+              return API.get('/products?limit=200');
+            },
+            selectedIdFn: function() { return t.product_id || null; },
+            onSelect: function(p) { _bfProdId = p.id; _bugLoadComponents(); _bugLoadProjects(p.id); }
+          }) + '<div id="bf-prod-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择产品</div></div></div>' +
       '</div>' +
       '<div style="' + _bGrid2 + '">' +
         '<div><label style="' + _bLbl + '">组件</label><select class="search-inp" id="bf-component" style="' + inp + '"><option value="">选择组件...</option></select></div>' +
@@ -1379,18 +1386,11 @@ function _initBugFormSelectors(t, isEdit) {
     }
   });
 
-  // Pre-fill existing product name + load projects/components for edit mode
-  if (t.product_id) {
-    setTimeout(function() {
-      API.get('/products?limit=200').then(function(data) {
-        var items = (data && data.items) ? data.items : (data || []);
-        var p = items.find(function(x) { return x.id == t.product_id; });
-        var inp = document.getElementById('bf-prod-input');
-        if (inp && p) inp.value = p.name;
-      });
-      _bugLoadComponents();
-    }, 100);
-  }
+  // 根据项目加载产品（单产品自动选中，多产品下拉选），并加载组件
+  setTimeout(function() {
+    if (_bfProjId) { _bugLoadProducts(_bfProjId); }
+    else if (t.product_id) { _bugLoadComponents(); }
+  }, 100);
   // Pre-fill project name for edit mode
   if (isEdit && t.project_id) {
     setTimeout(function() {
@@ -1428,6 +1428,53 @@ function _initBugFormSelectors(t, isEdit) {
       if (ai) ai.value = t.assignee_name;
     }
   }, 80);
+}
+
+function _bugLoadProducts(projectId) {
+  // 根据项目加载关联产品：单产品自动选中；多产品让用户选择（保留仍有效的已选值）
+  var pid = projectId || _bfProjId;
+  if (!pid) return;
+  API.get('/projects/' + pid + '/products').then(function(products) {
+    var inp = document.getElementById('bf-prod-input');
+    if (!inp) return;
+    products = products || [];
+    var prevVal = _bfProdId;
+    if (!products.length) {
+      _bfProdId = null;
+      inp.value = '';
+      _bugFillComponents([]);
+      return;
+    }
+    if (products.length === 1) {
+      _bfProdId = products[0].id;
+      inp.value = (products[0].code ? products[0].code + ' ' : '') + (products[0].name || '');
+      _bugLoadComponents();
+      return;
+    }
+    var kept = products.some(function(p) { return String(p.id) === String(prevVal); });
+    _bfProdId = kept ? prevVal : null;
+    if (!kept) inp.value = '';
+  }).catch(function() {});
+}
+
+function _bugLoadProjects(productId) {
+  // 根据产品反查关联项目：单项目自动选中；多项目清空让用户从关联列表选
+  API.get('/products/' + productId + '/projects').then(function(projects) {
+    projects = projects || [];
+    if (projects.length === 1) {
+      var p = projects[0];
+      _bfProjId = p.id;
+      var pi = document.getElementById('bf-proj-input');
+      if (pi) pi.value = (p.code ? p.code + ' ' : '') + (p.name || '');
+    } else if (projects.length > 1) {
+      var kept = projects.some(function(p) { return String(p.id) === String(_bfProjId); });
+      if (!kept) {
+        _bfProjId = null;
+        var pi2 = document.getElementById('bf-proj-input');
+        if (pi2) pi2.value = '';
+      }
+    }
+  }).catch(function() {});
 }
 
 function _bugLoadComponents() {

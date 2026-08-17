@@ -182,7 +182,7 @@ def update_bug(db, bug_id, data, user_id=None):
     old_cc_user_ids = (b.cc_user_ids or [])[:]  # snapshot for CC favorites sync
     # Collect field-level changes (Zentao-style) for structured history
     changes = []
-    for k in ["title","description","project_id","component_id","status","resolution",
+    for k in ["title","description","product_id","project_id","component_id","status","resolution",
               "severity","priority","type","assignee_id","estimate_hours",
               "gitlab_url","gitlab_iid","resolved_by_id","cc_user_ids","progress"]:
         if k in data:

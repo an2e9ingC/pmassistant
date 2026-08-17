@@ -265,6 +265,7 @@ def create_task(db: Session, data: dict, user) -> dict:
         assignee_ids = None
     t = Task(
         project_id=data.get("project_id"),
+        product_id=data.get("product_id"),
         stage_name=data.get("stage_name") or None,
         title=data.get("title", ""),
         description=data.get("description"),
@@ -419,7 +420,7 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
             for u in db.query(LocalUser).filter(LocalUser.id.in_(all_ids)).all():
                 if u.id not in user_name_map:
                     user_name_map[u.id] = u.display_name or u.username
-    for field in ("assignee_ids", "title", "description", "status", "priority", "type",
+    for field in ("assignee_ids", "title", "description", "project_id", "product_id", "status", "priority", "type",
                    "stage_name", "assignee_id", "reviewer_id",
                    "parent_id", "blocked_by_id",
                    "start_date", "due_date", "sort_order", "progress", "cc_user_ids"):
@@ -705,12 +706,17 @@ def _task_dict(t: Task, db=None) -> dict:
             proj_name = proj.name
             proj_code = proj.code
 
-    # Resolve product via project → ProductProjectLink
-    prod_id = None
+    # Resolve product: 优先 task.product_id（多产品项目显式指定），否则回退「项目 → 第一个产品」
+    prod_id = t.product_id
     prod_name = None
     prod_code = None
-    if t.project_id and db:
-        from backend.models.zentao import ProductProjectLink as PPL, PmaProduct
+    from backend.models.zentao import ProductProjectLink as PPL, PmaProduct
+    if prod_id and db:
+        prod = db.query(PmaProduct).filter(PmaProduct.id == prod_id).first()
+        if prod:
+            prod_name = prod.name
+            prod_code = prod.code
+    elif t.project_id and db:
         plink = db.query(PPL).filter(PPL.project_id == t.project_id).first()
         if plink:
             prod = db.query(PmaProduct).filter(PmaProduct.id == plink.product_id).first()

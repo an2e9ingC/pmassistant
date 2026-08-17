@@ -72,6 +72,16 @@ async def gitlab_status(_=Depends(get_current_user)):
         await client.close()
 
 
+@router.get("/issues-url", response_model=dict)
+def get_issues_url(_=Depends(get_current_user)):
+    """Return the GitLab issues page URL for the configured PMA project."""
+    base = (settings.GITLAB_BASE_URL or "").rstrip("/")
+    web_base = base.rsplit("/api", 1)[0]
+    path = (settings.GITLAB_PROJECT_PATH or "").strip("/")
+    url = f"{web_base}/{path}/-/issues" if web_base and path else ""
+    return {"code": 0, "data": {"issues_url": url}, "message": "ok"}
+
+
 @router.get("/releases", response_model=dict)
 def list_releases(
     product_id: int = Query(None),

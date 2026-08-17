@@ -399,7 +399,7 @@ function openFeedbackDialog() {
 
   var html = '<div class="note-dialog-overlay">' +
     '<div class="note-dialog" style="max-width:500px">' +
-      '<div class="note-dialog-head"><span class="note-dialog-title">提交反馈 <a href="http://192.168.0.100/group/subgroup/project/-/issues" target="_blank" class="zentao-link" title="在 GitLab 中查看所有 Issue">↗ GitLab</a></span>' +
+      '<div class="note-dialog-head"><span class="note-dialog-title">提交反馈 <a id="fb-issues-link" href="#" target="_blank" class="zentao-link" title="在 GitLab 中查看所有 Issue">↗ GitLab</a></span>' +
         '<button class="note-dialog-close" onclick="closeFeedbackDialog()">&times;</button></div>' +
       '<div style="margin-bottom:12px">' +
         '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">类型</label>' +
@@ -440,6 +440,13 @@ function openFeedbackDialog() {
       '</div>' +
     '</div></div>';
   document.body.insertAdjacentHTML('beforeend', html);
+  // 动态设置「↗ GitLab」链接为配置的仓库 issues 页
+  API.get('/gitlab/issues-url').then(function(data) {
+    if (data && data.issues_url) {
+      var link = document.getElementById('fb-issues-link');
+      if (link) link.href = data.issues_url;
+    }
+  }).catch(function() {});
   window._fbType = 'bug';
   selectFeedbackType('bug');
   loadFeedbackMembers();

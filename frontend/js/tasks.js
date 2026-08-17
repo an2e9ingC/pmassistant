@@ -950,6 +950,7 @@ async function initProjectStages() {
 
 var _tfProjectId = null; // project numeric ID selected in the task form
 var _tfProjectCode = null; // project code (e.g. PE0450) for API calls to /projects/{code}/...
+var _tfProductId = null; // product ID selected in the task form (nullable; auto-filled from project)
 var _tfAssigneeIds = []; // assignee IDs selected in the task form (multi-select)
 var _tfReviewerId = null; // reviewer ID selected in the task form
 var _tfOriginalStatus = null; // original status when editing
@@ -1107,6 +1108,7 @@ async function _submitTaskFullPage(taskId) {
     title: title,
     description: desc,
     project_id: _tfProjectId || null,
+    product_id: _tfProductId || null,
     stage_name: _tfStageName(),
     assignee_ids: _tfAssigneeIds || [],
     reviewer_id: _tfReviewerId || null,
@@ -1421,11 +1423,26 @@ function _buildTaskForm(t, isEdit) {
       '<div id="tf-title-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请填入任务标题</div>' +
       '<div style="' + _grid2 + '">' +
         '<div><label style="' + _lbl + '">所属项目 *</label>' +
-          '<div style="margin-top:2px">' + createProjectCombo({
+          '<div style="margin-top:2px">' + createSearchCombo({
             comboId: 'tf-proj-combo', inputId: 'tf-project-input', dropdownId: 'tf-proj-dropdown',
+            placeholder: '搜索项目...',
+            dataSource: function() {
+              if (_tfProductId) return API.get('/products/' + _tfProductId + '/projects');
+              return loadAllProjects().then(function() { return _allProjects || []; });
+            },
             selectedIdFn: function() { return _tfProjectId; },
-            onSelect: function(p) { _tfProjectId = p.id; _tfProjectCode = p.code; _loadTfExecutions(p.code); }
+            onSelect: function(p) { _tfProjectId = p.id; _tfProjectCode = p.code; _loadTfExecutions(p.code); _loadTfProducts(p.id); }
           }) + '<div id="tf-project-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择所属项目</div></div></div>' +
+        '<div><label style="' + _lbl + '">产品</label><div style="margin-top:2px">' + createSearchCombo({
+          comboId: 'tf-prod-combo', inputId: 'tf-product-input', dropdownId: 'tf-product-dropdown',
+          placeholder: '搜索产品...',
+          dataSource: function() {
+            if (_tfProjectId) return API.get('/projects/' + _tfProjectId + '/products');
+            return API.get('/products?limit=200');
+          },
+          selectedIdFn: function() { return _tfProductId; },
+          onSelect: function(p) { _tfProductId = p.id; _loadTfProjects(p.id); }
+        }) + '</div></div>' +
         '<div><label style="' + _lbl + '">阶段 *</label><select class="search-inp" id="tf-execution" style="' + inp + '"><option value="">请选择阶段...</option>' + execOpts + '</select><div id="tf-execution-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择阶段</div></div>' +
       '</div>' +
       '<div style="' + _grid2 + '">' +
@@ -1498,6 +1515,7 @@ function _initTaskFormSelectors(t, isEdit) {
   // Set form-scope state
   _tfProjectId = t.project_id || _taskProjectId || null;
   _tfProjectCode = t.project_code || _taskProjectCode || _tfProjectId;
+  _tfProductId = t.product_id || null;
   _tfAssigneeIds = (t.assignee_ids && t.assignee_ids.length) ? t.assignee_ids.slice() : (t.assignee_id ? [t.assignee_id] : []);
   _tfReviewerId = t.reviewer_id || null;
   window._tfCcIds = (t.cc_user_ids || []).slice();
@@ -1552,6 +1570,7 @@ function _initTaskFormSelectors(t, isEdit) {
   if (projId) {
     var curExecVal = t.stage_name || '';
     _loadTfExecutions(projId, curExecVal);
+    _loadTfProducts(projId);
   }
 
   // Load worklogs and comments (edit mode)
@@ -1602,6 +1621,53 @@ function _loadTfExecutions(projectId, selectedId) {
         if (eid === prevVal) opt.selected = true;
         sel.appendChild(opt);
       });
+    }
+  }).catch(function() {});
+}
+
+function _loadTfProducts(projectId) {
+  // 根据项目加载关联产品：单产品自动选中；多产品让用户选择（保留仍有效的已选值）
+  var identifier = _tfProjectCode || projectId;
+  API.get('/projects/' + identifier + '/products').then(function(products) {
+    var inp = document.getElementById('tf-product-input');
+    if (!inp) return;
+    products = products || [];
+    var prevVal = _tfProductId;
+    if (!products.length) {
+      _tfProductId = null;
+      inp.value = '';
+      return;
+    }
+    if (products.length === 1) {
+      _tfProductId = products[0].id;
+      inp.value = (products[0].code ? products[0].code + ' ' : '') + (products[0].name || '');
+      return;
+    }
+    var kept = products.some(function(p) { return String(p.id) === String(prevVal); });
+    _tfProductId = kept ? prevVal : null;
+    if (!kept) inp.value = '';
+  }).catch(function() {});
+}
+
+function _loadTfProjects(productId) {
+  // 根据产品反查关联项目：单项目自动选中（含阶段加载）；多项目清空让用户从关联列表选
+  API.get('/products/' + productId + '/projects').then(function(projects) {
+    projects = projects || [];
+    if (projects.length === 1) {
+      var p = projects[0];
+      _tfProjectId = p.id;
+      _tfProjectCode = p.code;
+      var pi = document.getElementById('tf-project-input');
+      if (pi) pi.value = (p.code ? p.code + ' ' : '') + (p.name || '');
+      _loadTfExecutions(p.code);
+    } else if (projects.length > 1) {
+      var kept = projects.some(function(p) { return String(p.id) === String(_tfProjectId); });
+      if (!kept) {
+        _tfProjectId = null;
+        _tfProjectCode = null;
+        var pi2 = document.getElementById('tf-project-input');
+        if (pi2) pi2.value = '';
+      }
     }
   }).catch(function() {});
 }

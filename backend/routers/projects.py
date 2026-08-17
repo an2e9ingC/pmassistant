@@ -130,6 +130,17 @@ def get_stages(identifier: str, db: Session = Depends(get_db), _=Depends(get_cur
     return {"code": 0, "data": result, "message": "ok"}
 
 
+@router.get("/{identifier}/products", response_model=dict)
+def get_project_products(identifier: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    """Get products linked to a project (for task product selection in multi-product projects)."""
+    project = resolve_project(db, identifier)
+    from backend.models.zentao import ProductProjectLink, PmaProduct
+    links = db.query(ProductProjectLink).filter(ProductProjectLink.project_id == project.id).all()
+    product_ids = [l.product_id for l in links]
+    products = db.query(PmaProduct).filter(PmaProduct.id.in_(product_ids)).all() if product_ids else []
+    return {"code": 0, "data": [{"id": p.id, "name": p.name, "code": p.code} for p in products], "message": "ok"}
+
+
 class StageInfoUpdate(BaseModel):
     name: Optional[str] = None
     sort_order: Optional[int] = None
