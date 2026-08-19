@@ -106,6 +106,7 @@ class BugAnalysis(Base):
     title = Column(String(256), nullable=True)  # 分析标题（时间线默认显示）
     content = Column(Text, nullable=False)  # Markdown
     attachments = Column(JSON, nullable=True)  # [{"filename": "...", "url": "..."}]
+    is_deleted = Column(Integer, default=0)   # 1=已删除（软删除），分析列表显示删除线
     created_at = Column(DateTime, default=func.now())
 
 
@@ -146,4 +147,5 @@ class BugComment(Base):
     user_id = Column(Integer, ForeignKey("local_users.id"), nullable=False)
     content = Column(Text, nullable=False)
     is_system = Column(Integer, default=0)  # 0=user comment, 1=system auto-log
+    is_deleted = Column(Integer, default=0)   # 1=已删除（软删除），时间线显示删除线
     created_at = Column(DateTime, default=func.now())

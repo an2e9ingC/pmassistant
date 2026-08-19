@@ -6,9 +6,11 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
-from backend.middleware.auth import get_current_user, require_perm
+from backend.middleware.auth import get_current_user, has_perm
 from backend.models.task import TaskComment
 from backend.services import worklog_service
+from backend.audit_categories import AUDIT_CAT_TASK
+from backend.routers.logs import log_audit
 
 router = APIRouter(prefix="/api/worklogs", tags=["worklogs"])
 comment_router = APIRouter(prefix="/api/task-comments", tags=["task-comments"])
@@ -41,6 +43,10 @@ class WorkLogBatchCreate(BaseModel):
 
 class CommentCreate(BaseModel):
     task_id: int
+    content: str
+
+
+class CommentUpdate(BaseModel):
     content: str
 
 
@@ -176,6 +182,7 @@ def list_comments(
             "username": user.username if user else "?",
             "display_name": user.display_name if user else "?",
             "content": c.content,
+            "is_deleted": c.is_deleted or 0,
             "created_at": to_local_str(c.created_at) if c.created_at else None,
         })
     return {"code": 0, "data": result, "message": "ok"}
@@ -205,6 +212,7 @@ def create_comment(
             "username": user.username,
             "display_name": user.display_name,
             "content": c.content,
+            "is_deleted": c.is_deleted or 0,
             "created_at": to_local_str(c.created_at) if c.created_at else None,
         },
         "message": "ok",
@@ -215,11 +223,52 @@ def create_comment(
 def delete_comment(
     comment_id: int,
     db: Session = Depends(get_db),
-    _=Depends(require_perm("task_edit")),
+    user=Depends(get_current_user),
 ):
+    """Soft-delete a task comment — author or admin only."""
     c = db.query(TaskComment).filter(TaskComment.id == comment_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="Comment not found")
-    db.delete(c)
-    db.commit()
+    if c.user_id != user.id and not has_perm(user, "admin"):
+        raise HTTPException(status_code=403, detail="只能删除自己添加的评论")
+    if not c.is_deleted:
+        c.is_deleted = 1  # 软删除：保留内容，时间线显示删除线
+        db.commit()
+    log_audit(db, user, "task_comment_delete", f"任务 #{c.task_id} 删除评论 #{comment_id}", AUDIT_CAT_TASK, "high")
     return {"code": 0, "data": None, "message": "ok"}
+
+
+@comment_router.put("/{comment_id}", response_model=dict)
+def update_comment(
+    comment_id: int,
+    body: CommentUpdate,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Update a task comment — only the author may edit it."""
+    from backend.database import to_local_str
+    c = db.query(TaskComment).filter(TaskComment.id == comment_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if c.is_deleted:
+        raise HTTPException(status_code=400, detail="评论已删除，无法编辑")
+    if c.user_id != user.id:
+        raise HTTPException(status_code=403, detail="只能修改自己添加的评论")
+    if not body.content or not body.content.strip():
+        raise HTTPException(status_code=400, detail="评论内容不能为空")
+    c.content = body.content
+    db.commit()
+    db.refresh(c)
+    log_audit(db, user, "task_comment_edit", f"任务 #{c.task_id} 编辑评论 #{c.id}", AUDIT_CAT_TASK, "medium")
+    return {
+        "code": 0,
+        "data": {
+            "id": c.id,
+            "task_id": c.task_id,
+            "user_id": c.user_id,
+            "content": c.content,
+            "is_deleted": c.is_deleted or 0,
+            "created_at": to_local_str(c.created_at) if c.created_at else None,
+        },
+        "message": "ok",
+    }

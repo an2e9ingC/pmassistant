@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.middleware.auth import get_current_user, require_perm, require_any_perm, has_perm
-from backend.models.bug import PmaBug
+from backend.models.bug import PmaBug, BugAnalysis, BugComment
 from backend.services import bug_service
 from backend.services.entity_resolver import resolve_project
 from backend.audit_categories import AUDIT_CAT_BUG
@@ -329,6 +329,12 @@ def create_analysis(bug_id: int, body: AnalysisCreate, db: Session = Depends(get
 
 @router.put("/{bug_id}/analysis/{aid}", response_model=dict)
 def update_analysis(bug_id: int, aid: int, body: AnalysisUpdate, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    a = db.query(BugAnalysis).filter(BugAnalysis.id == aid, BugAnalysis.bug_id == bug_id).first()
+    if not a: raise HTTPException(status_code=404, detail="Analysis not found")
+    if a.is_deleted:
+        raise HTTPException(status_code=400, detail="分析记录已删除，无法编辑")
+    if a.user_id != user.id:
+        raise HTTPException(status_code=403, detail="只能修改自己添加的分析记录")
     a = bug_service.update_analysis(db, aid, body.model_dump(exclude_none=True))
     if not a: raise HTTPException(status_code=404, detail="Analysis not found")
     log_audit(db, user, "bug_analysis_edit", f"Bug #{bug_id} 编辑分析", AUDIT_CAT_BUG, "medium")
@@ -337,8 +343,11 @@ def update_analysis(bug_id: int, aid: int, body: AnalysisUpdate, db: Session = D
 
 @router.delete("/{bug_id}/analysis/{aid}", response_model=dict)
 def delete_analysis(bug_id: int, aid: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
-    ok = bug_service.delete_analysis(db, aid)
-    if not ok: raise HTTPException(status_code=404, detail="Analysis not found")
+    a = db.query(BugAnalysis).filter(BugAnalysis.id == aid, BugAnalysis.bug_id == bug_id).first()
+    if not a: raise HTTPException(status_code=404, detail="Analysis not found")
+    if a.user_id != user.id and not has_perm(user, "admin"):
+        raise HTTPException(status_code=403, detail="只能删除自己添加的分析记录")
+    bug_service.delete_analysis(db, aid)  # 软删除
     log_audit(db, user, "bug_analysis_delete", f"Bug #{bug_id} 删除分析", AUDIT_CAT_BUG, "high")
     return {"code": 0, "message": "ok"}
 
@@ -390,6 +399,10 @@ class CommentCreate(BaseModel):
     is_system: Optional[int] = 0
 
 
+class CommentUpdate(BaseModel):
+    content: str
+
+
 @router.get("/{bug_id}/comments", response_model=dict)
 def list_comments(bug_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
     comments = bug_service.get_comments(db, bug_id)
@@ -400,6 +413,36 @@ def list_comments(bug_id: int, db: Session = Depends(get_db), _=Depends(get_curr
 def create_comment(bug_id: int, body: CommentCreate, db: Session = Depends(get_db), user=Depends(get_current_user)):
     c = bug_service.create_comment(db, bug_id, body.content, user.id, body.is_system)
     return {"code": 0, "data": c, "message": "ok"}
+
+
+@router.put("/{bug_id}/comments/{cid}", response_model=dict)
+def update_comment(bug_id: int, cid: int, body: CommentUpdate, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    """Update a bug comment — only the author may edit it."""
+    c = db.query(BugComment).filter(BugComment.id == cid, BugComment.bug_id == bug_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if c.is_deleted:
+        raise HTTPException(status_code=400, detail="评论已删除，无法编辑")
+    if c.user_id != user.id:
+        raise HTTPException(status_code=403, detail="只能修改自己添加的评论")
+    if not body.content or not body.content.strip():
+        raise HTTPException(status_code=400, detail="评论内容不能为空")
+    updated = bug_service.update_comment(db, cid, body.content)
+    log_audit(db, user, "bug_comment_edit", f"Bug #{bug_id} 编辑评论 #{cid}", AUDIT_CAT_BUG, "medium")
+    return {"code": 0, "data": updated, "message": "ok"}
+
+
+@router.delete("/{bug_id}/comments/{cid}", response_model=dict)
+def delete_comment(bug_id: int, cid: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    """Delete a bug comment — author or admin only."""
+    c = db.query(BugComment).filter(BugComment.id == cid, BugComment.bug_id == bug_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if c.user_id != user.id and not has_perm(user, "admin"):
+        raise HTTPException(status_code=403, detail="只能删除自己添加的评论")
+    bug_service.delete_comment(db, cid)
+    log_audit(db, user, "bug_comment_delete", f"Bug #{bug_id} 删除评论 #{cid}", AUDIT_CAT_BUG, "high")
+    return {"code": 0, "data": None, "message": "ok"}
 
 
 # ── GitLab Integration ──

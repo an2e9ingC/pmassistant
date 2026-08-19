@@ -366,7 +366,8 @@ def update_analysis(db, aid, data):
 def delete_analysis(db, aid):
     a = db.query(BugAnalysis).filter(BugAnalysis.id == aid).first()
     if not a: return False
-    db.delete(a); db.commit()
+    a.is_deleted = 1  # 软删除：保留内容，前端显示删除线
+    db.commit()
     return True
 
 # ═══════════════════════════════════════════ Comments
@@ -378,7 +379,7 @@ def get_comments(db, bug_id):
     users = {u.id: (u.display_name or u.username) for u in db.query(LocalUser).filter(LocalUser.id.in_(uids)).all()}
     return [{"id": c.id, "bug_id": c.bug_id, "user_id": c.user_id,
              "username": users.get(c.user_id, "?"), "content": c.content,
-             "is_system": c.is_system,
+             "is_system": c.is_system, "is_deleted": c.is_deleted or 0,
              "created_at": to_local_str(c.created_at) if c.created_at else None}
             for c in comments]
 
@@ -386,8 +387,24 @@ def create_comment(db, bug_id, content, user_id, is_system=0):
     c = BugComment(bug_id=bug_id, user_id=user_id, content=content, is_system=is_system)
     db.add(c); db.commit()
     return {"id": c.id, "bug_id": c.bug_id, "user_id": c.user_id,
-            "content": c.content, "is_system": c.is_system,
+            "content": c.content, "is_system": c.is_system, "is_deleted": c.is_deleted or 0,
             "created_at": to_local_str(c.created_at) if c.created_at else None}
+
+def update_comment(db, cid, content):
+    c = db.query(BugComment).filter(BugComment.id == cid).first()
+    if not c: return None
+    c.content = content
+    db.commit()
+    return {"id": c.id, "bug_id": c.bug_id, "user_id": c.user_id,
+            "content": c.content, "is_system": c.is_system, "is_deleted": c.is_deleted or 0,
+            "created_at": to_local_str(c.created_at) if c.created_at else None}
+
+def delete_comment(db, cid):
+    c = db.query(BugComment).filter(BugComment.id == cid).first()
+    if not c: return False
+    c.is_deleted = 1  # 软删除：保留内容，前端显示删除线
+    db.commit()
+    return True
 
 def add_system_comment(db, bug_id, user_id, content):
     return create_comment(db, bug_id, content, user_id, is_system=1)
@@ -549,6 +566,7 @@ def _bug_dict(b, db=None):
 def _analysis_dict(a, db=None):
     from backend.models.local import LocalUser
     result = {"id":a.id,"bug_id":a.bug_id,"user_id":a.user_id,"title":a.title,"content":a.content,"attachments":a.attachments or [],
+              "is_deleted": a.is_deleted or 0,
               "created_at":to_local_str(a.created_at) if a.created_at else None}
     if db:
         u = db.query(LocalUser).filter(LocalUser.id == a.user_id).first()

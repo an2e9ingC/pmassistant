@@ -1072,6 +1072,7 @@ function initTaskEdit(taskId) {
     document.getElementById('topbar-title').textContent = '编辑任务 #' + t.id + ' · ' + (t.title || '');
 
     setTimeout(function() { initRichEditor('tf-desc', {height: 360}); }, 100);
+    setTimeout(function() { initRichEditor('tf-comment-input', {height: 200}); }, 100);
     _initTaskFormSelectors(t, true);
   }).catch(function(e) {
     viewEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--danger)">加载失败: ' + escHtml(e.message || '') + '</div>';
@@ -1501,8 +1502,8 @@ function _buildTaskForm(t, isEdit) {
     html += '<div style="' + _card + '">' +
       '<div style="' + _cardHd + '">评论</div>' +
       '<div id="tf-comments" style="margin-bottom:8px">加载中...</div>' +
-      '<div style="display:flex;gap:8px">' +
-        '<input class="search-inp" id="tf-comment-input" placeholder="添加评论..." style="flex:1">' +
+      '<textarea class="search-inp" id="tf-comment-input" rows="3" placeholder="添加评论（支持富文本与图片粘贴）..." style="width:100%;box-sizing:border-box;resize:vertical"></textarea>' +
+      '<div style="display:flex;justify-content:flex-end;margin-top:6px">' +
         '<button class="btn-sm btn-primary" onclick="submitComment(' + t.id + ')">发送</button>' +
       '</div></div>';
   }
@@ -1600,6 +1601,9 @@ function _showTaskForm(title, task) {
   openDialog(title, bodyHtml, buttons, {maxWidth: '80vw', maxHeight: '90vh', headerExtra: headerExtra});
   setTimeout(function() {
     initRichEditor('tf-desc', {height: 360});
+  }, 150);
+  setTimeout(function() {
+    initRichEditor('tf-comment-input', {height: 200});
   }, 150);
 
   _initTaskFormSelectors(t, isEdit);
@@ -2642,9 +2646,14 @@ async function _loadComments(taskId) {
 
 async function submitComment(taskId) {
   var input = document.getElementById('tf-comment-input');
-  if (!input || !input.value.trim()) return;
+  if (!input) return;
+  var content = input.value || '';  // HugeRTE syncs HTML content to the textarea
+  if (!content.trim() || content === '<p></p>' || content === '<p><br></p>') {
+    showToast('请输入评论内容', 'error');
+    return;
+  }
   try {
-    await API.post('/task-comments', {task_id: taskId, content: input.value.trim()});
+    await API.post('/task-comments', {task_id: taskId, content: content});
     input.value = '';
     _loadComments(taskId);
   } catch(e) {

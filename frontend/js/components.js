@@ -2290,18 +2290,26 @@ function _timelineOrderIcon() {
   return _timelineOrder === 'desc' ? '↓' : '↑';
 }
 
-function _timelineOrderBtn(entityType, entityId, containerId) {
-  return '<button class="btn btn-icon timeline-order-btn" onclick="_toggleTimelineOrder(\'' + entityType + '\', ' + entityId + ', \'' + containerId + '\')" title="' + _timelineOrderLabel() + '">' + _timelineOrderIcon() + '</button>';
+function _timelineOrderBtn(entityType, entityId, containerId, refreshFn) {
+  // refreshFn: 可选，切换排序后调用的刷新函数名（默认 renderTimeline，如分析记录传 _loadBugAnalyses）
+  var fn = refreshFn || 'renderTimeline';
+  return '<button class="btn btn-icon timeline-order-btn" onclick="_toggleTimelineOrder(\'' + entityType + '\', ' + entityId + ', \'' + containerId + '\', \'' + fn + '\')" title="' + _timelineOrderLabel() + '">' + _timelineOrderIcon() + '</button>';
 }
 
-function _toggleTimelineOrder(entityType, entityId, containerId) {
+function _toggleTimelineOrder(entityType, entityId, containerId, refreshFn) {
   _timelineOrder = _timelineOrder === 'desc' ? 'asc' : 'desc';
   // 更新所有排序按钮图标与提示
   document.querySelectorAll('.timeline-order-btn').forEach(function(btn) {
     btn.textContent = _timelineOrderIcon();
     btn.title = _timelineOrderLabel();
   });
-  renderTimeline(entityType, entityId, containerId);
+  var fn = refreshFn || 'renderTimeline';
+  if (fn === 'renderTimeline') {
+    renderTimeline(entityType, entityId, containerId);
+  } else {
+    var f = window[fn];
+    if (typeof f === 'function') f(entityId);
+  }
 }
 
 /** Collapse/expand button for the whole history timeline (历史记录卡片头部). */
@@ -2357,7 +2365,7 @@ async function renderTimeline(entityType, entityId, containerId) {
       var dot = '<span style="position:absolute;left:-24px;top:4px;width:14px;height:14px;border-radius:50%;background:var(--surface);border:2px solid ' + dotColor + ';box-sizing:border-box;z-index:1"></span>';
       var inner = isAction
         ? _renderTimelineAction(item, author, time)
-        : _renderTimelineComment(item, author, time);
+        : _renderTimelineComment(item, author, time, entityType, entityId);
       html += '<div style="position:relative;padding:4px 0 12px 0">' + dot + inner + '</div>';
     });
     html += '</div>';
@@ -2421,15 +2429,102 @@ function _renderTimelineChange(c) {
   '</div>';
 }
 
-function _renderTimelineComment(item, author, time) {
+function _renderTimelineComment(item, author, time, entityType, entityId) {
+  var deleted = !!(item.is_deleted);
+  // 仅作者本人可编辑/删除自己的评论（已删除的不能再操作）
+  var me = getCurrentUser();
+  var isMine = !!(me && me.id && item.user_id && me.id === item.user_id) && !deleted;
+  if (isMine) {
+    // 缓存内容供编辑对话框预填（onclick 内联字符串无法安全携带 HTML）
+    window._commentEditCache = window._commentEditCache || {};
+    window._commentEditCache[item.id] = item.content || '';
+  }
+  var actBtns = '';
+  if (isMine) {
+    actBtns = iconEdit('_openCommentEdit(\'' + entityType + '\',' + entityId + ',' + item.id + ')', '编辑评论') +
+      iconDelete('_deleteComment(\'' + entityType + '\',' + entityId + ',' + item.id + ')', '删除评论');
+  }
+  var deletedTag = deleted ? '<span style="color:var(--muted);font-size:10px;border:1px solid var(--border);border-radius:4px;padding:0 5px">已删除</span>' : '';
   var head = '<div style="display:flex;align-items:baseline;gap:6px;font-size:12px;flex-wrap:wrap">' +
     '<span style="font-weight:600;color:var(--fg)">' + escHtml(author) + '</span>' +
     '<span style="color:var(--muted);font-size:10px">' + escHtml(time) + '</span>' +
+    deletedTag + actBtns +
   '</div>';
 
   var content = item.content || '';
-  var body = '<div style="margin-top:4px;font-size:13px;line-height:1.5;color:var(--fg)">' + renderMarkdown(content) + '</div>';
+  var body = deleted
+    ? '<div style="margin-top:4px;font-size:13px;line-height:1.5;color:var(--muted)"><span style="text-decoration:line-through">' + renderMarkdown(content) + '</span></div>'
+    : '<div style="margin-top:4px;font-size:13px;line-height:1.5;color:var(--fg)">' + renderMarkdown(content) + '</div>';
   return head + body;
+}
+
+/** Soft-delete one's own comment (content stays, shown with strikethrough). */
+async function _deleteComment(entityType, entityId, commentId) {
+  if (!confirm('确认删除该评论？删除后内容将以删除线显示。')) return;
+  try {
+    if (entityType === 'task') {
+      await API.del('/task-comments/' + commentId);
+    } else {
+      await API.del('/bugs/' + entityId + '/comments/' + commentId);
+    }
+    showToast('评论已删除', 'success');
+    // 刷新所有可能承载该评论时间线的容器（详情页 + 任务编辑表单）
+    var cids = entityType === 'task' ? ['task-detail-comments', 'tf-comments'] : ['bug-detail-comments'];
+    cids.forEach(function(cid) {
+      if (document.getElementById(cid)) renderTimeline(entityType, entityId, cid);
+    });
+  } catch(e) {
+    showToast('删除失败: ' + (e.message || ''), 'error');
+  }
+}
+
+/** Open a rich-text dialog to edit one's own comment. */
+function _openCommentEdit(entityType, entityId, commentId) {
+  var cached = (window._commentEditCache || {})[commentId] || '';
+  var dialogId = 'comment-edit-' + Date.now();
+  var taId = dialogId + '-ta';
+  var html = '<div class="note-dialog-overlay" id="' + dialogId + '">' +
+    '<div class="note-dialog" style="width:80vw;max-width:80vw;max-height:80vh;overflow-y:auto">' +
+      '<div class="note-dialog-head">' +
+        '<span class="note-dialog-title">编辑评论</span>' +
+        '<button class="note-dialog-close" onclick="document.getElementById(\'' + dialogId + '\').remove()">&times;</button>' +
+      '</div>' +
+      '<textarea id="' + taId + '" rows="6" style="width:100%;box-sizing:border-box">' + escHtml(cached) + '</textarea>' +
+      '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">' +
+        '<button class="btn" onclick="document.getElementById(\'' + dialogId + '\').remove()">取消</button>' +
+        '<button class="btn btn-primary" onclick="_submitCommentEdit(\'' + entityType + '\',' + entityId + ',' + commentId + ',\'' + dialogId + '\')">保存</button>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+  setTimeout(function() { initRichEditor(taId, {height: 400}); }, 50);
+}
+
+/** Submit an edited comment (author-only, backend enforces ownership). */
+async function _submitCommentEdit(entityType, entityId, commentId, dialogId) {
+  var ta = document.getElementById(dialogId + '-ta');
+  var content = ta ? ta.value : '';  // HugeRTE syncs HTML to the textarea
+  if (!content.trim() || content === '<p></p>' || content === '<p><br></p>') {
+    showToast('请输入评论内容', 'error');
+    return;
+  }
+  try {
+    if (entityType === 'task') {
+      await API.put('/task-comments/' + commentId, {content: content});
+    } else {
+      await API.put('/bugs/' + entityId + '/comments/' + commentId, {content: content});
+    }
+    var overlay = document.getElementById(dialogId);
+    if (overlay) overlay.remove();
+    showToast('评论已更新', 'success');
+    // 刷新所有可能承载该评论时间线的容器（详情页 + 任务编辑表单）
+    var cids = entityType === 'task' ? ['task-detail-comments', 'tf-comments'] : ['bug-detail-comments'];
+    cids.forEach(function(cid) {
+      if (document.getElementById(cid)) renderTimeline(entityType, entityId, cid);
+    });
+  } catch(e) {
+    showToast('更新失败: ' + (e.message || ''), 'error');
+  }
 }
 
 /* ── Description Inline Edit (button-triggered, read-only display by default) ── */

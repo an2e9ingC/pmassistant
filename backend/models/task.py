@@ -72,4 +72,5 @@ class TaskComment(Base):
     task_id = Column(Integer, ForeignKey("pma_tasks.id"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("local_users.id"), nullable=False)
     content = Column(Text, nullable=False)
+    is_deleted = Column(Integer, default=0)   # 1=已删除（软删除），时间线显示删除线
     created_at = Column(DateTime, default=func.now())

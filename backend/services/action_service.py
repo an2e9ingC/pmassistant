@@ -71,6 +71,7 @@ def _comment_dict(type_label: str, c, username: str, display_name: str) -> dict:
         "username": username,
         "display_name": display_name,
         "content": c.content,
+        "is_deleted": c.is_deleted or 0,
         "created_at": to_local_str(c.created_at) if c.created_at else None,
     }
 

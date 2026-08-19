@@ -984,8 +984,13 @@ function _renderBugDetailBody(b) {
 
       // ── 分析记录 ──
       '<div class="card info-glass-card" style="padding:20px">' +
-        '<div class="section-hd"><span class="section-title">分析记录</span>' +
-          '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openBugAnalysisDialog(' + b.id + ')">+ 添加</button></div>' +
+        '<div class="section-hd" style="display:flex;align-items:center;justify-content:space-between">' +
+          '<span class="section-title">分析记录</span>' +
+          '<div style="display:flex;gap:6px;align-items:center">' +
+            _timelineOrderBtn('bug', b.id, 'bv-analyses', '_loadBugAnalyses') +
+            '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openBugAnalysisDialog(' + b.id + ')">+ 添加</button>' +
+          '</div>' +
+        '</div>' +
         '<div id="bv-analyses">加载中...</div>' +
       '</div>' +
 
@@ -1816,25 +1821,66 @@ function openBugAnalysisDialog(bugId) {
   var html = '<div>' +
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">标题 <span style="color:var(--danger)">*</span></label>' +
       '<input class="search-inp" id="ba-title" placeholder="请输入分析标题" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
-    '<div><label style="font-size:11px;color:var(--muted)">正文（Markdown）<span style="color:var(--danger)">*</span></label>' +
+    '<div><label style="font-size:11px;color:var(--muted)">正文（支持富文本与图片粘贴）<span style="color:var(--danger)">*</span></label>' +
       '<textarea class="search-inp" id="ba-content" rows="5" style="width:100%;box-sizing:border-box;margin-top:4px;resize:vertical"></textarea></div>' +
   '</div>';
   openDialog('添加分析记录', html, [
     {text:'取消',onclick:'closeSharedDialog()'},
-    {text:'提交',cls:'btn-primary',onclick:'_submitBugAnalysis('+bugId+')'}], {maxWidth:500});
+    {text:'提交',cls:'btn-primary',onclick:'_submitBugAnalysis('+bugId+')'}], {maxWidth: '80vw', maxHeight: '80vh'});
+  setTimeout(function() { initRichEditor('ba-content', {height: 300}); }, 100);
 }
 
 async function _submitBugAnalysis(bugId) {
   var title = (document.getElementById('ba-title') || {}).value || '';
   var c = (document.getElementById('ba-content') || {}).value || '';
   if (!title.trim()) { showToast('请输入分析标题','error'); return; }
-  if (!c.trim()) { showToast('请输入分析内容','error'); return; }
+  if (!c.trim() || c === '<p></p>' || c === '<p><br></p>') { showToast('请输入分析内容','error'); return; }
   try {
-    await API.post('/bugs/'+bugId+'/analysis', {bug_id:bugId, title:title.trim(), content:c.trim()});
+    await API.post('/bugs/'+bugId+'/analysis', {bug_id:bugId, title:title.trim(), content:c});
     showToast('分析已添加','success');
     closeSharedDialog();
     _refreshBugDetailContent(bugId);
   } catch(e) { showToast('提交失败: '+(e.message||''),'error'); }
+}
+
+/** Open a rich-text dialog to edit one's own analysis record (author-only). */
+function openBugAnalysisEditDialog(bugId, aid) {
+  var cached = (window._analysisEditCache || {})[aid] || {title:'', content:''};
+  var html = '<div>' +
+    '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">标题 <span style="color:var(--danger)">*</span></label>' +
+      '<input class="search-inp" id="ba-edit-title" placeholder="请输入分析标题" value="' + escHtml(cached.title) + '" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
+    '<div><label style="font-size:11px;color:var(--muted)">正文（支持富文本与图片粘贴）<span style="color:var(--danger)">*</span></label>' +
+      '<textarea class="search-inp" id="ba-edit-content" rows="5" style="width:100%;box-sizing:border-box;margin-top:4px;resize:vertical">' + escHtml(cached.content) + '</textarea></div>' +
+  '</div>';
+  openDialog('编辑分析记录', html, [
+    {text:'取消',onclick:'closeSharedDialog()'},
+    {text:'保存',cls:'btn-primary',onclick:'_submitBugAnalysisEdit('+bugId+','+aid+')'}], {maxWidth: '80vw', maxHeight: '80vh'});
+  setTimeout(function() { initRichEditor('ba-edit-content', {height: 300}); }, 100);
+}
+
+async function _submitBugAnalysisEdit(bugId, aid) {
+  var title = (document.getElementById('ba-edit-title') || {}).value || '';
+  var c = (document.getElementById('ba-edit-content') || {}).value || '';
+  if (!title.trim()) { showToast('请输入分析标题','error'); return; }
+  if (!c.trim() || c === '<p></p>' || c === '<p><br></p>') { showToast('请输入分析内容','error'); return; }
+  try {
+    await API.put('/bugs/'+bugId+'/analysis/'+aid, {title: title.trim(), content: c});
+    showToast('分析已更新','success');
+    closeSharedDialog();
+    _refreshBugDetailContent(bugId);
+  } catch(e) { showToast('更新失败: '+(e.message||''),'error'); }
+}
+
+/** Soft-delete one's own analysis record (content stays, shown with strikethrough). */
+async function _deleteBugAnalysis(bugId, aid) {
+  if (!confirm('确认删除该分析记录？删除后内容将以删除线显示。')) return;
+  try {
+    await API.del('/bugs/' + bugId + '/analysis/' + aid);
+    showToast('分析已删除', 'success');
+    _refreshBugDetailContent(bugId);
+  } catch(e) {
+    showToast('删除失败: ' + (e.message || ''), 'error');
+  }
 }
 
 function _loadBugAnalyses(bugId) {
@@ -1842,6 +1888,10 @@ function _loadBugAnalyses(bugId) {
     var el = document.getElementById('bv-analyses');
     if (!el) return;
     var analyses = d.analyses || [];
+    // 与历史记录一致：默认最新优先（desc），可通过头部按钮切换为最早优先
+    if (_timelineOrder === 'desc') {
+      analyses = analyses.slice().reverse();
+    }
     // 标题显示数量（类似工时日志）
     var card = el.closest('.card');
     var titleEl = card ? card.querySelector('.section-title') : null;
@@ -1856,15 +1906,33 @@ function _loadBugAnalyses(bugId) {
       var userHtml = a.username ? ' · ' + escHtml(getDisplayName(a.display_name || a.username)) : '';
       var time = (a.created_at ? fmtISODateTime(a.created_at) : '') || '';
       var title = (a.title && a.title.trim()) ? a.title.trim() : ('分析 #' + a.id);
+      var deleted = !!(a.is_deleted);
+      // 仅作者本人可编辑/删除自己的分析记录（已删除的不能再操作）
+      var me = getCurrentUser();
+      var isMine = !!(me && me.id && a.user_id && me.id === a.user_id) && !deleted;
+      if (isMine) {
+        window._analysisEditCache = window._analysisEditCache || {};
+        window._analysisEditCache[a.id] = {title: a.title || '', content: a.content || ''};
+      }
+      var actBtns = '';
+      if (isMine) {
+        actBtns = iconEdit('openBugAnalysisEditDialog(' + bugId + ',' + a.id + ')', '编辑分析') +
+          iconDelete('_deleteBugAnalysis(' + bugId + ',' + a.id + ')', '删除分析');
+      }
+      var deletedTag = deleted ? '<span style="color:var(--muted);font-size:10px;border:1px solid var(--border);border-radius:4px;padding:0 5px">已删除</span>' : '';
+      var titleStyle = deleted ? 'font-weight:600;color:var(--muted);text-decoration:line-through' : 'font-weight:600;color:var(--fg)';
+      var dotColor = deleted ? 'var(--border)' : 'var(--accent)';
+      var bodyStyle = deleted ? 'font-size:13px;line-height:1.6;margin-top:4px;color:var(--muted);text-decoration:line-through' : 'font-size:13px;line-height:1.6;margin-top:4px';
       h += '<div style="position:relative;padding:4px 0 12px 0">' +
-        '<span style="position:absolute;left:-24px;top:4px;width:14px;height:14px;border-radius:50%;background:var(--surface);border:2px solid var(--accent);box-sizing:border-box;z-index:1"></span>' +
+        '<span style="position:absolute;left:-24px;top:4px;width:14px;height:14px;border-radius:50%;background:var(--surface);border:2px solid ' + dotColor + ';box-sizing:border-box;z-index:1"></span>' +
         '<div style="display:flex;align-items:baseline;gap:6px;font-size:12px;flex-wrap:wrap">' +
-          '<span style="font-weight:600;color:var(--fg)">' + escHtml(title) + '</span>' +
+          '<span style="' + titleStyle + '">' + escHtml(title) + '</span>' +
           '<span style="color:var(--muted);font-size:10px">' + userHtml + ' ' + time + '</span>' +
+          deletedTag + actBtns +
         '</div>' +
         '<details style="margin-top:4px">' +
           '<summary style="cursor:pointer;font-size:11px;color:var(--accent);user-select:none">查看正文</summary>' +
-          '<div class="markdown-body" style="font-size:13px;line-height:1.6;margin-top:4px">' + renderMarkdown(a.content || '') + '</div>' +
+          '<div class="markdown-body" style="' + bodyStyle + '">' + renderMarkdown(a.content || '') + '</div>' +
         '</details>' +
       '</div>';
     });
