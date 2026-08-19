@@ -1278,6 +1278,7 @@ function _renderTaskDetailBody(t) {
         '<div class="section-hd" style="display:flex;align-items:center;justify-content:space-between">' +
           '<span class="section-title">历史记录</span>' +
           '<div style="display:flex;gap:6px;align-items:center">' +
+            _timelineCollapseBtn('task-detail-comments') +
             _timelineOrderBtn('task', t.id, 'task-detail-comments') +
             '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openCommentDialog(\'task\', ' + t.id + ')">添加评论</button>' +
           '</div>' +

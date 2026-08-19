@@ -2304,6 +2304,22 @@ function _toggleTimelineOrder(entityType, entityId, containerId) {
   renderTimeline(entityType, entityId, containerId);
 }
 
+/** Collapse/expand button for the whole history timeline (历史记录卡片头部). */
+function _timelineCollapseBtn(containerId) {
+  return '<button class="btn btn-icon timeline-collapse-btn" onclick="_toggleTimelineCollapse(this, \'' + containerId + '\')" title="收起历史记录">▾</button>';
+}
+
+function _toggleTimelineCollapse(btn, containerId) {
+  if (!btn) return;
+  // 优先在按钮所在卡片内查找容器，避免命中隐藏视图/旧弹窗中的同名容器
+  var card = btn.closest ? btn.closest('.card') : null;
+  var el = card ? card.querySelector('#' + containerId) : document.getElementById(containerId);
+  if (!el) return;
+  var collapsed = el.classList.toggle('timeline-collapsed');
+  btn.textContent = collapsed ? '▸' : '▾';
+  btn.title = collapsed ? '展开历史记录' : '收起历史记录';
+}
+
 /**
  * Render a merged action+comment timeline into a container.
  * Actions (field changes) are collapsed by default; comments show directly.

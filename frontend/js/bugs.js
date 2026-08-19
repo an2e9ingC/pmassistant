@@ -969,7 +969,7 @@ function _renderBugDetailBody(b) {
   // ── 布局：左侧其他卡片，右侧基本信息 + 状态与进度（上下摆放）──
   html += '<div style="display:flex;gap:16px;align-items:flex-start">' +
 
-    // ── 左侧：描述 / 工时日志 / 历史记录 / 分析记录 ──
+    // ── 左侧：描述 / 分析记录 / 工时日志 / 历史记录 ──
     '<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:16px">' +
 
       // ── 描述 ──
@@ -980,6 +980,13 @@ function _renderBugDetailBody(b) {
         '<div id="bug-desc-' + b.id + '" data-desc="' + escHtml(b.description || '') + '" class="markdown-body" style="font-size:13px;line-height:1.6;min-height:20px">' +
           (b.description ? renderMarkdown(b.description) : '<span style="color:var(--muted)">暂无描述</span>') +
         '</div>' +
+      '</div>' +
+
+      // ── 分析记录 ──
+      '<div class="card info-glass-card" style="padding:20px">' +
+        '<div class="section-hd"><span class="section-title">分析记录</span>' +
+          '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openBugAnalysisDialog(' + b.id + ')">+ 添加</button></div>' +
+        '<div id="bv-analyses">加载中...</div>' +
       '</div>' +
 
       // ── 工时日志 ──
@@ -994,18 +1001,12 @@ function _renderBugDetailBody(b) {
         '<div class="section-hd" style="display:flex;align-items:center;justify-content:space-between">' +
           '<span class="section-title">历史记录</span>' +
           '<div style="display:flex;gap:6px;align-items:center">' +
+            _timelineCollapseBtn('bug-detail-comments') +
             _timelineOrderBtn('bug', b.id, 'bug-detail-comments') +
             '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openCommentDialog(\'bug\', ' + b.id + ')">添加评论</button>' +
           '</div>' +
         '</div>' +
         '<div id="bug-detail-comments" style="margin-bottom:8px">加载中...</div>' +
-      '</div>' +
-
-      // ── 分析记录 ──
-      '<div class="card info-glass-card" style="padding:20px">' +
-        '<div class="section-hd"><span class="section-title">分析记录</span>' +
-          '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="openBugAnalysisDialog(' + b.id + ')">+ 添加</button></div>' +
-        '<div id="bv-analyses">加载中...</div>' +
       '</div>' +
 
     '</div>' +
