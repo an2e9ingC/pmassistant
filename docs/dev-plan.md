@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-当前版本：v2026.08.19-beta8 | 最后更新：2026-08-19
+当前版本：v2026.08.21-beta1 | 最后更新：2026-08-21
 
 ---
 
@@ -231,6 +231,7 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-08-21 | v2026.08.21-beta1 | chore: 版本号日期校正 — 修正此前误用 08-19 的版本日期，按当天实际日期(08-21)+跨天重置 beta 规范使用 v2026.08.21-beta1 |
 | 2026-08-19 | v2026.08.19-beta8 | fix: LibreOffice docx→pdf 转换失败(rc=77) — 根因是常驻 GUI soffice 进程锁定用户 profile(~/.config/libreoffice/4/.lock),headless 转换报"Failed to update lastsynchronized";已杀掉残留进程,并在 _convert_with_libreoffice 改用独立 user profile(-env:UserInstallation=临时目录)彻底隔离用户 LibreOffice 锁,失败日志补充 stderr |
 | 2026-08-19 | v2026.08.19-beta7 | feat: Bug分析记录正文改为可选 — 标题保持必填,正文去掉必填校验(添加/编辑对话框),空正文不显示"查看正文"折叠块改为显示"(无正文)";后端 AnalysisCreate.content 默认空字符串 |
 | 2026-08-19 | v2026.08.19-beta6 | feat: 评论/分析记录富文本+编辑/软删除+分析排序 — 分析记录添加/编辑对话框改富文本编辑器(80vw,支持图片粘贴)+任务编辑表单评论框改富文本+评论/分析记录支持作者本人编辑(后端归属校验403+audit log)+删除改软删除(is_deleted列,内容保留,时间线/分析列表显示删除线+已删除标记,本人或admin可删)+分析记录支持与历史记录一致的排序切换(默认从新到旧) |
