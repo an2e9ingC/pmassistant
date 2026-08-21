@@ -144,19 +144,24 @@ def _convert_with_libreoffice(content: bytes, ext: str) -> Optional[bytes]:
     """Convert docx/vsdx → PDF via LibreOffice headless. Returns PDF bytes or None."""
     import tempfile, subprocess, shutil
     tmpdir = tempfile.mkdtemp(prefix="pma-lo-")
+    # 独立 user profile：避免与用户 GUI LibreOffice 实例/全局锁（~/.config/libreoffice/4/.lock）冲突，
+    # 否则 headless 转换会失败（rc=77 "Failed to update .../lastsynchronized"）
+    profile = os.path.join(tmpdir, "profile")
+    os.makedirs(profile, exist_ok=True)
     src = os.path.join(tmpdir, f"input.{ext}")
     try:
         with open(src, "wb") as f:
             f.write(content)
         proc = subprocess.run(
-            ["libreoffice", "--headless", "--convert-to", "pdf", "--outdir", tmpdir, src],
+            ["libreoffice", "--headless", "-env:UserInstallation=file://" + profile,
+             "--convert-to", "pdf", "--outdir", tmpdir, src],
             timeout=60, capture_output=True, text=True,
         )
         pdf = os.path.join(tmpdir, "input.pdf")
         if proc.returncode == 0 and os.path.exists(pdf) and os.path.getsize(pdf) >= 3000:
             with open(pdf, "rb") as f:
                 return f.read()
-        logger.warning(f"LibreOffice {ext}→pdf failed: rc={proc.returncode}")
+        logger.warning(f"LibreOffice {ext}→pdf failed: rc={proc.returncode} stderr={proc.stderr[:300]}")
         return None
     except subprocess.TimeoutExpired:
         logger.warning(f"LibreOffice {ext}→pdf timed out (60s)")

@@ -98,7 +98,7 @@ class WorklogUpdate(BaseModel):
 class AnalysisCreate(BaseModel):
     bug_id: int
     title: Optional[str] = None
-    content: str
+    content: str = ""  # 正文可选，默认空字符串（DB 列非空，存 "" 不违反）
     attachments: Optional[list] = None
 
 

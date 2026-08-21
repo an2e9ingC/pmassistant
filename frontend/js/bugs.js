@@ -1821,7 +1821,7 @@ function openBugAnalysisDialog(bugId) {
   var html = '<div>' +
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">标题 <span style="color:var(--danger)">*</span></label>' +
       '<input class="search-inp" id="ba-title" placeholder="请输入分析标题" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
-    '<div><label style="font-size:11px;color:var(--muted)">正文（支持富文本与图片粘贴）<span style="color:var(--danger)">*</span></label>' +
+    '<div><label style="font-size:11px;color:var(--muted)">正文（可选，支持富文本与图片粘贴）</label>' +
       '<textarea class="search-inp" id="ba-content" rows="5" style="width:100%;box-sizing:border-box;margin-top:4px;resize:vertical"></textarea></div>' +
   '</div>';
   openDialog('添加分析记录', html, [
@@ -1834,7 +1834,6 @@ async function _submitBugAnalysis(bugId) {
   var title = (document.getElementById('ba-title') || {}).value || '';
   var c = (document.getElementById('ba-content') || {}).value || '';
   if (!title.trim()) { showToast('请输入分析标题','error'); return; }
-  if (!c.trim() || c === '<p></p>' || c === '<p><br></p>') { showToast('请输入分析内容','error'); return; }
   try {
     await API.post('/bugs/'+bugId+'/analysis', {bug_id:bugId, title:title.trim(), content:c});
     showToast('分析已添加','success');
@@ -1849,7 +1848,7 @@ function openBugAnalysisEditDialog(bugId, aid) {
   var html = '<div>' +
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">标题 <span style="color:var(--danger)">*</span></label>' +
       '<input class="search-inp" id="ba-edit-title" placeholder="请输入分析标题" value="' + escHtml(cached.title) + '" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
-    '<div><label style="font-size:11px;color:var(--muted)">正文（支持富文本与图片粘贴）<span style="color:var(--danger)">*</span></label>' +
+    '<div><label style="font-size:11px;color:var(--muted)">正文（可选，支持富文本与图片粘贴）</label>' +
       '<textarea class="search-inp" id="ba-edit-content" rows="5" style="width:100%;box-sizing:border-box;margin-top:4px;resize:vertical">' + escHtml(cached.content) + '</textarea></div>' +
   '</div>';
   openDialog('编辑分析记录', html, [
@@ -1862,7 +1861,6 @@ async function _submitBugAnalysisEdit(bugId, aid) {
   var title = (document.getElementById('ba-edit-title') || {}).value || '';
   var c = (document.getElementById('ba-edit-content') || {}).value || '';
   if (!title.trim()) { showToast('请输入分析标题','error'); return; }
-  if (!c.trim() || c === '<p></p>' || c === '<p><br></p>') { showToast('请输入分析内容','error'); return; }
   try {
     await API.put('/bugs/'+bugId+'/analysis/'+aid, {title: title.trim(), content: c});
     showToast('分析已更新','success');
@@ -1923,6 +1921,14 @@ function _loadBugAnalyses(bugId) {
       var titleStyle = deleted ? 'font-weight:600;color:var(--muted);text-decoration:line-through' : 'font-weight:600;color:var(--fg)';
       var dotColor = deleted ? 'var(--border)' : 'var(--accent)';
       var bodyStyle = deleted ? 'font-size:13px;line-height:1.6;margin-top:4px;color:var(--muted);text-decoration:line-through' : 'font-size:13px;line-height:1.6;margin-top:4px';
+      // 正文可选：空正文不显示"查看正文"折叠块
+      var hasContent = !!(a.content && a.content.trim() && a.content !== '<p></p>' && a.content !== '<p><br></p>');
+      var bodyHtml = hasContent
+        ? '<details style="margin-top:4px">' +
+            '<summary style="cursor:pointer;font-size:11px;color:var(--accent);user-select:none">查看正文</summary>' +
+            '<div class="markdown-body" style="' + bodyStyle + '">' + renderMarkdown(a.content || '') + '</div>' +
+          '</details>'
+        : '<div style="margin-top:4px;font-size:11px;color:var(--muted)">（无正文）</div>';
       h += '<div style="position:relative;padding:4px 0 12px 0">' +
         '<span style="position:absolute;left:-24px;top:4px;width:14px;height:14px;border-radius:50%;background:var(--surface);border:2px solid ' + dotColor + ';box-sizing:border-box;z-index:1"></span>' +
         '<div style="display:flex;align-items:baseline;gap:6px;font-size:12px;flex-wrap:wrap">' +
@@ -1930,10 +1936,7 @@ function _loadBugAnalyses(bugId) {
           '<span style="color:var(--muted);font-size:10px">' + userHtml + ' ' + time + '</span>' +
           deletedTag + actBtns +
         '</div>' +
-        '<details style="margin-top:4px">' +
-          '<summary style="cursor:pointer;font-size:11px;color:var(--accent);user-select:none">查看正文</summary>' +
-          '<div class="markdown-body" style="' + bodyStyle + '">' + renderMarkdown(a.content || '') + '</div>' +
-        '</details>' +
+        bodyHtml +
       '</div>';
     });
     h += '</div>';
