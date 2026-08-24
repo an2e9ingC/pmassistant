@@ -12,6 +12,12 @@ var _originalGrouped = null; // snapshot before edits, for "discard"
 var _currentProjectType = 'RD'; // selected project type tab
 var _projectTypes = [];      // [{id, label, stages, builtin}]
 
+// Normalize common URL typo 'http:/' → 'http://' (mirrors backend _normalize_url_prefix).
+function _normUrl(s) {
+  if (s == null) return '';
+  return String(s).replace(/^(https?:)\/(?!\/)/i, '$1//');
+}
+
 // Fixed stage order matching the project lifecycle
 var STAGE_ORDER = [
   '售前', '项目立项', '需求分解',
@@ -597,7 +603,7 @@ function renderTemplatesPage() {
           { key: 'doc_name', title: '文档名称', minWidth: 100, render: function(v) { return '<span style="font-weight:500">'+escHtml(v||'')+'</span>'; } },
           { key: 'responsible_role', title: '责任人', minWidth: 90, width: '80px', render: function(v) { return '<span style="font-size:12px;white-space:nowrap">'+escHtml(v||'—')+'</span>'; } },
           { key: 'doc_type', title: '类型', minWidth: 65, width: '60px', render: function(v) { return '<span style="font-size:11px">'+escHtml(typeLabels[v]||'—')+'</span>'; } },
-          { key: 'path_info', title: '路径', render: function(v, row) { var p = row.doc_path || ''; if (!p && row.base_path) p = (row.base_path + '/' + (row.file_pattern || '')).replace(/([^:])\/{2,}/g, '$1/'); return '<span style="font-size:11px">'+(p?'<span style="font-family:var(--mono);color:var(--accent);word-break:break-all">'+escHtml(p)+'</span>':'—')+'</span>'; } },
+          { key: 'path_info', title: '路径', render: function(v, row) { var p = row.doc_path || ''; if (!p && row.base_path) p = (row.base_path + '/' + (row.file_pattern || '')).replace(/([^:])\/{2,}/g, '$1/'); p = _normUrl(p); return '<span style="font-size:11px">'+(p?'<span style="font-family:var(--mono);color:var(--accent);word-break:break-all">'+escHtml(p)+'</span>':'—')+'</span>'; } },
           { key: 'description', title: '说明', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(v||'')+'</span>'; } }
         ];
         if (canEdit) cols.push({ key: 'actions', title: '操作', width: (actionColWidth(4) + 20) + 'px', minWidth: actionColWidth(4) + 20, render: function(v, row) {
@@ -859,6 +865,7 @@ function showEditTemplateForm(id) {
   // Full path: prefer doc_path, fallback to base_path + file_pattern
   var fullPath = d.doc_path || '';
   if (!fullPath && d.base_path) fullPath = (d.base_path + '/' + (d.file_pattern || '')).replace(/([^:])\/{2,}/g, '$1/');
+  fullPath = _normUrl(fullPath);
   _openDocDialog('编辑文档模板',
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名称</label>' +
@@ -908,7 +915,7 @@ function saveTemplate(id) {
   var sort = sortVal !== '' ? parseInt(sortVal) : 0;
   var role = roleEl ? roleEl.value.trim() : '';
   var desc = descEl ? descEl.value.trim() : '';
-  var path = fullPathEl ? fullPathEl.value.trim() : '';
+  var path = fullPathEl ? _normUrl(fullPathEl.value.trim()) : '';
   // Split into base_path (last / inclusive) + file_pattern (last segment)
   var lastSlash = path.lastIndexOf('/');
   var basePath = lastSlash > 0 ? path.substring(0, lastSlash + 1) : '';
@@ -2258,7 +2265,7 @@ function renderProductTreePage() {
           { key: 'doc_name', title: '文档名称', minWidth: 100, render: function(v) { return '<span style="font-weight:500">'+escHtml(v||'')+'</span>'; } },
           { key: 'responsible_role', title: '责任人', minWidth: 90, width: '80px', render: function(v) { return '<span style="font-size:12px;white-space:nowrap">'+escHtml(v||'—')+'</span>'; } },
           { key: 'doc_type', title: '类型', minWidth: 65, width: '60px', render: function(v) { return '<span style="font-size:11px">'+escHtml(typeLabels[v]||'—')+'</span>'; } },
-          { key: 'doc_path', title: '路径', render: function(v) { return '<span style="font-size:12px">'+(v?'<a href="'+escHtml(v)+'" target="_blank" style="color:var(--accent);text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'" title="点击打开路径">'+escHtml(v)+' ↗</a>':'—')+'</span>'; } },
+          { key: 'doc_path', title: '路径', render: function(v) { var p = _normUrl(v); return '<span style="font-size:12px">'+(p?'<a href="'+escHtml(p)+'" target="_blank" style="color:var(--accent);text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'" title="点击打开路径">'+escHtml(p)+' ↗</a>':'—')+'</span>'; } },
           { key: 'description', title: '说明', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(v||'')+'</span>'; } }
         ];
         if (canEdit) cols.push({ key: 'actions', title: '操作', width: actionColWidth(4) + 'px', minWidth: actionColWidth(4), render: function(v, row) {
@@ -2389,6 +2396,7 @@ function showEditProductTemplateForm(id) {
   // Full path: prefer doc_path, fallback to base_path + file_pattern
   var fullPath = tpl.doc_path || '';
   if (!fullPath && tpl.base_path) fullPath = (tpl.base_path + '/' + (tpl.file_pattern || '')).replace(/([^:])\/{2,}/g, '$1/');
+  fullPath = _normUrl(fullPath);
   _openDocDialog('编辑文档模板',
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档名称</label>' +
@@ -2460,7 +2468,7 @@ function saveProductTemplate(id) {
   var order = parseInt(orderEl.value) || 0;
   var desc = descEl.value.trim();
   var role = roleEl ? roleEl.value : '';
-  var fullPath = fullPathEl.value.trim();
+  var fullPath = _normUrl(fullPathEl.value.trim());
   // Split into base_path (last / inclusive) + file_pattern (last segment)
   var lastSlash = fullPath.lastIndexOf('/');
   var basePath = lastSlash > 0 ? fullPath.substring(0, lastSlash + 1) : '';

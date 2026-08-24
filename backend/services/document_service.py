@@ -365,8 +365,8 @@ def create_template(db: Session, data: dict) -> dict:
         sort_order=data.get("sort_order", 0),
         description=data.get("description"),
         responsible_role=data.get("responsible_role"),
-        doc_path=data.get("doc_path"),
-        base_path=data.get("base_path"),
+        doc_path=_normalize_url_prefix(data.get("doc_path")),
+        base_path=_normalize_url_prefix(data.get("base_path")),
         file_pattern=data.get("file_pattern"),
         doc_type=data.get("doc_type"),
         is_unnecessary=1 if data.get("is_unnecessary") else 0,
@@ -399,7 +399,10 @@ def update_template(db: Session, template_id: int, data: dict) -> Optional[dict]
             raise ValueError(f"文档模板「{new_name}」在该阶段下已存在")
     for field in ("stage_type", "doc_name", "sort_order", "description", "responsible_role", "doc_path", "base_path", "file_pattern", "doc_type", "is_unnecessary", "is_optional"):
         if field in data:
-            setattr(tpl, field, data[field])
+            value = data[field]
+            if field in ("doc_path", "base_path"):
+                value = _normalize_url_prefix(value)
+            setattr(tpl, field, value)
     db.commit()
     db.refresh(tpl)
     return _template_dict(tpl)
@@ -740,9 +743,20 @@ def _sync_from_templates(db: Session, project_id: int, project_type: str = "RD")
         db.commit()
 
 
+def _normalize_url_prefix(s: str) -> str:
+    """Normalize a common URL typo: 'http:/' → 'http://', 'https:/' → 'https://'.
+
+    Only a single '/' following the scheme is fixed. 'http://' and 'https://'
+    are left untouched (the regex requires the slash NOT be followed by another '/').
+    """
+    if not s:
+        return s
+    import re
+    return re.sub(r'^(https?:)/(?!/)', r'\1//', s)
+
+
 def _build_doc_path(tpl, project_code: str) -> str:
     """Build doc_path from template's base_path + file_pattern with {code} substitution."""
-    import re
     if tpl.base_path and tpl.file_pattern:
         base = tpl.base_path.replace("{code}", project_code) if project_code else tpl.base_path
         pattern = tpl.file_pattern.replace("{code}", project_code) if project_code else tpl.file_pattern
@@ -750,7 +764,7 @@ def _build_doc_path(tpl, project_code: str) -> str:
     else:
         doc_path = tpl.doc_path.replace("{code}", project_code) if (tpl.doc_path and project_code) else (tpl.doc_path or "")
     if doc_path:
-        doc_path = re.sub(r'^(https?:)/(?!/)', r'\1//', doc_path)
+        doc_path = _normalize_url_prefix(doc_path)
     return doc_path
 
 
@@ -1393,6 +1407,10 @@ def _sync_affected_product_docs(db: Session, node_id: int):
 
 
 def create_product_template(db: Session, data: dict) -> dict:
+    if data.get("doc_path"):
+        data["doc_path"] = _normalize_url_prefix(data["doc_path"])
+    if data.get("base_path"):
+        data["base_path"] = _normalize_url_prefix(data["base_path"])
     tpl = ProductDocTemplate(**data)
     db.add(tpl)
     db.commit()
@@ -1406,6 +1424,8 @@ def update_product_template(db: Session, template_id: int, data: dict) -> Option
         return None
     for k, v in data.items():
         if hasattr(tpl, k) and v is not None:
+            if k in ("doc_path", "base_path"):
+                v = _normalize_url_prefix(v)
             setattr(tpl, k, v)
     db.commit()
     _sync_affected_product_docs(db, tpl.product_id)
