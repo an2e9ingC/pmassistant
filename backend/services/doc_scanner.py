@@ -73,14 +73,17 @@ def _relative_path(base_url: str, full_url: str) -> str:
 def _to_regex(pattern: str) -> str:
     """Ensure pattern is a valid regex for matching file/directory names.
 
-    - If already regex (contains \\d, \\w, .*, .+, [, etc. without bare * or ?),
-      return as-is with $ anchor.
-    - If glob wildcards (*, ?) present, convert to regex via re.escape + replacement.
+    - If already regex (contains \\d, \\w, .*, .+, [, etc.), return as-is with $ anchor.
+      Note '.*' / '.+' are REGEX—the '*'/'?' there must NOT be re-escaped as glob.
+    - Only a BARE '*' or '?' (wildcard NOT preceded by '.') is a legacy glob wildcard,
+      converted via re.escape + replacement.
     - Otherwise, escape literal text.
     """
     if not pattern:
         return pattern
-    has_glob = '*' in pattern or '?' in pattern
+    # A bare '*'/'?' (not part of .* / .+ ) signals legacy glob. Sequences like '.*' ,
+    # '.+' are regex quantifiers and must be preserved as-is.
+    has_glob = bool(re.search(r'(?<!\.)\*|(?<!\.)\?', pattern))
     has_regex_meta = bool(re.search(r'\\[dDwWsS]|[\[\]\(\)\{\}\+\^\$\|]|\.\*|\.\+', pattern))
     if has_regex_meta and not has_glob:
         # Already regex — just ensure end anchor
