@@ -1742,7 +1742,9 @@ function _renderMergedMonthCalendar(today, wecomDailyMap, wlData, weData) {
     }
     var dotHtml = '';
     if (isCurrentMonth && hasCheckin) {
-      var filled = wlH >= h;
+      // 与页面展示(.toFixed(1))口径一致：按 0.1h 四舍五入后比较，
+      // 避免"显示打卡/记录均 8.2h/100% 却因浮点差(~0.01h)判红点"的误导
+      var filled = Math.round(wlH * 10) >= Math.round(h * 10);
       dotHtml = '<span style="position:absolute;top:1px;right:2px;width:6px;height:6px;border-radius:50%;background:' +
                 (filled ? 'var(--success)' : 'var(--danger)') + '"></span>';
     }

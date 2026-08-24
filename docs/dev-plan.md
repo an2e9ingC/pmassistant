@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-当前版本：v2026.08.24-beta1 | 最后更新：2026-08-24
+当前版本：v2026.08.24-beta2 | 最后更新：2026-08-24
 
 ---
 
@@ -231,6 +231,7 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-08-24 | v2026.08.24-beta2 | fix: 工时日历红点误判 — 红点用未圆整浮点比较(wlH>=h),显示却用toFixed(1)/toFixed(0)圆整,导致"打卡/记录均8.2h、记录比100%"仍显示红点(实际差0.01h);改为Math.round(wlH*10)>=Math.round(h*10)对齐显示口径,真实未达标(记录6h/打卡8h)仍判红 |
 | 2026-08-24 | v2026.08.24-beta1 | chore: 增加服务器停止原因诊断日志 — 服务器曾于08-23 04:58被优雅关闭(仅记录"Shutting down"，无触发者信息)；新增:_install_signal_logger捕获SIGTERM/SIGINT信号+时间,_log_shutdown_diag在shutdown记录pid/运行时长/请求数/最近请求与空闲/父进程命令行/残留任务/shutdown-notice,中间件统计请求;server.sh在start/stop写data/ops-8000.log(time+pid+reason+caller)留痕 |
 | 2026-08-21 | v2026.08.21-beta1 | chore: 版本号日期校正 — 修正此前误用 08-19 的版本日期，按当天实际日期(08-21)+跨天重置 beta 规范使用 v2026.08.21-beta1 |
 | 2026-08-19 | v2026.08.19-beta8 | fix: LibreOffice docx→pdf 转换失败(rc=77) — 根因是常驻 GUI soffice 进程锁定用户 profile(~/.config/libreoffice/4/.lock),headless 转换报"Failed to update lastsynchronized";已杀掉残留进程,并在 _convert_with_libreoffice 改用独立 user profile(-env:UserInstallation=临时目录)彻底隔离用户 LibreOffice 锁,失败日志补充 stderr |
