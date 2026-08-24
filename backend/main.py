@@ -49,10 +49,99 @@ startup_source_status = {
     "svn":    {"status": "pending", "detail": "", "checked_at": None},
 }
 
+# ── Process diagnostics (for tracing WHY the server went down) ──
+_PROC_START_TS = time.time()      # approx process start (module import time)
+_LAST_REQUEST_TS = None           # last HTTP request handled (via middleware)
+_REQUEST_COUNT = 0                # total HTTP requests handled since start
+
+
+def _install_signal_logger():
+    """Log the signal that triggered shutdown, then delegate to uvicorn's handler.
+
+    Without this, a clean shutdown only logs "Shutting down PMA backend..." with no
+    record of WHICH signal (SIGTERM vs SIGINT vs SIGHUP) stopped the process, making
+    it impossible to attribute a stop to a manual `server.sh stop`, an external kill,
+    or a terminal/session close. We capture the signal name + time, then hand the
+    signal back to uvicorn's own handler so graceful shutdown is unchanged.
+    """
+    import signal
+    saved = {}
+
+    def _handler(signum, frame):
+        try:
+            logger.warning(
+                f"PMA received signal {signum}({signal.Signals(signum).name}) at "
+                f"{time.strftime('%Y-%m-%d %H:%M:%S')} — triggering graceful shutdown"
+            )
+        except Exception:
+            pass
+        prev = saved.get(signum)
+        if callable(prev):
+            # uvicorn's handle_exit(sig, frame) → sets should_exit, keeps graceful path
+            try:
+                prev(signum, frame)
+            except Exception:
+                pass
+        else:
+            # No delegable handler installed (unusual) — restore default and re-raise
+            try:
+                signal.signal(signum, signal.SIG_DFL)
+                _os.kill(_os.getpid(), signum)
+            except Exception:
+                pass
+
+    # SIGTERM / SIGINT are what uvicorn installs handlers for; SIGHUP is ignored
+    # under nohup (server.sh), so we leave it alone to avoid interfering.
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            saved[sig] = signal.getsignal(sig)
+            signal.signal(sig, _handler)
+        except Exception:
+            pass
+
+
+def _log_shutdown_diag():
+    """Emit a rich diagnostics line at shutdown so the cause can be traced later."""
+    import asyncio
+    import json as _json
+    ts = time.time()
+    uptime = ts - _PROC_START_TS
+    # Parent process cmdline — reveals whether stop came from a shell/server.sh/systemd/etc.
+    parent_cmd = "?"
+    try:
+        ppid = _os.getppid()
+        if ppid:
+            with open(f"/proc/{ppid}/cmdline", "rb") as _f:
+                parent_cmd = _f.read().replace(b"\x00", b" ").decode("utf-8", "replace").strip()
+    except Exception:
+        pass
+    notice = None
+    try:
+        if _os.path.exists(_SHUTDOWN_NOTICE_FILE):
+            with open(_SHUTDOWN_NOTICE_FILE, "r") as _f:
+                notice = _json.load(_f)
+    except Exception:
+        pass
+    last_req = _LAST_REQUEST_TS
+    last_req_str = time.strftime("%H:%M:%S", time.localtime(last_req)) if last_req else "none"
+    idle = f"{ts - last_req:.1f}s" if last_req else "n/a"
+    try:
+        n_tasks = len(asyncio.all_tasks())
+    except Exception:
+        n_tasks = -1
+    logger.warning(
+        f"PMA shutdown diagnostics: pid={_os.getpid()} "
+        f"started_at={time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(_PROC_START_TS))} "
+        f"uptime={uptime:.0f}s requests={_REQUEST_COUNT} last_request={last_req_str} "
+        f"idle_before_shutdown={idle} parent_pid={_os.getppid()} parent_cmd={parent_cmd!r} "
+        f"pending_tasks={n_tasks} notice={notice}"
+    )
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting PMA backend...")
+    _install_signal_logger()
     _env_path = _os.path.abspath(".env")
     _db_path = _os.path.abspath(getattr(_db_module, "_db_path", "data/pma-8800.db"))
     _cfg_path = _os.path.abspath(f"data/source_config-{_port}.json") if _port else _os.path.abspath("data/source_config-8800.json")
@@ -166,6 +255,8 @@ async def lifespan(app: FastAPI):
     yield
     _auto_sync_task.cancel()
     _auto_backup_task.cancel()
+    # Emit diagnostics BEFORE the generic message so the stop cause is traceable
+    _log_shutdown_diag()
     logger.info("Shutting down PMA backend...")
 
 
@@ -187,6 +278,9 @@ app.add_middleware(
 @app.middleware("http")
 async def _add_no_cache_headers(request: Request, call_next):
     """Prevent browser caching: API data + HTML pages must always be fresh."""
+    global _LAST_REQUEST_TS, _REQUEST_COUNT
+    _LAST_REQUEST_TS = time.time()
+    _REQUEST_COUNT += 1
     response: Response = await call_next(request)
     path = request.url.path
     # Disable all browser caching — always fetch fresh content

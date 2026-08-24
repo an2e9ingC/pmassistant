@@ -94,6 +94,7 @@ do_start() {
     echo -n "[PMA:$PORT] 启动服务器..."
     # Clear shutdown notice on fresh start
     rm -f "$NOTICE_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] START port=$PORT action=$(basename "$0")" >> "$SCRIPT_DIR/data/ops-$PORT.log"
     TZ=Asia/Shanghai PMA_PORT="$PORT" DATABASE_URL="sqlite:///./data/pma-$PORT.db" nohup python3 -m uvicorn backend.main:app \
         --host "$HOST" \
         --port "$PORT" \
@@ -141,6 +142,10 @@ do_stop() {
     # Write shutdown notice so frontend can warn users
     local notice_msg="服务器将在几秒后${reason:-停止}，请保存工作。重启后需重新登录。"
     echo "{\"message\":\"$notice_msg\",\"time\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}" > "$NOTICE_FILE"
+    # Record the stop operation so the cause can be traced later (who/why/when).
+    # `who -m` names the interactive caller; falls back to the invoking user.
+    local caller="$(who -m 2>/dev/null || id -un 2>/dev/null)"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] STOP port=$PORT pid=$pid reason=${reason:-stop} caller=$caller" >> "$SCRIPT_DIR/data/ops-$PORT.log"
     echo -n "[PMA:$PORT] 停止服务器 (PID: $pid)..."
     # Give SSE loop enough time to detect the notice file and push shutdown event to all clients
     sleep 5
