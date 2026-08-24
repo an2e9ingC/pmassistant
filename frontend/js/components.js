@@ -2256,6 +2256,47 @@ function renderMarkdown(md) {
   return '<pre style="white-space:pre-wrap;font-size:13px">' + escHtml(md) + '</pre>';
 }
 
+/* ── Task source tag: mark non-template (manual) tasks in title columns ── */
+function _renderTaskManualTag(task) {
+  if (!task) return '';
+  if (task.template_id === undefined) return '';  // 数据未提供该字段，保守不标记
+  if (task.template_id) return '';                // 模板创建的任务不标记
+  return '<span class="task-manual-tag">手动</span>';  // 0/null/'' → 手动创建
+}
+
+/** 静默判断当前用户是否具备某权限（不弹 toast）。 */
+function _hasPerm(perm) {
+  try {
+    var user = getCurrentUser();
+    if (!user) return false;
+    var perms = (user.permissions || '').split(',').filter(Boolean);
+    return user.role === 'admin' || perms.indexOf('admin') >= 0 || perms.indexOf(perm) >= 0;
+  } catch(e) { return false; }
+}
+
+/** 任务详情「基本信息」卡中，"阶段"右侧的独立子卡片：任务来源（模板可点/手动）。 */
+function _renderTaskSourceKpi(task) {
+  var ti = task && task.template_info;
+  if (task && task.template_id && ti) {
+    var canJump = _hasPerm('doc_template');   // 仅模板管理权限可点击跳转
+    var label = (ti.project_type_label || ti.project_type || '') + '>' + (ti.stage_type || '');
+    var inner = canJump
+      ? '<a href="javascript:void(0)" onclick="openTaskTemplate(\'' + escJs(ti.project_type) + '\',\'' + escJs(ti.stage_type) + '\',' + ti.id + ')" style="color:var(--accent);text-decoration:underline" title="跳转到模板管理">' + escHtml(label) + '</a>'
+      : '<span style="color:var(--fg)">' + escHtml(label) + '</span>';
+    return '<div class="dkpi"><div class="dkpi-lbl">任务来源</div>' +
+      '<div class="dkpi-val" style="font-size:12px;font-weight:530;margin-top:1px;white-space:nowrap"><span style="color:var(--muted)">模板：</span>' + inner + '</div></div>';
+  }
+  return '<div class="dkpi"><div class="dkpi-lbl">任务来源</div>' +
+    '<div class="dkpi-val" style="font-size:12px;font-weight:530;margin-top:1px;white-space:nowrap"><span style="color:var(--muted)">手动</span></div></div>';
+}
+
+/** 跳转到模板管理页-项目模板，定位到指定 project_type + stage（并高亮目标模板）。 */
+function openTaskTemplate(projectType, stageType, templateId) {
+  if (typeof gotoView !== 'function') return;
+  window._highlightTaskTemplateId = templateId || null;
+  gotoView('doc-templates', { params: ['project', encodeURIComponent(projectType || ''), encodeURIComponent(stageType || '')] });
+}
+
 /* ── Entity Action Timeline (Zentao-style change history) ── */
 
 var _ENTITY_FIELD_LABELS = {

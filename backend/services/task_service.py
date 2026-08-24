@@ -24,8 +24,9 @@ def get_tasks(
     status: Optional[str] = None,
     assignee_id: Optional[int] = None,
     reviewer_id: Optional[int] = None,
+    source: Optional[str] = None,
 ) -> List[dict]:
-    """List tasks with optional filters."""
+    """List tasks with optional filters. `source` = 'template' | 'manual'."""
     q = db.query(Task)
     if project_id:
         q = q.filter(Task.project_id == project_id)
@@ -37,6 +38,10 @@ def get_tasks(
         q = q.filter(Task.assignee_id == assignee_id)
     if reviewer_id:
         q = q.filter(Task.reviewer_id == reviewer_id)
+    if source == 'template':
+        q = q.filter(Task.template_id.isnot(None))
+    elif source == 'manual':
+        q = q.filter(Task.template_id.is_(None))
     q = q.filter(or_(Task.is_deleted == 0, Task.is_deleted == None))
     q = q.order_by(Task.sort_order, Task.created_at.desc())
     results = [_task_dict(t, db) for t in q.all()]
@@ -55,6 +60,12 @@ def get_tasks(
             extra_q = extra_q.filter(Task.stage_name == stage_name)
         if status:
             extra_q = extra_q.filter(Task.status == status)
+        if reviewer_id:
+            extra_q = extra_q.filter(Task.reviewer_id == reviewer_id)
+        if source == 'template':
+            extra_q = extra_q.filter(Task.template_id.isnot(None))
+        elif source == 'manual':
+            extra_q = extra_q.filter(Task.template_id.is_(None))
         extra_q = extra_q.order_by(Task.sort_order, Task.created_at.desc())
         for t in extra_q.all():
             if t.id not in seen_ids and assignee_id in (t.assignee_ids or []):
@@ -799,11 +810,40 @@ def _task_dict(t: Task, db=None) -> dict:
         "latest_activity": latest_activity,
         "stage_id": t.stage_id,
         "template_id": t.template_id,
+        "template_info": _resolve_template_info(db, t.template_id),
         "is_diverged": t.is_diverged,
         "is_deleted": t.is_deleted,
         "cc_user_ids": t.cc_user_ids or [],
         "cc_user_names": _resolve_cc_names(db, t.cc_user_ids) if db and t.cc_user_ids else [],
     }
+
+
+def _resolve_template_info(db, template_id):
+    """Return template detail {id, name, stage_type, project_type} for a task's
+    template, or None if the task is manual / template missing. Used by the 任务来源
+    badge in task detail to show + link to the source template."""
+    if not template_id or not db:
+        return None
+    from backend.models.document import TaskTemplate
+    tpl = db.query(TaskTemplate).filter(TaskTemplate.id == template_id).first()
+    if not tpl:
+        return None
+    return {
+        "id": tpl.id,
+        "name": tpl.task_name,
+        "stage_type": tpl.stage_type,
+        "project_type": tpl.project_type,
+        "project_type_label": _project_type_label(tpl.project_type),
+    }
+
+
+def _project_type_label(project_type):
+    """Map project_type code → display label (RD→研发项目, SC→生产项目, fallback=code)."""
+    try:
+        from backend.services.document_service import PROJECT_TYPE_DEFS
+        return PROJECT_TYPE_DEFS.get(project_type, {}).get("label") or project_type
+    except Exception:
+        return project_type
 
 
 def _parse_date(val) -> Optional[date]:

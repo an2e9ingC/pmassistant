@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-当前版本：v2026.08.24-beta5 | 最后更新：2026-08-24
+当前版本：v2026.08.24-beta14 | 最后更新：2026-08-24
 
 ---
 
@@ -231,6 +231,12 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-08-24 | v2026.08.24-beta14 | feat: 任务管理筛选栏一键清除按钮 — 筛选栏新增"清除所有过滤"按钮(btn-primary accent填充,字号13px,深浅主题自适应),一键清空项目/阶段/状态/负责人/来源过滤并重载 |
+| 2026-08-24 | v2026.08.24-beta12 | feat: 任务管理过滤完善+任务来源独立卡片 — ①任务来源改为"基本信息"卡阶段右侧的独立子卡片(非嵌阶段内),显示"模板:项目类型>阶段"(生产项目>三防)或"手动",仅doc_template权限可点跳模板管理;②修复组合过滤AND:get_tasks的assignee额外查询extra_q补source/reviewer过滤(原缺,导致assignee+source组合混入);③项目过滤改为可搜索选择+✕清空恢复全部(独立_taskProjectFilter,不切内嵌视图);④筛选栏新增"清除"按钮一键清除项目/阶段/状态/负责人/来源所有过滤 |
+| 2026-08-24 | v2026.08.24-beta9 | feat: 任务来源标记优化+列表责任人列/过滤 — ①任务来源改为放"基本信息"卡阶段值右侧(不再单独一行),显示"模板:项目类型>阶段"(如 生产项目>三防,后端template_info附project_type_label RD/SC→研发/生产),仅doc_template权限可点跳模板管理精确定位;手动显示"手动";②任务管理列表责任人列复用_renderAssigneeDisplay(与user-center一致,团队(n)徽章+可点击openAssignDialog修改);③负责人过滤改为用户搜索下拉(全部+输入用户名搜索选择→assignee_id过滤)+✕清除,默认全部 |
+| 2026-08-24 | v2026.08.24-beta8 | feat: 任务详情任务来源标记+列表责任人列 — ①任务详情基本信息卡最后一行新增"任务来源":模板创建显示对应模板名(后端_task_dict附带template_info含name/stage_type/project_type),仅具备doc_template模板管理权限可点击跳转到模板管理-项目模板的精确定位子页(project_type+stage+高亮目标模板行),否则仅显示文本;手动创建显示"手动";②任务管理列表进度列后新增"责任人"列(中文display_name,多人顿号分隔) |
+| 2026-08-24 | v2026.08.24-beta7 | feat: /tasks页任务来源过滤(手动/模板) — 任务管理页顶部筛选栏新增"来源"下拉(全部/模板/手动),按template_id过滤;后端get_tasks加source参数(template→template_id非空,manual→为空),list_tasks路由加source Query,前端loadTaskData传source;可与项目/状态/负责人等筛选叠加 |
+| 2026-08-24 | v2026.08.24-beta6 | feat(ui): 任务列表标记非模板(手动)任务 — 在所有任务列表(任务管理/项目详情/用户中心我的任务/待审批/甘特阶段行)的标题前,对非模板创建的任务(template_id 为空)显示灰色小徽章「手动」;新增.task-manual-tag样式与_renderTaskManualTag(),数据缺template_id字段时保守不标记避免误标 |
 | 2026-08-24 | v2026.08.24-beta5 | fix: 模板任务改名未同步已创建任务标题 — update_task_template 只更新模板记录,不改已由该模板创建的任务标题(仅"重新应用模板"时才同步);修复:task_name变化时同步template_id匹配且is_diverged==0(未人工改过)的任务title,避免覆盖人工改名 |
 | 2026-08-24 | v2026.08.24-beta4 | fix: 任务批量删除误走Bug路径(函数名冲突) — 任务版_doBatchDelete(components.js)与Bug版_doBatchDelete(bugs.js)同名全局函数,先进Bug列表加载bugs.js后其Bug版覆盖任务版,导致任务批量删除确认调Bug版→verifyPassword"批量删除0个Bug"+DELETE/bugs/batch;将任务版改名_doTaskBatchDelete消除冲突,复现路径(先Bug后任务)恢复正常 |
 | 2026-08-24 | v2026.08.24-beta3 | fix: 项目详情批量删除串用(Bug路径) — 先进Bug列表tab再切任务tab后,任务批量删除误走/bugs/batch并提示"0个Bug"(任务id被Bug表过滤为0);根因是任务/Bug批量选择集合(_selectedTasks/_selectedBugs)与两个底部浮层工具栏(batch-toolbar/bug-batch-toolbar)跨视图/跨tab残留不清理;新增_clearAllBatchState()并在gotoView(主视图切换)与switchDTab(项目详情tab切换)时清空集合+隐藏工具栏 |

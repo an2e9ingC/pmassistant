@@ -639,6 +639,13 @@ function renderTemplatesPage() {
       _taskPendingOps.push({ stage: _selectedStage, type: 'tasks', items: (_taskTemplatesGrouped[_selectedStage]||[]).map(function(t,i) { return {id:t.id, sort_order:i+1}; }) });
       renderTemplatesPage();
     });
+    // 精确子页面定位：高亮从任务详情跳转进来的目标模板行
+    var _hlId = window._highlightTaskTemplateId;
+    if (_hlId) {
+      window._highlightTaskTemplateId = null;
+      var _hlRow = document.querySelector('#tpl-tasks-' + stageKey + ' tr[data-row-id="' + _hlId + '"]');
+      if (_hlRow) { _hlRow.classList.add('tpl-flash'); _hlRow.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+    }
   }
   // Load template creator setting into the global config bar
   if (canEdit) loadTemplateCreatorSetting();

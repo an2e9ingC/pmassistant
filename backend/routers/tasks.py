@@ -98,6 +98,7 @@ def list_tasks(
     status: Optional[str] = Query(None),
     assignee_id: Optional[int] = Query(None),
     reviewer_id: Optional[int] = Query(None),
+    source: Optional[str] = Query(None, description="template | manual"),
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
@@ -105,7 +106,7 @@ def list_tasks(
     if project_id:
         p = resolve_project(db, project_id)
         pid = p.id
-    tasks = task_service.get_tasks(db, pid, stage_name, status, assignee_id, reviewer_id)
+    tasks = task_service.get_tasks(db, pid, stage_name, status, assignee_id, reviewer_id, source)
     return {"code": 0, "data": tasks, "message": "ok"}
 
 

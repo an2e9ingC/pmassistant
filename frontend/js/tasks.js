@@ -364,9 +364,11 @@ function _submitDetailComment(taskId) {
 var _taskProjectId = null;   // null = show project selector
 var _taskProjectCode = null;  // project code (e.g. PE0450) for API calls
 var _taskProjectName = '';
+var _taskProjectFilter = '';  // 任务管理页"项目"过滤（''=全部项目，仅过滤不切换内嵌视图）
 var _taskFilterStatus = '';
 var _taskFilterExecution = '';
 var _taskFilterAssignee = '';
+var _taskFilterSource = '';  // '' = all | 'template' | 'manual'
 /* ── Entry Point ── */
 
 function initTasks(firstArg) {
@@ -381,7 +383,8 @@ function initTasks(firstArg) {
   _taskProjectId = null;
   _taskFilterStatus = '';
   _taskFilterExecution = '';
-  _taskFilterAssignee = 'me';
+  _taskFilterSource = '';
+  _taskFilterAssignee = '';   // '' = 全部（负责人过滤，默认全部）
   _calChangeCallback = loadTaskData;
   renderTasksPage();
 }
@@ -394,6 +397,7 @@ function initProjectTasks(projectId, projectName) {
   _taskProjectName = projectName || '';
   _taskFilterStatus = '';
   _taskFilterExecution = '';
+  _taskFilterSource = '';
   _taskFilterAssignee = '';
   window._ganttStageFilter = '';  // consume once
   renderTasksPage();
@@ -460,12 +464,19 @@ function _renderTaskFiltersInline() {
   var html = '';
   // Project selector
   html += '<span style="font-size:11px;color:var(--muted);white-space:nowrap">项目</span>' +
-    createProjectCombo({
-      comboId: 'task-proj-combo',
-      inputId: 'task-proj-input',
-      dropdownId: 'task-proj-dropdown',
-      onSelect: function(p) { _taskProjectId = p.id; _taskProjectCode = p.code; _taskProjectName = p.name; loadTaskData(); }
-    }) + '<style>#task-proj-combo{min-width:0!important;width:160px}</style>';
+    '<div style="flex:0 0 210px;display:flex;align-items:center;gap:4px">' +
+      '<div style="flex:1;min-width:0">' +
+        createProjectCombo({
+          comboId: 'task-proj-combo',
+          inputId: 'task-proj-input',
+          dropdownId: 'task-proj-dropdown',
+          placeholder: '全部/搜索项目...',
+          onSelect: function(p) { _taskProjectFilter = p.id; loadTaskData(); }
+        }) +
+      '</div>' +
+      '<button class="btn-icon" title="全部项目" onclick="_clearTaskProjectFilter()">✕</button>' +
+    '</div>' +
+    '<style>#task-proj-combo{min-width:0!important}</style>';
   // Stage filter
   html += '<span style="font-size:11px;color:var(--muted);white-space:nowrap;margin-left:4px">阶段</span>' +
     '<select class="search-inp" id="task-exec-filter" onchange="_taskFilterExecution=this.value;loadTaskData()" style="width:120px">' +
@@ -479,12 +490,59 @@ function _renderTaskFiltersInline() {
       '<option value="review">评审中</option>' +
       '<option value="done">已完成</option>' +
       '</select>';
-  // Assignee filter
-  html += '<span style="font-size:11px;color:var(--muted);white-space:nowrap;margin-left:4px">负责人</span>' +
-    '<select class="search-inp" id="task-assignee-filter" onchange="_taskFilterAssignee=this.value;loadTaskData()" style="width:100px">' +
+  // Source filter (自动生成 vs 手动)
+  html += '<span style="font-size:11px;color:var(--muted);white-space:nowrap;margin-left:4px">来源</span>' +
+    '<select class="search-inp" id="task-source-filter" onchange="_taskFilterSource=this.value;loadTaskData()" style="width:90px">' +
       '<option value="">全部</option>' +
-      '<option value="me"' + (_taskFilterAssignee==='me'?' selected':'') + '>我负责的</option></select>';
+      '<option value="template"' + (_taskFilterSource==='template'?' selected':'') + '>模板</option>' +
+      '<option value="manual"' + (_taskFilterSource==='manual'?' selected':'') + '>手动</option>' +
+    '</select>';
+  // Assignee filter (search a user)
+  html += '<span style="font-size:11px;color:var(--muted);white-space:nowrap;margin-left:4px">负责人</span>' +
+    '<div style="flex:0 0 210px;display:flex;align-items:center;gap:4px">' +
+      '<div style="flex:1;min-width:0">' +
+        createUserCombo({
+          comboId: 'task-assignee-combo', inputId: 'task-assignee-input', dropdownId: 'task-assignee-drop',
+          placeholder: '全部/搜索负责人...',
+          selectedIdFn: function() { return _taskFilterAssignee || null; },
+          onSelect: function(u) { _taskFilterAssignee = u.id; loadTaskData(); }
+        }) +
+      '</div>' +
+      '<button class="btn-icon" title="全部负责人" onclick="_clearTaskAssigneeFilter()">✕</button>' +
+    '</div>';
+  // 一键清除所有过滤（accent 主按钮，CSS 变量自适应深浅主题）
+  html += '<button class="btn btn-primary" style="font-size:13px;padding:5px 10px;margin-left:6px" onclick="_clearAllTaskFilters()" title="清除所有过滤条件">清除所有过滤</button>';
   return html;
+}
+
+function _clearTaskAssigneeFilter() {
+  _taskFilterAssignee = '';
+  var inp = document.getElementById('task-assignee-input');
+  if (inp) inp.value = '';
+  loadTaskData();
+}
+
+function _clearTaskProjectFilter() {
+  _taskProjectFilter = '';
+  var inp = document.getElementById('task-proj-input');
+  if (inp) inp.value = '';
+  loadTaskData();
+}
+
+/** 一键清除所有过滤项目/阶段/状态/负责人/来源，并重新加载。 */
+function _clearAllTaskFilters() {
+  _taskProjectFilter = '';
+  _taskFilterStatus = '';
+  _taskFilterExecution = '';
+  _taskFilterAssignee = '';
+  _taskFilterSource = '';
+  ['task-proj-input', 'task-assignee-input'].forEach(function(id) {
+    var el = document.getElementById(id); if (el) el.value = '';
+  });
+  ['task-source-filter', 'task-exec-filter', 'task-status-filter'].forEach(function(id) {
+    var el = document.getElementById(id); if (el) el.value = '';
+  });
+  loadTaskData();
 }
 
 function _renderTaskFilters() {
@@ -549,18 +607,14 @@ async function loadTaskData() {
   content.innerHTML = '<div class="loading-spinner">加载中...</div>';
 
   try {
-    var projId = _taskProjectId;
+    var projId = _taskProjectFilter || _taskProjectId;
 
     var params = [];
     if (projId) params.push('project_id=' + projId);
     if (_taskFilterStatus) params.push('status=' + _taskFilterStatus);
+    if (_taskFilterSource) params.push('source=' + _taskFilterSource);
     if (_taskFilterExecution) params.push('stage_name=' + encodeURIComponent(_taskFilterExecution));
-    var assigneeId = '';
-    if (_taskFilterAssignee === 'me') {
-      var user = getCurrentUser();
-      if (user) assigneeId = 'assignee_id=' + user.id;
-    }
-    if (assigneeId) params.push(assigneeId);
+    if (_taskFilterAssignee) params.push('assignee_id=' + _taskFilterAssignee);
     var qs = params.length ? '?' + params.join('&') : '';
 
     var data = await API.get('/tasks' + qs);
@@ -627,7 +681,7 @@ function renderTaskTable(tasks, execs) {
       { key: 'id', title: '编号', width: '7%', minWidth: 75, render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted)">#' + v + '</span>'; } },
       { key: 'project_code', title: '项目编号', width: '8%', minWidth: 90, render: function(v, row) { return v ? projCodeTag(v, 'openProject(\''+escHtml(v).replace(/'/g,"\\'")+'\')', row.project_name) : '-'; } },
       { key: 'project_name', title: '项目名称', width: '10%', minWidth: 100, align: 'left', render: function(v) { return '<span style="font-size:12px">'+escHtml(v||'-')+'</span>'; } },
-      { key: 'title', title: '标题', minWidth: 100, align: 'left', className: 'dt-wrap', render: function(v, row) { return '<a href="javascript:void(0)" onclick="openTaskDetail('+row.id+')" style="color:var(--accent)">'+escHtml(v||'')+'</a>'; } },
+      { key: 'title', title: '标题', minWidth: 100, align: 'left', className: 'dt-wrap', render: function(v, row) { return _renderTaskManualTag(row) + '<a href="javascript:void(0)" onclick="openTaskDetail('+row.id+')" style="color:var(--accent)">'+escHtml(v||'')+'</a>'; } },
       { key: 'stage_name', title: '阶段', width: '9%', minWidth: 100, render: function(v) { return v ? '<span style="font-size:11px;color:var(--muted)">'+escHtml(v)+'</span>' : '-'; } },
       { key: 'status', title: '状态', width: '6%', minWidth: 80, render: function(v, row) {
         var h = renderPill(v||'todo');
@@ -636,6 +690,7 @@ function renderTaskTable(tasks, execs) {
       }},
       { key: 'priority', title: '优先级', width: '5%', minWidth: 65, render: function(v) { return renderPriorityBadge(v); } },
       { key: 'progress', title: '进度', width: '6%', minWidth: 60, render: function(v) { return renderProgressCircle(v||0, 26, {label:''}); } },
+      { key: 'assignee', title: '责任人', width: '9%', minWidth: 100, align: 'left', render: function(v, row) { return '<span style="white-space:nowrap" onclick="event.stopPropagation();openAssignDialog('+row.id+')" title="点击修改责任人">'+_renderAssigneeDisplay(row.assignee_names||[], row.id, {fallback: row.assignee_name || row.assignee_username || '—'})+'</span>'; } },
       { key: 'due_date', title: '截止日期', width: '6%', minWidth: 100, render: function(v, row) { return '<span style="color:'+(v&&row.status!=='done'&&row.status!=='done'&&v<fmtLocalDate()?'var(--danger)':'')+'">'+(v||'-')+'</span>'; } },
       { key: 'actions', title: '操作', width: actionColWidth(3) + 'px', minWidth: actionColWidth(3), render: function(v, row) { return iconEdit('openTaskDialog('+row.id+')','编辑任务')+iconCopy('openCopyTaskDialog('+row.id+')','复制任务')+iconDelete('deleteTask('+row.id+',\''+escJs(row.title)+'\')','删除任务'); } }
     ],
@@ -719,7 +774,7 @@ function renderTaskTableCompact(tasks, execs) {
           : escHtml(v||'');
         return '<div>' + cell + ' <sup style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:8px">' + (count||row._stageCount||1) + '</sup></div>';
       }},
-      { key: 'title', title: '任务标题', minWidth: 100, align: 'left', render: function(v, row) { return row._empty?'—':'<span style="cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" onclick="openTaskDetail('+row.id+')" title="查看任务详情">'+escHtml(v||'')+'</span>'; } },
+      { key: 'title', title: '任务标题', minWidth: 100, align: 'left', render: function(v, row) { return row._empty?'—':_renderTaskManualTag(row)+'<span style="cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" onclick="openTaskDetail('+row.id+')" title="查看任务详情">'+escHtml(v||'')+'</span>'; } },
       { key: 'fav', title: '', width: '24px', minWidth: 24, className: 'dt-fav-cell', render: function(v, row) { return row._empty ? '' : favStar('task', row.id, {stopPropagation: true}); } },
       { key: 'status', title: '状态', width: '6%', minWidth: 80, render: function(v, row) { return row._empty?'—':renderPill(v||'todo'); } },
       { key: 'priority', title: '优先级', width: '5%', minWidth: 65, render: function(v, row) { return row._empty?'—':(typeof renderPriorityBadge==='function'?renderPriorityBadge(v):escHtml(v||'medium')); } },
@@ -808,7 +863,7 @@ function _renderTaskRowCompact(t, stageStart) {
   var effectiveStart = t.start_date || stageStart || null;
   var startDateStr = effectiveStart || '—';
   var startTitle = effectiveStart ? escHtml(effectiveStart) : (stageStart ? '默认取阶段开始时间' : '未设置');
-  return '<td style="text-align:left;cursor:pointer" onclick="openTaskDetail(' + t.id + ')" title="查看任务详情">' + escHtml(t.title) + '</td>' +
+  return '<td style="text-align:left;cursor:pointer" onclick="openTaskDetail(' + t.id + ')" title="查看任务详情">' + _renderTaskManualTag(t) + escHtml(t.title) + '</td>' +
     '<td style="text-align:center' + (window._approvalEnabled ? ';cursor:pointer' : '') + '"' + (window._approvalEnabled ? ' onclick="event.stopPropagation();openReviewerDialog(' + t.id + ')" title="' + (t.status === 'review' && t.reviewer_name ? '审批人: ' + escHtml(t.reviewer_name) + ' — 点击修改' : '点击修改审批人') + '"' : '') + '>' + renderPill(t.status || 'todo') + '</td>' +
     '<td style="text-align:center">' + (typeof renderPriority === 'function' ? renderPriority(t.priority) : escHtml(t.priority || 'medium')) + '</td>' +
     '<td style="font-size:12px;cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();openAssignDialog(' + t.id + ')" title="指派任务">' + assigneeName + '</td>' +
@@ -1310,6 +1365,8 @@ function _renderTaskDetailBody(t) {
             (t.template_id
               ? '<span class="dkpi-val" style="color:var(--muted)">' + stageName + '</span>'
               : _buildEditableField(t.id, 'stage_name', 'stage-select', '<span class="dkpi-val">' + stageName + '</span>', t.stage_name || '', {v:'',l:''}, ' data-project-id="' + (t.project_id || '') + '" data-project-code="' + escHtml(t.project_code || '') + '"')) + '</div>' +
+          // 任务来源：阶段右侧的独立子卡片（模板：项目类型>阶段 / 手动）
+          _renderTaskSourceKpi(t) +
           // Per-person progress (team tasks only)
           _renderTeamProgress(t) +
           // Reviewer (editable, only if approval enabled)
