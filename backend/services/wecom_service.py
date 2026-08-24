@@ -13,6 +13,85 @@ from backend.models.local import LocalUser
 
 logger = logging.getLogger(__name__)
 
+# 免打卡/无需正常打卡的审批关键词（请假/外出/出差等）
+_LEAVE_KEYWORDS = ('外出', '请假', '外勤', '出差', '调休', '事假', '病假')
+
+def _is_leave_name(name) -> bool:
+    """Whether an approval name means "no normal checkin needed" (leave/out-of-office)."""
+    return any(k in (name or '') for k in _LEAVE_KEYWORDS)
+
+
+def _approval_date_range(raw):
+    """Extract (date_range, slice_info) from an approval apply_data (Attendance/Vacation/DateRange)."""
+    apply_data = raw.get("apply_data", {}) or {}
+    dr, slice_info = None, {}
+    for content in (apply_data.get("contents") or []):
+        ctrl = content.get("control", "")
+        val = content.get("value", {})
+        att = None
+        if ctrl == "Attendance":
+            att = val.get("attendance", {})
+        elif ctrl == "Vacation":
+            va = val.get("vacation", {})
+            att = va.get("attendance", {}) if isinstance(va, dict) else {}
+        if isinstance(att, dict):
+            dr = att.get("date_range", {}) or dr
+            slice_info = att.get("slice_info", {}) or slice_info
+        elif ctrl == "DateRange":
+            dr = val.get("date_range", {}) or dr
+    return dr, slice_info
+
+
+def _approval_day_periods(raw):
+    """按天展开一个免打卡审批 → [(day_str, all_day), ...].
+    撤销(4)/驳回(3) → 空；跨天请假每天一条；all_day=True 表示整天(请假时长>=8h)。
+    """
+    try:
+        sp_status = raw.get("sp_status", 0)
+        if sp_status not in (1, 2):
+            return []
+        if not _is_leave_name(raw.get("sp_name", "")):
+            return []
+        dr, slice_info = _approval_date_range(raw)
+        items = (slice_info.get("day_items") if isinstance(slice_info, dict) else None) or []
+        if not items:
+            if not dr or not dr.get("new_begin"):
+                return []
+            day_str = (datetime.fromtimestamp(dr.get("new_begin", 0), tz=timezone.utc) + timedelta(hours=8)).strftime("%Y-%m-%d")
+            return [(day_str, True)]
+        periods = []
+        for di in items:
+            day_ts0 = di.get("daytime", 0)
+            if not day_ts0:
+                continue
+            day_str = (datetime.fromtimestamp(day_ts0, tz=timezone.utc) + timedelta(hours=8)).strftime("%Y-%m-%d")
+            dur = di.get("duration", 0) or 0
+            periods.append((day_str, dur >= 28800))  # >=8h 视为整天(去午休后)
+        return periods
+    except Exception:
+        return []
+
+
+def _approval_day_time(raw, day_str):
+    """某天请假的起止时分(展示用)；整天/中间天返回空串。"""
+    try:
+        dr, _ = _approval_date_range(raw)
+        if not dr:
+            return "", ""
+        b = dr.get("new_begin", 0); e = dr.get("new_end", 0)
+        bs = es = ""
+        if b:
+            bdt = datetime.fromtimestamp(b, tz=timezone.utc) + timedelta(hours=8)
+            if bdt.strftime("%Y-%m-%d") == day_str:
+                bs = bdt.strftime("%H:%M")
+        if e:
+            edt = datetime.fromtimestamp(e, tz=timezone.utc) + timedelta(hours=8)
+            if edt.strftime("%Y-%m-%d") == day_str:
+                es = edt.strftime("%H:%M")
+        return bs, es
+    except Exception:
+        return "", ""
+
 
 def _parse_date(d: Optional[str]) -> Optional[date]:
     """Parse YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ to date."""
@@ -62,11 +141,11 @@ async def _sync_wecom_users(db, client):
             if linked:
                 linked.display_name = name
 
-async def sync_wecom_data(db: Session) -> dict:
+async def sync_wecom_data(db: Session, days: int = 60) -> dict:
     """Full sync: fetch checkin + approval data from WeCom for all linked users.
 
-    Fetches the last 60 days of data. Only writes if API succeeds;
-    keeps existing data on failure.
+    `days` = 回看窗口天数(default 60 天). 每日定时同步用 60;
+    周日定时同步/手动同步可传 180(最近6个月). 只写不删,失败保留旧数据.
     """
     from backend.services.wecom_client import WeComClient
 
@@ -88,7 +167,7 @@ async def sync_wecom_data(db: Session) -> dict:
 
         now = datetime.now(timezone.utc)
         end_ts = int(now.timestamp())
-        start_ts = end_ts - 60 * 86400  # last 60 days
+        start_ts = end_ts - days * 86400  # look back `days` (default 60)
 
         created, updated, total_fetched = 0, 0, 0
 
@@ -342,15 +421,18 @@ def _extract_approval_hours(detail: dict) -> tuple:
     if not apply_user_id:
         return (None, None, 0)
 
-    # Only process relevant approval types
-    if "外出" not in sp_name:
-        return (None, None, 0)  # skip non-out-of-office approvals
+    # Only process relevant approval types (外出/请假等免打卡审批):
+    # 请假、外勤、出差、调休、事假、病假、外出 —— 这类审批当天无需正常打卡。
+    _LEAVE_APPROVAL_KEYS = ('外出', '请假', '外勤', '出差', '调休', '事假', '病假')
+    if not any(k in sp_name for k in _LEAVE_APPROVAL_KEYS):
+        return (None, None, 0)  # skip non leave/out-of-office approvals
 
     # Parse apply_data for time range
     apply_data = detail.get("apply_data", {})
     contents = apply_data.get("contents", [])
 
     start_ts, end_ts = None, None
+    vacation_duration = None  # 请假按天核算(已去午休)，避免 date_range 跨度跨天巨大
 
     for item in contents:
         ctrl = item.get("control", "")
@@ -392,6 +474,20 @@ def _extract_approval_hours(detail: dict) -> tuple:
                 end_ts = e if e else s  # same-day
                 break
 
+        elif ctrl == "Vacation":
+            # 请假审批：时间范围在 value.vacation.attendance.date_range
+            va = val.get("vacation", {})
+            att = va.get("attendance", {}) if isinstance(va, dict) else {}
+            dr = att.get("date_range", {}) if isinstance(att, dict) else {}
+            if dr.get("new_begin") and dr.get("new_end"):
+                start_ts = dr.get("new_begin")
+                end_ts = dr.get("new_end")
+                # 请假时长按 slice_info.duration(每天工作时长,已去午休)，而非 date_range 跨度
+                si = att.get("slice_info", {}) if isinstance(att, dict) else {}
+                if isinstance(si, dict) and si.get("duration"):
+                    vacation_duration = si["duration"]
+                break
+
         elif ctrl == "PunchCorrection":
             # 补卡审批 — already handled by checkin data, skip
             return (None, None, 0)
@@ -402,11 +498,14 @@ def _extract_approval_hours(detail: dict) -> tuple:
         logger.warning(f"WeCom approval: no time range in '{sp_name}' for {apply_user_id}, controls={ctrls}")
         return (None, None, 0)
 
-    # Calculate hours (no lunch deduction for 外出)
-    duration_sec = end_ts - start_ts
-    if duration_sec <= 0:
-        return (None, None, 0)
-    hours = duration_sec / 3600.0
+    # Calculate hours — 请假按天数(去午休)；外出/其它按 date_range 跨度(无午休扣减)
+    if vacation_duration:
+        hours = vacation_duration / 3600.0
+    else:
+        duration_sec = end_ts - start_ts
+        if duration_sec <= 0:
+            return (None, None, 0)
+        hours = duration_sec / 3600.0
 
     # Determine the date of the approval start
     try:
@@ -542,7 +641,14 @@ def get_checkin_calendar(
         if c.source == "checkin":
             daily_map[d]["_checkin_h"] = max(daily_map[d]["_checkin_h"], c.work_hours or 0)
         elif c.source == "approval":
-            daily_map[d]["_approval_h"] = max(daily_map[d]["_approval_h"], c.work_hours or 0)
+            # 只把有效审批(审批中1/已通过2)计入；驳回3/撤销4不计
+            try:
+                _rawd = json.loads(c.raw_data or "{}")
+                _st = _rawd.get("sp_status", 0)
+            except Exception:
+                _st = 0
+            if _st in (1, 2):
+                daily_map[d]["_approval_h"] = max(daily_map[d]["_approval_h"], c.work_hours or 0)
         # Extract details from raw_data based on source type
         try:
             if c.source == "approval":
@@ -550,44 +656,30 @@ def get_checkin_calendar(
                 raw = json.loads(c.raw_data or "{}")
                 if isinstance(raw, dict):
                     sp_name = raw.get("sp_name", "")
-                    if sp_name:
-                        # Extract time range from apply_data
-                        start_str, end_str = "", ""
-                        try:
-                            apply_data = raw.get("apply_data", {})
-                            for content in (apply_data.get("contents") or []):
-                                ctrl = content.get("control", "")
-                                cid = content.get("id", "")
-                                if ctrl == "Attendance" and cid == "smart-time":
-                                    dr = (content.get("value", {})
-                                          .get("attendance", {})
-                                          .get("date_range", {}))
-                                    begin_ts = dr.get("new_begin", 0)
-                                    end_ts = dr.get("new_end", 0)
-                                    if begin_ts:
-                                        bt = datetime.fromtimestamp(begin_ts, tz=timezone.utc) + timedelta(hours=8)
-                                        start_str = bt.strftime("%H:%M")
-                                    if end_ts:
-                                        et = datetime.fromtimestamp(end_ts, tz=timezone.utc) + timedelta(hours=8)
-                                        end_str = et.strftime("%H:%M")
-                                    break
-                        except Exception:
-                            pass
-                        time_label = f"{start_str}-{end_str}" if start_str and end_str else ""
-                        # Add approval label with time to checkin_info
-                        if time_label:
-                            daily_map[d]["checkin_info"] += f"[{sp_name} {time_label}] "
-                        else:
-                            daily_map[d]["checkin_info"] += f"[{sp_name}] "
-                        if "approvals" not in daily_map[d]:
-                            daily_map[d]["approvals"] = []
-                        daily_map[d]["approvals"].append({
-                            "name": sp_name,
-                            "status": raw.get("sp_status", 0),
-                            "apply_time": raw.get("apply_time", 0),
-                            "start_time": start_str,
-                            "end_time": end_str,
-                        })
+                    sp_status = raw.get("sp_status", 0)
+                    # 仅有效审批(审批中1/已通过2)进入详情；撤销4/驳回3 不显示不标记
+                    if sp_name and sp_status in (1, 2):
+                        # 跨天请假按天展开；valid 且无 day_items 时单日兜底
+                        periods = _approval_day_periods(raw)
+                        if not periods:
+                            periods = [(d, False)]
+                        for (day_str, all_day) in periods:
+                            if day_str not in daily_map:
+                                daily_map[day_str] = {"date": day_str, "total_hours": 0.0, "checkin_info": "", "checkins": [], "approvals": [], "_checkin_h": 0.0, "_approval_h": 0.0}
+                            dm = daily_map[day_str]
+                            start_str, end_str = _approval_day_time(raw, day_str)
+                            tlabel = f"{start_str}-{end_str}" if start_str and end_str else ""
+                            dm["checkin_info"] += f"[{sp_name} {tlabel}] " if tlabel else f"[{sp_name}] "
+                            if "approvals" not in dm:
+                                dm["approvals"] = []
+                            dm["approvals"].append({
+                                "name": sp_name,
+                                "status": raw.get("sp_status", 0),
+                                "apply_time": raw.get("apply_time", 0),
+                                "start_time": start_str,
+                                "end_time": end_str,
+                                "all_day": all_day,
+                            })
             else:
                 # Checkin records: raw_data is an array [{checkin_type, checkin_time, ...}]
                 raw = json.loads(c.raw_data or "[]")
@@ -611,10 +703,17 @@ def get_checkin_calendar(
             pass
 
     # Resolve total_hours from stored work_hours (checkin wins; approval fills gap)
+    # 免打卡(请假/外出等)日：审批工时不计入"打卡"，总工时只算真实打卡(checkin)
     for m in daily_map.values():
         ch = m.pop("_checkin_h", 0.0)
         ah = m.pop("_approval_h", 0.0)
-        m["total_hours"] = round(max(ch, ah), 2)
+        # 免打卡(请假/外出等)日: 有效审批(审批中1/已通过2)；其工时不计入打卡
+        is_leave = any(a.get("status") in (1, 2) and _is_leave_name(a.get("name", ""))
+                       for a in m.get("approvals", []))
+        if is_leave:
+            m["total_hours"] = round(ch, 2)
+        else:
+            m["total_hours"] = round(max(ch, ah), 2)
 
     daily = sorted(daily_map.values(), key=lambda x: x["date"], reverse=True)
     total = sum(d["total_hours"] for d in daily)

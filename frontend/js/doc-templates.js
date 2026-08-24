@@ -137,6 +137,12 @@ function _renderRegexGenerator(inputId, docType) {
   html += '<input class="search-inp" id="rg-codeval-' + uniq + '" placeholder="如 PE0445 / LNS677A-V010" style="width:100%;box-sizing:border-box;font-family:var(--mono);font-size:12px;padding:4px 6px" oninput="_rgTest(\'' + inputId + '\')">';
   html += '</div>';
 
+  // Example path: {code} replaced by the assumed value (concrete standard-conforming example)
+  html += '<div style="margin-bottom:8px">';
+  html += '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:2px">示例路径（{code} 已替换为假设值，标准示例）</label>';
+  html += '<code id="rg-example-' + uniq + '" style="display:block;padding:6px 8px;background:var(--bg);border-radius:4px;font-size:12px;word-break:break-all;min-height:18px;color:var(--accent)"></code>';
+  html += '</div>';
+
   // Test
   html += '<div style="margin-bottom:4px">';
   html += '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:2px">快速测试（输入实际完整路径）</label>';
@@ -185,6 +191,14 @@ function _rgTest(inputId) {
   var pattern = target.value || '';
   var testVal = testEl.value.trim();
   var codeVal = codevalEl ? codevalEl.value.trim() : '';
+
+  // Show an example path: {code} replaced by the assumed code value.
+  var exampleEl = document.getElementById('rg-example-' + uniq);
+  if (exampleEl) {
+    var ex = pattern.split('{code}').join(codeVal);
+    exampleEl.textContent = ex || '(空)';
+  }
+
   if (!testVal) { resultEl.textContent = ''; resultEl.style.color = ''; return; }
   if (!pattern) { resultEl.textContent = '❌ 正则表达式为空'; resultEl.style.color = 'var(--danger)'; return; }
   // Replace {code} placeholder with the assumed value (regex-escaped)

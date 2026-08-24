@@ -28,6 +28,7 @@
   --fg:          #17191F;
   --muted:       #6B7694;
   --border:      #E3E8F4;
+  --hatch:       #A9B1C4;   /* 斜线/未记录填充：比 muted 更浅，弱化视觉 */
   --sidebar-w:   228px;
   --header-h:    54px;
   --font:        -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
@@ -60,6 +61,7 @@
   --fg:          #E4E9F6;
   --muted:       #717DA0;
   --border:      #232839;
+  --hatch:       #3E4A5E;   /* 斜线/未记录填充：深色主题下略亮于背景的深灰 */
   --sh:          0 1px 3px rgba(0,0,0,0.35), 0 1px 2px rgba(0,0,0,0.3);
   --sh-md:       0 4px 14px rgba(0,0,0,0.45);
 }

@@ -1688,6 +1688,20 @@ function _hidePieTooltip() {
 
 var _calYear, _calMonth;
 
+/* 免打卡审批名称关键词（请假/外出等） */
+var _LEAVE_KEYS = ['请假','外出','外勤','出差','调休','事假','病假'];
+function _isLeaveName(name) {
+  return _LEAVE_KEYS.some(function(k) { return (name||'').indexOf(k) >= 0; });
+}
+/** 某日 calendar daily 是否为"整天免打卡"日（有提交/已通过且整天(all_day)的请假审批）。
+    半天/部分请假日不算整天免打卡 —— 该日仍需上班打卡。 */
+function _isLeaveDate(weDay) {
+  if (!weDay || !weDay.approvals) return false;
+  return weDay.approvals.some(function(a) {
+    return (a.status === 1 || a.status === 2) && a.all_day && _isLeaveName(a.name);
+  });
+}
+
 function _renderMergedMonthCalendar(today, wecomDailyMap, wlData, weData) {
   if (!_calYear) { _calYear = today.getFullYear(); _calMonth = today.getMonth()+1; }
   var total = weData ? (weData.total||0) : 0;
@@ -1734,6 +1748,11 @@ function _renderMergedMonthCalendar(today, wecomDailyMap, wlData, weData) {
 
     // Check if this date has checkin data
     var hasCheckin = !!(weDay && weDay.total_hours > 0);
+    // 免打卡(请假/外出等审批通过)日：无需打卡，不显示红边框，灰底
+    var isLeave = isCurrentMonth && _isLeaveDate(weDay);
+    // 存储该日审批信息，供工时详情弹窗展示请假
+    window._calLeaveMap = window._calLeaveMap || {};
+    window._calLeaveMap[dStr] = (weDay && weDay.approvals) || [];
 
     // 圆点：有打卡即显示；红/绿 = PMA 记录工时 vs 打卡工时（记录覆盖打卡 = 100% 绿）
     var wlH = 0;
@@ -1741,7 +1760,7 @@ function _renderMergedMonthCalendar(today, wecomDailyMap, wlData, weData) {
       wlDay.tasks.forEach(function(t) { wlH += (t.calculated_hours || t.hours || 0); });
     }
     var dotHtml = '';
-    if (isCurrentMonth && hasCheckin) {
+    if (isCurrentMonth && hasCheckin && !isLeave) {
       // 与页面展示(.toFixed(1))口径一致：按 0.1h 四舍五入后比较，
       // 避免"显示打卡/记录均 8.2h/100% 却因浮点差(~0.01h)判红点"的误导
       var filled = Math.round(wlH * 10) >= Math.round(h * 10);
@@ -1765,13 +1784,18 @@ function _renderMergedMonthCalendar(today, wecomDailyMap, wlData, weData) {
         cellBg = 'background:' + otColors[overLevel] + ';';
       }
     }
+    // 免打卡(请假)日：无打卡记录 → 细浅斜纹（与饼图"未记录"一致，浅色不遮挡日期数字）
+    if (isLeave && !hasCheckin) {
+      cellBg = 'background: repeating-linear-gradient(45deg, var(--hatch) 0 1px, transparent 1px 4px);';
+      tipText = tipText || '请假/免打卡';
+    }
 
-    // 工作日（周一~五）无打卡 → 红边框（仅限过去日期，未来未打卡属正常）；今天 → accent
+    // 工作日（周一~五）无打卡 → 红边框（仅限过去日期，未来未打卡属正常）；今天 → accent；免打卡日不红
     var dow = new Date(y, mm, displayDay).getDay();
     var isWorkday = dow >= 1 && dow <= 5;
     var borderColor = 'var(--border)';
     var borderWidth = '1px';
-    if (isCurrentMonth && isWorkday && !hasCheckin && dStr < todayStr) {
+    if (isCurrentMonth && isWorkday && !hasCheckin && dStr < todayStr && !isLeave) {
       borderColor = 'var(--danger)';
       borderWidth = '2px';
     } else if (isToday) {
@@ -1830,10 +1854,27 @@ function _openMergedDayDetail(dateStr, checkinHours, hasCheckin) {
 
     // Merged summary bar: checkin + worklog stats in one row
     // Always render the full structure; zero/empty values shown as-is (issue #263)
-    var checkinLabel = '<span style="font-size:15px;color:var(--muted)">打卡 <b style="color:' + (hasCheckin ? 'var(--success)' : 'var(--muted)') + ';font-size:17px">' + checkinHours.toFixed(1) + 'h</b></span>';
-    var ratioText = checkinHours > 0
-      ? '<span style="font-size:15px;color:var(--muted)" title="已记录工时 ÷ 打卡工时的比例">记录/打卡 <b style="color:var(--fg);font-size:17px">' + (totalCalcH / checkinHours * 100).toFixed(0) + '%</b></span>'
-      : '<span style="font-size:15px;color:var(--muted)" title="已记录工时 ÷ 打卡工时的比例">记录/打卡 <b style="color:var(--fg);font-size:17px">—</b></span>';
+    var leaveDay = false;
+    try { leaveDay = ((window._calLeaveMap && window._calLeaveMap[dateStr]) || []).some(function(a){ return a.status === 2 && _isLeaveName(a.name); }); } catch(e) {}
+    var checkinLabel = leaveDay
+      ? '<span style="font-size:15px;color:var(--muted)">打卡 <b style="color:var(--warn);font-size:17px">免打卡</b></span>'
+      : '<span style="font-size:15px;color:var(--muted)">打卡 <b style="color:' + (hasCheckin ? 'var(--success)' : 'var(--muted)') + ';font-size:17px">' + checkinHours.toFixed(1) + 'h</b></span>';
+    var ratioText = leaveDay
+      ? ''
+      : (checkinHours > 0
+        ? '<span style="font-size:15px;color:var(--muted)" title="已记录工时 ÷ 打卡工时的比例">记录/打卡 <b style="color:var(--fg);font-size:17px">' + (totalCalcH / checkinHours * 100).toFixed(0) + '%</b></span>'
+        : '<span style="font-size:15px;color:var(--muted)" title="已记录工时 ÷ 打卡工时的比例">记录/打卡 <b style="color:var(--fg);font-size:17px">—</b></span>');
+
+    // 免打卡(请假/外出等)审批信息 —— 展示到工时详情
+    var leaveInfo = '';
+    try {
+      var _appsD = (window._calLeaveMap && window._calLeaveMap[dateStr]) || [];
+      var _leaveApps = _appsD.filter(function(a) { return (a.status === 1 || a.status === 2) && _isLeaveName(a.name); });
+      if (_leaveApps.length) {
+        var _lnames = _leaveApps.map(function(a) { return a.name; }).join('、');
+        leaveInfo = '<span style="font-size:13px;color:var(--warn);font-weight:600" title="该日已请假/免打卡，无需打卡">免打卡：' + escHtml(_lnames) + '</span>';
+      }
+    } catch(e) {}
 
     var summaryBar = '<div style="display:flex;gap:16px;padding:12px 16px;margin-bottom:12px;background:var(--bg);border-radius:8px;border:1px solid var(--border);align-items:center;flex-wrap:wrap">' +
       checkinLabel +
@@ -1841,6 +1882,7 @@ function _openMergedDayDetail(dateStr, checkinHours, hasCheckin) {
       '<span style="font-size:15px;color:var(--muted)" title="当天所有工时记录的总小时数">已记录 <b style="color:var(--fg);font-size:17px">' + totalCalcH.toFixed(1) + 'h</b></span>' +
       '<span style="font-size:15px;color:var(--muted)">' + entryCount + ' 条</span>' +
       ratioText +
+      (leaveInfo ? '<span style="color:var(--border)">|</span>' + leaveInfo : '') +
     '</div>' +
     '<div id="wl-checkin-detail" style="font-size:15px;color:var(--muted);margin-bottom:10px;padding:10px 14px;background:var(--bg);border-radius:8px;border:1px solid var(--border);display:none">加载打卡详情...</div>';
 
@@ -1906,9 +1948,11 @@ function _openMergedDayDetail(dateStr, checkinHours, hasCheckin) {
         day.checkins.forEach(function(c) {
           var t = c.type || '打卡';
           var tm = c.time || '?';
+          var hasEx = !!c.exception;
+          var tColor = hasEx ? 'var(--warn)' : 'var(--success)';  // 异常/未打卡→警示色; 正常→绿
           var ex = c.exception ? ' <span style="color:var(--warn)">(' + c.exception + ')</span>' : '';
           var loc = c.location ? ' @' + c.location : '';
-          lines.push(t + ': ' + tm + ex + loc);
+          lines.push('<span style="color:' + tColor + ';font-weight:600">' + escHtml(t) + '</span>: ' + tm + ex + loc);
         });
       }
       if (day && day.approvals && day.approvals.length) {
@@ -1918,8 +1962,8 @@ function _openMergedDayDetail(dateStr, checkinHours, hasCheckin) {
       }
       // No checkin/approval data: still render the structure, values left empty (issue #263)
       if (!lines.length) {
-        lines.push('上班打卡: -- <span style="color:var(--warn)">(未打卡)</span>');
-        lines.push('下班打卡: -- <span style="color:var(--warn)">(未打卡)</span>');
+        lines.push('<span style="color:var(--warn)">上班打卡</span>: -- <span style="color:var(--warn)">(未打卡)</span>');
+        lines.push('<span style="color:var(--warn)">下班打卡</span>: -- <span style="color:var(--warn)">(未打卡)</span>');
       }
       detailEl.innerHTML = lines.join(' | ');
       detailEl.style.display = '';

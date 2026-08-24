@@ -192,7 +192,7 @@ async def trigger_single_sync(source: str, db: Session = Depends(get_db), user: 
         t0 = _time.time()
         wc_sync_log = _wc_log_sync(db, "wecom")
         try:
-            wc_result = await _wecom_svc.sync_wecom_data(db)
+            wc_result = await _wecom_svc.sync_wecom_data(db, days=180)  # 手动同步最近6个月
             elapsed = round(_time.time() - t0, 1)
             fetched = wc_result.get('fetched', 0)
             created = wc_result.get('created', 0)

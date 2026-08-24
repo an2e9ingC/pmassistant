@@ -352,7 +352,9 @@ class SyncService:
                     _sync_progress["phase"] = "企业微信打卡数据"
                     from backend.services import wecom_service as _wecom_svc
                     t0 = time.time()
-                    wc_result = await _wecom_svc.sync_wecom_data(db)
+                    # 周日固定同步最近6个月;平日每日同步保持60天
+                    _wc_days = 180 if datetime.now().weekday() == 6 else 60
+                    wc_result = await _wecom_svc.sync_wecom_data(db, days=_wc_days)
                     timings["wecom"] = round(time.time() - t0, 1)
                     wecom_summary = {
                         "status": "success",
