@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-当前版本：v2026.08.24-beta4 | 最后更新：2026-08-24
+当前版本：v2026.08.24-beta5 | 最后更新：2026-08-24
 
 ---
 
@@ -231,6 +231,7 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-08-24 | v2026.08.24-beta5 | fix: 模板任务改名未同步已创建任务标题 — update_task_template 只更新模板记录,不改已由该模板创建的任务标题(仅"重新应用模板"时才同步);修复:task_name变化时同步template_id匹配且is_diverged==0(未人工改过)的任务title,避免覆盖人工改名 |
 | 2026-08-24 | v2026.08.24-beta4 | fix: 任务批量删除误走Bug路径(函数名冲突) — 任务版_doBatchDelete(components.js)与Bug版_doBatchDelete(bugs.js)同名全局函数,先进Bug列表加载bugs.js后其Bug版覆盖任务版,导致任务批量删除确认调Bug版→verifyPassword"批量删除0个Bug"+DELETE/bugs/batch;将任务版改名_doTaskBatchDelete消除冲突,复现路径(先Bug后任务)恢复正常 |
 | 2026-08-24 | v2026.08.24-beta3 | fix: 项目详情批量删除串用(Bug路径) — 先进Bug列表tab再切任务tab后,任务批量删除误走/bugs/batch并提示"0个Bug"(任务id被Bug表过滤为0);根因是任务/Bug批量选择集合(_selectedTasks/_selectedBugs)与两个底部浮层工具栏(batch-toolbar/bug-batch-toolbar)跨视图/跨tab残留不清理;新增_clearAllBatchState()并在gotoView(主视图切换)与switchDTab(项目详情tab切换)时清空集合+隐藏工具栏 |
 | 2026-08-24 | v2026.08.24-beta2 | fix: 工时日历红点误判 — 红点用未圆整浮点比较(wlH>=h),显示却用toFixed(1)/toFixed(0)圆整,导致"打卡/记录均8.2h、记录比100%"仍显示红点(实际差0.01h);改为Math.round(wlH*10)>=Math.round(h*10)对齐显示口径,真实未达标(记录6h/打卡8h)仍判红 |

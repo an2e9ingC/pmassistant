@@ -1033,11 +1033,16 @@ def create_task_template(db: Session, data: dict) -> dict:
 
 
 def update_task_template(db: Session, template_id: int, data: dict) -> Optional[dict]:
-    """Update an existing task template."""
+    """Update an existing task template. If task_name changes, also sync the title of
+    every task already created from this template, except ones the user hand-edited
+    (is_diverged) so we never overwrite manual renames."""
+    import logging
+    _log = logging.getLogger(__name__)
     tpl = db.query(TaskTemplate).filter(TaskTemplate.id == template_id).first()
     if not tpl:
         return None
     new_name = data.get("task_name", tpl.task_name)
+    old_name = tpl.task_name
     if new_name != tpl.task_name or "stage_type" in data:
         dup = db.query(TaskTemplate).filter(
             TaskTemplate.project_type == tpl.project_type,
@@ -1052,6 +1057,17 @@ def update_task_template(db: Session, template_id: int, data: dict) -> Optional[
             setattr(tpl, field, data[field])
     db.commit()
     db.refresh(tpl)
+    # 任务模板改名 → 同步已创建项目里由该模板生成的任务标题
+    # （跳过用户手工改过的任务 is_diverged，避免覆盖人工命名）
+    if new_name != old_name:
+        affected = db.query(Task).filter(
+            Task.template_id == template_id,
+            or_(Task.is_diverged == 0, Task.is_diverged == None),
+            Task.title != new_name,
+        ).update({"title": new_name}, synchronize_session=False)
+        db.commit()
+        if affected:
+            _log.info(f"[task-template-update] template_id={template_id}: synced title to {new_name!r} on {affected} tasks")
     return _task_template_dict(tpl)
 
 
