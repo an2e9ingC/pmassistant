@@ -237,6 +237,9 @@ function gotoView(view, opts) {
 
   // Activate view DOM (use _viewEl alias if set, e.g. task-create → tasks)
   document.querySelectorAll('.view').forEach(function(v) { v.classList.remove('active'); });
+  // Clear any leftover batch-selection state/toolbars from a previous view
+  // (prevents task delete from hitting the bug batch path, and vice-versa)
+  if (typeof _clearAllBatchState === 'function') _clearAllBatchState();
   var domView = entry._viewEl || view;
   var viewEl = document.getElementById('view-' + domView);
   if (viewEl) viewEl.classList.add('active');

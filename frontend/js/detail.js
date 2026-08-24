@@ -2142,6 +2142,9 @@ async function submitNote() {
 function switchDTab(id, el) {
   document.querySelectorAll('.dsec').forEach(function(s) { s.classList.remove('active'); });
   document.querySelectorAll('.dtab').forEach(function(t) { t.classList.remove('active'); });
+  // Reset any cross-panel batch-selection state/toolbars (task vs bug) when switching
+  // project-detail tabs, so e.g. a previous Bug list can't feed the Task batch delete.
+  if (typeof _clearAllBatchState === 'function') _clearAllBatchState();
   var sec = document.getElementById('dsec-' + id);
   if (sec) sec.classList.add('active');
   if (el) { el.classList.add('active'); }

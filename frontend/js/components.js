@@ -3015,6 +3015,21 @@ function _clearBatchSelection() {
   _updateBatchToolbar();
 }
 
+/* ── Clear ALL batch-selection state & floating toolbars (defensive) ──
+   任务(_selectedTasks/batch-toolbar)与Bug(_selectedBugs/bug-batch-toolbar)共享
+   全局集合与两个同位置的底部浮层；切换视图/Tab时清空集合并隐藏工具栏，避免某视图
+   的批量状态残留或双工具栏重叠造成误操作。
+   (注：批量删除误走Bug路径的真正根因是 _doBatchDelete 函数名冲突，见 _doTaskBatchDelete；
+   本函数仅作额外防御，非修复所必需。) */
+function _clearAllBatchState() {
+  try { if (window._selectedTasks && window._selectedTasks.clear) window._selectedTasks.clear(); } catch(e) {}
+  try { if (window._selectedBugs && window._selectedBugs.clear) window._selectedBugs.clear(); } catch(e) {}
+  var bt = document.getElementById('batch-toolbar');
+  if (bt) bt.style.display = 'none';
+  var bbt = document.getElementById('bug-batch-toolbar');
+  if (bbt) bbt.style.display = 'none';
+}
+
 /* ── Batch Delete ── */
 function batchDeleteTasks() {
   if (_selectedTasks.size === 0) { showToast('请先选择任务', 'error'); return; }
@@ -3022,11 +3037,13 @@ function batchDeleteTasks() {
   openDialog('批量删除任务',
     '<div class="confirm-dlg">确认删除 <b>' + count + '</b> 个任务？<br><br>相关工时记录和评论也会被删除。<br><br><b style="color:var(--danger)">此操作不可撤销。</b></div>',
     [{text: '取消', onclick: 'closeSharedDialog()'},
-     {text: '确认删除', cls: 'btn-danger', onclick: 'closeSharedDialog();_doBatchDelete()'}],
+     {text: '确认删除', cls: 'btn-danger', onclick: 'closeSharedDialog();_doTaskBatchDelete()'}],
     {hideClose: true});
 }
 
-async function _doBatchDelete() {
+/* 注意：勿命名为 _doBatchDelete —— bugs.js 的同名函数会在其加载后覆盖本函数，
+   导致任务批量删除误调 Bug 删除逻辑（弹"批量删除 0 个Bug"并走 /bugs/batch）。 */
+async function _doTaskBatchDelete() {
   var ok = await verifyPassword('批量删除 ' + _selectedTasks.size + ' 个任务', 'skip_task_delete');
   if (!ok) return;
   try {
