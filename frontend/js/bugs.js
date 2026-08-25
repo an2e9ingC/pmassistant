@@ -57,7 +57,6 @@ function initBugs(firstArg) {
           '<span class="tab" id="bug-view-report" onclick="switchBugView(\'report\')">报表</span>' +
         '</span>' +
         '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-left:auto">' +
-          (typeof hasPerm === 'function' && hasPerm('sync') ? '<button class="btn" style="font-size:11px;padding:3px 10px;color:var(--accent);border-color:var(--accent)" onclick="openZentaoImportDialog()" title="从禅道导入Bug">从禅道导入</button>' : '') +
           '<button class="btn" style="font-size:11px;padding:3px 10px;color:var(--success);border-color:var(--success)" onclick="exportBugsCsv()" title="导出当前筛选结果为CSV">导出CSV</button>' +
         '</div>' +
       '</div>' +

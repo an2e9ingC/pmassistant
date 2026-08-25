@@ -595,17 +595,11 @@ function renderProdInfo(p, docs) {
       '<div class="dkpi-lbl">' + s.icon + ' ' + s.label + '</div>' +
       '<div class="dkpi-val" style="color:' + s.color + '">' + s.value + '</div></div>';
   });
-  // Bug KPI
-  var zentaoBugs = p.total_bugs || 0;
+  // Bug KPI（屏蔽禅道 bug 显示，仅展示 PMA 本地 Bug）
   var pmaBugs = p.pma_bugs || 0;
-  var totalBugs = zentaoBugs + pmaBugs;
-  var bugPctZentao = totalBugs > 0 ? Math.round(zentaoBugs / totalBugs * 100) : 0;
-  var bugPctPma = totalBugs > 0 ? Math.round(pmaBugs / totalBugs * 100) : 0;
-  var ringParts = [];
-  if (zentaoBugs > 0) ringParts.push('var(--yellow) 0% ' + bugPctZentao + '%');
-  if (pmaBugs > 0) ringParts.push('var(--accent) ' + bugPctZentao + '% ' + (bugPctZentao + bugPctPma) + '%');
-  var ringGradient = ringParts.length ? 'background:conic-gradient(' + ringParts.join(',') + ');' : '';
-  var bugRingHtml = '<div class="dkpi" title="禅道: ' + zentaoBugs + ' | PMA: ' + pmaBugs + '">' +
+  var totalBugs = pmaBugs;
+  var ringGradient = pmaBugs > 0 ? 'background:conic-gradient(var(--accent) 0 100%);' : '';
+  var bugRingHtml = '<div class="dkpi" title="PMA Bug: ' + pmaBugs + '">' +
     '<div class="dkpi-lbl">🐛 Bug 总数</div>' +
     '<div style="display:flex;align-items:center;gap:10px">' +
       '<div style="position:relative;width:52px;height:52px;flex-shrink:0">' +
@@ -614,8 +608,7 @@ function renderProdInfo(p, docs) {
           '<span style="font-size:14px;font-weight:700;font-family:var(--mono);color:var(--fg)">' + totalBugs + '</span></div>' +
       '</div>' +
       '<div style="display:flex;gap:4px;margin-top:2px">' +
-        '<button class="btn btn-xs" style="font-size:10px;color:var(--yellow);border-color:var(--yellow);padding:1px 5px" onclick="event.stopPropagation();window.open(\'' + (p.zentao_bugs_url || '#') + '\',\'_blank\')" title="禅道 Bug ' + zentaoBugs + '">禅道 ' + zentaoBugs + '</button>' +
-        '<button class="btn btn-xs" style="font-size:10px;color:var(--accent);border-color:var(--accent);padding:1px 5px" onclick="event.stopPropagation()" title="PMA Bug ' + pmaBugs + '（待完成）">PMA ' + pmaBugs + '</button>' +
+        '<button class="btn btn-xs" style="font-size:10px;color:var(--accent);border-color:var(--accent);padding:1px 5px" onclick="event.stopPropagation();switchProdTab(\'bugs\')" title="PMA Bug ' + pmaBugs + '（待完成），点击查看">PMA ' + pmaBugs + '</button>' +
       '</div>' +
     '</div>' +
   '</div>';
