@@ -54,19 +54,24 @@ Co-Authored-By: <model-name> / <tool-name>
 
 ### 1. 更新版本信息（commit 前完成，确保一并提交）
 
-1. **更新 `frontend/index.html` + `frontend/login.html`** 的 `<meta name="app-version">`（如本轮尚未更新）
+> **版本号日期必须用「实时日期」**：每次 commit 前，先执行
+> `TODAY=$(TZ=Asia/Shanghai date '+%Y-%m-%d')` 取**当天真实日期**，用它拼接版本号 `v${TODAY}-betaN`。
+> **严禁使用上下文 / 上一次记录 / 记忆里的日期** —— 系统时间可能漂移，上下文日期可能过期或错误（例如曾出现 08-19 → 08-21 → 08-24 错用）。日期只信 `date` 的输出。
+
+1. **更新 `frontend/index.html` + `frontend/login.html`** 的 `<meta name="app-version">`（如本轮尚未更新）—— 版本号日期用上面的实时 `TODAY`
 2. **更新 `docs/dev-plan.md`**：
    - 页头版本号同步为 `#app-version` 当前值
-   - 变更记录表**插入新条目到表头下方第一条**（最新在最前面，按日期+版本倒序）：
+   - 变更记录表**插入新条目到表头下方第一条**（最新在最前面，按日期+版本倒序；日期同样用实时 `TODAY`）：
 
    ```bash
    # 更新页头版本号 + 最后更新日期（显式指定 TZ=Asia/Shanghai 确保北京时间）
+   TODAY=$(TZ=Asia/Shanghai date +%Y-%m-%d)   # 实时日期，勿用上下文/记忆日期
    sed -i 's/当前版本：v[^ ]*/当前版本：v新版本号/' docs/dev-plan.md
-   sed -i 's/最后更新：[0-9-]*/最后更新：'$(TZ=Asia/Shanghai date +%Y-%m-%d)'/' docs/dev-plan.md
+   sed -i "s/最后更新：[0-9-]*/最后更新：$TODAY/" docs/dev-plan.md
 
    # 在变更记录表头分隔行之后插入新条目（确保最新记录在第一位）
    LINE=$(awk '/^## 变更记录/{found=1} found && /^\|------\|------\|------\|$/{print NR; exit}' docs/dev-plan.md)
-   sed -i "${LINE}a | $(TZ=Asia/Shanghai date +%Y-%m-%d) | v新版本号 | type: 简短描述 |" docs/dev-plan.md
+   sed -i "${LINE}a | $TODAY | v新版本号 | type: 简短描述 |" docs/dev-plan.md
    ```
 3. **数据层变更**同步更新 `docs/db.md`
 

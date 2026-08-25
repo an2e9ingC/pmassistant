@@ -11,7 +11,7 @@ allowed-tools: Read, Write, Edit, Bash
 
 `vYYYY.MM.DD-betaN`（开发） / `vYYYY.MM.DD`（发布）
 
-- 日期部分用**当天实际日期**
+- 日期部分用**当天实际日期** —— 必须用**实时**获取：`TODAY=$(TZ=Asia/Shanghai date '+%Y-%m-%d')`。**严禁用上下文 / 记忆 / 上一次记录里的日期**（系统时间可能漂移，如曾出现 08-19 → 08-21 → 08-24 错用）。
 - 同一天内 beta 递增（beta1, beta2, ...）
 - 跨天重置 beta 为 1
 
