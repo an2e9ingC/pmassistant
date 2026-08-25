@@ -3,7 +3,7 @@ import re
 from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import desc as _desc, asc as _asc, case
+from sqlalchemy import desc as _desc, asc as _asc, case, func, cast, Integer
 from sqlalchemy.orm import Session
 
 from backend.models.zentao import CachedProject
@@ -170,13 +170,19 @@ def get_project_list(
     total = q.count()
 
     # Default: sort by end ASC, NULLS LAST (long-term projects at bottom)
-    sort_col = {
-        "end": CachedProject.end,
-        "code": CachedProject.code,
-    }.get(sort_by, CachedProject.id)
+    if sort_by == "code":
+        # 按编号后数字部分排序(如 PE0456 → 456)，数值序，避免字符串序错排
+        sort_col = cast(func.substr(CachedProject.code, 3), Integer)
+    else:
+        sort_col = {
+            "end": CachedProject.end,
+            "code": CachedProject.code,
+        }.get(sort_by, CachedProject.id)
     direction = _asc if sort_order == "asc" else _desc
+    # 无编号(NULL/空)项目始终排最后
+    null_rank = _asc if sort_order == "desc" else _desc
     items = q.order_by(
-        direction(case((sort_col.is_(None), 1), else_=0)),
+        null_rank(case((sort_col.is_(None), 1), else_=0)),
         direction(sort_col),
     ).offset((page - 1) * limit).limit(limit).all()
 

@@ -18,8 +18,8 @@ var dashFilter = {
   category: '',      // '' | 'active' | 'completed' | 'high_risk' | 'incomplete_docs'
   program: '',       // '' | program_id
   search: '',
-  sortBy: 'end',
-  sortOrder: 'asc',
+  sortBy: 'code',
+  sortOrder: 'desc',
   _searchTimer: null,
 
   // ── KPI card click (single-select: clicking already-active card does nothing) ──

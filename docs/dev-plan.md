@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-当前版本：v2026.08.24-beta27 | 最后更新：2026-08-24
+当前版本：v2026.08.25-beta1 | 最后更新：2026-08-25
 
 ---
 
@@ -231,6 +231,7 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-08-25 | v2026.08.25-beta1 | fix: 项目总览默认按编号从大到小(issue#4) — dashFilter默认sort由end升序改为code降序;后端get_project_list按编号后数字部分排序(CAST(substr(code,3)),PE0456→456数值序,避免字符串序把PE0456排在PE04510前),无编号项目排最后 |
 | 2026-08-24 | v2026.08.24-beta27 | feat: 屏蔽禅道Bug显示 — ①产品详情Bug总数据屏蔽禅道:移除禅道扇区与"禅道 N"按钮,仅显示PMA计数(环形单色PMA);②Bug管理页顶部移除"从禅道导入"按钮;PMA本地Bug(含导入)仍正常显示 |
 | 2026-08-24 | v2026.08.24-beta26 | feat: 产品详情PMA Bug计数可点击 — 产品详情基本信息Bug总数中"PMA N"按钮改为onclick switchProdTab('bugs')跳转到该产品Bug tab子页,title补"点击查看" |
 | 2026-08-24 | v2026.08.24-beta25 | fix: 撤销/驳回请假不再显示+免打卡详情识别审批中 — ①后端get_checkin_calendar approval分支对sp_status非1/2(撤销4/驳回3)完全跳过,不再写入checkin_info/approvals(修复撤销请假仍显示"请假"-重复);②前端leaveInfo判定放宽到status1/2(此前只status2,审批中请假未显示免打卡标记) |
