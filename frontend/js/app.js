@@ -1436,8 +1436,8 @@ async function init() {
 
   // Apply theme once — after sync, before content render
   _applyTheme(_getEffectiveTheme());
-  // Apply UI density preference (after prefs sync)
-  _applyUiDensity(localStorage.getItem('pma_ui_density') || 'normal');
+  // Apply UI density preference (after prefs sync)；无偏好时默认"紧凑"使首次加载即紧凑
+  _applyUiDensity(localStorage.getItem('pma_ui_density') || 'compact');
   var themeTgl = document.getElementById('theme-toggle');
   if (themeTgl) themeTgl.classList.toggle('on', document.documentElement.getAttribute('data-theme') === 'dark');
 
@@ -3163,8 +3163,7 @@ function _renderPreferencesPanel(content) {
   var tickerSpeed = localStorage.getItem('pma_ticker_speed') || 'normal';
   var tickerMode = localStorage.getItem('pma_ticker_mode') || 'activities';
   var themeMode = localStorage.getItem('pm_theme_mode') || 'auto';
-  var uiDensity = localStorage.getItem('pma_ui_density') || 'normal';
-  var tableDensity = localStorage.getItem('pma_table_density') || 'normal';
+  var uiDensity = localStorage.getItem('pma_ui_density') || 'compact';
   var speedLabels = {slow: '慢速', normal: '正常', fast: '快速'};
   var speedBtns = '';
   ['slow', 'normal', 'fast'].forEach(function(s) {
@@ -3192,22 +3191,13 @@ function _renderPreferencesPanel(content) {
       '" onclick="setThemeMode(\'' + m + '\');_renderPreferencesPanel()">' + themeIcons[m] + '</button>';
   });
 
-  // UI Density buttons (filter card font size)
-  var uiDensityLabels = {compact: '紧凑', normal: '标准', comfortable: '舒适'};
+  // UI 密度 5 档：全局统一缩放所有标准组件(按钮/卡片/表格行高/输入框/标题/留白等)
+  var uiDensityLabels = {extra_compact: '最紧', compact: '紧凑', normal: '标准', comfortable: '舒适', extra_comfortable: '最舒'};
   var uiDensityBtns = '';
-  ['compact', 'normal', 'comfortable'].forEach(function(d) {
+  ['extra-compact', 'compact', 'normal', 'comfortable', 'extra-comfortable'].forEach(function(d) {
     uiDensityBtns += '<button class="btn btn-xs" style="margin-right:4px;' +
       (uiDensity === d ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : '') +
-      '" onclick="setUiDensity(\'' + d + '\');_renderPreferencesPanel()">' + uiDensityLabels[d] + '</button>';
-  });
-
-  // Table Density buttons (row spacing)
-  var tblDensityLabels = {compact: '紧凑', normal: '标准', comfortable: '舒适'};
-  var tblDensityBtns = '';
-  ['compact', 'normal', 'comfortable'].forEach(function(d) {
-    tblDensityBtns += '<button class="btn btn-xs" style="margin-right:4px;' +
-      (tableDensity === d ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : '') +
-      '" onclick="_setTableDensity(\'' + d + '\');_renderPreferencesPanel()">' + tblDensityLabels[d] + '</button>';
+      '" onclick="setUiDensity(\'' + d + '\');_renderPreferencesPanel()">' + (uiDensityLabels[d.replace(/-/g,'_')] || d) + '</button>';
   });
 
   // Default filter preferences
@@ -3265,12 +3255,6 @@ function _renderPreferencesPanel(content) {
             '<span class="integration-row-lbl">界面密度</span>' +
             '<span class="integration-row-val">' + uiDensityBtns + '</span>' +
           '</div>' +
-        '</div>' +
-
-        // Card 3: 表格
-        '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px">' +
-          '<div style="font-size:12px;font-weight:600;color:var(--fg);margin-bottom:10px">表格</div>' +
-          '<div style="margin-bottom:6px"><span style="font-size:11px;color:var(--muted)">行高密度</span><div style="margin-top:3px">' + tblDensityBtns + '</div></div>' +
         '</div>' +
 
         // Card 4: 默认筛选
@@ -3357,14 +3341,6 @@ async function showNewUserWelcomeDialog() {
         '<button class="btn btn-primary" onclick="closePwDialog()">知道了</button></div>' +
     '</div></div>';
   document.body.insertAdjacentHTML('beforeend', html);
-}
-
-function _setTableDensity(level) {
-  if (typeof DataTable !== 'undefined' && DataTable.setAllDensity) {
-    DataTable.setAllDensity(level);
-  } else {
-    _savePref('pma_table_density', level);
-  }
 }
 
 function _setDefaultFilter(type, value) {

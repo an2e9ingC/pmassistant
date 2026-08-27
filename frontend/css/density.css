@@ -1,0 +1,51 @@
+/* ═══════════════════════════════════════════════════
+   GLOBAL UI DENSITY — 5 档统一缩放
+   本文件最后加载，基于 html[data-ui-density] 设置的 --ui-scale，
+   把所有标准组件的字号/内边距/间距统一缩放（含表格行高、卡片、按钮、输入框、标题、KPI、页面留白）。
+   组件内联 style 的尺寸不参与（标准组件以 class 定义为主）。
+   ═══════════════════════════════════════════════════ */
+
+/* ── 行间距（随系数缩放；标准=1.0 时 1.5）── */
+body { line-height: calc(1.5 * var(--ui-scale)); }
+
+/* ── 按钮 ── */
+.btn { font-size: calc(12.5px * var(--ui-scale)); padding: calc(6px * var(--ui-scale)) calc(14px * var(--ui-scale)); }
+.btn.btn-sm   { font-size: calc(11px * var(--ui-scale));  padding: calc(3px * var(--ui-scale)) calc(10px * var(--ui-scale)); }
+.btn.btn-xs   { font-size: calc(10px * var(--ui-scale));  padding: calc(2px * var(--ui-scale)) calc(6px * var(--ui-scale)); }
+.btn.btn-icon { font-size: calc(13px * var(--ui-scale));  padding: calc(2px * var(--ui-scale)) calc(6px * var(--ui-scale)); }
+
+/* ── 标题 / 区块 ── */
+.section-title { font-size: calc(14px * var(--ui-scale)); }
+.section-hd    { margin-bottom: calc(12px * var(--ui-scale)); }
+.section-acts  { gap: calc(8px * var(--ui-scale)); }
+
+/* ── 卡片 ── */
+.card-pad { padding: calc(16px * var(--ui-scale)); }
+
+/* ── Tabs / 胶囊 / 徽章 ── */
+.tabs { padding: calc(3px * var(--ui-scale)); gap: calc(2px * var(--ui-scale)); }
+.tab  { font-size: calc(12.5px * var(--ui-scale)); padding: calc(5px * var(--ui-scale)) calc(14px * var(--ui-scale)); }
+.pill { font-size: calc(11.5px * var(--ui-scale)); padding: calc(3px * var(--ui-scale)) calc(10px * var(--ui-scale)); }
+.badge{ font-size: calc(11px * var(--ui-scale));   padding: calc(2px * var(--ui-scale)) calc(8px * var(--ui-scale)); }
+
+/* ── 输入框 ── */
+.search-inp { font-size: calc(13px * var(--ui-scale)); padding: calc(8px * var(--ui-scale)) calc(10px * var(--ui-scale)); }
+
+/* ── KPI 卡片 ── */
+.kpi-grid { gap: calc(14px * var(--ui-scale)); margin-bottom: calc(22px * var(--ui-scale)); }
+.kpi-card { padding: calc(16px * var(--ui-scale)) calc(18px * var(--ui-scale)) calc(14px * var(--ui-scale)); }
+.kpi-label { font-size: calc(11px * var(--ui-scale)); margin-bottom: calc(8px * var(--ui-scale)); }
+.kpi-value { font-size: calc(28px * var(--ui-scale)); margin-bottom: calc(6px * var(--ui-scale)); }
+
+/* ── 表格（行高/列内边距/字号 随档位缩放，含密度变体）。
+   表格行高融入整体外观缩放：与其它标准组件一样由同一 --ui-scale 统一缩放。 ── */
+.dt-table thead th { padding: calc(7px * var(--ui-scale)) calc(10px * var(--ui-scale)); font-size: calc(12.5px * var(--ui-scale)); }
+.dt-table tbody td { padding: calc(8px * var(--ui-scale)) calc(10px * var(--ui-scale)); font-size: calc(13px * var(--ui-scale)); }
+.dt-table.dt-density-compact thead th    { padding: calc(5px * var(--ui-scale)) calc(10px * var(--ui-scale)); font-size: calc(11.5px * var(--ui-scale)); }
+.dt-table.dt-density-compact tbody td    { padding: calc(5px * var(--ui-scale)) calc(10px * var(--ui-scale)); font-size: calc(12px * var(--ui-scale)); }
+.dt-table.dt-density-comfortable thead th { padding: calc(10px * var(--ui-scale)) calc(14px * var(--ui-scale)); font-size: calc(13px * var(--ui-scale)); }
+.dt-table.dt-density-comfortable tbody td { padding: calc(10px * var(--ui-scale)) calc(14px * var(--ui-scale)); font-size: calc(13.5px * var(--ui-scale)); }
+
+/* ── 页面留白 / 过滤栏 ── */
+.content { padding: calc(24px * var(--ui-scale)) calc(28px * var(--ui-scale)); }
+.task-filter-bar { gap: calc(10px * var(--ui-scale)); margin-bottom: calc(12px * var(--ui-scale)); }

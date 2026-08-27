@@ -361,7 +361,6 @@ function _initDashDt() {
       { key: 'tags', title: '项目标签', width: '9%', minWidth: 80, render: function(v, row) { var tl=row.tags_list||[]; return (tl.length&&tl[0]!=='')?tl.slice(0,3).map(function(t){return '<span class="tag-badge tag-'+(t.length%5)+'">#'+escHtml(t)+'</span>';}).join(' '):'<span style="font-size:11.5px;color:var(--muted)">无</span>'; } }
     ],
     resizable: true,
-    density: (function() { try { return localStorage.getItem('pma_table_density') || 'normal'; } catch(e) { return 'normal'; } })(),
     clickable: true
   });
   window._dashDt = _dashDt;

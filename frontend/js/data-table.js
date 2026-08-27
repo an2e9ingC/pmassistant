@@ -54,7 +54,7 @@ var DataTable = (function() {
     this._onSelectChange = opts.onSelectChange || null;
     this._emptyText = opts.emptyText || '暂无数据';
     this._clickable = opts.clickable === true;
-    this._density = opts.density || (function() { try { return localStorage.getItem('pma_table_density') || 'normal'; } catch(e) { return 'normal'; } })();
+    this._density = opts.density || 'normal';
     this._onRowClick = opts.onRowClick || null;
 
     // ── Sort state ──
@@ -513,29 +513,6 @@ var DataTable = (function() {
       var id = row[self._idKey];
       return id != null && self._selected.has(id);
     });
-  };
-
-  DataTable.prototype.setDensity = function(level) {
-    this._tableEl.classList.remove('dt-density-compact', 'dt-density-comfortable');
-    if (level === 'compact') {
-      this._density = 'compact';
-      this._tableEl.classList.add('dt-density-compact');
-    } else if (level === 'comfortable') {
-      this._density = 'comfortable';
-      this._tableEl.classList.add('dt-density-comfortable');
-    } else {
-      this._density = 'normal';
-    }
-  };
-
-  // Global: persist density preference and apply to ALL tables
-  DataTable.setAllDensity = function(level) {
-    try { localStorage.setItem('pma_table_density', level); } catch(e) {}
-    if (typeof _savePref === 'function') {
-      try { _savePref('pma_table_density', level); } catch(e) {}
-    }
-    _gcInstances();
-    _instances.forEach(function(dt) { dt.setDensity(level); });
   };
 
   DataTable.prototype.filter = function(predicate) {

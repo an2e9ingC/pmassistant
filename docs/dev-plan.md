@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-当前版本：v2026.08.27-beta19 | 最后更新：2026-08-27
+当前版本：v2026.08.27-beta25 | 最后更新：2026-08-27
 
 ---
 
@@ -231,6 +231,8 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-08-27 | v2026.08.27-beta25 | feat(ui): 全局UI密度5档统一缩放(单一紧凑系数) — ①--ui-scale(html[data-ui-density])5档:最紧0.80/紧凑0.90/标准1.00/舒适1.05/最舒1.10(标准=1.0为基准,其余按系数自动计算),默认无偏好=紧凑0.90使首次加载即紧凑;②新增 density.css 最后加载,所有标准组件(btn族/section-title/card-pad/tab/pill/badge/search-inp/kpi族/dt-table单元格行高/content留白/task-filter-bar)+body行间距统一用 calc(<base>*var(--ui-scale)) 缩放,表格行高/列内边距/字号/组件间隙随档位自适应;③偏好设置"UI密度"5档按钮;④删除临时局部尺寸调整:#uc-right-panel zoom:0.9 移除(面板内组件由全局系数缩放),#uc-inner margin-right 校正;⑤删除"表格行高密度"独立卡片与功能(_setTableDensity/setDensity/setAllDensity/pma_table_density/dashboard density),行高统一 --ui-scale;⑥index/login 引入 density.css  |
+| 2026-08-27 | v2026.08.27-beta24 | style(ui): 用户中心右侧面板整体缩小10%+自适应高度 — ①#uc-right-panel(工时日历/项目工时占比/任务统计)用 zoom:0.9 整体缩10%(同步缩放布局,内容贴合 max-height,无需滚动即可直接显示全部组件,非transform只缩视觉);②max-height 按浏览器动态(calc(100vh-70px)+_ucUpdateLayout按barTop-70),高度自适应页面;#uc-inner margin-right:360px→334px,释放空间让给左侧表格 |
 | 2026-08-27 | v2026.08.27-beta19 | style(ui): 全局左侧导航栏收窄为内容宽度 — --sidebar-w 228px→150px(最长项"GitLab 发布"约146px),仅容纳图标+导航文字+徽标;.main margin-left 与底部 fixed 条 left:var(--sidebar-w) 同步生效,多出空间让给内容区 |
 | 2026-08-27 | v2026.08.27-beta18 | style(ui): 工时日历圆点统一"白色圆环+状态色中心" — 所有红/绿圆点(记录工时vs打卡工时)统一为状态色(绿=100%记录/红=未覆盖)填充+白色描边圆环,任意底色(含绿底整日)下均清晰可见且样式一致;取消单独绿底特判 |
 | 2026-08-27 | v2026.08.27-beta17 | fix(ui): 绿底白环缩小为圆点大小+免打卡日打卡详情统一 — ①白色圆环宽高由9px改为6px(与圆点一致),白描边透明中心;②工时详情"打卡详情":请假/外出/出差等免打卡日改为统一展示审批信息(请假 起-止),不再展示"未打卡"打卡记录(避免同日有无打卡记录导致详情内容不一致) |

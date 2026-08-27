@@ -111,3 +111,16 @@
 ═══════════════════════════════════════════════════ */
 .card-pad  { padding: 16px; }
 .card-clip { padding: 0; overflow: hidden; }
+
+/* ═══════════════════════════════════════════════════
+   UI 密度 5 档缩放 (全局 compact 显示)
+   html[data-ui-density] 由偏好设置驱动；标准组件用
+   calc(<base> * var(--ui-scale)) 统一缩放字号/内边距。
+   ═══════════════════════════════════════════════════ */
+/* 系数：标准=1.00，其余档按系数自动计算（默认=紧凑0.90，使首次加载即紧凑） */
+html                                   { --ui-scale: 0.90; }
+html[data-ui-density="extra-compact"]  { --ui-scale: 0.80; }
+html[data-ui-density="compact"]        { --ui-scale: 0.90; }
+html[data-ui-density="normal"]         { --ui-scale: 1.00; }
+html[data-ui-density="comfortable"]    { --ui-scale: 1.05; }
+html[data-ui-density="extra-comfortable"] { --ui-scale: 1.10; }
