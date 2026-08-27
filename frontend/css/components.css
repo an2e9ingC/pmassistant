@@ -839,9 +839,9 @@ input[type="checkbox"] { accent-color: var(--accent); }
 /* Fixed right panel: calendar at top + stats below, aligned with profile card row */
 #uc-right-panel {
   position: fixed; top: 70px; right: 20px; width: 340px;
-  max-height: calc(100vh - 70px); overflow-y: auto; z-index: 10;
+  max-height: calc(100vh - 70px); z-index: 10;
   display: flex; flex-direction: column; gap: 0;
-  /* 面板内组件(kpi-card/dt-table等)统一由全局 --ui-scale 缩放，不再局部 zoom */
+  /* 面板内组件(kpi-card/dt-table等)统一由全局 --ui-scale 缩放；直接显示，不做滚动容器 */
 }
 #uc-right-panel #uc-calendar {
   flex-shrink: 0;

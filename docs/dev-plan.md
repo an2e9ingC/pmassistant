@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-当前版本：v2026.08.27-beta25 | 最后更新：2026-08-27
+当前版本：v2026.08.27-beta26 | 最后更新：2026-08-27
 
 ---
 
@@ -231,6 +231,7 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-08-27 | v2026.08.27-beta26 | feat(ui): 用户中心页面在系数=1.0 基础上优化 — ①KPI(任务/Bug过滤卡)标签字体与右侧卡片标题一致(h2 15px),value 28px*0.8;②任务/Bug列表:编号列58px、项目编号78px、产品编号114px(min-width+内容自适应,产品编号长值ellipsis),项目/产品编号按钮(font+padding+border)缩20%,阶段列96px(可显示PCBA入库质检)、责任人min-width 80px(可显示5个汉字),多余空间留给任务标题列;③右侧工时日历/项目工时占比/任务统计面板 transform:scale(0.9) 缩10%,#uc-inner margin-right→334px,面板去除 overflow-y:auto 直接显示(非滚动容器) |
 | 2026-08-27 | v2026.08.27-beta25 | feat(ui): 全局UI密度5档统一缩放(单一紧凑系数) — ①--ui-scale(html[data-ui-density])5档:最紧0.80/紧凑0.90/标准1.00/舒适1.05/最舒1.10(标准=1.0为基准,其余按系数自动计算),默认无偏好=紧凑0.90使首次加载即紧凑;②新增 density.css 最后加载,所有标准组件(btn族/section-title/card-pad/tab/pill/badge/search-inp/kpi族/dt-table单元格行高/content留白/task-filter-bar)+body行间距统一用 calc(<base>*var(--ui-scale)) 缩放,表格行高/列内边距/字号/组件间隙随档位自适应;③偏好设置"UI密度"5档按钮;④删除临时局部尺寸调整:#uc-right-panel zoom:0.9 移除(面板内组件由全局系数缩放),#uc-inner margin-right 校正;⑤删除"表格行高密度"独立卡片与功能(_setTableDensity/setDensity/setAllDensity/pma_table_density/dashboard density),行高统一 --ui-scale;⑥index/login 引入 density.css  |
 | 2026-08-27 | v2026.08.27-beta24 | style(ui): 用户中心右侧面板整体缩小10%+自适应高度 — ①#uc-right-panel(工时日历/项目工时占比/任务统计)用 zoom:0.9 整体缩10%(同步缩放布局,内容贴合 max-height,无需滚动即可直接显示全部组件,非transform只缩视觉);②max-height 按浏览器动态(calc(100vh-70px)+_ucUpdateLayout按barTop-70),高度自适应页面;#uc-inner margin-right:360px→334px,释放空间让给左侧表格 |
 | 2026-08-27 | v2026.08.27-beta19 | style(ui): 全局左侧导航栏收窄为内容宽度 — --sidebar-w 228px→150px(最长项"GitLab 发布"约146px),仅容纳图标+导航文字+徽标;.main margin-left 与底部 fixed 条 left:var(--sidebar-w) 同步生效,多出空间让给内容区 |

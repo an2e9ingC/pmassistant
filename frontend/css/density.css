@@ -49,3 +49,19 @@ body { line-height: calc(1.5 * var(--ui-scale)); }
 /* ── 页面留白 / 过滤栏 ── */
 .content { padding: calc(24px * var(--ui-scale)) calc(28px * var(--ui-scale)); }
 .task-filter-bar { gap: calc(10px * var(--ui-scale)); margin-bottom: calc(12px * var(--ui-scale)); }
+
+/* ═══ 用户中心页面专项优化（在系数=1.0 基础上的基准微调，仍随 --ui-scale 联动）═══ */
+/* 1. KPI(任务/Bug 过滤卡)标签字体与右侧卡片标题(h2 15px)一致 */
+#view-user-center .uc-cat-cards .kpi-card .kpi-label { font-size: calc(15px * var(--ui-scale)); font-weight: 620; }
+#view-user-center .uc-cat-cards .kpi-card .kpi-value { font-size: calc(28px * 0.8 * var(--ui-scale)); }
+
+/* 2. 任务/Bug 列表：项目编号/产品编号 按钮(含字体+内边距+边框)缩小 20%；长编号用 ... 省略(产品编号列已有ellipsis) */
+#uc-tasks-dt .proj-code-btn,
+#uc-bugs-dt .proj-code-btn {
+  font-size: calc(12px * 0.8 * var(--ui-scale));
+  padding: calc(4px * 0.8 * var(--ui-scale)) calc(10px * 0.8 * var(--ui-scale));
+  border-width: calc(2px * 0.8 * var(--ui-scale));
+}
+
+/* 3. 右侧 工时日历/项目工时占比/任务统计 面板卡片整体缩小 10% */
+#uc-right-panel { transform: scale(0.9); transform-origin: top right; }
