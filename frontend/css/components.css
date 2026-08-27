@@ -26,6 +26,15 @@
   white-space: nowrap;
 }
 
+/* 模板创建任务标题前的「来源模板」小徽章（🔒跟随 / 🔓已脱离） */
+.task-template-tag {
+  display: inline-block; vertical-align: middle;
+  font-size: 9px; line-height: 1; padding: 1px 4px; margin-right: 5px;
+  border-radius: 3px; background: var(--accent-lt);
+  border: 1px solid var(--accent); color: var(--accent);
+  white-space: nowrap;
+}
+
 /* 从任务详情跳转到模板管理时，目标任务模板行的高亮闪烁 */
 .tpl-flash { animation: tplFlash 0.6s ease-in-out 3; }
 @keyframes tplFlash { 0%,100% { background: transparent; } 50% { background: var(--accent-lt); } }

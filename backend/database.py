@@ -458,36 +458,30 @@ def _migrate_to_sqlcipher():
 
 
 def _migrate_task_is_deleted():
-    """Split is_diverged semantics: add is_deleted column, fix existing data.
+    """Separate is_diverged (sync-guard) from is_deleted (soft-delete).
 
-    Before: is_diverged served three roles — visibility gate, sync guard, soft-delete.
-    After:  is_diverged = sync guard only (prevents template from overwriting user edits).
-            is_deleted  = soft-delete flag (hides task from lists).
+    is_diverged = sync guard only: the task was edited away from its template and
+                 the template sync must NOT overwrite it. The task stays visible and
+                 is_diverged must NEVER imply soft-delete.
+    is_deleted  = user soft-delete: hides the task from lists (set by delete_task).
+
+    This migration ONLY cleans up legacy broken is_diverged flags left by old
+    template-deletion code. It NEVER derives is_deleted from is_diverged.
     """
     import sqlite3
     try:
         conn = sqlite3.connect(_db_path)
         cursor = conn.cursor()
-        # Check if column already exists (_migrate_sqlite may have added it)
         cursor.execute("PRAGMA table_info(pma_tasks)")
         cols = {row[1] for row in cursor.fetchall()}
-        if "is_deleted" not in cols:
-            logger.info("_migrate_task_is_deleted: is_deleted column not yet added by _migrate_sqlite, skipping data fix")
+        # is_deleted column is added by _migrate_sqlite; nothing to fix here if is_diverged missing.
+        if "is_diverged" not in cols:
             conn.close()
             return
 
-        # Fix: tasks with is_diverged=1 and template_id still valid → genuine user soft-delete
-        # Copy is_diverged → is_deleted, keep is_diverged for sync guard
-        cursor.execute("""
-            UPDATE pma_tasks SET is_deleted = 1
-            WHERE is_diverged = 1
-              AND template_id IS NOT NULL
-              AND template_id IN (SELECT id FROM task_templates)
-        """)
-        genuine = cursor.rowcount
-
-        # Fix: tasks with is_diverged=1 and template_id=NULL or template deleted
-        # These were set by broken template-deletion code — clear is_diverged
+        # Legacy broken flags: is_diverged=1 but template no longer exists / task has no template.
+        # Set by old code that conflated "removed from template" with divergence.
+        # Clear them so the task is treated as a normal (manual) task again; do NOT touch is_deleted.
         cursor.execute("""
             UPDATE pma_tasks SET is_diverged = 0
             WHERE is_diverged = 1
@@ -498,8 +492,8 @@ def _migrate_task_is_deleted():
 
         conn.commit()
         conn.close()
-        if genuine or cleared:
-            logger.info(f"_migrate_task_is_deleted: genuine_soft_deletes={genuine}, cleared_broken={cleared}")
+        if cleared:
+            logger.info(f"_migrate_task_is_deleted: cleared legacy is_diverged on {cleared} tasks")
     except Exception as e:
         logger.warning(f"_migrate_task_is_deleted: {e}")
 

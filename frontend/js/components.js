@@ -2351,8 +2351,12 @@ function renderMarkdown(md) {
 function _renderTaskManualTag(task) {
   if (!task) return '';
   if (task.template_id === undefined) return '';  // 数据未提供该字段，保守不标记
-  if (task.template_id) return '';                // 模板创建的任务不标记
-  return '<span class="task-manual-tag">手动</span>';  // 0/null/'' → 手动创建
+  if (!task.template_id) return '<span class="task-manual-tag">手动</span>';  // 0/null/'' → 手动创建
+  // 模板创建的任务：跟随模板(🔒由模板控制) / 已脱离(🔓不再被模板覆盖)
+  if (task.is_diverged === 1 || task.is_diverged === '1') {
+    return '<span class="task-template-tag" title="来源模板（已脱离，不再被模板同步覆盖）">🔓 来源模板</span>';
+  }
+  return '<span class="task-template-tag" title="来源模板（由模板控制）">🔒 来源模板</span>';
 }
 
 /** 静默判断当前用户是否具备某权限（不弹 toast）。 */
@@ -2374,8 +2378,13 @@ function _renderTaskSourceKpi(task) {
     var inner = canJump
       ? '<a href="javascript:void(0)" onclick="openTaskTemplate(\'' + escJs(ti.project_type) + '\',\'' + escJs(ti.stage_type) + '\',' + ti.id + ')" style="color:var(--accent);text-decoration:underline" title="跳转到模板管理">' + escHtml(label) + '</a>'
       : '<span style="color:var(--fg)">' + escHtml(label) + '</span>';
+    // 来源状态图标：跟随模板(🔒) / 已脱离(🔓)
+    var diverged = (task.is_diverged === 1 || task.is_diverged === '1');
+    var stateIcon = diverged
+      ? '<span title="已脱离模板（不再被模板同步覆盖）">🔓</span> '
+      : '<span title="由模板控制">🔒</span> ';
     return '<div class="dkpi"><div class="dkpi-lbl">任务来源</div>' +
-      '<div class="dkpi-val" style="font-size:12px;font-weight:530;margin-top:1px;white-space:nowrap"><span style="color:var(--muted)">模板：</span>' + inner + '</div></div>';
+      '<div class="dkpi-val" style="font-size:12px;font-weight:530;margin-top:1px;white-space:nowrap">' + stateIcon + '<span style="color:var(--muted)">模板：</span>' + inner + '</div></div>';
   }
   return '<div class="dkpi"><div class="dkpi-lbl">任务来源</div>' +
     '<div class="dkpi-val" style="font-size:12px;font-weight:530;margin-top:1px;white-space:nowrap"><span style="color:var(--muted)">手动</span></div></div>';

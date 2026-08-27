@@ -423,6 +423,7 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
                 user_name_map[u.id] = u.display_name or u.username
     # Also resolve assignee_ids names for change logging
     old_assignee_ids = (t.assignee_ids or [])[:]
+    old_assignee_id_single = t.assignee_id if t.assignee_id is not None else None
     if "assignee_ids" in data:
         new_assignee_ids = data["assignee_ids"] or []
         all_ids = set(old_assignee_ids) | set(new_assignee_ids)
@@ -476,10 +477,12 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
 
     if "stage_name" in data:
         t.stage_name = data["stage_name"] or None
-    # When assignee of a template task is changed, mark as diverged (prevent sync overwrite)
-    if t.template_id and "assignee_ids" in data:
-        new_ids = set(data["assignee_ids"] or [])
-        old_ids = set(old_assignee_ids)
+    # When assignee of a template task changes (single or multi), mark as diverged
+    # (prevent template sync from overwriting the user's responsible-person change).
+    if t.template_id and ("assignee_ids" in data or "assignee_id" in data):
+        new_ids = set(t.assignee_ids or ([t.assignee_id] if t.assignee_id else []))
+        old_ids = set(old_assignee_ids) if old_assignee_ids else (
+            set([old_assignee_id_single]) if old_assignee_id_single is not None else set())
         if new_ids != old_ids:
             t.is_diverged = 1
             changes.append("已脱离模板（责任人变更）")
@@ -877,12 +880,24 @@ def _log_audit(db: Session, project_id: int, username: Optional[str], action: st
             "task_update": "任务更新",
             "task_delete": "任务删除",
         }
+        # Resolve project code for structured context (PEXXX shown in operation log)
+        project_code = ""
+        if project_id:
+            from backend.models.zentao import CachedProject
+            proj = db.query(CachedProject).filter(CachedProject.id == project_id).first()
+            if proj:
+                project_code = proj.code or ""
         log = AuditLog(
             username=username,
             action=action,
             detail=detail,
             category=AUDIT_CAT_TASK,
             level="low",
+            project_id=project_id,
+            project_code=project_code,
+            task_id=task_id,
+            task_name=task_name or "",
+            task_assignee=task_assignee or "",
         )
         db.add(log)
         # Also write to ProjectActivity so it appears in project detail timeline

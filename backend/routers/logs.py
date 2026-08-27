@@ -160,6 +160,11 @@ def view_audit_logs(
                     "level": e.level or "medium",
                     "detail": e.detail or "",
                     "created_at": to_local_str(e.created_at) if e.created_at else "",
+                    "project_id": getattr(e, "project_id", None),
+                    "project_code": getattr(e, "project_code", None) or "",
+                    "task_id": getattr(e, "task_id", None),
+                    "task_name": getattr(e, "task_name", None) or "",
+                    "task_assignee": getattr(e, "task_assignee", None) or "",
                 }
                 for e in entries
             ],

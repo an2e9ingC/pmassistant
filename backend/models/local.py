@@ -158,6 +158,12 @@ class AuditLog(Base):
     level = Column(String(16), nullable=True, default="medium")     # high/medium/low
     detail = Column(String(512), nullable=True)
     created_at = Column(DateTime, default=func.now())
+    # ── 结构化上下文（任务类日志：项目/任务信息）──
+    project_id = Column(Integer, nullable=True)
+    project_code = Column(String(64), nullable=True)
+    task_id = Column(Integer, nullable=True)
+    task_name = Column(String(256), nullable=True)
+    task_assignee = Column(String(128), nullable=True)
 
 
 class ProjectActivity(Base):

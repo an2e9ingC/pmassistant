@@ -918,7 +918,7 @@ function importTasksFromTemplates() {
             break;
           case 'exists_diverged':
             disabled = ' disabled';
-            statusText = '已修改';
+            statusText = '已脱离';
             statusColor = 'var(--warn)';
             checkbox = '<input type="checkbox" value="' + t.template_id + '" data-status="' + status + '"' + checked + disabled + '>';
             break;

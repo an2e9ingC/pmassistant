@@ -381,8 +381,22 @@ async function loadAuditLogs() {
           { key: 'created_at', title: '时间', width: '140px', minWidth: 120, render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--muted);white-space:nowrap">' + escHtml(fmtISODateTime(v)) + '</span>'; } },
           { key: 'username', title: '用户', width: '70px', minWidth: 90, render: function(v) { return '<span style="font-size:12px">' + escHtml(getDisplayName(v)) + '</span>'; } },
           { key: 'category', title: '分类', width: '80px', minWidth: 80, render: function(v) { return '<span style="font-size:11px">' + escHtml(v||'—') + '</span>'; } },
-          { key: 'action', title: '操作', width: '140px', minWidth: 110, render: function(v) { return '<span style="font-size:11px">' + escHtml(ACTION_LABEL[v]||v) + '</span>'; } },
+          { key: 'action', title: '操作', width: '110px', minWidth: 100, render: function(v) { return '<span style="font-size:11px">' + escHtml(ACTION_LABEL[v]||v) + '</span>'; } },
           { key: 'level', title: '等级', width: '50px', minWidth: 60, render: function(v) { return levelPill(v); } },
+          { key: '_project_task', title: '项目/任务', width: '190px', minWidth: 160, render: function(v, row) {
+            if (row && row.task_id) {
+              var parts = [];
+              if (row.project_code) {
+                parts.push(projCodeTag(row.project_code, 'openProject(\'' + String(row.project_code).replace(/'/g, "\\'") + '\')', ''));
+              }
+              parts.push('<span style="color:var(--muted);font-size:11px">#' + row.task_id + '</span>');
+              if (row.task_name) {
+                parts.push('<a href="javascript:void(0)" onclick="openTaskDetail(' + row.task_id + ')" style="font-size:11px;color:var(--accent)">' + escHtml(row.task_name) + '</a>');
+              }
+              return '<span style="white-space:nowrap">' + parts.join(' ') + '</span>';
+            }
+            return '<span style="font-size:11px;color:var(--muted)">—</span>';
+          } },
           { key: 'detail', title: '详情', render: function(v) { return '<span style="font-size:11px;color:var(--muted)">' + escHtml(v||'') + '</span>'; } }
         ],
         data: items,
