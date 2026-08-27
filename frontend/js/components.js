@@ -1702,6 +1702,33 @@ function _isLeaveDate(weDay) {
   });
 }
 
+// 免打卡日 hover 提示：显示实际审批类型(出差/外出/请假等)，而非笼统"请假/免打卡"
+function _leaveTypeTip(weDay) {
+  var types = [];
+  if (weDay && weDay.approvals) {
+    weDay.approvals.forEach(function(a) {
+      if ((a.status === 1 || a.status === 2) && _isLeaveName(a.name)) {
+        for (var i = 0; i < _LEAVE_KEYS.length; i++) {
+          var k = _LEAVE_KEYS[i];
+          if ((a.name || '').indexOf(k) >= 0) { types.push(k); break; }
+        }
+      }
+    });
+  }
+  var s = types.filter(function(v, i) { return types.indexOf(v) === i; }).join('、');
+  return s ? (s + ' · 免打卡') : '请假/免打卡';
+}
+
+// 该日是否为工作日(周一~五)
+function _isDateWeekday(dateStr) {
+  try {
+    var p = dateStr.split('-');
+    var d = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
+    var dow = d.getDay();
+    return dow >= 1 && dow <= 5;
+  } catch(e) { return true; }
+}
+
 function _renderMergedMonthCalendar(today, wecomDailyMap, wlData, weData) {
   if (!_calYear) { _calYear = today.getFullYear(); _calMonth = today.getMonth()+1; }
   var total = weData ? (weData.total||0) : 0;
@@ -1760,12 +1787,15 @@ function _renderMergedMonthCalendar(today, wecomDailyMap, wlData, weData) {
       wlDay.tasks.forEach(function(t) { wlH += (t.calculated_hours || t.hours || 0); });
     }
     var dotHtml = '';
-    if (isCurrentMonth && hasCheckin && !isLeave) {
+    // 有打卡工时即显示原点标记(外出/出差等免打卡日也记录工时内容，仍显示"记录工时 vs 打卡工时"红/绿点)。
+    // 统一为「白色圆环 + 状态色中心」：中心为绿(100%记录)/红(未覆盖)，外圈白色描边，
+    // 保证绿底(整日8h~8.5h)上绿点也清晰可见，且各状态样式一致。
+    if (isCurrentMonth && hasCheckin) {
       // 与页面展示(.toFixed(1))口径一致：按 0.1h 四舍五入后比较，
       // 避免"显示打卡/记录均 8.2h/100% 却因浮点差(~0.01h)判红点"的误导
       var filled = Math.round(wlH * 10) >= Math.round(h * 10);
-      dotHtml = '<span style="position:absolute;top:1px;right:2px;width:6px;height:6px;border-radius:50%;background:' +
-                (filled ? 'var(--success)' : 'var(--danger)') + '"></span>';
+      var dotC = filled ? 'var(--success)' : 'var(--danger)';
+      dotHtml = '<span style="position:absolute;top:1px;right:2px;width:7px;height:7px;border-radius:50%;border:1px solid #fff;background:' + dotC + ';box-sizing:border-box"></span>';
     }
 
     // Cell color fill based on WeCom checkin hours
@@ -1784,10 +1814,11 @@ function _renderMergedMonthCalendar(today, wecomDailyMap, wlData, weData) {
         cellBg = 'background:' + otColors[overLevel] + ';';
       }
     }
-    // 免打卡(请假)日：无打卡记录 → 细浅斜纹（与饼图"未记录"一致，浅色不遮挡日期数字）
+    // 免打卡(请假/外出/出差等)日：无打卡记录 → 细浅斜纹（与饼图"未记录"一致，浅色不遮挡日期数字）；
+    // 提示显示实际审批类型(出差/外出/请假等)而非笼统"请假/免打卡"
     if (isLeave && !hasCheckin) {
       cellBg = 'background: repeating-linear-gradient(45deg, var(--hatch) 0 1px, transparent 1px 4px);';
-      tipText = tipText || '请假/免打卡';
+      tipText = tipText || _leaveTypeTip(weDay);
     }
 
     // 工作日（周一~五）无打卡 → 红边框（仅限过去日期，未来未打卡属正常）；今天 → accent；免打卡日不红
@@ -1854,23 +1885,36 @@ function _openMergedDayDetail(dateStr, checkinHours, hasCheckin) {
 
     // Merged summary bar: checkin + worklog stats in one row
     // Always render the full structure; zero/empty values shown as-is (issue #263)
-    var leaveDay = false;
-    try { leaveDay = ((window._calLeaveMap && window._calLeaveMap[dateStr]) || []).some(function(a){ return a.status === 2 && _isLeaveName(a.name); }); } catch(e) {}
-    var checkinLabel = leaveDay
-      ? '<span style="font-size:15px;color:var(--muted)">打卡 <b style="color:var(--warn);font-size:17px">免打卡</b></span>'
-      : '<span style="font-size:15px;color:var(--muted)">打卡 <b style="color:' + (hasCheckin ? 'var(--success)' : 'var(--muted)') + ';font-size:17px">' + checkinHours.toFixed(1) + 'h</b></span>';
-    var ratioText = leaveDay
-      ? ''
-      : (checkinHours > 0
-        ? '<span style="font-size:15px;color:var(--muted)" title="已记录工时 ÷ 打卡工时的比例">记录/打卡 <b style="color:var(--fg);font-size:17px">' + (totalCalcH / checkinHours * 100).toFixed(0) + '%</b></span>'
-        : '<span style="font-size:15px;color:var(--muted)" title="已记录工时 ÷ 打卡工时的比例">记录/打卡 <b style="color:var(--fg);font-size:17px">—</b></span>');
+    var dayApps = ((window._calLeaveMap && window._calLeaveMap[dateStr]) || []);
+    var leaveDay = dayApps.some(function(a) { return a.status === 2 && _isLeaveName(a.name); });
+    var hasTrip = dayApps.some(function(a) { return a.status === 2 && (a.name || '').indexOf('出差') >= 0; });
+    var isWk = _isDateWeekday(dateStr);
+    // 出差工作日：公司默认当天工时固定8h视为企微打卡
+    var bizTripWorkday = hasTrip && checkinHours > 0 && isWk && leaveDay;
 
-    // 免打卡(请假/外出等)审批信息 —— 展示到工时详情
+    var checkinLabel;
+    if (bizTripWorkday) {
+      checkinLabel = '<span style="font-size:15px;color:var(--muted)">打卡 <b style="color:var(--success);font-size:17px">8h</b><span style="font-size:11px;color:var(--accent);margin-left:6px">出差默认8h</span></span>';
+    } else if (checkinHours > 0) {
+      checkinLabel = '<span style="font-size:15px;color:var(--muted)">打卡 <b style="color:var(--success);font-size:17px">' + checkinHours.toFixed(1) + 'h</b></span>';
+    } else if (leaveDay) {
+      checkinLabel = '<span style="font-size:15px;color:var(--muted)">打卡 <b style="color:var(--warn);font-size:17px">免打卡</b></span>';
+    } else {
+      checkinLabel = '<span style="font-size:15px;color:var(--muted)">打卡 <b style="color:var(--muted);font-size:17px">' + checkinHours.toFixed(1) + 'h</b></span>';
+    }
+    var ratioText = (!leaveDay || checkinHours > 0)
+      ? (checkinHours > 0
+        ? '<span style="font-size:15px;color:var(--muted)" title="已记录工时 ÷ 打卡工时的比例">记录/打卡 <b style="color:var(--fg);font-size:17px">' + (totalCalcH / checkinHours * 100).toFixed(0) + '%</b></span>'
+        : '<span style="font-size:15px;color:var(--muted)" title="已记录工时 ÷ 打卡工时的比例">记录/打卡 <b style="color:var(--fg);font-size:17px">—</b></span>')
+      : '';
+
+    // 免打卡(请假/外出等)审批信息 —— 仅真正无工时(0h)的免打卡日展示；出差工作日8h由上方标记说明
     var leaveInfo = '';
     try {
-      var _appsD = (window._calLeaveMap && window._calLeaveMap[dateStr]) || [];
+      var _appsD = dayApps;
       var _leaveApps = _appsD.filter(function(a) { return (a.status === 1 || a.status === 2) && _isLeaveName(a.name); });
-      if (_leaveApps.length) {
+      var _showLeaveInfo = _leaveApps.length && checkinHours <= 0;
+      if (_showLeaveInfo) {
         var _lnames = _leaveApps.map(function(a) { return a.name; }).join('、');
         leaveInfo = '<span style="font-size:13px;color:var(--warn);font-weight:600" title="该日已请假/免打卡，无需打卡">免打卡：' + escHtml(_lnames) + '</span>';
       }
@@ -1944,7 +1988,10 @@ function _openMergedDayDetail(dateStr, checkinHours, hasCheckin) {
     API.get('/wecom/calendar?user_id=' + uid + '&date_from=' + dateStr + '&date_to=' + dateStr).then(function(data) {
       var day = (data && data.daily && data.daily.length) ? data.daily[0] : null;
       var lines = [];
-      if (day && day.checkins && day.checkins.length) {
+      // 请假/外出/出差等免打卡日：是外出工作/休假，不上正常打卡；其打卡记录多为"未打卡"噪音，
+      // 统一按审批信息(请假 起-止)展示，与其它免打卡日口径一致。非免打卡日才展示打卡明细。
+      var isLeaveDay = !!(day && day.approvals && day.approvals.some(function(a) { return _isLeaveName(a.name); }));
+      if (day && day.checkins && day.checkins.length && !isLeaveDay) {
         day.checkins.forEach(function(c) {
           var t = c.type || '打卡';
           var tm = c.time || '?';

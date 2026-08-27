@@ -710,7 +710,23 @@ def get_checkin_calendar(
         # 免打卡(请假/外出等)日: 有效审批(审批中1/已通过2)；其工时不计入打卡
         is_leave = any(a.get("status") in (1, 2) and _is_leave_name(a.get("name", ""))
                        for a in m.get("approvals", []))
-        if is_leave:
+        # 出差：工作日公司默认当天工时固定 8h(直接视为企微打卡)；周末默认 0h，以实际补卡(checkin)为准。
+        # 外出：打卡时间以审批时间范围计，且处理中间午休(与打卡口径一致：整日 span>=9h 扣减午休)。
+        # 请假：按实际打卡口径。
+        is_biz_trip = any(a.get("status") in (1, 2) and "出差" in (a.get("name") or "")
+                          for a in m.get("approvals", []))
+        is_out_field = any(a.get("status") in (1, 2) and "外出" in (a.get("name") or "")
+                           for a in m.get("approvals", []))
+        if is_biz_trip:
+            try:
+                _dow = datetime.strptime(m.get("date", ""), "%Y-%m-%d").weekday()
+            except Exception:
+                _dow = 0
+            m["total_hours"] = 8.0 if _dow < 5 else round(ch, 2)
+        elif is_out_field:
+            _lunch = float(getattr(settings, "WECOM_LUNCH_HOURS", 1.5) or 1.5)
+            m["total_hours"] = round(ah - _lunch, 2) if ah >= 9.0 else round(ah, 2)
+        elif is_leave:
             m["total_hours"] = round(ch, 2)
         else:
             m["total_hours"] = round(max(ch, ah), 2)
