@@ -42,6 +42,8 @@ def get_tasks(
         q = q.filter(Task.template_id.isnot(None))
     elif source == 'manual':
         q = q.filter(Task.template_id.is_(None))
+    elif source == 'diverged':
+        q = q.filter(Task.template_id.isnot(None), Task.is_diverged == 1)
     q = q.filter(or_(Task.is_deleted == 0, Task.is_deleted == None))
     q = q.order_by(Task.sort_order, Task.created_at.desc())
     results = [_task_dict(t, db) for t in q.all()]
@@ -66,6 +68,8 @@ def get_tasks(
             extra_q = extra_q.filter(Task.template_id.isnot(None))
         elif source == 'manual':
             extra_q = extra_q.filter(Task.template_id.is_(None))
+        elif source == 'diverged':
+            extra_q = extra_q.filter(Task.template_id.isnot(None), Task.is_diverged == 1)
         extra_q = extra_q.order_by(Task.sort_order, Task.created_at.desc())
         for t in extra_q.all():
             if t.id not in seen_ids and assignee_id in (t.assignee_ids or []):

@@ -496,6 +496,7 @@ function _renderTaskFiltersInline() {
       '<option value="">全部</option>' +
       '<option value="template"' + (_taskFilterSource==='template'?' selected':'') + '>模板</option>' +
       '<option value="manual"' + (_taskFilterSource==='manual'?' selected':'') + '>手动</option>' +
+      '<option value="diverged"' + (_taskFilterSource==='diverged'?' selected':'') + '>脱离模板</option>' +
     '</select>';
   // Assignee filter (search a user)
   html += '<span style="font-size:11px;color:var(--muted);white-space:nowrap;margin-left:4px">负责人</span>' +

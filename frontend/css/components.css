@@ -26,12 +26,12 @@
   white-space: nowrap;
 }
 
-/* 模板创建任务标题前的「来源模板」小徽章（🔒跟随 / 🔓已脱离） */
+/* 模板创建任务标题前的「来源模板」小徽章（🔓已脱离，绿色） */
 .task-template-tag {
   display: inline-block; vertical-align: middle;
   font-size: 9px; line-height: 1; padding: 1px 4px; margin-right: 5px;
-  border-radius: 3px; background: var(--accent-lt);
-  border: 1px solid var(--accent); color: var(--accent);
+  border-radius: 3px; background: var(--success-lt);
+  border: 1px solid var(--success); color: var(--success);
   white-space: nowrap;
 }
 
