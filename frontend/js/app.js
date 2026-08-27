@@ -1213,6 +1213,7 @@ function _syncBottomLayout() {
 }
 
 function _adjustTickerPosition(notifBarHeight) {
+  // ticker/notif 均为 position:fixed 固定在视口底部；ticker 叠在 notif-bar 上方(bottom = notif-bar 高度)
   var ticker = document.getElementById('alert-ticker');
   if (ticker) ticker.style.bottom = (notifBarHeight || 0) + 'px';
   _syncBottomLayout();
@@ -1225,6 +1226,16 @@ function _getBottomBarHeight() {
   if (ticker && ticker.style.display !== 'none' && _tickerEnabled) h += ticker.offsetHeight || 28;
   if (notifBar && notifBar.style.display !== 'none') h += notifBar.offsetHeight;
   return h;
+}
+
+// 底部固定条（alert-ticker / notif-bar）在视口坐标里最靠上的顶边 y（ticker 位于 notif-bar 上方，取二者较小 y）
+function _ucBottomBarTop() {
+  var top = window.innerHeight;
+  var notifBar = document.getElementById('notif-bar');
+  if (notifBar && notifBar.style.display !== 'none') top = Math.min(top, notifBar.getBoundingClientRect().top);
+  var ticker = document.getElementById('alert-ticker');
+  if (ticker && ticker.style.display !== 'none' && _tickerEnabled) top = Math.min(top, ticker.getBoundingClientRect().top);
+  return top;
 }
 
 function setThemeMode(mode) {
@@ -1694,15 +1705,18 @@ async function initUserCenter(viewUserId, tab) {
 
   // Container: profile bar at top + tab-switched content below
   container.innerHTML =
-    '<div id="uc-inner" style="display:flex;flex-direction:column;height:100%;overflow:hidden">' +
-    // Profile bar — inline, not floating; reserve space for right panel
-    '<div id="uc-profile-bar-wrap" style="margin-right:358px">' + profileBarHtml + '</div>' +
+    // 右侧栏(#uc-right-panel)为 position:fixed;right:20px;width:340px，占视口右侧 360px。
+    // 在容器 #uc-inner 统一预留右侧列，使左侧所有区块(资料栏/表格区)整体与右侧栏分离、不重叠。
+    '<div id="uc-inner" style="display:flex;flex-direction:column;height:100%;overflow:visible;margin-right:360px">' +
+    // Profile bar — inline, not floating
+    '<div id="uc-profile-bar-wrap">' + profileBarHtml + '</div>' +
     // Expand panel
-    '<div class="profile-expand" id="uc-expand" style="margin-right:358px"><div class="profile-expand-inner"><div id="uc-expand-content"></div></div></div>' +
-    // Bottom area: left (tab-switched tables) + right (calendar)
+    '<div class="profile-expand" id="uc-expand"><div class="profile-expand-inner"><div id="uc-expand-content"></div></div></div>' +
+    // Bottom area: left (tab-switched tables); right column reserved at #uc-inner 上面的 margin-right
     '<div style="flex:1;min-height:0;display:flex;flex-direction:column">' +
-      // ── Left: tab-switched content (tasks or bugs), reserve space for right panel ──
-      '<div style="display:flex;flex-direction:column;min-width:0;flex:1;margin-right:358px">' +
+      // ── Left: tab-switched content (tasks or bugs)
+      // min-height:0 必须：否则此 flex 容器不可收缩，表格会随内容撑高、被整体布局裁掉最后一行
+      '<div style="display:flex;flex-direction:column;min-width:0;flex:1;min-height:0">' +
         // Tasks section (default visible)
         '<div id="uc-tasks-section" style="flex:1;display:flex;flex-direction:column;min-height:0">' +
           '<div class="task-filter-bar" id="uc-tasks-filter-bar"></div>' +
@@ -1737,20 +1751,22 @@ async function initUserCenter(viewUserId, tab) {
     window._ucRightPanel.style.display = '';
   }
 
-  // Dynamic table scroll heights (like dashboard's _resizeProjTable)
+  // 动态布局：底部 ticker/notif 固定于视口底部。表格 .dt-scroll 外层高度按「表格顶部 → 底部bar顶边」的实际
+  // 可用空间动态设置(行数自适应，超出则内部滚动、表头固定、最后一行完整)。右侧固定面板同步避开底部 bar。
   window._ucUpdateLayout = function() {
-    var bottomH = typeof _getBottomBarHeight === 'function' ? _getBottomBarHeight() : 0;
-    var inner = document.getElementById('uc-inner');
-    if (inner) { inner.style.height = 'calc(100% - ' + bottomH + 'px)'; }
-    // Defer maxHeight until after browser re-layout
     requestAnimationFrame(function() {
-      var bottomH = typeof _getBottomBarHeight === 'function' ? _getBottomBarHeight() : 0;
-      var tw = document.querySelector('#uc-tasks-table-wrap .dt-scroll');
-      if (tw) { var tr = tw.getBoundingClientRect(); tw.style.maxHeight = Math.max(200, window.innerHeight - tr.top - 32 - bottomH) + 'px'; }
-      var bw = document.querySelector('#uc-bugs-table-wrap .dt-scroll');
-      if (bw) { var br = bw.getBoundingClientRect(); bw.style.maxHeight = Math.max(200, window.innerHeight - br.top - 32 - bottomH) + 'px'; }
-      var aw = document.querySelector('#uc-approvals-table-wrap .dt-scroll');
-      if (aw) { var ar = aw.getBoundingClientRect(); aw.style.maxHeight = Math.max(200, window.innerHeight - ar.top - 32 - bottomH) + 'px'; }
+      var barTop = _ucBottomBarTop();
+      var pad = 8; // 表格与底部 bar 之间留白
+      ['#uc-tasks-table-wrap .dt-scroll', '#uc-bugs-table-wrap .dt-scroll', '#uc-approvals-table-wrap .dt-scroll'].forEach(function(sel) {
+        var el = document.querySelector(sel);
+        if (!el) return;
+        var rect = el.getBoundingClientRect();
+        var h = Math.max(180, Math.round(barTop - rect.top - pad));
+        el.style.height = h + 'px';
+        el.style.maxHeight = h + 'px';
+      });
+      var rp = document.getElementById('uc-right-panel');
+      if (rp) rp.style.maxHeight = Math.max(0, Math.round(barTop - 70)) + 'px';
     });
   }
   setTimeout(window._ucUpdateLayout, 80);
@@ -1867,6 +1883,8 @@ function _ucSwitchTab(tab) {
   } else if (tab === 'approvals') {
     if (window._approvalEnabled) _ucLoadApprovals();
   }
+  // 切换 tab 后重新测高，保证当前表格 .dt-scroll 填满可用空间
+  setTimeout(function() { if (typeof window._ucUpdateLayout === 'function') window._ucUpdateLayout(); }, 50);
 }
 
 function _ucNewBug() {
@@ -1922,6 +1940,7 @@ function _renderUcApprovalTable() {
         { key: 'actions', title: '操作', width: actionColWidth(2) + 'px', minWidth: actionColWidth(2), render: function(v, row) { return '<span style="white-space:nowrap" onclick="event.stopPropagation()"><button class="btn-icon" onclick="_ucApproveTask('+row.id+',\''+escJs(row.title)+'\')" title="批准" style="color:var(--success)">'+_ucApproveIcon+'</button><button class="btn-icon" onclick="_ucRejectTask('+row.id+',\''+escJs(row.title)+'\')" title="驳回" style="color:var(--danger);margin-left:2px">'+_ucRejectIcon+'</button></span>'; } }
       ],
       data: _ucApprovals,
+      stickyHeader: true,
       onRowClick: function(row) { _ucOpenTask(row.id); }
     });
   } else {
@@ -2294,7 +2313,6 @@ function _renderUcTaskTable() {
         { key: 'actions', title: '操作', width: actionColWidth(4) + 'px', minWidth: actionColWidth(4), render: function(v, row) { return _ucTaskActionsHtml(row); } }
       ],
       data: flatRows,
-      maxHeight: '400px',
       stickyHeader: true,
       selectable: true,
       checkboxPosition: 0,
@@ -2847,6 +2865,7 @@ async function _ucLoadBugs() {
         data: bugRows,
         selectable: true,
         checkboxPosition: 0,
+        stickyHeader: true,
         onSelectChange: function(rows) { _selectedBugs = new Set((rows || []).map(function(r) { return r.id; })); if (typeof _ensureBugBatchToolbar === 'function') _ensureBugBatchToolbar(); if (typeof _updateBugBatchToolbar === 'function') _updateBugBatchToolbar(); }
       });
     } else { _ucBugsDt.setData(bugRows); }

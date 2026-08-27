@@ -356,6 +356,17 @@
 body.has-ticker #view-user-center.active { padding-bottom: 0; }
 #user-center-content { flex: 1 1 0%; min-height: 0; display: flex; flex-direction: column; }
 
+/* 底部滚动告警 + 通知栏：position:fixed 固定于视口底部(见 index.html inline)，始终可见 */
+#uc-tasks-table-wrap, #uc-bugs-table-wrap, #uc-approvals-table-wrap {
+  flex: 1 1 0%; min-height: 0; overflow: hidden;
+  display: flex; flex-direction: column;
+}
+#uc-tasks-dt, #uc-bugs-dt, #uc-approvals-dt {
+  flex: 1 1 0%; min-height: 0;
+  display: flex; flex-direction: column;
+}
+/* .dt-scroll 高度由 _ucUpdateLayout 按「表格顶部 → 底部bar顶边」动态设置(内部滚动、表头固定)；勿用 flex:1 覆盖 */
+
 /* DB Manage */
 .db-manage-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .db-manage-grid .config-section { min-width: 0; }

@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-当前版本：v2026.08.27-beta2 | 最后更新：2026-08-27
+当前版本：v2026.08.27-beta11 | 最后更新：2026-08-27
 
 ---
 
@@ -231,6 +231,15 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-08-27 | v2026.08.27-beta11 | fix(ui): 用户中心表格行数自适应+滚动,底部条固定底部 — ①底部 alert-ticker/notif-bar 改回 position:fixed;bottom:0 固定在视口底部(ticker 经 _adjustTickerPosition 叠在 notif-bar 上方,bottom=notif-bar高度),始终可见;②表格 .dt-scroll 外层 height 由 _ucUpdateLayout 按「表格顶部→底部bar顶边」动态设置(真实 getBoundingClientRect().top),行数自适应可用空间,超出则内部 overflow-y:auto 滚动、表头 fixed、最后一行完整;③去掉 sticky 页脚 flex 相关改动 |
+| 2026-08-27 | v2026.08.27-beta10 | fix(ui): 用户中心 任务/Bug/审批表恢复表格风格+表头固定 — ①给 Bug 表、审批表 DataTable 补上 stickyHeader:true(此前只有任务表有),三表滚动时表头均固定;②结合前面 sticky 页脚+flex 自适应,保持表格样式(DataTable)且填满到页脚上方、超出内部滚动、表头固定 |
+| 2026-08-27 | v2026.08.27-beta9 | fix(ui): 去掉 html zoom:0.9 修复底部空白 — 根因:html{zoom:0.9} 把 100vh 渲染成约90%视口,导致 .main(min-height:100vh) 与底部 sticky 页脚停在真实视口底之上~10%,出现"ticker/notif-bar 下面一段空白"(此前 fixed 悬浮条时,同一~10%空隙表现为"表格到 bar 之间空白")。移除 zoom:0.9,使 100vh 与真实视口一致,sticky 页脚贴底、内容填满到页脚上方,无空白;同时所有 calc(100vh-Npx) 计高恢复正确。副作用:整个 UI 渲染比例约放大11%(0.9→1.0),密度略降 |
+| 2026-08-27 | v2026.08.27-beta8 | refactor(ui): 底部条改为 sticky 页脚,根治重叠/裁剪/空白 — ①#alert-ticker/#notif-bar 从 end-of-body 的 position:fixed 悬浮层移入 .main 作为 sticky bottom:0 页脚,占文档流高度,内容(含表格)天然止于其上方,不再需要 JS 测高避让;②#uc-inner 内容链(#view-user-center/#user-center-content/底部区/左侧区/表区/.dt-scroll)逐级 flex:1+min-height:0,表格自动填满到页脚上方,表头固定、超出内部滚动、最后一行完整;③_ucUpdateLayout 仅保留右侧固定面板避开页脚;④去掉大量易碎的 JS 测高与 padding 补丁 |
+| 2026-08-27 | v2026.08.27-beta7 | fix(ui): 用户中心左右列分界明确、不重叠 — ①把右侧栏(#uc-right-panel,fixed;right:20;w340占视口右侧360px)的预留从子元素(资料栏/表区各自margin-right:358)上移到容器#uc-inner统一margin-right:360,使整个左侧列(资料栏+表格区)整体与右侧工时日历/统计栏分离,不再有容器div伸到右侧栏下方造成"重合";②移除子元素重复margin,避免双重预留;③保留底部bar避让与表高度自适应 |
+| 2026-08-27 | v2026.08.27-beta6 | fix(ui): 用户中心表高度对齐底部bar(修复重叠/裁剪) — ①.dt-scroll外层height改按底部bar真实getBoundingClientRect().top计算(取ticker/notif-bar最靠上顶边),不再用window.innerHeight-bottomH(因zoom/测量偏差导致表格撑高被#uc-inner overflow裁剪、最后一行缺失);②#uc-inner改overflow:visible并去掉calc(100%-bottomH)高度覆盖,避免表格被裁;③右侧浮动面板maxHeight同步避让底部bar;④表格外层始终=可用空间,行数自适应,超出内部滚动,表头固定,最后一行完整 |
+| 2026-08-27 | v2026.08.27-beta5 | fix(ui): 用户中心表高度按可用空间动态调整 — ①表格.dt-scroll外层height改为按viewport动态计算(window.innerHeight-表格top-bottomBar-留白),使表格默认显示行数自适应页面可用空间,数据超出时内部滚动才有意义;②不再依赖flex链收缩_找回原maxHeight钳制方案但改为height(填充而非封顶),消除表格与底部ticker/notif-bar间空白;③保留sticky表头与最后一行滚动可见 |
+| 2026-08-27 | v2026.08.27-beta4 | fix(ui): 用户中心表高度链+固定表头 — ①左侧内容容器补min-height:0,使整个flex高度链可收缩,数据表不再随内容撑高/被#uc-inner(overflow:hidden)裁掉最后一行;②.dt-scroll保持为可滚动容器(overflow-y:auto),表头dt-sticky照常固定,最后一行滚动可见;③修复上版表头不固定+最后一行显示不完整 |
+| 2026-08-27 | v2026.08.27-beta3 | fix(ui): 用户中心任务表高度溢出+底部空白 — ①任务/Bug/审批表改为flex填满剩余高度(消除表格与底部ticker/notif-bar间大空白)；②去掉DataTable maxHeight:400px和_ucUpdateLayout视口maxHeight钳制,修复最后一行被uc-inner overflow:hidden裁剪；③表区改为#uc-*-wrap/#uc-*-dt/.dt-scroll逐级flex:1 |
 | 2026-08-27 | v2026.08.27-beta2 | feat: 人力报表月份下拉+维度tab选中高亮 — ①统计月份改为下拉选择(select,近24个月),支持通过选择方式填入,切换即重载;②"按人员/按项目"维度tab选中态明显高亮(accent-lt背景+accent下划线+加粗),并在上级tab切换后重新固定高亮(修复选中效果不可见) |
 | 2026-08-27 | v2026.08.27-beta1 | feat: 人力报表按月份查看+导出体现月份 — ①人力工时报表头部新增"统计月份"月份选择器(type=month),切换即按所选月份重载数据(默认当月,date_from=月初/date_to=月末);②导出Excel按钮携带当前所选月份范围,文件名含月份(manpower_report_YYYY-MM.xlsx),工作簿每个sheet顶部插入标题行展示统计月份与统计周期;③后端export_manpower_excel/路由文件名支持date_from/date_to |
 | 2026-08-25 | v2026.08.25-beta1 | fix: 项目总览默认按编号从大到小(issue#4) — dashFilter默认sort由end升序改为code降序;后端get_project_list按编号后数字部分排序(CAST(substr(code,3)),PE0456→456数值序,避免字符串序把PE0456排在PE04510前),无编号项目排最后 |

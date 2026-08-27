@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="app-version" content="v2026.08.27-beta2">
+  <meta name="app-version" content="v2026.08.27-beta11">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>PM Assistant · 集成禅道 & GitLab</title>
 <script>
@@ -902,6 +902,10 @@ document.write('<link rel="stylesheet" href="/css/doc-templates.css?v=' + v + '"
     </div>
 
   </div>
+
+  <!-- 底部滚动告警 + 通知栏：position:fixed 固定在视口底部，始终可见；ticker 叠在 notif-bar 之上 -->
+  <div id="alert-ticker" style="display:none;position:fixed;left:var(--sidebar-w);right:0;z-index:900;background:var(--surface);border-top:1px solid var(--border);overflow:hidden;white-space:nowrap;font-size:12px;padding:6px 0"><div id="alert-ticker-inner" style="display:inline-block;animation-name:ticker-scroll;animation-duration:100s;animation-timing-function:linear;animation-iteration-count:infinite"></div></div>
+  <div id="notif-bar" style="display:none;position:fixed;left:var(--sidebar-w);right:0;bottom:0;z-index:999"></div>
 </main>
 
 <script>
@@ -1147,8 +1151,5 @@ async function triggerSync() {
   if (btn) { btn.disabled = false; btn.style.opacity = ''; }
 }
 </script>
-<!-- Broadcast notification bar -->
-<div id="alert-ticker" style="display:none;position:fixed;bottom:0;left:var(--sidebar-w);right:0;z-index:900;background:var(--surface);border-top:1px solid var(--border);overflow:hidden;white-space:nowrap;font-size:12px;padding:6px 0"><div id="alert-ticker-inner" style="display:inline-block;animation-name:ticker-scroll;animation-duration:100s;animation-timing-function:linear;animation-iteration-count:infinite"></div></div>
-<div id="notif-bar" style="display:none"></div>
 </body>
 </html>
