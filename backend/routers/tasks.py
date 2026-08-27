@@ -293,7 +293,6 @@ def create_task(
     user=Depends(require_perm("task_edit")),
 ):
     t = task_service.create_task(db, payload.model_dump(), user)
-    log_audit(db, user, "task_create", f"任务「{payload.title}」", AUDIT_CAT_TASK, "medium")
     return {"code": 0, "data": t, "message": "ok"}
 
 
@@ -449,7 +448,6 @@ def batch_delete_tasks(
         ok = task_service.delete_task(db, tid, user)
         if ok:
             deleted += 1
-            log_audit(db, user, "task_delete", f"批量删除任务 #{tid}", AUDIT_CAT_TASK, "high")
         else:
             skipped += 1
     return {"code": 0, "data": {"deleted": deleted, "skipped": skipped, "total": len(payload.task_ids)}, "message": f"已删除 {deleted} 个任务"}
@@ -464,7 +462,6 @@ def delete_task(
     ok = task_service.delete_task(db, task_id, user)
     if not ok:
         raise HTTPException(status_code=404, detail="Task not found")
-    log_audit(db, user, "task_delete", f"删除任务 #{task_id}", AUDIT_CAT_TASK, "high")
     return {"code": 0, "data": None, "message": "ok"}
 
 
@@ -479,7 +476,6 @@ def approve_task(
         result = task_service.approve_task(db, task_id, user)
         if not result:
             raise HTTPException(status_code=404, detail="Task not found")
-        log_audit(db, user, "task_update", f"审批通过任务 #{task_id}", AUDIT_CAT_TASK, "medium")
         return {"code": 0, "data": result, "message": "审批已通过，任务已完成"}
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
@@ -499,7 +495,6 @@ def reject_task(
         result = task_service.reject_task(db, task_id, reason, user)
         if not result:
             raise HTTPException(status_code=404, detail="Task not found")
-        log_audit(db, user, "task_update", f"驳回任务 #{task_id}: {reason}", AUDIT_CAT_TASK, "medium")
         return {"code": 0, "data": result, "message": "已驳回，任务状态已改为进行中"}
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))

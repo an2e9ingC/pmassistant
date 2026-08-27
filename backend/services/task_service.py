@@ -891,12 +891,20 @@ def _log_audit(db: Session, project_id: int, username: Optional[str], action: st
             proj = db.query(CachedProject).filter(CachedProject.id == project_id).first()
             if proj:
                 project_code = proj.code or ""
+        # Level per CLAUDE.md: 删除=high；新增/编辑=medium；其余 low
+        _TASK_ACTION_LEVEL = {
+            "task_delete": "high",
+            "task_create": "medium",
+            "task_create_batch": "medium",
+            "task_import": "medium",
+            "task_update": "medium",
+        }
         log = AuditLog(
             username=username,
             action=action,
             detail=detail,
             category=AUDIT_CAT_TASK,
-            level="low",
+            level=_TASK_ACTION_LEVEL.get(action, "low"),
             project_id=project_id,
             project_code=project_code,
             task_id=task_id,
