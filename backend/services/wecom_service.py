@@ -603,6 +603,90 @@ async def sync_wecom_schedule(db: Session) -> None:
 
 # ── Calendar Aggregation ──
 
+def _as_date(d):
+    """Coerce a str/date/datetime to a date (None-safe)."""
+    if d is None:
+        return None
+    if isinstance(d, date):
+        return d
+    if isinstance(d, datetime):
+        return d.date()
+    return _parse_date(str(d)[:10])
+
+
+def _is_valid_approval(raw) -> bool:
+    try:
+        return raw.get("sp_status", 0) in (1, 2)
+    except Exception:
+        return False
+
+
+def _resolve_daily_hours(day: dict) -> float:
+    """Compute one day's work hours with the standard business rules (shared by
+    user center + manpower report, so the two never diverge).
+
+    - 出差(biz_trip): 工作日=8h，周末=实际补卡(checkin)
+    - 外出(out_field): 审批时长 − 午休（≥9h 才扣）
+    - 请假/外勤(leave): 免打卡，只算真实打卡(checkin)
+    - 其它: max(打卡, 审批)
+    """
+    ch = day.get("_checkin_h") or 0.0
+    ah = day.get("_approval_h") or 0.0
+    apprs = day.get("approvals") or []
+    is_leave = any(a.get("status") in (1, 2) and _is_leave_name(a.get("name", "")) for a in apprs)
+    is_biz_trip = any(a.get("status") in (1, 2) and "出差" in (a.get("name") or "") for a in apprs)
+    is_out_field = any(a.get("status") in (1, 2) and "外出" in (a.get("name") or "") for a in apprs)
+    if is_biz_trip:
+        try:
+            _dow = datetime.strptime(day.get("date", ""), "%Y-%m-%d").weekday()
+        except Exception:
+            _dow = 0
+        return 8.0 if _dow < 5 else round(ch, 2)
+    if is_out_field:
+        _lunch = float(getattr(settings, "WECOM_LUNCH_HOURS", 1.5) or 1.5)
+        return round(ah - _lunch, 2) if ah >= 9.0 else round(ah, 2)
+    if is_leave:
+        return round(ch, 2)
+    return round(max(ch, ah), 2)
+
+
+def user_daily_totals(db: Session, wecom_userid: str, date_from=None, date_to=None) -> dict:
+    """Return {date_str: total_hours} for a user — identical to get_checkin_calendar's
+    per-day total_hours. 供人力报表复用，保证与用户中心口径一致。"""
+    if not wecom_userid:
+        return {}
+    fd = _as_date(date_from)
+    td = _as_date(date_to)
+    q = db.query(WeComCheckin).filter(WeComCheckin.user_id == wecom_userid)
+    if fd:
+        q = q.filter(WeComCheckin.date >= fd)
+    if td:
+        q = q.filter(WeComCheckin.date <= td)
+    days = {}
+    for c in q.all():
+        d = str(c.date)
+        m = days.setdefault(d, {"date": d, "_checkin_h": 0.0, "_approval_h": 0.0, "approvals": []})
+        if c.source == "checkin":
+            m["_checkin_h"] = max(m["_checkin_h"], c.work_hours or 0)
+        elif c.source == "approval":
+            try:
+                raw = json.loads(c.raw_data or "{}")
+            except Exception:
+                raw = {}
+            if _is_valid_approval(raw):
+                m["_approval_h"] = max(m["_approval_h"], c.work_hours or 0)
+                sp_name = raw.get("sp_name", "")
+                st = raw.get("sp_status", 0)
+                periods = _approval_day_periods(raw)
+                if not periods:
+                    periods = [(d, False)]
+                for (day_str, _all_day) in periods:
+                    dm = days.setdefault(day_str, {"date": day_str, "_checkin_h": 0.0, "_approval_h": 0.0, "approvals": []})
+                    if not any(x.get("name") == sp_name and x.get("status") == st for x in dm["approvals"]):
+                        dm["approvals"].append({"name": sp_name, "status": st})
+    return {dd: _resolve_daily_hours(m) for dd, m in days.items()}
+
+
 def get_checkin_calendar(
     db: Session,
     user: LocalUser,
@@ -702,34 +786,9 @@ def get_checkin_calendar(
         except Exception:
             pass
 
-    # Resolve total_hours from stored work_hours (checkin wins; approval fills gap)
-    # 免打卡(请假/外出等)日：审批工时不计入"打卡"，总工时只算真实打卡(checkin)
+    # Resolve total_hours with the shared business rules (same as manpower report)
     for m in daily_map.values():
-        ch = m.pop("_checkin_h", 0.0)
-        ah = m.pop("_approval_h", 0.0)
-        # 免打卡(请假/外出等)日: 有效审批(审批中1/已通过2)；其工时不计入打卡
-        is_leave = any(a.get("status") in (1, 2) and _is_leave_name(a.get("name", ""))
-                       for a in m.get("approvals", []))
-        # 出差：工作日公司默认当天工时固定 8h(直接视为企微打卡)；周末默认 0h，以实际补卡(checkin)为准。
-        # 外出：打卡时间以审批时间范围计，且处理中间午休(与打卡口径一致：整日 span>=9h 扣减午休)。
-        # 请假：按实际打卡口径。
-        is_biz_trip = any(a.get("status") in (1, 2) and "出差" in (a.get("name") or "")
-                          for a in m.get("approvals", []))
-        is_out_field = any(a.get("status") in (1, 2) and "外出" in (a.get("name") or "")
-                           for a in m.get("approvals", []))
-        if is_biz_trip:
-            try:
-                _dow = datetime.strptime(m.get("date", ""), "%Y-%m-%d").weekday()
-            except Exception:
-                _dow = 0
-            m["total_hours"] = 8.0 if _dow < 5 else round(ch, 2)
-        elif is_out_field:
-            _lunch = float(getattr(settings, "WECOM_LUNCH_HOURS", 1.5) or 1.5)
-            m["total_hours"] = round(ah - _lunch, 2) if ah >= 9.0 else round(ah, 2)
-        elif is_leave:
-            m["total_hours"] = round(ch, 2)
-        else:
-            m["total_hours"] = round(max(ch, ah), 2)
+        m["total_hours"] = _resolve_daily_hours(m)
 
     daily = sorted(daily_map.values(), key=lambda x: x["date"], reverse=True)
     total = sum(d["total_hours"] for d in daily)

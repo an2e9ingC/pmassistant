@@ -12,7 +12,6 @@ from backend.models.delivery import DeliveryRecord
 from backend.models.task import WorkLog, Task
 from backend.models.bug import BugWorkLog, PmaBug
 from backend.models.local import LocalUser
-from backend.models.wecom import WeComCheckin
 
 
 def get_project_summary(db: Session) -> dict:
@@ -154,31 +153,18 @@ def _get_effective_hours(worklog) -> float:
 
 
 def _sum_checkin_hours(db: Session, wuids: list, from_date: date, to_date: date) -> dict:
-    """打卡总工时（wecom_userid → hours）：按 (user, date) 取 checkin/approval 的 work_hours 最大值后求和。
-
-    与 wecom_service.get_checkin_calendar 的「每日 max(checkin, approval)」口径一致，
-    避免同日既有打卡又有审批时被重复叠加（用户中心与人力报表因此不一致）。
+    """打卡总工时（wecom_userid → hours）：复用 wecom_service.user_daily_totals，
+    与用户中心 get_checkin_calendar 完全相同口径（出差=8h/工作日、请假免打卡、外出-午休、其余 max），
+    避免报表把「出差审批总时长」误当打卡工时导致与用户中心不一致。
     """
     if not wuids:
         return {}
-    rows = db.query(
-        WeComCheckin.user_id, WeComCheckin.date,
-        WeComCheckin.source, WeComCheckin.work_hours,
-    ).filter(
-        WeComCheckin.user_id.in_(wuids),
-        WeComCheckin.date >= from_date,
-        WeComCheckin.date <= to_date,
-    ).all()
-    per_day = {}  # (wuid, date) -> {"checkin": max, "approval": max}
-    for uid, d, src, hrs in rows:
-        m = per_day.setdefault((uid, str(d)), {"checkin": 0.0, "approval": 0.0})
-        if src == "checkin":
-            m["checkin"] = max(m["checkin"], float(hrs or 0.0))
-        elif src == "approval":
-            m["approval"] = max(m["approval"], float(hrs or 0.0))
+    from backend.services.wecom_service import user_daily_totals
     totals = {}
-    for (uid, _), m in per_day.items():
-        totals[uid] = totals.get(uid, 0.0) + max(m["checkin"], m["approval"])
+    for wuid in wuids:
+        total = sum(user_daily_totals(db, wuid, from_date, to_date).values())
+        if total:
+            totals[wuid] = total
     return totals
 
 
