@@ -336,6 +336,8 @@
 .proj-table.clickable tbody tr { cursor: pointer; }
 .proj-table tbody tr:nth-child(odd) td { background: var(--surface); }
 .proj-table tbody tr:nth-child(even) td { background: var(--bg); }
+/* 人力按人员明细表：行悬停高亮（同一行即左右打卡/记录两侧联动） */
+.proj-table.mp-detail-table tbody tr:hover td { background: var(--accent-lt); }
 .proj-table tbody tr:hover td { background: var(--surface2); }
 /* Dark theme: Gantt month palette — ice gray-blue / dark green alternating */
 [data-theme="dark"] .proj-table tbody tr:nth-child(odd) td { background: #2a3340; } /* Also defined in data-table.css:114; keep in sync */

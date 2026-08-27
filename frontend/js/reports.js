@@ -410,25 +410,64 @@ function _renderMpUserDetail(el, d) {
     });
   }
 
-  var dailyRows = '';
-  (d.daily || []).forEach(function(day) {
-    var projHtml = (day.projects || []).map(function(p) {
+  // 按日数据（打卡 / 记录），用于合并到同一张表对齐
+  var checkinByDate = {};
+  (d.checkin_daily || []).forEach(function(cd) { checkinByDate[cd.date] = cd; });
+  var dailyByDate = {};
+  (d.daily || []).forEach(function(day) { dailyByDate[day.date] = day; });
+
+  var ckTypeColor = function(t) {
+    return t === '出差' ? 'var(--warn)' : t === '外出' ? 'var(--accent)' : t === '请假' ? 'var(--muted)' : 'var(--success)';
+  };
+
+  var unionDates = {};
+  Object.keys(checkinByDate).forEach(function(dd){ unionDates[dd] = 1; });
+  Object.keys(dailyByDate).forEach(function(dd){ unionDates[dd] = 1; });
+  var dates = Object.keys(unionDates).sort().reverse();
+
+  var combinedRows = dates.map(function(date) {
+    var ck = checkinByDate[date];
+    var dy = dailyByDate[date];
+    // 打卡侧
+    var ckDate = ck ? date : '';
+    var ckH = ck ? (ck.hours || 0).toFixed(1) + 'h' : '—';
+    var ckT = ck ? '<span style="color:' + ckTypeColor(ck.type) + '">' + escHtml(ck.type || '正常') + '</span>' : '—';
+    // 记录侧
+    var recDate = dy ? date : '';
+    var recH = dy ? (dy.hours || 0).toFixed(1) + 'h' : '—';
+    var projHtml = dy ? (dy.projects || []).map(function(p) {
       return '<div style="display:flex;justify-content:space-between;gap:6px">' +
         '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(p.project_code || p.project_name || '其他') + '</span>' +
         '<span style="font-family:var(--mono);flex-shrink:0">' + (p.hours || 0).toFixed(1) + 'h (' + (p.percentage || 0) + '%)</span>' +
         '</div>';
-    }).join('');
-    dailyRows += '<tr>' +
-      '<td style="font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;vertical-align:top">' + escHtml(day.date) + '</td>' +
-      '<td style="font-family:var(--mono);font-size:11px;text-align:right;white-space:nowrap;vertical-align:top">' + (day.hours || 0).toFixed(1) + 'h</td>' +
-      '<td style="font-size:11px;min-width:160px">' + projHtml + '</td>' +
+    }).join('') : '—';
+    var cmp = '—';
+    if (dy) {
+      var recHn = dy.hours || 0;
+      var ckHn = ck ? (ck.hours || 0) : 0;
+      var diff = recHn - ckHn;
+      if (Math.abs(diff) < 0.05) cmp = '<span style="color:var(--success)">持平</span>';
+      else if (diff > 0) cmp = '<span style="color:var(--warn)">超出 ' + diff.toFixed(1) + 'h</span>';
+      else cmp = '<span style="color:var(--danger)">' + (recHn < 0.05 ? '未记录' : '低 ' + Math.abs(diff).toFixed(1) + 'h') + '</span>';
+    }
+    return '<tr>' +
+      '<td style="font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;vertical-align:top">' + escHtml(ckDate) + '</td>' +
+      '<td style="font-family:var(--mono);font-size:11px;text-align:right;white-space:nowrap;vertical-align:top">' + ckH + '</td>' +
+      '<td style="font-size:11px;vertical-align:top;white-space:nowrap">' + ckT + '</td>' +
+      '<td style="font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;vertical-align:top">' + escHtml(recDate) + '</td>' +
+      '<td style="font-family:var(--mono);font-size:11px;text-align:right;white-space:nowrap;vertical-align:top">' + recH + '</td>' +
+      '<td style="font-size:11px;min-width:150px;vertical-align:top">' + projHtml + '</td>' +
+      '<td style="font-size:11px;white-space:nowrap;vertical-align:top">' + cmp + '</td>' +
       '</tr>';
-  });
+  }).join('');
+
+  var tablesBody = combinedRows || '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:16px">该时段无记录</td></tr>';
 
   el.innerHTML =
-    '<div style="display:flex;gap:12px;align-items:flex-start">' +
-      '<div style="flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:12px">' +
-        '<div class="card card-pad">' +
+    '<div style="display:flex;flex-direction:column;gap:12px;align-items:stretch">' +
+      // 第一行：人员信息卡(左) + 项目工时占比饼图(右)
+      '<div style="display:flex;gap:12px;align-items:stretch">' +
+        '<div class="card card-pad" style="flex:1 1 0;min-width:0">' +
           '<div style="font-weight:620;font-size:14px">' + escHtml(s.display_name || '') + '</div>' +
           '<div style="font-size:12px;color:var(--muted);margin-top:6px;display:flex;gap:14px;flex-wrap:wrap">' +
             '<span>打卡 <b style="color:var(--fg)">' + (s.checkin_hours || 0).toFixed(1) + 'h</b></span>' +
@@ -436,11 +475,18 @@ function _renderMpUserDetail(el, d) {
             '<span>记录/打卡 <b style="color:var(--fg)">' + ratioTxt + '</b></span>' +
           '</div>' +
         '</div>' +
-        '<div class="card card-pad"><div id="mp-user-pie"></div></div>' +
+        '<div class="card card-pad" style="flex:1 1 0;min-width:0"><div id="mp-user-pie"></div></div>' +
       '</div>' +
-      '<div class="card card-pad" style="flex:1 1 0;min-width:0">' +
-        '<div style="font-weight:620;font-size:13px;margin-bottom:8px">每日各项目占比</div>' +
-        (dailyRows ? '<table class="proj-table" style="font-size:12px;width:100%"><thead><tr><th style="text-align:left">日期</th><th style="text-align:right">工时</th><th style="text-align:left">项目明细</th></tr></thead><tbody>' + dailyRows + '</tbody></table>' : '<div style="color:var(--muted);font-size:12px;text-align:center;padding:16px">该时段无工时记录</div>') +
+      // 第二行：打卡明细 + 记录明细，同一张表、左右列分组，按日期同一行对齐
+      '<div class="card card-pad">' +
+        '<table class="proj-table mp-detail-table" style="font-size:12px;width:100%">' +
+          '<thead>' +
+            '<tr><th colspan="3" style="text-align:center;color:var(--muted)">打卡明细</th><th colspan="4" style="text-align:center;color:var(--muted)">记录明细（每日各项目占比）</th></tr>' +
+            '<tr><th style="text-align:center">日期</th><th style="text-align:center">打卡工时</th><th style="text-align:center">类型</th>' +
+              '<th style="text-align:center">日期</th><th style="text-align:center">工时</th><th style="text-align:center">项目明细</th><th style="text-align:center">与打卡对比</th></tr>' +
+          '</thead>' +
+          '<tbody>' + tablesBody + '</tbody>' +
+        '</table>' +
       '</div>' +
     '</div>';
 

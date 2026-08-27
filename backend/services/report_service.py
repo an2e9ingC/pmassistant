@@ -503,8 +503,11 @@ def get_user_manpower_detail(
     # ── Checkin hours ──
     user = db.query(LocalUser).filter(LocalUser.id == user_id).first()
     checkin_hours = 0.0
+    checkin_daily = []
     if user and user.wecom_userid:
         checkin_hours = _sum_checkin_hours(db, [user.wecom_userid], from_date, to_date).get(user.wecom_userid, 0.0)
+        from backend.services.wecom_service import user_daily_checkins
+        checkin_daily = user_daily_checkins(db, user.wecom_userid, from_date, to_date)
 
     pma_hours = round(total_hours, 1)
     ratio = round(pma_hours / checkin_hours * 100, 1) if checkin_hours > 0 else None
@@ -519,6 +522,7 @@ def get_user_manpower_detail(
         },
         "projects": projects,
         "daily": daily,
+        "checkin_daily": checkin_daily,
     }
 
 

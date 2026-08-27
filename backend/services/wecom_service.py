@@ -650,9 +650,8 @@ def _resolve_daily_hours(day: dict) -> float:
     return round(max(ch, ah), 2)
 
 
-def user_daily_totals(db: Session, wecom_userid: str, date_from=None, date_to=None) -> dict:
-    """Return {date_str: total_hours} for a user — identical to get_checkin_calendar's
-    per-day total_hours. 供人力报表复用，保证与用户中心口径一致。"""
+def _user_daily_map(db: Session, wecom_userid: str, date_from=None, date_to=None) -> dict:
+    """Build per-day checkin context: {date: {date, _checkin_h, _approval_h, approvals[]}}."""
     if not wecom_userid:
         return {}
     fd = _as_date(date_from)
@@ -684,7 +683,40 @@ def user_daily_totals(db: Session, wecom_userid: str, date_from=None, date_to=No
                     dm = days.setdefault(day_str, {"date": day_str, "_checkin_h": 0.0, "_approval_h": 0.0, "approvals": []})
                     if not any(x.get("name") == sp_name and x.get("status") == st for x in dm["approvals"]):
                         dm["approvals"].append({"name": sp_name, "status": st})
-    return {dd: _resolve_daily_hours(m) for dd, m in days.items()}
+    return days
+
+
+def _day_type(m: dict) -> str:
+    """类目：出差 > 外出 > 请假/外勤 > 正常（与 _resolve_daily_hours 的业务规则对应）。"""
+    apprs = m.get("approvals") or []
+    if any(a.get("status") in (1, 2) and "出差" in (a.get("name") or "") for a in apprs):
+        return "出差"
+    if any(a.get("status") in (1, 2) and "外出" in (a.get("name") or "") for a in apprs):
+        return "外出"
+    if any(a.get("status") in (1, 2) and _is_leave_name(a.get("name", "")) for a in apprs):
+        return "请假"
+    return "正常"
+
+
+def user_daily_totals(db: Session, wecom_userid: str, date_from=None, date_to=None) -> dict:
+    """Return {date_str: total_hours} for a user — identical to get_checkin_calendar's
+    per-day total_hours. 供人力报表复用，保证与用户中心口径一致。"""
+    return {dd: _resolve_daily_hours(m) for dd, m in _user_daily_map(db, wecom_userid, date_from, date_to).items()}
+
+
+def user_daily_checkins(db: Session, wecom_userid: str, date_from=None, date_to=None) -> list:
+    """Return [{date, hours, type}] per-day check-in detail (打卡明细), using the same
+    business rules as user_daily_totals / get_checkin_calendar."""
+    days = _user_daily_map(db, wecom_userid, date_from, date_to)
+    out = []
+    for d, m in days.items():
+        out.append({
+            "date": d,
+            "hours": round(_resolve_daily_hours(m), 2),
+            "type": _day_type(m),
+        })
+    out.sort(key=lambda x: x["date"], reverse=True)
+    return out
 
 
 def get_checkin_calendar(
