@@ -656,4 +656,12 @@ def export_manpower_excel(
             u["project_count"],
         ])
 
+    # 在每个 sheet 顶部插入标题行，体现统计月份/统计周期
+    period_title = f"人力工时报表  统计月份: {from_date.strftime('%Y-%m')}  统计周期: {from_date} ~ {to_date}"
+    from openpyxl.styles import Font as _Font
+    for ws in wb.worksheets:
+        ws.insert_rows(1)
+        cell = ws.cell(row=1, column=1, value=period_title)
+        cell.font = _Font(bold=True, size=12)
+
     wb.save(output)

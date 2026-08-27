@@ -267,6 +267,13 @@
   transition: color 0.13s, border-color 0.13s; user-select: none;
 }
 .map-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 590; }
+/* 人力报表"按人员/按项目"维度子tab：选中态明显高亮（背景+accent 下划线） */
+#rpt-sec-manpower .map-tabs .map-tab { border-radius: 8px 8px 0 0; }
+#rpt-sec-manpower .map-tabs .map-tab.active {
+  background: var(--accent-lt);
+  color: var(--accent);
+  font-weight: 650;
+}
 .map-search-row {
   display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap;
 }

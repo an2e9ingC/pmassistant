@@ -179,7 +179,8 @@ def manpower_export(
     )
     output.seek(0)
 
-    filename = f"manpower_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    period_label = (date_from or 'all') if not (date_from or date_to) else f"{date_from or 'all'}~{date_to or 'now'}"
+    filename = f"manpower_report_{period_label}.xlsx"
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

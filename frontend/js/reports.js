@@ -162,19 +162,64 @@ var _pieColors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC489
 
 async function loadManpowerReport() {
   var container = document.getElementById('rpt-sec-manpower');
-  if (!container || container._loaded) return;
+  if (!container) return;
+  // 上级 tab 切换会清掉所有 .map-tab 的 active，先重新固定"按人员/按项目"高亮
+  _applyManpowerDimActive();
+  if (container._loaded) return;
+  var now = new Date();
+  var ym = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  await _fetchManpowerReport(ym);
+}
+
+// 月份字符串 "YYYY-MM" → { from:"YYYY-MM-01", to:"YYYY-MM-最后一天" }
+function _mpMonthRange(ym) {
+  var p = (ym || '').split('-');
+  var y = parseInt(p[0], 10), m = parseInt(p[1], 10);
+  if (!y || !m) return { from: '', to: '' };
+  var mm = String(m).padStart(2, '0');
+  return {
+    from: y + '-' + mm + '-01',
+    to: y + '-' + mm + '-' + String(new Date(y, m, 0).getDate()).padStart(2, '0'),
+  };
+}
+
+// 月份选择下拉选项：近 24 个月（含当前月）
+function _mpMonthOptions(selectedYm) {
+  var now = new Date();
+  var html = '';
+  for (var i = 0; i < 24; i++) {
+    var d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    var ym = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    html += '<option value="' + ym + '"' + (ym === selectedYm ? ' selected' : '') + '>' + ym + '</option>';
+  }
+  return html;
+}
+
+function _mpMonthChanged(ym) {
+  if (!ym) return;
+  _fetchManpowerReport(ym);
+}
+
+async function _fetchManpowerReport(ym) {
+  var container = document.getElementById('rpt-sec-manpower');
+  if (!container) return;
   container.innerHTML = '<div class="loading-spinner">加载人力报表...</div>';
 
   try {
     var mpPerm = hasPerm('manpower_view');
     if (!mpPerm) _manpowerGroupBy = 'user';  // 普通用户仅"按人员"维度
-    var data = await API.get('/reports/manpower');
+    var range = _mpMonthRange(ym);
+    var data = await API.get('/reports/manpower?date_from=' + encodeURIComponent(range.from) + '&date_to=' + encodeURIComponent(range.to));
     var s = data.summary || {};
     var checkinTotal = (data.by_user || []).reduce(function(acc, u) { return acc + (u.checkin_hours || 0); }, 0);
 
     container.innerHTML =
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">' +
-        '<div class="section-title" style="margin:0">人力工时报表</div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">' +
+        '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
+          '<div class="section-title" style="margin:0">人力工时报表</div>' +
+          '<span style="font-size:12px;color:var(--muted)">统计月份</span>' +
+          '<select class="search-inp" style="width:auto" onchange="_mpMonthChanged(this.value)">' + _mpMonthOptions(ym) + '</select>' +
+        '</div>' +
         '<button class="btn btn-primary btn-sm" onclick="_exportManpower()">导出 Excel</button>' +
       '</div>' +
       '<div class="kpi-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:16px">' +
@@ -192,6 +237,7 @@ async function loadManpowerReport() {
       '<div style="font-size:11px;color:var(--muted);margin-top:8px">' + data.period.from + ' ~ ' + data.period.to + '</div>';
 
     window._mpData = data;
+    window._mpYm = ym;
     _renderManpowerDim(_manpowerGroupBy);
     container._loaded = true;
   } catch(e) {
@@ -199,11 +245,15 @@ async function loadManpowerReport() {
   }
 }
 
+function _applyManpowerDimActive() {
+  document.querySelectorAll('#rpt-sec-manpower .map-tab').forEach(function(t) {
+    t.classList.toggle('active', t.textContent.indexOf(_manpowerGroupBy === 'project' ? '项目' : '人员') >= 0);
+  });
+}
+
 function _switchManpowerDim(dim) {
   _manpowerGroupBy = dim;
-  document.querySelectorAll('#rpt-sec-manpower .map-tab').forEach(function(t) {
-    t.classList.toggle('active', t.textContent.indexOf(dim === 'project' ? '项目' : '人员') >= 0);
-  });
+  _applyManpowerDimActive();
   _renderManpowerDim(dim);
 }
 
@@ -408,7 +458,10 @@ async function _exportManpower() {
   var token = localStorage.getItem('pma_token');
   if (!token) { showToast('未登录', 'error'); return; }
   try {
-    var res = await fetch('/api/reports/manpower/export', { headers: { 'Authorization': 'Bearer ' + token } });
+    var ym = window._mpYm || '';
+    var range = _mpMonthRange(ym);
+    var qs = '?date_from=' + encodeURIComponent(range.from) + '&date_to=' + encodeURIComponent(range.to);
+    var res = await fetch('/api/reports/manpower/export' + qs, { headers: { 'Authorization': 'Bearer ' + token } });
     if (!res.ok) {
       var err = {};
       try { err = await res.json(); } catch(e) {}
@@ -418,8 +471,7 @@ async function _exportManpower() {
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
-    var _period = (window._mpData && window._mpData.period) || {};
-    a.download = 'manpower_report_' + (_period.from || '') + '_' + (_period.to || '') + '.xlsx';
+    a.download = 'manpower_report_' + ym + '.xlsx';
     document.body.appendChild(a);
     a.click();
     a.remove();
