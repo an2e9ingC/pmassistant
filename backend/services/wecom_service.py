@@ -224,29 +224,33 @@ async def sync_wecom_data(db: Session, days: int = 60) -> dict:
                 hours = 0.0
             else:
                 # ── Pair 上班→下班 records ──
+                # 早上最早按北京 08:45 起算；下班最晚不超过次日 03:00
+                try:
+                    _ds_date = date.fromisoformat(str(ds)[:10])
+                except Exception:
+                    _ds_date = date.today()
+                morn_ref, night_ref = _day_refs(_ds_date)
                 hours = 0.0
                 used_out = set()
                 for cin in d["checkins_in"]:
+                    cin_c = max(cin, morn_ref)
                     best = None
+                    best_c = None
                     for j, cout in enumerate(d["checkins_out"]):
-                        if j not in used_out and cout > cin:
-                            if best is None or cout < d["checkins_out"][best]:
-                                best = j
+                        if j in used_out:
+                            continue
+                        cout_c = min(cout, night_ref)
+                        if cout_c > cin_c and (best_c is None or cout_c < best_c):
+                            best = j
+                            best_c = cout_c
                     if best is not None:
-                        hours += (d["checkins_out"][best] - cin) / 3600.0
+                        # 精确扣午休：与本日 12:00–13:30 午休窗口的实际重叠
+                        ov = _lunch_overlap(cin_c, best_c, _ds_date)
+                        hours += (best_c - cin_c - ov) / 3600.0
                         used_out.add(best)
 
-            # ── Lunch deduction: only for single-pair days with raw >= 9h ──
-            # Threshold of 9h raw span: only full workdays that include lunch break
-            # Weekend/short days (<9h raw) won't trigger the deduction
-            # Lunch hours configurable via 数据源→企业微信 配置窗口 (default 1.5h)
-            lunch_deducted = False
-            if (hours >= 9.0 and len(d["checkins_in"]) == 1 and len(d["checkins_out"]) == 1
-                    and has_valid_punch):
-                hours -= float(getattr(settings, "WECOM_LUNCH_HOURS", 1.5) or 1.5)
-                lunch_deducted = True
-
             hours = max(0, hours)
+            lunch_deducted = False
 
             # ── Structured logging for debugging ──
             exception_types = [r.get("exception_type", "") for r in d["raw"]]
@@ -498,18 +502,41 @@ def _extract_approval_hours(detail: dict) -> tuple:
         logger.warning(f"WeCom approval: no time range in '{sp_name}' for {apply_user_id}, controls={ctrls}")
         return (None, None, 0)
 
-    # Calculate hours — 请假按天数(去午休)；外出/其它按 date_range 跨度(无午休扣减)
+    # 请假不受影响（variance_duration per day 已去午休）；外出/其它按跨度，且
+    # 早上最早按开始日 08:45 起算、结束最晚不超过结束日次日 03:00
+    if not vacation_duration:
+        try:
+            _b_start = (datetime.fromtimestamp(int(start_ts), tz=timezone.utc) + timedelta(hours=8)).date()
+            _b_end = (datetime.fromtimestamp(int(end_ts), tz=timezone.utc) + timedelta(hours=8)).date()
+        except Exception:
+            _b_start = _b_end = date.today()
+        start_morn, _ = _day_refs(_b_start)
+        _, end_night = _day_refs(_b_end)
+        start_ts = max(int(start_ts), start_morn)
+        end_ts = min(int(end_ts), end_night)
+
+    # Calculate hours — 请假按天数(去午休)；外出/其它按 date_range 跨度，且
+    # 单日审批精确扣午休(12:00–13:30)；多日(出差等)不扣午休
     if vacation_duration:
         hours = vacation_duration / 3600.0
     else:
         duration_sec = end_ts - start_ts
         if duration_sec <= 0:
             return (None, None, 0)
+        # 单日(开始日==结束日)才扣午休重叠；多日跨度不扣
+        try:
+            _single = (_b_start == _b_end)
+            if _single:
+                ov = _lunch_overlap(start_ts, end_ts, _b_start)
+                duration_sec = max(0, duration_sec - ov)
+        except Exception:
+            pass
         hours = duration_sec / 3600.0
 
-    # Determine the date of the approval start
+    # Determine the date of the approval start (Beijing date — 避免 UTC 日期错位导致
+    # 早上开始的审批被存到前一天，形成孤儿/错位行)
     try:
-        dt = datetime.fromtimestamp(int(start_ts), tz=timezone.utc)
+        dt = datetime.fromtimestamp(int(start_ts), tz=timezone.utc) + timedelta(hours=8)
         date_key = dt.date()
     except (ValueError, OSError):
         return (None, None, 0)
@@ -614,6 +641,28 @@ def _as_date(d):
     return _parse_date(str(d)[:10])
 
 
+def _day_refs(d: date):
+    """Return (morn_ref, night_ref) as UTC unix timestamps for a Beijing day.
+
+    - morn_ref: Beijing `d` 08:45  → UTC `d` 00:45
+    - night_ref: Beijing `d+1` 03:00 → UTC `d` 19:00
+    (WeCom timestamps are UTC; Beijing = UTC+8h.)
+    """
+    morn = datetime(d.year, d.month, d.day, 0, 45, tzinfo=timezone.utc).timestamp()
+    night = datetime(d.year, d.month, d.day, 19, 0, tzinfo=timezone.utc).timestamp()
+    return morn, night
+
+
+def _lunch_overlap(start_ts: float, end_ts: float, day: date) -> float:
+    """Seconds of overlap between [start_ts, end_ts] and the 12:00–13:30 lunch window on `day` (Beijing).
+
+    Beijing 12:00 = UTC `day` 04:00; Beijing 13:30 = UTC `day` 05:30.
+    """
+    lunch_s = datetime(day.year, day.month, day.day, 4, 0, tzinfo=timezone.utc).timestamp()
+    lunch_e = datetime(day.year, day.month, day.day, 5, 30, tzinfo=timezone.utc).timestamp()
+    return max(0.0, min(end_ts, lunch_e) - max(start_ts, lunch_s))
+
+
 def _is_valid_approval(raw) -> bool:
     try:
         return raw.get("sp_status", 0) in (1, 2)
@@ -625,8 +674,8 @@ def _resolve_daily_hours(day: dict) -> float:
     """Compute one day's work hours with the standard business rules (shared by
     user center + manpower report, so the two never diverge).
 
-    - 出差(biz_trip): 工作日=8h，周末=实际补卡(checkin)
-    - 外出(out_field): 审批时长 − 午休（≥9h 才扣）
+    - 出差(biz_trip): 工作日=8h，周末=实际补卡(checkin)；有实际打卡则取更长
+    - 外出(out_field): 审批时长 − 午休（≥9h 才扣）；有实际打卡则取更长
     - 请假/外勤(leave): 免打卡，只算真实打卡(checkin)
     - 其它: max(打卡, 审批)
     """
@@ -637,16 +686,19 @@ def _resolve_daily_hours(day: dict) -> float:
     is_biz_trip = any(a.get("status") in (1, 2) and "出差" in (a.get("name") or "") for a in apprs)
     is_out_field = any(a.get("status") in (1, 2) and "外出" in (a.get("name") or "") for a in apprs)
     if is_biz_trip:
+        # 出差：有实际打卡按实际；无打卡按现有策略（工作日8h/周末补卡）
+        if ch and ch > 0:
+            return round(ch, 2)
         try:
             _dow = datetime.strptime(day.get("date", ""), "%Y-%m-%d").weekday()
         except Exception:
             _dow = 0
         return 8.0 if _dow < 5 else round(ch, 2)
     if is_out_field:
-        _lunch = float(getattr(settings, "WECOM_LUNCH_HOURS", 1.5) or 1.5)
-        return round(ah - _lunch, 2) if ah >= 9.0 else round(ah, 2)
+        # 外出：ah/ch 都已在同步时精确扣午休；取较长者
+        return round(max(ah, ch), 2)
     if is_leave:
-        return round(ch, 2)
+        return round(ch, 2)                      # 请假/外勤：免打卡，只算真实打卡
     return round(max(ch, ah), 2)
 
 
@@ -664,9 +716,24 @@ def _user_daily_map(db: Session, wecom_userid: str, date_from=None, date_to=None
     days = {}
     for c in q.all():
         d = str(c.date)
-        m = days.setdefault(d, {"date": d, "_checkin_h": 0.0, "_approval_h": 0.0, "approvals": []})
+        m = days.setdefault(d, {"date": d, "_checkin_h": 0.0, "_approval_h": 0.0, "approvals": [], "_in": None, "_out": None})
         if c.source == "checkin":
             m["_checkin_h"] = max(m["_checkin_h"], c.work_hours or 0)
+            try:
+                raw = json.loads(c.raw_data or "[]")
+                if isinstance(raw, list):
+                    for x in raw:
+                        ct = x.get("checkin_time", 0)
+                        if not ct:
+                            continue
+                        t = (datetime.fromtimestamp(ct, tz=timezone.utc) + timedelta(hours=8)).strftime("%H:%M")
+                        ctype = x.get("checkin_type", "") or ""
+                        if "上班" in ctype:
+                            m["_in"] = min(m["_in"], t) if m["_in"] else t
+                        elif "下班" in ctype:
+                            m["_out"] = max(m["_out"], t) if m["_out"] else t
+            except Exception:
+                pass
         elif c.source == "approval":
             try:
                 raw = json.loads(c.raw_data or "{}")
@@ -680,7 +747,7 @@ def _user_daily_map(db: Session, wecom_userid: str, date_from=None, date_to=None
                 if not periods:
                     periods = [(d, False)]
                 for (day_str, _all_day) in periods:
-                    dm = days.setdefault(day_str, {"date": day_str, "_checkin_h": 0.0, "_approval_h": 0.0, "approvals": []})
+                    dm = days.setdefault(day_str, {"date": day_str, "_checkin_h": 0.0, "_approval_h": 0.0, "approvals": [], "_in": None, "_out": None})
                     if not any(x.get("name") == sp_name and x.get("status") == st for x in dm["approvals"]):
                         dm["approvals"].append({"name": sp_name, "status": st})
     return days
@@ -705,8 +772,11 @@ def user_daily_totals(db: Session, wecom_userid: str, date_from=None, date_to=No
 
 
 def user_daily_checkins(db: Session, wecom_userid: str, date_from=None, date_to=None) -> list:
-    """Return [{date, hours, type}] per-day check-in detail (打卡明细), using the same
-    business rules as user_daily_totals / get_checkin_calendar."""
+    """Return [{date, hours, type, in_time, out_time}] per-day check-in detail (打卡明细),
+    using the same business rules as user_daily_totals / get_checkin_calendar.
+
+    `in_time`/`out_time`: actual punch times "HH:MM" (Beijing) so users can trace how `hours` is derived.
+    """
     days = _user_daily_map(db, wecom_userid, date_from, date_to)
     out = []
     for d, m in days.items():
@@ -714,6 +784,8 @@ def user_daily_checkins(db: Session, wecom_userid: str, date_from=None, date_to=
             "date": d,
             "hours": round(_resolve_daily_hours(m), 2),
             "type": _day_type(m),
+            "in_time": m.get("_in") or "",
+            "out_time": m.get("_out") or "",
         })
     out.sort(key=lambda x: x["date"], reverse=True)
     return out

@@ -432,6 +432,8 @@ function _renderMpUserDetail(el, d) {
     var ckDate = ck ? date : '';
     var ckH = ck ? (ck.hours || 0).toFixed(1) + 'h' : '—';
     var ckT = ck ? '<span style="color:' + ckTypeColor(ck.type) + '">' + escHtml(ck.type || '正常') + '</span>' : '—';
+    var ckIn = (ck && ck.in_time) ? '<span style="font-family:var(--mono);font-size:11px;color:var(--fg)">' + escHtml(ck.in_time) + '</span>' : '—';
+    var ckOut = (ck && ck.out_time) ? '<span style="font-family:var(--mono);font-size:11px;color:var(--fg)">' + escHtml(ck.out_time) + '</span>' : '—';
     // 记录侧
     var recDate = dy ? date : '';
     var recH = dy ? (dy.hours || 0).toFixed(1) + 'h' : '—';
@@ -454,6 +456,8 @@ function _renderMpUserDetail(el, d) {
       '<td style="font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;vertical-align:top">' + escHtml(ckDate) + '</td>' +
       '<td style="font-family:var(--mono);font-size:11px;text-align:right;white-space:nowrap;vertical-align:top">' + ckH + '</td>' +
       '<td style="font-size:11px;vertical-align:top;white-space:nowrap">' + ckT + '</td>' +
+      '<td style="font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;vertical-align:top">' + ckIn + '</td>' +
+      '<td style="font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;vertical-align:top">' + ckOut + '</td>' +
       '<td style="font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;vertical-align:top">' + escHtml(recDate) + '</td>' +
       '<td style="font-family:var(--mono);font-size:11px;text-align:right;white-space:nowrap;vertical-align:top">' + recH + '</td>' +
       '<td style="font-size:11px;min-width:150px;vertical-align:top">' + projHtml + '</td>' +
@@ -461,7 +465,7 @@ function _renderMpUserDetail(el, d) {
       '</tr>';
   }).join('');
 
-  var tablesBody = combinedRows || '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:16px">该时段无记录</td></tr>';
+  var tablesBody = combinedRows || '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:16px">该时段无记录</td></tr>';
 
   el.innerHTML =
     '<div style="display:flex;flex-direction:column;gap:12px;align-items:stretch">' +
@@ -481,8 +485,8 @@ function _renderMpUserDetail(el, d) {
       '<div class="card card-pad">' +
         '<table class="proj-table mp-detail-table" style="font-size:12px;width:100%">' +
           '<thead>' +
-            '<tr><th colspan="3" style="text-align:center;color:var(--muted)">打卡明细</th><th colspan="4" style="text-align:center;color:var(--muted)">记录明细（每日各项目占比）</th></tr>' +
-            '<tr><th style="text-align:center">日期</th><th style="text-align:center">打卡工时</th><th style="text-align:center">类型</th>' +
+            '<tr><th colspan="5" style="text-align:center;color:var(--muted)">打卡明细</th><th colspan="4" style="text-align:center;color:var(--muted)">记录明细（每日各项目占比）</th></tr>' +
+            '<tr><th style="text-align:center">日期</th><th style="text-align:center">打卡工时</th><th style="text-align:center">类型</th><th style="text-align:center">上班打卡</th><th style="text-align:center">下班打卡</th>' +
               '<th style="text-align:center">日期</th><th style="text-align:center">工时</th><th style="text-align:center">项目明细</th><th style="text-align:center">与打卡对比</th></tr>' +
           '</thead>' +
           '<tbody>' + tablesBody + '</tbody>' +
