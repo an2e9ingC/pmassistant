@@ -133,6 +133,25 @@ def _migrate_sqlite():
         logger.warning(f"Migration warning: {e}")
 
 
+def _migrate_board_status_rename():
+    """板卡状态「硬件上电测试」重命名为「硬件上电」，同步存量板卡与时间线事件数据。
+
+    幂等：仅更新仍为旧状态名的行。经 SQLAlchemy engine 执行，兼容 SQLCipher 加密库。
+    """
+    from sqlalchemy import text
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(
+                "UPDATE `delivery_boards` SET `status` = '硬件上电' WHERE `status` = '硬件上电测试'"))
+            conn.execute(text(
+                "UPDATE `delivery_board_events` SET `from_status` = '硬件上电' WHERE `from_status` = '硬件上电测试'"))
+            conn.execute(text(
+                "UPDATE `delivery_board_events` SET `to_status` = '硬件上电' WHERE `to_status` = '硬件上电测试'"))
+            conn.commit()
+    except Exception as e:
+        logger.warning(f"Migration warning (board status rename): {e}")
+
+
 def _migrate_password_hash_nullable():
     """Make local_users.password_hash nullable for GitLab OAuth users.
 
@@ -669,7 +688,7 @@ def clean_orphan_favorites(db: Session):
 def init_db():
     from backend.models.local import LocalUser, Role, UserRole, ProductBlockDiagram, ProductNote, ProjectNote, PmaSetting, AuditLog, ProjectActivity, ProductActivity  # noqa: F401
     from backend.models.bug import CachedBug, PmaBug, BugWorkLog, BugAnalysis, BugAttachment, BugTransfer  # noqa: F401
-    from backend.models.delivery import DeliveryRecord, DeliveryMaterialCode  # noqa: F401
+    from backend.models.delivery import DeliveryRecord, DeliveryMaterialCode, DeliveryBoard, DeliveryBoardEvent  # noqa: F401
     from backend.models.document import DocumentTemplate, ProjectDocument, ProductDocTemplate, ProductLine, PmaTag, ProductDocument, ProductNamingOption, BugTemplate  # noqa: F401
     from backend.models.standard import ProcessStandard  # noqa: F401
     from backend.models.task import Task, WorkLog, TaskComment  # noqa: F401
@@ -695,6 +714,7 @@ def init_db():
     _migrate_product_hierarchy()
     _migrate_project_doc_template_id()  # backfill template_id on project_documents
     _migrate_task_is_deleted()  # Split is_diverged semantics: add is_deleted, fix existing data
+    _migrate_board_status_rename()  # 板卡状态「硬件上电测试」→「硬件上电」
     _migrate_to_sqlcipher()  # Convert unencrypted DB to SQLCipher if key configured
     _clear_gitlab_tokens()   # Force re-auth on server restart
     _ensure_db_instance_id()  # Ensure instance UUID for DB fingerprint detection
@@ -722,21 +742,21 @@ def init_db():
         # Seed default roles if not exist
         default_roles = [
             ("public", "普通用户", "", "默认角色组，所有登录用户自动拥有（基础访问权限）"),
-            ("admin", "管理员", "admin,sync,project_edit,product_link,customer_link,doc_template,stage_mapping,manpower_view", "系统完整管理权限（不可修改）"),
+            ("admin", "管理员", "admin,sync,project_edit,product_link,customer_link,doc_template,stage_mapping,manpower_view,board_manage", "系统完整管理权限（不可修改）"),
             ("ceo", "CEO", "manpower_view", "查看所有项目数据"),
             ("cto", "CTO", "manpower_view", "查看所有项目数据"),
-            ("pm", "项目经理", "sync,project_edit,product_link,customer_link,doc_template,stage_mapping,task_edit,manpower_view", "项目管理+同步+产客关系维护+文档模板+阶段映射+任务"),
+            ("pm", "项目经理", "sync,project_edit,product_link,customer_link,doc_template,stage_mapping,task_edit,manpower_view,board_manage", "项目管理+同步+产客关系维护+文档模板+阶段映射+任务+板卡管理"),
             ("hr", "人力", "manpower_view", "人力报表+工时统计查看"),
-            ("sales", "销售及售前", "", "查看售前+分配项目"),
-            ("hw_dev", "硬件开发", "", "查看分配项目"),
-            ("structure", "结构设计及装配", "", "查看分配项目"),
-            ("hw_test", "硬件测试", "", "查看分配项目"),
-            ("bsp_dev", "BSP开发", "", "查看分配项目"),
-            ("sw_dev", "业务软件开发", "", "查看分配项目"),
-            ("test_delivery", "测试交付", "project_edit,doc_template", "查看分配项目+交付管理+文档模板"),
-            ("procurement", "采购", "", "查看分配项目"),
-            ("quality", "质检", "", "查看分配项目"),
-            ("warehouse", "库房管理", "", "查看分配项目"),
+            ("sales", "销售及售前", "board_manage", "查看售前+分配项目+板卡管理"),
+            ("hw_dev", "硬件开发", "board_manage", "查看分配项目+板卡管理"),
+            ("structure", "结构设计及装配", "board_manage", "查看分配项目+板卡管理"),
+            ("hw_test", "硬件测试", "board_manage", "查看分配项目+板卡管理"),
+            ("bsp_dev", "BSP开发", "board_manage", "查看分配项目+板卡管理"),
+            ("sw_dev", "业务软件开发", "board_manage", "查看分配项目+板卡管理"),
+            ("test_delivery", "测试交付", "project_edit,doc_template,board_manage", "查看分配项目+交付管理+文档模板+板卡管理"),
+            ("procurement", "采购", "board_manage", "查看分配项目+板卡管理"),
+            ("quality", "质检", "board_manage", "查看分配项目+板卡管理"),
+            ("warehouse", "库房管理", "board_manage", "查看分配项目+板卡管理"),
         ]
         for key, label, perms, desc in default_roles:
             if not db.query(Role).filter(Role.key == key).first():
@@ -751,6 +771,19 @@ def init_db():
                 perms = set(role.permissions.split(",")) if role.permissions else set()
                 if "manpower_view" not in perms:
                     perms.add("manpower_view")
+                    role.permissions = ",".join(sorted(perms))
+        db.commit()
+
+        # Ensure board_manage is in existing roles (板卡管理)
+        board_roles = ["admin", "pm", "test_delivery", "warehouse", "quality",
+                       "hw_dev", "sw_dev", "bsp_dev", "hw_test", "structure",
+                       "procurement", "sales"]
+        for rk in board_roles:
+            role = db.query(Role).filter(Role.key == rk).first()
+            if role:
+                perms = set(role.permissions.split(",")) if role.permissions else set()
+                if "board_manage" not in perms:
+                    perms.add("board_manage")
                     role.permissions = ",".join(sorted(perms))
         db.commit()
 

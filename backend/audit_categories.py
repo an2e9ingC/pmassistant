@@ -47,7 +47,7 @@ FIELD_LABEL = {
     "planned_delivery_qty": "计划交付数量",
     "delivery_note": "交付备注",
     "product_delivery_plans": "产品交付计划",
-    "product_code": "产品编号",
+    "product_code": "产品型号",
     "delivery_method": "交付形式",
     "material_codes": "物料编码",
     "background": "项目背景",

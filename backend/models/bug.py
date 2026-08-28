@@ -51,7 +51,10 @@ class PmaBug(Base):
     severity = Column(Integer, default=3)  # 1-4
     priority = Column(String(16), default="medium")  # low / medium / high / critical
     type = Column(String(32), default="codeerror")
-    # codeerror / design / compatibility / standard / security / performance / other
+    # codeerror / design / compatibility / standard / security / performance / other / repair
+
+    # 维修类 Bug 关联的板卡 id 列表（DeliveryBoard.id）
+    board_ids = Column(JSON, nullable=True, default=list)
 
     # People
     reporter_id = Column(Integer, ForeignKey("local_users.id"), nullable=False)

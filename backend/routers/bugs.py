@@ -6,9 +6,11 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.middleware.auth import get_current_user, require_perm, require_any_perm, has_perm
 from backend.models.bug import PmaBug, BugAnalysis, BugComment
+from backend.models.delivery import DeliveryBoard
 from backend.services import bug_service
+from backend.services.bug_service import BUG_TYPE_REPAIR
 from backend.services.entity_resolver import resolve_project
-from backend.audit_categories import AUDIT_CAT_BUG
+from backend.audit_categories import AUDIT_CAT_BUG, AUDIT_CAT_PROJECT
 from backend.routers.logs import log_audit
 from fastapi.responses import StreamingResponse
 
@@ -37,6 +39,18 @@ def _filter_editable_bug_ids(db, user, bug_ids):
     return result
 
 
+def _validate_repair_boards(db, project_id, board_ids):
+    """维修 Bug 关联的板卡必须属于 bug 所在项目。"""
+    if not board_ids:
+        return
+    cnt = db.query(DeliveryBoard).filter(
+        DeliveryBoard.id.in_(board_ids),
+        DeliveryBoard.project_id == project_id,
+    ).count()
+    if cnt != len(set(board_ids)):
+        raise HTTPException(status_code=400, detail="板卡不属于该项目")
+
+
 class BugCreate(BaseModel):
     title: str
     description: Optional[str] = ""
@@ -50,6 +64,7 @@ class BugCreate(BaseModel):
     estimate_hours: float = 0
     cc_user_ids: Optional[List[int]] = None
     progress: Optional[int] = 0
+    board_ids: Optional[List[int]] = None
 
 
 class BugUpdate(BaseModel):
@@ -68,6 +83,7 @@ class BugUpdate(BaseModel):
     resolved_by_id: Optional[int] = None
     cc_user_ids: Optional[List[int]] = None
     progress: Optional[int] = None
+    board_ids: Optional[List[int]] = None
 
 
 class WorklogCreate(BaseModel):
@@ -246,7 +262,15 @@ def get_bug(bug_id: int, db: Session = Depends(get_db), _=Depends(get_current_us
 
 @router.post("", response_model=dict)
 def create_bug(body: BugCreate, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    if body.type == BUG_TYPE_REPAIR:
+        if not body.board_ids:
+            raise HTTPException(status_code=400, detail="维修类 Bug 必须关联板卡")
+        _validate_repair_boards(db, body.project_id, body.board_ids)
     b = bug_service.create_bug(db, {**body.model_dump(), "reporter_id": user.id})
+    if body.type == BUG_TYPE_REPAIR and body.board_ids:
+        for bid in body.board_ids:
+            log_audit(db, user, "delivery_board_repair",
+                      f"板卡#{bid} →维修中（维修Bug#{b['id']}）", AUDIT_CAT_PROJECT, "medium")
     log_audit(db, user, "bug_create", f"创建Bug「{body.title}」", AUDIT_CAT_BUG, "medium")
     return {"code": 0, "data": b, "message": "ok"}
 
@@ -255,8 +279,34 @@ def create_bug(body: BugCreate, db: Session = Depends(get_db), user=Depends(get_
 def update_bug(bug_id: int, body: BugUpdate, db: Session = Depends(get_db), user=Depends(get_current_user)):
     if not _can_edit_bug(db, user, bug_id):
         raise HTTPException(status_code=403, detail="无权修改该Bug：仅创建人或负责人可修改")
+    existing = db.query(PmaBug).filter(PmaBug.id == bug_id).first()
+    if not existing:
+        raise HTTPException(status_code=404, detail="Bug not found")
+    # 维修 Bug 校验：类型为维修时板卡必填且属于项目
+    eff_type = body.type or existing.type
+    eff_board_ids = body.board_ids if body.board_ids is not None else (existing.board_ids or [])
+    if eff_type == BUG_TYPE_REPAIR and not eff_board_ids:
+        raise HTTPException(status_code=400, detail="维修类 Bug 必须关联板卡")
+    if body.board_ids is not None:
+        _validate_repair_boards(db, body.project_id or existing.project_id, body.board_ids)
+    old_status = existing.status
+    old_board_ids = [int(x) for x in (existing.board_ids or []) if x is not None]
     b = bug_service.update_bug(db, bug_id, body.model_dump(exclude_none=True), user.id)
     if not b: raise HTTPException(status_code=404, detail="Bug not found")
+    # 板卡联动审计（与 bug_service 实际联动条件对齐，避免记录未发生的迁移）
+    new_board_ids = [int(x) for x in (b.get("board_ids") or []) if x is not None]
+    added = [x for x in new_board_ids if x not in old_board_ids]
+    if b.get("type") == BUG_TYPE_REPAIR and b.get("status") not in ("resolved", "closed"):
+        for bid in added:
+            log_audit(db, user, "delivery_board_repair",
+                      f"板卡#{bid} →维修中（维修Bug#{bug_id}）", AUDIT_CAT_PROJECT, "medium")
+    if body.status in ("resolved", "closed") and old_status not in ("resolved", "closed"):
+        repairing_ids = {br.id for br in db.query(DeliveryBoard).filter(
+            DeliveryBoard.id.in_(old_board_ids), DeliveryBoard.status == "维修中").all()} if old_board_ids else set()
+        for bid in new_board_ids:
+            if bid in repairing_ids:
+                log_audit(db, user, "delivery_board_repair_finish",
+                          f"板卡#{bid} →已维修（维修Bug#{bug_id} 解决）", AUDIT_CAT_PROJECT, "medium")
     log_audit(db, user, "bug_update", f"更新Bug #{bug_id}", AUDIT_CAT_BUG, "medium")
     return {"code": 0, "data": b, "message": "ok"}
 

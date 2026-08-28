@@ -50,7 +50,7 @@ function initDashboard() {
   }
 }
 
-function initDetailView(code, tabId) {
+function initDetailView(code, tabId, highlightBoard) {
   loadAllProjects().then(function() {
     if (code) {
       // Look up project by code to get integer id for combo
@@ -61,6 +61,8 @@ function initDetailView(code, tabId) {
         if (tabId && typeof setDetailTargetTab === 'function') {
           setDetailTargetTab(tabId);
         }
+        // 从 Bug 详情跳转交付页时，携带待定位高亮的板卡编号（delivery 视图渲染后消费并清除）
+        window._deliveryHighlightBoard = highlightBoard || null;
         projComboSelect(p.id);
       }
     } else if (window._pendingProjectCode) {
@@ -263,6 +265,7 @@ function gotoView(view, opts) {
       'admin': '系统管理', 'sync': '数据同步', 'project_edit': '项目维护',
       'product_link': '产品维护', 'customer_link': '客户维护',
       'doc_template': '文档模板', 'stage_mapping': '阶段映射',
+      'board_manage': '板卡管理',
     };
     var currentLabel = userPerms.length
       ? userPerms.map(function(p) { return permLabels[p] || p; }).join(', ')
@@ -1670,7 +1673,7 @@ async function initUserCenter(viewUserId, tab) {
 
   var isGitlab = user.auth_source === 'gitlab';
   var perms = (user.permissions || '').split(',').filter(Boolean);
-  var permLabels = {'admin':'系统管理','sync':'数据同步','project_edit':'项目维护','product_link':'产品维护','customer_link':'客户维护','doc_template':'文档模板配置','stage_mapping':'阶段映射','task_edit':'任务管理'};
+  var permLabels = {'admin':'系统管理','sync':'数据同步','project_edit':'项目维护','product_link':'产品维护','customer_link':'客户维护','doc_template':'文档模板配置','stage_mapping':'阶段映射','task_edit':'任务管理','board_manage':'板卡管理'};
   var permBadges = perms.map(function(p) { return '<span class="profile-role-tag">' + escHtml(permLabels[p]||p) + '</span>'; }).join('');
   var showPermRoles = window._debugPermEnabled && permBadges;
 
@@ -2302,7 +2305,7 @@ function _renderUcTaskTable() {
         { key: 'fav', title: '', width: '24px', minWidth: 24, className: 'dt-fav-cell', render: function(v, row) { return favStar('task', row.id, {stopPropagation: true}); } },
         { key: 'id', title: '编号', width: 'calc(58px * var(--ui-scale))', minWidth: 58, render: function(v) { return '<span style="font-size:11px;font-family:var(--mono);color:var(--accent);cursor:pointer" onclick="event.stopPropagation();_ucOpenTask('+v+')">#'+v+'</span>'; } },
         { key: '_projCode', title: '项目编号', width: 'calc(78px * var(--ui-scale))', minWidth: 78, rowspan: true, render: function(v, row) { return v ? projCodeTag(row.project_code||v, 'event.stopPropagation();openProject(\''+escHtml(row.project_code||v).replace(/'/g,"\\'")+'\')', row.project_name) : '-'; } },
-        { key: '_prodName', title: '产品编号', width: 'calc(114px * var(--ui-scale))', minWidth: 114, rowspan: true, render: function(v, row) { return row.product_code ? '<span class="proj-code-btn" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="event.stopPropagation();openProductDetail(\''+escHtml(row.product_code)+'\')" title="'+escHtml(row.product_code)+' '+escHtml(row.product_name||'')+'">'+escHtml(row.product_code)+'</span>' : '<span style="font-size:12px;color:var(--muted)">—</span>'; } },
+        { key: '_prodName', title: '产品型号', width: 'calc(114px * var(--ui-scale))', minWidth: 114, rowspan: true, render: function(v, row) { return row.product_code ? '<span class="proj-code-btn" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="event.stopPropagation();openProductDetail(\''+escHtml(row.product_code)+'\')" title="'+escHtml(row.product_code)+' '+escHtml(row.product_name||'')+'">'+escHtml(row.product_code)+'</span>' : '<span style="font-size:12px;color:var(--muted)">—</span>'; } },
         { key: '_stageName', title: '阶段', width: 'calc(96px * var(--ui-scale))', minWidth: 96, rowspan: true, render: function(v) { var parts = (v||'').split('||'); var name = parts.length >= 3 ? parts[2] : (v||''); return '<span style="font-size:12px">'+escHtml(name)+'</span>'; } },
         { key: 'title', title: '任务标题', minWidth: 100, align: 'left', render: function(v, row) { return _renderTaskManualTag(row) + '<span style="font-weight:530;cursor:pointer" onclick="event.stopPropagation();_ucOpenTask('+row.id+')">'+escHtml(v||'')+'</span>'; } },
         { key: 'assignee_name', title: '责任人', width: 'calc(80px * var(--ui-scale))', minWidth: 80, render: function(v, row) { var user=getCurrentUser(); var uid=user?user.id:null; var isAssignee=uid&&(row.assignee_id==uid||(row.assignee_ids&&row.assignee_ids.indexOf(uid)>=0)); var canEdit=uid&&(row.reporter_id==uid||isAssignee); var display=_renderAssigneeDisplay(row.assignee_names||[], row.id, {fallback: v||'—'}); if (canEdit) { window._ucEditData = window._ucEditData || {}; window._ucEditData[row.id] = { ids: row.assignee_ids || (row.assignee_id ? [row.assignee_id] : []), type: 'task', title: row.title || '' }; } var onclick=''; if (canEdit) onclick=' onclick="event.stopPropagation();_ucEditAssignee('+row.id+')" title="点击修改责任人"'; return '<span style="font-size:12px'+(canEdit?';cursor:pointer;color:var(--accent);text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px':'')+'"'+onclick+'>'+display+'</span>'; } },
@@ -2853,7 +2856,7 @@ async function _ucLoadBugs() {
           { key: 'fav', title: '', width: '24px', minWidth: 24, className: 'dt-fav-cell', render: function(v, row) { return favStar('bug', row.id, {stopPropagation: true}); } },
           { key: 'id', title: '编号', width: 'calc(58px * var(--ui-scale))', minWidth: 58, render: function(v) { return '<span style="font-family:var(--mono);font-size:11px;cursor:pointer" onclick="event.stopPropagation();loadViewScript(\'/js/bugs.js?v=' + APP_VERSION + '\',function(){openBugDetail('+v+')})">#'+v+'</span>'; } },
           { key: '_projCode', title: '项目编号', width: 'calc(78px * var(--ui-scale))', minWidth: 78, rowspan: true, render: function(v, row) { return v ? projCodeTag(row.project_code||v, 'event.stopPropagation();openProject(\''+escHtml(row.project_code||v).replace(/'/g,"\\'")+'\')', row.project_name) : '-'; } },
-          { key: '_prodName', title: '产品编号', width: 'calc(114px * var(--ui-scale))', minWidth: 114, rowspan: true, render: function(v, row) { return row.product_code ? '<span class="proj-code-btn" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="event.stopPropagation();openProductDetail(\''+escHtml(row.product_code)+'\')" title="'+escHtml(row.product_code)+' '+escHtml(row.product_name||'')+'">'+escHtml(row.product_code)+'</span>' : '<span style="font-size:12px;color:var(--muted)">—</span>'; } },
+          { key: '_prodName', title: '产品型号', width: 'calc(114px * var(--ui-scale))', minWidth: 114, rowspan: true, render: function(v, row) { return row.product_code ? '<span class="proj-code-btn" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="event.stopPropagation();openProductDetail(\''+escHtml(row.product_code)+'\')" title="'+escHtml(row.product_code)+' '+escHtml(row.product_name||'')+'">'+escHtml(row.product_code)+'</span>' : '<span style="font-size:12px;color:var(--muted)">—</span>'; } },
           { key: 'title', title: 'Bug标题', minWidth: 100, align: 'left', render: function(v, row) { return '<span style="font-weight:530;cursor:pointer" onclick="event.stopPropagation();loadViewScript(\'/js/bugs.js?v=' + APP_VERSION + '\',function(){openBugDetail('+row.id+')})">'+escHtml(v||'')+'</span>'; } },
           { key: 'assignee_name', title: '责任人', width: 'calc(80px * var(--ui-scale))', minWidth: 80, render: function(v, row) { var user=getCurrentUser(); var uid=user?user.id:null; var canEdit=uid&&(row.reporter_id==uid||row.assignee_id==uid); return '<span style="font-size:12px;'+(canEdit?'cursor:pointer;color:var(--accent);text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px':'')+'"'+(canEdit?' onclick="event.stopPropagation();_ucEditAssignee('+row.id+',\'bug\','+(row.assignee_id||0)+',\''+escHtml(row.assignee_name||'').replace(/'/g,"\\'")+'\',\''+escHtml(row.title||'').replace(/'/g,"\\'")+'\')" title="'+(canEdit?'点击修改责任人':'')+'"':'')+'>'+escHtml(v||'—')+'</span>'; } },
           { key: 'severity', title: '严重程度', width: '6%', minWidth: 60, render: function(v, row) { var sevs={1:'致命',2:'严重',3:'一般',4:'建议'}; var c={1:'var(--danger)',2:'var(--warn)',3:'var(--muted)',4:'var(--success)'}; var user=getCurrentUser(); var canEdit=user&&user.id==row.reporter_id; return '<span style="font-size:11px;color:'+(c[v]||c[3])+';font-weight:600;cursor:'+(canEdit?'pointer':'default')+'" onclick="event.stopPropagation();'+(canEdit?'_ucEditBugField('+row.id+',\'severity\',\''+v+'\',\'1:致命,2:严重,3:一般,4:建议\',\''+escHtml(row.title||'').replace(/'/g,"\\'")+'\')':'')+'">'+(sevs[v]||'—')+'</span>'; } },
@@ -3843,6 +3846,7 @@ function _projectDeliveryChanged() {
 }
 EventBus.on(EVENTS.DELIVERY_SAVED, _projectDeliveryChanged);
 EventBus.on(EVENTS.DELIVERY_DELETED, _projectDeliveryChanged);
+EventBus.on(EVENTS.BOARD_CHANGED, _projectDeliveryChanged);
 
 function _projectStagesChanged() {
   if (isViewActive('detail') && typeof refreshProjectStages === 'function') refreshProjectStages();

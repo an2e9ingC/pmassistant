@@ -85,7 +85,7 @@ SEED_TEMPLATES: list[dict] = [
     {"project_type": "RD", "stage_type": "测试", "doc_name": "测试计划", "sort_order": 1, "responsible_role": "测试交付", "description": "测试计划文档，包含测试策略、测试范围、资源安排、进度计划"},
     {"project_type": "RD", "stage_type": "测试", "doc_name": "测试报告", "sort_order": 2, "responsible_role": "测试交付", "description": "系统测试结果汇总，包含测试结论、遗留问题、交付建议"},
     # 产品发货
-    {"project_type": "RD", "stage_type": "产品发货", "doc_name": "发货清单", "sort_order": 1, "responsible_role": "项目经理", "description": "产品发货明细清单，包含产品编号、数量、收货方信息、发货日期"},
+    {"project_type": "RD", "stage_type": "产品发货", "doc_name": "发货清单", "sort_order": 1, "responsible_role": "项目经理", "description": "产品发货明细清单，包含产品型号、数量、收货方信息、发货日期"},
     # 项目总结
     {"project_type": "RD", "stage_type": "项目总结", "doc_name": "项目总结报告", "sort_order": 1, "responsible_role": "项目经理", "description": "项目总结报告，包含目标达成情况、经验教训、改进建议"},
 ]

@@ -229,14 +229,16 @@ var DataTable = (function() {
     }
 
     // Pre-compute rowspan for columns with rowspan: true
+    // rowspan 可为布尔值（按自身列分组）或字符串（按指定列 key 分组，如 product_name 按 product_code 合并）
     var rowspanMap = {};
     self._columns.forEach(function(col, i) {
       if (!col.rowspan) return;
+      var groupKey = (typeof col.rowspan === 'string') ? col.rowspan : col.key;
       var spans = [], count = 0;
       for (var r = 0; r < self._data.length; r++) {
         count++;
-        var nextVal = r + 1 < self._data.length ? self._data[r + 1][col.key] : null;
-        var curVal = self._data[r][col.key];
+        var nextVal = r + 1 < self._data.length ? self._data[r + 1][groupKey] : null;
+        var curVal = self._data[r][groupKey];
         if (nextVal !== curVal) { spans.push({start: r - count + 1, count: count}); count = 0; }
       }
       rowspanMap[i] = spans;

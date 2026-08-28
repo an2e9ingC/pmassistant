@@ -76,6 +76,7 @@ var EVENTS = {
   NOTE_DELETED: 'note:deleted',
   DELIVERY_SAVED: 'delivery:saved',
   DELIVERY_DELETED: 'delivery:deleted',
+  BOARD_CHANGED: 'board:changed',
   DIAGRAM_SAVED: 'diagram:saved',
   DIAGRAM_DELETED: 'diagram:deleted',
   MAINT_SAVED: 'maint:saved',

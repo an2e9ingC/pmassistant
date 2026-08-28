@@ -526,7 +526,7 @@ function _pmShowLinkProductDialog() {
 
   openDialog('关联已有三级产品 — 到「' + escHtml((_pmFindNodeById(_pmSelectedNodeId) || {}).name || '') + '」',
     '<div style="margin-bottom:8px">' +
-      '<input class="search-inp" id="pm-link-search" placeholder="搜索产品编号或名称..." style="width:100%;box-sizing:border-box" oninput="_pmFilterLinkProducts()">' +
+      '<input class="search-inp" id="pm-link-search" placeholder="搜索产品型号或名称..." style="width:100%;box-sizing:border-box" oninput="_pmFilterLinkProducts()">' +
     '</div>' +
     '<div style="margin-bottom:6px;font-size:10.5px;color:var(--muted)">' +
       '<span id="pm-link-count">共 ' + _pmLinkAvailable.length + ' 个可选</span>' +
@@ -620,7 +620,7 @@ function _pmShowEditProductDialog(productId, productName, productCode) {
         : '<span style="font-size:12px;color:var(--muted)">暂无标签</span>';
 
       openDialog('编辑产品 — ' + escHtml(productName),
-        '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">产品编号</label>' +
+        '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">产品型号</label>' +
           '<input class="search-inp" id="pm-edit-code" value="' + escHtml(p.code || '') + '" style="width:100%;box-sizing:border-box"></div>' +
         '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">产品名称 <span style="font-weight:400">（不能包含空格和中文符号）</span></label>' +
           '<input class="search-inp" id="pm-edit-name" value="' + escHtml(p.name || '') + '" style="width:100%;box-sizing:border-box" oninput="_pmValidateProdName(this)">' +
@@ -947,7 +947,7 @@ function _pmShowCreateProductDialog() {
       : '<span style="font-size:12px;color:var(--muted)">暂无标签，请先在文档模板中配置</span>';
 
     openDialog('添加三级产品 — ' + crumbTitle,
-      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">产品编号 * <span style="font-weight:400">（如：LVX624M-V010）</span></label>' +
+      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">产品型号 * <span style="font-weight:400">（如：LVX624M-V010）</span></label>' +
       '<input class="search-inp" id="pm-newprod-code" placeholder="如：LVX624M-V010" style="width:100%;box-sizing:border-box;margin-top:4px"></div>' +
       '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">产品名称 * <span style="font-weight:400">（通常与编号一致）</span></label>' +
       '<input class="search-inp" id="pm-newprod-name" placeholder="如：LVX624M-V010" style="width:100%;box-sizing:border-box;margin-top:4px"></div>' +
@@ -973,7 +973,7 @@ async function _pmCreateProduct() {
   var status = document.getElementById('pm-newprod-status').value;
 
   if (!name) { showToast('请输入产品名称', 'error'); return; }
-  if (!code) { showToast('请输入产品编号', 'error'); return; }
+  if (!code) { showToast('请输入产品型号', 'error'); return; }
 
   var tags = [];
   document.querySelectorAll('.pm-newprod-tag:checked').forEach(function(cb) {

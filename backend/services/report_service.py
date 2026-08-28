@@ -609,7 +609,7 @@ def export_manpower_excel(
 
     # Sheet 2: 工时明细
     ws2 = wb.create_sheet("工时明细")
-    ws2.append(["人员", "项目编号", "项目名", "产品编号", "产品名", "日期", "工时占比(%)", "计算工时(h)", "工作内容", "来源"])
+    ws2.append(["人员", "项目编号", "项目名", "产品型号", "产品名", "日期", "工时占比(%)", "计算工时(h)", "工作内容", "来源"])
     for w in twls:
         t = task_map.get(w.task_id)
         proj_info = proj_map.get(t.project_id, ("", "")) if t and t.project_id else ("", "")
