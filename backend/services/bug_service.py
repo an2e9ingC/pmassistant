@@ -18,6 +18,9 @@ from backend.services.task_service import _sync_cc_favorites
 
 UPLOAD_ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "uploads", "bugs")
 
+# 维修类 Bug 类型值（驱动板卡 维修中/已维修 流转）
+BUG_TYPE_REPAIR = "repair"
+
 
 # ═══════════════════════════════════════════ Bug CRUD
 
@@ -148,7 +151,33 @@ def get_bug(db, bug_id):
     d["attachments"] = [_attachment_dict(a) for a in db.query(BugAttachment).filter(BugAttachment.bug_id == bug_id, BugAttachment.analysis_id.is_(None)).all()]
     return d
 
+def _board_ids_norm(data):
+    """Normalize board_ids from request data → list[int]."""
+    ids = data.get("board_ids") or []
+    try:
+        return [int(x) for x in ids if x is not None]
+    except (TypeError, ValueError):
+        return []
+
+
+def _reporter_display_name(db, bug) -> str:
+    from backend.models.local import LocalUser
+    if not bug.reporter_id:
+        return ""
+    u = db.query(LocalUser).filter(LocalUser.id == bug.reporter_id).first()
+    return (u.display_name or u.username) if u else ""
+
+
+def _user_display_name(db, user_id) -> str:
+    from backend.models.local import LocalUser
+    if not user_id:
+        return ""
+    u = db.query(LocalUser).filter(LocalUser.id == user_id).first()
+    return (u.display_name or u.username) if u else ""
+
+
 def create_bug(db, data):
+    board_ids = _board_ids_norm(data)
     b = PmaBug(
         title=data["title"], description=data.get("description", ""),
         product_id=data["product_id"], project_id=data.get("project_id"),
@@ -159,9 +188,16 @@ def create_bug(db, data):
         estimate_hours=float(data.get("estimate_hours", 0) or 0),
         cc_user_ids=data.get("cc_user_ids"),
         progress=int(data.get("progress", 0) or 0),
+        board_ids=board_ids or None,
     )
     db.add(b); db.commit(); db.refresh(b)
     _sync_cc_favorites(db, data.get("cc_user_ids"), b.id, 'bug')
+    # 维修 Bug → 关联板卡进入维修中（系统联动，绕开归属人授权）
+    if data.get("type") == BUG_TYPE_REPAIR and board_ids:
+        from backend.services import board_service
+        reporter_name = _reporter_display_name(db, b)
+        for bid in board_ids:
+            board_service.repair_start(db, bid, b, reporter_name)
     return _bug_dict(b, db)
 
 def _fmt_change_val(v):
@@ -180,11 +216,12 @@ def update_bug(db, bug_id, data, user_id=None):
     if not b: return None
     old_status = b.status
     old_cc_user_ids = (b.cc_user_ids or [])[:]  # snapshot for CC favorites sync
+    old_board_ids = [int(x) for x in (b.board_ids or []) if x is not None]  # snapshot for repair linkage
     # Collect field-level changes (Zentao-style) for structured history
     changes = []
     for k in ["title","description","product_id","project_id","component_id","status","resolution",
               "severity","priority","type","assignee_id","estimate_hours",
-              "gitlab_url","gitlab_iid","resolved_by_id","cc_user_ids","progress"]:
+              "gitlab_url","gitlab_iid","resolved_by_id","cc_user_ids","progress","board_ids"]:
         if k in data:
             old_val = getattr(b, k)
             new_val = data[k]
@@ -233,6 +270,24 @@ def update_bug(db, bug_id, data, user_id=None):
                 db.add(BugAnalysis(bug_id=lb.id, user_id=lb.assignee_id or lb.reporter_id,
                         content=f"关联 Bug #{bug_id} 已解决，自动同步状态"))
         if linked: db.commit()
+    # 维修 Bug 板卡联动（新增关联板卡，bug 未解决 → 补 维修中 事件；移除的不回退）
+    if "board_ids" in data:
+        new_board_ids = [int(x) for x in (b.board_ids or []) if x is not None]
+        if b.type == BUG_TYPE_REPAIR and b.status not in ("resolved", "closed"):
+            added = [x for x in new_board_ids if x not in old_board_ids]
+            if added:
+                from backend.services import board_service
+                reporter_name = _reporter_display_name(db, b)
+                for bid in added:
+                    board_service.repair_start(db, bid, b, reporter_name)
+    # 维修 Bug 解决/关闭 → 关联板卡 维修中→已维修（系统联动）
+    if data.get("status") in ("resolved", "closed") and old_status not in ("resolved", "closed"):
+        bid_list = [int(x) for x in (b.board_ids or []) if x is not None]
+        if bid_list:
+            from backend.services import board_service
+            actor_name = _user_display_name(db, user_id)
+            for bid in bid_list:
+                board_service.repair_finish(db, bid, b, actor_name)
     # Record structured change history
     if changes and user_id:
         from backend.services.action_service import record_action
@@ -524,6 +579,7 @@ def transfer_bug(db, bug_id, to_project_id, transfer_type, user_id):
 
 def _bug_dict(b, db=None):
     pc = pn = pj_n = pj_c = cn = rn = an = cc_names = None
+    board_nos = []
     if db:
         if b.product_id:
             p = db.query(__import__('backend.models.zentao', fromlist=['PmaProduct']).PmaProduct).filter_by(id=b.product_id).first()
@@ -546,6 +602,16 @@ def _bug_dict(b, db=None):
             LU = __import__('backend.models.local', fromlist=['LocalUser']).LocalUser
             cc_users = db.query(LU).filter(LU.id.in_(b.cc_user_ids)).all()
             cc_names = [u.display_name or u.username for u in cc_users]
+        if b.board_ids:
+            try:
+                ids = [int(x) for x in b.board_ids if x is not None]
+            except (TypeError, ValueError):
+                ids = []
+            if ids:
+                DB = __import__('backend.models.delivery', fromlist=['DeliveryBoard']).DeliveryBoard
+                rows = db.query(DB).filter(DB.id.in_(ids)).all()
+                idmap = {r.id: r.serial_no for r in rows}
+                board_nos = [idmap.get(x, "") for x in ids]
     return {"id":b.id,"title":b.title,"description":b.description or "","product_id":b.product_id,"product_name":pn,"product_code":pc,
             "project_id":b.project_id,"project_name":pj_n,"project_code":pj_c,
             "component_id":b.component_id,"component_name":cn,
@@ -561,7 +627,9 @@ def _bug_dict(b, db=None):
             "created_at":to_local_str(b.created_at) if b.created_at else None,
             "updated_at":to_local_str(b.updated_at) if b.updated_at else None,
             "cc_user_ids": b.cc_user_ids or [],
-            "cc_user_names": cc_names or []}
+            "cc_user_names": cc_names or [],
+            "board_ids": b.board_ids or [],
+            "board_nos": board_nos}
 
 def _analysis_dict(a, db=None):
     from backend.models.local import LocalUser

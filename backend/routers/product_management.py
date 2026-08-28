@@ -231,7 +231,7 @@ def update_local_product(
         if body.name and old and old.get("name") != body.name:
             changes.append(f"产品名称: '{old['name']}' -> '{body.name}'")
         if body.code and old and old.get("code") != body.code:
-            changes.append(f"产品编号: '{old['code']}' -> '{body.code}'")
+            changes.append(f"产品型号: '{old['code']}' -> '{body.code}'")
         if body.status and old and old.get("status") != body.status:
             changes.append(f"状态: '{old['status']}' -> '{body.status}'")
         if body.description is not None and old and old.get("description") != body.description:

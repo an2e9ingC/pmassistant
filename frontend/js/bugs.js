@@ -130,7 +130,7 @@ async function _renderBugSidebar() {
   // 类型
   html += '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">类型</div>' +
     _bugSelOption('bug-filter-type', '_bugFilterType=this.value;loadBugs()',
-      [{v:'codeerror',l:'代码错误'},{v:'design',l:'设计缺陷'},{v:'security',l:'安全问题'},{v:'performance',l:'性能问题'},{v:'compatibility',l:'兼容性'},{v:'standard',l:'规范'},{v:'other',l:'其他'}], _bugFilterType);
+      [{v:'codeerror',l:'代码错误'},{v:'design',l:'设计缺陷'},{v:'security',l:'安全问题'},{v:'performance',l:'性能问题'},{v:'compatibility',l:'兼容性'},{v:'standard',l:'规范'},{v:'repair',l:'维修'},{v:'other',l:'其他'}], _bugFilterType);
 
   // 负责人
   html += '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">负责人</div>' +
@@ -329,7 +329,7 @@ var _bugStatusOpts = [
   {v:'open',l:'待确认'},{v:'confirmed',l:'已确认'},{v:'in_progress',l:'处理中'},
   {v:'gitlab_submitted',l:'GitLab已提交'},{v:'resolved',l:'已解决'},{v:'closed',l:'已关闭'}
 ];
-var _bugTypeLabels = {codeerror:'代码错误',design:'设计缺陷',security:'安全问题',performance:'性能问题',compatibility:'兼容性',standard:'规范',other:'其他'};
+var _bugTypeLabels = {codeerror:'代码错误',design:'设计缺陷',security:'安全问题',performance:'性能问题',compatibility:'兼容性',standard:'规范',repair:'维修',other:'其他'};
 
 function _renderBugTable(container, bugs) {
   if (!bugs.length) { container.innerHTML = '<div class="empty-state">暂无Bug</div>'; _bugDt = null; return; }
@@ -360,7 +360,10 @@ function _renderBugTable(container, bugs) {
           var opts = '<option value="">未分配</option>' + (_bugUserOptions||[]).map(function(u) { return '<option value="'+u.id+'"'+(String(u.id)===String(row.assignee_id||'')?' selected':'')+'>'+escHtml(u.name||u.code)+'</option>'; }).join('');
           return '<span onclick="event.stopPropagation()"><select data-id="'+row.id+'" onchange="_bugQuickAssign('+row.id+', this.value)" style="font-size:11px;padding:1px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--fg);max-width:100px">'+opts+'</select></span>';
         } },
-      { key: 'type', title: '类型', width: '7%', minWidth: 70, sortable: true, render: function(v) { return '<span style="font-size:11px">'+(_bugTypeLabels[v]||v||'-')+'</span>'; } },
+      { key: 'type', title: '类型', width: '7%', minWidth: 70, sortable: true, render: function(v) {
+          if (v === 'repair') return '<span class="pill bd-repairing">维修</span>';
+          return '<span style="font-size:11px">'+escHtml(_bugTypeLabels[v]||v||'-')+'</span>';
+        } },
       { key: 'created_at', title: '创建时间', width: '9%', minWidth: 95, sortable: true, render: function(v) { return '<span style="font-size:11px;color:var(--muted)">'+formatDate(v)+'</span>'; } },
       { key: 'actions', title: '操作', width: actionColWidth(2) + 'px', minWidth: actionColWidth(2), render: function(v, row) {
           var html = '';
@@ -698,7 +701,7 @@ async function _loadBugReport() {
     }
     var piePalette = ['var(--accent)','var(--warn)','var(--success)','var(--danger)','var(--purple)','#B0B8C9'];
     var statusColor = {open:'var(--warn)',confirmed:'var(--accent)',in_progress:'var(--accent)',gitlab_submitted:'var(--purple)',resolved:'var(--success)',closed:'var(--muted)'};
-    var typeColor = {codeerror:'var(--accent)',design:'var(--warn)',security:'var(--danger)',performance:'var(--purple)',compatibility:'var(--success)',standard:'#B0B8C9',other:'var(--muted)'};
+    var typeColor = {codeerror:'var(--accent)',design:'var(--warn)',security:'var(--danger)',performance:'var(--purple)',compatibility:'var(--success)',standard:'#B0B8C9',repair:'var(--warn)',other:'var(--muted)'};
 
     var statusGroups = _bugStatusOpts.map(function(o) { return {key: o.v, label: o.l, color: statusColor[o.v] || 'var(--muted)'}; });
     var sevGroups = [1,2,3,4].map(function(s) {
@@ -940,14 +943,14 @@ function _renderBugDetailBody(b) {
   var sevs = {1:'致命',2:'严重',3:'一般',4:'建议'};
   var sevColors = {1:'var(--danger)',2:'var(--warn)',3:'var(--accent)',4:'var(--muted)'};
   var projHtml = b.project_code ? projCodeTag(b.project_code, 'openProject(\'' + escHtml(b.project_code).replace(/'/g, "\\'") + '\')', b.project_name) + ' ' + escHtml(b.project_name || '') : escHtml(b.project_name || '-');
-  var typeLabel = {codeerror:'代码错误',design:'设计缺陷',security:'安全问题',performance:'性能问题',other:'其他'}[b.type]||b.type;
+  var typeLabel = {codeerror:'代码错误',design:'设计缺陷',security:'安全问题',performance:'性能问题',repair:'维修',other:'其他'}[b.type]||b.type;
 
   var _STATUS_OPTS = [
     {v:'open',l:'待确认'},{v:'in_progress',l:'处理中'},
     {v:'resolved',l:'已解决'},{v:'closed',l:'已关闭'}];
   var _SEV_OPTS = [{v:'1',l:'1-致命'},{v:'2',l:'2-严重'},{v:'3',l:'3-一般'},{v:'4',l:'4-建议'}];
   var _PRIO_OPTS = [{v:'low',l:'低'},{v:'medium',l:'中'},{v:'high',l:'高'},{v:'critical',l:'紧急'}];
-  var _TYPE_OPTS = [{v:'codeerror',l:'代码错误'},{v:'design',l:'设计缺陷'},{v:'security',l:'安全问题'},{v:'performance',l:'性能问题'},{v:'other',l:'其他'}];
+  var _TYPE_OPTS = [{v:'codeerror',l:'代码错误'},{v:'design',l:'设计缺陷'},{v:'security',l:'安全问题'},{v:'performance',l:'性能问题'},{v:'repair',l:'维修'},{v:'other',l:'其他'}];
 
   var html = '';
   // ── CSS for inline editing ──
@@ -1048,6 +1051,16 @@ function _renderBugDetailBody(b) {
               JSON.stringify(b.cc_user_ids || [])) +
           '</div>' +
         '</div>' +
+        ((b.board_ids && b.board_ids.length) ?
+          '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">' +
+            '<div class="dkpi"><div class="dkpi-lbl">关联板卡</div><div class="bd-val">' +
+              (b.board_nos || []).map(function(no, i) {
+                var projCode = escHtml(String(b.project_code || '')).replace(/'/g, "\\'");
+                var serial = escHtml(String(no)).replace(/'/g, "\\'");
+                return '<span class="tag-badge tag-1" title="跳转到交付页产品列表定位并高亮该编号" style="margin:2px 4px 2px 0;cursor:pointer" onclick="_boardJumpToDelivery(\'' + projCode + '\',\'' + serial + '\')">' + escHtml(no) + '</span>';
+              }).join('') +
+            '</div></div>' +
+          '</div>' : '') +
       '</div>' +
 
       // ── 状态与进度 ──
@@ -1184,6 +1197,11 @@ async function _submitBugFullPage(bugId) {
   if (!projId) { showToast('请选择所属项目', 'error'); return; }
   if (!asgnId) { showToast('请选择负责人', 'error'); return; }
   if (!sev) { showToast('请选择严重程度', 'error'); return; }
+  var bugType = document.getElementById('bf-type').value;
+  if (bugType === 'repair' && (!window._bfBoardIds || !window._bfBoardIds.length)) {
+    showToast('维修类 Bug 必须至少关联一块板卡', 'error');
+    return;
+  }
 
   var data = {
     title: title,
@@ -1191,7 +1209,7 @@ async function _submitBugFullPage(bugId) {
     product_id: pid,
     project_id: projId,
     component_id: parseInt(document.getElementById('bf-component').value) || null,
-    type: document.getElementById('bf-type').value,
+    type: bugType,
     severity: sev,
     priority: document.getElementById('bf-priority').value,
     status: document.getElementById('bf-status').value,
@@ -1199,6 +1217,7 @@ async function _submitBugFullPage(bugId) {
     progress: parseInt(document.getElementById('bf-progress').value) || 0,
     assignee_id: asgnId,
     cc_user_ids: (window._bfCcIds && window._bfCcIds.length) ? window._bfCcIds : null,
+    board_ids: (window._bfBoardIds && window._bfBoardIds.length) ? window._bfBoardIds.slice() : null,
   };
 
   try {
@@ -1214,6 +1233,11 @@ async function _submitBugFullPage(bugId) {
   } catch(e) {
     showToast('操作失败: ' + (e.message || ''), 'error');
   }
+}
+
+/* 关联板卡编号 → 跳转项目交付页，定位并高亮产品列表中对应编号 */
+function _boardJumpToDelivery(projectCode, serialNo) {
+  gotoView('detail', { params: [String(projectCode), 'delivery', String(serialNo)] });
 }
 
 function openBugDetail(bugId) {
@@ -1284,7 +1308,7 @@ function _buildBugForm(t, isEdit) {
               return loadAllProjects().then(function() { return _allProjects || []; });
             },
             selectedIdFn: function() { return t.project_id || null; },
-            onSelect: function(p) { _bfProjId = p.id; _bugLoadProducts(p.id); }
+            onSelect: function(p) { _bfProjId = p.id; _bugLoadProducts(p.id); _bugBoardProjectChanged(p.id); }
           }) + '<div id="bf-proj-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择项目</div></div></div>' +
         '<div><label style="' + _bLbl + '">产品 *</label>' +
           '<div style="margin-top:2px">' + createSearchCombo({
@@ -1318,14 +1342,26 @@ function _buildBugForm(t, isEdit) {
           '<div id="bf-severity-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请选择严重程度</div></div>' +
         '<div><label style="' + _bLbl + '">优先级</label><select class="search-inp" id="bf-priority" style="' + inp + '">' +
           '<option value="low">低</option><option value="medium" selected>中</option><option value="high">高</option><option value="critical">紧急</option></select></div>' +
-        '<div><label style="' + _bLbl + '">类型</label><select class="search-inp" id="bf-type" style="' + inp + '">' +
-          '<option value="codeerror">代码错误</option><option value="design">设计缺陷</option><option value="security">安全问题</option><option value="performance">性能问题</option><option value="other">其他</option></select></div>' +
+        '<div><label style="' + _bLbl + '">类型</label><select class="search-inp" id="bf-type" onchange="_bugTypeChanged(this.value)" style="' + inp + '">' +
+          '<option value="codeerror">代码错误</option><option value="design">设计缺陷</option><option value="security">安全问题</option><option value="performance">性能问题</option><option value="repair">维修</option><option value="other">其他</option></select></div>' +
         '<div><label style="' + _bLbl + '">状态</label><select class="search-inp" id="bf-status" style="' + inp + '">' +
           '<option value="open">待确认</option><option value="in_progress">处理中</option><option value="resolved">已解决</option><option value="closed">已关闭</option></select></div>' +
         '<div><label style="' + _bLbl + '">预估工时(h)</label>' +
           '<input class="search-inp" id="bf-estimate" type="number" step="0.5" value="' + (t.estimate_hours || '') + '" style="' + inp + '"></div>' +
         '<div><label style="' + _bLbl + '">进度(%)</label>' +
           '<input class="search-inp" id="bf-progress" type="number" min="0" max="100" step="5" value="' + (t.progress || 0) + '" style="' + inp + '"></div>' +
+      '</div>' +
+      '<div id="bf-boards-row" style="display:none;margin-top:8px">' +
+        '<label style="' + _bLbl + '">产品编号 * <span style="font-size:10px;color:var(--muted)">(维修类 Bug 必填，关联板卡将进入维修中)</span></label>' +
+        '<div style="margin-top:2px">' +
+          '<div style="position:relative">' +
+            '<input class="search-inp" id="bf-boards-input" placeholder="搜索产品编号..." onfocus="_bugBoardDropdown(true)" oninput="_bugBoardDropdown(true)" onblur="setTimeout(function(){_bugBoardDropdown(false)},150)" style="' + inp + '">' +
+            '<div id="bf-boards-drop" style="display:none;position:absolute;z-index:50;top:100%;left:0;right:0;max-height:180px;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:7px;margin-top:2px;box-shadow:0 4px 16px rgba(0,0,0,0.12)"></div>' +
+          '</div>' +
+          '<div id="bf-boards-tags" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px"></div>' +
+          '<div id="bf-boards-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:3px">维修类 Bug 必须至少关联一块板卡</div>' +
+          '<div id="bf-boards-empty" style="display:none;font-size:10px;color:var(--warn);margin-top:3px">该项目暂无板卡，请先在 项目详情>交付记录 录入板卡</div>' +
+        '</div>' +
       '</div>' +
     '</div>' +
   '</div>';
@@ -1343,6 +1379,104 @@ function _buildBugForm(t, isEdit) {
   '</div>';
 
   return bodyHtml;
+}
+
+/* ── 维修 Bug 产品编号多选（关联板卡 → 自动进入维修中） ── */
+
+function _bugTypeChanged(type) {
+  var row = document.getElementById('bf-boards-row');
+  if (row) row.style.display = (type === 'repair') ? '' : 'none';
+  if (type === 'repair') _bugBoardDropdown(true);
+}
+
+async function _bugLoadBoards() {
+  if (!_bfProjId) { window._bfBoardCache = []; return; }
+  try {
+    var res = await API.get('/delivery/projects/' + _bfProjId + '/boards');
+    window._bfBoardCache = (res && res.boards) || [];  // API.get 已解包 json.data → {boards, meta}
+    _bugBoardRefreshTags();
+    _bugBoardRefreshEmptyHint();
+  } catch(e) { window._bfBoardCache = []; }
+}
+
+function _bugBoardProjectChanged(projId) {
+  window._bfBoardIds = [];
+  window._bfBoardCache = [];
+  _bugBoardRefreshTags();
+  if (projId) _bugLoadBoards();
+}
+
+function _bugBoardDropdown(show) {
+  var drop = document.getElementById('bf-boards-drop');
+  if (!drop) return;
+  if (!show) { drop.style.display = 'none'; return; }
+  if (!window._bfBoardCache || !window._bfBoardCache.length) {
+    _bugLoadBoards().then(function() { _bugBoardRenderDrop(); });
+    return;
+  }
+  _bugBoardRenderDrop();
+}
+
+function _bugBoardRenderDrop() {
+  var drop = document.getElementById('bf-boards-drop');
+  var input = document.getElementById('bf-boards-input');
+  if (!drop) return;
+  var kw = (input ? input.value : '').trim().toLowerCase();
+  var sel = window._bfBoardIds || [];
+  var list = (window._bfBoardCache || []).filter(function(b) {
+    if (sel.indexOf(b.id) >= 0) return false;
+    if (kw && String(b.serial_no).toLowerCase().indexOf(kw) < 0) return false;
+    return true;
+  });
+  if (!list.length) {
+    drop.innerHTML = '<div style="padding:8px 10px;font-size:11px;color:var(--muted)">' + (sel.length ? '已全部选择或暂无匹配' : '暂无板卡') + '</div>';
+    drop.style.display = '';
+    return;
+  }
+  drop.innerHTML = list.map(function(b) {
+    return '<div style="padding:7px 10px;cursor:pointer;font-size:12px;display:flex;justify-content:space-between;gap:8px" onmousedown="event.preventDefault();_bugBoardPick(' + b.id + ',\'' + escHtml(String(b.serial_no)).replace(/'/g, "\\'") + '\')">' +
+      '<span style="font-family:var(--mono)">' + escHtml(b.serial_no) + '</span>' +
+      '<span style="color:var(--muted);font-size:10px">' + escHtml(b.status || '') + '</span>' +
+    '</div>';
+  }).join('');
+  drop.style.display = '';
+}
+
+function _bugBoardPick(id) {
+  if (!window._bfBoardIds) window._bfBoardIds = [];
+  if (window._bfBoardIds.indexOf(id) >= 0) return;
+  window._bfBoardIds.push(id);
+  var input = document.getElementById('bf-boards-input');
+  if (input) input.value = '';
+  _bugBoardRefreshTags();
+  _bugBoardRenderDrop();
+}
+
+function _bugBoardRemove(id) {
+  window._bfBoardIds = (window._bfBoardIds || []).filter(function(x) { return x !== id; });
+  _bugBoardRefreshTags();
+  _bugBoardRenderDrop();
+}
+
+function _bugBoardRefreshTags() {
+  var el = document.getElementById('bf-boards-tags');
+  if (!el) return;
+  var ids = window._bfBoardIds || [];
+  var map = {};
+  (window._bfBoardCache || []).forEach(function(b) { map[b.id] = b.serial_no; });
+  el.innerHTML = ids.map(function(id) {
+    var no = map[id] || ('#' + id);
+    return '<span class="tag-badge tag-1" style="cursor:pointer" title="移除" onclick="_bugBoardRemove(' + id + ')">' + escHtml(no) + ' &times;</span>';
+  }).join('');
+  var hint = document.getElementById('bf-boards-hint');
+  if (hint) hint.style.display = 'none';
+}
+
+function _bugBoardRefreshEmptyHint() {
+  var row = document.getElementById('bf-boards-row');
+  var empty = document.getElementById('bf-boards-empty');
+  if (!row || !empty) return;
+  empty.style.display = (row.style.display !== 'none' && !(window._bfBoardCache || []).length) ? '' : 'none';
 }
 
 function _showBugForm(b) {
@@ -1409,6 +1543,14 @@ function _initBugFormSelectors(t, isEdit) {
   if (isEdit && t.type) { setTimeout(function() { var s=document.getElementById('bf-type'); if(s)s.value=t.type; },100); }
   if (isEdit && t.status) { setTimeout(function() { var s=document.getElementById('bf-status'); if(s)s.value=t.status; },100); }
   if (isEdit && t.component_id) { setTimeout(function() { var s=document.getElementById('bf-component'); if(s)s.value=t.component_id; },200); }
+  // 维修 Bug 板卡多选：初始化选中 + 按类型显隐 + 加载项目板卡
+  window._bfBoardIds = (t.board_ids || []).slice();
+  window._bfBoardCache = [];
+  setTimeout(function() {
+    var bt = document.getElementById('bf-type');
+    if (bt) _bugTypeChanged(bt.value);
+    if (_bfProjId) _bugLoadBoards();
+  }, 250);
 
   // Create user combo + CC selector
   setTimeout(function() {
@@ -1518,7 +1660,7 @@ function _bugApplyDescTemplate() {
 
 async function _submitBug(bugId) {
   // Clear hints
-  ['bf-title-hint','bf-prod-hint','bf-proj-hint','bf-assignee-hint','bf-severity-hint'].forEach(function(id) {
+  ['bf-title-hint','bf-prod-hint','bf-proj-hint','bf-assignee-hint','bf-severity-hint','bf-boards-hint'].forEach(function(id) {
     var el = document.getElementById(id); if (el) el.style.display = 'none';
   });
   var valid = true;
@@ -1532,6 +1674,10 @@ async function _submitBug(bugId) {
   if (!asgnId) { var h = document.getElementById('bf-assignee-hint'); if (h) h.style.display = ''; valid = false; }
   var sev = parseInt(document.getElementById('bf-severity').value) || 0;
   if (!sev) { var h = document.getElementById('bf-severity-hint'); if (h) h.style.display = ''; valid = false; }
+  var bugType = document.getElementById('bf-type').value;
+  if (bugType === 'repair' && (!window._bfBoardIds || !window._bfBoardIds.length)) {
+    var h = document.getElementById('bf-boards-hint'); if (h) h.style.display = ''; valid = false;
+  }
   if (!valid) return;
 
   var desc = document.getElementById('bf-desc').value.trim();
@@ -1542,12 +1688,13 @@ async function _submitBug(bugId) {
     component_id:parseInt(document.getElementById('bf-component').value)||null,
     severity:sev,
     priority:document.getElementById('bf-priority').value,
-    type:document.getElementById('bf-type').value,
+    type:bugType,
     status:document.getElementById('bf-status').value,
     estimate_hours:parseFloat(document.getElementById('bf-estimate').value)||0,
     assignee_id:asgnId,
     progress: parseInt(document.getElementById('bf-progress').value) || 0,
     cc_user_ids:(window._bfCcIds && window._bfCcIds.length) ? window._bfCcIds : null,
+    board_ids:(window._bfBoardIds && window._bfBoardIds.length) ? window._bfBoardIds.slice() : null,
   };
   try {
     var result;

@@ -6,7 +6,8 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from backend.models.delivery import DeliveryRecord, DeliveryMaterialCode
+from backend.models.delivery import DeliveryRecord, DeliveryMaterialCode, DeliveryBoard
+from backend.services import board_service
 
 
 def get_delivery_summary(db: Session, project_id: int) -> dict:
@@ -26,8 +27,14 @@ def get_delivery_summary(db: Session, project_id: int) -> dict:
 
     delivered_qty = sum(r.quantity or 0 for r in records)
 
-    remaining = max(0, planned - delivered_qty) if planned > 0 else 0
-    progress = min(100, round(delivered_qty / planned * 100)) if planned > 0 else 0
+    # 板卡动态统计：已交付/已维修 计入交付进度；维修中 −1；维修完成 +1
+    boards = db.query(DeliveryBoard).filter(DeliveryBoard.project_id == project_id).all()
+    has_boards = bool(boards)
+    board_delivered = sum(1 for b in boards if b.status in ("已交付", "已维修"))
+    effective_delivered = board_delivered if has_boards else delivered_qty
+
+    remaining = max(0, planned - effective_delivered) if planned > 0 else 0
+    progress = min(100, round(effective_delivered / planned * 100)) if planned > 0 else 0
 
     # Parse per-product delivery plans — auto-initialize from linked products if empty
     plans = []
@@ -60,17 +67,26 @@ def get_delivery_summary(db: Session, project_id: int) -> dict:
             project.product_delivery_plans = json.dumps(plans, ensure_ascii=False)
             db.commit()
 
-    # Compute per-product delivered counts
+    # Compute per-product delivered counts (record-based fallback)
     product_delivered = Counter()
     for r in records:
         if r.product_code:
             product_delivered[r.product_code] += (r.quantity or 0)
 
+    # Board-based per-product delivered counts (当前状态实时动态)
+    board_by_code = {}
+    for b in boards:
+        board_by_code.setdefault(b.product_code or "", []).append(b)
+
     # Build per-product stats
     prod_stats = []
     for plan in plans:
         code = plan.get("product_code", "")
-        delivered = product_delivered.get(code, 0)
+        bs = board_by_code.get(code, [])
+        if bs:
+            delivered = sum(1 for b in bs if b.status in ("已交付", "已维修"))
+        else:
+            delivered = product_delivered.get(code, 0)
         planned_qty = plan.get("planned_qty", 0)
         prod_stats.append({
             "product_code": code,
@@ -88,14 +104,16 @@ def get_delivery_summary(db: Session, project_id: int) -> dict:
     return {
         "planned": planned,
         "delivered_manual": project.delivered_sets_qty or 0 if project else 0,
-        "total": delivered_qty,
-        "done": delivered_qty,
+        "total": effective_delivered,
+        "done": effective_delivered,
         "remaining": remaining,
         "progress": ring_progress,  # computed from product aggregation
         "delivery_note": project.delivery_note if project else None,
         "product_delivery_plans": plans,
         "product_stats": prod_stats,
         "records": [record_dict(r) for r in records],
+        "boards": board_service.boards_with_prev(db, boards),
+        "board_meta": board_service.board_meta(),
     }
 
 
@@ -106,7 +124,7 @@ def list_delivery_records(db: Session, project_id: int) -> list[dict]:
     return [record_dict(r) for r in records]
 
 
-def create_delivery_record(db: Session, project_id: int, data: dict) -> DeliveryRecord:
+def create_delivery_record(db: Session, project_id: int, data: dict, actor: str = "") -> DeliveryRecord:
     record = DeliveryRecord(
         project_id=project_id,
         product_name=data.get("product_name", ""),
@@ -133,10 +151,15 @@ def create_delivery_record(db: Session, project_id: int, data: dict) -> Delivery
 
     db.commit()
     db.refresh(record)
+
+    # 板卡联动：物料编码自动登记为板卡（→已交付）
+    valid_codes = [c for c in material_codes if c and c.strip()]
+    if valid_codes:
+        board_service.sync_delivery_record(db, project_id, record, valid_codes, actor)
     return record
 
 
-def update_delivery_record(db: Session, record_id: int, data: dict) -> Optional[DeliveryRecord]:
+def update_delivery_record(db: Session, record_id: int, data: dict, actor: str = "") -> Optional[DeliveryRecord]:
     r = db.query(DeliveryRecord).filter(DeliveryRecord.id == record_id).first()
     if not r:
         return None
@@ -164,6 +187,13 @@ def update_delivery_record(db: Session, record_id: int, data: dict) -> Optional[
 
     db.commit()
     db.refresh(r)
+
+    # 板卡联动：删除旧交付事件后按最新物料编码重新登记
+    if "material_codes" in data:
+        board_service.remove_delivery_events(db, record_id)
+        valid_codes = [c for c in data["material_codes"] if c and c.strip()]
+        if valid_codes:
+            board_service.sync_delivery_record(db, r.project_id, r, valid_codes, actor)
     return r
 
 
@@ -171,6 +201,8 @@ def delete_delivery_record(db: Session, record_id: int) -> bool:
     r = db.query(DeliveryRecord).filter(DeliveryRecord.id == record_id).first()
     if not r:
         return False
+    # 板卡联动：先删除该交付记录关联事件，受影响板卡回退在库
+    board_service.remove_delivery_events(db, record_id)
     db.delete(r)
     db.commit()
     return True

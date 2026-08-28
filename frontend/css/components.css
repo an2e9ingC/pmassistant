@@ -87,12 +87,24 @@
 .pill.pending { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
 .pill.planning { background: var(--warn-lt); color: var(--warn); }
 .pill.canceled { background: var(--bg); color: var(--muted); border: 1px solid var(--border); text-decoration: line-through; }
+/* 板卡列表固定宽度胶囊：状态 4 字宽 / 人员 3 字宽（固定宽度保证列内对齐，超长内容溢出隐藏） */
+.pill.fx4 { width: calc(4em + 20px); padding: 3px 9px; justify-content: center; overflow: hidden; }
+.pill.fx3 { width: calc(3em + 20px); padding: 3px 9px; justify-content: center; overflow: hidden; }
+.pill.person { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+.pill.person-cur { background: var(--accent-lt); color: var(--accent); border: 1px solid var(--accent); }
 .pill.abolished { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
 /* PMA task statuses */
 .pill.todo { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
 .pill.in_progress { background: var(--accent-lt); color: var(--accent); }
 .pill.review { background: var(--warn-lt); color: var(--warn); border: 1px solid var(--warn); }
 .pill.done { background: var(--success-lt); color: var(--success); }
+/* Board (板卡) statuses */
+.pill.bd-stock { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+.pill.bd-prod { background: var(--accent-lt); color: var(--accent); }
+.pill.bd-delivered { background: var(--success-lt); color: var(--success); }
+.pill.bd-repairing { background: var(--warn-lt); color: var(--warn); }
+.pill.bd-repaired { background: var(--success-lt); color: var(--success); }
+.pill.bd-scrapped { background: var(--danger-lt); color: var(--danger); }
 
 /* ── Priority tag (full definition below at ~line 981) ── */
 

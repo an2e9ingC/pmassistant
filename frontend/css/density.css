@@ -55,7 +55,7 @@ body { line-height: calc(1.5 * var(--ui-scale)); }
 #view-user-center .uc-cat-cards .kpi-card .kpi-label { font-size: calc(15px * var(--ui-scale)); font-weight: 620; }
 #view-user-center .uc-cat-cards .kpi-card .kpi-value { font-size: calc(28px * 0.8 * var(--ui-scale)); }
 
-/* 2. 任务/Bug 列表：项目编号/产品编号 按钮(含字体+内边距+边框)缩小 20%；长编号用 ... 省略(产品编号列已有ellipsis) */
+/* 2. 任务/Bug 列表：项目编号/产品型号 按钮(含字体+内边距+边框)缩小 20%；长编号用 ... 省略(产品型号列已有ellipsis) */
 #uc-tasks-dt .proj-code-btn,
 #uc-bugs-dt .proj-code-btn {
   font-size: calc(12px * 0.8 * var(--ui-scale));

@@ -137,7 +137,7 @@ function _initCustDetProdDt() {
     container: document.getElementById('cust-det-prod-table'),
     columns: [
       { key: 'idx', title: '序号', width: '6%', minWidth: 60, render: function(v) { return '<span style="color:var(--muted);font-size:12px">' + v + '</span>'; } },
-      { key: 'code', title: '产品编号', width: '170px', minWidth: 170, render: function(v) { return '<span style="font-family:var(--mono);font-size:11.5px;color:var(--accent);cursor:pointer" onclick="event.stopPropagation();openProductFromCust(\'' + escHtml(v||'').replace(/'/g, "\\'") + '\')">' + escHtml(v||'') + '</span>'; } },
+      { key: 'code', title: '产品型号', width: '170px', minWidth: 170, render: function(v) { return '<span style="font-family:var(--mono);font-size:11.5px;color:var(--accent);cursor:pointer" onclick="event.stopPropagation();openProductFromCust(\'' + escHtml(v||'').replace(/'/g, "\\'") + '\')">' + escHtml(v||'') + '</span>'; } },
       { key: 'name', title: '产品名称', minWidth: 100, render: function(v) { return escHtml(v||''); } },
       { key: 'status', title: '状态', width: '10%', minWidth: 80, render: function(v) { return renderPill(v); } },
       { key: 'projects', title: '项目信息', render: function(v) {

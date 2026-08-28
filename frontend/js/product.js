@@ -1404,7 +1404,7 @@ function showProdEditDialog() {
     openDialog('编辑产品 — ' + escHtml(p.name),
       '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">产品名称</label>' +
         '<input class="search-inp" id="prod-edit-name" value="' + escHtml(p.name) + '" style="width:100%;box-sizing:border-box"></div>' +
-      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">产品编号</label>' +
+      '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">产品型号</label>' +
         '<input class="search-inp" id="prod-edit-code" value="' + escHtml(p.code || '') + '" readonly style="width:100%;box-sizing:border-box;background:var(--border);cursor:not-allowed"></div>' +
       '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">状态</label>' +
         '<select class="search-inp" id="prod-edit-status" style="width:100%;box-sizing:border-box">' +

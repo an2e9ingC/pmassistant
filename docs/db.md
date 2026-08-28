@@ -30,7 +30,7 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 | `pma_products` | `PmaProduct` | 82 | ZenTao 缓存 | 从 ZenTao 同步的产品数据，含 NAS 路径、Git 地址、客户标记等扩展字段 |
 | `zenta_releases` | `CachedRelease` | 4 | ZenTao 缓存 | 产品下的发布版本/里程碑，含 GitLab 关联地址及校验状态 |
 | `zenta_bugs` | `CachedBug` | 98 | ZenTao 缓存 | 产品/项目下的 Bug 缺陷数据，按严重程度、优先级、状态追踪 |
-| `pma_bugs` | `PmaBug` | 0 | 本地-Bug | PMA 本地 Bug 系统：产品级追踪，支持组件、严重度、优先级、GitLab 联动、项目转移 |
+| `pma_bugs` | `PmaBug` | 0 | 本地-Bug | PMA 本地 Bug 系统：产品级追踪，支持组件、严重度、优先级、GitLab 联动、项目转移。含 `board_ids`(JSON)——「维修」类 Bug 关联的板卡 id 列表，创建/解决时驱动板卡 维修中→已维修 |
 | `pma_bug_worklogs` | `BugWorkLog` | 0 | 本地-Bug | Bug 工时记录：user_id、hours、date、description |
 | `pma_bug_analysis` | `BugAnalysis` | 0 | 本地-Bug | Bug 分析解决记录：Markdown 内容 + JSON 附件列表 |
 | `pma_bug_attachments` | `BugAttachment` | 0 | 本地-Bug | Bug 附件元数据：文件名、MIME、文件系统路径、大小 |
@@ -618,6 +618,44 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 | 9 | `note` | TEXT | NULLABLE | 备注 |
 | 10 | `created_at` | DATETIME | default=now | — |
 | 11 | `updated_at` | DATETIME | default=now, onupdate=now | — |
+
+#### 5.3.10.1 `delivery_boards` — 板卡档案（交付状态子页面）
+
+> 项目交付的所有板卡生命周期追踪（研发生产流转、当前状态/持有人、交付、维修、报废）。状态目录见 `board_service.py` 的 `BOARD_STATUSES`（在库/生产中/研发调试/硬件上电/测试/三防/装配/已交付/维修中/已维修/已报废），**维修中/已维修 仅由「维修」类 Bug 驱动**（`repair_start`/`repair_finish`），其余状态可手动自由切换（无终态）。
+
+| # | 列名 | 类型 | 约束 | 说明 |
+|---|------|------|------|------|
+| 1 | `id` | INTEGER | **PK** | — |
+| 2 | `project_id` | INTEGER | NOT NULL, INDEX, **FK→zenta_projects.id** | 所属项目 |
+| 3 | `serial_no` | VARCHAR(128) | NOT NULL | 产品编号（板卡个体编号，UniqueConstraint: project_id + serial_no） |
+| 4 | `product_code` | VARCHAR(128) | NULLABLE | 产品型号 |
+| 5 | `product_name` | VARCHAR(256) | NULLABLE | 产品名称 |
+| 6 | `status` | VARCHAR(32) | default="在库" | 当前状态 |
+| 7 | `owner` | VARCHAR(128) | NULLABLE | **归属人 username**（建档=录入者；生产流转→转交给谁；交付→交付责任人；维修→Bug 责任人；在库/报废→表单手动指定） |
+| 8 | `current_holder` | VARCHAR(128) | NULLABLE | 当前持有人 |
+| 9 | `note` | TEXT | NULLABLE | 备注 |
+| 10 | `created_by` | VARCHAR(64) | NULLABLE | 建档人 |
+| 11 | `created_at` | DATETIME | default=now | — |
+| 12 | `updated_at` | DATETIME | default=now, onupdate=now | — |
+
+#### 5.3.10.2 `delivery_board_events` — 板卡生命周期事件（时间线）
+
+> 事件**只增不改**（录错用新事件更正）；字段不设固定列，**目标状态表单字段统一存 `data` JSON**（schema 由 `BOARD_STATUS_SCHEMA` 配置，可扩展，预留「模板管理>项目模板配置状态」扩展点）。
+
+| # | 列名 | 类型 | 约束 | 说明 |
+|---|------|------|------|------|
+| 1 | `id` | INTEGER | **PK** | — |
+| 2 | `board_id` | INTEGER | NOT NULL, INDEX, **FK→delivery_boards.id (CASCADE)** | 所属板卡 |
+| 3 | `from_status` | VARCHAR(32) | NULLABLE | 迁移前状态（建档事件为 NULL） |
+| 4 | `to_status` | VARCHAR(32) | NOT NULL | 迁移后状态 |
+| 5 | `event_time` | DATETIME | default=now | 业务时间（目标状态表单的 event_time 字段） |
+| 6 | `actor` | VARCHAR(128) | NULLABLE | 操作人 |
+| 7 | `note` | TEXT | NULLABLE | 说明 |
+| 8 | `data` | JSON(TEXT) | NULLABLE | 目标状态表单字段通用存储（转交给谁/交付方式/归属人/报废原因/维修 Bug 信息等） |
+| 9 | `delivery_record_id` | INTEGER | NULLABLE, INDEX | 关联 `delivery_records.id`（交付记录自动联动） |
+| 10 | `bug_id` | INTEGER | NULLABLE, INDEX | 关联 `pma_bugs.id`（维修 Bug 联动；时间线渲染 Bug# 可点击链接） |
+| 11 | `created_by` | VARCHAR(64) | NULLABLE | — |
+| 12 | `created_at` | DATETIME | default=now | — |
 
 ---
 
