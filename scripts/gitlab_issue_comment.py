@@ -18,6 +18,8 @@ Required config (.env):
     PMA_USERNAME — PMA login username (default: admin)
     PMA_PASSWORD — PMA login password (default: admin1)  # 当前环境管理员密码非初始 admin123
     PMA_URL — PMA base URL (default: http://localhost:8000)
+
+    登录自动尝试候选密码（admin1 / admin123）：配置的密码不对时回退到另一个，避免密码漂移阻塞评论发布。
 """
 
 import argparse
@@ -67,28 +69,40 @@ def load_env() -> dict:
 
 
 def get_auth_token(pma_url: str, username: str, password: str) -> str:
-    """Login to PMA and get an access token."""
+    """Login to PMA and get an access token.
+
+    Tries the configured password first; on auth failure falls back to the
+    other known candidate (admin1 / admin123), so a password drift doesn't
+    block posting. Connection errors are fatal (network issue, not credentials).
+    """
+    candidates = [password]
+    for alt in ("admin1", "admin123"):
+        if alt not in candidates:
+            candidates.append(alt)
+
     login_url = f"{pma_url.rstrip('/')}/api/auth/login"
-    data = json.dumps({"username": username, "password": password}).encode()
-    req = urllib.request.Request(
-        login_url,
-        data=data,
-        headers={"Content-Type": "application/json"},
-    )
-    try:
-        resp = urllib.request.urlopen(req)
-        body = json.loads(resp.read())
-        token = body.get("data", {}).get("access_token", "")
-        if not token:
-            print(f"ERROR: Login failed — {body.get('message', 'no token')}", file=sys.stderr)
+    last_err = "no token"
+    for pw in candidates:
+        data = json.dumps({"username": username, "password": pw}).encode()
+        req = urllib.request.Request(
+            login_url,
+            data=data,
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            resp = urllib.request.urlopen(req)
+            body = json.loads(resp.read())
+            token = body.get("data", {}).get("access_token", "")
+            if token:
+                return token
+            last_err = body.get("message", "no token")
+        except urllib.error.HTTPError as e:
+            last_err = f"HTTP {e.code} — {e.reason}"
+        except urllib.error.URLError as e:
+            print(f"ERROR: Cannot connect to PMA at {pma_url}: {e.reason}", file=sys.stderr)
             sys.exit(1)
-        return token
-    except urllib.error.HTTPError as e:
-        print(f"ERROR: Login HTTP {e.code} — {e.reason}", file=sys.stderr)
-        sys.exit(1)
-    except urllib.error.URLError as e:
-        print(f"ERROR: Cannot connect to PMA at {pma_url}: {e.reason}", file=sys.stderr)
-        sys.exit(1)
+    print(f"ERROR: Login failed — {last_err} (tried: {', '.join(candidates)})", file=sys.stderr)
+    sys.exit(1)
 
 
 def post_issue_note(pma_url: str, token: str, issue_iid: int, body: str) -> dict:
