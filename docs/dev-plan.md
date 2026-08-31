@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-当前版本：v2026.08.28-beta22 | 最后更新：2026-08-28
+当前版本：v2026.08.31-beta1 | 最后更新：2026-08-31
 
 ---
 
@@ -231,6 +231,7 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-08-31 | v2026.08.31-beta1 | style(ui): 移除「项目总览」导航栏告警角标 — 删除 nav-badge(alert-badge)元素及 dashboard.js 中 data.pending_alerts 填充逻辑（导航不再显示待处理告警数字角标），后端 KPI 接口 pending_alerts 字段保留（API 契约不变） |
 | 2026-08-28 | v2026.08.28-beta22 | feat(api,ui): 交付记录子页面板卡生命周期管理 — ①板卡档案(表delivery_boards+事件表delivery_board_events):批量录入(起始编号+数量≤50自动递增尾部数字段)、单板卡建档、编号项目内唯一冲突400;②状态目录11态自由切换(维修中/已维修仅由维修Bug驱动,手动切换400;当前维修中不可手动切出),每目标状态按BOARD_STATUS_SCHEMA动态渲染必填表单(生产=转交给谁/交付=交付责任人/在库报废=手动指定归属人),事件字段存通用data JSON可扩展;③归属人授权(owner本人或project_edit)编辑/切换,删除板卡需project_edit,归属人流转(生产→转交给谁/交付→交付责任人/维修→Bug责任人/在库报废→手动指定);④维修Bug联动:新增Bug类型"维修"(必填关联板卡多选,板卡须属项目),创建→板卡自动维修中+owner=Bug责任人,解决/关闭→已维修,时间线含Bug#可点击跳转,reopen/删除不回退;⑤交付联动:交付记录物料编码自动登记板卡+已交付事件(owner=交付责任人),删改同步回滚;⑥交付进度动态统计:已交付/已维修计入,维修中−1,已维修+1,按当前状态实时计算;⑦历史迁移:现有交付记录物料编码展开建档;⑧前端:板卡列表(固定宽度状态/人员流转胶囊+上一状态/上一归属人+点击切换+时间线SVG图标)、产品型号必选、过滤放标题栏同行、时间线弹窗(asc/desc+目标字段网格+状态色圆点)、tab改名"交付记录";⑨权限board_manage授予12角色 |
 | 2026-08-27 | v2026.08.27-beta26 | feat(ui): 用户中心页面在系数=1.0 基础上优化 — ①KPI(任务/Bug过滤卡)标签字体与右侧卡片标题一致(h2 15px),value 28px*0.8;②任务/Bug列表:编号列58px、项目编号78px、产品编号114px(min-width+内容自适应,产品编号长值ellipsis),项目/产品编号按钮(font+padding+border)缩20%,阶段列96px(可显示PCBA入库质检)、责任人min-width 80px(可显示5个汉字),多余空间留给任务标题列;③右侧工时日历/项目工时占比/任务统计面板 transform:scale(0.9) 缩10%,#uc-inner margin-right→334px,面板去除 overflow-y:auto 直接显示(非滚动容器) |
 | 2026-08-27 | v2026.08.27-beta25 | feat(ui): 全局UI密度5档统一缩放(单一紧凑系数) — ①--ui-scale(html[data-ui-density])5档:最紧0.80/紧凑0.90/标准1.00/舒适1.05/最舒1.10(标准=1.0为基准,其余按系数自动计算),默认无偏好=紧凑0.90使首次加载即紧凑;②新增 density.css 最后加载,所有标准组件(btn族/section-title/card-pad/tab/pill/badge/search-inp/kpi族/dt-table单元格行高/content留白/task-filter-bar)+body行间距统一用 calc(<base>*var(--ui-scale)) 缩放,表格行高/列内边距/字号/组件间隙随档位自适应;③偏好设置"UI密度"5档按钮;④删除临时局部尺寸调整:#uc-right-panel zoom:0.9 移除(面板内组件由全局系数缩放),#uc-inner margin-right 校正;⑤删除"表格行高密度"独立卡片与功能(_setTableDensity/setDensity/setAllDensity/pma_table_density/dashboard density),行高统一 --ui-scale;⑥index/login 引入 density.css  |

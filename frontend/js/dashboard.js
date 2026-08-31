@@ -252,12 +252,6 @@ async function loadKpiCards() {
     }
     document.getElementById('kpi-incomplete-docs-count').textContent = data.incomplete_docs_count;
 
-    var badge = document.getElementById('alert-badge');
-    if (badge) {
-      badge.textContent = data.pending_alerts;
-      badge.style.display = data.pending_alerts > 0 ? '' : 'none';
-    }
-
     // Load risk config for admin users
     loadRiskConfig();
 
