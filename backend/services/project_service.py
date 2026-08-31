@@ -652,6 +652,7 @@ def _project_detail(p: CachedProject, db: Session, has_pending_docs: bool = Fals
         "planned_delivery_qty": p.planned_delivery_qty or 0,
         "delivery_note": p.delivery_note or "",
         "is_local": bool(p.is_local),
+        "tracking_only": bool(p.tracking_only),
         "zentao_url": _zentao_url("project", p.id) if not p.is_local else None,
     }
 
@@ -860,7 +861,10 @@ def _handle_transition_to_doing(db: Session, project) -> dict:
 
         ptype = (project.project_type or "RD").strip()
         _sync_from_templates(db, project.id, ptype)
-        task_count = _sync_tasks_from_templates(db, project.id, ptype)
+        # 老项目跟踪 (tracking_only): docs sync (资料完整性跟踪), tasks NOT auto-created (#6)
+        task_count = 0
+        if not bool(getattr(project, "tracking_only", False)):
+            task_count = _sync_tasks_from_templates(db, project.id, ptype)
 
         # Count docs after sync
         doc_count = db.query(ProjectDocument).filter(

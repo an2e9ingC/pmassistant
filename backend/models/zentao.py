@@ -51,6 +51,9 @@ class CachedProject(Base):
     is_local = Column(Boolean, default=False)
     # Creator info
     reporter_id = Column(Integer, ForeignKey("local_users.id"), nullable=True)
+    # PMA-local flag: True = 老项目跟踪 (R&D-complete, tracking only — template tasks NOT auto-created)
+    # NOTE: existing rows get NULL on auto-migration; treat NULL as False (see serializers + SQL filters).
+    tracking_only = Column(Boolean, default=False)
 
 
 class CachedUser(Base):

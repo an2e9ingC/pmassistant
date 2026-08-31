@@ -54,6 +54,7 @@ FIELD_LABEL = {
     "tags": "标签",
     "linked_project_ids": "关联项目ID",
     "is_local": "是否本地",
+    "tracking_only": "老项目跟踪",
     "owner_id": "负责人",
     # Product fields
     "category": "分类",

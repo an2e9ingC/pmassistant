@@ -1033,6 +1033,7 @@ class ProjectUpdate(BaseModel):
     product_ids: Optional[list] = None  # List[ProductLinkItem] for edit mode
     description: Optional[str] = None
     is_local: Optional[bool] = None
+    tracking_only: Optional[bool] = None  # 老项目跟踪标记
 
 
 @router.put("/{identifier}", response_model=dict)
@@ -1134,6 +1135,16 @@ def update_project(
         project.status = new_status
         db.commit()
     # --- End status handling ---
+
+    # Handle tracking_only marker explicitly: bool-coerce to avoid str(None)!=str(False) false changes,
+    # and apply BEFORE type-change resync so _resync_on_type_change sees the updated flag.
+    new_tracking = data.pop("tracking_only", None)
+    if new_tracking is not None:
+        new_tracking = bool(new_tracking)
+        old_tracking = bool(getattr(project, "tracking_only", False))
+        if old_tracking != new_tracking:
+            project.tracking_only = new_tracking
+            changes.append(f"{FIELD_LABEL.get('tracking_only', '老项目跟踪')}: '{old_tracking}' -> '{new_tracking}'")
 
     for field, value in data.items():
         if field in ("begin", "end", "real_began", "real_end"):

@@ -149,7 +149,8 @@ var dashFilter = {
       // Search globally — ignore type/status/category/program filters
     } else {
       if (this.type && this.type !== 'all' && this.type !== 'fav') p.type = this.type;
-      if (this.status) p.status = this.status;
+      if (this.status === 'tracking') { p.tracking_only = 1; }
+      else if (this.status) p.status = this.status;
       if (this.category) p.category = this.category;
       if (this.program) p.program_id = this.program;
     }
@@ -343,7 +344,7 @@ function _initDashDt() {
     columns: [
       { key: 'fav', title: '', width: '28px', minWidth: 28, render: function(v, row) { return favStar('project', row.id, {stopPropagation: true}); } },
       { key: 'code', title: '项目编号', width: '6%', minWidth: 90, headerRender: function() { return '<span style="cursor:pointer" onclick="dashFilter.toggleSortCode()">项目编号</span> <span id="sort-code-ind" style="color:var(--muted)">⇅</span>'; }, render: function(v, row) { return v ? projCodeTag(v, 'event.stopPropagation();openProject(\'' + escHtml(v||'').replace(/'/g, "\\'") + '\')', row.name) : projCodeTag('RD'); } },
-      { key: 'name', title: '项目名', width: '28%', minWidth: 100, render: function(v) { return '<div class="proj-name">' + escHtml(v||'') + '</div>'; } },
+      { key: 'name', title: '项目名', width: '28%', minWidth: 100, render: function(v, row) { return '<div class="proj-name" style="display:inline-block;vertical-align:middle">' + escHtml(v||'') + '</div>' + (row.tracking_only ? ' <span class="pm-src-badge tracking" style="vertical-align:middle">跟踪</span>' : ''); } },
       { key: 'customer_name', title: '客户', width: '5%', minWidth: 110, render: function(v) { return renderCustomerBadge(v); } },
       { key: 'type', title: '类型', width: '5%', minWidth: 65, render: function(v) { return renderTypeBadge(v); } },
       { key: 'current_stage', title: '当前阶段', width: '12%', minWidth: 100, render: function(v) { return '<span style="font-size:13px">'+escHtml(v||'—')+'</span>'; } },

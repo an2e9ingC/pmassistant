@@ -116,6 +116,7 @@ def get_project_list(
     sort_order: str = "asc",
     page: int = 1,
     limit: int = 50,
+    tracking_only: Optional[bool] = None,  # 老项目跟踪过滤
 ) -> tuple[list[CachedProject], int]:
     q = db.query(CachedProject)
 
@@ -133,6 +134,10 @@ def get_project_list(
 
     if status:
         q = q.filter(CachedProject.status == status)
+
+    # 老项目跟踪过滤（SQL NULL 语义：用 is_(True)，勿用 == True）
+    if tracking_only:
+        q = q.filter(CachedProject.tracking_only.is_(True))
 
     if program_id is not None:
         q = q.filter(CachedProject.program_id == program_id)

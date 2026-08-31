@@ -52,6 +52,7 @@ class LocalProjectCreate(BaseModel):
     planned_delivery_qty: Optional[int] = None
     consumed: Optional[float] = None
     linked_project_ids: Optional[str] = None
+    tracking_only: bool = False
 
 
 class LocalProjectUpdate(BaseModel):
@@ -67,6 +68,7 @@ class LocalProjectUpdate(BaseModel):
     tags: Optional[str] = None
     planned_delivery_qty: Optional[int] = None
     consumed: Optional[float] = None
+    tracking_only: Optional[bool] = None
 
 
 class ProductNodeLinkRequest(BaseModel):
@@ -332,10 +334,12 @@ def create_local_project(
             planned_delivery_qty=body.planned_delivery_qty,
             consumed=body.consumed,
             linked_project_ids=body.linked_project_ids,
+            tracking_only=body.tracking_only,
         )
-        log_audit(db, user, "local_project_create",
-                  f"名称={body.name}, 编号={body.code}, 产品数={len(body.product_ids or [])}",
-                  AUDIT_CAT_PROJECT, "medium")
+        detail = f"名称={body.name}, 编号={body.code}, 产品数={len(body.product_ids or [])}"
+        if body.tracking_only:
+            detail += ", 老项目跟踪"
+        log_audit(db, user, "local_project_create", detail, AUDIT_CAT_PROJECT, "medium")
         return {"code": 0, "data": project, "message": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

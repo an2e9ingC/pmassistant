@@ -16,7 +16,7 @@ Usage:
 
 Required config (.env):
     PMA_USERNAME — PMA login username (default: admin)
-    PMA_PASSWORD — PMA login password (default: admin123)
+    PMA_PASSWORD — PMA login password (default: admin1)  # 当前环境管理员密码非初始 admin123
     PMA_URL — PMA base URL (default: http://localhost:8000)
 """
 
@@ -33,7 +33,7 @@ def load_env() -> dict:
     """Load configuration from .env file in the PMA project root."""
     env = {
         "PMA_USERNAME": os.environ.get("PMA_USERNAME", "admin"),
-        "PMA_PASSWORD": os.environ.get("PMA_PASSWORD", "admin123"),
+        "PMA_PASSWORD": os.environ.get("PMA_PASSWORD", "admin1"),
         "PMA_URL": os.environ.get("PMA_URL", "http://localhost:8000"),
     }
 

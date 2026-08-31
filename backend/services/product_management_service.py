@@ -345,6 +345,7 @@ def create_local_project(
     consumed: Optional[float] = None,
     reporter_id: Optional[int] = None,
     linked_project_ids: Optional[str] = None,
+    tracking_only: bool = False,
 ) -> dict:
     """Create a PMA-local project."""
     if product_ids is None:
@@ -372,6 +373,7 @@ def create_local_project(
         consumed=consumed or 0,
         reporter_id=reporter_id,
         synced_at=None,
+        tracking_only=tracking_only,
     )
     db.add(project)
     db.flush()
@@ -413,11 +415,13 @@ def create_local_project(
 
     # Initialize documents and tasks from templates ONLY if not 'wait'
     # For 'wait' status, templates are created later on first transition to 'doing' (#231)
+    # 老项目跟踪 (tracking_only): docs still sync (资料完整性跟踪), but template tasks are NOT auto-created (#6)
     if status != "wait":
         try:
             from backend.services.document_service import _sync_from_templates, _sync_tasks_from_templates
             _sync_from_templates(db, project.id, project_type)
-            _sync_tasks_from_templates(db, project.id, project_type)
+            if not tracking_only:
+                _sync_tasks_from_templates(db, project.id, project_type)
         except Exception as e:
             import logging
             logging.getLogger(__name__).warning(f"Template sync failed for project {code} ({project_type}): {e}")
@@ -567,6 +571,7 @@ def _project_item(p: CachedProject, db: Session) -> dict:
         "tags_list": [t.strip() for t in (p.tags or "").split(",") if t.strip()],
         "is_local": bool(p.is_local),
         "reporter_id": p.reporter_id,
+        "tracking_only": bool(p.tracking_only),
         "product_count": product_count,
         "product_names": product_names,
         "synced_at": to_local_str(p.synced_at) if p.synced_at else None,
@@ -588,6 +593,9 @@ def _resync_on_type_change(db: Session, project_id: int, new_type: str):
     if project and project.status == "abolished":
         logger.warning(f"Skipping _resync_on_type_change for abolished project {project_id}")
         return
+    # 老项目跟踪 (tracking_only): skip the ENTIRE template-task section — never auto-create nor
+    # delete template tasks (preserves manually-imported ones). Docs/stages still reset (#6).
+    is_tracking = bool(getattr(project, "tracking_only", False))
 
     # 1. Reset stages
     db.query(ProjectStage).filter(ProjectStage.project_id == project_id).delete()
@@ -599,15 +607,16 @@ def _resync_on_type_change(db: Session, project_id: int, new_type: str):
 
     # 3. Remove template-originated tasks (keep manual tasks)
     # Clean up worklogs and comments for template tasks first to avoid orphaned data
-    template_task_ids = db.query(Task.id).filter(
-        Task.project_id == project_id, Task.template_id.isnot(None)
-    ).subquery()
-    db.query(WorkLog).filter(WorkLog.task_id.in_(template_task_ids)).delete(synchronize_session=False)
-    db.query(TaskComment).filter(TaskComment.task_id.in_(template_task_ids)).delete(synchronize_session=False)
-    db.query(Task).filter(
-        Task.project_id == project_id, Task.template_id.isnot(None)
-    ).delete()
-    _sync_tasks_from_templates(db, project_id, new_type)
+    if not is_tracking:
+        template_task_ids = db.query(Task.id).filter(
+            Task.project_id == project_id, Task.template_id.isnot(None)
+        ).subquery()
+        db.query(WorkLog).filter(WorkLog.task_id.in_(template_task_ids)).delete(synchronize_session=False)
+        db.query(TaskComment).filter(TaskComment.task_id.in_(template_task_ids)).delete(synchronize_session=False)
+        db.query(Task).filter(
+            Task.project_id == project_id, Task.template_id.isnot(None)
+        ).delete()
+        _sync_tasks_from_templates(db, project_id, new_type)
 
     db.flush()
 
