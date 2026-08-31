@@ -99,7 +99,7 @@ python3 << 'PYEOF'
 import urllib.request, json
 
 # 登录
-login_data = json.dumps({"username": "admin", "password": "admin123"}).encode()
+login_data = json.dumps({"username": "admin", "password": "admin1"}).encode()
 req = urllib.request.Request("http://localhost:8000/api/auth/login", data=login_data,
     headers={"Content-Type": "application/json"})
 resp = urllib.request.urlopen(req)
