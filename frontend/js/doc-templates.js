@@ -3003,12 +3003,15 @@ async function _namingDelete(id, fk) {
 
 /* ── Bug Templates Tab ── */
 
+var _bugTplCache = [];  // 已加载的 Bug 模板列表（编辑对话框按 id 回填真实内容）
+
 async function initBugTemplates() {
   var c = document.getElementById('dtsec-bugtpl');
   c.innerHTML = '<div class="loading-spinner">加载中...</div>';
   try {
     var data = await API.get('/product-doc-templates/bug-templates');
     var tpls = data || [];
+    _bugTplCache = tpls;
     var html = '<div style="max-width:800px">' +
       '<div style="display:flex;justify-content:flex-end;margin-bottom:10px">' +
         '<button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="_bugTplShowEdit(0)">+ 添加模板</button>' +
@@ -3023,7 +3026,7 @@ async function initBugTemplates() {
         container: document.getElementById('bug-tpl-table'),
         columns: [
           { key: 'name', title: '名称', minWidth: 100, render: function(v, row) { return '<span style="font-weight:500">'+escHtml(v||'')+'</span>'+(row.is_default?' <span style="font-size:9px;color:var(--accent);background:var(--accent-lt);padding:1px 4px;border-radius:3px">默认</span>':''); } },
-          { key: 'content', title: '内容预览', render: function(v) { return '<span style="font-size:11px;color:var(--muted);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHtml((v||'').substring(0,80))+'</span>'; } },
+          { key: 'content', title: '内容预览', render: function(v) { return '<span style="font-size:11px;color:var(--muted);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHtml(stripHtml(renderMarkdown(v||'')).replace(/\s+/g,' ').trim().substring(0,80))+'</span>'; } },
           { key: 'actions', title: '操作', width: actionColWidth(3) + 'px', minWidth: actionColWidth(3), render: function(v, row) { return (row.is_default?'':iconBtn('⭐','设为默认','_bugTplSetDefault('+row.id+')'))+iconEdit('_bugTplShowEdit('+row.id+')','编辑')+iconDelete('_bugTplDelete('+row.id+')','删除'); } }
         ],
         data: tpls,
@@ -3037,22 +3040,28 @@ function _bugTplShowEdit(id) {
   var t = id ? _bugTplFind(id) : null;
   var body = '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">模板名称 *</label>' +
     '<input class="search-inp" id="bt-name" value="'+escHtml(t?t.name:'')+'" style="width:100%;box-sizing:border-box;margin-top:3px"></div>' +
-    '<div><label style="font-size:11px;color:var(--muted)">内容（Markdown）</label>' +
-    '<textarea class="search-inp" id="bt-content" rows="12" style="width:100%;box-sizing:border-box;margin-top:3px;resize:vertical;font-family:var(--mono);font-size:12px">'+escHtml(t?t.content:defaultContent)+'</textarea></div>';
+    '<div><label style="font-size:11px;color:var(--muted)">内容</label>' +
+    '<textarea class="search-inp" id="bt-content" rows="12" style="width:100%;box-sizing:border-box;margin-top:3px">'+escHtml(t?t.content:defaultContent)+'</textarea></div>';
   openDialog((id?'编辑':'添加')+' Bug提交模板', body, [
     {text:'取消',onclick:'closeSharedDialog()'},
     {text:'保存',cls:'btn-primary',onclick:'_bugTplSave('+(id||0)+')'}
-  ], {maxWidth:560});
+  ], {maxWidth:'80vw'});
+  setTimeout(function() { initRichEditor('bt-content', {height: 400}); }, 100);
 }
 
 function _bugTplFind(id) {
-  var el = document.querySelector('#dtsec-bugtpl');
-  return null; // We'll re-fetch
+  for (var i = 0; i < _bugTplCache.length; i++) {
+    if (String(_bugTplCache[i].id) === String(id)) return _bugTplCache[i];
+  }
+  return null;
 }
 
 async function _bugTplSave(id) {
   var name = document.getElementById('bt-name').value.trim();
-  var content = document.getElementById('bt-content').value;
+  var contentEl = document.getElementById('bt-content');
+  // 编辑器已初始化 → 读取富文本 HTML；未初始化（hugerte 未加载等）→ 回退 textarea
+  var ed = (typeof hugerte !== 'undefined') ? hugerte.get('bt-content') : null;
+  var content = ed ? ed.getContent() : (contentEl ? contentEl.value : '');
   if (!name) { showToast('请输入模板名称','error'); return; }
   try {
     if (id) await API.put('/product-doc-templates/bug-templates/'+id, {name:name, content:content});

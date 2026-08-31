@@ -1158,7 +1158,7 @@ function initBugEdit(bugId) {
     '</div>';
     viewEl.innerHTML = html;
     document.getElementById('topbar-title').textContent = '编辑 Bug #' + b.id;
-    setTimeout(function() { initRichEditor('bf-desc', {height: 360}); }, 100);
+    setTimeout(function() { initRichEditor('bf-desc', {height: 400}); }, 100);
     _initBugFormSelectors(b, true);
   }).catch(function(e) {
     viewEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--danger)">加载失败: ' + escHtml(e.message || '') + '</div>';
@@ -1179,7 +1179,7 @@ function initBugCreate() {
   '</div>';
   viewEl.innerHTML = html;
   document.getElementById('topbar-title').textContent = '新建 Bug';
-  setTimeout(function() { initRichEditor('bf-desc', {height: 360}); }, 100);
+  setTimeout(function() { initRichEditor('bf-desc', {height: 400}); }, 100);
   _initBugFormSelectors(null, false);
 }
 
@@ -1493,7 +1493,7 @@ function _showBugForm(b) {
   bodyHtml = '<div style="max-height:75vh;overflow-y:auto;padding-right:4px">' + bodyHtml + '</div>';
 
   var title = isEdit ? '编辑Bug #'+t.id : '新建Bug';
-  setTimeout(function() { initRichEditor('bf-desc', {height: 360}); }, 100);
+  setTimeout(function() { initRichEditor('bf-desc', {height: 400}); }, 100);
   openDialog(title, bodyHtml, [
     {text:'取消',onclick:'closeSharedDialog()'},
     {text:isEdit?'保存':'创建',cls:'btn-primary',onclick:'_submitBug('+(t.id||'null')+')'}], {maxWidth:'80vw', maxHeight:'90vh'});
@@ -1652,10 +1652,19 @@ function _bugApplyDescTemplate() {
   var descEl = document.getElementById('bf-desc');
   if (!tplSel || !descEl) return;
   var tplId = tplSel.value;
-  if (!tplId) return;
   var tpls = window._bfDescTemplates || [];
   var t = tpls.find(function(x) { return x.id == tplId; });
-  if (t) descEl.value = t.content || '';
+  // 未选择模板（不使用模板）或模板不存在 → 清空内容
+  var content = t ? (t.content || '') : '';
+  // bf-desc 已被 HugeRTE 接管：直接写 textarea.value 不会反映到编辑器，
+  // 需同步调用编辑器 API 更新可见内容（markdownToHtml 兼容 Markdown/HTML 模板）。
+  var ed = (typeof hugerte !== 'undefined') ? hugerte.get('bf-desc') : null;
+  if (ed) {
+    ed.setContent(content ? markdownToHtml(content) : '');
+    descEl.value = ed.getContent();
+  } else {
+    descEl.value = content;
+  }
 }
 
 async function _submitBug(bugId) {
