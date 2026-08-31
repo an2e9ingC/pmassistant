@@ -224,6 +224,7 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 | 24 | `raw_json` | TEXT | — | ZenTao 原始 JSON |
 | 25 | `synced_at` | DATETIME | default=now | 同步时间 |
 | 26 | `is_local` | BOOLEAN | default=False | 是否本地创建 |
+| 27 | `tracking_only` | BOOLEAN | default=False | 老项目跟踪标记：True=研发基本完成仅需跟踪，**不自动按模板创建任务**，可手动导入/创建（存量行 NULL 视为 False） |
 
 **关系**：
 - `executions` (backref) → `zenta_executions.project_id`（1:N）

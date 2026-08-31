@@ -1280,6 +1280,8 @@ def sync_all_projects_tasks(db: Session, project_ids: Optional[list[int]] = None
         q = q.filter(CachedProject.id.in_(project_ids))
     # Skip projects in 'wait' or 'abolished' status — templates not yet initialized (#231)
     q = q.filter(CachedProject.status.notin_(["wait", "abolished"]))
+    # Skip tracking-only projects — their tasks are only created manually (#6)
+    q = q.filter(or_(CachedProject.tracking_only.is_(None), CachedProject.tracking_only == False))  # noqa: E712
     projects = q.order_by(CachedProject.id).all()
     synced: list[str] = []
     failed: list[str] = []

@@ -241,6 +241,7 @@ function buildDetailHeader(p) {
         (p.is_local
           ? ' <span class="pm-src-badge local" style="vertical-align:middle">PMA本地</span>'
           : (p.zentao_url ? ' <a href="' + p.zentao_url + '" target="_blank" class="zentao-link" title="在禅道中查看">&#x2197; 禅道</a>' : '')) +
+        (p.tracking_only ? ' ' + renderTrackingBadge() : '') +
       '</div>' +
     '</div>' +
     '<div style="display:flex;align-items:flex-start;gap:24px;flex-shrink:0">' +
@@ -3092,6 +3093,11 @@ function showProjectFormDialog(isEdit, convertSource) {
             '<option value="abolished"' + (p && p.raw_status === 'abolished' ? ' selected' : '') + '>已废止</option>' +
           '</select></div>' +
       '</div>' +
+      // Row 5b: 老项目跟踪标记（convert 模式隐藏）
+      (!isConvert ? '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">' +
+        '<input type="checkbox" id="proj-form-tracking"' + ((p && p.tracking_only) ? ' checked' : '') + ' style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">' +
+        '<label for="proj-form-tracking" style="font-size:12px;color:var(--muted);cursor:pointer">研发基本完成，仅需跟踪（不自动创建模板任务，可手动导入/创建）</label>' +
+        '</div>' : '') +
       // Row 6: 实际开始 | 实际结束
       '<div style="display:flex;gap:10px;margin-bottom:10px">' +
         '<div style="flex:1"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">实际开始</label>' +
@@ -3565,9 +3571,17 @@ async function saveProjectForm(isEdit) {
   var statusEl = g('proj-form-status');
   if (statusEl) payload.status = statusEl.value;
 
+  // 老项目跟踪标记 (checkbox)
+  var trackingEl = g('proj-form-tracking');
+  if (trackingEl) payload.tracking_only = trackingEl.checked;
+
   // Confirm wait→doing transition (triggers template sync) (#231)
   if (isEdit && _projDetail && _projDetail.raw_status === 'wait' && payload.status === 'doing') {
-    if (!confirm('将项目状态从「待启动」切换为「进行中」将自动根据模板创建阶段、任务和文档。确认继续？')) {
+    if (payload.tracking_only) {
+      if (!confirm('将项目状态从「待启动」切换为「进行中」将自动创建阶段和文档（老项目跟踪：不会自动创建任务，可手动导入/创建）。确认继续？')) {
+        return;
+      }
+    } else if (!confirm('将项目状态从「待启动」切换为「进行中」将自动根据模板创建阶段、任务和文档。确认继续？')) {
       return;
     }
   }

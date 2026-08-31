@@ -298,6 +298,10 @@ function renderTypeBadge(type) {
   return '<span class="badge badge-' + t + '">' + getProjectTypeLabel(type) + '</span>';
 }
 
+function renderTrackingBadge() {
+  return '<span class="pm-src-badge tracking" title="老项目跟踪：研发基本完成，不自动创建模板任务，可手动导入/创建">跟踪</span>';
+}
+
 function renderPill(status) {
   return '<span class="pill ' + (status || 'pending') + '">' + (STATUS_TXT[status] || status) + '</span>';
 }

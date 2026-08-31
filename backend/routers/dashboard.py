@@ -55,6 +55,7 @@ def get_projects(
     status: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
     program_id: Optional[int] = Query(None),
+    tracking_only: Optional[int] = Query(None),  # 老项目跟踪过滤
     sort_by: str = Query("end"),
     sort_order: str = Query("asc"),
     page: int = Query(1, ge=1),
@@ -64,6 +65,7 @@ def get_projects(
 ):
     items, total = dashboard_service.get_project_list(
         db, search, type, status, category, program_id, sort_by, sort_order, page, limit,
+        bool(tracking_only) if tracking_only is not None else None,
     )
     # Batch-load linked customers for all items
     from backend.models.zentao import CustomerProjectLink, PmaCustomer
@@ -257,6 +259,7 @@ def _project_list_item(p, linked_customers=None, has_pending_docs: bool = False,
         "tags": tags_str,
         "tags_list": tags_list,
         "risk_level": _calc_risk_level(p, has_pending_docs, has_incomplete_tasks, has_stage_anomalies),
+        "tracking_only": bool(p.tracking_only),
         "linked_projects": linked_projects,
     }
 

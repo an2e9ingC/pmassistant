@@ -380,3 +380,4 @@ body.has-ticker #view-user-center.active { padding-bottom: 0; }
 .pm-src-badge.synced  { background: var(--accent-lt); color: var(--accent); }
 .pm-src-badge.local   { background: var(--warn-lt);  color: var(--warn); }
 .pm-src-badge.unknown { background: var(--bg);       color: var(--muted); }
+.pm-src-badge.tracking { background: var(--purple-lt); color: var(--purple); }
