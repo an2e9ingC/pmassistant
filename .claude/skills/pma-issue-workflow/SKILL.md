@@ -30,14 +30,22 @@ allowed-tools: Read, Write, Edit, Bash, LSP, Agent, WebFetch
 
 ```bash
 python3 << 'PYEOF'
-import urllib.request, json
+import urllib.request, urllib.error, json
 
-# 1. 登录获取 token
-login_data = json.dumps({"username": "admin", "password": "admin1"}).encode()
-req = urllib.request.Request("http://localhost:8000/api/auth/login", data=login_data,
-    headers={"Content-Type": "application/json"})
-resp = urllib.request.urlopen(req)
-token = json.loads(resp.read())["data"]["access_token"]
+# 1. 登录获取 token（候选密码 admin1 / admin123，一个不对自动换另一个）
+token = None
+for pw in ("admin1", "admin123"):
+    try:
+        login_data = json.dumps({"username": "admin", "password": pw}).encode()
+        req = urllib.request.Request("http://localhost:8000/api/auth/login", data=login_data,
+            headers={"Content-Type": "application/json"})
+        resp = urllib.request.urlopen(req)
+        token = json.loads(resp.read())["data"]["access_token"]
+        break
+    except urllib.error.HTTPError:
+        continue
+if not token:
+    raise SystemExit("登录失败：admin1 / admin123 均不正确")
 
 # 2. 获取单个 Issue
 IID = {N}  # 替换为实际 issue 编号
@@ -57,13 +65,22 @@ PYEOF
 
 ```bash
 python3 << 'PYEOF'
-import urllib.request, json
+import urllib.request, urllib.error, json
 
-login_data = json.dumps({"username": "admin", "password": "admin1"}).encode()
-req = urllib.request.Request("http://localhost:8000/api/auth/login", data=login_data,
-    headers={"Content-Type": "application/json"})
-resp = urllib.request.urlopen(req)
-token = json.loads(resp.read())["data"]["access_token"]
+# 登录获取 token（候选密码 admin1 / admin123，一个不对自动换另一个）
+token = None
+for pw in ("admin1", "admin123"):
+    try:
+        login_data = json.dumps({"username": "admin", "password": pw}).encode()
+        req = urllib.request.Request("http://localhost:8000/api/auth/login", data=login_data,
+            headers={"Content-Type": "application/json"})
+        resp = urllib.request.urlopen(req)
+        token = json.loads(resp.read())["data"]["access_token"]
+        break
+    except urllib.error.HTTPError:
+        continue
+if not token:
+    raise SystemExit("登录失败：admin1 / admin123 均不正确")
 
 for iid in [62, 63, 65, 67]:  # 替换为实际 issue 编号列表
     req = urllib.request.Request(f"http://localhost:8000/api/gitlab/issues/{iid}",

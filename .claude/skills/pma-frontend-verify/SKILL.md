@@ -96,14 +96,22 @@ async () => { var res = await API.get('/path'); return res; }
 
 ```python
 python3 << 'PYEOF'
-import urllib.request, json
+import urllib.request, urllib.error, json
 
-# 登录
-login_data = json.dumps({"username": "admin", "password": "admin1"}).encode()
-req = urllib.request.Request("http://localhost:8000/api/auth/login", data=login_data,
-    headers={"Content-Type": "application/json"})
-resp = urllib.request.urlopen(req)
-token = json.loads(resp.read())["data"]["access_token"]
+# 登录（候选密码 admin1 / admin123，一个不对自动换另一个）
+token = None
+for pw in ("admin1", "admin123"):
+    try:
+        login_data = json.dumps({"username": "admin", "password": pw}).encode()
+        req = urllib.request.Request("http://localhost:8000/api/auth/login", data=login_data,
+            headers={"Content-Type": "application/json"})
+        resp = urllib.request.urlopen(req)
+        token = json.loads(resp.read())["data"]["access_token"]
+        break
+    except urllib.error.HTTPError:
+        continue
+if not token:
+    raise SystemExit("登录失败：admin1 / admin123 均不正确")
 
 # 调用目标 API
 req = urllib.request.Request("http://localhost:8000/api/<path>",
