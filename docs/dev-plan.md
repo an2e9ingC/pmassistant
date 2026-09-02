@@ -1,6 +1,6 @@
 # PMA 开发计划与进度
 
-当前版本：v2026.08.31-beta3 | 最后更新：2026-08-31
+当前版本：v2026.09.02-beta1 | 最后更新：2026-09-02
 
 ---
 
@@ -231,6 +231,7 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-09-02 | v2026.09.02-beta1 | fix(api): 项目总览编号排序兼容LSJ前缀 — ①根因:排序SQL用SUBSTR(code,3)写死去掉两位字母前缀,LSJ为3位前缀→剩余"Jxxxx"被CAST成0,所有LSJ项目排序键相同导致点表头不生效;②database.py注册SQLite标量函数pma_code_num(code)(取编号末尾连续数字转int,PE0456→456/LSJ0538→538,任意前缀长度/混合位宽正确),纯字母或空编号返回NULL;③dashboard_service的code排序改用pma_code_num;④顺带修正"无编号项目恒置底":null标志恒升序,升降序一致置底(对计划完成"长期"列同生效),移除未用的cast/Integer导入 |
 | 2026-08-31 | v2026.08.31-beta3 | feat(ui): Bug提交模板改为富文本编辑 — ①模板管理页(bugtpl):添加/编辑对话框内容由纯文本area升级为富文本(HugeRTE,高度400px/宽度80vw与"添加评论"弹窗一致),保存经编辑器getContent()读取真实内容,列表预览按Markdown渲染后取纯文本;②创建Bug页:描述模板下拉切换时通过HugeRTE API同步更新富文本编辑器内容(选中模板自动填充,切回"不使用模板"清空),编辑状态也能用新模板id匹配缓存回填;③修复模板编辑按id回填内容缓存(_bugTplCache)避免覆盖 |
 | 2026-08-31 | v2026.08.31-beta2 | feat(api,ui): 项目支持「老项目跟踪」标记（Issue #6）— ①CachedProject 新增 tracking_only 布尔列(启动自动迁移,存量NULL视为False);②标记项目默认不按模板自动创建任务(4处调用点:创建/wait→doing/类型变更重同步/批量同步全部门控,仅跳过任务、文档与阶段照常按模板生成),仍可手动导入模板任务/手动创建任务;③创建/编辑弹窗复选标记(convert转化隐藏),wait→doing确认文案按标记区分;④总览新增「跟踪」过滤标签(tracking_only=1后端过滤保分页)+表格name列跟踪徽章,详情头部徽章,组件renderTrackingBadge+紫色样式;⑤审计:创建detail追加"老项目跟踪",FIELD_LABEL映射;⑥版本升至beta2 |
 | 2026-08-31 | v2026.08.31-beta1 | style(ui): 移除「项目总览」导航栏告警角标 — 删除 nav-badge(alert-badge)元素及 dashboard.js 中 data.pending_alerts 填充逻辑（导航不再显示待处理告警数字角标），后端 KPI 接口 pending_alerts 字段保留（API 契约不变） |

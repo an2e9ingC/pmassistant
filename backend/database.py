@@ -2,6 +2,7 @@ import json as _json
 import os as _os
 import logging
 import uuid as _uuid
+import re as _re
 from datetime import datetime as _datetime
 from urllib.parse import quote as _urlquote
 
@@ -82,6 +83,23 @@ if _is_sqlcipher_enabled():
         cursor = dbapi_connection.cursor()
         cursor.execute(f"PRAGMA key = \"{settings.SQLCIPHER_KEY}\"")
         cursor.close()
+
+
+# ── Custom SQLite scalar: numeric tail of a project code (for code-column sorting) ──
+# 'PE0456'→456、'LSJ0538'→538 —— 兼容任意长度的字母前缀(PE/SW/PT/LSJ…)，避免像
+# SUBSTR(code, 3) 那样写死两位前缀而把 LSJ 整体算成 0。纯字母/空编号返回 NULL(排最后)。
+
+def _project_code_num(code):
+    if not code:
+        return None
+    m = _re.search(r"(\d+)$", str(code))
+    return int(m.group(1)) if m else None
+
+
+@event.listens_for(engine, "connect")
+def _register_sqlite_functions(dbapi_connection, connection_record):
+    dbapi_connection.create_function("pma_code_num", 1, _project_code_num)
+
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

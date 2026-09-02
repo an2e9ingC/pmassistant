@@ -3,7 +3,7 @@ import re
 from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import desc as _desc, asc as _asc, case, func, cast, Integer
+from sqlalchemy import desc as _desc, asc as _asc, case, func
 from sqlalchemy.orm import Session
 
 from backend.models.zentao import CachedProject
@@ -176,18 +176,20 @@ def get_project_list(
 
     # Default: sort by end ASC, NULLS LAST (long-term projects at bottom)
     if sort_by == "code":
-        # 按编号后数字部分排序(如 PE0456 → 456)，数值序，避免字符串序错排
-        sort_col = cast(func.substr(CachedProject.code, 3), Integer)
+        # 按编号末尾数字部分排序(如 PE0456 → 456、LSJ0538 → 538)，数值序，避免字符串序错排。
+        # 用 SQLite 自定义函数 pma_code_num(code)（backend/database.py），兼容任意长度字母前缀，
+        # 不再写死 SUBSTR(code,3) 两位前缀——那会把 LSJ 等 3 位前缀编号整体算成 0。
+        # 纯字母/空编号返回 NULL → 由下方 null 标志排序逻辑恒排最后。
+        sort_col = func.pma_code_num(CachedProject.code)
     else:
         sort_col = {
             "end": CachedProject.end,
             "code": CachedProject.code,
         }.get(sort_by, CachedProject.id)
     direction = _asc if sort_order == "asc" else _desc
-    # 无编号(NULL/空)项目始终排最后
-    null_rank = _asc if sort_order == "desc" else _desc
+    # 无编号(NULL/空)项目始终排最后（升降序一致）：null 标志恒升序 → 非空(0)在前、空(1)在后
     items = q.order_by(
-        null_rank(case((sort_col.is_(None), 1), else_=0)),
+        _asc(case((sort_col.is_(None), 1), else_=0)),
         direction(sort_col),
     ).offset((page - 1) * limit).limit(limit).all()
 
