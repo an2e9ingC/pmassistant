@@ -305,24 +305,30 @@ def delete_bug(db, bug_id):
 def get_worklogs(db, bug_id):
     logs = db.query(BugWorkLog).filter(BugWorkLog.bug_id == bug_id).order_by(BugWorkLog.date.desc()).all()
     from backend.models.local import LocalUser
+    from backend.services.worklog_hours import collect_baselines, row_derived_hours, row_basis
     uids = {w.user_id for w in logs}
     users = {u.id: (u.display_name or u.username) for u in db.query(LocalUser).filter(LocalUser.id.in_(uids)).all()}
+    bls = collect_baselines(db, logs)
     return [{"id": w.id, "bug_id": w.bug_id, "user_id": w.user_id,
-             "username": users.get(w.user_id, "?"), "hours": w.hours,
+             "username": users.get(w.user_id, "?"),
+             "hours": row_derived_hours(w, bls.get((w.user_id, w.date))),
              "percentage": w.percentage,
-             "calculated_hours": w.calculated_hours,
+             "calculated_hours": row_derived_hours(w, bls.get((w.user_id, w.date))),
+             "basis": row_basis(bls.get((w.user_id, w.date))),
              "date": str(w.date) if w.date else None,
              "description": w.description,
              "created_at": to_local_str(w.created_at) if w.created_at else None}
             for w in logs]
 
 def create_worklog(db, data, user_id):
-    from backend.services.worklog_service import _calc_calculated_hours, _parse_date
+    from backend.services.worklog_service import _parse_date, _validate_percentage_not_exceeded
     pct = float(data.get("percentage", 0) or 0)
     d = _parse_date(data.get("date")) or date.today()
-    calc_h, _ = _calc_calculated_hours(db, user_id, d, pct)
+    # 单条新增同样校验：当日已填 + 本条 ≤ 100%（与批量/编辑口径一致）
+    _validate_percentage_not_exceeded(db, user_id, d, pct)
+    # 只存百分比；派生小时列休眠（hours 因 NOT NULL 写 0.0 占位，读路径一律实时推导）
     w = BugWorkLog(bug_id=data["bug_id"], user_id=user_id,
-                   hours=calc_h, percentage=pct, calculated_hours=calc_h,
+                   hours=0.0, percentage=pct,
                    date=d, description=data.get("description", ""))
     db.add(w); db.commit()
     _recalc_bug_hours(db, data["bug_id"])
@@ -367,16 +373,13 @@ def create_worklog_batch(db, bug_id, entries, user_id):
     return created
 
 def update_worklog(db, wl_id, data):
-    from backend.services.worklog_service import _calc_calculated_hours, _parse_date, _validate_percentage_not_exceeded
+    from backend.services.worklog_service import _parse_date, _validate_percentage_not_exceeded
     w = db.query(BugWorkLog).filter(BugWorkLog.id == wl_id).first()
     if not w: return None
     if "percentage" in data:
         pct = float(data["percentage"] or 0)
         _validate_percentage_not_exceeded(db, w.user_id, w.date, pct, exclude_bug_id=w.id)
         w.percentage = pct
-        calc_h, _ = _calc_calculated_hours(db, w.user_id, w.date, pct)
-        w.hours = calc_h
-        w.calculated_hours = calc_h
     if "date" in data:
         v = data["date"]
         if isinstance(v, str):
@@ -384,10 +387,6 @@ def update_worklog(db, wl_id, data):
         if v != w.date and w.percentage:
             _validate_percentage_not_exceeded(db, w.user_id, v, w.percentage)
         w.date = v
-        if w.percentage:
-            calc_h, _ = _calc_calculated_hours(db, w.user_id, w.date, w.percentage)
-            w.hours = calc_h
-            w.calculated_hours = calc_h
     if "description" in data:
         w.description = data["description"]
     db.commit(); _recalc_bug_hours(db, w.bug_id)
@@ -648,23 +647,20 @@ def _attachment_dict(a):
 
 def _worklog_dict(w, db=None):
     from backend.models.local import LocalUser
-    from backend.models.wecom import WeComCheckin
-    result = {"id":w.id,"bug_id":w.bug_id,"user_id":w.user_id,"hours":w.hours,
-              "percentage":w.percentage,"calculated_hours":w.calculated_hours,
+    from backend.services.worklog_hours import baselines_for, row_derived_hours, row_basis
+    bl = None
+    if db and w.user_id and w.date:
+        bl = baselines_for(db, [(w.user_id, w.date)]).get((w.user_id, w.date))
+    basis = row_basis(bl)
+    dh = row_derived_hours(w, bl)
+    result = {"id":w.id,"bug_id":w.bug_id,"user_id":w.user_id,"hours":dh,
+              "percentage":w.percentage,"calculated_hours":dh,
+              "basis":basis, "has_checkin": basis == "ok",
               "date":str(w.date) if w.date else None,"description":w.description,
               "created_at":to_local_str(w.created_at) if w.created_at else None}
     if db:
         u = db.query(LocalUser).filter(LocalUser.id == w.user_id).first()
         result["username"] = u.display_name or u.username if u else None
-        # Check has_checkin
-        if u and u.wecom_userid:
-            c = db.query(WeComCheckin).filter(
-                WeComCheckin.user_id == u.wecom_userid,
-                WeComCheckin.date == w.date,
-            ).first()
-            result["has_checkin"] = bool(c and c.work_hours and c.work_hours > 0)
-        else:
-            result["has_checkin"] = False
     return result
 
 def _transfer_dict(t, db=None):
@@ -687,11 +683,9 @@ def _transfer_dict(t, db=None):
             "created_at":to_local_str(t.created_at) if t.created_at else None}
 
 def _recalc_bug_hours(db, bug_id):
-    total = db.query(BugWorkLog).with_entities(
-        sa_func.coalesce(
-            sa_func.sum(sa_func.coalesce(BugWorkLog.calculated_hours, BugWorkLog.hours)),
-        0)
-    ).filter(BugWorkLog.bug_id == bug_id).scalar() or 0.0
+    """Refresh PmaBug.consumed_hours 缓存（冗余列）—— 派生口径，与任务侧 recalc_consumed_hours 一致。"""
+    from backend.services.worklog_hours import derived_bug_hours
+    total = derived_bug_hours(db, bug_id)
     db.query(PmaBug).filter(PmaBug.id == bug_id).update({PmaBug.consumed_hours: float(total)})
     db.commit()
 

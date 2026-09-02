@@ -31,12 +31,12 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 | `zenta_releases` | `CachedRelease` | 4 | ZenTao 缓存 | 产品下的发布版本/里程碑，含 GitLab 关联地址及校验状态 |
 | `zenta_bugs` | `CachedBug` | 98 | ZenTao 缓存 | 产品/项目下的 Bug 缺陷数据，按严重程度、优先级、状态追踪 |
 | `pma_bugs` | `PmaBug` | 0 | 本地-Bug | PMA 本地 Bug 系统：产品级追踪，支持组件、严重度、优先级、GitLab 联动、项目转移。含 `board_ids`(JSON)——「维修」类 Bug 关联的板卡 id 列表，创建/解决时驱动板卡 维修中→已维修 |
-| `pma_bug_worklogs` | `BugWorkLog` | 0 | 本地-Bug | Bug 工时记录：user_id、hours、date、description |
+| `pma_bug_worklogs` | `BugWorkLog` | 0 | 本地-Bug | Bug 工时记录（Issue #9 百分比权威）：user_id、bug_id、percentage（用户填 0-100）、date、description；小时一律实时推导，hours/calculated_hours 为休眠列 |
 | `pma_bug_analysis` | `BugAnalysis` | 0 | 本地-Bug | Bug 分析解决记录：Markdown 内容 + JSON 附件列表 |
 | `pma_bug_attachments` | `BugAttachment` | 0 | 本地-Bug | Bug 附件元数据：文件名、MIME、文件系统路径、大小 |
 | `pma_bug_transfers` | `BugTransfer` | 0 | 本地-Bug | Bug 项目转移记录：move/copy、来源/目标项目、操作人 |
 | `pma_tasks` | `Task` | 0 | 本地-任务 | PMA 本地任务：项目级，含阶段、状态、工时、进度、产出物 |
-| `pma_worklogs` | `WorkLog` | 0 | 本地-任务 | 任务工时记录：user_id、hours、date、description |
+| `pma_worklogs` | `WorkLog` | 0 | 本地-任务 | 任务工时记录（Issue #9 百分比权威）：user_id、task_id、percentage（用户填 0-100）、date、description；小时一律实时推导，hours/calculated_hours 为休眠列 |
 | `pma_task_comments` | `TaskComment` | 0 | 本地-任务 | 任务评论：纯文本内容，user_id |
 | `product_naming_options` | `ProductNamingOption` | 21 | 本地-产品 | 产品命名规范配置：系列/FPGA/CPU/ADC/形态各字段的可选值 |
 | `zenta_users` | `CachedUser` | 73 | ZenTao 缓存 | ZenTao 系统中的用户列表，用于人员指派信息展示 |

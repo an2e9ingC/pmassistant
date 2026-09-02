@@ -329,7 +329,10 @@ def list_worklogs(bug_id: int, db: Session = Depends(get_db), _=Depends(get_curr
 @router.post("/{bug_id}/worklogs", response_model=dict)
 def create_worklog(bug_id: int, body: WorklogCreate, db: Session = Depends(get_db), user=Depends(get_current_user)):
     body.bug_id = bug_id
-    w = bug_service.create_worklog(db, body.model_dump(), user.id)
+    try:
+        w = bug_service.create_worklog(db, body.model_dump(), user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     log_audit(db, user, "bug_worklog_add", f"Bug #{bug_id} 记录工时 {body.percentage}%", AUDIT_CAT_BUG, "low")
     return {"code": 0, "data": w, "message": "ok"}
 

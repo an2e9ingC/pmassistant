@@ -50,15 +50,20 @@ class Task(Base):
 
 
 class WorkLog(Base):
-    """Time tracking: each entry records hours spent on a task."""
+    """Time tracking: percentage-authoritative (Issue #9).
+
+    Each row stores the user-entered `percentage` of a task-day. All hour values
+    are derived live as percentage × the day's WeCom baseline (see
+    backend/services/worklog_hours.py), never stored/refreshed per row.
+    """
     __tablename__ = "pma_worklogs"
 
     id = Column(Integer, primary_key=True)
     task_id = Column(Integer, ForeignKey("pma_tasks.id"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("local_users.id"), nullable=False)
-    hours = Column(Float, nullable=False)
-    percentage = Column(Float, nullable=True)         # 工时占比 0-100（用户填写）
-    calculated_hours = Column(Float, nullable=True)   # 根据百分比×打卡工时自动计算的小时数
+    hours = Column(Float, nullable=False)             # 休眠列：NOT NULL 占位（新行写 0.0），不再被读；仅史前 percentage IS NULL 行回退用
+    percentage = Column(Float, nullable=True)         # 权威输入：工时占比 0-100（用户填写）
+    calculated_hours = Column(Float, nullable=True)   # 休眠列：历史按行落库的派生值，不再被读/写
     date = Column(Date, nullable=False)
     description = Column(Text, nullable=True)
     created_at = Column(DateTime, default=func.now())

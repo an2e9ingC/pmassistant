@@ -96,7 +96,10 @@ def create_worklog(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    w = worklog_service.create_worklog(db, payload.model_dump(), user.id)
+    try:
+        w = worklog_service.create_worklog(db, payload.model_dump(), user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return {"code": 0, "data": w, "message": "ok"}
 
 

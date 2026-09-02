@@ -88,7 +88,9 @@ def get_task(db: Session, task_id: int) -> Optional[dict]:
     # Attach worklogs
     logs = db.query(WorkLog).filter(WorkLog.task_id == task_id).order_by(WorkLog.date.desc(), WorkLog.created_at.desc()).all()
     from backend.services.worklog_service import _worklog_dict, _comment_dict
-    d["worklogs"] = [_worklog_dict(w) for w in logs]
+    from backend.services.worklog_hours import collect_baselines
+    _bls = collect_baselines(db, logs)
+    d["worklogs"] = [_worklog_dict(w, t, db, _bls) for w in logs]
     # Attach comments
     comments = db.query(TaskComment).filter(TaskComment.task_id == task_id).order_by(TaskComment.created_at.asc()).all()
     d["comments"] = [_comment_dict(c, db) for c in comments]
@@ -691,12 +693,13 @@ def delete_task(db: Session, task_id: int, user=None) -> bool:
 
 
 def recalc_consumed_hours(db: Session, task_id: int):
-    """Update task.consumed_hours from sum of worklog calculated_hours (fallback to hours)."""
-    total = db.query(WorkLog).with_entities(
-        sa_func.coalesce(
-            sa_func.sum(sa_func.coalesce(WorkLog.calculated_hours, WorkLog.hours)),
-        0)
-    ).filter(WorkLog.task_id == task_id).scalar() or 0.0
+    """Refresh task.consumed_hours 缓存（冗余列，维护方=工时增删改/企微同步）。
+
+    口径改为派生求和：SUM(该任务每行 percentage × 当日企微有效工时)，与"只存百分比、小时实时推导"一致。
+    由工时增删改、WeCom 同步钩子调用；Gantt/阶段/项目进度走 Task.progress（非小时），不受影响。
+    """
+    from backend.services.worklog_hours import derived_task_hours
+    total = derived_task_hours(db, task_id)
     db.query(Task).filter(Task.id == task_id).update({Task.consumed_hours: float(total)})
     db.commit()
 

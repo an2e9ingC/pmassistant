@@ -147,9 +147,11 @@ def _parse_date_range(date_from: Optional[str], date_to: Optional[str]) -> tuple
     return from_date, to_date
 
 
-def _get_effective_hours(worklog) -> float:
-    """Get effective hours from worklog: calculated_hours or hours."""
-    return float(worklog.calculated_hours or worklog.hours or 0)
+def _eff_hours(worklog, bls) -> float:
+    """实时派生小时：percentage×当日企微有效工时（bls 由 worklog_hours.collect_baselines 预取，
+    key=(user_id,date)；无基准日/未定型按 8h 暂计）。史前行（percentage NULL）回退旧 hours 列兜底。"""
+    from backend.services.worklog_hours import row_derived_hours
+    return row_derived_hours(worklog, bls.get((worklog.user_id, worklog.date)))
 
 
 def _sum_checkin_hours(db: Session, wuids: list, from_date: date, to_date: date) -> dict:
@@ -215,6 +217,9 @@ def get_manpower_report(
             prod_map[p.id] = p
     uid_set = {w.user_id for w in task_wls} | {w.user_id for w in bug_wls}
     user_map = {u.id: u for u in db.query(LocalUser).filter(LocalUser.id.in_(uid_set)).all()} if uid_set else {}
+    # 派生口径：整段报表共用一次批量企微基准解析
+    from backend.services.worklog_hours import collect_baselines
+    _bls = collect_baselines(db, list(task_wls) + list(bug_wls))
 
     # ── by_project ──
     by_project = {}
@@ -231,7 +236,7 @@ def get_manpower_report(
                 "total_hours": 0.0, "total_percentage": 0.0, "count": 0,
                 "users": {}, "tasks": {}, "bugs": {},
             }
-        h = _get_effective_hours(w)
+        h = _eff_hours(w, _bls)
         by_project[pid]["total_hours"] += h
         by_project[pid]["total_percentage"] += w.percentage or 0
         by_project[pid]["count"] += 1
@@ -252,7 +257,7 @@ def get_manpower_report(
                 "total_hours": 0.0, "total_percentage": 0.0, "count": 0,
                 "users": {}, "tasks": {}, "bugs": {},
             }
-        h = _get_effective_hours(w)
+        h = _eff_hours(w, _bls)
         by_project[pid]["total_hours"] += h
         by_project[pid]["total_percentage"] += w.percentage or 0
         by_project[pid]["count"] += 1
@@ -273,7 +278,7 @@ def get_manpower_report(
                 "total_hours": 0.0, "total_percentage": 0.0, "count": 0,
                 "projects": {},
             }
-        h = _get_effective_hours(w)
+        h = _eff_hours(w, _bls)
         by_user[uid]["total_hours"] += h
         by_user[uid]["total_percentage"] += w.percentage or 0
         by_user[uid]["count"] += 1
@@ -290,7 +295,7 @@ def get_manpower_report(
                 "total_hours": 0.0, "total_percentage": 0.0, "count": 0,
                 "projects": {},
             }
-        h = _get_effective_hours(w)
+        h = _eff_hours(w, _bls)
         by_user[uid]["total_hours"] += h
         by_user[uid]["total_percentage"] += w.percentage or 0
         by_user[uid]["count"] += 1
@@ -313,7 +318,7 @@ def get_manpower_report(
                 "product_name": getattr(proj, "name", "") or "",
                 "total_hours": 0.0, "total_percentage": 0.0, "count": 0,
             }
-        h = _get_effective_hours(w)
+        h = _eff_hours(w, _bls)
         by_product[pid]["total_hours"] += h
         by_product[pid]["total_percentage"] += w.percentage or 0
         by_product[pid]["count"] += 1
@@ -446,6 +451,9 @@ def get_user_manpower_detail(
             proj_map[p.id] = p
         for p in db.query(PmaProduct).filter(PmaProduct.id.in_(proj_ids)).all():
             prod_map[p.id] = p
+    # 派生口径：整个详情页共用一次批量企微基准解析（单用户，行集小）
+    from backend.services.worklog_hours import collect_baselines
+    _bls = collect_baselines(db, list(twls) + list(bws))
 
     def _proj_meta(pid):
         proj = proj_map.get(pid) or prod_map.get(pid)
@@ -461,12 +469,12 @@ def get_user_manpower_detail(
         t = task_map.get(w.task_id)
         if not t or not t.project_id:
             continue
-        proj_hours[t.project_id] = proj_hours.get(t.project_id, 0.0) + _get_effective_hours(w)
+        proj_hours[t.project_id] = proj_hours.get(t.project_id, 0.0) + _eff_hours(w, _bls)
     for w in bws:
         b = bug_map.get(w.bug_id)
         if not b or not b.project_id:
             continue
-        proj_hours[b.project_id] = proj_hours.get(b.project_id, 0.0) + _get_effective_hours(w)
+        proj_hours[b.project_id] = proj_hours.get(b.project_id, 0.0) + _eff_hours(w, _bls)
 
     total_hours = sum(proj_hours.values())
     projects = []
@@ -482,12 +490,12 @@ def get_user_manpower_detail(
         t = task_map.get(w.task_id)
         pid = t.project_id if t and t.project_id else None
         daily_map.setdefault(str(w.date), {}).setdefault(pid, 0.0)
-        daily_map[str(w.date)][pid] += _get_effective_hours(w)
+        daily_map[str(w.date)][pid] += _eff_hours(w, _bls)
     for w in bws:
         b = bug_map.get(w.bug_id)
         pid = b.project_id if b and b.project_id else None
         daily_map.setdefault(str(w.date), {}).setdefault(pid, 0.0)
-        daily_map[str(w.date)][pid] += _get_effective_hours(w)
+        daily_map[str(w.date)][pid] += _eff_hours(w, _bls)
 
     daily = []
     for d in sorted(daily_map.keys(), reverse=True):
@@ -510,7 +518,8 @@ def get_user_manpower_detail(
         checkin_daily = user_daily_checkins(db, user.wecom_userid, from_date, to_date)
 
     pma_hours = round(total_hours, 1)
-    ratio = round(pma_hours / checkin_hours * 100, 1) if checkin_hours > 0 else None
+    # ratio 用未四舍五入的 total_hours，避免 100% 满记被显示成 99.x%（recorded 8.33 vs checkin 8.33 → 100.0）
+    ratio = round(total_hours / checkin_hours * 100, 1) if checkin_hours > 0 else None
 
     return {
         "summary": {
@@ -561,6 +570,9 @@ def export_manpower_excel(
     proj_map = {}
     for p in db.query(CachedProject).all(): proj_map[p.id] = (p.code, p.name)
     for p in db.query(PmaProduct).all(): proj_map[p.id] = (p.code, p.name)
+    # 派生口径：导出明细/占比统一按 percentage×当日企微基准实时推导
+    from backend.services.worklog_hours import collect_baselines
+    _bls = collect_baselines(db, list(twls) + list(bws))
 
     # Sheet 1: 按人员-项目工时占比（财务核算每人各项目人力投入）
     ws1 = wb.active
@@ -575,7 +587,7 @@ def export_manpower_excel(
         uid = w.user_id
         if uid not in user_proj:
             user_proj[uid] = {}
-        user_proj[uid][t.project_id] = user_proj[uid].get(t.project_id, 0.0) + _get_effective_hours(w)
+        user_proj[uid][t.project_id] = user_proj[uid].get(t.project_id, 0.0) + _eff_hours(w, _bls)
     for w in bws:
         b = bug_map.get(w.bug_id)
         if not b or not b.project_id:
@@ -583,7 +595,7 @@ def export_manpower_excel(
         uid = w.user_id
         if uid not in user_proj:
             user_proj[uid] = {}
-        user_proj[uid][b.project_id] = user_proj[uid].get(b.project_id, 0.0) + _get_effective_hours(w)
+        user_proj[uid][b.project_id] = user_proj[uid].get(b.project_id, 0.0) + _eff_hours(w, _bls)
 
     for uid in sorted(user_proj.keys(), key=lambda u: -sum(user_proj[u].values())):
         u = user_map.get(uid)
@@ -616,7 +628,7 @@ def export_manpower_excel(
         u = user_map.get(w.user_id)
         ws2.append([
             (u.display_name or u.username) if u else "?", proj_info[0], proj_info[1], "", "",
-            str(w.date), w.percentage or "", w.calculated_hours or w.hours or "",
+            str(w.date), w.percentage or "", round(_eff_hours(w, _bls), 1),
             w.description or "", "task",
         ])
     for w in bws:
@@ -625,7 +637,7 @@ def export_manpower_excel(
         u = user_map.get(w.user_id)
         ws2.append([
             (u.display_name or u.username) if u else "?", proj_info[0], proj_info[1], "", "",
-            str(w.date), w.percentage or "", w.calculated_hours or w.hours or "",
+            str(w.date), w.percentage or "", round(_eff_hours(w, _bls), 1),
             w.description or "", "bug",
         ])
 

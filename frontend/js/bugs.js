@@ -1819,8 +1819,11 @@ function _bwlOnDateChange(idx) {
   ]).then(function(results) {
     var usage = results[0] || {}, wecom = results[1] || {};
     var remaining = usage.remaining_percentage !== undefined ? usage.remaining_percentage : 100;
-    var checkinH = (wecom.daily && wecom.daily[0]) ? wecom.daily[0].total_hours : 0;
+    var weDay = (wecom.daily && wecom.daily.length) ? wecom.daily[0] : null;
+    var checkinH = weDay ? (weDay.total_hours || 0) : 0;
     _bwlSavedPct[d] = usage.total_percentage_used || 0; _bwlCheckinHours[d] = checkinH;
+    // 当日企微口径未定型/缺失提示（Issue #9）：无基准日按8h暂计待核正 / 当天未打下班卡自动核算
+    _wlRenderRowIncompleteHint(document.querySelector('#bwl-rows .bwl-row[data-idx="' + idx + '"]'), _wlDayIsIncomplete(weDay, d));
     var av = document.getElementById('bwl-avail-' + idx);
     if (av) { av.textContent = '可用 ' + remaining + '%'; av.style.color = remaining > 0 ? 'var(--success)' : 'var(--danger)'; }
     var pctEl = document.getElementById('bwl-pct-' + idx);
