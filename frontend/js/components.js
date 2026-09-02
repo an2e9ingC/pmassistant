@@ -2193,15 +2193,121 @@ function _findDayTask(id) { return _dayDetailTasks.find(function(t){return t.id=
 function _renderProgressSlider(idPrefix, currentPct, label) {
   var pcts = [0, 25, 50, 75, 100];
   var ticks = pcts.map(function(p) {
-    return '<span style="position:absolute;left:' + p + '%;transform:translateX(-50%);font-size:9px;color:var(--muted);cursor:pointer" onclick="var s=document.getElementById(\'' + idPrefix + '-slider\');s.value=' + p + ';s.oninput()">' + p + '%</span>';
+    return '<span style="position:absolute;left:' + p + '%;transform:translateX(-50%);font-size:9px;color:var(--muted);cursor:pointer" onclick="var s=document.getElementById(\'' + idPrefix + '-slider\');s.value=' + p + ';_pctSyncRange2Num(s)">' + p + '%</span>';
   }).join('');
   var labelHtml = label ? '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' + escHtml(label) + '</div>' : '';
   return labelHtml +
-    '<div style="position:relative;padding:0 6px;margin-bottom:18px">' +
-      '<input type="range" id="' + idPrefix + '-slider" min="0" max="100" step="5" value="' + currentPct + '" style="width:100%;margin:0" oninput="document.getElementById(\'' + idPrefix + '-val\').textContent=this.value+\'%\'">' +
+    '<div style="position:relative;padding:0 6px;margin-bottom:8px">' +
+      '<input type="range" id="' + idPrefix + '-slider" min="0" max="100" step="1" value="' + currentPct + '" style="width:100%;margin:0" title="聚焦后用滚轮微调（Shift=5%）" oninput="_pctSyncRange2Num(this)" onwheel="_pctWheel(event)">' +
       '<div style="position:relative;width:100%;height:14px;margin-top:0">' + ticks + '</div>' +
-    '</div>' +
-    '<div style="text-align:center;margin-bottom:8px"><span id="' + idPrefix + '-val" style="font-weight:510;font-size:18px;color:var(--accent)">' + currentPct + '%</span></div>';
+      '<div style="display:flex;align-items:center;justify-content:center;gap:4px;margin-top:2px">' +
+        '<input type="number" id="' + idPrefix + '-val" data-range="' + idPrefix + '-slider" min="0" max="100" step="1" value="' + currentPct + '" class="pct-num" title="输入数值，回车确认（仅数字）" style="width:64px;font-size:16px;padding:2px 6px" oninput="_pctNumInput(event)" onblur="_pctNumBlur(event)">' +
+        '<span style="font-size:16px;font-weight:600;color:var(--accent)">%</span>' +
+      '</div>' +
+    '</div>';
+}
+
+// ── Shared percentage-entry helpers (tasks/bugs/calendar 记录工时的「占比」滑块) ──
+// 结构约定：<input range id="X"> 紧跟 <input number data-range="X" class="pct-num">，二者同处一个容器。
+// 拖动滑块 / 滚轮 / 输入数值任一方，另一方都会同步；范围/步长共用 range 的 min/max。
+
+// 滑块变化 → 数值框同步（同时把 range 动态 min/max 镜像到数值框）
+function _pctSyncRange2Num(range) {
+  var g = range && range.parentElement;
+  if (!g) return;
+  var n = g.querySelector('input[type="number"]');
+  if (!n) return;
+  n.min = range.min; n.max = range.max;
+  n.value = parseInt(range.value, 10);
+}
+// 鼠标聚焦滑块后滚轮微调：一格 = 滑块 step（占比/进度均 step=1→1%）；Shift = step×5
+function _pctWheel(ev) {
+  var r = ev.currentTarget;
+  var base = parseFloat(r.step);
+  if (!(base > 0)) base = 1;
+  var step = ev.shiftKey ? base * 5 : base;
+  var min = parseInt(r.min, 10) || 0, max = parseInt(r.max, 10) || 100;
+  var cur = parseInt(r.value, 10) || 0;
+  var next = Math.min(max, Math.max(min, cur + (ev.deltaY < 0 ? step : -step)));
+  if (next === cur) return; // 已在边界：不拦截，让页面正常滚动
+  if (ev.preventDefault) ev.preventDefault();
+  r.value = next;
+  r.dispatchEvent(new Event('input', { bubbles: true })); // 触发各页面的 oninput 联动（小时/圆环/超额）
+}
+// 数值框输入（仅整数；超过上限实时收敛到 max；低于下限暂不联动，避免打断 45 这类多位数输入）
+function _pctNumInput(ev) {
+  var n = ev.currentTarget;
+  var rid = n.getAttribute('data-range');
+  var r = rid ? document.getElementById(rid) : null;
+  if (!r || n.value === '') return;
+  var v = parseInt(n.value, 10);
+  if (isNaN(v)) return;
+  var min = parseInt(r.min, 10) || 0, max = parseInt(r.max, 10) || 100;
+  if (v > max) { v = max; n.value = max; } // 上限实时收敛，输入框不允许停留超界值
+  if (v < min) return;                      // 低于下限：交给回车/失焦收敛
+  if (parseInt(r.value, 10) === v) return;
+  r.value = v;
+  r.dispatchEvent(new Event('input', { bubbles: true }));
+}
+// 数值框失焦：空/越界（未提交）吸附回滑块当前值
+function _pctNumBlur(ev) {
+  var n = ev.currentTarget;
+  var rid = n.getAttribute('data-range');
+  var r = rid ? document.getElementById(rid) : null;
+  if (!r) return;
+  _pctSyncRange2Num(r);
+}
+// 回车确认提交：按 [min..max] 收敛后写入滑块并收起滑块组
+function _pctNumCommit(n, r) {
+  var min = parseInt(r.min, 10) || 0, max = parseInt(r.max, 10) || 100;
+  var v = parseInt(n.value, 10);
+  if (isNaN(v)) v = parseInt(r.value, 10) || min; // 空值 → 沿用滑块当前值
+  v = Math.min(max, Math.max(min, v));
+  r.value = v;
+  _pctSyncRange2Num(r);
+  r.dispatchEvent(new Event('input', { bubbles: true }));
+}
+function _pctNumEnter(n) {
+  var rid = n.getAttribute('data-range');
+  var r = rid ? document.getElementById(rid) : null;
+  if (r) _pctNumCommit(n, r);
+  n.blur(); // 失焦触发容器 focusout → 收起为圆环
+}
+// 数值合法性 + 回车确认（事件委托：对所有 .pct-num 输入框统一生效，无需逐处绑定）
+// - 键击仅允许数字；拦截 e / E / + / - / . 与字母（type=number 会放行这些字符）
+// - 粘贴内容非纯数字则拒绝
+// - 回车 = 确认提交（收敛到 min..max 并收起）
+(function() {
+  function _pctKeyGuard(ev) {
+    var t = ev.target;
+    if (!t || !t.classList || !t.classList.contains('pct-num')) return;
+    if (ev.key === 'Enter') {
+      ev.preventDefault(); ev.stopPropagation(); // 避免触发对话框默认确认
+      _pctNumEnter(t);
+      return;
+    }
+    if (ev.ctrlKey || ev.metaKey || ev.altKey) return; // 保留复制/粘贴等快捷键
+    if (ev.key && ev.key.length === 1 && !/[0-9]/.test(ev.key)) ev.preventDefault();
+  }
+  function _pctPasteGuard(ev) {
+    var t = ev.target;
+    if (!t || !t.classList || !t.classList.contains('pct-num')) return;
+    var cb = ev.clipboardData || window.clipboardData;
+    var txt = (cb && cb.getData) ? cb.getData('text') : '';
+    if (!/^\s*\d*\s*$/.test(txt)) ev.preventDefault(); // 仅接受纯数字（可为空）
+  }
+  document.addEventListener('keydown', _pctKeyGuard, true);
+  document.addEventListener('paste', _pctPasteGuard, true);
+})();
+// 百分比/进度滑块组焦点离开容器 → 收起显示前的占比/进度圆环（内部 range↔number 互切焦点不收起）
+function _pctGroupFocusOut(ev) {
+  var c = ev.currentTarget;
+  var to = ev.relatedTarget;
+  if (to && c.contains(to)) return;
+  setTimeout(function() {
+    c.style.display = 'none';
+    if (c.previousElementSibling) c.previousElementSibling.style.display = '';
+  }, 150);
 }
 
 function editWorklogEntryById(wlId, dateStr) {
@@ -2233,7 +2339,8 @@ function editWorklogEntry(t, dateStr) {
           stageFilterFn: function() { return document.getElementById('wl-edit-stage').value; },
           onSelect: function(tsk) {
             document.getElementById('wl-edit-task-id').value = tsk.id;
-            document.getElementById('wl-edit-slider').value = tsk.progress || 0;
+            var pse = document.getElementById('wl-edit-slider');
+            if (pse) { pse.value = tsk.progress || 0; _pctSyncRange2Num(pse); }
           }}) + '</div></div>' +
     '<input type="hidden" id="wl-edit-task-id" value="' + (t.task_id||'') + '">' +
     '<input type="hidden" id="wl-edit-reviewer-name" value="' + escHtml(t.reviewer_name || '') + '">' +
@@ -2242,9 +2349,12 @@ function editWorklogEntry(t, dateStr) {
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">日期 *</label>' +
       '<input class="search-inp" id="wl-edit-date" type="date" required value="'+dateStr+'" style="width:100%;box-sizing:border-box;margin-top:2px"></div>' +
     '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">工时占比 (%) *</label>' +
-      '<input type="range" id="wl-edit-pct" min="5" max="100" step="1" value="'+(t.percentage||25)+'" style="width:100%" oninput="_wlEditPctChanged()">' +
+      '<input type="range" id="wl-edit-pct" min="5" max="100" step="1" value="'+(t.percentage||25)+'" style="width:100%" title="聚焦后用滚轮微调（Shift=5%）" oninput="_wlEditPctChanged()" onwheel="_pctWheel(event)">' +
       '<div style="display:flex;justify-content:space-between;font-size:9px;color:var(--muted)"><span>5%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>' +
-      '<div style="text-align:center"><span id="wl-edit-pct-val" style="font-size:18px;font-weight:600;color:var(--accent)">'+(t.percentage||25)+'%</span></div>' +
+      '<div style="display:flex;align-items:center;justify-content:center;gap:4px;margin-top:2px">' +
+        '<input type="number" id="wl-edit-pct-num" data-range="wl-edit-pct" min="5" max="100" step="1" value="'+(t.percentage||25)+'" class="pct-num" title="输入数值，回车确认（仅数字）" style="width:64px;font-size:16px;padding:2px 6px" oninput="_pctNumInput(event)" onblur="_pctNumBlur(event)">' +
+        '<span style="font-size:16px;font-weight:600;color:var(--accent)">%</span>' +
+      '</div>' +
       '<div style="font-size:10px;color:var(--muted);margin-top:2px">计算工时: ' + ((t.calculated_hours||t.hours||0)).toFixed(1) + 'h</div>' +
       '<div id="wl-edit-pct-hint" style="font-size:10px;color:var(--warn);margin-top:2px"></div></div>' +
     (isBug ? '' : '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">进度(%) *</label>' +
@@ -2319,11 +2429,10 @@ var _wlEditBugId = null;
 
 function _wlEditPctChanged() {
   var pctEl = document.getElementById('wl-edit-pct');
-  var valEl = document.getElementById('wl-edit-pct-val');
   var hintEl = document.getElementById('wl-edit-pct-hint');
   if (!pctEl) return;
   var pct = parseInt(pctEl.value) || 0;
-  if (valEl) valEl.textContent = pct + '%';
+  _pctSyncRange2Num(pctEl);
   if (hintEl) {
     var others = window._wlEditOthersPct || 0;
     var total = others + pct;
@@ -3084,9 +3193,10 @@ function _wlCalBuildRow(idx, defaultDate) {
       '<div id="wl-cal-pct-ring-' + idx + '" style="width:80px;flex-shrink:0;cursor:pointer;text-align:center" onclick="_wlCalShowPct(' + idx + ')" title="点击调整占比">' +
         _wlCalRing(25, 38, 'var(--accent)') +
       '</div>' +
-      '<div id="wl-cal-pct-slider-' + idx + '" style="display:none;flex-shrink:0;align-items:center;gap:4px;width:130px">' +
-        '<input type="range" id="wl-cal-pct-' + idx + '" min="5" max="100" step="1" value="25" style="flex:1" oninput="_wlCalPctInput(' + idx + ')" onblur="_wlCalHidePct(' + idx + ')">' +
-        '<span id="wl-cal-pct-slider-val-' + idx + '" style="font-size:13px;font-weight:600;color:var(--accent);min-width:38px;text-align:right">25%</span>' +
+      '<div id="wl-cal-pct-slider-' + idx + '" style="display:none;flex-shrink:0;align-items:center;gap:5px;width:176px" onfocusout="_pctGroupFocusOut(event)">' +
+        '<input type="range" id="wl-cal-pct-' + idx + '" min="5" max="100" step="1" value="25" style="flex:1;min-width:0" title="聚焦后用滚轮微调（Shift=5%）" oninput="_wlCalPctInput(' + idx + ')" onwheel="_pctWheel(event)">' +
+        '<input type="number" id="wl-cal-pct-num-' + idx + '" data-range="wl-cal-pct-' + idx + '" min="5" max="100" step="1" value="25" class="pct-num" title="输入数值，回车确认（仅数字）" oninput="_pctNumInput(event)" onblur="_pctNumBlur(event)">' +
+        '<span style="font-size:12px;color:var(--muted);flex-shrink:0">%</span>' +
       '</div>' +
       '<span id="wl-cal-avail-' + idx + '" style="width:80px;flex-shrink:0;font-size:14px;color:var(--success);text-align:center">可用 100%</span>' +
       '<span style="width:32px;flex-shrink:0;text-align:center">' + iconDelete('_wlCalRemoveRow(' + idx + ')', '删除此行') + '</span>' +
@@ -3105,8 +3215,12 @@ function _wlCalRing(pct, size, color) {
 
 var _wlCalCheckinH = {}, _wlCalSavedPct = {};
 
-function _wlCalShowPct(idx) { document.getElementById('wl-cal-pct-ring-'+idx).style.display='none'; var s=document.getElementById('wl-cal-pct-slider-'+idx); s.style.display=''; var inp=s.querySelector('input'); if(inp)inp.focus(); }
-function _wlCalHidePct(idx) { setTimeout(function(){ document.getElementById('wl-cal-pct-slider-'+idx).style.display='none'; document.getElementById('wl-cal-pct-ring-'+idx).style.display=''; },150); }
+function _wlCalShowPct(idx) {
+  document.getElementById('wl-cal-pct-ring-' + idx).style.display = 'none';
+  var s = document.getElementById('wl-cal-pct-slider-' + idx); s.style.display = 'flex';
+  var r = document.getElementById('wl-cal-pct-' + idx);
+  if (r) { _wlCalPctInput(idx); r.focus(); }
+}
 
 function _wlCalOnDateChange(idx) {
   var d = document.getElementById('wl-cal-date-' + idx).value; if (!d) return;
@@ -3133,18 +3247,19 @@ function _wlCalOnDateChange(idx) {
     } else if (pctEl) {
       pctEl.max = Math.max(5, remaining);
       if (parseInt(pctEl.value) > remaining) pctEl.value = Math.max(5, remaining);
+      _pctSyncRange2Num(pctEl);
       _wlCalUpdateRing(idx);
     }
   });
 }
 
 function _wlCalPctInput(idx) {
-  var pct = parseInt(document.getElementById('wl-cal-pct-' + idx).value) || 25;
+  var pctEl = document.getElementById('wl-cal-pct-' + idx);
+  var pct = parseInt(pctEl.value) || 25;
   var d = document.getElementById('wl-cal-date-' + idx).value;
   var checkinH = _wlCalCheckinH[d] || 8;
   document.getElementById('wl-cal-hours-' + idx).textContent = (pct / 100 * checkinH).toFixed(1);
-  var valEl = document.getElementById('wl-cal-pct-slider-val-' + idx);
-  if (valEl) valEl.textContent = pct + '%';
+  _pctSyncRange2Num(pctEl);
   _wlCalUpdateRing(idx);
 }
 

@@ -124,3 +124,26 @@ html[data-ui-density="compact"]        { --ui-scale: 0.90; }
 html[data-ui-density="normal"]         { --ui-scale: 1.00; }
 html[data-ui-density="comfortable"]    { --ui-scale: 1.05; }
 html[data-ui-density="extra-comfortable"] { --ui-scale: 1.10; }
+
+/* ═══════════════════════════════════════════════════
+   工时占比「数值精填」输入框 (.pct-num)
+   隐藏原生上下箭头，配合滑块拖动/滚轮/直接输入三路同步。
+   ═══════════════════════════════════════════════════ */
+.pct-num {
+  width: 48px;
+  padding: 1px 4px;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.pct-num::-webkit-inner-spin-button,
+.pct-num::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.pct-num { -moz-appearance: textfield; appearance: textfield; }
+.pct-num:focus { outline: none; border-color: var(--accent); }

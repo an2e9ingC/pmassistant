@@ -1805,7 +1805,8 @@ async function submitTask(taskId) {
   EventBus.emit('task:before-save', evt);
   // Sync DOM with possibly-modified data
   document.getElementById('tf-status').value = data.status || 'todo';
-  document.getElementById('tf-slider').value = data.progress || 0;
+  var tfs = document.getElementById('tf-slider');
+  if (tfs) { tfs.value = data.progress || 0; _pctSyncRange2Num(tfs); }
   if (origStatus === 'done' && origProgress < 100 && data.progress === 100) {
     showToast('状态设为已完成，进度已自动设为100%', 'warn');
   }
@@ -2204,19 +2205,6 @@ function _initWorklogDt(logs, taskId) {
   });
 }
 
-function _buildTeamProgressField(task) {
-  // For team tasks: show personal progress slider instead of task progress input
-  var curUser = (typeof getCurrentUser === 'function' && getCurrentUser()) || {};
-  var curUid = curUser ? (curUser.id || null) : null;
-  var progressMap = task.assignee_progress || {};
-  var myPct = parseInt(progressMap[String(curUid)] || progressMap[curUid] || 0);
-  window._wlTeamTaskId = task.id; // flag for submitWorklog to also update personal progress
-  return '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">我的进度(%) * <span style="color:var(--accent);font-size:10px">(团队任务·仅更新个人进度)</span></label>' +
-    _renderProgressSlider('wl', myPct) +
-    '<div id="wl-progress-hint" style="display:none;font-size:10px;color:var(--danger);margin-top:1px">请设置进度</div>' +
-    '</div>';
-}
-
 function openWorklogDialog(taskId) {
   API.get('/tasks/'+taskId).then(function(task) {
     var today = fmtLocalDate();
@@ -2290,17 +2278,19 @@ function _wlBuildRow(idx, defaultDate, progress) {
       '<div id="wl-pct-ring-' + idx + '" style="width:80px;flex-shrink:0;cursor:pointer;text-align:center" onclick="_wlShowPctSlider(' + idx + ')" title="点击调整占比">' +
         _wlProgressRing(25, 38, 'var(--accent)') +
       '</div>' +
-      '<div id="wl-pct-slider-' + idx + '" style="display:none;flex-shrink:0;align-items:center;gap:4px;width:130px">' +
-        '<input type="range" id="' + pId + '" min="5" max="100" step="1" value="25" style="flex:1" oninput="_wlPctSliderInput(' + idx + ')" onblur="_wlHidePctSlider(' + idx + ')">' +
-        '<span id="wl-pct-slider-val-' + idx + '" style="font-size:13px;font-weight:600;color:var(--accent);min-width:38px;text-align:right">25%</span>' +
+      '<div id="wl-pct-slider-' + idx + '" style="display:none;flex-shrink:0;align-items:center;gap:5px;width:176px" onfocusout="_pctGroupFocusOut(event)">' +
+        '<input type="range" id="' + pId + '" min="5" max="100" step="1" value="25" style="flex:1;min-width:0" title="聚焦后用滚轮微调（Shift=5%）" oninput="_wlPctSliderInput(' + idx + ')" onwheel="_pctWheel(event)">' +
+        '<input type="number" id="wl-pct-num-' + idx + '" data-range="' + pId + '" min="5" max="100" step="1" value="25" class="pct-num" title="输入数值，回车确认（仅数字）" oninput="_pctNumInput(event)" onblur="_pctNumBlur(event)">' +
+        '<span style="font-size:12px;color:var(--muted);flex-shrink:0">%</span>' +
       '</div>' +
       // Progress: ring by default, click to show inline slider
       '<div id="wl-prog-ring-' + idx + '" style="width:80px;flex-shrink:0;cursor:pointer;text-align:center" onclick="_wlShowProgSlider(' + idx + ')" title="点击调整进度">' +
         _wlProgressRing(progress, 38, 'var(--success)') +
       '</div>' +
-      '<div id="wl-prog-slider-' + idx + '" style="display:none;flex-shrink:0;align-items:center;gap:4px;width:130px">' +
-        '<input type="range" id="' + gId + '" min="0" max="100" step="5" value="' + progress + '" style="flex:1" oninput="_wlProgSliderInput(' + idx + ')" onblur="_wlHideProgSlider(' + idx + ')">' +
-        '<span id="wl-prog-slider-val-' + idx + '" style="font-size:13px;font-weight:600;color:var(--success);min-width:38px;text-align:right">' + progress + '%</span>' +
+      '<div id="wl-prog-slider-' + idx + '" style="display:none;flex-shrink:0;align-items:center;gap:5px;width:176px" onfocusout="_pctGroupFocusOut(event)">' +
+        '<input type="range" id="' + gId + '" min="0" max="100" step="1" value="' + progress + '" style="flex:1;min-width:0" title="聚焦后用滚轮微调（Shift=5%）" oninput="_wlProgSliderInput(' + idx + ')" onwheel="_pctWheel(event)">' +
+        '<input type="number" id="wl-prog-num-' + idx + '" data-range="' + gId + '" min="0" max="100" step="1" value="' + progress + '" class="pct-num" title="输入数值，回车确认（仅数字）" style="color:var(--success)" oninput="_pctNumInput(event)" onblur="_pctNumBlur(event)">' +
+        '<span style="font-size:12px;color:var(--muted);flex-shrink:0">%</span>' +
       '</div>' +
       '<span id="' + aId + '" style="width:80px;flex-shrink:0;font-size:14px;color:var(--success);text-align:center">可用 100%</span>' +
       '<span style="width:32px;flex-shrink:0;text-align:center">' + iconDelete('_wlRemoveRow(' + idx + ')', '删除此行') + '</span>' +
@@ -2387,6 +2377,7 @@ function _wlOnDateChange(idx) {
     } else if (pctEl) {
       pctEl.max = Math.max(5, remaining);
       if (parseInt(pctEl.value) > remaining) pctEl.value = Math.max(5, remaining);
+      _pctSyncRange2Num(pctEl);
       _wlUpdatePctRing(idx);
     }
     _wlCheckOverPct();
@@ -2396,31 +2387,25 @@ function _wlOnDateChange(idx) {
 // ── Inline ring ↔ slider toggle ──
 function _wlShowPctSlider(idx) {
   document.getElementById('wl-pct-ring-' + idx).style.display = 'none';
-  var sl = document.getElementById('wl-pct-slider-' + idx); sl.style.display = '';
-  var inp = sl.querySelector('input'); if (inp) { inp.focus(); _wlPctSliderInput(idx); }
+  var sl = document.getElementById('wl-pct-slider-' + idx); sl.style.display = 'flex';
+  var r = document.getElementById('wl-pct-' + idx);
+  if (r) { _wlPctSliderInput(idx); r.focus(); }
 }
-function _wlHidePctSlider(idx) { setTimeout(function() {
-  document.getElementById('wl-pct-slider-' + idx).style.display = 'none';
-  document.getElementById('wl-pct-ring-' + idx).style.display = '';
-}, 150); }
 function _wlShowProgSlider(idx) {
   document.getElementById('wl-prog-ring-' + idx).style.display = 'none';
-  var sl = document.getElementById('wl-prog-slider-' + idx); sl.style.display = '';
-  var inp = sl.querySelector('input'); if (inp) inp.focus();
+  var sl = document.getElementById('wl-prog-slider-' + idx); sl.style.display = 'flex';
+  var r = document.getElementById('wl-prog-' + idx);
+  if (r) { _wlProgSliderInput(idx); r.focus(); }
 }
-function _wlHideProgSlider(idx) { setTimeout(function() {
-  document.getElementById('wl-prog-slider-' + idx).style.display = 'none';
-  document.getElementById('wl-prog-ring-' + idx).style.display = '';
-}, 150); }
 
 // ── Percentage → hours sync (hours is readonly, driven by pct) ──
 function _wlPctSliderInput(idx) {
-  var pct = parseInt(document.getElementById('wl-pct-' + idx).value) || 25;
+  var pctEl = document.getElementById('wl-pct-' + idx);
+  var pct = parseInt(pctEl.value) || 25;
   var d = document.getElementById('wl-date-' + idx).value;
   var checkinH = _wlCheckinHours[d] || 8;
   document.getElementById('wl-hours-' + idx).textContent = (pct / 100 * checkinH).toFixed(1);
-  var valEl = document.getElementById('wl-pct-slider-val-' + idx);
-  if (valEl) valEl.textContent = pct + '%';
+  _pctSyncRange2Num(pctEl);
   _wlUpdatePctRing(idx);
   _wlCheckOverPct();
 }
@@ -2429,9 +2414,9 @@ function _wlUpdatePctRing(idx) {
   document.getElementById('wl-pct-ring-' + idx).innerHTML = _wlProgressRing(pct, 32, 'var(--accent)');
 }
 function _wlProgSliderInput(idx) {
-  var prog = parseInt(document.getElementById('wl-prog-' + idx).value) || 0;
-  var valEl = document.getElementById('wl-prog-slider-val-' + idx);
-  if (valEl) valEl.textContent = prog + '%';
+  var progEl = document.getElementById('wl-prog-' + idx);
+  var prog = parseInt(progEl.value) || 0;
+  _pctSyncRange2Num(progEl);
   document.getElementById('wl-prog-ring-' + idx).innerHTML = _wlProgressRing(prog, 32, 'var(--success)');
 }
 
@@ -2610,67 +2595,6 @@ async function _doSubmitBatchWorklog(taskId, entries, maxProgress, isTeam) {
     _closeWorklogDialog();
     EventBus.emit('worklog:saved', {taskId: taskId});
   } catch(e) { showToast('记录失败: ' + (e.message || '未知错误'), 'error'); }
-}
-
-// ── Single worklog edit (kept for per-row editing) ──
-
-var _wlEditPendingSubmit = null;
-
-async function _submitWorklogEdit(wlId, taskId) {
-  var pct = parseInt(document.getElementById('wl-pct').value) || 0;
-  var progress = parseInt(document.getElementById('wl-slider').value);
-  var desc = document.getElementById('wl-desc').value.trim();
-  var date = document.getElementById('wl-date').value;
-  if (!date) { showToast('请选择日期', 'warn'); return; }
-  if (pct < 5) { showToast('工时占比至少5%', 'warn'); return; }
-  if (!desc) { showToast('请填写工作描述', 'warn'); return; }
-
-  if (progress >= 100) {
-    _wlEditPendingSubmit = { wlId: wlId, taskId: taskId, percentage: pct, progress: progress, desc: desc, date: date };
-    var approvalEnabled = window._approvalEnabled;
-    var reviewerName = document.getElementById('wl-reviewer-name');
-    var rname = reviewerName ? reviewerName.value.trim() : '';
-    if (approvalEnabled) {
-      var reviewMsg = rname ? '，评审人: <b>' + escHtml(rname) + '</b>' : '，评审人: <b>待分配</b>';
-      openDialog('确认提交工时',
-        '<div style="font-size:13px;margin-bottom:8px">进度 <b>100%</b>，任务将进入<b>评审中</b>状态' + reviewMsg + '。</div>',
-        [{text: '取消', onclick: '_wlEditCancelSubmit()'}, {text: '确认', cls: 'btn-primary', onclick: '_wlEditConfirmSubmit()'}],
-        {hideClose: true, overlayClass: 'wl-edit-confirm-overlay', keepExisting: true});
-    } else {
-      openDialog('确认提交工时',
-        '<div style="font-size:13px;margin-bottom:8px">进度 <b>100%</b>，任务将自动切换为<b>已完成</b>状态。</div>',
-        [{text: '取消', onclick: '_wlEditCancelSubmit()'}, {text: '确认', cls: 'btn-primary', onclick: '_wlEditConfirmSubmit()'}],
-        {hideClose: true, overlayClass: 'wl-edit-confirm-overlay', keepExisting: true});
-    }
-    return;
-  }
-  await _doSubmitWorklogEdit(wlId, taskId, pct, progress, desc, date);
-}
-
-function _wlEditCancelSubmit() {
-  var d = document.querySelector('.wl-edit-confirm-overlay'); if (d) d.remove();
-  _wlEditPendingSubmit = null;
-}
-
-async function _wlEditConfirmSubmit() {
-  var d = document.querySelector('.wl-edit-confirm-overlay'); if (d) d.remove();
-  if (!_wlEditPendingSubmit) return;
-  var p = _wlEditPendingSubmit;
-  _wlEditPendingSubmit = null;
-  await _doSubmitWorklogEdit(p.wlId, p.taskId, p.percentage, p.progress, p.desc, p.date);
-}
-
-async function _doSubmitWorklogEdit(wlId, taskId, percentage, progress, desc, date) {
-  try {
-    await API.put('/worklogs/' + wlId, {percentage: percentage, date: date, description: desc});
-    var taskRes = await API.put('/tasks/' + taskId, {progress: progress});
-    if (taskRes && taskRes.auto_messages && taskRes.auto_messages.length) {
-      taskRes.auto_messages.forEach(function(msg) { showToast(msg, 'success'); });
-    }
-    showToast('工时已更新', 'success');
-    _closeWorklogDialog();
-    EventBus.emit('worklog:saved', {taskId: taskId});
-  } catch(e) { showToast('更新失败: ' + (e.message || '未知错误'), 'error'); }
 }
 
 function deleteWorklogById(wlId, taskId) {
