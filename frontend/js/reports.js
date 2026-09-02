@@ -445,12 +445,20 @@ function _renderMpUserDetail(el, d) {
     }).join('') : '—';
     var cmp = '—';
     if (dy) {
-      var recHn = dy.hours || 0;
       var ckHn = ck ? (ck.hours || 0) : 0;
-      var diff = recHn - ckHn;
-      if (Math.abs(diff) < 0.05) cmp = '<span style="color:var(--success)">持平</span>';
-      else if (diff > 0) cmp = '<span style="color:var(--warn)">超出 ' + diff.toFixed(1) + 'h</span>';
-      else cmp = '<span style="color:var(--danger)">' + (recHn < 0.05 ? '未记录' : '低 ' + Math.abs(diff).toFixed(1) + 'h') + '</span>';
+      // 待核正：①checkin_daily 无该日行（忘打卡/补卡/外出·出差公文未完成）②正常打卡日 0h（今天下班卡未打）
+      // 请假/外出/出差等免打卡日本身即 0h 属正常，不在此列（走下方按实际口径对比）
+      var ckT = ck ? (ck.type || '') : '';
+      if (!ck || (ckHn < 0.05 && ckT === '正常')) {
+        // 当日无权威企微打卡基准 → 记录按 8h 暂计待核正，数据到位后自动按实际核正
+        cmp = '<span style="color:var(--warn)" title="当日暂无企微打卡/审批基准：记录按 8h 暂计，数据到位后自动按实际核正">待核正</span>';
+      } else {
+        var recHn = dy.hours || 0;
+        var diff = recHn - ckHn;
+        if (Math.abs(diff) < 0.05) cmp = '<span style="color:var(--success)">持平</span>';
+        else if (diff > 0) cmp = '<span style="color:var(--warn)">超出 ' + diff.toFixed(1) + 'h</span>';
+        else cmp = '<span style="color:var(--danger)">' + (recHn < 0.05 ? '未记录' : '低 ' + Math.abs(diff).toFixed(1) + 'h') + '</span>';
+      }
     }
     return '<tr>' +
       '<td style="font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;vertical-align:top">' + escHtml(ckDate) + '</td>' +

@@ -9,74 +9,15 @@ from sqlalchemy.sql import func as sa_func
 from backend.models.task import WorkLog, Task
 from backend.models.bug import BugWorkLog, PmaBug
 from backend.models.local import PmaSetting, LocalUser, ProjectActivity
-from backend.models.wecom import WeComCheckin, WeComSchedule
 from backend.database import to_local_str
 
 
-def _calc_calculated_hours(db: Session, user_id: int, wl_date: date, percentage: float) -> Tuple[float, bool]:
-    """Calculate hours from percentage × day checkin hours.
-    Returns (calculated_hours, has_checkin).
-
-    Priority: WeComCheckin.work_hours → WeComSchedule daily avg → default 8h
-    """
-    has_checkin = False
-    default_hours = 8.0
-
-    # Find LocalUser → wecom_userid
-    user = db.query(LocalUser).filter(LocalUser.id == user_id).first()
-    if user and user.wecom_userid:
-        # Look up checkin hours
-        checkin = db.query(WeComCheckin).filter(
-            WeComCheckin.user_id == user.wecom_userid,
-            WeComCheckin.date == wl_date,
-        ).first()
-        if checkin and checkin.work_hours and checkin.work_hours > 0:
-            has_checkin = True
-            return (round(percentage / 100.0 * float(checkin.work_hours), 2), has_checkin)
-
-        # Fallback: WeComSchedule
-        schedule = db.query(WeComSchedule).filter(
-            WeComSchedule.year == wl_date.year,
-            WeComSchedule.month == wl_date.month,
-        ).first()
-        if schedule and schedule.work_days and schedule.work_days > 0 and schedule.work_hours:
-            daily = float(schedule.work_hours) / int(schedule.work_days)
-            return (round(percentage / 100.0 * daily, 2), has_checkin)
-
-    # Default fallback
-    return (round(percentage / 100.0 * default_hours, 2), has_checkin)
-
-
-def _recalc_calculated_hours_for_date(db: Session, local_user_id: int, wl_date: date):
-    """Recalculate calculated_hours for all worklogs on a given date after WeCom sync.
-    Called from wecom_service after checkin data is updated.
-    """
-    user = db.query(LocalUser).filter(LocalUser.id == local_user_id).first()
-    if not user:
-        return
-
-    # Update task worklogs
-    wls = db.query(WorkLog).filter(
-        WorkLog.user_id == local_user_id,
-        WorkLog.date == wl_date,
-        WorkLog.percentage.isnot(None),
-    ).all()
-    for wl in wls:
-        calc_h, _ = _calc_calculated_hours(db, local_user_id, wl.date, wl.percentage)
-        wl.calculated_hours = calc_h
-
-    # Update bug worklogs
-    bwls = db.query(BugWorkLog).filter(
-        BugWorkLog.user_id == local_user_id,
-        BugWorkLog.date == wl_date,
-        BugWorkLog.percentage.isnot(None),
-    ).all()
-    for bwl in bwls:
-        calc_h, _ = _calc_calculated_hours(db, local_user_id, bwl.date, bwl.percentage)
-        bwl.calculated_hours = calc_h
-
-    if wls or bwls:
-        db.commit()
+# ─────────────────────────────────────────────────────────────
+# 派生口径：只存 percentage，小时一律实时推导（worklog_hours.py）
+# 本文件原先按行落库派生值的 _calc_calculated_hours /
+# _recalc_calculated_hours_for_date 已删除，读路径改走
+# collect_baselines + row_derived_hours / effective_hours_for。
+# ─────────────────────────────────────────────────────────────
 
 
 def _auto_update_task_status(db: Session, task_id: int):
@@ -141,7 +82,9 @@ def get_worklogs(
     logs = q.all()
     task_ids = {w.task_id for w in logs}
     task_map = _fetch_task_map(db, task_ids)
-    return [_worklog_dict(w, task_map.get(w.task_id), db) for w in logs]
+    from backend.services.worklog_hours import collect_baselines
+    _bls = collect_baselines(db, logs)
+    return [_worklog_dict(w, task_map.get(w.task_id), db, _bls) for w in logs]
 
 
 def _log_worklog_activity(db: Session, task_id: int, user_id: int, action: str, detail: str):
@@ -169,17 +112,21 @@ def _log_worklog_activity(db: Session, task_id: int, user_id: int, action: str, 
 
 
 def create_worklog(db: Session, data: dict, user_id: int) -> dict:
-    """Create a worklog entry and recalc task consumed_hours."""
+    """Create a worklog entry and recalc task consumed_hours.
+
+    只存 percentage（+ date/description）；派生小时列休眠（hours 因 NOT NULL 写 0.0 占位，
+    读路径与任务消耗缓存一律实时推导，见 worklog_hours.py）。
+    """
     pct = float(data.get("percentage", 0) or 0)
     wl_date = _parse_date(data.get("date")) or date.today()
-    calc_h, has_checkin = _calc_calculated_hours(db, user_id, wl_date, pct)
+    # 单条新增同样校验：当日已填 + 本条 ≤ 100%（与批量/编辑口径一致）
+    _validate_percentage_not_exceeded(db, user_id, wl_date, pct)
 
     w = WorkLog(
         task_id=data.get("task_id"),
         user_id=user_id,
-        hours=calc_h,  # backward compat
+        hours=0.0,  # dormant: NOT NULL 占位
         percentage=pct,
-        calculated_hours=calc_h,
         date=wl_date,
         description=data.get("description"),
     )
@@ -195,15 +142,14 @@ def create_worklog(db: Session, data: dict, user_id: int) -> dict:
         if task and task.stage_id:
             _recalc_stage_progress(db, task.stage_id)
 
+    from backend.services.worklog_hours import baselines_for, effective_hours_for
+    bl = baselines_for(db, [(user_id, wl_date)]).get((user_id, wl_date))
+    dh = effective_hours_for(pct, bl)
     task = db.query(Task).filter(Task.id == w.task_id).first()
     # Log to project activity timeline
     _log_worklog_activity(db, w.task_id, user_id, "工时记录",
-        f"记录工时 {pct}% ({calc_h}h): {w.description or ''}")
-    result = _worklog_dict(w, task, db)
-    result["has_checkin"] = has_checkin
-    result["percentage"] = w.percentage
-    result["calculated_hours"] = w.calculated_hours
-    return result
+        f"记录工时 {pct}% ({dh}h): {w.description or ''}")
+    return _worklog_dict(w, task, db)
 
 
 def update_worklog(db: Session, worklog_id: int, data: dict) -> Optional[dict]:
@@ -213,7 +159,6 @@ def update_worklog(db: Session, worklog_id: int, data: dict) -> Optional[dict]:
         return None
 
     changes = []
-    has_checkin = False
     if "percentage" in data:
         new_pct = float(data["percentage"] or 0)
         # Validate: new percentage + other records on the same date <= 100
@@ -221,10 +166,6 @@ def update_worklog(db: Session, worklog_id: int, data: dict) -> Optional[dict]:
         if new_pct != w.percentage:
             changes.append(f"{w.percentage}% → {new_pct}%")
         w.percentage = new_pct
-        # Recalculate hours based on new percentage
-        calc_h, has_checkin = _calc_calculated_hours(db, w.user_id, w.date, new_pct)
-        w.hours = calc_h
-        w.calculated_hours = calc_h
     if "date" in data:
         new_date = _parse_date(data["date"]) or w.date
         if new_date != w.date:
@@ -233,10 +174,6 @@ def update_worklog(db: Session, worklog_id: int, data: dict) -> Optional[dict]:
                 _validate_percentage_not_exceeded(db, w.user_id, new_date, w.percentage)
             changes.append(f"日期 → {new_date}")
             w.date = new_date
-            if w.percentage:
-                calc_h, has_checkin = _calc_calculated_hours(db, w.user_id, new_date, w.percentage)
-                w.hours = calc_h
-                w.calculated_hours = calc_h
     if "description" in data:
         new_desc = data["description"]
         if new_desc != w.description:
@@ -259,11 +196,7 @@ def update_worklog(db: Session, worklog_id: int, data: dict) -> Optional[dict]:
     if changes:
         _log_worklog_activity(db, w.task_id, w.user_id, "工时更新",
             f"更新工时: {'; '.join(changes)}")
-    result = _worklog_dict(w, task, db)
-    result["has_checkin"] = has_checkin
-    result["percentage"] = w.percentage
-    result["calculated_hours"] = w.calculated_hours
-    return result
+    return _worklog_dict(w, task, db)
 
 
 def delete_worklog(db: Session, worklog_id: int) -> bool:
@@ -273,7 +206,14 @@ def delete_worklog(db: Session, worklog_id: int) -> bool:
         return False
     task_id = w.task_id
     user_id = w.user_id
-    detail = f"删除工时 {w.hours}h: {w.description or ''}"
+    # 时间线文案用实时推导小时 + 百分比表述（派生小时列已休眠，不读 w.hours）
+    from backend.services.worklog_hours import baselines_for, effective_hours_for
+    bl = baselines_for(db, [(user_id, w.date)]).get((user_id, w.date))
+    if w.percentage is not None:
+        dh = effective_hours_for(w.percentage, bl)
+        detail = f"删除工时 {w.percentage}% ({dh}h): {w.description or ''}"
+    else:  # 史前行（0 条兜底）
+        detail = f"删除工时 {w.hours}h: {w.description or ''}"
     db.delete(w)
     db.commit()
 
@@ -437,6 +377,13 @@ def get_calendar(
             comps = db.query(ProductDocTemplate).filter(ProductDocTemplate.id.in_(bug_comp_ids)).all()
             bug_comp_map = {c.id: c.doc_name for c in comps if c.doc_name}
 
+    # 派生口径：单次批量取当日企微基准，(user_id,date)→hours 由 percentage 实时推导
+    from backend.services.worklog_hours import collect_baselines, row_derived_hours
+    _bls = collect_baselines(db, list(logs) + list(bug_logs))
+
+    def _eff(_w):
+        return row_derived_hours(_w, _bls.get((_w.user_id, _w.date)))
+
     # Group by date
     daily_map = {}
     for w in logs:
@@ -446,14 +393,14 @@ def get_calendar(
         task = task_map.get(w.task_id)
         proj = proj_map.get(task.project_id) if task else None
         stage = task.stage_name if task else ''
-        daily_map[d]["total_hours"] += w.hours or 0.0
+        daily_map[d]["total_hours"] += _eff(w)
         daily_map[d]["tasks"].append({
             "id": w.id,
             "task_id": w.task_id,
             "title": task.title if task else "(已删除)",
-            "hours": w.hours,
+            "hours": _eff(w),
             "percentage": w.percentage,
-            "calculated_hours": w.calculated_hours,
+            "calculated_hours": _eff(w),
             "progress": task.progress if task else 0,
             "created_at": to_local_str(w.created_at) if w.created_at else '',
             "project_id": task.project_id if task else None,
@@ -468,15 +415,15 @@ def get_calendar(
         if d not in daily_map:
             daily_map[d] = {"date": d, "total_hours": 0.0, "tasks": []}
         bug = bug_map.get(bw.bug_id)
-        daily_map[d]["total_hours"] += bw.hours or 0.0
+        daily_map[d]["total_hours"] += _eff(bw)
         daily_map[d]["tasks"].append({
             "id": bw.id,
             "task_id": None,
             "bug_id": bw.bug_id,
             "title": ("Bug #" + str(bw.bug_id) + " " + bug.title) if bug else ("Bug #" + str(bw.bug_id)),
-            "hours": bw.hours,
+            "hours": _eff(bw),
             "percentage": bw.percentage,
-            "calculated_hours": bw.calculated_hours,
+            "calculated_hours": _eff(bw),
             "progress": bug.progress if bug else 0,
             "created_at": to_local_str(bw.created_at) if bw.created_at else '',
             "project_id": bug.project_id if bug else None,
@@ -531,32 +478,41 @@ def get_summary(
         bq = bq.filter(BugWorkLog.date <= _parse_date(date_to))
     bug_logs = bq.all()
 
+    # 派生口径：单次批量取当日企微基准
+    from backend.services.worklog_hours import collect_baselines, row_derived_hours
+    _bls = collect_baselines(db, list(logs) + list(bug_logs))
+
+    def _eff(_w):
+        return row_derived_hours(_w, _bls.get((_w.user_id, _w.date)))
+
     by_user = {}
     by_project = {}
     by_date = {}
     total = 0.0
 
     for w in logs:
-        total += w.hours or 0.0
+        h = _eff(w)
+        total += h
         uid = w.user_id
         if uid not in by_user:
             by_user[uid] = 0.0
-        by_user[uid] += w.hours or 0.0
+        by_user[uid] += h
         d = str(w.date)
         if d not in by_date:
             by_date[d] = 0.0
-        by_date[d] += w.hours or 0.0
+        by_date[d] += h
 
     for bw in bug_logs:
-        total += bw.hours or 0.0
+        h = _eff(bw)
+        total += h
         uid = bw.user_id
         if uid not in by_user:
             by_user[uid] = 0.0
-        by_user[uid] += bw.hours or 0.0
+        by_user[uid] += h
         d = str(bw.date)
         if d not in by_date:
             by_date[d] = 0.0
-        by_date[d] += bw.hours or 0.0
+        by_date[d] += h
 
     return {
         "total_hours": total,
@@ -566,21 +522,23 @@ def get_summary(
     }
 
 
-def _worklog_dict(w: WorkLog, task: Task = None, db: Session = None) -> dict:
+def _worklog_dict(w: WorkLog, task: Task = None, db: Session = None, bls: dict = None) -> dict:
+    """序列化一行工时。bls：collect_baselines 预取的 (user_id,date)→基准 映射（列表场景避免 N+1）。
+
+    实时推导（percentage×当日企微口径；无基准日按 8h 暂计待核正）。db 用于取用户名；二者皆无时按
+    兜底（无基准日 8h 口径）推导展示值，不影响主路径。
+    """
     from backend.models.local import LocalUser
+    from backend.services.worklog_hours import baselines_for, row_derived_hours, row_basis
     user = db.query(LocalUser).filter(LocalUser.id == w.user_id).first() if db and w.user_id else None
 
-    # Determine has_checkin
-    has_checkin = False
-    if db and w.user_id and w.date:
-        from backend.models.wecom import WeComCheckin
-        luser = db.query(LocalUser).filter(LocalUser.id == w.user_id).first()
-        if luser and luser.wecom_userid:
-            checkin = db.query(WeComCheckin).filter(
-                WeComCheckin.user_id == luser.wecom_userid,
-                WeComCheckin.date == w.date,
-            ).first()
-            has_checkin = bool(checkin and checkin.work_hours and checkin.work_hours > 0)
+    bl = None
+    if w.user_id and w.date:
+        bl = bls.get((w.user_id, w.date)) if bls is not None else None
+    if bl is None and db and w.user_id and w.date:
+        bl = baselines_for(db, [(w.user_id, w.date)]).get((w.user_id, w.date))
+    basis = row_basis(bl)
+    dh = row_derived_hours(w, bl)
 
     return {
         "id": w.id,
@@ -588,10 +546,11 @@ def _worklog_dict(w: WorkLog, task: Task = None, db: Session = None) -> dict:
         "user_id": w.user_id,
         "username": user.username if user else "?",
         "display_name": user.display_name if user else "?",
-        "hours": w.hours,
+        "hours": dh,
         "percentage": w.percentage,
-        "calculated_hours": w.calculated_hours,
-        "has_checkin": has_checkin,
+        "calculated_hours": dh,
+        "basis": basis,
+        "has_checkin": basis == "ok",
         "date": str(w.date) if w.date else None,
         "description": w.description,
         "task_title": task.title if task else None,

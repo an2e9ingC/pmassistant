@@ -170,6 +170,11 @@ async def sync_wecom_data(db: Session, days: int = 60) -> dict:
         start_ts = end_ts - days * 86400  # look back `days` (default 60)
 
         created, updated, total_fetched = 0, 0, 0
+        # 审批计数提升到外层作用域：仅审批变更（出差/外出/请假/补卡）也会改写当日打卡口径，
+        # 需要在末尾作为工时重算的触发条件之一
+        approval_created, approval_updated = 0, 0
+        # 本趟同步"实际发生变更"的 (wecom_userid, date)：末尾据此精确刷新任务/Bug 消耗缓存
+        changed_pairs = set()
 
         # ── Accumulate all records across batches BEFORE processing ──
         # (records for the same day can be split across batch boundaries)
@@ -263,12 +268,15 @@ async def sync_wecom_data(db: Session, days: int = 60) -> dict:
                 f"valid_punch={has_valid_punch}"
             )
 
+            _wl_date = date.fromisoformat(ds)
             existing = db.query(WeComCheckin).filter(
                 WeComCheckin.user_id == uid,
-                WeComCheckin.date == date.fromisoformat(ds),
+                WeComCheckin.date == _wl_date,
                 WeComCheckin.source == "checkin",
             ).first()
             if existing:
+                # 只有权威小时数真正变化才需要刷新下游聚合缓存（raw 仅用于展示 in/out，不参与口径）
+                changed = abs((existing.work_hours or 0) - hours) >= 0.005
                 existing.work_hours = hours
                 existing.raw_data = json.dumps(d["raw"][:5], ensure_ascii=False)
                 existing.synced_at = datetime.now(timezone.utc)
@@ -276,13 +284,16 @@ async def sync_wecom_data(db: Session, days: int = 60) -> dict:
             else:
                 db.add(WeComCheckin(
                     user_id=uid,
-                    date=date.fromisoformat(ds),
+                    date=_wl_date,
                     work_hours=hours,
                     source="checkin",
                     raw_data=json.dumps(d["raw"][:5], ensure_ascii=False),
                     synced_at=datetime.now(timezone.utc),
                 ))
                 created += 1
+                changed = True
+            if changed:
+                changed_pairs.add((uid, _wl_date))
 
         db.commit()
 
@@ -290,7 +301,6 @@ async def sync_wecom_data(db: Session, days: int = 60) -> dict:
         # Approval records fill the gap for days without valid checkin punches
         # (e.g. 外出: user doesn't clock in/out, hours come from approval)
         try:
-            approval_created, approval_updated = 0, 0
             seen_sp = set()  # deduplicate across batch ranges
             client2 = WeComClient()
             await client2.authenticate()
@@ -307,7 +317,7 @@ async def sync_wecom_data(db: Session, days: int = 60) -> dict:
                             detail = await client2.get_approval_detail(sp_no)
                             if not detail:
                                 continue
-                            result = _process_approval(db, detail, wecom_userids)
+                            result = _process_approval(db, detail, wecom_userids, changed_pairs)
                             if result == "created":
                                 approval_created += 1
                             elif result == "updated":
@@ -328,35 +338,36 @@ async def sync_wecom_data(db: Session, days: int = 60) -> dict:
         except Exception as e:
             logger.error(f"WeCom schedule sync failed: {e}")
 
-        # ── Recalculate calculated_hours for affected worklogs ──
-        if created > 0 or updated > 0:
+        # ── 精确刷新任务/Bug 消耗缓存（实时派生口径）──
+        # 行级派生值已不再落库（工时只存 percentage，小时一律读时推导），旧的"30 天逐日按行重算"已无意义。
+        # 仅审批变更（无打卡新增/更新）时也要触发：审批会改写当日打卡口径。
+        # 只对本趟同步"实际变更的 (wecom_userid, date)"上挂了工时的 task/bug 刷新其 consumed_hours 缓存。
+        if (created > 0 or updated > 0 or approval_created > 0 or approval_updated > 0) and changed_pairs:
             try:
-                from backend.services.worklog_service import _recalc_calculated_hours_for_date
                 from backend.services.task_service import recalc_consumed_hours
                 from backend.services.bug_service import _recalc_bug_hours
-                # Recalculate for the last 30 days
-                from datetime import timedelta as td
-                affected_user_ids = {u.id for u in users}
-                for day_offset in range(30):
-                    d = (now - td(days=day_offset)).date()
-                    for uid in affected_user_ids:
-                        _recalc_calculated_hours_for_date(db, uid, d)
-                # Recalc consumed_hours for all affected tasks and bugs
-                from backend.models.task import WorkLog, Task
+                from backend.models.task import WorkLog
                 from backend.models.bug import BugWorkLog
-                task_ids = db.query(WorkLog.task_id).filter(
-                    WorkLog.user_id.in_(affected_user_ids),
-                    WorkLog.date >= (now - td(days=30)).date(),
-                ).distinct().all()
-                bug_ids = db.query(BugWorkLog.bug_id).filter(
-                    BugWorkLog.user_id.in_(affected_user_ids),
-                    BugWorkLog.date >= (now - td(days=30)).date(),
-                ).distinct().all()
-                for (tid,) in task_ids:
-                    recalc_consumed_hours(db, tid)
-                for (bid,) in bug_ids:
-                    _recalc_bug_hours(db, bid)
-                logger.info(f"WeCom sync: recalculated hours for {len(users)} users, {len(task_ids)} tasks, {len(bug_ids)} bugs")
+                changed_dates = {d for (_u, d) in changed_pairs}
+                changed_wids = {u for (u, _d) in changed_pairs}
+                local_ids = {lu.id for lu in users if lu.wecom_userid in changed_wids}
+                if changed_dates and local_ids:
+                    task_ids = db.query(WorkLog.task_id).filter(
+                        WorkLog.user_id.in_(local_ids),
+                        WorkLog.date.in_(changed_dates),
+                    ).distinct().all()
+                    bug_ids = db.query(BugWorkLog.bug_id).filter(
+                        BugWorkLog.user_id.in_(local_ids),
+                        BugWorkLog.date.in_(changed_dates),
+                    ).distinct().all()
+                    for (tid,) in task_ids:
+                        recalc_consumed_hours(db, tid)
+                    for (bid,) in bug_ids:
+                        _recalc_bug_hours(db, bid)
+                    logger.info(
+                        f"WeCom sync: refreshed consumed caches for {len(task_ids)} tasks, "
+                        f"{len(bug_ids)} bugs on {len(changed_dates)} changed dates"
+                    )
             except Exception as e:
                 logger.error(f"WeCom sync recalc failed: {e}")
 
@@ -548,8 +559,12 @@ def _extract_approval_hours(detail: dict) -> tuple:
 _approval_sample_logged = False
 
 
-def _process_approval(db: Session, detail: dict, wecom_userids: list) -> Optional[str]:
-    """Process one approval detail record. Returns 'created', 'updated', or None."""
+def _process_approval(db: Session, detail: dict, wecom_userids: list, changed_pairs: set = None) -> Optional[str]:
+    """Process one approval detail record. Returns 'created', 'updated', or None.
+
+    changed_pairs（可选）：集合，传入时把本审批实际改写口径的日期收集进去
+    —— 审批行所在日期 + 该审批按天展开（跨天请假/外出）覆盖的每一天，供同步末尾精确刷新聚合缓存。
+    """
     global _approval_sample_logged
 
     if not _approval_sample_logged:
@@ -586,7 +601,7 @@ def _process_approval(db: Session, detail: dict, wecom_userids: list) -> Optiona
         existing.raw_data = json.dumps(detail, ensure_ascii=False)
         existing.synced_at = datetime.now(timezone.utc)
         logger.info(f"WeCom approval: updated {user_id} {date_key} {hours:.2f}h ({sp_name})")
-        return "updated"
+        result = "updated"
     else:
         db.add(WeComCheckin(
             user_id=user_id,
@@ -597,7 +612,20 @@ def _process_approval(db: Session, detail: dict, wecom_userids: list) -> Optiona
             synced_at=datetime.now(timezone.utc),
         ))
         logger.info(f"WeCom approval: created {user_id} {date_key} {hours:.2f}h ({sp_name})")
-        return "created"
+        result = "created"
+
+    if changed_pairs is not None:
+        try:
+            if isinstance(date_key, str):
+                changed_pairs.add((user_id, date.fromisoformat(str(date_key)[:10])))
+            else:
+                changed_pairs.add((user_id, date_key))
+            # 审批可跨天展开（请假/外出多天），展开覆盖的每一天都会改写当日口径
+            for (day_str, _all_day) in _approval_day_periods(detail):
+                changed_pairs.add((user_id, date.fromisoformat(str(day_str)[:10])))
+        except Exception:
+            pass
+    return result
 
 
 async def sync_wecom_schedule(db: Session) -> None:
@@ -702,19 +730,13 @@ def _resolve_daily_hours(day: dict) -> float:
     return round(max(ch, ah), 2)
 
 
-def _user_daily_map(db: Session, wecom_userid: str, date_from=None, date_to=None) -> dict:
-    """Build per-day checkin context: {date: {date, _checkin_h, _approval_h, approvals[]}}."""
-    if not wecom_userid:
-        return {}
-    fd = _as_date(date_from)
-    td = _as_date(date_to)
-    q = db.query(WeComCheckin).filter(WeComCheckin.user_id == wecom_userid)
-    if fd:
-        q = q.filter(WeComCheckin.date >= fd)
-    if td:
-        q = q.filter(WeComCheckin.date <= td)
+def _merge_user_daily(rows) -> dict:
+    """Merge a user's WeComCheckin rows into per-day context: {date: {date, _checkin_h, _approval_h, approvals[]}}.
+
+    纯逻辑（不做 DB 查询），供单用户 / 批量两种取数共用，保证口径逐字节一致（含审批跨天展开）。
+    """
     days = {}
-    for c in q.all():
+    for c in rows:
         d = str(c.date)
         m = days.setdefault(d, {"date": d, "_checkin_h": 0.0, "_approval_h": 0.0, "approvals": [], "_in": None, "_out": None})
         if c.source == "checkin":
@@ -753,6 +775,45 @@ def _user_daily_map(db: Session, wecom_userid: str, date_from=None, date_to=None
     return days
 
 
+def _user_daily_map(db: Session, wecom_userid: str, date_from=None, date_to=None) -> dict:
+    """Build per-day checkin context for ONE user: {date: {date, _checkin_h, _approval_h, approvals[]}}."""
+    if not wecom_userid:
+        return {}
+    fd = _as_date(date_from)
+    td = _as_date(date_to)
+    q = db.query(WeComCheckin).filter(WeComCheckin.user_id == wecom_userid)
+    if fd:
+        q = q.filter(WeComCheckin.date >= fd)
+    if td:
+        q = q.filter(WeComCheckin.date <= td)
+    return _merge_user_daily(q.all())
+
+
+def _user_daily_map_batch(db: Session, wecom_userids, date_from=None, date_to=None) -> dict:
+    """Multi-user variant of _user_daily_map: one query, {wecom_userid: {date: day_entry}}.
+
+    语义与单用户路径逐字节一致（按用户分组后走同一 _merge_user_daily，含审批跨天展开）。
+    """
+    if not wecom_userids:
+        return {}
+    fd = _as_date(date_from)
+    td = _as_date(date_to)
+    q = db.query(WeComCheckin).filter(WeComCheckin.user_id.in_(wecom_userids))
+    if fd:
+        q = q.filter(WeComCheckin.date >= fd)
+    if td:
+        q = q.filter(WeComCheckin.date <= td)
+    by_user = {}
+    for c in q.all():
+        by_user.setdefault(c.user_id, []).append(c)
+    out = {}
+    for wid in wecom_userids:
+        m = _merge_user_daily(by_user.get(wid) or [])
+        if m:
+            out[wid] = m
+    return out
+
+
 def _day_type(m: dict) -> str:
     """类目：出差 > 外出 > 请假/外勤 > 正常（与 _resolve_daily_hours 的业务规则对应）。"""
     apprs = m.get("approvals") or []
@@ -769,6 +830,35 @@ def user_daily_totals(db: Session, wecom_userid: str, date_from=None, date_to=No
     """Return {date_str: total_hours} for a user — identical to get_checkin_calendar's
     per-day total_hours. 供人力报表复用，保证与用户中心口径一致。"""
     return {dd: _resolve_daily_hours(m) for dd, m in _user_daily_map(db, wecom_userid, date_from, date_to).items()}
+
+
+def day_baselines_for_dates(db: Session, wecom_userids, dates) -> dict:
+    """Resolve authoritative day-hours for a SET of (wecom_userid, date) in ONE query.
+
+    Returns {(wecom_userid, date): resolved_hours}. Absent day (无任何企微派生条目) → key MISSING；
+    present day → resolved float（可为 0.0，如请假无实卡/0 小时审批/下班卡未打的当天上午）。
+
+    调用方据此区分三态：
+      - key 缺失                    → absent（无基准日：忘打卡 / 补卡 / 外出出差公文未完成）
+      - value >= MIN_REAL_HOURS     → ok（权威口径）
+      - value <  MIN_REAL_HOURS     → pending（有条目但口径未定型，如今天下班卡未打）
+    """
+    if not wecom_userids or not dates:
+        return {}
+    userids = [str(u) for u in wecom_userids]
+    dmin = min(dates)
+    dmax = max(dates)
+    maps = _user_daily_map_batch(db, userids, dmin, dmax)
+    out = {}
+    for wid in userids:
+        dm = maps.get(wid)
+        if not dm:
+            continue
+        for d in dates:
+            m = dm.get(str(d))
+            if m is not None:
+                out[(wid, d)] = _resolve_daily_hours(m)
+    return out
 
 
 def user_daily_checkins(db: Session, wecom_userid: str, date_from=None, date_to=None) -> list:

@@ -1733,6 +1733,62 @@ function _isDateWeekday(dateStr) {
   } catch(e) { return true; }
 }
 
+/* ── 当日企微口径是否未定型/缺失 + 提示（Issue #9）──
+   三态返回值：
+     null     = 无需提示（周末 / 整天请假已批 / 当日已有最终企微工时）
+     'pending'= 当日有企微条目但工时未定型（如今天上班卡已打、下班卡尚未打 → 小时数按最终打卡自动核算）
+     'absent' = 当日无任何企微打卡/审批条目（过去某天忘打卡、或补卡/外出/出差公文未提交或未审批完成 →
+                按 8h 暂计，数据到位后自动按实际核正）
+   记录"当天是否记满"只看百分比，不依赖当天工时是否定型。 */
+function _wlDayIsIncomplete(weDay, dateStr) {
+  try {
+    if (!_isDateWeekday(dateStr)) return null;        // 周末无打卡属正常，不提示
+    if (dateStr > fmtLocalDate(new Date())) return null; // 未来工作日尚无企微条目属正常，不提示
+    if (_isLeaveDate(weDay)) return null;             // 整天请假/外出/出差已审批通过：免打卡
+    if (!weDay) return 'absent';                      // 无任何企微打卡/审批条目
+    if ((weDay.total_hours || 0) > 0) return null;    // 已有最终企微口径
+    var cs = weDay.checkins || [];
+    if (!cs.length) return null;                      // 有条目但无打卡明细：无从判（如仅审批占位）
+    return cs.some(function(c) {                      // 有上班打卡但下班/最终口径未定型
+      var t = c.type || '';
+      return t.indexOf('上班') >= 0 && t.indexOf('未打卡') < 0 && !!(c.time);
+    }) ? 'pending' : null;
+  } catch(e) { return null; }
+}
+function _wlIncompleteHintHtml(msg) {
+  return '<div style="font-size:13px;color:var(--warn);font-weight:600;margin-top:4px">' +
+    (msg || '下班卡尚未打卡：小时数将按最终企微打卡时长自动更新，占比以百分比为准。') +
+    '</div>';
+}
+// 按三态给出录入行内提示文案
+function _wlIncompleteStateMsg(state) {
+  if (state === 'absent') {
+    return '当天暂无企微打卡/审批记录（忘打卡，或补卡/外出/出差公文未提交/未审批完成）：' +
+      '本次按 8h 暂计，数据到位后自动按实际核正。';
+  }
+  if (state === 'pending') {
+    return '下班卡/审批尚未完成：小时数将按最终企微打卡时长自动核算，占比以百分比为准。';
+  }
+  return '';
+}
+// 在工时录入行内显示/隐藏"未定型/无基准日"提示（三个录入对话框共用）
+function _wlRenderRowIncompleteHint(rowEl, state) {
+  if (!rowEl) return;
+  var h = rowEl.querySelector('.wl-incomplete-hint');
+  var msg = _wlIncompleteStateMsg(state);
+  if (msg) {
+    if (!h) {
+      h = document.createElement('div');
+      h.className = 'wl-incomplete-hint';
+      rowEl.appendChild(h);
+    }
+    h.innerHTML = _wlIncompleteHintHtml(msg);
+    h.style.display = '';
+  } else if (h) {
+    h.style.display = 'none';
+  }
+}
+
 function _renderMergedMonthCalendar(today, wecomDailyMap, wlData, weData) {
   if (!_calYear) { _calYear = today.getFullYear(); _calMonth = today.getMonth()+1; }
   var total = weData ? (weData.total||0) : 0;
@@ -1785,19 +1841,30 @@ function _renderMergedMonthCalendar(today, wecomDailyMap, wlData, weData) {
     window._calLeaveMap = window._calLeaveMap || {};
     window._calLeaveMap[dStr] = (weDay && weDay.approvals) || [];
 
-    // 圆点：有打卡即显示；红/绿 = PMA 记录工时 vs 打卡工时（记录覆盖打卡 = 100% 绿）
-    var wlH = 0;
+    // 圆点：有打卡即显示；绿 = 当天已记满 100%（按记录百分比之和判定：记满即绿，
+    // 更晚的打/企微工时更新不再把它算回 <100%，见 Issue #9）；红 = 未记满。
+    var wlH = 0, dayPct = 0, allHavePct = !!(wlDay && wlDay.tasks && wlDay.tasks.length);
     if (wlDay && wlDay.tasks) {
-      wlDay.tasks.forEach(function(t) { wlH += (t.calculated_hours || t.hours || 0); });
+      wlDay.tasks.forEach(function(t) {
+        wlH += (t.calculated_hours || t.hours || 0);
+        if (t.percentage != null) { dayPct += t.percentage; }
+        else { allHavePct = false; }
+      });
     }
     var dotHtml = '';
-    // 有打卡工时即显示原点标记(外出/出差等免打卡日也记录工时内容，仍显示"记录工时 vs 打卡工时"红/绿点)。
-    // 统一为「白色圆环 + 状态色中心」：中心为绿(100%记录)/红(未覆盖)，外圈白色描边，
+    // 有打卡工时即显示原点标记(外出/出差等免打卡日也记录工时内容，仍显示红/绿点)。
+    // 统一为「白色圆环 + 状态色中心」：中心为绿(记满100%)/红(未记满)，外圈白色描边，
     // 保证绿底(整日8h~8.5h)上绿点也清晰可见，且各状态样式一致。
     if (isCurrentMonth && hasCheckin) {
-      // 与页面展示(.toFixed(1))口径一致：按 0.1h 四舍五入后比较，
-      // 避免"显示打卡/记录均 8.2h/100% 却因浮点差(~0.01h)判红点"的误导
-      var filled = Math.round(wlH * 10) >= Math.round(h * 10);
+      var filled;
+      if (allHavePct) {
+        // 全部记录带百分比：以百分比之和判定（≥99.5 视为记满即绿），不依赖记录时快照的小时数
+        filled = dayPct >= 99.5;
+      } else {
+        // 含旧式(无百分比)记录：退回小时口径，按 0.1h 四舍五入后比较，
+        // 避免"显示打卡/记录均 8.2h/100% 却因浮点差(~0.01h)判红点"的误导
+        filled = Math.round(wlH * 10) >= Math.round(h * 10);
+      }
       var dotC = filled ? 'var(--success)' : 'var(--danger)';
       dotHtml = '<span style="position:absolute;top:1px;right:2px;width:7px;height:7px;border-radius:50%;border:1px solid #fff;background:' + dotC + ';box-sizing:border-box"></span>';
     }
@@ -1824,6 +1891,17 @@ function _renderMergedMonthCalendar(today, wecomDailyMap, wlData, weData) {
       cellBg = 'background: repeating-linear-gradient(45deg, var(--hatch) 0 1px, transparent 1px 4px);';
       tipText = tipText || _leaveTypeTip(weDay);
     }
+    // 记录过工时但当日企微口径未定型/缺失（Issue #9）：过去某天忘打卡/补卡/外出出差公文未完成等
+    // → 该日按 8h 暂计待核正；tooltip 直接说明，点击日详情也有摘要条提示
+    if (wlDay && wlDay.tasks && wlDay.tasks.length) {
+      var dayIncmpl = _wlDayIsIncomplete(weDay, dStr);
+      if (dayIncmpl) {
+        tipText = tipText ? tipText + ' · ' : '';
+        tipText += (dayIncmpl === 'absent')
+          ? '按8h暂计·待核正（暂无打卡/审批）'
+          : '下班/审批未完成·自动核算';
+      }
+    }
 
     // 工作日（周一~五）无打卡 → 红边框（仅限过去日期，未来未打卡属正常）；今天 → accent；免打卡日不红
     var dow = new Date(y, mm, displayDay).getDay();
@@ -1848,7 +1926,7 @@ function _renderMergedMonthCalendar(today, wecomDailyMap, wlData, weData) {
 }
 
 function _openMergedDayDetail(dateStr, checkinHours, hasCheckin) {
-  function render(wlData) {
+  function render(wlData, weDay) {
     var tasks = (wlData && wlData.daily && wlData.daily[0]) ? wlData.daily[0].tasks : [];
     _dayDetailTasks = tasks; // populate for edit/copy operations
 
@@ -1882,9 +1960,11 @@ function _openMergedDayDetail(dateStr, checkinHours, hasCheckin) {
     });
 
     // Summary stats
-    var totalCalcH = 0, entryCount = tasks.length;
+    var totalCalcH = 0, recPct = 0, entryCount = tasks.length;
+    var allHavePct = entryCount > 0;
     tasks.forEach(function(t) {
       totalCalcH += (t.calculated_hours || t.hours || 0);
+      if (t.percentage != null) { recPct += t.percentage; } else { allHavePct = false; }
     });
 
     // Merged summary bar: checkin + worklog stats in one row
@@ -1895,6 +1975,9 @@ function _openMergedDayDetail(dateStr, checkinHours, hasCheckin) {
     var isWk = _isDateWeekday(dateStr);
     // 出差工作日：公司默认当天工时固定8h视为企微打卡
     var bizTripWorkday = hasTrip && checkinHours > 0 && isWk && leaveDay;
+    // 当日企微口径状态（Issue #9）：null=已定型/无需提示；'pending'=有条目未定型（今天下班卡未打）；
+    // 'absent'=无任何企微条目（过去忘打卡/补卡/外出·出差公文未完成 → 按 8h 暂计待核正）
+    var incomplete = _wlDayIsIncomplete(weDay, dateStr);
 
     var checkinLabel;
     if (bizTripWorkday) {
@@ -1903,14 +1986,27 @@ function _openMergedDayDetail(dateStr, checkinHours, hasCheckin) {
       checkinLabel = '<span style="font-size:15px;color:var(--muted)">打卡 <b style="color:var(--success);font-size:17px">' + checkinHours.toFixed(1) + 'h</b></span>';
     } else if (leaveDay) {
       checkinLabel = '<span style="font-size:15px;color:var(--muted)">打卡 <b style="color:var(--warn);font-size:17px">免打卡</b></span>';
+    } else if (incomplete === 'pending') {
+      checkinLabel = '<span style="font-size:15px;color:var(--muted)">打卡 <b style="color:var(--warn);font-size:17px">未完成</b></span>' +
+        '<span style="font-size:11px;color:var(--accent)">下班卡未打卡 · 小时按最终企微打卡自动核算</span>';
+    } else if (incomplete === 'absent') {
+      checkinLabel = '<span style="font-size:15px;color:var(--muted)">打卡 <b style="color:var(--warn);font-size:17px">按8h暂计</b></span>' +
+        '<span style="font-size:11px;color:var(--accent)" title="当天暂无企微打卡/审批记录：工时按 8h 暂计，数据到位后自动按实际核正">暂无打卡记录 · 待核正</span>';
     } else {
       checkinLabel = '<span style="font-size:15px;color:var(--muted)">打卡 <b style="color:var(--muted);font-size:17px">' + checkinHours.toFixed(1) + 'h</b></span>';
     }
-    var ratioText = (!leaveDay || checkinHours > 0)
-      ? (checkinHours > 0
-        ? '<span style="font-size:15px;color:var(--muted)" title="已记录工时 ÷ 打卡工时的比例">记录/打卡 <b style="color:var(--fg);font-size:17px">' + (totalCalcH / checkinHours * 100).toFixed(0) + '%</b></span>'
-        : '<span style="font-size:15px;color:var(--muted)" title="已记录工时 ÷ 打卡工时的比例">记录/打卡 <b style="color:var(--fg);font-size:17px">—</b></span>')
-      : '';
+    var ratioText;
+    if (allHavePct) {
+      // 记录占比 = 当日记录百分比之和：记 100% 即满（绿），更晚下班卡/企微工时更新不再使其 <100%
+      var _recClr = recPct >= 99.5 ? 'var(--success)' : 'var(--fg)';
+      ratioText = '<span style="font-size:15px;color:var(--muted)" title="当日所有记录百分比之和，≥100 显示 100">记录占比 <b style="color:' + _recClr + ';font-size:17px">' + Math.min(100, Math.round(recPct)) + '%</b></span>';
+    } else {
+      ratioText = (!leaveDay || checkinHours > 0)
+        ? (checkinHours > 0
+          ? '<span style="font-size:15px;color:var(--muted)" title="已记录工时 ÷ 打卡工时的比例">记录/打卡 <b style="color:var(--fg);font-size:17px">' + (totalCalcH / checkinHours * 100).toFixed(0) + '%</b></span>'
+          : '<span style="font-size:15px;color:var(--muted)" title="已记录工时 ÷ 打卡工时的比例">记录/打卡 <b style="color:var(--fg);font-size:17px">—</b></span>')
+        : '';
+    }
 
     // 免打卡(请假/外出等)审批信息 —— 仅真正无工时(0h)的免打卡日展示；出差工作日8h由上方标记说明
     var leaveInfo = '';
@@ -2025,8 +2121,13 @@ function _openMergedDayDetail(dateStr, checkinHours, hasCheckin) {
 
   function fetchAndRender() {
     var uid = window._ucViewUserId || (getCurrentUser() ? getCurrentUser().id : '');
-    API.get('/worklogs/calendar?user_id='+uid+'&date_from='+dateStr+'&date_to='+dateStr).then(function(wlData) {
-      render(wlData);
+    Promise.all([
+      API.get('/worklogs/calendar?user_id='+uid+'&date_from='+dateStr+'&date_to='+dateStr),
+      API.get('/wecom/calendar?user_id='+uid+'&date_from='+dateStr+'&date_to='+dateStr)
+    ]).then(function(results) {
+      var wecom = results[1] || {};
+      var weDay = (wecom.daily && wecom.daily.length) ? wecom.daily[0] : null;
+      render(results[0] || {}, weDay);
       _loadCheckinDetail(dateStr);
     });
   }
@@ -3016,8 +3117,11 @@ function _wlCalOnDateChange(idx) {
   ]).then(function(results) {
     var usage = results[0] || {}, wecom = results[1] || {};
     var remaining = usage.remaining_percentage !== undefined ? usage.remaining_percentage : 100;
-    var checkinH = (wecom.daily && wecom.daily[0]) ? wecom.daily[0].total_hours : 0;
+    var weDay = (wecom.daily && wecom.daily.length) ? wecom.daily[0] : null;
+    var checkinH = weDay ? (weDay.total_hours || 0) : 0;
     _wlCalSavedPct[d] = usage.total_percentage_used || 0; _wlCalCheckinH[d] = checkinH;
+    // 当日企微口径未定型/缺失提示（Issue #9）：无基准日按8h暂计待核正 / 当天未打下班卡自动核算
+    _wlRenderRowIncompleteHint(document.querySelector('#wl-cal-rows .wl-cal-row[data-idx="' + idx + '"]'), _wlDayIsIncomplete(weDay, d));
     var av = document.getElementById('wl-cal-avail-' + idx);
     if (av) { av.textContent = '可用 ' + remaining + '%'; av.style.color = remaining > 0 ? 'var(--success)' : 'var(--danger)'; }
     var pctEl = document.getElementById('wl-cal-pct-' + idx);
