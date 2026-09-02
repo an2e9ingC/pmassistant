@@ -71,9 +71,29 @@ Co-Authored-By: <model-name> / <tool-name>
 
    # 在变更记录表头分隔行之后插入新条目（确保最新记录在第一位）
    LINE=$(awk '/^## 变更记录/{found=1} found && /^\|------\|------\|------\|$/{print NR; exit}' docs/dev-plan.md)
-   sed -i "${LINE}a | $TODAY | v新版本号 | type: 简短描述 |" docs/dev-plan.md
+   sed -i "${LINE}a | $TODAY | v新版本号 | type: 一句话描述 |" docs/dev-plan.md
    ```
-3. **数据层变更**同步更新 `docs/db.md`
+
+#### ⚠️ 变更记录「说明」列 = 一句话用户可见说明（硬性规范）
+
+> **为什么？** dev-plan.md 的版本历史是**用户可见的**：`pma-daily-summary` 会读取它生成日报、发布说明会展示给业务用户。它不是给开发者的内部 commit log。
+
+**每条记录 = 一句话**，用业务/用户语言说清本版本「**解决了什么问题 / 新增了什么功能**」。
+- 建议直接复用 commit subject（`type(scope): 一句话`）或改写得更面向用户，长度 ≤ 40 字。
+- 想要多条就另起一行？**不允许**——一个版本一行，要点合并进一句话，宁精勿全。
+
+**❌ 禁止出现**：
+- ①②③ 编号 / 分号拼接的多要点罗列（一眼看去像 commit body）
+- 实现细节：函数名、SQL、SQLite 函数、算法/方案名、字段名
+- 内部复盘过程（`根因: …; 修复: …`）
+- 文件路径清单、把 commit body 的 bullet 列表直接粘贴进来
+
+| | 说明列写法 |
+|---|---|
+| ✅ 正例 | `fix(api): 项目总览编号列按数值排序，修复 LSJ 等三位前缀项目错排` |
+| ❌ 反例 | `fix(api): 项目总览编号排序兼容LSJ前缀 — ①根因: substr(code,3)按两位截取把LSJ算成0; ②用pma_code_num()取尾部数字; ③null排最后…` |
+
+
 
 #### 版本号自检（rebase 后、commit 前必须执行）
 

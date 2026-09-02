@@ -22,6 +22,7 @@ allowed-tools: Read, Write, Edit, Bash
 ## Commit 前
 
 1. `docs/dev-plan.md`：版本历史表追加新条目 + 页头版本号**同步为 `#app-version` 的当前值**
+   > **新条目说明列 = 一句话用户可见描述**（版本历史会提供给用户），只写「解决了什么问题/新增了什么功能」，禁止 ①②③ 罗列与实现细节。详见 pma-commit 规范。
 2. `frontend/index.html`：已在调试阶段更新，commit 时如果本轮有多次修改可能已经是最新
 
 **重要**：commit 时 `docs/dev-plan.md` 直接取 `#app-version` 的值，**无需再 +1**。因此文档版本记录可以是**非连续的**（跳过的 beta 号对应中间调试版本）。
