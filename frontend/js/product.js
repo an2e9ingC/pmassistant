@@ -247,7 +247,7 @@ function _povRenderProducts() {
       tagsHtml = '<div class="prod-tags">' + tagTexts.slice(0,4).map(function(t,j){ return '<span class="prod-tag t' + (j%5) + '">' + escHtml(t) + '</span>'; }).join('') + '</div>';
     }
     // Per-stage doc completion rings
-    var stageOrder = ['硬件开发', '结构设计', 'BSP开发', '软件开发', '测试'];
+    var stageOrder = ['硬件开发', '结构设计', 'BSP开发', '业务软件开发', 'FPGA开发', '测试'];
     var docStages = p.doc_stages || [];
     var stageMap = {};
     docStages.forEach(function(s) { stageMap[s.stage_type] = s; });
@@ -476,7 +476,7 @@ async function refreshProductDocs() {
 function renderProdDetailHeader(p, docs) {
   // Compute per-stage completion
   var stageStats = {};
-  var stageOrder = ['硬件开发', '结构设计', 'BSP开发', '软件开发', '测试'];
+  var stageOrder = ['硬件开发', '结构设计', 'BSP开发', '业务软件开发', 'FPGA开发', '测试'];
   (docs || []).forEach(function(d) {
     var st = d.stage_type || '通用';
     if (!stageStats[st]) stageStats[st] = { total: 0, done: 0 };
@@ -1190,7 +1190,7 @@ function _renderProdDocsInline(docs) {
   var canEdit = user && (user.role === 'admin' || perms.indexOf('admin') >= 0 || perms.indexOf('product_link') >= 0);
 
   // Group by stage_type
-  var stageOrder = ['硬件开发', '结构设计', 'BSP开发', '软件开发', '测试', '通用'];
+  var stageOrder = ['硬件开发', '结构设计', 'BSP开发', '业务软件开发', 'FPGA开发', '测试', '通用'];
   var grouped = {};
   docs.forEach(function(d) {
     var st = d.stage_type || '通用';
@@ -1203,7 +1203,8 @@ function _renderProdDocsInline(docs) {
     '硬件开发': 'var(--accent-lt)',
     '结构设计': isDark ? '#283528' : '#e8f5e9',
     'BSP开发': isDark ? '#353020' : '#fff3e0',
-    '软件开发': isDark ? '#2a3340' : '#e3f2fd',
+    '业务软件开发': isDark ? '#2a3340' : '#e3f2fd',
+    'FPGA开发': isDark ? '#2a3040' : '#e8eefd',
     '测试': isDark ? '#352830' : '#fce4ec',
     '通用': 'var(--surface)'
   };

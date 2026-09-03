@@ -338,6 +338,35 @@ def _migrate_product_hierarchy():
         sqlite_conn.close()
 
 
+def _migrate_project_release_lock():
+    """Rename project_release_freeze → project_release_lock (terminology: freeze → lock).
+
+    Only runs on DBs that still have the old table (pre-merge dev DBs). create_all
+    may have just created an empty project_release_lock, so drop it before renaming.
+    """
+    import sqlite3
+
+    sqlite_conn = sqlite3.connect(_db_path)
+    cursor = sqlite_conn.cursor()
+    try:
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='project_release_freeze'")
+        if not cursor.fetchone():
+            return
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='project_release_lock'")
+        if cursor.fetchone():
+            cursor.execute("DROP TABLE `project_release_lock`")  # empty table from create_all
+        cursor.execute("ALTER TABLE `project_release_freeze` RENAME TO `project_release_lock`")
+        cursor.execute("ALTER TABLE `project_release_lock` RENAME COLUMN `frozen_by` TO `locked_by`")
+        cursor.execute("ALTER TABLE `project_release_lock` RENAME COLUMN `frozen_at` TO `locked_at`")
+        cursor.execute("DROP INDEX IF EXISTS `ix_project_release_freeze_project_id`")
+        cursor.execute("CREATE INDEX IF NOT EXISTS `ix_project_release_lock_project_id` ON `project_release_lock` (`project_id`)")
+        sqlite_conn.commit()
+    except Exception as e:
+        logger.warning(f"Migration warning: {e}")
+    finally:
+        sqlite_conn.close()
+
+
 def _migrate_project_doc_template_id():
     """Add and backfill template_id column on project_documents.
 
@@ -535,6 +564,237 @@ def _migrate_task_is_deleted():
         logger.warning(f"_migrate_task_is_deleted: {e}")
 
 
+def _migrate_stage_unification():
+    """Unify project/product stage taxonomy (issue #2 软件版本功能).
+
+    1. FPGA 基础版本分类迁移：产品 FPGA基础版本 模板/文档从 BSP开发 → FPGA开发
+       （产品侧新增 FPGA开发 分类，与项目 FPGA开发 阶段恒等对应）。
+    2. 阶段重命名：软件开发 → 业务软件开发（document_templates / project_documents /
+       product_doc_templates / product_documents 四张表 + pma_settings custom_stage_types_*）。
+
+    全部幂等：WHERE 条件命中即改，已迁移后无操作。
+    """
+    import sqlite3
+    try:
+        conn = sqlite3.connect(_db_path)
+        cursor = conn.cursor()
+
+        # 1) FPGA 基础版本 → FPGA开发（产品侧分类迁移）
+        fpga_tpl = cursor.execute(
+            "UPDATE product_doc_templates SET stage_type = 'FPGA开发' "
+            "WHERE stage_type = 'BSP开发' AND doc_name LIKE '%FPGA%'"
+        ).rowcount
+        fpga_doc = cursor.execute(
+            "UPDATE product_documents SET stage_type = 'FPGA开发' "
+            "WHERE stage_type = 'BSP开发' AND doc_name LIKE '%FPGA%'"
+        ).rowcount
+
+        # 2) 软件开发 → 业务软件开发（四张表）
+        tpl = cursor.execute(
+            "UPDATE document_templates SET stage_type = '业务软件开发' "
+            "WHERE stage_type = '软件开发'"
+        ).rowcount
+        pdoc = cursor.execute(
+            "UPDATE project_documents SET stage_type = '业务软件开发' "
+            "WHERE stage_type = '软件开发'"
+        ).rowcount
+        ptpl = cursor.execute(
+            "UPDATE product_doc_templates SET stage_type = '业务软件开发' "
+            "WHERE stage_type = '软件开发'"
+        ).rowcount
+        pdoc2 = cursor.execute(
+            "UPDATE product_documents SET stage_type = '业务软件开发' "
+            "WHERE stage_type = '软件开发'"
+        ).rowcount
+
+        # 3) pma_settings custom_stage_types_* 中的阶段名
+        set_rows = cursor.execute(
+            "SELECT key, value FROM pma_settings "
+            "WHERE key LIKE 'custom_stage_types_%' OR key = 'custom_stage_types'"
+        ).fetchall()
+        settings_changed = 0
+        for key, value in set_rows:
+            if value and "软件开发" in value and "业务软件开发" not in value:
+                cursor.execute(
+                    "UPDATE pma_settings SET value = ? WHERE key = ?",
+                    (value.replace("软件开发", "业务软件开发"), key),
+                )
+                settings_changed += 1
+
+        conn.commit()
+        conn.close()
+        if fpga_tpl or fpga_doc or tpl or pdoc or ptpl or pdoc2 or settings_changed:
+            logger.info(
+                f"_migrate_stage_unification: fpga tpl={fpga_tpl} doc={fpga_doc} "
+                f"rename tpl={tpl} proj={pdoc} ptpl={ptpl} pdoc={pdoc2} settings={settings_changed}"
+            )
+    except Exception as e:
+        logger.warning(f"_migrate_stage_unification: {e}")
+
+
+def _migrate_fpga_source_dropdown():
+    """清理旧「全部使用产品基础版本」主开关状态 → 通用 FPGA 文档来源下拉（Issue #2 重构）。
+
+    下拉选项直接复用 project_release_auto（doc_auto）：使用项目侧发布版本=0 / 使用产品基础版本=1。
+    1. 通用 FPGA 文档（template_id=96）use_product_versions=1（旧主开关开启）→ 确保
+       project_release_auto(project_doc, id, enabled=1) 行存在（继承开启态，per-product 拆分保持）；
+       use_product_versions 置 0（列停用）。is_removed 只修正「关闭态但异常隐藏」→ 恢复可见；
+       开启态保持隐藏（1），避免 docs 页与子文档重复。
+    2. 无 doc_auto 开启的孤儿 `FPGA版本开发-<code>` 子文档 → is_removed=1 并清理其
+       auto flag / lock（随后首次访问 sync_project_product_docs 会按 doc_auto 决定是否重建）。
+
+    幂等：全部带 WHERE 条件命中即改，已迁移后无操作。
+    """
+    import sqlite3
+    try:
+        conn = sqlite3.connect(_db_path)
+        cursor = conn.cursor()
+        pd_cols = {r[1] for r in cursor.execute("PRAGMA table_info(project_documents)")}
+        ra_cols = {r[1] for r in cursor.execute("PRAGMA table_info(project_release_auto)")}
+        if ("use_product_versions" not in pd_cols or "is_removed" not in pd_cols
+                or "project_release_auto" not in
+                {r[0] for r in cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                or not {"project_id", "source_type", "doc_id", "enabled"} <= ra_cols):
+            conn.close()
+            return
+
+        # 1) 通用 FPGA 文档：旧主开关开启态(use_product_versions=1) → 建立 doc_auto=1 行（继承），
+        #    并把 use_product_versions 列停用（置 0）。is_removed 语义与 doc_auto 一致：
+        #    开启态保持隐藏（1，per-product 拆分态，勿恢复——避免 docs 页与子文档重复），
+        #    关闭态但被异常隐藏（1）→ 恢复可见（0）。稳态由后续 sync 按 doc_auto 兜底。
+        generics = cursor.execute(
+            "SELECT id, project_id, use_product_versions, is_removed FROM project_documents "
+            "WHERE template_id = 96"
+        ).fetchall()
+        opened = 0
+        restored = 0
+        for doc_id, project_id, upv, removed in generics:
+            if upv:
+                row = cursor.execute(
+                    "SELECT enabled FROM project_release_auto "
+                    "WHERE project_id=? AND source_type='project_doc' AND doc_id=?",
+                    (project_id, doc_id),
+                ).fetchone()
+                if row is None or not row[0]:
+                    cursor.execute(
+                        "INSERT OR REPLACE INTO project_release_auto "
+                        "(project_id, source_type, doc_id, enabled) VALUES (?, 'project_doc', ?, 1)",
+                        (project_id, doc_id),
+                    )
+                    opened += 1
+            if removed and not upv:
+                restored += 1
+                cursor.execute(
+                    "UPDATE project_documents SET use_product_versions = 0, is_removed = 0 "
+                    "WHERE id = ?", (doc_id,),
+                )
+            else:
+                cursor.execute(
+                    "UPDATE project_documents SET use_product_versions = 0 WHERE id = ?",
+                    (doc_id,),
+                )
+
+        # 2) 孤儿每产品子文档：所属项目通用 FPGA 文档未开启 doc_auto → 清理（隐藏 + 删 flag/lock）
+        orphan_ids = [r[0] for r in cursor.execute(
+            "SELECT pd.id FROM project_documents pd "
+            "WHERE pd.template_id IS NULL AND pd.stage_type = 'FPGA开发' "
+            "  AND pd.doc_name LIKE 'FPGA版本开发-%' AND pd.is_removed = 0 "
+            "  AND NOT EXISTS ("
+            "    SELECT 1 FROM project_documents g "
+            "    JOIN project_release_auto ra ON ra.project_id = g.project_id "
+            "      AND ra.source_type = 'project_doc' AND ra.doc_id = g.id "
+            "    WHERE g.project_id = pd.project_id AND g.template_id = 96 AND ra.enabled = 1"
+            ")"
+        ).fetchall()]
+        cleaned = 0
+        if orphan_ids:
+            ph = ",".join("?" * len(orphan_ids))
+            cursor.execute(
+                f"UPDATE project_documents SET is_removed = 1 WHERE id IN ({ph})", orphan_ids)
+            cleaned += cursor.execute(
+                f"DELETE FROM project_release_auto WHERE source_type='project_doc' "
+                f"AND doc_id IN ({ph})", orphan_ids).rowcount
+            cursor.execute(
+                f"DELETE FROM project_release_lock WHERE source_type='project_doc' "
+                f"AND doc_id IN ({ph})", orphan_ids)
+
+        conn.commit()
+        conn.close()
+        if opened or restored or cleaned:
+            logger.info(f"_migrate_fpga_source_dropdown: doc_auto inherited={opened}, "
+                        f"generic restored={restored}, orphan fpga docs cleaned={cleaned}")
+    except Exception as e:
+        logger.warning(f"_migrate_fpga_source_dropdown: {e}")
+
+
+def _migrate_fpga_per_board_source():
+    """通用 template-96 doc_auto 主开关 → 逐板卡来源（Issue #2 迁移）。
+
+    语义（逐板卡来源控制）：每块板卡的来源由该板卡自己的 `FPGA版本开发-<code>` 子文档上的
+    project_release_auto 行决定（enabled=1 → 使用产品基础版本 / 无行或 0 → 使用项目侧发布版本）。
+    通用 template-96 文档在有单板时仅作容器（无下拉），不再承载主开关。
+
+    迁移两步（对历史数据兜底，幂等）：
+    1. 旧「全局使用产品基础版本」开态（通用 doc_auto=1，或旧 use_product_versions 已由
+       `_migrate_fpga_source_dropdown` 继承为 doc_auto=1）→ 把该项目的全部板卡子文档 doc_auto
+       也置 1（忠实继承旧全局开态；子文档无行则建 enabled=1）。这样逐板卡模型下各板卡仍走
+       产品基础版本，不因移除通用主开关而静默回退到项目侧。
+    2. 删除通用 template-96 的 doc_auto 行（主开关已无读取方）。
+    不删除通用文档上的手动锁（无单板且项目侧时该行仍是可锁版本行）。
+    """
+    import sqlite3
+    try:
+        conn = sqlite3.connect(_db_path)
+        cursor = conn.cursor()
+        tables = {r[0] for r in cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        if "project_release_auto" not in tables or "project_documents" not in tables:
+            conn.close()
+            return
+        ra_cols = {r[1] for r in cursor.execute("PRAGMA table_info(project_release_auto)")}
+        if not {"project_id", "source_type", "doc_id", "enabled"} <= ra_cols:
+            conn.close()
+            return
+
+        inherited = 0
+        # 1) 通用 doc_auto=1（旧全局产品基础版本开态）→ 其项目全部板卡子文档 doc_auto 置 1
+        for gid, pid in cursor.execute(
+                "SELECT pd.id, pd.project_id FROM project_documents pd "
+                "JOIN project_release_auto ra ON ra.project_id = pd.project_id "
+                "  AND ra.source_type='project_doc' AND ra.doc_id = pd.id "
+                "WHERE pd.template_id = 96 AND ra.enabled = 1").fetchall():
+            for child_id in [r[0] for r in cursor.execute(
+                    "SELECT id FROM project_documents WHERE project_id=? "
+                    "AND template_id IS NULL AND stage_type='FPGA开发' "
+                    "AND doc_name LIKE 'FPGA版本开发-%'", (pid,))]:
+                row = cursor.execute(
+                    "SELECT enabled FROM project_release_auto "
+                    "WHERE project_id=? AND source_type='project_doc' AND doc_id=?",
+                    (pid, child_id)).fetchone()
+                if row is None or not row[0]:
+                    cursor.execute(
+                        "INSERT OR REPLACE INTO project_release_auto "
+                        "(project_id, source_type, doc_id, enabled) VALUES (?, 'project_doc', ?, 1)",
+                        (pid, child_id))
+                    inherited += 1
+
+        # 2) 删除通用 template-96 的 doc_auto 主开关行
+        generic_ids = [r[0] for r in cursor.execute(
+            "SELECT id FROM project_documents WHERE template_id = 96")]
+        removed = 0
+        if generic_ids:
+            ph = ",".join("?" * len(generic_ids))
+            removed = cursor.execute(
+                f"DELETE FROM project_release_auto "
+                f"WHERE source_type='project_doc' AND doc_id IN ({ph})", generic_ids).rowcount
+        conn.commit()
+        conn.close()
+        if inherited or removed:
+            logger.info(f"_migrate_fpga_per_board_source: child doc_auto inherited={inherited}, "
+                        f"generic template-96 doc_auto removed={removed}")
+    except Exception as e:
+        logger.warning(f"_migrate_fpga_per_board_source: {e}")
+
+
 def _rebuild_table_dropping_execution_id(cursor, table_name):
     """Rebuild `table_name` without the `execution_id` column (and its FK/index).
 
@@ -730,8 +990,12 @@ def init_db():
     _migrate_drop_execution()   # remove Zentao execution/task cache layer + execution_id columns
     _migrate_password_hash_nullable()
     _migrate_product_hierarchy()
+    _migrate_project_release_lock()  # rename project_release_freeze → project_release_lock (freeze→lock)
     _migrate_project_doc_template_id()  # backfill template_id on project_documents
     _migrate_task_is_deleted()  # Split is_diverged semantics: add is_deleted, fix existing data
+    _migrate_stage_unification()  # 阶段统一：软件开发→业务软件开发 + FPGA基础版本 → FPGA开发
+    _migrate_fpga_source_dropdown()  # 旧主开关(use_product_versions) → 通用FPGA文档 doc_auto 下拉
+    _migrate_fpga_per_board_source()  # 通用 template-96 主开关行清理 → FPGA 来源改为逐板卡控制
     _migrate_board_status_rename()  # 板卡状态「硬件上电测试」→「硬件上电」
     _migrate_to_sqlcipher()  # Convert unencrypted DB to SQLCipher if key configured
     _clear_gitlab_tokens()   # Force re-auth on server restart

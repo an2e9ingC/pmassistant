@@ -21,7 +21,7 @@ function _normUrl(s) {
 // Fixed stage order matching the project lifecycle
 var STAGE_ORDER = [
   '售前', '项目立项', '需求分解',
-  '硬件开发', '结构设计', 'BSP开发', '软件开发',
+  '硬件开发', '结构设计', 'BSP开发', '业务软件开发', 'FPGA开发',
   '测试', '产品发货', '项目总结',
 ];
 
@@ -2026,7 +2026,7 @@ var _productStage = '通用';       // currently selected stage filter
 var _productPendingOps = [];     // pending operations queue (add/edit/delete/reorder)
 var _productNextTempId = -1000;  // temp IDs for locally-added templates
 
-var PRODUCT_STAGE_TYPES = ['硬件开发', '结构设计', 'BSP开发', '软件开发', '测试', '通用'];
+var PRODUCT_STAGE_TYPES = ['硬件开发', '结构设计', 'BSP开发', '业务软件开发', 'FPGA开发', '测试', '通用'];
 
 var DOC_TYPES = [
   { key: 'gitlab', label: 'GitLab' },

@@ -452,6 +452,7 @@ def update_document(
     detail = f"「{doc_name}」{'; '.join(parts)}" if parts else f"「{doc_name}」无变更"
     log_project_activity(db, project.id, user.username, "文档状态", detail)
     log_audit(db, user, "project_doc_update", f"project={project.code} {detail}", AUDIT_CAT_PROJECT, "low")
+
     return {"code": 0, "data": result, "message": "ok"}
 
 
@@ -476,6 +477,551 @@ def delete_document(
     log_project_activity(db, project.id, user.username, "文档删除", f"「{doc_name}」已删除")
     log_audit(db, user, "project_doc_delete", f"project={project.code} doc={doc_name}", AUDIT_CAT_PROJECT, "high")
     return {"code": 0, "data": None, "message": "ok"}
+
+
+# ── 软件版本：聚合 / 锁定 ────────────────────────────────────────────────────
+# source_type: 'project_doc' 项目文档（软件发布 / FPGA版本开发 等）| 'product_doc' 产品 BSP 文档
+# current 语义：锁定版本覆盖 → 否则为 DocReleaseMatch.is_current（自动最新）
+# 锁定为展示层覆盖：底层文档 location 仍自动跟踪最新，仅聚合页展示所选版本。
+
+
+def _doc_version_options(db, pid: int, source_type: str, doc_id: int) -> set:
+    """该文档当前可选的版本集合（校验 lock 请求用）。
+
+    可选项遵循子项下拉选择的版本来源：
+    - project_doc 且「使用产品基础版本」（doc_auto=1）→ 关联产品同阶段基础版本合集
+      （每产品自动 FPGA 子文档除外，其自身 matches 即该产品 FPGA 基础版本；
+      通用 96 文档在 per-product 模式是控制行，不提供锁定）；
+    - 其余（使用项目侧发布版本 / 每产品子文档 / 通用 96 项目侧）→ 该文档自身 GitLab matches。
+    - product_doc → 该产品文档自身 matches。
+    """
+    from backend.models.document import ProjectDocument, ProductDocument, DocReleaseMatch
+    from backend.services.project_service import get_project_products
+    versions: set = set()
+    if source_type == "project_doc":
+        pd = db.query(ProjectDocument).filter(
+            ProjectDocument.id == doc_id, ProjectDocument.project_id == pid).first()
+        if not pd:
+            return versions
+        from backend.services.document_service import (get_doc_auto_enabled,
+                                                       _is_auto_fpga_doc,
+                                                       _product_base_matches,
+                                                       FPGA_GENERIC_TEMPLATE_ID,
+                                                       get_fpga_generic_doc)
+        if _is_auto_fpga_doc(pd):
+            # 板卡子文档：来源决定可锁定版本——产品基础版本 → 自身 product fpga matches；
+            # 项目侧 → 通用 template-96 文档（项目 fpga 仓库）的 matches。
+            if get_doc_auto_enabled(db, pid, "project_doc", doc_id):
+                for m in db.query(DocReleaseMatch).filter(
+                        DocReleaseMatch.project_doc_id == doc_id).all():
+                    versions.add(m.version_name)
+                return versions
+            generic = get_fpga_generic_doc(db, pid)
+            if generic:
+                for m in db.query(DocReleaseMatch).filter(
+                        DocReleaseMatch.project_doc_id == generic.id).all():
+                    versions.add(m.version_name)
+            return versions
+        if (get_doc_auto_enabled(db, pid, "project_doc", doc_id)
+                and pd.template_id != FPGA_GENERIC_TEMPLATE_ID):
+            for m in _product_base_matches(db, pid, pd):
+                versions.add(m.version_name)
+            return versions
+        for m in db.query(DocReleaseMatch).filter(DocReleaseMatch.project_doc_id == doc_id).all():
+            versions.add(m.version_name)
+    elif source_type == "product_doc":
+        linked = {p["id"] for p in get_project_products(db, pid)}
+        pd = db.query(ProductDocument).filter(ProductDocument.id == doc_id).first()
+        if not pd or pd.product_id not in linked:
+            return versions
+        for m in db.query(DocReleaseMatch).filter(DocReleaseMatch.product_doc_id == doc_id).all():
+            versions.add(m.version_name)
+    return versions
+
+
+@router.get("/{identifier}/software-versions", response_model=dict)
+async def get_software_versions(
+    identifier: str,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    """聚合项目全部软件/FPGA 发布版本（项目文档 + 关联产品基础版本）。
+
+    只读（get_current_user）。groups 按来源分组（项目发布 / 产品基础版本）；
+    versions 为去重后的全量版本合集。
+    """
+    from backend.models.document import (ProjectDocument, ProductDocument,
+                                         DocReleaseMatch, ProjectReleaseLock)
+    from backend.services.document_service import (get_or_init_project_documents,
+                                                   get_bsp_auto_effective,
+                                                   get_doc_auto_enabled,
+                                                   _is_auto_fpga_doc,
+                                                   _product_base_matches,
+                                                   FPGA_AUTO_DOC_PREFIX)
+    from backend.services.project_service import get_project_products
+    from sqlalchemy import or_
+    from datetime import datetime as _dt
+
+    project = resolve_project(db, identifier)
+    pid = project.id
+    get_or_init_project_documents(db, pid)  # 确保自动创建/清理已执行
+
+    # 通用 FPGA 文档（template_id=96）：有相关单板时它是「容器行」（is_removed=1 由 sync
+    # 隐藏），每块板卡子文档各自带来源下拉；无单板时退化为普通项目侧版本行。
+    # 独立查询（含 is_removed=1），保证容器行不被项目组循环按 is_removed==0 过滤。
+    generic = db.query(ProjectDocument).filter(
+        ProjectDocument.project_id == pid,
+        ProjectDocument.template_id == 96,
+    ).first()
+    # 卡片「全部使用最新版本」主开关显示有效状态（默认开启口径下，无显式关闭行的
+    # product_doc 视为开启，见 get_bsp_auto_effective / get_doc_auto_enabled）
+    bsp_on = get_bsp_auto_effective(db, pid)
+    # 关联产品（产品基础版本来源）：提前取出，供溯源项目发布子项「当前版本」实际来自哪个产品
+    products = get_project_products(db, pid)
+    prod_code_map = {p["id"]: p["code"] for p in products}
+
+    lock_rows = db.query(ProjectReleaseLock).filter(
+        ProjectReleaseLock.project_id == pid).all()
+    lock_map = {(f.source_type, f.doc_id): f for f in lock_rows}
+
+    def _doc_info(source_type, doc_id, doc_name, stage, matches, auto_managed=False,
+                  doc_auto=False, doc_auto_capable=False, latest_hint=None,
+                  covered=False, covered_by=None, fpga_parent=False, fpga_child=False,
+                  product_code=None):
+        """序列化单个文档的版本信息 + 锁定状态。
+
+        标签页仅收录 GitLab 文档；无发布匹配 → unsubmitted（未提交），前端标记显示。
+        auto_managed=True：文档处于「自动锁定最新版本」管理下，前端禁用手动选择。
+        doc_auto / doc_auto_capable：子项来源下拉当前处于「使用产品基础版本」（doc_auto=1）
+        与是否可配置。项目发布子项均可配；每产品自动 FPGA 子文档（fpga_child）来源固定。
+        latest_hint：聚合产品基础版本时显式指定「最新」（= 全部关联产品对应阶段中最新的发布）。
+        covered / covered_by：阶段级来源互斥 —— 当存在同阶段且已启用「使用产品基础版本」的
+        项目发布文档时，产品基础版本文档被覆盖（covered）：灰显、不单独锁定、不参与版本汇总，
+        covered_by 为覆盖它的项目发布文档名。
+        fpga_parent：通用 FPGA 文档（template_id=96）处于 per-product 模式时的父控制行——
+        提供来源下拉与拆分说明，不渲染版本列表/锁定（版本由下方 fpga_child 子文档承载）。
+        fpga_child：`FPGA版本开发-<code>` 自动子文档，来源固定为对应产品的 FPGA 基础版本。
+        """
+        lock = lock_map.get((source_type, doc_id))
+        own_matches = list(matches)
+        if latest_hint is not None:
+            latest = latest_hint
+        elif own_matches:
+            # 当前 = 该文档 location 对应版本（is_current），否则最新
+            latest = next((m for m in own_matches if m.is_current), own_matches[0])
+        else:
+            latest = None
+        locked_version = lock.version_name if lock else None
+        current = locked_version or (latest.version_name if latest else None)
+        has_newer = bool(locked_version and latest and locked_version != latest.version_name)
+
+        versions = [{
+            "version": m.version_name,
+            "url": m.gitlab_url,
+            "date": to_local_str(m.released_at) if m.released_at else None,
+            "is_current": current is not None and m.version_name == current,
+        } for m in own_matches]
+        return {
+            "doc_id": doc_id,
+            "source_type": source_type,
+            "doc_name": doc_name,
+            "stage": stage,
+            "current": current,
+            "locked": bool(lock),
+            "locked_by": lock.locked_by if lock else None,
+            "locked_version": locked_version,
+            "has_newer": has_newer,
+            "auto_managed": bool(auto_managed),
+            "doc_auto": bool(doc_auto),
+            "doc_auto_capable": bool(doc_auto_capable),
+            "covered": bool(covered),
+            "covered_by": covered_by,
+            "unsubmitted": bool(not own_matches),
+            "version_count": len(own_matches),
+            "fpga_parent": bool(fpga_parent),
+            "fpga_child": bool(fpga_child),
+            "product_code": product_code,
+            "versions": versions,
+        }
+
+    groups = []
+    flat = {}  # version -> {version,url,date,sources:set,is_current,locked}
+
+    def _add_flat(m, source_label, is_current, locked):
+        entry = flat.get(m.version_name)
+        if entry is None:
+            entry = flat[m.version_name] = {
+                "version": m.version_name,
+                "url": m.gitlab_url,
+                "date": to_local_str(m.released_at) if m.released_at else None,
+                "sources": set(),
+                "is_current": False,
+                "locked": False,
+            }
+        entry["sources"].add(source_label)
+        if is_current:
+            entry["is_current"] = True
+        if locked:
+            entry["locked"] = True
+
+    # ── 项目自身发布文档（软件发布 / FPGA版本开发 等 GitLab 文档）──
+    project_docs = []
+    # 阶段级来源互斥：已启用「使用产品基础版本」的项目发布子项 → 该阶段被项目侧覆盖，
+    # 产品卡上同阶段的产品基础版本文档灰显、不单独锁定、不参与汇总。
+    covered_by_stage = {}  # stage -> 覆盖它的项目发布文档名
+    pdoc_rows = db.query(ProjectDocument).filter(
+        ProjectDocument.project_id == pid,
+        ProjectDocument.is_removed == 0,
+    ).all()
+    from backend.services.doc_scanner import _is_gitlab_doc
+
+    # 通用 FPGA 文档（template_id=96）：有单板产品时它是板卡拆分视图的「容器行」
+    # （is_removed=1 由 sync 隐藏；无来源选择，版本由下方 fpga_child 子文档各自承载，
+    # 每块板卡独立选择 项目侧 / 产品基础版本）。迭代顺序显式包含它并按 sort_order 定序，
+    # 使容器行与其 `FPGA版本开发-<code>` 子文档在 软件发布 等其它文档之后紧邻呈现。
+    def _rowkey(x): return (x.sort_order if x.sort_order is not None else 10 ** 9, x.id)
+    all_rows = {r.id: r for r in pdoc_rows}
+    if generic is not None:
+        all_rows[generic.id] = generic
+    all_rows = sorted(all_rows.values(), key=_rowkey)
+    fpga_children = sorted((r for r in all_rows if _is_auto_fpga_doc(r)), key=_rowkey)
+
+    for pd in all_rows:
+        # 每产品子文档只在通用 96 父行处统一渲染，避免行与父控制行分离
+        if _is_auto_fpga_doc(pd):
+            continue
+        if pd.template_id != 96 and pd.is_removed == 1:
+            continue
+        # 仅 GitLab 版本文档进入软件版本页（svn/nas/pdm 等无 release 版本概念）
+        if not _is_gitlab_doc(pd.doc_type, pd.location or pd.doc_path or ""):
+            continue
+        # 通用 FPGA 文档（template_id=96）
+        if pd.template_id == 96:
+            if not fpga_children:
+                # 无相关单板产品：普通行，展示项目仓库自身 FPGA 发布版本（仅项目侧可用）
+                matches = db.query(DocReleaseMatch).filter(
+                    DocReleaseMatch.project_doc_id == pd.id).all()
+                info = _doc_info("project_doc", pd.id, pd.doc_name, pd.stage_type or "", matches,
+                                 auto_managed=False, doc_auto=False, doc_auto_capable=False)
+                project_docs.append(info)
+                for m in matches:
+                    _add_flat(m, pd.doc_name, m.version_name == info["current"],
+                              info["locked"] and m.version_name == info["current"])
+                continue
+            # 容器行（无来源下拉；每块板卡子文档各自带来源下拉）
+            project_docs.append(_doc_info(
+                "project_doc", pd.id, pd.doc_name, pd.stage_type or "", [],
+                auto_managed=False, doc_auto=False, doc_auto_capable=False, fpga_parent=True))
+            for child in fpga_children:
+                code = child.doc_name[len(FPGA_AUTO_DOC_PREFIX):]
+                child_auto = get_doc_auto_enabled(db, pid, "project_doc", child.id)
+                if child_auto:
+                    # 产品基础版本 → 该板卡自身（产品 FPGA 仓库）的发布匹配
+                    c_matches = db.query(DocReleaseMatch).filter(
+                        DocReleaseMatch.project_doc_id == child.id).all()
+                else:
+                    # 项目侧 → 通用 96（项目 FPGA 仓库，模板无板卡维度）的发布匹配
+                    c_matches = db.query(DocReleaseMatch).filter(
+                        DocReleaseMatch.project_doc_id == pd.id).all()
+                cinfo = _doc_info("project_doc", child.id, child.doc_name,
+                                  child.stage_type or "", c_matches,
+                                  auto_managed=False, doc_auto=child_auto,
+                                  doc_auto_capable=True, fpga_child=True,
+                                  product_code=code)
+                project_docs.append(cinfo)
+                for m in c_matches:
+                    _add_flat(m, child.doc_name, m.version_name == cinfo["current"],
+                              cinfo["locked"] and m.version_name == cinfo["current"])
+            continue
+        # 其余项目发布文档：无匹配仍展示标记「未提交」；每个子项都有来源下拉（可切产品侧）。
+        matches = db.query(DocReleaseMatch).filter(
+            DocReleaseMatch.project_doc_id == pd.id).all()
+        per_doc = get_doc_auto_enabled(db, pid, "project_doc", pd.id)
+        latest_hint = None
+        if per_doc:
+            # 该阶段已切换到产品基础版本 → 产品卡同阶段文档被覆盖；版本来源 = 关联产品合集
+            covered_by_stage[pd.stage_type or ""] = pd.doc_name
+            matches = _product_base_matches(db, pid, pd)
+            if matches:
+                latest_hint = max(matches,
+                                  key=lambda m: (m.released_at is not None, m.released_at or _dt.min))
+        info = _doc_info("project_doc", pd.id, pd.doc_name, pd.stage_type or "", matches,
+                         auto_managed=False, doc_auto=per_doc, doc_auto_capable=True,
+                         latest_hint=latest_hint)
+        # 产品基础版本模式：溯源「当前版本」实际来自哪个产品，供版本汇总「产品编号」列展示
+        if per_doc and info["current"]:
+            for m in matches:
+                if m.version_name != info["current"] or not m.product_doc_id:
+                    continue
+                pdoc = db.query(ProductDocument).filter(
+                    ProductDocument.id == m.product_doc_id).first()
+                if pdoc and pdoc.product_id in prod_code_map:
+                    info["product_code"] = prod_code_map[pdoc.product_id]
+                    break
+        project_docs.append(info)
+        for m in matches:
+            _add_flat(m, pd.doc_name, m.version_name == info["current"],
+                      info["locked"] and m.version_name == info["current"])
+    if project_docs:
+        groups.append({"key": "project", "type": "project", "label": "项目",
+                       "docs": project_docs})
+
+    # ── 关联产品基础版本（BSP开发 / 业务软件开发 / FPGA开发 的产品 GitLab 文档）──
+    # FPGA 板卡子文档按产品 code 索引：某板卡处于「使用产品基础版本」（子文档 doc_auto=1）时，
+    # 其产品卡 FPGA 基础版本文档被项目经子文档承载 → covered；「使用项目侧发布版本」时该产品
+    # 基础版本不被项目跟踪 → 不 covered（保持独立可见/可锁）。
+    fpga_child_by_code = {ch.doc_name[len(FPGA_AUTO_DOC_PREFIX):]: ch for ch in fpga_children}
+    for prod in products:
+        prod_id = prod["id"]
+        prod_docs = []
+        prod_pdoc_ids = [r[0] for r in db.query(ProductDocument.id).filter(
+            ProductDocument.product_id == prod_id,
+            ProductDocument.doc_type == "gitlab",
+            or_(ProductDocument.is_removed == 0, ProductDocument.is_removed.is_(None)),  # 仅保留的项
+        ).all()]
+        for pdoc_id in prod_pdoc_ids:
+            matches = db.query(DocReleaseMatch).filter(
+                DocReleaseMatch.product_doc_id == pdoc_id).all()
+            pdoc = db.query(ProductDocument).filter(ProductDocument.id == pdoc_id).first()
+            # 无匹配的产品 GitLab 文档仍展示，标记 未提交（见 frontend _svRenderDoc）
+            # 每个产品版本文档可单独配置「使用最新版本」开关：开启 → 自动锁定最新、禁止手动
+            doc_auto = get_doc_auto_enabled(db, pid, "product_doc", pdoc_id)
+            pdoc_stage = ((pdoc.stage_type or "").strip() if pdoc else "")
+            if pdoc_stage == "FPGA开发":
+                # 逐板卡覆盖：仅当该板卡子文档自身「使用产品基础版本」时，其产品卡 FPGA 文档才被覆盖
+                child = fpga_child_by_code.get(prod["code"])
+                child_auto = child and get_doc_auto_enabled(db, pid, "project_doc", child.id)
+                covered = bool(child_auto)
+                covered_by = child.doc_name if covered else None
+            else:
+                # 阶段级来源互斥：同阶段已启用「使用产品基础版本」→ 该产品文档被覆盖（灰显、不单独锁定/汇总）
+                covered = pdoc_stage in covered_by_stage
+                covered_by = covered_by_stage.get(pdoc_stage)
+            info = _doc_info("product_doc", pdoc_id, pdoc.doc_name if pdoc else "基础版本",
+                             pdoc_stage, matches,
+                             auto_managed=doc_auto, doc_auto=doc_auto, doc_auto_capable=True,
+                             covered=covered, covered_by=covered_by)
+            prod_docs.append(info)
+            if covered:
+                # 该产品基础版本的版本已通过项目侧「使用产品基础版本」聚合进入汇总，跳过避免重复
+                continue
+            for m in matches:
+                _add_flat(m, (pdoc.doc_name if pdoc else "基础版本"),
+                          m.version_name == info["current"],
+                          info["locked"] and m.version_name == info["current"])
+        if prod_docs:
+            groups.append({"key": str(prod_id), "type": "product",
+                           "label": f"{prod['name']}（{prod['code']}）",
+                           "code": prod["code"], "name": prod["name"], "docs": prod_docs})
+
+    versions = [{
+        "version": v["version"],
+        "url": v["url"],
+        "date": v["date"],
+        "sources": sorted(v["sources"]),
+        "is_current": v["is_current"],
+        "locked": v["locked"],
+    } for v in flat.values()]
+    versions.sort(key=lambda x: x["date"] or "", reverse=True)
+
+    mode = {
+        "bsp_auto_latest": bsp_on,
+    }
+
+    return {"code": 0, "data": {"groups": groups, "versions": versions, "mode": mode}, "message": "ok"}
+
+
+class LockBody(BaseModel):
+    source_type: str  # 'project_doc' | 'product_doc'
+    doc_id: int
+    version: Optional[str] = None  # unlock 时可不传
+
+
+@router.post("/{identifier}/software-versions/lock", response_model=dict)
+async def lock_version(
+    identifier: str,
+    body: LockBody,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("project_edit")),
+):
+    """锁定某文档的当前版本（展示层覆盖，编辑权限）。"""
+    from datetime import datetime as _dt, timezone as _tz
+    from backend.models.document import ProjectReleaseLock, ProjectDocument, ProductDocument
+    project = resolve_project(db, identifier)
+    pid = project.id
+
+    if body.source_type not in ("project_doc", "product_doc"):
+        raise HTTPException(status_code=400, detail="source_type 仅支持 project_doc / product_doc")
+    # 自动管理模式下的文档（使用产品基础版本 / 全部使用最新版本）禁止手动选择其他版本
+    from backend.services.document_service import is_doc_auto_managed
+    if is_doc_auto_managed(db, pid, body.source_type, body.doc_id):
+        raise HTTPException(status_code=400, detail="该文档处于自动锁定最新版本模式，不可手动选择其他版本")
+    if body.version not in _doc_version_options(db, pid, body.source_type, body.doc_id):
+        raise HTTPException(status_code=400, detail="版本不属于该文档的有效选项")
+
+    lock = db.query(ProjectReleaseLock).filter(
+        ProjectReleaseLock.project_id == pid,
+        ProjectReleaseLock.source_type == body.source_type,
+        ProjectReleaseLock.doc_id == body.doc_id,
+    ).first()
+    if not lock:
+        lock = ProjectReleaseLock(project_id=pid, source_type=body.source_type, doc_id=body.doc_id)
+        db.add(lock)
+    lock.version_name = body.version
+    lock.locked_by = user.username
+    lock.locked_at = _dt.now(_tz.utc)
+    db.commit()
+
+    doc_name = "文档"
+    if body.source_type == "project_doc":
+        pd = db.query(ProjectDocument).filter(ProjectDocument.id == body.doc_id).first()
+        if pd:
+            doc_name = pd.doc_name
+    else:
+        pd = db.query(ProductDocument).filter(ProductDocument.id == body.doc_id).first()
+        if pd:
+            doc_name = pd.doc_name
+    log_project_activity(db, project.id, user.username, "版本锁定", f"「{doc_name}」当前版本设为 {body.version}")
+    log_audit(db, user, "lock_release",
+              f"project={project.code} source={body.source_type} doc_id={body.doc_id} version={body.version}",
+              AUDIT_CAT_PROJECT, "medium")
+    return {"code": 0, "data": {"source_type": body.source_type, "doc_id": body.doc_id,
+                                "version": body.version}, "message": "ok"}
+
+
+@router.post("/{identifier}/software-versions/unlock", response_model=dict)
+async def unlock_version(
+    identifier: str,
+    body: LockBody,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("project_edit")),
+):
+    """解除锁定（恢复为自动最新，编辑权限）。"""
+    from backend.models.document import ProjectReleaseLock
+    project = resolve_project(db, identifier)
+    pid = project.id
+    lock = db.query(ProjectReleaseLock).filter(
+        ProjectReleaseLock.project_id == pid,
+        ProjectReleaseLock.source_type == body.source_type,
+        ProjectReleaseLock.doc_id == body.doc_id,
+    ).first()
+    if lock:
+        db.delete(lock)
+        db.commit()
+        log_audit(db, user, "unlock_release",
+                  f"project={project.code} source={body.source_type} doc_id={body.doc_id}",
+                  AUDIT_CAT_PROJECT, "medium")
+    if body.source_type == "project_doc":
+        # 解除手动选择后：若该子项仍处于「使用产品基础版本」，恢复自动跟随最新产品基础版本；
+        # 若来源已切回项目侧（doc_auto=0）则无事发生。
+        from backend.services.document_service import auto_lock_project_doc
+        auto_lock_project_doc(db, pid, body.doc_id)
+    return {"code": 0, "data": None, "message": "ok"}
+
+
+class BspAutoLatestBody(BaseModel):
+    enabled: bool
+
+
+@router.post("/{identifier}/software-versions/bsp-auto-latest", response_model=dict)
+async def set_bsp_auto_latest(
+    identifier: str,
+    body: BspAutoLatestBody,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("project_edit")),
+):
+    """产品基础版本「全部使用最新版本」批量开关（编辑权限）。
+
+    开启 → 所有产品 BSP 文档的单独开关统一置 1 并自动锁定最新版本（随产品迭代推进）；
+    关闭 → 全部置 0（删除自动锁恢复手动）。之后可在单个文档上用 doc-auto 精细调整。
+
+    开关比较口径为**有效状态**（get_bsp_auto_effective）：产品基础版本默认开启后，即使
+    bsp_auto_latest 本地列仍为 0，只要没有任何显式关闭的产品文档，有效状态即为开启，
+    此时点「关闭」会落库 enabled=0 行再解除自动锁，避免界面显示开启、点击却无效果。
+    """
+    from backend.services.document_service import (set_bsp_auto_for_project,
+                                                   auto_lock_bsp_for_project,
+                                                   get_bsp_auto_effective)
+    project = resolve_project(db, identifier)
+    pid = project.id
+    if get_bsp_auto_effective(db, pid) != body.enabled:
+        project.bsp_auto_latest = 1 if body.enabled else 0
+        db.commit()
+        set_bsp_auto_for_project(db, pid, body.enabled)
+        auto_lock_bsp_for_project(db, pid)
+        log_audit(db, user, "set_bsp_auto_latest",
+                  f"project={project.code} enabled={'1' if body.enabled else '0'}",
+                  AUDIT_CAT_PROJECT, "medium")
+    return {"code": 0, "data": {"enabled": body.enabled}, "message": "ok"}
+
+
+class DocAutoBody(BaseModel):
+    source_type: str  # 'project_doc' | 'product_doc'
+    doc_id: int
+    enabled: bool
+
+
+@router.post("/{identifier}/software-versions/doc-auto", response_model=dict)
+async def set_doc_auto(
+    identifier: str,
+    body: DocAutoBody,
+    db: Session = Depends(get_db),
+    user=Depends(require_perm("project_edit")),
+):
+    """单个项目发布子项的「来源选择」切换（子项级控制，编辑权限）。
+
+    对应前端每个子项的下拉：使用项目侧发布版本（enabled=false）/ 使用产品基础版本（enabled=true）。
+    - project_doc：项目发布 GitLab 文档（软件发布 / FPGA版本开发 等）。开启「使用产品基础版本」→
+      版本来源切换为关联产品对应阶段合集，自动跟随最新（可再手动锁定其一）。
+      每产品 FPGA 板卡子文档（`FPGA版本开发-<code>`）走同一普通路径：开启 → 该板卡改用自身产品
+      FPGA 基础版本并自动跟随最新；关闭 → 切回项目仓库（通用 template-96）发布的版本。
+      通用 template-96 文档本身在板卡视图下是纯容器，不通过此端点切换（前端无下拉）。
+    - product_doc：产品基础版本 GitLab 文档。开启 → 自动锁定最新（禁用手动）；关闭 → 恢复手动。
+    """
+    from backend.models.document import ProjectDocument, ProductDocument, ProjectReleaseLock
+    from backend.services.document_service import set_doc_auto as _sv_set_doc_auto
+    from backend.services.project_service import get_project_products
+
+    project = resolve_project(db, identifier)
+    pid = project.id
+
+    doc_name = "文档"
+    if body.source_type == "project_doc":
+        pd = db.query(ProjectDocument).filter(
+            ProjectDocument.id == body.doc_id, ProjectDocument.project_id == pid).first()
+        if not pd:
+            raise HTTPException(status_code=404, detail="项目文档不存在")
+        from backend.services.doc_scanner import _is_gitlab_doc
+        if not _is_gitlab_doc(pd.doc_type, pd.location or pd.doc_path or ""):
+            raise HTTPException(status_code=400, detail="仅支持 GitLab 版本文档")
+        doc_name = pd.doc_name
+        # 来源切换：该文档旧来源下的锁定版本全部作废，先清空再按新来源自动跟随最新
+        db.query(ProjectReleaseLock).filter(
+            ProjectReleaseLock.project_id == pid,
+            ProjectReleaseLock.source_type == "project_doc",
+            ProjectReleaseLock.doc_id == body.doc_id,
+        ).delete(synchronize_session=False)
+        db.commit()
+        _sv_set_doc_auto(db, pid, body.source_type, body.doc_id, bool(body.enabled))
+    elif body.source_type == "product_doc":
+        linked = {p["id"] for p in get_project_products(db, pid)}
+        pdoc = db.query(ProductDocument).filter(ProductDocument.id == body.doc_id).first()
+        if not pdoc or pdoc.product_id not in linked:
+            raise HTTPException(status_code=404, detail="产品文档不存在或未关联本项目")
+        if pdoc.doc_type != "gitlab":
+            raise HTTPException(status_code=400, detail="仅支持 GitLab 版本文档")
+        doc_name = pdoc.doc_name or "基础版本"
+        _sv_set_doc_auto(db, pid, body.source_type, body.doc_id, bool(body.enabled))
+    else:
+        raise HTTPException(status_code=400, detail="source_type 仅支持 project_doc / product_doc")
+
+    log_project_activity(db, project.id, user.username, "版本来源切换",
+                         f"「{doc_name}」" + ("改用产品基础版本" if body.enabled else "恢复使用项目侧发布版本"))
+    log_audit(db, user, "set_doc_auto",
+              f"project={project.code} source={body.source_type} doc_id={body.doc_id} enabled={'1' if body.enabled else '0'}",
+              AUDIT_CAT_PROJECT, "medium")
+    return {"code": 0, "data": {"source_type": body.source_type, "doc_id": body.doc_id,
+                                "enabled": bool(body.enabled)}, "message": "ok"}
 
 
 @router.get("/{identifier}/gantt", response_model=dict)

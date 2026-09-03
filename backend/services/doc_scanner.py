@@ -552,14 +552,37 @@ def scan_doc_path(doc_path: str):
     return None
 
 
+def _parse_release_dt(value) -> "datetime | None":
+    """Parse a GitLab release created_at ISO string into a naive-UTC datetime.
+
+    GitLab returns ISO 8601 (e.g. '2026-08-26T05:30:11.000Z' or with offset);
+    we normalize to naive UTC so the column stores a consistent representation.
+    """
+    if not value:
+        return None
+    try:
+        s = str(value).strip().replace("Z", "+00:00")
+        dt = _dt.fromisoformat(s)
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(_tz.utc).replace(tzinfo=None)
+        return dt
+    except Exception:
+        return None
+
+
 async def _scan_gitlab_releases_batch(docs: list) -> dict:
     """Scan a batch of GitLab release doc_path patterns against actual GitLab releases.
 
     Args:
-        docs: list of (doc, template_path) tuples where doc is a ProductDocument
+        docs: list of (doc, doc_label, template_path) tuples (ProductDocument or ProjectDocument)
 
     Returns:
-        dict[int, str | None]: doc_id -> matched release URL (or None if not found)
+        dict[int, dict]: doc_id -> {
+            "url": str | None,   # newest matched release URL (the auto-tracked current)
+            "matches": [         # ALL matched releases, newest first (copies, per-doc)
+                {"version_name", "url", "released_at", "is_current"}
+            ]
+        }
     """
     from backend.services.gitlab_service import parse_gitlab_release_pattern
     from backend.services.gitlab_client import GitLabClient
@@ -599,54 +622,114 @@ async def _scan_gitlab_releases_batch(docs: list) -> dict:
             except Exception as e:
                 logger.warning(f"[gitlab-scan] Project '{project_path}': failed to fetch releases: {e}")
                 for doc, _, _ in group:
-                    results[doc.id] = None
+                    results[doc.id] = {"url": None, "matches": []}
                 continue
 
             if not releases:
                 logger.info(f"[gitlab-scan] Project '{project_path}': no releases found")
                 for doc, _, _ in group:
-                    results[doc.id] = None
+                    results[doc.id] = {"url": None, "matches": []}
                 continue
 
-            logger.info(f"[gitlab-scan] Project '{project_path}': found {len(releases)} release(s)")
-            # Pre-extract tag names
-            tag_names = [r.get("tag_name", "") for r in releases if r.get("tag_name")]
+            # Pre-extract per-release info, newest first (GitLab returns desc by created_at).
+            release_entries = []
+            for r in releases:
+                tag = r.get("tag_name", "")
+                if not tag:
+                    continue
+                release_entries.append({
+                    "version_name": tag,
+                    "url": f"{base_url}/{project_path}/-/releases/{tag}",
+                    "released_at": _parse_release_dt(r.get("created_at")),
+                })
+            # Sort by released_at desc (newest first); releases without a date go last.
+            release_entries.sort(
+                key=lambda e: (e["released_at"] is None, e["released_at"]), reverse=True)
+
+            logger.info(f"[gitlab-scan] Project '{project_path}': found {len(release_entries)} release(s)")
 
             for doc, doc_label, tag_pattern in group:
-                matched_tag = None
                 if not tag_pattern:
-                    # Empty pattern: match any (first) release
-                    if tag_names:
-                        matched_tag = tag_names[0]
-                        logger.info(f"[gitlab-scan] {doc_label}: empty pattern, matched first tag '{matched_tag}'")
-                    else:
-                        logger.info(f"[gitlab-scan] {doc_label}: empty pattern but no releases")
+                    # Empty pattern: all releases match
+                    matches = [dict(e) for e in release_entries]
+                    logger.info(f"[gitlab-scan] {doc_label}: empty pattern, matched {len(matches)} release(s)")
                 else:
-                    # Build regex from tag_pattern
                     tag_regex = _build_tag_regex(tag_pattern)
                     try:
                         compiled = re.compile(tag_regex, re.IGNORECASE)
                     except re.error as e:
                         logger.warning(f"[gitlab-scan] {doc_label}: invalid regex '{tag_regex}': {e}")
-                        results[doc.id] = None
+                        results[doc.id] = {"url": None, "matches": []}
                         continue
-                    for tag_name in tag_names:
-                        if compiled.match(tag_name):
-                            matched_tag = tag_name
-                            logger.info(f"[gitlab-scan] {doc_label}: matched tag '{tag_name}'")
-                            break
+                    matches = [dict(e) for e in release_entries if compiled.match(e["version_name"])]
+                    if not matches:
+                        logger.info(f"[gitlab-scan] {doc_label}: no matching release for pattern '{tag_pattern}'")
 
-                if matched_tag:
-                    results[doc.id] = f"{base_url}/{project_path}/-/releases/{matched_tag}"
+                if matches:
+                    # Tentative current = newest; check_* recomputes against final location.
+                    for i, m in enumerate(matches):
+                        m["is_current"] = 1 if i == 0 else 0
+                    results[doc.id] = {"url": matches[0]["url"], "matches": matches}
+                    logger.info(f"[gitlab-scan] {doc_label}: {len(matches)} match(es), current={matches[0]['version_name']}")
                 else:
-                    results[doc.id] = None
-                    logger.info(f"[gitlab-scan] {doc_label}: no matching release for pattern '{tag_pattern}'")
+                    results[doc.id] = {"url": None, "matches": []}
     finally:
         await client.close()
 
-    matched_count = sum(1 for v in results.values() if v is not None)
+    matched_count = sum(1 for v in results.values() if v.get("url"))
     logger.info(f"[gitlab-scan] Done: {matched_count}/{len(docs)} matched")
     return results
+
+
+def _rewrite_release_matches(db, project_doc_id: int = None, product_doc_id: int = None,
+                             matches: list = None, location_url: str = None) -> int:
+    """Replace stored release matches for one document after a scan.
+
+    The scanner is the single writer: delete old rows, insert the freshest set.
+    `is_current` marks the version whose URL equals the doc's final location (the
+    auto-tracked current); if the location isn't among the matches the newest
+    match wins. Returns the number of rows written.
+    """
+    from backend.models.document import DocReleaseMatch
+
+    if matches is None:
+        matches = []
+
+    q = db.query(DocReleaseMatch)
+    if project_doc_id is not None:
+        q = q.filter(DocReleaseMatch.project_doc_id == project_doc_id)
+    else:
+        q = q.filter(DocReleaseMatch.product_doc_id == product_doc_id)
+    q.delete(synchronize_session=False)
+
+    if not matches:
+        return 0
+
+    target = None
+    if location_url:
+        loc = unquote(location_url).rstrip("/")
+        for m in matches:
+            if unquote(m["url"]).rstrip("/") == loc:
+                target = m
+                break
+    if target is None:
+        target = matches[0]
+
+    now = _dt.utcnow()
+    for m in matches:
+        db.add(DocReleaseMatch(
+            project_doc_id=project_doc_id,
+            product_doc_id=product_doc_id,
+            version_name=m["version_name"],
+            gitlab_url=m["url"],
+            released_at=m.get("released_at"),
+            is_current=1 if m is target else 0,
+            created_at=now,
+            updated_at=now,
+        ))
+    # 会话 autoflush=False，立即 flush 让后续查询（如 auto_lock_project_doc）能看到新写入的 matches
+    db.flush()
+    return len(matches)
 
 
 def _build_tag_regex(tag_pattern: str) -> str:
@@ -780,7 +863,9 @@ async def check_all_product_docs(db, product_ids: list = None, skip_svn: bool = 
             # ── GitLab doc: use batch result ──
             if _is_gitlab_doc(doc_type, template_path):
                 p_gl_checked += 1
-                matched_url = gitlab_results.get(doc.id)
+                gitlab_info = gitlab_results.get(doc.id) or {}
+                matched_url = gitlab_info.get("url")
+                matches = gitlab_info.get("matches") or []
                 regex_match = matched_url is not None  # True = regex actually matched a tag
                 validated = regex_match
 
@@ -828,6 +913,11 @@ async def check_all_product_docs(db, product_ids: list = None, skip_svn: bool = 
                     p_gl_reverted += 1
                     logger.warning(f"[doc-scanner] {_make_label(doc)} "
                                    f"reverted to pending: GitLab release not found")
+
+                # Persist every matched release so the 软件版本 tab can aggregate.
+                if matches:
+                    _rewrite_release_matches(db, product_doc_id=doc.id,
+                                             matches=matches, location_url=doc.location)
                 continue
 
             # ── SVN/NAS docs: skip if GitLab-only sync ──
@@ -1006,6 +1096,7 @@ async def check_product_docs(db, product_id: int, skip_gitlab: bool = False) -> 
     location_filled = 0
     total_matched = 0
     svn_meta_updated = 0
+    matches_written = 0
     results = []
 
     from datetime import datetime as _dt
@@ -1055,7 +1146,9 @@ async def check_product_docs(db, product_id: int, skip_gitlab: bool = False) -> 
 
         for doc, template_path in gitlab_docs:
             scanned += 1
-            matched_url = gitlab_results.get(doc.id)
+            gitlab_info = gitlab_results.get(doc.id) or {}
+            matched_url = gitlab_info.get("url")
+            matches = gitlab_info.get("matches") or []
             exists = matched_url is not None
 
             # If pattern didn't match but doc has a manually set location,
@@ -1109,6 +1202,18 @@ async def check_product_docs(db, product_id: int, skip_gitlab: bool = False) -> 
                 reverted += 1
                 logger.warning(f"[doc-scanner] doc#{doc.id} '{doc.doc_name}' "
                                f"reverted to pending: GitLab release not found")
+
+            # Persist every matched release so the 软件版本 tab can aggregate.
+            if matches:
+                matches_written += _rewrite_release_matches(
+                    db, product_doc_id=doc.id, matches=matches, location_url=doc.location)
+
+        # 「全部使用最新版本」开启的关联项目：随产品迭代自动推进 BSP 版本锁到最新
+        try:
+            from backend.services.document_service import auto_lock_bsp_for_product
+            auto_lock_bsp_for_product(db, product_id)
+        except Exception as e:
+            logger.warning(f"[doc-scanner] auto_lock_bsp_for_product failed: {e}")
 
     # ── SVN/NAS scan (existing logic) ──
     for doc in svn_docs:
@@ -1260,7 +1365,7 @@ async def check_product_docs(db, product_id: int, skip_gitlab: bool = False) -> 
             logger.warning(f"[doc-scanner] doc#{doc.id} '{doc.doc_name}' "
                            f"reverted to pending: file not found")
 
-    if auto_submitted > 0 or reverted > 0 or location_filled > 0 or svn_meta_updated > 0:
+    if auto_submitted > 0 or reverted > 0 or location_filled > 0 or svn_meta_updated > 0 or matches_written > 0:
         db.commit()
 
     return {
@@ -1285,6 +1390,10 @@ async def check_project_docs(db, project_id: int) -> dict:
     from backend.models.document import ProjectDocument
     from backend.models.zentao import CachedProject
 
+    # Ensure per-product FPGA version docs exist before scanning them
+    from backend.services.document_service import sync_project_product_docs, auto_lock_project_doc
+    sync_project_product_docs(db, project_id)
+
     docs = db.query(ProjectDocument).filter(
         ProjectDocument.project_id == project_id
     ).all()
@@ -1294,6 +1403,7 @@ async def check_project_docs(db, project_id: int) -> dict:
     reverted = 0
     location_filled = 0
     total_matched = 0
+    matches_written = 0
     results = []
 
     from datetime import datetime as _dt
@@ -1337,7 +1447,9 @@ async def check_project_docs(db, project_id: int) -> dict:
 
         for doc, template_path in gitlab_docs:
             scanned += 1
-            matched_url = gitlab_results.get(doc.id)
+            gitlab_info = gitlab_results.get(doc.id) or {}
+            matched_url = gitlab_info.get("url")
+            matches = gitlab_info.get("matches") or []
             exists = matched_url is not None
 
             # If pattern didn't match but doc has a manually set location,
@@ -1384,6 +1496,21 @@ async def check_project_docs(db, project_id: int) -> dict:
                 reverted += 1
                 logger.warning(f"[doc-scanner] project doc#{doc.id} '{doc.doc_name}' "
                                f"reverted to pending: GitLab release not found")
+
+            # Persist every matched release so the 软件版本 tab can aggregate.
+            if matches:
+                matches_written += _rewrite_release_matches(
+                    db, project_doc_id=doc.id, matches=matches, location_url=doc.location)
+            # 按「使用产品基础版本」单独开关自动锁定/解锁（开关关闭删除自动锁恢复手动；
+            # 非自动文档开启时锁定到关联产品 BSP 版本合集的最新，见 auto_lock_project_doc）
+            auto_lock_project_doc(db, project_id, doc.id)
+
+        # 产品BSP「全部使用最新版本」开关：自动锁定各关联产品 BSP 文档到最新（开关关闭则清理自动锁）
+        try:
+            from backend.services.document_service import auto_lock_bsp_for_project
+            auto_lock_bsp_for_project(db, project_id)
+        except Exception as e:
+            logger.warning(f"[doc-scanner] auto_lock_bsp_for_project failed: {e}")
 
     # ── SVN/NAS/solidworks scan (existing logic) ──
     for doc in other_docs:
@@ -1494,7 +1621,7 @@ async def check_project_docs(db, project_id: int) -> dict:
             logger.warning(f"[doc-scanner] project doc#{doc.id} '{doc.doc_name}' "
                            f"reverted to pending: file not found")
 
-    if auto_submitted > 0 or reverted > 0 or location_filled > 0:
+    if auto_submitted > 0 or reverted > 0 or location_filled > 0 or matches_written > 0:
         db.commit()
 
     return {
@@ -1503,5 +1630,6 @@ async def check_project_docs(db, project_id: int) -> dict:
         "auto_submitted": auto_submitted,
         "reverted": reverted,
         "location_filled": location_filled,
+        "matches_written": matches_written,
         "results": results,
     }

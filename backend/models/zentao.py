@@ -49,6 +49,8 @@ class CachedProject(Base):
     synced_at = Column(DateTime, default=func.now())
     # PMA-local flag: True for manually created projects (not synced from Zentao)
     is_local = Column(Boolean, default=False)
+    # PMA-local flag: 产品BSP「全部使用最新版本」——开启后软件版本页所有产品BSP文档自动锁定最新版本（不可手动选择）
+    bsp_auto_latest = Column(Integer, nullable=False, server_default="0", default=0)
     # Creator info
     reporter_id = Column(Integer, ForeignKey("local_users.id"), nullable=True)
     # PMA-local flag: True = 老项目跟踪 (R&D-complete, tracking only — template tasks NOT auto-created)
