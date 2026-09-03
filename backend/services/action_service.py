@@ -45,7 +45,10 @@ def _resolve_users(db: Session, user_ids) -> dict:
     return {u.id: (u.username or "?", u.display_name or u.username or "?") for u in users}
 
 
-def _action_dict(a: EntityAction, changes: list, username: str, display_name: str) -> dict:
+def _action_dict(a: EntityAction, changes: list, username: str, display_name: str,
+                 name_map: dict = None) -> dict:
+    """Serialize an action. User-id fields render as Chinese names (see _resolve_change_user_ids)."""
+    name_map = name_map or {}
     return {
         "id": a.id,
         "type": "action",
@@ -55,11 +58,48 @@ def _action_dict(a: EntityAction, changes: list, username: str, display_name: st
         "display_name": display_name,
         "comment": a.comment,
         "changes": [
-            {"field": c.field, "old_value": c.old_value, "new_value": c.new_value}
+            {"field": c.field,
+             "old_value": _map_change_value(c.field, c.old_value, name_map),
+             "new_value": _map_change_value(c.field, c.new_value, name_map)}
             for c in changes
         ],
         "created_at": to_local_str(a.created_at) if a.created_at else None,
     }
+
+
+# 用户字段：变更历史中这些字段的取值是"用户id"或"用户id、用户id…"，读取时统一映射为中文名
+_USER_FIELDS = {"assignee_id", "assignee_ids", "reviewer_id", "resolved_by_id", "cc_user_ids"}
+
+
+def _map_change_value(field, value, name_map):
+    """Map numeric user-id tokens in a change value to Chinese display names (names kept as-is)."""
+    if field not in _USER_FIELDS or not value:
+        return value
+    tokens = [t for t in str(value).split("、")]
+    resolved = []
+    for t in tokens:
+        ts = t.strip()
+        if ts.isdigit() and int(ts) in name_map:
+            resolved.append(name_map[int(ts)])
+        else:
+            resolved.append(t)
+    return "、".join(resolved)
+
+
+def _collect_change_user_ids(changes):
+    """Gather all user ids referenced by user-field change rows."""
+    ids = set()
+    for c in changes:
+        if c.field not in _USER_FIELDS:
+            continue
+        for v in (c.old_value, c.new_value):
+            if not v:
+                continue
+            for t in str(v).split("、"):
+                ts = t.strip()
+                if ts.isdigit():
+                    ids.add(int(ts))
+    return ids
 
 
 def _comment_dict(type_label: str, c, username: str, display_name: str) -> dict:
@@ -92,6 +132,13 @@ def get_timeline(db: Session, entity_type: str, entity_id: int) -> list:
         for c in change_rows:
             changes.setdefault(c.action_id, []).append(c)
 
+    # 变更历史中用户字段的取值是用户 id：读取时统一映射为中文名（负责人/审批人/解决人/抄送人）
+    change_uids = _collect_change_user_ids([c for cs in changes.values() for c in cs])
+    change_name_map = {}
+    if change_uids:
+        for u in db.query(LocalUser).filter(LocalUser.id.in_(change_uids)).all():
+            change_name_map[u.id] = u.display_name or u.username or u.id
+
     # Comments (task vs bug)
     comments = []
     if entity_type == "task":
@@ -110,7 +157,7 @@ def get_timeline(db: Session, entity_type: str, entity_id: int) -> list:
     timeline = []
     for a in actions:
         uname, dname = users.get(a.user_id, ("?", "?"))
-        timeline.append(_action_dict(a, changes.get(a.id, []), uname, dname))
+        timeline.append(_action_dict(a, changes.get(a.id, []), uname, dname, change_name_map))
     for c in comments:
         uname, dname = users.get(c.user_id, ("?", "?"))
         timeline.append(_comment_dict(entity_type, c, uname, dname))

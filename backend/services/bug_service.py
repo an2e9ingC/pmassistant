@@ -216,7 +216,9 @@ def update_bug(db, bug_id, data, user_id=None):
     if not b: return None
     old_status = b.status
     old_cc_user_ids = (b.cc_user_ids or [])[:]  # snapshot for CC favorites sync
+    old_assignee_id = b.assignee_id  # snapshot: 责任人变更时把原责任人自动加入抄送（Issue #10）
     old_board_ids = [int(x) for x in (b.board_ids or []) if x is not None]  # snapshot for repair linkage
+    cc_sync_needed = "cc_user_ids" in data  # CC 变更时同步关注（显式编辑 或 责任人自动进抄送）
     # Collect field-level changes (Zentao-style) for structured history
     changes = []
     for k in ["title","description","product_id","project_id","component_id","status","resolution",
@@ -228,6 +230,23 @@ def update_bug(db, bug_id, data, user_id=None):
             if old_val != new_val:
                 setattr(b, k, new_val)
                 changes.append({"field": k, "old_value": _fmt_change_val(old_val), "new_value": _fmt_change_val(new_val)})
+    # 责任人自动进抄送（Issue #10）：责任人从 X 变更为 Y 时，把原责任人 X 自动加入抄送，
+    # 使"被设置过责任人"的用户持续跟踪该 Bug；现任责任人 Y 不再占抄送位（负责人字段单独承载）。
+    if "assignee_id" in data and data["assignee_id"] != old_assignee_id:
+        cc = [int(x) for x in (b.cc_user_ids or []) if x is not None]
+        cc_before = list(cc)
+        former = old_assignee_id
+        new_asg = data["assignee_id"]
+        if former is not None and former != b.reporter_id and former not in cc:
+            cc.append(former)  # 历史责任人（创建人除外——创建人已通过"我创建的"持续可见）
+        if new_asg in cc:
+            cc.remove(new_asg)  # 现任责任人从抄送移除，避免"负责人"与"抄送"重复
+        if cc != cc_before:
+            b.cc_user_ids = cc
+            changes.append({"field": "cc_user_ids",
+                            "old_value": _fmt_change_val(cc_before),
+                            "new_value": _fmt_change_val(cc)})
+            cc_sync_needed = True
     if data.get("status") == "resolved" and not b.resolved_at:
         b.resolved_at = datetime.now(timezone.utc)
     if data.get("status") == "closed" and not b.closed_at:
@@ -235,9 +254,9 @@ def update_bug(db, bug_id, data, user_id=None):
     b.updated_at = datetime.now(timezone.utc)
     db.commit()
     # Sync CC favorites: add for new CC users, remove for removed CC users
-    if "cc_user_ids" in data:
+    if cc_sync_needed:
         try:
-            new_cc = data.get("cc_user_ids") or []
+            new_cc = [int(x) for x in (b.cc_user_ids or []) if x is not None]
             added = [uid for uid in new_cc if uid not in old_cc_user_ids]
             removed = [uid for uid in old_cc_user_ids if uid not in new_cc]
             _sync_cc_favorites(db, added, b.id, 'bug')
