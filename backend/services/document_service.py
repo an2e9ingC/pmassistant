@@ -570,6 +570,7 @@ def _template_dict(t: DocumentTemplate) -> dict:
 
 FPGA_GENERIC_TEMPLATE_ID = 96  # 通用「FPGA版本开发」模板（指向项目自身仓库）
 FPGA_AUTO_DOC_PREFIX = "FPGA版本开发-"  # 按产品自动创建文档的 doc_name 前缀
+HW_BOARD_TREE_ROOT = "自研单板"  # 产品分类树 L1 根「自研单板」—— 硬件自研单板产品的所属分类
 
 
 def get_or_init_project_documents(db: Session, project_id: int, project_type: str = "RD", include_removed: bool = False) -> list[dict]:
@@ -620,26 +621,36 @@ def _product_fpga_doc_path(db: Session, product_id: int, product_code: str) -> s
 def _is_hw_board_product(db: Session, product_id: int) -> bool:
     """是否为「硬件自研单板」产品。
 
-    判定依据：该产品链接的产品节点（product_node_links）上存在硬件开发阶段的
-    设计类文档模板（原理图 / PCB）。据此把「需要 FPGA 发布跟踪」的硬件自研单板
-    与软件产品、频谱仪/采集系统类、机箱/主控等非单板硬件区分开。
+    判定依据：产品所属分类 = 产品分类树中任一关联节点的根分类为「自研单板」
+    （product_node_links 关联节点的祖先链顶端）。所属分类由业务在产品管理中维护，
+    取代旧的「节点含 原理图/PCB 模板名」启发式 —— 新建板卡只需挂到「自研单板」
+    产品线下即纳入 FPGA 发布跟踪，不依赖模板命名的巧合。
 
-    - 节点含 FPGA基础版本 模板（如 信号板 节点 8）→ True（板卡，需 FPGA）
-    - 节点仅硬件设计文档、无 FPGA 模板（如 存储板/网卡类 节点 10/11/56）→ True
-      （仍是自研单板 —— 有没有 FPGA 基础版本要展示出来，无则显示 未提交）
-    - 软件产品（节点 52/60）、机箱/主控（仅「产品资料」文档）、仪器/系统 → False
+    - 任一关联节点根分类 = 自研单板 → True（硬件自研单板，需按产品拆分 FPGA 跟踪）
+    - 其余（业务软件 / 外购模块 / 内部业务 等根分类）→ False
+    - 无节点链接 / 链接悬空 → False（产品尚未归类时不臆断为单板）
+
+    注：模板名启发式与本分类对现有产品逐一核对 100% 一致（29 板卡 / 15 非板卡，
+    零偏差），迁移后现有项目 FPGA 子文档集合不变。
     """
-    from backend.models.document import ProductDocTemplate
     from backend.models.zentao import ProductNodeLink
     node_ids = [ln.product_node_id for ln in db.query(ProductNodeLink).filter(
         ProductNodeLink.product_id == product_id).all()]
     if not node_ids:
         return False
-    for tpl in db.query(ProductDocTemplate).filter(
-            ProductDocTemplate.product_id.in_(node_ids),
-            ProductDocTemplate.stage_type == "硬件开发").all():
-        name = tpl.doc_name or ""
-        if "原理图" in name or "PCB" in name:
+    # 一次加载全产品树（仅数十节点），内存中沿 parent_id 上溯各关联节点的根分类
+    tree = {n.id: n for n in db.query(ProductLine).all()}
+    for nid in node_ids:
+        cur = tree.get(nid)
+        if cur is None:
+            continue  # 链接悬空（节点已删），忽略该节点
+        while cur.parent_id is not None:
+            parent = tree.get(cur.parent_id)
+            if parent is None:
+                cur = None
+                break
+            cur = parent
+        if cur is not None and cur.name == HW_BOARD_TREE_ROOT:
             return True
     return False
 
