@@ -23,11 +23,11 @@ from backend.models.zentao import CachedProject  # noqa: F401 — 确保 FK 目�
 # ─────────────────────────── 状态目录（可扩展） ───────────────────────────
 # 全量状态目录：含维修中/已维修（Bug 驱动，非手动目标）
 BOARD_STATUSES = [
-    "在库", "生产中", "研发调试", "硬件上电", "测试", "三防", "装配",
-    "已交付", "维修中", "已维修", "已报废",
+    "在库", "生产中", "硬件上电", "研发调试", "客户联调", "测试", "三防", "装配",
+    "维修中", "已维修", "已报废", "已交付",
 ]
 BOARD_REPAIR_STATUSES = {"维修中", "已维修"}  # 仅 Bug 到达
-_PRODUCTION_STATUSES = {"生产中", "研发调试", "硬件上电", "测试", "三防", "装配"}
+_PRODUCTION_STATUSES = {"生产中", "硬件上电", "研发调试", "客户联调", "测试", "三防", "装配"}
 _MANUAL_TARGETS = [s for s in BOARD_STATUSES if s not in BOARD_REPAIR_STATUSES]
 
 # 手动切换弹窗：每目标状态字段 schema（key/label/type/required）
@@ -42,8 +42,9 @@ _PROD_FIELDS = [
 
 BOARD_STATUS_SCHEMA = {
     "生产中": _PROD_FIELDS,
-    "研发调试": _PROD_FIELDS,
     "硬件上电": _PROD_FIELDS,
+    "研发调试": _PROD_FIELDS,
+    "客户联调": _PROD_FIELDS,
     "测试": _PROD_FIELDS,
     "三防": _PROD_FIELDS,
     "装配": _PROD_FIELDS,
@@ -104,13 +105,6 @@ def _user_display(db: Session, username: Optional[str]) -> str:
     from backend.models.local import LocalUser
     u = db.query(LocalUser).filter(LocalUser.username == username).first()
     return (u.display_name or u.username) if u else username
-
-
-def _can_manage(user, board: DeliveryBoard) -> bool:
-    """仅板卡归属人本人或具 project_edit 者可操作状态切换/编辑。"""
-    if board.owner and user.username == board.owner:
-        return True
-    return has_perm(user, "project_edit")
 
 
 # ─────────────────────────── 序列化 ───────────────────────────
@@ -293,13 +287,51 @@ def list_boards(db: Session, project_id: int) -> list[DeliveryBoard]:
     ).order_by(DeliveryBoard.serial_no.asc()).all()
 
 
+def board_overview(db: Session) -> dict:
+    """跨所有项目的板卡总览（总览页数据源）：行=每块板卡(附项目代号/名称)，
+    附交付口径汇总。只读聚合，不改写任何数据。
+    交付口径与 delivery_service 一致：已交付 ∪ 已维修 计入已交付。"""
+    boards = (db.query(DeliveryBoard)
+              .order_by(DeliveryBoard.project_id,
+                        DeliveryBoard.product_code,
+                        DeliveryBoard.serial_no)
+              .all())
+    if not boards:
+        return {
+            "summary": {"total": 0, "delivered": 0,
+                        "by_status": {s: 0 for s in BOARD_STATUSES}},
+            "boards": [],
+            "meta": board_meta(),
+        }
+    ids = {b.project_id for b in boards}
+    from backend.models.zentao import CachedProject  # 局部 import 防循环
+    pmap = {p.id: p for p in db.query(CachedProject)
+            .filter(CachedProject.id.in_(ids)).all()}
+    attach_prev_status(db, boards)  # 每行回填 prev_status/prev_owner
+    rows = []
+    for b in boards:
+        d = board_dict(b)
+        p = pmap.get(b.project_id)
+        d["project_code"] = p.code if p else ""
+        d["project_name"] = p.name if p else ""
+        rows.append(d)
+    from collections import Counter
+    by_status = Counter(b.status for b in boards)
+    summary = {
+        "total": len(boards),
+        "delivered": by_status.get("已交付", 0) + by_status.get("已维修", 0),
+        "by_status": {s: by_status.get(s, 0) for s in BOARD_STATUSES},
+    }
+    return {"summary": summary, "boards": rows, "meta": board_meta()}
+
+
 def update_board(db: Session, board_id: int, data: dict, user) -> Optional[DeliveryBoard]:
-    """编辑基本信息（不含 status）。仅归属人本人或 project_edit。"""
+    """编辑基本信息（不含 status）。需具板卡管理权限（admin/board_manage）。"""
     board = _get_board(db, board_id)
     if not board:
         return None
-    if not _can_manage(user, board):
-        raise PermissionError("仅板卡归属人或项目管理者可操作")
+    if not has_perm(user, "board_manage"):
+        raise PermissionError("编辑板卡需板卡管理权限")
     serial_no = (data.get("serial_no") or "").strip()
     if serial_no and serial_no != board.serial_no:
         if _board_exists(db, board.project_id, serial_no):
@@ -342,14 +374,13 @@ def _validate_required(schema: list, data: dict) -> None:
 
 
 def switch_status(db: Session, board_id: int, to_status: str, data: dict, user):
-    """手动状态切换：目标=目录内、≠当前、非维修中/已维修；当前非维修中。
+    """手动状态切换：所有登录用户可操作（权限开放）。目标=目录内、≠当前、
+    非维修中/已维修；当前非维修中（维修中仅经维修 Bug 流转）。
     按目标 schema 校验必填 → 写事件 → 更新 status/current_holder/owner。
     返回 board；None=板卡不存在。"""
     board = _get_board(db, board_id)
     if not board:
         return None
-    if not _can_manage(user, board):
-        raise PermissionError("仅板卡归属人或项目管理者可操作")
     if to_status not in BOARD_STATUSES:
         raise ValueError("未知状态")
     if to_status in BOARD_REPAIR_STATUSES:
@@ -409,7 +440,7 @@ def _resolve_assignee(db: Session, bug) -> tuple[Optional[str], str]:
 
 def repair_start(db: Session, board_id: int, bug, reporter_name: str) -> Optional[DeliveryBoardEvent]:
     """创建维修 Bug 时：板卡→维修中，owner=Bug 责任人（缺省创建人），写事件（含 bug_id）。
-    绕过 _can_manage（系统联动）。已维修中仅补事件（多个 Bug 可关联同一板卡）。"""
+    系统联动，无需板卡管理权限。已维修中仅补事件（多个 Bug 可关联同一板卡）。"""
     board = _get_board(db, board_id)
     if not board:
         return None
