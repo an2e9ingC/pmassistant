@@ -772,3 +772,99 @@ body.has-ticker .view.active { padding-bottom: 28px; }
 #board-table-container tr.hl-board td {
   animation: board-hl-flash 3s ease-out forwards;
 }
+
+
+/* ════════════ 软件版本 Tab（sv）— 版本维护 / 版本汇总 ════════════ */
+.sv-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; padding: 2px 2px 12px; }
+.sv-toolbar-actions { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+.sv-divider { width: 1px; height: 16px; background: var(--border); flex: 0 0 auto; }
+
+/* 子视图分段控件（版本汇总 / 版本维护） */
+.sv-view-switch { display: inline-flex; gap: 2px; background: var(--surface2); border: 1px solid var(--border); border-radius: 7px; padding: 2px; flex: 0 0 auto; }
+.sv-view-btn { padding: 3px 13px; border: none; border-radius: 5px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 500; font-family: var(--font); cursor: pointer; white-space: nowrap; transition: background .12s ease, color .12s ease; }
+.sv-view-btn:hover { color: var(--fg); }
+.sv-view-btn.active { background: var(--accent); color: #fff; font-weight: 600; }
+
+/* 筛选控件 */
+.sv-select, .sv-search { font-family: var(--font); font-size: 12px; color: var(--fg); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; outline: none; transition: border-color .12s ease; }
+.sv-select { padding: 4px 8px; cursor: pointer; max-width: 200px; }
+.sv-search { padding: 4px 10px; width: 170px; }
+.sv-select:focus, .sv-search:focus { border-color: var(--accent); }
+
+/* 维护说明（默认收起） */
+.sv-helpbar { display: flex; align-items: center; justify-content: flex-end; margin: 0 0 8px; }
+.sv-help-btn { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); font-family: var(--font); font-size: 11.5px; font-weight: 500; padding: 3px 10px; border-radius: 5px; cursor: pointer; transition: background .12s ease, color .12s ease, border-color .12s ease; }
+.sv-help-btn:hover, .sv-help-btn.open { background: var(--surface2); color: var(--fg); border-color: var(--accent); }
+.sv-help { background: var(--accent-lt); border: 1px solid var(--accent-lt); border-radius: 8px; padding: 10px 12px; font-size: 11.5px; color: var(--muted); line-height: 1.7; margin-bottom: 10px; }
+.sv-help .sv-help-kw { font-weight: 700; color: var(--fg); }
+
+/* section 卡片（项目发布 / 产品基础版本） */
+.sv-section { flex: 1 1 380px; min-width: 300px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.sv-section-hd { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 14px; border-bottom: 1px solid var(--border); }
+.sv-section-blue .sv-section-hd { background: var(--accent-lt); border-bottom-color: var(--accent); }
+.sv-section-green .sv-section-hd { background: var(--success-lt); border-bottom-color: var(--success); }
+.sv-section-title { font-size: 12.5px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
+.sv-section-blue .sv-section-title { color: var(--accent); }
+.sv-section-green .sv-section-title { color: var(--success); }
+.sv-section-sub { font-size: 10.5px; opacity: .75; font-weight: 400; }
+.sv-section-bd { padding: 10px 12px 12px; }
+
+/* 产品基础版本：每个产品一个独立卡片块（产品色头带 + 文档行），相邻产品卡通过边框/头带明显区分 */
+.sv-prod-card { border: 1px solid var(--success); border-radius: 10px; overflow: hidden; margin-bottom: 10px; background: var(--surface); }
+.sv-prod-card-hd { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 6px 12px; background: var(--success-lt); border-bottom: 1px solid var(--success); }
+.sv-prod-card-ic { flex: 0 0 auto; font-size: 12px; }
+.sv-prod-card-t { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; font-size: 12px; font-weight: 600; color: var(--fg); min-width: 0; }
+.sv-prod-card-name { color: var(--muted); font-weight: 400; }
+.sv-prod-card-count { font-size: 10.5px; color: var(--success); font-weight: 500; margin-left: auto; white-space: nowrap; }
+.sv-prod-card-bd { padding: 8px 10px 4px; }
+/* 卡片内最后一个文档行不产生多余下边距 */
+.sv-prod-card-bd .sv-doc:last-child { margin-bottom: 4px; }
+
+/* 文档行 */
+.sv-doc { background: var(--bg); border: 1px solid var(--border); border-radius: 9px; margin-bottom: 8px; padding: 8px 12px; }
+/* FPGA「容器行」与软件发布等普通文档同一实线卡片风格；FPGA 板卡子项（sv-doc-child）用虚线区分层级 */
+.sv-doc.sv-doc-fpga { margin-bottom: 4px; }
+.sv-doc.sv-doc-child { margin-left: 20px; border: 1px dashed var(--border); }
+.sv-doc-row { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
+.sv-fpga-ic { flex-shrink: 0; font-size: 13px; }
+.sv-state-ok { color: var(--success); font-weight: 700; flex: 0 0 auto; }
+.sv-state-auto { display: inline-flex; width: 15px; height: 15px; align-items: center; justify-content: center; border: 1px solid var(--warn); border-radius: 50%; color: var(--warn); font-size: 10px; font-weight: 700; flex: 0 0 auto; }
+.sv-stage-tag { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 10px; font-size: 10.5px; font-weight: 500; color: var(--muted); background: var(--surface2); border: 1px solid var(--border); white-space: nowrap; flex: 0 0 auto; }
+/* 文档名可收缩截断（hover 显示全名），右端控件簇永不换行 → 来源下拉箭头固定在行尾 */
+.sv-doc-name { font-size: 12.5px; font-weight: 650; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; min-width: 0; }
+.sv-doc-count { font-size: 10.5px; color: var(--muted); white-space: nowrap; flex: 0 0 auto; }
+.sv-cur { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--success); text-decoration: none; flex: 0 1 auto; min-width: 0; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sv-unsubmitted { font-size: 11.5px; color: var(--warn); font-weight: 600; font-style: italic; white-space: nowrap; }
+.sv-badge-covered { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+.sv-src-static { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+.sv-src-select { font-size: 11px; padding: 2px 6px; cursor: pointer; max-width: 155px; white-space: nowrap; }
+.sv-auto-cb { display: inline-flex; align-items: center; gap: 3px; font-size: 10.5px; color: var(--muted); user-select: none; white-space: nowrap; cursor: pointer; }
+.sv-auto-cb.disabled { cursor: not-allowed; }
+.sv-bsp-switch { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); user-select: none; white-space: nowrap; cursor: pointer; }
+.sv-bsp-switch.disabled { cursor: not-allowed; }
+
+/* 展开的版本列表 */
+.sv-ver-rows { margin: 8px 0 0; border-top: 1px dashed var(--border); padding: 8px 0 0 12px; }
+.sv-ver-rows.child { padding-left: 24px; }
+.sv-ver-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12px; }
+.sv-ver-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); flex: 0 0 auto; }
+.sv-ver-dot.cur { background: var(--success); }
+.sv-ver-date { font-size: 10px; color: var(--muted); white-space: nowrap; }
+.sv-ver-cb { width: 13px; height: 13px; flex-shrink: 0; cursor: pointer; accent-color: var(--success); }
+.sv-ver-lock { color: var(--success); font-size: 12px; flex-shrink: 0; width: 13px; text-align: center; }
+.sv-ver-cover { color: var(--muted); font-size: 11px; flex-shrink: 0; width: 13px; text-align: center; }
+
+/* 版本汇总 = DataTable 组件（frontend/js/data-table.js），表格布局/表头/斑马纹由组件 css 提供。
+   以下仅保留 DataTable 单元格内部的自定义内容样式 */
+.sv-c-name { font-weight: 700; }
+.sv-c-stage { white-space: nowrap; color: var(--muted); font-size: 11px; }
+.sv-c-path { font-family: var(--mono); font-size: 11px; color: var(--accent); text-decoration: none; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sv-c-path-missing { color: var(--muted); font-size: 11px; }
+.sv-ver-line { display: inline-flex; align-items: center; gap: 4px; }
+.sv-ver-main { font-family: var(--mono); font-size: 12px; font-weight: 600; word-break: break-all; }
+.sv-ver-main.locked { color: var(--success); }
+.sv-ver-main.fg { color: var(--fg); }
+.sv-auto-chip { display: inline-block; border: 1px solid var(--accent); color: var(--accent); border-radius: 4px; font-size: 10px; line-height: 1.4; padding: 0 5px; }
+.sv-ver-sub { margin-top: 3px; font-size: 10.5px; color: var(--muted); }
+.sv-ver-sub .f-newest { color: var(--success); font-weight: 600; }
+.sv-ver-sub .f-newer { color: var(--warn); font-weight: 600; }
