@@ -3373,6 +3373,8 @@ function _updateBatchToolbar() {
 
 function _clearBatchSelection() {
   _selectedTasks.clear();
+  // 同时清空所有 selectable DataTable 的行勾选 + 表头“全选”状态（DataTable 表格无 .task-checkbox DOM）
+  if (window.DataTable && DataTable.clearAllSelectionState) DataTable.clearAllSelectionState(false);
   document.querySelectorAll('.task-checkbox').forEach(function(c) { c.checked = false; });
   var allCb = document.getElementById('task-select-all');
   if (allCb) allCb.checked = false;
@@ -3388,10 +3390,16 @@ function _clearBatchSelection() {
 function _clearAllBatchState() {
   try { if (window._selectedTasks && window._selectedTasks.clear) window._selectedTasks.clear(); } catch(e) {}
   try { if (window._selectedBugs && window._selectedBugs.clear) window._selectedBugs.clear(); } catch(e) {}
+  try { if (window._docsSel && window._docsSel.clear) window._docsSel.clear(); } catch(e) {}
+  try { if (Array.isArray(window._docsSelRows)) window._docsSelRows.length = 0; } catch(e) {}
+  // 同步清空各 selectable DataTable 的行勾选/表头全选态，避免残留选中
+  if (window.DataTable && DataTable.clearAllSelectionState) DataTable.clearAllSelectionState(false);
   var bt = document.getElementById('batch-toolbar');
   if (bt) bt.style.display = 'none';
   var bbt = document.getElementById('bug-batch-toolbar');
   if (bbt) bbt.style.display = 'none';
+  var dbt = document.getElementById('docs-batch-toolbar');
+  if (dbt) dbt.style.display = 'none';
 }
 
 /* ── Batch Delete ── */

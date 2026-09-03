@@ -749,7 +749,8 @@ function renderTaskTableCompact(tasks, execs) {
   stageKeys.forEach(function(stageName) {
     var stageTasks = grouped[stageName] || [];
     if (!stageTasks.length) {
-      flatRows.push({ _stage: stageName, _empty: true, id: 0 });
+      // 占位行无 id：DataTable 按“有合法 id 才算可勾选行”，空阶段行不参与全选/批量
+      flatRows.push({ _stage: stageName, _empty: true });
     } else {
       stageTasks.forEach(function(t, i) {
         t._stage = stageName;

@@ -51,6 +51,7 @@ var DataTable = (function() {
     this._resizable = opts.resizable !== false;
     this._selectable = opts.selectable || false;
     this._checkboxPosition = opts.checkboxPosition || 'left';
+    this._rowSelectable = opts.rowSelectable || null; // fn(row) => 是否可勾选（无 id 的占位行恒不可选）
     this._onSelectChange = opts.onSelectChange || null;
     this._emptyText = opts.emptyText || '暂无数据';
     this._clickable = opts.clickable === true;
@@ -295,10 +296,12 @@ var DataTable = (function() {
     var td = document.createElement('td');
     td.className = 'dt-cb-cell';
     td.onclick = function(e) { e.stopPropagation(); };
+    // 无合法 id 的占位行 / 不满足 rowSelectable 的行：保留列占位但不渲染复选框，不可选择
+    if (!this._isRowSelectable(row)) return td;
     var cb = document.createElement('input');
     cb.type = 'checkbox';
-    cb.value = rowId != null ? rowId : '';
-    if (rowId != null && this._selected.has(rowId)) cb.checked = true;
+    cb.value = rowId;
+    if (this._selected.has(rowId)) cb.checked = true;
     var self = this;
     cb.onchange = function() {
       self._toggleRow(rowId, this.checked, row);
@@ -309,12 +312,27 @@ var DataTable = (function() {
 
   /* ── Selection ── */
 
+  // 某行是否可勾选：必须具有合法 id，且满足 rowSelectable（若配置）。全选计数/全选/复选框均以此为准
+  DataTable.prototype._isRowSelectable = function(row) {
+    if (row[this._idKey] == null) return false;
+    return this._rowSelectable ? !!this._rowSelectable(row) : true;
+  };
+
+  // 参与选择的行数。
+  // 空占位行 / 不可勾选行（无 id 或 rowSelectable 拒绝）不参与选择，避免：
+  // ① 行内出现无意义复选框；② 全选计数与实际勾选行不一致 → 表头"全选/取消全选"陷入 indeterminate 无法取消。
+  DataTable.prototype._selectableCount = function() {
+    var self = this;
+    var n = 0;
+    this._data.forEach(function(row) { if (self._isRowSelectable(row)) n++; });
+    return n;
+  };
+
   DataTable.prototype._toggleSelectAll = function(checked) {
     var self = this;
     if (checked) {
       this._data.forEach(function(row) {
-        var id = row[self._idKey];
-        if (id != null) self._selected.add(id);
+        if (self._isRowSelectable(row)) self._selected.add(row[self._idKey]);
       });
     } else {
       this._selected.clear();
@@ -324,14 +342,16 @@ var DataTable = (function() {
   };
 
   DataTable.prototype._toggleRow = function(id, checked, row) {
+    if (id == null) return; // 无 id 的占位行不提供选择
     if (checked) this._selected.add(id);
     else this._selected.delete(id);
 
-    // Update select-all checkbox state
+    // Update select-all checkbox state (与可勾选行数比较，而非 _data.length)
     if (this._selectAllCb) {
+      var total = this._selectableCount();
       this._selectAllCb.indeterminate = false;
       if (this._selected.size === 0) this._selectAllCb.checked = false;
-      else if (this._selected.size === this._data.length) this._selectAllCb.checked = true;
+      else if (this._selected.size === total && total > 0) this._selectAllCb.checked = true;
       else { this._selectAllCb.checked = false; this._selectAllCb.indeterminate = true; }
     }
 
@@ -354,9 +374,25 @@ var DataTable = (function() {
       if (checked) tr.classList.add('selected'); else tr.classList.remove('selected');
     });
     if (this._selectAllCb) {
-      this._selectAllCb.checked = this._selected.size === this._data.length && this._data.length > 0;
-      this._selectAllCb.indeterminate = this._selected.size > 0 && this._selected.size < this._data.length;
+      var total = this._selectableCount();
+      this._selectAllCb.checked = total > 0 && this._selected.size === total;
+      this._selectAllCb.indeterminate = this._selected.size > 0 && this._selected.size < total;
     }
+  };
+
+  // 从外部清除整表选择（工具栏"取消"、批量操作完成后），可选触发 onSelectChange 同步外部集合
+  DataTable.prototype.clearSelection = function(notify) {
+    this._selected.clear();
+    this._updateSelectionUI();
+    if (notify !== false && this._onSelectChange) this._onSelectChange(this.getSelected());
+  };
+
+  // 清除所有 selectable DataTable 实例的选择状态（共享底部批量工具栏的"取消"用）
+  DataTable.clearAllSelectionState = function(notify) {
+    _gcInstances();
+    _instances.forEach(function(dt) {
+      if (dt._selectable) dt.clearSelection(notify !== false);
+    });
   };
 
   /* ── Sorting ── */
@@ -512,8 +548,7 @@ var DataTable = (function() {
   DataTable.prototype.getSelected = function() {
     var self = this;
     return this._data.filter(function(row) {
-      var id = row[self._idKey];
-      return id != null && self._selected.has(id);
+      return self._isRowSelectable(row) && self._selected.has(row[self._idKey]);
     });
   };
 

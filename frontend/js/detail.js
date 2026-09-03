@@ -1181,7 +1181,9 @@ function buildDocs(data) {
   // New format: { documents: [...], standard_stages: [...] }
   var stageList = (data && data.documents) ? data.documents : data;
   if (!stageList || !stageList.length) {
-    document.getElementById('docs-table-wrap').innerHTML = '<div style="text-align:center;padding:30px;font-style:italic;color:var(--muted)">暂无文档清单<br><span style="font-size:11px">项目阶段尚未匹配到文档模板，请先配置文档模板</span></div>'; _docsDt = null;
+    document.getElementById('docs-table-wrap').innerHTML = '<div style="text-align:center;padding:30px;font-style:italic;color:var(--muted)">暂无文档清单<br><span style="font-size:11px">项目阶段尚未匹配到文档模板，请先配置文档模板</span></div>';
+    _docsDt = null;
+    _clearDocsBatchState();
     return;
   }
 
@@ -1252,11 +1254,98 @@ function buildDocs(data) {
     ],
     data: flatRows,
     maxHeight: 'calc(100vh - 320px)',
-    rowClassFn: function(row) { return row._bg ? { background: row._bg } : null; }
+    rowClassFn: function(row) { return row._bg ? { background: row._bg } : null; },
+    // 批量操作（复选框列插在「阶段」之后、「序号」之前）：仅允许批量处理的后端能力——
+    // 可选文档(soft-remove) 与 孤儿/手动文档(硬删)；普通模板文档不可勾选，避免误删模板清单
+    selectable: canEdit,
+    checkboxPosition: 1,
+    rowSelectable: function(row) { return !!row.id && (row.is_optional || row.stage_type === '未知'); },
+    onSelectChange: function(rows) {
+      _docsSel = new Set(rows.map(function(r) { return r.id; }));
+      _docsSelRows = rows;
+      _ensureDocsBatchToolbar();
+      _updateDocsBatchToolbar();
+    }
   });
 }
 
 var _docsDt = null;
+
+/* ── 项目文档批量操作（批量删除：孤儿/手动硬删 + 可选软移除）── */
+var _docsSel = new Set();
+var _docsSelRows = [];
+
+function _renderDocsBatchToolbar() {
+  return '<div id="docs-batch-toolbar" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:1000;' +
+    'background:var(--accent);color:#fff;padding:8px 16px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.2);' +
+    'align-items:center;gap:12px">' +
+    '<span id="docs-batch-count">已选 0 个文档</span>' +
+    '<button onclick="batchDeleteDocs()" style="padding:4px 12px;border:1px solid #fff;border-radius:4px;background:transparent;color:#fff;cursor:pointer;font-size:12px">批量删除</button>' +
+    '<button onclick="_clearDocsBatchState()" style="padding:4px 12px;border:none;border-radius:4px;background:rgba(255,255,255,0.2);color:#fff;cursor:pointer;font-size:12px">取消</button>' +
+    '</div>';
+}
+function _ensureDocsBatchToolbar() {
+  if (document.getElementById('docs-batch-toolbar')) return;
+  document.body.insertAdjacentHTML('beforeend', _renderDocsBatchToolbar());
+}
+function _updateDocsBatchToolbar() {
+  var bar = document.getElementById('docs-batch-toolbar');
+  if (!bar) return;
+  if (_docsSel.size) {
+    bar.style.display = 'flex';
+    var countEl = document.getElementById('docs-batch-count');
+    if (countEl) countEl.textContent = '已选 ' + _docsSel.size + ' 个文档';
+  } else {
+    bar.style.display = 'none';
+  }
+}
+function _clearDocsBatchState() {
+  _docsSel.clear();
+  _docsSelRows = [];
+  if (_docsDt) _docsDt.clearSelection(false);
+  var bar = document.getElementById('docs-batch-toolbar');
+  if (bar) bar.style.display = 'none';
+}
+
+function batchDeleteDocs() {
+  if (!_docsSel.size) { showToast('请先选择文档', 'error'); return; }
+  var del = [], rm = [];
+  _docsSelRows.forEach(function(r) { if (r.stage_type === '未知') del.push(r); else rm.push(r); });
+  var parts = [];
+  if (rm.length) parts.push('· 移除 <b>' + rm.length + '</b> 个可选文档（软移除，可重新导入）');
+  if (del.length) parts.push('· 永久删除 <b>' + del.length + '</b> 个孤儿/手动文档（不可恢复）');
+  openDialog('批量删除文档',
+    '<div class="confirm-dlg">确认处理所选 <b>' + _docsSel.size + '</b> 个文档？<br><br>' + parts.join('<br>') + '</div>',
+    [{ text: '取消', onclick: 'closeSharedDialog()' },
+     { text: '确认处理', cls: 'btn-danger', onclick: 'closeSharedDialog();_doDocsBatchDelete()' }],
+    { hideClose: true });
+}
+
+async function _doDocsBatchDelete() {
+  if (!_comboCurCode) return;
+  var ok = await verifyPassword('批量删除 ' + _docsSel.size + ' 个文档', 'skip_doc_remove');
+  if (!ok) return;
+  var del = [], rm = [];
+  _docsSelRows.forEach(function(r) { if (r.stage_type === '未知') del.push(r); else rm.push(r); });
+  var failed = [];
+  var doneDel = 0, doneRm = 0;
+  try {
+    for (var i = 0; i < del.length; i++) {
+      try { await API.del('/projects/' + _comboCurCode + '/documents/' + del[i].id); doneDel++; }
+      catch (e) { failed.push(del[i].doc_name || ('#' + del[i].id)); }
+    }
+    for (var j = 0; j < rm.length; j++) {
+      try { await API.put('/projects/' + _comboCurCode + '/documents/' + rm[j].id, { is_removed: 1 }); doneRm++; }
+      catch (e) { failed.push(rm[j].doc_name || ('#' + rm[j].id)); }
+    }
+  } finally {
+    _clearDocsBatchState();
+    var msg = '已删除 ' + doneDel + ' 个、移除 ' + doneRm + ' 个文档';
+    if (failed.length) msg += '，失败 ' + failed.length + ' 个：' + failed.slice(0, 3).join('、') + (failed.length > 3 ? '…' : '');
+    showToast(msg, failed.length ? 'error' : 'success');
+    if (typeof EventBus !== 'undefined') EventBus.emit(EVENTS.PROJECT_DOC_DELETED, {});
+  }
+}
 var _projectDocsRaw = null;  // 最近一次文档数据（用于编辑对话框读取 doc 元数据）
 
 /* ── 软件版本 Tab（聚合项目发布 + 产品基础版本，支持锁定）── */
@@ -2889,6 +2978,8 @@ function switchDTab(id, el) {
   // Reset any cross-panel batch-selection state/toolbars (task vs bug) when switching
   // project-detail tabs, so e.g. a previous Bug list can't feed the Task batch delete.
   if (typeof _clearAllBatchState === 'function') _clearAllBatchState();
+  // 离开文档 Tab 时同步清空文档批量勾选态与浮层
+  if (typeof _clearDocsBatchState === 'function') _clearDocsBatchState();
   var sec = document.getElementById('dsec-' + id);
   if (sec) sec.classList.add('active');
   if (el) { el.classList.add('active'); }
