@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="app-version" content="v2026.09.02-beta3">
+  <meta name="app-version" content="v2026.09.03-beta6">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>PM Assistant · 集成禅道 & GitLab</title>
 <script>
@@ -444,7 +444,8 @@ document.write('<link rel="stylesheet" href="/css/density.css?v=' + v + '">');
         <div class="dtab" onclick="switchDTab('bugs',this)">Bug列表</div>
         <div class="dtab" onclick="switchDTab('docs',this)">项目文档</div>
         <div class="dtab" onclick="switchDTab('resources',this)">产品文档</div>
-        <div class="dtab" onclick="switchDTab('delivery',this)">交付记录</div>
+        <div class="dtab" onclick="switchDTab('versions',this)">软件版本</div>
+        <div class="dtab" onclick="switchDTab('delivery',this)">交付状态</div>
         <div class="dtab" onclick="switchDTab('activities',this)">项目日志</div>
         <div class="dtab" id="dt-maintenance" onclick="switchDTab('maintenance',this)">项目维护</div>
       </div>
@@ -483,6 +484,9 @@ document.write('<link rel="stylesheet" href="/css/density.css?v=' + v + '">');
         <div class="card" style="padding:0;overflow:hidden">
         <div id="docs-table-wrap"><div class="empty-state" style="padding:20px">请选择项目</div></div>
         </div>
+      </div>
+      <div class="dsec" id="dsec-versions">
+        <div id="versions-content"><div class="empty-state" style="padding:20px">请选择项目</div></div>
       </div>
       <div class="dsec" id="dsec-delivery">
         <div id="delivery-content">

@@ -214,7 +214,7 @@ function renderProductManagementPage() {
       var templateStages = {};
       _pmNodeTemplates.forEach(function(t) { var s = t.stage_type || '通用'; templateStages[s] = (templateStages[s] || 0) + 1; });
       var templateParts = [];
-      ['硬件开发', '结构设计', 'BSP开发', '软件开发', '测试', '通用'].forEach(function(st) {
+      ['硬件开发', '结构设计', 'BSP开发', '业务软件开发', 'FPGA开发', '测试', '通用'].forEach(function(st) {
         if (templateStages[st]) templateParts.push(st + templateStages[st] + '个');
       });
       rightHtml += '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">文档模板：' +

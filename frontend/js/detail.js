@@ -1165,6 +1165,7 @@ function buildStages(stages) {
 /* Documents Table */
 
 function buildDocs(data) {
+  _projectDocsRaw = data;
   var user = getCurrentUser();
   var perms = (user && user.permissions) ? user.permissions.split(',') : [];
   var canEdit = perms.indexOf('doc_template') >= 0 || perms.indexOf('admin') >= 0 || perms.indexOf('project_edit') >= 0;
@@ -1256,38 +1257,117 @@ function buildDocs(data) {
 }
 
 var _docsDt = null;
+var _projectDocsRaw = null;  // 最近一次文档数据（用于编辑对话框读取 doc 元数据）
+
+/* ── 软件版本 Tab（聚合项目发布 + 产品基础版本，支持锁定）── */
+var _svData = null;        // GET /software-versions 返回的 data
+var _svView = 'all';   // 'all' 版本汇总(默认子tab) | 'current' 版本维护
+var _svTypeFilter = 'all'; // 'all' | 'project' | 'product'
+var _svProdFilter = 'all'; // 产品 code 或 'all'
+var _svKeyword = '';       // 版本关键字
+var _svExpanded = {};      // doc key('project_doc:12'/'product_doc:3342') -> bool
+var _svHelpOpen = false;   // 版本维护页「维护说明」折叠状态
+var _svSummaryDt = null;   // 版本汇总 DataTable 实例（挂载点 #sv-summary-dt，由 _svRenderBody 提供）
+
+function _svCanEdit() {
+  var user = getCurrentUser();
+  var perms = (user && user.permissions) ? user.permissions.split(',') : [];
+  return perms.indexOf('project_edit') >= 0 || perms.indexOf('admin') >= 0;
+}
 
 /* ── Document Status Edit Dialog ── */
 
 function openDocEditDialog(docId) {
-  var inp = 'width:100%;box-sizing:border-box;margin-top:1px';
+  var doc = _findProjectDoc(docId);
+  var isVersionDoc = doc && doc.doc_type === 'gitlab';
+
+  var html = '';
+  // 版本选择（GitLab 版本文档：软件发布 / FPGA版本开发 等）
+  // （来源切换已统一收敛到软件版本页的每个子项「来源选择」下拉，不再在此处配置）
+  if (isVersionDoc) {
+    html += '<div style="margin-bottom:12px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px" id="doc-edit-ver-box">' +
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">当前版本（展示层选择，不影响文档自动跟踪最新）</div>' +
+      '<div id="doc-edit-ver-inner"><span style="color:var(--muted);font-size:11px">加载版本中...</span></div>' +
+    '</div>';
+  }
+  if (!isVersionDoc) {
+    html += '<div style="padding:8px 4px;color:var(--muted);font-size:12px">该文档无版本配置项</div>';
+  }
+
   openDialog('编辑文档状态',
-    '<div style="margin-bottom:10px">' +
-      '<label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">文档链接/路径（标记已提交时需要）</label>' +
-      '<input class="search-inp" id="doc-edit-loc" placeholder="输入文档链接/路径" style="' + inp + '">' +
-    '</div>' +
-    '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
-      '<button class="btn btn-primary" onclick="submitDocStatus(' + docId + ')">标记已提交</button>' +
-      '<button class="btn" onclick="markDocUnnecessary(' + docId + ')" style="color:var(--warn);border-color:var(--warn)">标记为无需文档</button>' +
-    '</div>',
-    [{text: '取消', onclick: 'closeSharedDialog()'}],
-    {hideClose: true});
+    html,
+    [{text: '关闭', onclick: 'closeSharedDialog()'}],
+    {hideClose: true, maxWidth: 480});
+
+  if (isVersionDoc) loadDocVersionOptions(docId, doc);
 }
 
-function submitDocStatus(docId) { saveDocStatus(docId, 'submitted'); }
-function markDocUnnecessary(docId) { saveDocStatus(docId, 'unnecessary'); }
-function deleteDocStatus(docId, docName) {
-  var label = docName || ('#' + docId);
-  openDialog('删除文档',
-    '<div class="confirm-dlg">确认删除文档 <b>' + escHtml(label) + '</b>？<br><br>删除后将不再显示。<br><br>如需恢复，可在"导入模板文档"中重新导入。</div>',
-    [{text: '取消', onclick: 'closeSharedDialog()'},
-     {text: '确认删除', cls: 'btn-danger', onclick: 'closeSharedDialog();_confirmDeleteDoc(' + docId + ',\x27' + escJs(label) + '\x27)'}],
-    {hideClose: true});
+function _findProjectDoc(docId) {
+  var raw = _projectDocsRaw;
+  var stages = raw && raw.documents ? raw.documents : (Array.isArray(raw) ? raw : []);
+  var found = null;
+  stages.forEach(function(stage) {
+    (stage.documents || []).forEach(function(d) { if (d.id == docId) found = d; });
+  });
+  return found;
 }
-async function _confirmDeleteDoc(docId, docName) {
-  var ok = await verifyPassword('删除文档: ' + (docName || '#' + docId), 'skip_doc_delete');
-  if (!ok) return;
-  saveDocStatus(docId, 'deleted');
+
+async function loadDocVersionOptions(docId, doc) {
+  var inner = document.getElementById('doc-edit-ver-inner');
+  if (!inner) return;
+  try {
+    var resp = await API.get('/projects/' + _comboCurCode + '/software-versions');
+    var data = (resp && resp.data) ? resp.data : resp;
+    var match = null;
+    ((data && data.groups) || []).forEach(function(g) {
+      (g.docs || []).forEach(function(d) {
+        if (d.source_type === 'project_doc' && d.doc_id == docId) match = d;
+      });
+    });
+    if (!match || !match.versions || !match.versions.length) {
+      inner.innerHTML = '<span style="color:var(--muted);font-size:11px">暂无版本（文档路径未匹配到 GitLab 发布，或尚未扫描）</span>';
+      return;
+    }
+    var sorted = match.versions.slice().sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
+    var opts = '';
+    sorted.forEach(function(v) {
+      var sel = (v.version === match.current) ? ' selected' : '';
+      opts += '<option value="' + escHtml(v.version) + '"' + sel + '>' + escHtml(v.version) + (v.date ? '（' + formatDate(v.date) + '）' : '') + '</option>';
+    });
+    var lockedTxt = match.locked
+      ? '<span style="color:var(--success);font-weight:700;margin-left:6px">✅</span>' + (match.has_newer ? '<span class="tag-badge tag-2" style="margin-left:6px">非最新</span>' : '')
+      : '';
+    inner.innerHTML =
+      '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
+        '<select id="doc-edit-ver" style="flex:1;min-width:180px;padding:5px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg)">' + opts + '</select>' +
+        '<button class="btn btn-sm" onclick="saveDocVersion(' + docId + ')" style="font-size:11px;padding:4px 10px">锁定为当前版本</button>' +
+        (match.locked ? '<button class="btn btn-sm" onclick="unlockDocVersion(' + docId + ')" style="font-size:11px;padding:4px 10px;color:var(--danger);border-color:var(--danger)">恢复自动最新</button>' : '') +
+      '</div>' +
+      '<div style="font-size:10px;color:var(--muted);margin-top:4px">当前：' + escHtml(match.current || '—') + lockedTxt + '</div>';
+  } catch(e) {
+    inner.innerHTML = '<span style="color:var(--danger);font-size:11px">加载版本失败: ' + escHtml(e.message) + '</span>';
+  }
+}
+
+async function saveDocVersion(docId) {
+  var sel = document.getElementById('doc-edit-ver');
+  var version = sel ? sel.value : '';
+  if (!version) return;
+  try {
+    await API.post('/projects/' + _comboCurCode + '/software-versions/lock', { source_type: 'project_doc', doc_id: docId, version: version });
+    showToast('已锁定版本：' + version, 'success');
+    closeSharedDialog();
+    EventBus.emit(EVENTS.PROJECT_DOC_SAVED, {});
+  } catch(e) { showToast('设置失败: ' + (e.message || ''), 'error'); }
+}
+
+async function unlockDocVersion(docId) {
+  try {
+    await API.post('/projects/' + _comboCurCode + '/software-versions/unlock', { source_type: 'project_doc', doc_id: docId });
+    showToast('已恢复自动最新', 'success');
+    closeSharedDialog();
+    EventBus.emit(EVENTS.PROJECT_DOC_SAVED, {});
+  } catch(e) { showToast('操作失败: ' + (e.message || ''), 'error'); }
 }
 
 function removeOptionalDoc(docId, docName) {
@@ -1325,33 +1405,6 @@ async function _confirmRemoveDoc(docId, docName) {
     showToast('已移除可选项', 'success');
     EventBus.emit(EVENTS.PROJECT_DOC_SAVED, {});
   } catch(e) { showToast('移除失败: ' + (e.message || ''), 'error'); }
-}
-
-async function saveDocStatus(docId, status) {
-  var user = getCurrentUser();
-  var username = user ? (user.display_name || user.username) : '?';
-  var now = new Date().toISOString().substring(0, 10);
-  var locEl = document.getElementById('doc-edit-loc');
-  var loc = locEl ? locEl.value.trim() : '';
-  var body = { status: status };
-  if (status === 'unnecessary') {
-    body.status = 'submitted';
-    body.location = '无需文档';
-  } else if (status === 'deleted') {
-    body.is_removed = 1;
-    body.location = '已删除';
-  } else if (loc) {
-    body.location = loc;
-  }
-  closeSharedDialog();
-  try {
-    await API.put('/projects/' + _comboCurCode + '/documents/' + docId, body);
-    var msgs = {submitted:'已标记为提交', unnecessary:'已标记为无需文档', deleted:'已删除'};
-    showToast(msgs[status] || '状态已更新', 'success');
-    EventBus.emit(EVENTS.PROJECT_DOC_SAVED, {});
-  } catch(e) {
-    showToast('操作失败: ' + (e.message || '未知错误'), 'error');
-  }
 }
 
 function refreshDocs() {
@@ -2846,6 +2899,7 @@ function switchDTab(id, el) {
   // Refresh tab content when switching to it
   if (id === 'maintenance') buildMaintenance();
   if (id === 'activities') loadActivities();
+  if (id === 'versions') buildVersionsTab();
   if (id === 'pma-tasks' && _comboCurCode) {
     var projName = (document.getElementById('combo-input') || {}).value || '';
     if (!projName && typeof _allProjects !== 'undefined') {
@@ -2869,6 +2923,699 @@ function switchDTab(id, el) {
   if (_comboCurCode && typeof buildHash === 'function' && el) {
     history.pushState({ view: 'detail', params: [String(_comboCurCode), id] }, '', buildHash('detail', String(_comboCurCode), id));
   }
+}
+
+/* ── 软件版本 Tab ── */
+
+function _svDocKey(sourceType, docId) { return sourceType + ':' + docId; }
+
+function _svCopyText(text, label) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function() { showToast('已复制' + (label ? '：' + label : ''), 'success'); })
+        .catch(function() { _fallbackCopy(text); });
+    } else { _fallbackCopy(text); }
+  } catch(e) { _fallbackCopy(text); }
+}
+
+function _svCopyUrl(url, version) {
+  _svCopyText(url, version ? ('版本链接：' + version) : '版本链接');
+}
+
+async function buildVersionsTab() {
+  _svRegisterRealtime();  // 版本锁定事件实时订阅（只注册一次）
+  _svView = 'all';  // 每次进入「软件版本」Tab 都切回「版本汇总」子视图（不保留上次的版本维护/过滤状态）
+  var container = document.getElementById('versions-content');
+  if (!container) return;
+  if (!_comboCurCode) {
+    container.innerHTML = '<div class="empty-state" style="padding:20px">请选择项目</div>';
+    return;
+  }
+  container.innerHTML = '<div class="loading-spinner" style="padding:30px">加载软件版本...</div>';
+  try {
+    var resp = await API.get('/projects/' + _comboCurCode + '/software-versions');
+    _svData = (resp && resp.data) ? resp.data : resp;
+    renderVersionsTab();
+  } catch(e) {
+    container.innerHTML = '<div style="text-align:center;padding:30px;color:var(--danger)">加载失败: ' + escHtml(e.message) + '</div>';
+  }
+}
+
+function renderVersionsTab() {
+  var container = document.getElementById('versions-content');
+  if (!container) return;
+  var groups = (_svData && _svData.groups) || [];
+  var prodOpts = '<option value="all">全部产品</option>';
+  groups.forEach(function(g) {
+    if (g.type === 'product') {
+      prodOpts += '<option value="' + escHtml(g.key) + '"' + (_svProdFilter === g.key ? ' selected' : '') + '>' + escHtml(g.label) + '</option>';
+    }
+  });
+  var isSummary = (_svView === 'all');
+  container.innerHTML =
+    '<div class="sv-toolbar">' +
+      '<div class="sv-view-switch">' +
+        '<button type="button" class="sv-view-btn' + (isSummary ? ' active' : '') + '" onclick="_svSetView(\'all\')">版本汇总</button>' +
+        '<button type="button" class="sv-view-btn' + (!isSummary ? ' active' : '') + '" onclick="_svSetView(\'current\')">版本维护</button>' +
+      '</div>' +
+      '<span class="sv-divider"></span>' +
+      '<select class="sv-select" onchange="_svSetType(this.value)">' +
+        '<option value="all">全部来源</option>' +
+        '<option value="project"' + (_svTypeFilter === 'project' ? ' selected' : '') + '>项目发布</option>' +
+        '<option value="product"' + (_svTypeFilter === 'product' ? ' selected' : '') + '>产品基础版本</option>' +
+      '</select>' +
+      '<select class="sv-select" onchange="_svSetProd(this.value)">' + prodOpts + '</select>' +
+      '<input id="sv-keyword" class="sv-search" placeholder="搜索版本..." value="' + escHtml(_svKeyword) + '" oninput="_svSetKeyword(this.value)">' +
+      (isSummary ?
+        '<span class="sv-toolbar-actions">' +
+          '<button type="button" class="btn btn-sm" onclick="_svCopyAll()">📋 复制全部链接</button>' +
+          '<button type="button" class="btn btn-sm" onclick="_svExportCsv()">⬇ 导出CSV</button>' +
+        '</span>' : '') +
+    '</div>' +
+    '<div class="card" style="padding:0;overflow:hidden">' +
+      '<div id="versions-body">' + _svRenderBody() + '</div>' +
+    '</div>';
+  // 版本汇总 = DataTable 组件（imperative）：内联重建后同步挂载/销毁
+  if (isSummary) _svMountSummaryDt(); else _svDestroySummaryDt();
+}
+
+function _svRenderBody() {
+  // 版本汇总 = DataTable 组件：body 只放挂载点，渲染走 _svMountSummaryDt()
+  return _svView === 'all' ? '<div id="sv-summary-dt"></div>' : _svRenderCurrent();
+}
+
+function _svRenderCurrent() {
+  var groups = (_svData && _svData.groups) || [];
+  var helpHtml = _svHelpOpen ? _svHelpHtml() : '';
+  if (!groups.length) {
+    return _svHelpBar() + helpHtml + '<div style="text-align:center;padding:30px;font-style:italic;color:var(--muted)">暂无软件版本<br><span style="font-size:11px">项目发布文档或产品基础版本文档未匹配到 GitLab 发布</span></div>';
+  }
+  var canEdit = _svCanEdit();
+  var projRows = '';
+  var projCount = 0;
+  var prodRows = '';
+  var prodCount = 0;
+  groups.forEach(function(g) {
+    if (_svTypeFilter === 'project' && g.type !== 'project') return;
+    if (_svTypeFilter === 'product' && g.type !== 'product') return;
+    if (_svProdFilter !== 'all' && g.key !== _svProdFilter) return;
+    var docs = (g.docs || []).filter(function(d) { return _svDocMatch(d); });
+    if (!docs.length) return;
+    var rows = '';
+    docs.forEach(function(d) { rows += _svRenderDoc(g, d, canEdit); });
+    if (!rows) return;
+    if (g.type === 'project') {
+      projRows += rows;
+      projCount += docs.length;
+    } else {
+      // 产品基础版本 = 每个产品一个【独立卡片块】：产品色头带 + 文档行，相邻产品卡在边框/头带上明显区分
+      var gChip = (g.code)
+        ? projCodeTag(String(g.code), 'openProductDetail(\'' + escJs(String(g.code)) + '\')', g.name || '')
+        : escHtml(g.label || '');
+      prodRows += '<div class="sv-prod-card">' +
+        '<div class="sv-prod-card-hd">' +
+          '<span class="sv-prod-card-ic">🔌</span>' +
+          '<span class="sv-prod-card-t">' + gChip + (g.name ? '<span class="sv-prod-card-name">（' + escHtml(g.name) + '）</span>' : '') + '</span>' +
+          '<span class="sv-prod-card-count">' + docs.length + ' 个版本来源</span>' +
+        '</div>' +
+        '<div class="sv-prod-card-bd">' + rows + '</div>' +
+      '</div>';
+      prodCount += docs.length;
+    }
+  });
+  var out = '';
+  if (projRows) out += _svSection('🚀', '项目发布', projRows, projCount, '', 'blue');
+  if (prodRows) out += _svSection('🔌', '产品基础版本', prodRows, prodCount, _svBspSwitch(), 'green');
+  if (!out) return _svHelpBar() + helpHtml + '<div style="text-align:center;padding:30px;font-style:italic;color:var(--muted)">无匹配的版本来源</div>';
+  return _svHelpBar() + helpHtml + '<div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap">' + out + '</div>';
+}
+
+// 版本维护顶部「维护说明」内容：默认折叠，点「维护说明」按钮展开。文案一字不改，仅替换容器为 .sv-help。
+function _svHelpHtml() {
+  var groups = (_svData && _svData.groups) || [];
+  // 项目发布 FPGA 拆分信息（通用容器行下的板卡子文档数），供维护说明按实际拆分数量动态提示
+  var fpgaSplitCount = 0;
+  groups.forEach(function(g) {
+    if (g.type !== 'project') return;
+    (g.docs || []).forEach(function(d) {
+      if (d.fpga_parent) fpgaSplitCount = (g.docs || []).filter(function(x) { return x.fpga_child; }).length;
+    });
+  });
+  return '<div class="sv-help">' +
+    '💡 <b class="sv-help-kw">维护说明</b>：<br>' +
+    '· <span style="color:var(--success);font-weight:700">✅</span> 已锁定为本项目使用的版本；<span style="color:var(--muted);font-weight:700">?</span> 未锁定，自动跟踪最新版本。<br>' +
+    '· 展开文档的版本列表，勾选某版本复选框即<u>锁定</u>；取消勾选则<u>恢复自动跟随</u>（需要编辑权限）。<br>' +
+    '· 每个<b>项目发布</b>子项都有「<u>来源选择</u>」下拉：默认<b>使用项目侧发布版本</b>（本项目仓库 GitLab 发布的版本）；切换到<b>使用产品基础版本</b>后版本来源改为关联产品对应阶段的发布版本，默认自动锁定并跟随最新，也可在展开的版本列表中手动锁定任一产品版本。<br>' +
+    '· ' + (fpgaSplitCount > 0
+      ? '「FPGA版本开发」按 <b>' + fpgaSplitCount + ' 个板卡</b>拆分（FPGA版本开发-&lt;产品代码&gt;），<b>各板卡的来源在子文档上单独控制</b>：同一项目不同板卡可分别使用<b>项目发布版本</b>或<b>产品基础版本</b>。'
+      : '「FPGA版本开发」按<b>含 FPGA 的板卡</b>拆分为板卡子文档（FPGA版本开发-&lt;产品代码&gt;），每块板卡的来源在各自的子文档上单独控制：同一项目可能有多块含 FPGA 的板卡，有的使用<b>项目发布的版本</b>、有的使用<b>产品基础版本</b>，不能统一控制。') + '<br>' +
+    '· 板卡使用产品基础版本时跟随其产品「FPGA基础版本」发布；<b>未配置 / 尚未提供</b>「FPGA基础版本」的板卡照常显示并标记 <b>未提交</b>（版本汇总同样列出），便于区分「FPGA 未提交」与「无需提供」；确无 FPGA 的产品在模板管理标记「无FPGA」即不再要求。<br>' +
+    '· <span style="color:var(--success)">🔒</span> 产品基础版本文档处于「使用最新版本」自动管理下（默认开启；卡片开关或子项单独开关可批量/个别关闭），自动锁定最新版本，无需手动维护。<br>' +
+    '· 「最新」= 已锁定且无更新；「非最新」= 已锁定但来源有更新可用，请及时升级。<br>' +
+    '· 已锁定的版本（✅）与未锁定但自动跟踪的当前版本（自动）都会汇总到「版本汇总」页，作为最终交付给测试/工程的版本清单。<br>' +
+    '· 「全部使用最新版本」（🔌 产品基础版本卡片开关）：开启后所有产品基础版本（BSP开发 / 业务软件开发 / FPGA开发）自动锁定最新版本，不可手动选择其他版本；每个产品版本文档还可单独开关「使用最新版本」。<br>' +
+    '· <span style="color:var(--warn);font-weight:700">单一来源</span>：业务软件 / FPGA 开发的最终版本只能有一个来源——子项用<b>项目侧发布版本</b>（含默认）时，项目侧版本即最终交付，<b>同阶段产品基础版本不再进入「版本汇总」</b>；子项改用<b>产品基础版本</b>后，由产品侧决定最终版本，产品卡同阶段基础版本文档灰显。切换来源时会弹出确认提示。' +
+  '</div>';
+}
+
+// 维护说明折叠入口（右上角小按钮）；_svToggleHelp 只重绘 #versions-body，保留工具栏搜索框焦点/输入
+function _svHelpBar() {
+  return '<div class="sv-helpbar">' +
+    '<button type="button" class="sv-help-btn' + (_svHelpOpen ? ' open' : '') + '" onclick="_svToggleHelp()" title="展开 / 收起维护说明">维护说明 ' + (_svHelpOpen ? '&#9650;' : '&#9660;') + '</button>' +
+  '</div>';
+}
+
+function _svToggleHelp() {
+  _svHelpOpen = !_svHelpOpen;
+  var body = document.getElementById('versions-body');
+  if (body) body.innerHTML = _svRenderBody();
+}
+
+function _svSection(icon, label, innerHtml, count, extra, theme) {
+  // 主题色头部带：项目发布 = 蓝色(蓝=主题强调色)；产品基础版本 = 绿色(绿=success)
+  theme = (theme === 'green') ? 'green' : 'blue';
+  return '<div class="sv-section sv-section-' + theme + '">' +
+    '<div class="sv-section-hd">' +
+      '<span class="sv-section-title">' + icon + ' ' + escHtml(label) + ' <span class="sv-section-sub">' + count + ' 个版本来源</span></span>' +
+      (extra ? '<span style="flex:1"></span>' + extra : '') +
+    '</div>' +
+    '<div class="sv-section-bd">' + innerHtml + '</div>' +
+  '</div>';
+}
+
+// 产品基础版本卡片上的「全部使用最新版本」批量配置开关（project.bsp_auto_latest）
+function _svBspSwitch() {
+  var canEdit = _svCanEdit();
+  var mode = (_svData && _svData.mode) || {};
+  return '<label class="sv-bsp-switch' + (canEdit ? '' : ' disabled') + '" title="开启后所有产品基础版本（BSP开发 / 业务软件开发 / FPGA开发）自动锁定最新版本（随产品迭代自动更新），不可手动选择其他版本；每个文档还可单独精细调整">' +
+    '<input type="checkbox" id="sv-bsp-auto"' + (mode.bsp_auto_latest ? ' checked' : '') + (canEdit ? '' : ' disabled') + ' onchange="_svToggleBspAuto(this.checked)" style="width:13px;height:13px;accent-color:var(--accent)">' +
+    '全部使用最新版本' +
+  '</label>';
+}
+
+function _svDocMatch(d) {
+  var kw = (_svKeyword || '').trim().toLowerCase();
+  if (!kw) return true;
+  var hay = ((d.current || '') + ' ' + (d.doc_name || '')).toLowerCase();
+  var hit = (d.versions || []).some(function(v) { return (v.version || '').toLowerCase().indexOf(kw) >= 0; });
+  return hay.indexOf(kw) >= 0 || hit;
+}
+
+function _svSrcSelect(d, canEdit) {
+  // 项目发布子项「来源选择」下拉：使用项目侧发布版本（project，doc_auto=0，默认）
+  // / 使用产品基础版本（product，doc_auto=1）。data-cur 记录切换前状态供取消还原。
+  var opts = '<option value="project"' + (d.doc_auto ? '' : ' selected') + '>使用项目侧发布版本</option>' +
+             '<option value="product"' + (d.doc_auto ? ' selected' : '') + '>使用产品基础版本</option>';
+  if (canEdit) {
+    return '<select class="sv-src-select" data-cur="' + (d.doc_auto ? 'product' : 'project') + '" onchange="_svChangeSource(\'' + d.source_type + '\',' + d.doc_id + ',\'' + escJs(d.doc_name) + '\',this)" title="该子项的发布版本来源：使用项目侧发布版本 = 本项目仓库 GitLab 发布的版本；使用产品基础版本 = 关联产品对应阶段的发布版本">' + opts + '</select>';
+  }
+  return '<span class="sv-src-static" title="该子项的发布版本来源">' + (d.doc_auto ? '使用产品基础版本' : '使用项目侧发布版本') + '</span>';
+}
+
+function _svRenderDoc(g, d, canEdit) {
+  var key = _svDocKey(d.source_type, d.doc_id);
+  var expanded = !!_svExpanded[key];
+  if (!_svDocMatch(d)) return '';
+  var sorted = d.versions ? d.versions.slice().sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); }) : [];
+  var latestVer = sorted.length ? sorted[0].version : null;
+  // 阶段级来源互斥：covered = 该产品基础版本文档已被同阶段项目发布文档「使用产品基础版本」覆盖
+  var covered = !!d.covered;
+  var isFpgaParent = !!d.fpga_parent;
+  var isFpgaChild = !!d.fpga_child;
+  var stagePill = d.stage ? '<span class="sv-stage-tag">' + escHtml(d.stage) + '</span>' : '';
+
+  // 项目发布子项「来源选择」下拉：普通项目文档 + 各 FPGA 板卡子文档（后端仅对其置 doc_auto_capable）
+  // 通用 FPGA 容器行（fpga_parent）无下拉 —— 每块板卡的来源在各自子文档上单独控制
+  var srcSel = '';
+  if (g.type === 'project' && d.doc_auto_capable) {
+    srcSel = _svSrcSelect(d, canEdit);
+  }
+
+  // 通用 FPGA 文档有板卡子文档时仅作「容器行」：无来源下拉 / 无版本列表（来源下放到各板卡），
+  // 每块板卡使用 项目侧发布 / 产品基础版本 由下方 fpga_child 子文档各自的来源下拉单独控制。
+  // srcSel 为空（容器行 doc_auto_capable=false，见 backend get_software_versions 分支）
+  if (isFpgaParent) {
+    var childDocs = (g.docs || []).filter(function(x) { return x.fpga_child; });
+    // 容器行与软件发布等普通文档同一卡片样式/设计（实线）：🧩 + 文档名 + 阶段标签在左，板卡子项数在右
+    return '<div class="sv-doc sv-doc-fpga">' +
+      '<div class="sv-doc-row">' +
+        '<span class="sv-fpga-ic" title="FPGA版本开发按产品板卡拆分，各板卡的版本来源在下方虚线子项上单独控制">🧩</span>' +
+        '<span class="sv-doc-name" title="' + escHtml(d.doc_name) + '">' + escHtml(d.doc_name) + '</span>' +
+        stagePill +
+        '<span style="flex:1"></span>' +
+        '<span class="sv-doc-count">' + childDocs.length + ' 个板卡子项</span>' +
+      '</div>' +
+    '</div>';
+  }
+
+  var badge = '';
+  if (covered) {
+    badge += '<span class="tag-badge sv-badge-covered" title="该阶段已由项目发布「' + escHtml(d.covered_by || '') + '」使用产品基础版本，版本来源以项目侧为准，无需单独锁定">随「' + escHtml(d.covered_by || '') + '」使用产品基础版本</span>';
+  } else if (d.has_newer) {
+    badge += '<span class="tag-badge tag-2" title="来源已有更新版本">非最新</span>';
+  }
+  // 已锁定且为来源最新 → 标「最新」
+  if (latestVer && d.current === latestVer) {
+    badge += '<span class="tag-badge tag-4">最新</span>';
+  }
+
+  // 整行行首状态图标：已锁定 ✅ 绿色 | 未锁定 ? 圆形灰色（自动跟踪最新）
+  var stateIcon = d.locked
+    ? '<span class="sv-state-ok" title="已锁定为当前版本">✅</span>'
+    : '<span class="sv-state-auto" title="未锁定，自动跟踪最新版本">?</span>';
+
+  // 当前版本名 → 可点击跳转（有 URL 时），当前版本文字绿色
+  var curVer = null;
+  (d.versions || []).forEach(function(v) { if (v.version === d.current) curVer = v; });
+  var current = d.current
+    ? (curVer && curVer.url
+        ? '<a class="sv-cur" href="' + escHtml(curVer.url) + '" target="_blank" title="' + escHtml(d.current) + '">' + escHtml(d.current) + '</a>'
+        : '<span class="sv-cur" title="' + escHtml(d.current) + '">' + escHtml(d.current) + '</span>')
+    : '<span class="sv-unsubmitted">未提交</span>';
+
+  var verDivId = 'sv-vers-' + key.replace(/[^a-zA-Z0-9]/g, '_');
+  var versionsHtml = '';
+  if (sorted.length) {
+    versionsHtml = '<div id="' + verDivId + '" class="sv-ver-rows' + (isFpgaChild ? ' child' : '') + '" style="' + (expanded ? '' : 'display:none') + '">' +
+      sorted.map(function(v) {
+        var isCur = v.version === d.current;
+        var isLatest = v.version === latestVer;
+        var rowBadge = '';
+        if (isLatest) rowBadge += '<span class="tag-badge tag-4">最新</span>';
+        var nameHtml = v.url
+          ? '<a href="' + escHtml(v.url) + '" target="_blank" title="' + escHtml(v.url) + '" style="font-family:var(--mono);word-break:break-all;color:' + (isCur ? 'var(--success)' : 'var(--fg)') + ';text-decoration:none">' + escHtml(v.version) + '</a>'
+          : '<span style="font-family:var(--mono);word-break:break-all;color:' + (isCur ? 'var(--success)' : 'var(--fg)') + '">' + escHtml(v.version) + '</span>';
+        // 复选框替代 锁定/解锁 按钮（仅编辑权限显示；行首状态图标已在文档行头部统一展示）
+        // 自动管理模式（auto_managed）下不提供手动复选框，显示 🔒 提示自动锁定最新版本
+        // covered（被项目侧同阶段「使用产品基础版本」覆盖）→ 显示灰色 ⊗，不提供单独锁定
+        var rowCb = '';
+        if (covered) {
+          rowCb = '<span class="sv-ver-cover" title="该阶段已由项目发布「' + escHtml(d.covered_by || '') + '」使用产品基础版本，无需单独锁定">⊗</span>';
+        } else if (canEdit) {
+          if (d.auto_managed) {
+            rowCb = '<span class="sv-ver-lock" title="自动锁定最新版本，不可手动选择">🔒</span>';
+          } else {
+            var cbChecked = (isCur && d.locked) ? ' checked' : '';
+            rowCb = '<input type="checkbox" class="sv-ver-cb"' + cbChecked + ' title="' + ((isCur && d.locked) ? '取消锁定，恢复自动跟随' : '锁定为本项目使用的版本') + '" onchange="_svToggleRowLock(\'' + d.source_type + '\',' + d.doc_id + ',\x27' + escJs(v.version) + '\x27,\x27' + escJs(d.doc_name) + '\x27,this)">';
+          }
+        }
+        return '<div class="sv-ver-row">' +
+          rowCb +
+          '<span class="sv-ver-dot' + (isCur ? ' cur' : '') + '"></span>' +
+          nameHtml +
+          (v.date ? '<span class="sv-ver-date">' + formatDate(v.date) + '</span>' : '') +
+          rowBadge +
+          '<span style="flex:1"></span>' +
+        '</div>';
+      }).join('') +
+    '</div>';
+  }
+
+  var actions = '';
+  var tglKey = key.replace(/[^a-zA-Z0-9]/g, '_');
+  if (sorted.length) {
+    actions += '<button class="btn-icon" id="sv-tgl-' + tglKey + '" title="' + (expanded ? '收起' : '展开全部版本') + '" onclick="_svToggleDoc(\'' + d.source_type + '\',' + d.doc_id + ')">' + (expanded ? '&#9650;' : '&#9660;') + '</button>';
+  }
+
+  // 产品基础版本子项的「使用最新版本」单独开关（来源已由来源下拉管理，项目侧不再提供复选框）
+  // covered 文档的来源由项目侧同阶段「使用产品基础版本」控制，不提供单独开关
+  var autoCb = '';
+  if (g.type === 'product' && d.doc_auto_capable && !covered) {
+    var autoLabel = '使用最新版本';
+    autoCb = '<label class="sv-auto-cb' + (canEdit ? '' : ' disabled') + '" title="' + (d.doc_auto ? '已开启' : '已关闭') + '「' + autoLabel + '」：' + (d.doc_auto ? '该文档自动锁定最新版本，不可手动选择其他版本' : '该文档手动管理版本') + '">' +
+      '<input type="checkbox"' + (d.doc_auto ? ' checked' : '') + (canEdit ? '' : ' disabled') + ' onchange="_svToggleDocAuto(\'' + d.source_type + '\',' + d.doc_id + ',\'' + autoLabel + '\',this)" style="width:12px;height:12px;accent-color:var(--accent)">' +
+      autoLabel +
+    '</label>';
+  }
+
+  // 单行精简：身份区在左（状态图标+文档名+阶段标签），当前版本/徽标/来源控件/版本数/展开按钮右靠留白
+  return '<div class="sv-doc' + (isFpgaChild ? ' sv-doc-child' : '') + '">' +
+    '<div class="sv-doc-row">' +
+      stateIcon +
+      '<span class="sv-doc-name" title="' + escHtml(d.doc_name) + '">' + escHtml(d.doc_name) + '</span>' +
+      stagePill +
+      '<span style="flex:1"></span>' +
+      current +
+      badge +
+      srcSel +
+      autoCb +
+      '<span class="sv-doc-count">' + (d.version_count || (d.versions ? d.versions.length : 0)) + ' 个版本</span>' +
+      actions +
+    '</div>' +
+    versionsHtml +
+  '</div>';
+}
+
+function _svToggleDoc(sourceType, docId) {
+  var key = _svDocKey(sourceType, docId);
+  _svExpanded[key] = !_svExpanded[key];
+  var tglKey = key.replace(/[^a-zA-Z0-9]/g, '_');
+  var el = document.getElementById('sv-vers-' + tglKey);
+  if (el) el.style.display = _svExpanded[key] ? '' : 'none';
+  var btn = document.getElementById('sv-tgl-' + tglKey);
+  if (btn) {
+    btn.innerHTML = _svExpanded[key] ? '&#9650;' : '&#9660;';
+    btn.title = _svExpanded[key] ? '收起' : '展开全部版本';
+  }
+}
+
+// 版本汇总：单一来源的最终交付清单（业务软件 / FPGA开发 每项一个来源），按 组件/版本状态/版本路径 表格展示
+function _svSummaryRows() {
+  var groups = (_svData && _svData.groups) || [];
+  // 产品编号 → 产品名（取自产品组），供汇总「产品编号」列 chip 悬停显示产品名（同版本维护产品卡标题）
+  var prodNames = {};
+  groups.forEach(function(g) {
+    if (g.type === 'product' && g.code) prodNames[g.code] = g.name || '';
+  });
+  // 单一来源口径：项目发布子项（软件发布 / 各 FPGA 板卡子文档）选择「使用项目侧发布版本」
+  // （含默认）即代表开发人员确定该交付项（业务软件 / FPGA开发）的最终版本走项目侧，
+  // 同阶段的产品基础版本不再进入版本汇总 —— 避免同一阶段出现两个来源。
+  //   stageProjectOwned：整阶段被项目侧项目文档占据（软件发布；无板卡拆分时通用 FPGA 文档）
+  //   boardProjectOwned：某产品板卡的 FPGA 子文档为项目侧 → 该产品 FPGA基础版本不参与汇总
+  var stageProjectOwned = {};
+  var boardProjectOwned = {};
+  groups.forEach(function(g) {
+    if (g.type !== 'project') return;
+    (g.docs || []).forEach(function(d) {
+      if (d.fpga_parent) return;                     // FPGA 容器行不直接占据阶段
+      if (d.fpga_child) {
+        if (!d.doc_auto && d.product_code) boardProjectOwned[d.product_code] = true;
+      } else if (!d.doc_auto) {
+        stageProjectOwned[d.stage || ''] = true;
+      }
+    });
+  });
+  var rows = [];
+  groups.forEach(function(g) {
+    if (_svTypeFilter === 'project' && g.type !== 'project') return;
+    if (_svTypeFilter === 'product' && g.type !== 'product') return;
+    if (_svProdFilter !== 'all' && g.key !== _svProdFilter) return;
+    (g.docs || []).forEach(function(d) {
+      // 汇总口径 = 整个项目最终交付给测试人员的版本清单：每个交付项都占一行，
+      // 有版本（已锁定 ✅ / 未锁定自动跟踪）显示版本；尚无版本 → 显示「未提交」，
+      // 让测试/项目管理一眼看出哪些交付项还没提交版本（含项目文档与自动跟踪的
+      // 产品基础版本；未锁定的标「自动」）。
+      if (d.fpga_parent) return;       // FPGA 容器行：版本由下方各板卡子文档承载，不单列
+      if (d.covered) return;           // 被项目侧同阶段「使用产品基础版本」覆盖 → 不单独汇总（阶段级互斥）
+      if (g.type === 'product') {
+        // 单一来源：同阶段已被项目侧项目发布占据 → 该产品基础版本不是最终交付，不参与汇总
+        var shadowed = !!stageProjectOwned[d.stage || ''];
+        if (!shadowed && (d.stage || '') === 'FPGA开发') shadowed = !!boardProjectOwned[g.code || ''];
+        if (shadowed) return;
+        // 产品基础版本文档：手动管理模式（doc_auto=0）且未锁定 → 用户未承诺任何版本，不进入汇总
+        if (!d.doc_auto && !d.locked) return;
+      }
+      if (!_svDocMatch(d)) return;
+      var sorted = (d.versions || []).slice().sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
+      var latestVer = sorted.length ? sorted[0].version : null;
+      var curVer = null;
+      (d.versions || []).forEach(function(v) { if (v.version === d.current) curVer = v; });
+      // 分类：项目来源=阶段，产品基础版本=产品文档的分类（即 stage）
+      // 版本来源 = 实际来源：项目发布子项若切了「使用产品基础版本」(doc_auto=1) 则其版本来自产品侧
+      // 产品编号仅对「产品基础版本」来源展示（项目发布子项/FPGA板卡走项目侧时归属项目自身，不标产品）
+      var src = (g.type === 'product' || d.doc_auto) ? '产品基础版本' : '项目发布';
+      var prodCode = src === '产品基础版本'
+        ? (g.type === 'product' ? (g.code || '') : (d.product_code || null))
+        : null;
+      rows.push({
+        stage: d.stage || '',
+        doc_name: d.doc_name,
+        source: src,
+        product_code: prodCode,
+        product_name: prodNames[prodCode] || '',
+        version: d.current,
+        url: curVer ? curVer.url : null,
+        locked: !!d.locked,
+        has_newer: !!d.has_newer,
+        is_latest: !!latestVer && d.current === latestVer
+      });
+    });
+  });
+  return rows;
+}
+
+// 版本汇总 → DataTable 行。
+// DataTable 的 rowspan 按【单列 key 连续等值】合并，而原汇总口径是「同来源+同产品编号的连续行」
+// 同时合并 版本来源 与 产品编号 两列 → 两列共用合成合并键 _mrg（来源+产品编号 组合），
+// 保证两列合并边界完全一致；渲染分别读 row.source / row.prod。
+function _svSummaryDtRows() {
+  return _svSummaryRows().map(function(r) {
+    // 产品编号 chip：与版本维护产品卡标题同设计 —— projCodeTag 工厂，悬停显示产品名，点击跳产品详情
+    var prodCell = r.product_code
+      ? projCodeTag(String(r.product_code), 'openProductDetail(\'' + escJs(String(r.product_code)) + '\')', r.product_name || '')
+      : '<span style="font-size:12px;color:var(--muted)">——</span>';
+    // 状态两行化：主行 = 版本号（已锁定 ✅ / 自动 chip），次行 = 交付状态说明（最新/非最新/自动跟踪）
+    // 语义映射与原有判定完全一致：is_latest → 最新；has_newer → 非最新·来源有更新
+    var status;
+    if (r.version) {
+      var mainVer = '<span class="sv-ver-main' + (r.locked ? ' locked' : ' fg') + '">' + escHtml(r.version) + '</span>';
+      if (r.locked) {
+        // 已锁定（手动锁定或自动锁行）→ ✅ 确认交付
+        status = '<div class="sv-ver-line"><span class="sv-state-ok" title="已锁定为当前版本">✅</span>' + mainVer + '</div>';
+        status += '<div class="sv-ver-sub">已锁定' +
+          (r.is_latest ? ' · <span class="f-newest">最新</span>' : (r.has_newer ? ' · <span class="f-newer">非最新 · 来源有更新</span>' : '')) +
+          '</div>';
+      } else {
+        // 未锁定但来源已解析出当前版本（自动跟踪来源）→ 标 自动，与手动锁定的 ✅ 区分
+        status = '<div class="sv-ver-line"><span class="sv-auto-chip" title="未锁定：自动跟踪当前版本来源（如需固定可选具体版本后锁定）">自动</span>' + mainVer + '</div>';
+        status += '<div class="sv-ver-sub">自动跟踪当前版本</div>';
+      }
+    } else {
+      status = '<span class="sv-unsubmitted">未提交</span>';
+    }
+    var path = r.url
+      ? '<a class="sv-c-path" href="' + escHtml(r.url) + '" target="_blank" title="' + escHtml(r.url) + '">' + escHtml(r.url) + '</a>'
+      : '<span class="sv-c-path-missing">—</span>';
+    var op = r.url
+      ? '<button class="btn-icon" title="复制链接" onclick="_svCopyUrl(' + escJs(r.url) + ',\x27' + escJs(r.version) + '\x27)">&#128203;</button>'
+      : '<span style="color:var(--muted)">—</span>';
+    // 列顺序：版本名字 / 分类 / 版本信息 / 版本路径 / 版本来源+产品编号(合并) / 操作
+    return {
+      _mrg: (r.source || '') + '\u0001' + (r.product_code || ''),
+      name: r.doc_name,
+      stage: r.stage || '',
+      status: status,
+      path: path,
+      source: r.source || '',
+      prod: prodCell,
+      op: op
+    };
+  });
+}
+
+function _svMountSummaryDt() {
+  var mount = document.getElementById('sv-summary-dt');
+  if (!mount) return;
+  _svDestroySummaryDt();
+  _svSummaryDt = new DataTable({
+    container: mount,
+    density: 'compact',
+    maxHeight: 'calc(100vh - 360px)',
+    emptyText: '暂无版本汇总（项目发布子项与自动跟踪的产品基础版本在此汇总最终交付版本）',
+    data: _svSummaryDtRows(),
+    columns: [
+      { key: 'name',   title: '版本名字', align: 'left',  width: '17%', minWidth: 130, className: 'sv-c-name' },
+      { key: 'stage',  title: '分类',     align: 'left',  width: '8%',  minWidth: 70, className: 'sv-c-stage' },
+      { key: 'status', title: '版本信息', align: 'left',  width: '17%', minWidth: 150, render: function(v) { return v; } },
+      { key: 'path',   title: '版本路径', align: 'left',  width: '27%', minWidth: 200, render: function(v) { return v; } },
+      { key: '_mrg', title: '版本来源', align: 'left', width: '10%', minWidth: 80, rowspan: true,
+        render: function(v, row) { return escHtml(row.source); } },
+      { key: '_mrg', title: '产品编号', align: 'left', width: '10%', minWidth: 90, rowspan: true,
+        render: function(v, row) { return row.prod; } },
+      { key: 'op',     title: '操作',     align: 'center', width: '60px', minWidth: 60, render: function(v) { return v; } }
+    ]
+  });
+}
+
+function _svDestroySummaryDt() {
+  if (_svSummaryDt) {
+    try { _svSummaryDt.destroy(); } catch (e) {}
+    _svSummaryDt = null;
+  }
+}
+
+// 汇总视图内搜索过滤时更新已挂载 DataTable（避免整体 innerHTML 重建把表格销毁），无实例则重新挂载
+function _svRefreshSummaryRows() {
+  if (_svSummaryDt) _svSummaryDt.setData(_svSummaryDtRows());
+  else _svMountSummaryDt();
+}
+
+function _svSetView(v) { _svView = v; renderVersionsTab(); }
+function _svSetType(v) { _svTypeFilter = v; renderVersionsTab(); }
+function _svSetProd(v) { _svProdFilter = v; renderVersionsTab(); }
+// 版本来源切换确认弹窗（阶段级互斥：切换后项目仓库发布 / 产品基础版本二选一）
+function _svConfirmToggle(title, message, onOk, onCancel) {
+  openDialog(title,
+    '<div style="padding:16px 18px;font-size:13px;color:var(--fg);line-height:1.8">' + message + '</div>',
+    [
+      { text: '取消', cls: '', onclick: function() { this.closest('.note-dialog-overlay').remove(); if (onCancel) onCancel(); } },
+      { text: '确认切换', cls: 'btn-danger', onclick: function() { this.closest('.note-dialog-overlay').remove(); onOk(); } },
+    ],
+    { maxWidth: 460 }
+  );
+}
+
+async function _svToggleBspAuto(checked) {
+  if (!_svCanEdit()) { showToast('无编辑权限', 'error'); return; }
+  try {
+    await API.post('/projects/' + _comboCurCode + '/software-versions/bsp-auto-latest', { enabled: checked });
+    showToast(checked ? '已开启「全部使用最新版本」，所有产品基础版本将自动锁定最新版本' : '已关闭「全部使用最新版本」，恢复手动选择', 'success');
+    _svEmitLockChanged();
+  } catch(e) { showToast('切换失败: ' + (e.message || ''), 'error'); }
+}
+
+// 子项级「使用最新版本」开关（仅产品基础版本组文档；项目发布组来源由来源下拉管理）
+async function _svToggleDocAuto(sourceType, docId, label, el) {
+  if (!_svCanEdit()) { showToast('无编辑权限', 'error'); return; }
+  _svDoDocAuto(sourceType, docId, label, !!el.checked);
+}
+
+// 项目发布子项「版本来源」下拉：使用项目侧发布版本（project，默认）↔ 使用产品基础版本（product）
+// 切换涉及阶段级来源互斥（同阶段产品文档 covered），弹确认框；取消则还原下拉值
+function _svChangeSource(sourceType, docId, docName, el) {
+  if (!_svCanEdit()) { showToast('无编辑权限', 'error'); return; }
+  var cur = el && el.getAttribute('data-cur');
+  var on = el && el.value === 'product';
+  if ((cur === 'product' && on) || (cur === 'project' && !on)) { return; } // 未变化（如程序重绘）
+  var msg = on
+    ? '「' + escHtml(docName) + '」将改用<b>使用产品基础版本</b>：<br>· 版本列表改为关联产品对应阶段的发布版本，默认自动锁定并跟随产品侧基础版本最新，也可在展开的版本列表中手动锁定任一产品版本；<br>· <b>项目仓库发布的版本将不再参与版本汇总</b>，产品卡上同阶段基础版本文档灰显（该板卡不覆盖任何其他板卡，其余板卡来源保持不变）。<br><br>确认切换？'
+    : '「' + escHtml(docName) + '」将<b>恢复使用项目侧发布版本</b>：版本来自本项目仓库 GitLab 发布，按项目文档模板显示匹配结果；产品卡同阶段基础版本文档恢复单独管理。<br><br>确认切换？';
+  _svConfirmToggle('切换版本来源', msg, function() {
+    _svDoChangeSource(sourceType, docId, docName, on, el);
+  }, function() {
+    if (el) el.value = cur; // 取消 → 还原下拉
+  });
+}
+
+async function _svDoChangeSource(sourceType, docId, docName, on, el) {
+  try {
+    await API.post('/projects/' + _comboCurCode + '/software-versions/doc-auto', { source_type: sourceType, doc_id: docId, enabled: on });
+    if (el) el.setAttribute('data-cur', on ? 'product' : 'project');
+    showToast('「' + docName + '」已切换为' + (on ? '使用产品基础版本' : '使用项目侧发布版本'), 'success');
+    _svEmitLockChanged();
+  } catch(e) {
+    showToast('切换失败: ' + (e.message || ''), 'error');
+    if (el) el.value = (el.getAttribute('data-cur') || 'project'); // 失败还原
+  }
+}
+
+async function _svDoDocAuto(sourceType, docId, label, on) {
+  try {
+    await API.post('/projects/' + _comboCurCode + '/software-versions/doc-auto', { source_type: sourceType, doc_id: docId, enabled: on });
+    showToast((on ? '已开启「' : '已关闭「') + label + '」', 'success');
+    _svEmitLockChanged();
+  } catch(e) { showToast('切换失败: ' + (e.message || ''), 'error'); }
+}
+function _svSetKeyword(v) {
+  _svKeyword = v;
+  if (_svView === 'all') {
+    // 汇总视图：直接刷新已挂载 DataTable（保留列宽/滚动位置），避免整体重建销毁表格
+    _svRefreshSummaryRows();
+    return;
+  }
+  var body = document.getElementById('versions-body');
+  if (body) body.innerHTML = _svRenderBody();
+}
+
+function _svCopyAll() {
+  var rows = _svSummaryRows();
+  if (!rows.length) { showToast('暂无版本链接', 'info'); return; }
+  var lines = rows.map(function(r) {
+    return (r.stage + ' ' + r.doc_name) + '\t' + (r.source || '') + '\t' + (r.product_code || '——') + '\t' + (r.version || '未提交') + (r.url ? '\t' + r.url : '');
+  });
+  _svCopyText(lines.join('\n'), '全部版本链接');
+}
+
+function _svExportCsv() {
+  var rows = _svSummaryRows();
+  if (!rows.length) { showToast('暂无版本数据', 'info'); return; }
+  var csvRows = [['版本来源', '产品编号', '分类', '版本名字', '版本信息', '版本路径']];
+  rows.forEach(function(r) {
+    var status = r.version || '未提交';
+    if (r.locked) status = '✅ ' + status;
+    if (r.is_latest) status += ' 最新';
+    else if (r.has_newer) status += ' 非最新';
+    csvRows.push([r.source || '', r.product_code || '——', r.stage || '', r.doc_name, status, r.url || '']);
+  });
+  var csv = csvRows.map(function(r) {
+    return r.map(function(c) {
+      var s = String(c == null ? '' : c);
+      if (/[",\n]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
+      return s;
+    }).join(',');
+  }).join('\r\n');
+  var blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '软件版本_' + _comboCurCode + '_' + fmtLocalDate() + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+  showToast('已导出 CSV', 'success');
+}
+
+/* ── 锁定 / 解锁 ── */
+
+async function _svToggleRowLock(sourceType, docId, version, docName, el) {
+  if (el && el.checked) await lockVersion(sourceType, docId, version, docName);
+  else await unlockVersion(sourceType, docId, docName);
+}
+
+async function lockVersion(sourceType, docId, version, docName) {
+  if (!version) return;
+  try {
+    await API.post('/projects/' + _comboCurCode + '/software-versions/lock', { source_type: sourceType, doc_id: docId, version: version });
+    showToast('已锁定版本：' + version + (docName ? '（' + docName + '）' : ''), 'success');
+    _svEmitLockChanged();
+  } catch(e) { showToast('操作失败: ' + (e.message || ''), 'error'); }
+}
+
+async function unlockVersion(sourceType, docId, docName) {
+  try {
+    await API.post('/projects/' + _comboCurCode + '/software-versions/unlock', { source_type: sourceType, doc_id: docId });
+    showToast('已恢复自动最新' + (docName ? '（' + docName + '）' : ''), 'success');
+    _svEmitLockChanged();
+  } catch(e) { showToast('操作失败: ' + (e.message || ''), 'error'); }
+}
+
+async function _svReload() {
+  try {
+    var resp = await API.get('/projects/' + _comboCurCode + '/software-versions');
+    _svData = (resp && resp.data) ? resp.data : resp;
+    renderVersionsTab();
+  } catch(e) { showToast('刷新失败: ' + (e.message || ''), 'error'); }
+}
+
+/* ── 版本锁定实时刷新：EventBus（同页面多视图）+ BroadcastChannel（跨浏览器标签页） ──
+   任何锁定/解锁/自动模式切换后发送事件；打开的同一项目页面订阅后自动刷新，无需手动操作。 */
+
+var _svRealtimeRegistered = false;
+var _svLockChannel = null;
+
+function _svOnLockChanged(e) {
+  // 只刷新正在查看该项目软件版本/汇总的页面；其他项目不打扰
+  if (e && e.projectCode && e.projectCode !== _comboCurCode) return;
+  _svReload();
+}
+
+function _svEmitLockChanged() {
+  EventBus.emit(EVENTS.RELEASE_LOCK_CHANGED, { projectCode: _comboCurCode });
+  try {
+    if (_svLockChannel) _svLockChannel.postMessage({ projectCode: _comboCurCode });
+  } catch(e) {}
+}
+
+function _svRegisterRealtime() {
+  if (_svRealtimeRegistered) return;
+  _svRealtimeRegistered = true;
+  EventBus.on(EVENTS.RELEASE_LOCK_CHANGED, _svOnLockChanged);
+  try {
+    if (typeof BroadcastChannel !== 'undefined') {
+      _svLockChannel = new BroadcastChannel('pma-release-lock');
+      _svLockChannel.onmessage = function(e) { _svOnLockChanged(e && e.data); };
+    }
+  } catch(e) {}
 }
 
 function gotoStageDetail(idx) {

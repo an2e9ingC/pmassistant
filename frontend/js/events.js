@@ -82,5 +82,8 @@ var EVENTS = {
   MAINT_SAVED: 'maint:saved',
   STAGE_SAVED: 'stage:saved',
   STAGE_DELETED: 'stage:deleted',
-  PROJECT_BG_SAVED: 'project-bg:saved'
+  PROJECT_BG_SAVED: 'project-bg:saved',
+
+  /* ── 软件版本：版本锁定/解锁/自动模式切换（实时刷新同项目打开的页面） ── */
+  RELEASE_LOCK_CHANGED: 'release-lock:changed'
 };
