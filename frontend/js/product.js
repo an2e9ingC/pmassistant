@@ -703,7 +703,21 @@ function renderProdInfo(p, docs) {
       el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">未找到' + docName + '，请按要求提交</div>';
     }
   };
-  renderBlockDoc(currentBlockName || '产品规格书');
+  var _curBlockDocName = function() {
+    var sel = document.getElementById('block-doc-select');
+    return sel ? sel.value : (currentBlockName || '产品规格书');
+  };
+  window.loadBlockDoc = function() { renderBlockDoc(_curBlockDocName()); };
+
+  // 产品规格书/设计框图懒加载：进入页面默认不自动拉取（服务端转换 docx/vsdx 一次需数秒），
+  // 先显示占位 + 醒目「加载」按钮；点击按钮或切换下拉时才真正加载预览。
+  var _blockPhEl = document.getElementById('prod-block-content');
+  if (_blockPhEl) {
+    var _blockInitName = currentBlockName || '产品规格书';
+    _blockPhEl.innerHTML = findBlockDoc(_blockInitName)
+      ? docLazyPlaceholder({ docName: _blockInitName, btnOnclick: 'loadBlockDoc()' })
+      : '<div style="padding:20px;text-align:center;color:var(--muted)">未找到' + _blockInitName + '，请按要求提交</div>';
+  }
 
   window.switchBlockDoc = function(docName) {
     var hdr = document.getElementById('prod-block-doc-title');

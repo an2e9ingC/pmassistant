@@ -57,7 +57,7 @@ async function loadProjectDetail(code) {
       API.get('/projects/' + code),
       API.get('/projects/' + code + '/gantt'),
       API.get('/projects/' + code + '/stages'),
-      API.get('/projects/' + code + '/documents'),
+      API.get('/projects/' + code + '/documents?no_scan=1'),
       API.get('/projects/' + code + '/delivery'),
       API.get('/projects/' + code + '/resources'),
       API.get('/projects/' + code + '/notes'),
@@ -132,6 +132,15 @@ async function loadProjectDetail(code) {
     } else {
       history.replaceState({ view: 'detail', params: [_comboCurCode, targetTab] }, '', buildHash('detail', _comboCurCode, targetTab));
     }
+
+    // 首屏已用 no_scan 读库秒开，这里在后台扫描一次外部文档（SVN/PDM/GitLab），
+    // 完成后用最新结果增量刷新文档表；用户切到「项目文档」Tab 时若还没扫完也会即时看到结果
+    var _openScanCode = _comboCurCode;
+    setTimeout(function() {
+      if (_comboCurCode === _openScanCode && typeof _maybeProjectDocsScan === 'function') {
+        _maybeProjectDocsScan();
+      }
+    }, 80);
   } catch(e) {
     document.getElementById('detail-header').innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '</div>';
   }
@@ -150,10 +159,12 @@ async function refreshProjectDetail() {
     var comboInput = document.getElementById('combo-input');
     if (comboInput) comboInput.value = _comboCurCode;
     var docs = []; var notes = [];
-    try { docs = await API.get('/projects/' + code + '/documents') || []; } catch(e) {}
+    try { docs = await API.get('/projects/' + code + '/documents?no_scan=1') || []; } catch(e) {}
     try { notes = await API.get('/projects/' + code + '/notes') || []; } catch(e) {}
     buildDetailHeader(detail);
     buildInfo(detail, notes, _deliveryData, docs);
+    // 刷新后后台重新扫描外部文档（避免在线扫描阻塞本刷新）
+    if (typeof _maybeProjectDocsScan === 'function') _maybeProjectDocsScan();
   } catch(e) {
     showToast('刷新失败: ' + (e.message || ''), 'error');
   }
@@ -410,7 +421,7 @@ function buildInfo(p, notes, delivery, docs, taskStats, bugStats) {
   html += '<div style="flex:1;min-width:0;display:flex;flex-direction:column">';
   html += '<div class="card card-clip" style="padding:0;overflow:hidden;flex:1;display:flex;flex-direction:column">';
   html += '<div style="padding:8px 12px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">';
-  html += '<span style="font-size:12px;font-weight:600">' + escHtml(currentAgreementName || '技术协议') + '</span>';
+  html += '<span id="proj-agreement-title" style="font-size:12px;font-weight:600">' + escHtml(currentAgreementName || '技术协议') + '</span>';
   html += '<div style="display:flex;align-items:center;gap:4px">';
   html += '<select id="agreement-doc-select" style="font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--fg);cursor:pointer" onchange="switchAgreementDoc(this.value)">';
   agreementOptions.forEach(function(opt) {
@@ -427,26 +438,68 @@ function buildInfo(p, notes, delivery, docs, taskStats, bugStats) {
 
   document.getElementById('info-content').innerHTML = html;
 
-  // Render agreement doc inline
+  // 技术协议懒加载：进入页面默认不自动拉取大文档（服务端转换 docx/vsdx 一次需数秒），
+  // 先显示占位 + 醒目「加载」按钮；点击按钮或切换下拉时才真正加载预览。
+  var _agreeDocLoadTimer = null;
+  var _curAgreementName = function() {
+    var sel = document.getElementById('agreement-doc-select');
+    return sel ? sel.value : (currentAgreementName || '对外销售-技术协议');
+  };
   var renderAgreementDoc = function(docName) {
     var doc = findAgreementDoc(docName);
     var el = document.getElementById('proj-agreement-content');
     if (!el) return;
+    if (_agreeDocLoadTimer) { clearTimeout(_agreeDocLoadTimer); _agreeDocLoadTimer = null; }
     if (doc) {
       var token = localStorage.getItem('pma_token') || '';
       var fetchUrl = '/api/documents/fetch?url=' + encodeURIComponent(doc.location) + '&token=' + encodeURIComponent(token);
-      el.innerHTML = '<iframe src="' + fetchUrl + '" style="width:100%;min-height:800px;border:none"></iframe>';
+      var ext = (doc.location || '').split('.').pop().toLowerCase().split('?')[0];
+      var needConvert = (ext === 'vsdx' || ext === 'docx');
+      // 加载中转圈提示
+      el.innerHTML = '<div id="proj-agreement-loading" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:400px;color:var(--muted)">' +
+        '<div style="display:inline-block;width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:16px"></div>' +
+        '<div style="font-size:13px;margin-bottom:4px">正在加载 <b>' + escHtml(docName) + '</b></div>' +
+        (needConvert ? '<div style="font-size:11px;color:var(--muted)">首次转换需要 5–15 秒，请稍候…</div>' : '') +
+        '<div id="proj-agreement-loading-hint" style="font-size:11px;color:var(--warn);margin-top:12px;display:none">转换时间较长，仍在处理中…</div>' +
+      '</div>';
+      if (needConvert) {
+        _agreeDocLoadTimer = setTimeout(function() {
+          var hint = document.getElementById('proj-agreement-loading-hint');
+          if (hint) hint.style.display = 'block';
+        }, 20000);
+      }
+      var iframe = document.createElement('iframe');
+      iframe.src = fetchUrl;
+      iframe.style.cssText = 'width:100%;min-height:800px;border:none;display:none';
+      iframe.onload = function() {
+        if (_agreeDocLoadTimer) { clearTimeout(_agreeDocLoadTimer); _agreeDocLoadTimer = null; }
+        iframe.style.display = '';
+        var spinner = document.getElementById('proj-agreement-loading');
+        if (spinner) spinner.style.display = 'none';
+      };
+      el.appendChild(iframe);
     } else {
       el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">未找到' + docName + '，请按要求提交</div>';
     }
   };
-  renderAgreementDoc(currentAgreementName || '对外销售-技术协议');
+  window.loadAgreementDoc = function() { renderAgreementDoc(_curAgreementName()); };
 
   window.switchAgreementDoc = function(docName) {
     var hdr = document.querySelector('#info-content .section-hd .section-title');
     if (hdr) hdr.textContent = docName;
+    var title = document.getElementById('proj-agreement-title');
+    if (title) title.textContent = docName;
     renderAgreementDoc(docName);
   };
+
+  // 默认先显示占位（不拉取文档），用户点「加载」后再取；无对应文档则直接提示缺失
+  var _agreePhEl = document.getElementById('proj-agreement-content');
+  if (_agreePhEl) {
+    var _agreeInitName = currentAgreementName || '对外销售-技术协议';
+    _agreePhEl.innerHTML = findAgreementDoc(_agreeInitName)
+      ? docLazyPlaceholder({ docName: _agreeInitName, btnOnclick: 'loadAgreementDoc()' })
+      : '<div style="padding:20px;text-align:center;color:var(--muted)">未找到' + _agreeInitName + '，请按要求提交</div>';
+  }
 
   window.openAgreementDocFullscreen = function() {
     var sel = document.getElementById('agreement-doc-select');
@@ -1501,6 +1554,68 @@ function refreshDocs() {
   API.get('/projects/' + _comboCurCode + '/documents').then(function(data) {
     buildDocs(data);
   });
+}
+
+/* ── 后台文档扫描（不阻塞首屏）──
+ * 打开项目详情时首屏用 no_scan 秒开，之后在后台对 SVN/PDM/GitLab 做一次在线扫描，
+ * 完成后用最新结果增量刷新文档表（_docsDt.setData，不清空用户操作）。
+ * 用户切到「项目文档」Tab 时再次触发：同一项目 30s 内刚扫过则跳过；
+ * 若上次正在扫其它项目（快速切换），记录待扫项目，结束后自动补扫，确保新项目也能尽快拿到最新结果。 */
+var _projDocsScanBusy = false;
+var _projDocsScanCode = null;    // 最近一次扫描的项目（节流与补扫判定依据）
+var _projDocsScanAt = 0;
+var _projDocsScanPending = null; // busy 期间被请求扫描的项目 code，结束后补扫
+
+function _setDocsScanStatus(on) {
+  var sec = document.getElementById('dsec-docs');
+  if (!sec) return;
+  var titleEl = sec.querySelector('.section-hd .section-title');
+  if (!titleEl) return;
+  var base = (titleEl.getAttribute('data-docscan-orig') || titleEl.textContent).replace(/\s*·\s*校验中…\s*$/, '');
+  if (on) {
+    titleEl.setAttribute('data-docscan-orig', base);
+    titleEl.textContent = base + ' · 校验中…';
+  } else {
+    titleEl.setAttribute('data-docscan-orig', base);
+    titleEl.textContent = base;
+  }
+}
+
+function _startProjectDocsScan(code) {
+  _projDocsScanBusy = true;
+  _projDocsScanCode = code;
+  _projDocsScanAt = Date.now();
+  _setDocsScanStatus(true);
+  API.get('/projects/' + code + '/documents').then(function(data) {
+    // 扫描期间用户可能已切到其它项目，避免旧数据覆盖新页面
+    if (_comboCurCode !== code) return;
+    buildDocs(data);
+  }).catch(function() {
+    // 扫描失败静默处理，保留当前文档表数据
+  }).then(function() {
+    _projDocsScanBusy = false;
+    _setDocsScanStatus(false);
+    // 扫描期间曾请求扫描另一个项目（快速切换）→ 结束后补扫一次
+    if (_projDocsScanPending && _projDocsScanPending !== code) {
+      var next = _projDocsScanPending;
+      _projDocsScanPending = null;
+      if (_comboCurCode === next) _startProjectDocsScan(next);
+    } else {
+      _projDocsScanPending = null;
+    }
+  });
+}
+
+function _maybeProjectDocsScan() {
+  if (!_comboCurCode) return;
+  var code = _comboCurCode;
+  // 同一项目 30s 内刚扫过则跳过；快速切到其它项目不受此限，避免新项目一直等不到首扫
+  if (code === _projDocsScanCode && Date.now() - _projDocsScanAt < 30000) return;
+  if (_projDocsScanBusy) {
+    _projDocsScanPending = code; // 正在扫其它项目，记录待扫，结束后自动补扫当前项目
+    return;
+  }
+  _startProjectDocsScan(code);
 }
 
 /* ── Import Template Docs ── */
@@ -3010,6 +3125,9 @@ function switchDTab(id, el) {
       loadViewScript('/js/bugs.js?v=' + APP_VERSION, function() { loadProjectBugs(_comboCurCode); });
     }
   }
+  // 切到「项目文档」Tab 时后台再校验一次外部文档（打开详情时已在后台扫过，30s 内自动跳过），
+  // 保证用户看到的文档状态尽量新；扫描结果经 buildDocs 增量刷新表格
+  if (id === 'docs' && typeof _maybeProjectDocsScan === 'function') _maybeProjectDocsScan();
   // Update hash: user clicks push, initial load skip (history is handled by loadProjectDetail)
   if (_comboCurCode && typeof buildHash === 'function' && el) {
     history.pushState({ view: 'detail', params: [String(_comboCurCode), id] }, '', buildHash('detail', String(_comboCurCode), id));

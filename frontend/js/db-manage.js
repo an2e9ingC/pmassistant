@@ -8,6 +8,7 @@ var _dbSqlcipherEnabled = false;
 var _dbRemoteBackupConfig = null;
 var _dbRemoteBackups = [];
 var _dbManageContainerId = 'view-db-manage';
+var _dbRemoteLoading = false;  // 远端文件列表请求是否在途
 
 async function initDbManage(containerId) {
   if (containerId) _dbManageContainerId = containerId;
@@ -16,32 +17,59 @@ async function initDbManage(containerId) {
   container.innerHTML = '<div class="loading-spinner" style="padding:40px">加载中...</div>';
 
   try {
-    var cfg = await API.get('/admin/db/backup-config');
-    _dbBackupConfig = cfg;
-    var backups = await API.get('/admin/db/backups');
-    _dbBackups = backups || [];
-    var scStatus = await API.get('/admin/db/sqlcipher-status');
-    _dbSqlcipherEnabled = scStatus && scStatus.enabled;
-    var rcfg = await API.get('/admin/db/remote-backup-config');
-    _dbRemoteBackupConfig = rcfg || {};
-    var rbacks = await API.get('/admin/db/remote-backups');
-    _dbRemoteBackups = (rbacks && rbacks.files) ? rbacks.files : [];
+    // 本地/配置接口全部秒回；远端文件列表单独后台加载（首次需连 NAS，可能数秒）
+    var res = await Promise.all([
+      API.get('/admin/db/backup-config'),
+      API.get('/admin/db/backups'),
+      API.get('/admin/db/sqlcipher-status'),
+      API.get('/admin/db/remote-backup-config'),
+    ]);
+    _dbBackupConfig = res[0];
+    _dbBackups = res[1] || [];
+    _dbSqlcipherEnabled = res[2] && res[2].enabled;
+    _dbRemoteBackupConfig = res[3] || {};
   } catch(e) {
     container.innerHTML = '<div class="error-state">加载失败: ' + escHtml(e.message) + '</div>';
     return;
   }
 
-  renderDbManage();
+  _startRemoteLoad();   // 渲染本地 + 后台扫远端，完成后刷新远端表与 sync 徽标
 }
 
 async function refreshDbManage() {
   try {
     var backups = await API.get('/admin/db/backups');
     _dbBackups = backups || [];
-    var rbacks = await API.get('/admin/db/remote-backups');
-    _dbRemoteBackups = (rbacks && rbacks.files) ? rbacks.files : [];
   } catch(e) { return; }
-  renderDbManage();
+  _startRemoteLoad();   // 本地即时渲染；远端列表后台刷新
+}
+
+// ── 远端备份列表后台加载（不阻塞本地渲染）──
+
+function _patchLocalSyncStatus(remoteFiles) {
+  // 用远端文件 leaf name 直接补算本地备份 sync 徽标（与后端 _build_backup_item 逻辑一致），
+  // 避免远端返回后再二次请求 /backups
+  var names = {};
+  (remoteFiles || []).forEach(function(f) { if (f && f.name) names[f.name] = 1; });
+  (_dbBackups || []).forEach(function(b) {
+    if (b && b.name != null) b.sync_status = names[b.name] ? 'synced' : 'not_synced';
+  });
+}
+
+function _startRemoteLoad() {
+  if (_dbRemoteLoading) return;            // 已有请求在途
+  _dbRemoteLoading = true;
+  renderDbManage();                        // 先渲染本地（+已有远端缓存）；无旧数据时远端区显示「扫描中…」
+  API.get('/admin/db/remote-backups').then(function(r) {
+    var files = (r && r.files) ? r.files : [];
+    _dbRemoteBackups = files;
+    _patchLocalSyncStatus(files);          // 远端已返回 → 本地 sync 徽标由「待校验」补算为实际状态
+  }).catch(function() {
+    // 远端不可达/失败：保留已有远端列表，避免误清空
+  }).then(function() {
+    _dbRemoteLoading = false;
+    renderDbManage();
+  });
 }
 
 function renderDbManage() {
@@ -285,12 +313,15 @@ function renderDbManage() {
 
   // ── Remote backups table ──
   html += '<div>' +
-    '<div style="font-size:11px;color:var(--muted);font-weight:540;margin-bottom:4px">远端备份（共 ' + _dbRemoteBackups.length + ' 个）' +
+    '<div style="font-size:11px;color:var(--muted);font-weight:540;margin-bottom:4px">远端备份' +
+      ((_dbRemoteLoading && rEnabled && rType !== 'svn' && !_dbRemoteBackups.length) ? '（扫描中…）' : '（共 ' + _dbRemoteBackups.length + ' 个）') +
       (rPath ? ' — ' + escHtml(rPath) : '') + '</div>';
   if (!rEnabled) {
     html += '<div class="card card-pad" style="font-size:12px;color:var(--muted);font-style:italic">远端备份未启用，请在配置中启用</div>';
   } else if (rType === 'svn') {
     html += '<div class="card card-pad" style="font-size:12px;color:var(--warn);font-style:italic">SVN 暂不支持</div>';
+  } else if (_dbRemoteLoading && !_dbRemoteBackups.length) {
+    html += '<div class="card card-pad" style="font-size:12px;color:var(--muted);font-style:italic">正在扫描远端备份目录…（NAS 连接可能需要数秒）</div>';
   } else if (!_dbRemoteBackups.length) {
     html += '<div class="card card-pad" style="font-size:12px;color:var(--muted);font-style:italic">暂无远端备份文件</div>';
   } else {
@@ -376,9 +407,15 @@ function _renderLocalBackupTable(TYPE_LABELS) {
          row.file_type === 'env' ? 'background:var(--warn-lt);color:var(--warn)' :
          'background:var(--muted-lt);color:var(--muted)') + '">' + typeLabel + '</span>';
       var permBadge = row.permanent ? ' <span style="font-size:9px;padding:1px 4px;border-radius:3px;background:var(--success-lt);color:var(--success)">永久</span>' : '';
-      var syncBadge = row.sync_status === 'synced'
-        ? '<span style="font-size:10px;padding:1px 6px;border-radius:3px;background:var(--success-lt);color:var(--success)">已同步</span>'
-        : '<span style="font-size:10px;padding:1px 6px;border-radius:3px;background:var(--muted-lt);color:var(--muted)">未同步</span>';
+      var syncBadge;
+      if (row.sync_status === 'synced') {
+        syncBadge = '<span style="font-size:10px;padding:1px 6px;border-radius:3px;background:var(--success-lt);color:var(--success)">已同步</span>';
+      } else if (row.sync_status === 'not_synced') {
+        syncBadge = '<span style="font-size:10px;padding:1px 6px;border-radius:3px;background:var(--muted-lt);color:var(--muted)">未同步</span>';
+      } else {
+        // 远端列表尚未返回（缓存冷）→ 待后台扫描后补算
+        syncBadge = '<span style="font-size:10px;padding:1px 6px;border-radius:3px;background:var(--warn-lt);color:var(--warn)">待校验</span>';
+      }
       var canSync = true;
 
       h += '<tr style="' + (row.permanent ? 'background:var(--accent-lt)' : '') + '">' +

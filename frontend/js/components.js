@@ -3619,6 +3619,23 @@ async function submitReviewer(taskId) {
 ═══════════════════════════════════════════════════ */
 
 /**
+ * 大文档懒加载占位块 — 进入页面默认不自动拉取重文档（服务端转换 docx/vsdx 一次需数秒），
+ * 用户点击醒目的「加载」按钮后再真正加载，避免每次打开页面等待。
+ * @param {Object} opts - { docName: 文档名, btnOnclick: 点击按钮执行的函数字符串 }
+ * @returns {string} placeholder HTML
+ */
+function docLazyPlaceholder(opts) {
+  var docName = (opts && opts.docName) || '文档';
+  var btnOnclick = (opts && opts.btnOnclick) || '';
+  return '<div class="doc-lazy-ph">' +
+    '<div class="doc-lazy-ph-ico">📄</div>' +
+    '<div class="doc-lazy-ph-title">' + escHtml(docName) + '</div>' +
+    '<div class="doc-lazy-ph-sub">文档内容较多，打开页面时默认不自动加载<br>点击下方按钮后再开始加载预览</div>' +
+    '<button type="button" class="btn btn-primary doc-lazy-ph-btn" onclick="' + btnOnclick + '">加载《' + escHtml(docName) + '》</button>' +
+  '</div>';
+}
+
+/**
  * Render an SVG donut (ring) chart into a container element.
  * @param {string|Element} container - DOM element or id
  * @param {Array} segments - [{label, value, color}] — value used for proportion

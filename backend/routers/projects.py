@@ -278,11 +278,12 @@ def delete_stage(
 async def get_documents(
     identifier: str,
     include_removed: bool = Query(False),
+    no_scan: bool = Query(False, description="仅读库返回，跳过对 SVN/PDM/GitLab 的在线扫描（用于首屏秒开，扫描由打开后的后台 /documents 触发）"),
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
     project = resolve_project(db, identifier)
-    docs = await project_service.get_project_documents(db, project.id, include_removed=include_removed)
+    docs = await project_service.get_project_documents(db, project.id, include_removed=include_removed, run_scan=not no_scan)
     return {"code": 0, "data": docs, "message": "ok"}
 
 

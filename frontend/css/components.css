@@ -485,6 +485,19 @@ input[type="checkbox"] { accent-color: var(--accent); }
   color: var(--fg); cursor: pointer; font-size: 12px;
 }
 .error-state button:hover { background: var(--bg); }
+
+/* 大文档懒加载占位 — 项目技术协议 / 产品规格书默认不自动拉取，点击醒目按钮后再加载 */
+.doc-lazy-ph {
+  height: 100%; min-height: 420px; box-sizing: border-box;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; text-align: center; padding: 24px; color: var(--muted);
+  background: var(--bg);
+}
+.doc-lazy-ph-ico  { font-size: 42px; line-height: 1; opacity: .85; }
+.doc-lazy-ph-title { font-size: 13px; font-weight: 600; color: var(--fg); }
+.doc-lazy-ph-sub   { font-size: 11px; line-height: 1.7; }
+.doc-lazy-ph-btn   { font-size: 13px; padding: 9px 26px; border-radius: 8px; cursor: pointer; margin-top: 6px; box-shadow: var(--sh-md); }
+.doc-lazy-ph-btn:hover { transform: translateY(-1px); }
 .toast-container {
   position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 9999;
   display: flex; flex-direction: column; align-items: center; gap: 8px;

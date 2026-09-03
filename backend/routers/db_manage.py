@@ -36,6 +36,36 @@ PERMANENT_BACKUP_DIR = BACKUP_DIR / "permanent"         # permanent backups (rem
 # Lazy migration flag
 _migration_done = False
 
+# Remote NAS file-list TTL cache — 进「数据库管理」页时若每次都 smbclient 实时扫远端（每次 ~6s），
+# 页面会卡在网络往返上。这里缓存远端文件列表：/backups（算本地备份 sync 状态）与
+# /remote-backups（远端表）共享同一份缓存，同一次页面加载只扫一次远端。
+_REMOTE_LIST_CACHE = {"path": "", "ts": 0.0, "files": None}
+_REMOTE_LIST_TTL_SECONDS = 60.0
+
+
+def _remote_cache_files(config) -> Optional[list]:
+    """Return cached remote file list if still fresh for this remote_path, else None."""
+    if (
+        _REMOTE_LIST_CACHE["path"] == config.remote_path
+        and _REMOTE_LIST_CACHE["files"] is not None
+        and time.time() - _REMOTE_LIST_CACHE["ts"] < _REMOTE_LIST_TTL_SECONDS
+    ):
+        return _REMOTE_LIST_CACHE["files"]
+    return None
+
+
+def _set_remote_cache(config, files: list) -> None:
+    _REMOTE_LIST_CACHE["path"] = config.remote_path
+    _REMOTE_LIST_CACHE["files"] = files
+    _REMOTE_LIST_CACHE["ts"] = time.time()
+
+
+def _invalidate_remote_cache() -> None:
+    """远端列表发生写操作（同步/删除/配置变更）后调用，避免展示过期文件列表。"""
+    _REMOTE_LIST_CACHE["files"] = None
+    _REMOTE_LIST_CACHE["ts"] = 0.0
+
+
 # Shared with gen-sqlcipher-key.py — keep in sync
 _SQLCIPHER_SALT = b"pma-sqlcipher-salt-v1"
 _SQLCIPHER_ITERATIONS = 1_000_000
@@ -167,7 +197,7 @@ def _clean_empty_parents(file_path: Path):
         pass
 
 
-def _collect_backup_items(remote_names: set) -> list:
+def _collect_backup_items(remote_names: Optional[set]) -> list:
     """Walk HOTBACK_DIR and PERMANENT_BACKUP_DIR trees and build backup item dicts."""
     items = []
     for d, is_perm in [(HOTBACK_DIR, False), (PERMANENT_BACKUP_DIR, True)]:
@@ -201,7 +231,8 @@ def _sync_permanent_backups(db: Session) -> dict:
     if not config.enabled or not config.remote_path or config.remote_type == "svn":
         return {"synced": [], "failed": [], "skipped": []}
 
-    remote_names = _remote_file_names(db)
+    # 同步是写操作，需要实时远端列表判断跳过项 → force=True 强制现场拉取（不用缓存可能为 None）
+    remote_names = _remote_file_names(db, force=True)
     synced, failed, skipped = [], [], []
 
     if not PERMANENT_BACKUP_DIR.exists():
@@ -251,6 +282,7 @@ def _sync_file_to_nas(src: Path, dest_dir: str, config: RemoteBackupConfig, remo
             dest_file = dest / src.name
             shutil.copy2(str(src), str(dest_file))
             logger.info(f"Synced to NAS (local): {src.name} -> {dest_file}")
+            _invalidate_remote_cache()
             return True
         except Exception as e:
             logger.error(f"Failed to sync to NAS (local): {src.name} -> {dest_dir}: {e}")
@@ -298,6 +330,7 @@ def _sync_file_to_nas(src: Path, dest_dir: str, config: RemoteBackupConfig, remo
             )
             if result.returncode == 0:
                 logger.info(f"Synced to NAS (SMB): {src.name} -> {dest_dir}/{remote_subdir or ''}")
+                _invalidate_remote_cache()
                 return True
             else:
                 logger.error(f"smbclient failed for {src.name}: {result.stderr.strip()}")
@@ -458,6 +491,9 @@ def update_remote_backup_config(
     if payload.remote_password and payload.remote_password != "****":
         PmaSetting.set(db, "db_backup_remote_password", payload.remote_password)
 
+    # 远端路径/凭据可能已变化，旧缓存作废
+    _invalidate_remote_cache()
+
     log_audit(db, cu, "db_remote_backup_config",
               f"更新远端备份配置: enabled={payload.enabled}, type={payload.remote_type}, path={payload.remote_path}",
               AUDIT_CAT_SYSTEM)
@@ -544,6 +580,7 @@ def _delete_remote_file(filename: str, config: RemoteBackupConfig):
                                 break
                     except OSError:
                         pass
+                    _invalidate_remote_cache()
                     return
         return
 
@@ -569,6 +606,7 @@ def _delete_remote_file(filename: str, config: RemoteBackupConfig):
         cmds.append("exit")
 
         subprocess.run(cmd, input="\n".join(cmds), capture_output=True, text=True, timeout=15)
+        _invalidate_remote_cache()
 
 
 @router.post("/remote-backup/sync-now", response_model=dict)
@@ -652,8 +690,8 @@ def sync_all_to_remote(
             if f.is_file() and "-before-" not in f.name:
                 local_files.append(f)
 
-    # Get remote file names
-    remote_names = _remote_file_names(db)
+    # Get remote file names（同步是写操作 → force=True 实时拉取，避免冷缓存 None）
+    remote_names = _remote_file_names(db, force=True)
 
     synced = []
     skipped = []
@@ -685,11 +723,22 @@ def sync_all_to_remote(
 # ── Remote Backup List ──
 
 def _list_remote_files(config: RemoteBackupConfig) -> List[dict]:
-    """List backup files on the remote NAS.
+    """List backup files on the remote NAS（带 TTL 缓存）。
 
     Returns a list of {name, size, size_display, created_at}.
     Returns empty list on failure or if remote is unreachable.
+    缓存命中直接返回；否则扫描一次并写入缓存，供 /backups 与 /remote-backups 共享。
     """
+    cached = _remote_cache_files(config)
+    if cached is not None:
+        return cached
+    files = _list_remote_files_uncached(config)
+    _set_remote_cache(config, files)
+    return files
+
+
+def _list_remote_files_uncached(config: RemoteBackupConfig) -> List[dict]:
+    """实际扫描远端备份目录（无缓存）。"""
     normalized = config.remote_path.replace("\\", "/")
 
     # Mode 1: Local mount path — recursive listing
@@ -956,16 +1005,25 @@ def _file_type(filename: str) -> str:
     return "other"
 
 
-def _remote_file_names(db: Session) -> set:
-    """Get set of filenames that exist on the remote NAS (for sync status)."""
+def _remote_file_names(db: Session, force: bool = False) -> Optional[set]:
+    """Get set of filenames that exist on the remote NAS (for sync status).
+
+    force=False 只读缓存：远端列表未拉取/已过期时返回 None（表示「待校验」），
+    避免「列出本地备份」页面被远端 NAS 网络往返阻塞。
+    force=True 会立即访问远端（写操作后用，确保拿到最新同步状态）。
+    """
     config = _get_remote_config(db)
     if not config.enabled or not config.remote_path:
         return set()
-    try:
-        remote_files = _list_remote_files(config)
-    except Exception:
-        return set()
-    return {f["name"] for f in remote_files}
+    files = _remote_cache_files(config)
+    if files is None and force:
+        try:
+            files = _list_remote_files(config)  # 已带缓存写入
+        except Exception:
+            return set()
+    if files is None:
+        return None  # 远端列表未知 → 本地备份 sync 状态显示「待校验」
+    return {f["name"] for f in files}
 
 
 def _backup_iso_time(st_mtime: float) -> str:
@@ -973,10 +1031,20 @@ def _backup_iso_time(st_mtime: float) -> str:
     return datetime.utcfromtimestamp(st_mtime).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _build_backup_item(f: Path, permanent: bool, remote_names: set) -> dict:
-    """Build a single backup item dict from a file path."""
+def _build_backup_item(f: Path, permanent: bool, remote_names: Optional[set]) -> dict:
+    """Build a single backup item dict from a file path.
+
+    remote_names=None 表示远端列表尚未拉取（缓存冷）→ sync_status="unknown"，
+    前端显示「待校验」；等远端列表后台返回后再补全为 synced/not_synced。
+    """
     st = f.stat()
     name = f.name
+    if remote_names is None:
+        sync_status = "unknown"
+    elif name in remote_names:
+        sync_status = "synced"
+    else:
+        sync_status = "not_synced"
     return {
         "name": name,
         "size": st.st_size,
@@ -984,7 +1052,7 @@ def _build_backup_item(f: Path, permanent: bool, remote_names: set) -> dict:
         "created_at": _backup_iso_time(st.st_mtime),
         "permanent": permanent,
         "file_type": _file_type(name),
-        "sync_status": "synced" if name in remote_names else "not_synced",
+        "sync_status": sync_status,
     }
 
 

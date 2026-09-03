@@ -192,11 +192,14 @@ def get_project_stages(db: Session, project_id: int) -> dict:
     return {"stages": stages, "standard_stages": [s.name for s in stages_rows]}
 
 
-async def get_project_documents(db: Session, project_id: int, include_removed: bool = False) -> dict:
+async def get_project_documents(db: Session, project_id: int, include_removed: bool = False, run_scan: bool = True) -> dict:
     """Return documents grouped by standard stage, showing all standard stages.
 
     Standard stages with no documents are shown as empty placeholders
     so the frontend can render the complete template.
+
+    run_scan=False 时只读库返回，跳过对 SVN/PDM/GitLab 的在线扫描（首屏秒开用，
+    扫描改由打开详情后的后台 /documents(no_scan=0) 或 /docs/check 触发）。
     """
     from backend.services.document_service import get_or_init_project_documents, get_stage_types_for_project
 
@@ -207,10 +210,11 @@ async def get_project_documents(db: Session, project_id: int, include_removed: b
     # Init documents for matched stages (incremental)
     docs_list = get_or_init_project_documents(db, project_id, project_type, include_removed=include_removed)
 
-    # Auto-scan SVN docs — check if files exist at template paths
-    from backend.services.doc_scanner import check_project_docs
-    scan_result = await check_project_docs(db, project_id)
-    logger.info(f"[project-docs] project_id={project_id} scanned={scan_result.get('scanned',0)} matched={scan_result.get('total_matched',0)} submitted={scan_result.get('auto_submitted',0)}")
+    if run_scan:
+        # Auto-scan SVN docs — check if files exist at template paths
+        from backend.services.doc_scanner import check_project_docs
+        scan_result = await check_project_docs(db, project_id)
+        logger.info(f"[project-docs] project_id={project_id} scanned={scan_result.get('scanned',0)} matched={scan_result.get('total_matched',0)} submitted={scan_result.get('auto_submitted',0)}")
 
     # Group existing docs by stage_type (standard stage name)
     grouped: dict[str, list[dict]] = {}
