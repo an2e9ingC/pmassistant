@@ -306,6 +306,37 @@ function renderPill(status) {
   return '<span class="pill ' + (status || 'pending') + '">' + (STATUS_TXT[status] || status) + '</span>';
 }
 
+/* ── 板卡(交付)状态 pill — 单一来源（board-overview 总览页与项目详情共享）──
+   状态目录见 backend/services/board_service.py BOARD_STATUSES（中文即存储值）。
+   样式：components.css .pill.bd-*（已在全局可用）。 */
+var BOARD_PILL_CLASS = {
+  '在库': 'bd-stock',
+  '生产中': 'bd-prod', '硬件上电': 'bd-prod', '研发调试': 'bd-prod',
+  '客户联调': 'bd-prod', '测试': 'bd-prod', '三防': 'bd-prod', '装配': 'bd-prod',
+  '已交付': 'bd-delivered',
+  '维修中': 'bd-repairing',
+  '已维修': 'bd-repaired',
+  '已报废': 'bd-scrapped',
+};
+var BOARD_PILL_COLORS = {
+  '在库': 'var(--muted)',
+  '生产中': 'var(--accent)', '硬件上电': 'var(--accent)', '研发调试': 'var(--accent)',
+  '客户联调': 'var(--accent)', '测试': 'var(--accent)', '三防': 'var(--accent)', '装配': 'var(--accent)',
+  '已交付': 'var(--success)',
+  '维修中': 'var(--warn)',
+  '已维修': 'var(--success)',
+  '已报废': 'var(--danger)',
+};
+
+function boardStatusPill(status, onClick, title, fx) {
+  var cls = BOARD_PILL_CLASS[status] || 'pending';
+  var s = '<span class="pill ' + cls + (fx ? ' ' + fx : '') + '"';
+  if (onClick) s += ' style="cursor:pointer" onclick="' + onClick + '"';
+  if (title) s += ' title="' + escHtml(title) + '"';
+  s += '>' + escHtml(status) + '</span>';
+  return s;
+}
+
 var PRIORITY_LABELS = { low: '低', medium: '中', high: '高', critical: '紧急' };
 var PRIORITY_COLORS = { low: 'var(--muted)', medium: 'var(--accent)', high: 'var(--orange)', critical: 'var(--danger)' };
 

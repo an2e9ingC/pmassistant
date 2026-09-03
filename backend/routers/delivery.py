@@ -239,7 +239,7 @@ def update_board(
 def delete_board(
     board_id: int,
     db: Session = Depends(get_db),
-    user=Depends(require_perm("project_edit")),
+    user=Depends(require_perm("board_manage")),
 ):
     board = db.query(DeliveryBoard).filter(DeliveryBoard.id == board_id).first()
     if not board:
@@ -259,7 +259,7 @@ def change_board_status(
     board_id: int,
     body: BoardStatusChange,
     db: Session = Depends(get_db),
-    user=Depends(require_perm("board_manage")),
+    user=Depends(get_current_user),
 ):
     prev = db.query(DeliveryBoard).filter(DeliveryBoard.id == board_id).first()
     prev_status = prev.status if prev else None
@@ -296,3 +296,11 @@ def get_board_timeline(
         },
         "message": "ok",
     }
+
+
+# ═══════════════════════ 跨项目板卡总览（只读聚合） ═══════════════════════
+
+@router.get("/overview", response_model=dict)
+def get_board_overview(db: Session = Depends(get_db), _=Depends(get_current_user)):
+    """跨所有项目的板卡总览：行=板卡(带项目代号/名)，附交付口径汇总。"""
+    return {"code": 0, "data": board_service.board_overview(db), "message": "ok"}

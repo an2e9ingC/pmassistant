@@ -88,6 +88,7 @@ function initLogsView() {
 var VIEW_REGISTRY = {
   dashboard:        { title: '项目总览',    label: '项目总览',    perm: null,            init: initDashboard },
   detail:           { title: '项目详情',    label: '项目详情',    perm: null,            init: initDetailView,         js: '/js/detail.js?v=' + APP_VERSION },
+  'board-delivery': { title: '板卡管理',    label: '板卡管理',    perm: null,            initName: 'initBoardOverview', js: '/js/board-overview.js?v=' + APP_VERSION },
   'product-list':   { title: '产品总览',    label: '产品总览',    perm: null,            init: initProductList },
   'product-detail': { title: '产品详情',    label: '产品详情',    perm: null,            init: initProductDetail },
   'product-management': { title: '产品管理', label: '产品管理',  perm: 'product_link',  initName: 'initProductManagement', js: '/js/product-management.js?v=' + APP_VERSION },
