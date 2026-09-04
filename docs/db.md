@@ -990,9 +990,12 @@ local_users (用户账号) ──N:M── user_roles ──N:M── local_role
 | `procurement` | 采购 | —（无） | 只读查看 |
 | `quality` | 质检 | —（无） | 只读查看 |
 | `warehouse` | 库房管理 | —（无） | 只读查看 |
+| `fpga_dev` | FPGA 开发 | `version_maintain` | FPGA 逻辑软件开发工程师；经系统管理新增（非代码 seed），可维护软件版本 |
 | `viewer` | — | —（无） | 额外角色（DB 中存在，代码中声明） |
 
-### 11.4 7 个权限原子及其保护范围
+> 角色权限经「系统管理」界面可调整，实际以 `local_roles` 为准，上表为常见配置。
+
+### 11.4 8 个权限原子及其保护范围
 
 | 权限 key | 中文标签 | 保护的操作 |
 |----------|---------|-----------|
@@ -1003,6 +1006,7 @@ local_users (用户账号) ──N:M── user_roles ──N:M── local_role
 | `customer_link` | 客户维护 | 客户创建、更新、删除 |
 | `doc_template` | 文档模板配置 | 文档模板 CRUD、阶段类型管理、模板同步到项目、重置项目文档、标准编辑、标签 CRUD、产品文档模板 CRUD |
 | `stage_mapping` | 阶段映射 | 更新阶段名称、阶段名称映射同步到 ZenTao |
+| `version_maintain` | 软件版本维护 | 项目详情「软件版本」版本维护：锁定/解锁当前版本、切换版本来源（使用产品基础版本）、「全部使用最新版本」开关（4 个写端点接受 `project_edit` **或** `version_maintain`） |
 
 ### 11.5 权限计算逻辑
 

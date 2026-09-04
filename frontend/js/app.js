@@ -8,6 +8,7 @@ var TOAST_PERM_LABELS = {
   product_link: '产品维护',
   customer_link: '客户维护',
   task_edit: '任务管理',
+  version_maintain: '软件版本维护',
 };
 
 // ── Fav toggle → refresh user-center task/bug filter cards and tables ──

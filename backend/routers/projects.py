@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.database import get_db, to_local_str
-from backend.middleware.auth import get_current_user, require_perm
+from backend.middleware.auth import get_current_user, require_perm, require_any_perm
 from backend.models.local import ProjectNote, ProjectActivity
 from backend.models.zentao import CachedProject
 from backend.services.entity_resolver import resolve_project
@@ -843,7 +843,7 @@ async def lock_version(
     identifier: str,
     body: LockBody,
     db: Session = Depends(get_db),
-    user=Depends(require_perm("project_edit")),
+    user=Depends(require_any_perm("project_edit", "version_maintain")),
 ):
     """锁定某文档的当前版本（展示层覆盖，编辑权限）。"""
     from datetime import datetime as _dt, timezone as _tz
@@ -895,7 +895,7 @@ async def unlock_version(
     identifier: str,
     body: LockBody,
     db: Session = Depends(get_db),
-    user=Depends(require_perm("project_edit")),
+    user=Depends(require_any_perm("project_edit", "version_maintain")),
 ):
     """解除锁定（恢复为自动最新，编辑权限）。"""
     from backend.models.document import ProjectReleaseLock
@@ -929,7 +929,7 @@ async def set_bsp_auto_latest(
     identifier: str,
     body: BspAutoLatestBody,
     db: Session = Depends(get_db),
-    user=Depends(require_perm("project_edit")),
+    user=Depends(require_any_perm("project_edit", "version_maintain")),
 ):
     """产品基础版本「全部使用最新版本」批量开关（编辑权限）。
 
@@ -967,7 +967,7 @@ async def set_doc_auto(
     identifier: str,
     body: DocAutoBody,
     db: Session = Depends(get_db),
-    user=Depends(require_perm("project_edit")),
+    user=Depends(require_any_perm("project_edit", "version_maintain")),
 ):
     """单个项目发布子项的「来源选择」切换（子项级控制，编辑权限）。
 

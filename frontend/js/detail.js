@@ -1429,7 +1429,7 @@ var _svSummaryDt = null;   // 版本汇总 DataTable 实例（挂载点 #sv-summ
 function _svCanEdit() {
   var user = getCurrentUser();
   var perms = (user && user.permissions) ? user.permissions.split(',') : [];
-  return perms.indexOf('project_edit') >= 0 || perms.indexOf('admin') >= 0;
+  return perms.indexOf('project_edit') >= 0 || perms.indexOf('admin') >= 0 || perms.indexOf('version_maintain') >= 0;
 }
 
 /* ── Document Status Edit Dialog ── */
