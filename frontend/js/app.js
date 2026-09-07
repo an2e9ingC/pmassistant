@@ -9,6 +9,8 @@ var TOAST_PERM_LABELS = {
   customer_link: '客户维护',
   task_edit: '任务管理',
   version_maintain: '软件版本维护',
+  matcode_view: '物料编码查询',
+  matcode_issue: '物料编码发行',
 };
 
 // ── Fav toggle → refresh user-center task/bug filter cards and tables ──
@@ -112,6 +114,7 @@ var VIEW_REGISTRY = {
   tasks:            { title: '任务管理',    label: '任务管理',    perm: null,            initName: 'initTasks',            js: '/js/tasks.js?v=' + APP_VERSION },
   'task-create':    { title: '新建任务',    label: '任务管理',    perm: null,            initName: 'initTaskCreate',       js: '/js/tasks.js?v=' + APP_VERSION, _viewEl: 'tasks' },
   'bug-create':     { title: '新建Bug',     label: 'Bug 管理',    perm: null,            initName: 'initBugCreate',        js: '/js/bugs.js?v=' + APP_VERSION, _viewEl: 'bugs' },
+  matcode:          { title: '物料编码',    label: '物料编码',    perm: 'matcode_view',  initName: 'initMatcode',          js: '/js/matcode.js?v=' + APP_VERSION },
 };
 
 // ── Lazy script loader ──

@@ -966,6 +966,7 @@ def clean_orphan_favorites(db: Session):
 def init_db():
     from backend.models.local import LocalUser, Role, UserRole, ProductBlockDiagram, ProductNote, ProjectNote, PmaSetting, AuditLog, ProjectActivity, ProductActivity  # noqa: F401
     from backend.models.bug import CachedBug, PmaBug, BugWorkLog, BugAnalysis, BugAttachment, BugTransfer  # noqa: F401
+    from backend.models.matcode import MatcodeSegment, MatcodeMaterial  # noqa: F401
     from backend.models.delivery import DeliveryRecord, DeliveryMaterialCode, DeliveryBoard, DeliveryBoardEvent  # noqa: F401
     from backend.models.document import DocumentTemplate, ProjectDocument, ProductDocTemplate, ProductLine, PmaTag, ProductDocument, ProductNamingOption, BugTemplate  # noqa: F401
     from backend.models.standard import ProcessStandard  # noqa: F401
@@ -1001,6 +1002,16 @@ def init_db():
     _clear_gitlab_tokens()   # Force re-auth on server restart
     _ensure_db_instance_id()  # Ensure instance UUID for DB fingerprint detection
 
+    # Seed 物料编码段树（幂等；纯种子数据，非用户数据）
+    db = SessionLocal()
+    try:
+        from backend.services.matcode_catalog import seed_segments as _seed_segments
+        _n = _seed_segments(db)
+        if _n:
+            logger.info(f"Seeded {_n} matcode segments")
+    finally:
+        db.close()
+
     # Seed document templates on first startup
     from backend.services.document_service import seed_document_templates
     db = SessionLocal()
@@ -1024,7 +1035,7 @@ def init_db():
         # Seed default roles if not exist
         default_roles = [
             ("public", "普通用户", "", "默认角色组，所有登录用户自动拥有（基础访问权限）"),
-            ("admin", "管理员", "admin,sync,project_edit,product_link,customer_link,doc_template,stage_mapping,manpower_view,board_manage", "系统完整管理权限（不可修改）"),
+            ("admin", "管理员", "admin,sync,project_edit,product_link,customer_link,doc_template,stage_mapping,manpower_view,board_manage,matcode_view,matcode_issue", "系统完整管理权限（不可修改）"),
             ("ceo", "CEO", "manpower_view", "查看所有项目数据"),
             ("cto", "CTO", "manpower_view", "查看所有项目数据"),
             ("pm", "项目经理", "sync,project_edit,product_link,customer_link,doc_template,stage_mapping,task_edit,manpower_view,board_manage", "项目管理+同步+产客关系维护+文档模板+阶段映射+任务+板卡管理"),
@@ -1066,6 +1077,17 @@ def init_db():
                 perms = set(role.permissions.split(",")) if role.permissions else set()
                 if "board_manage" not in perms:
                     perms.add("board_manage")
+                    role.permissions = ",".join(sorted(perms))
+        db.commit()
+
+        # Ensure matcode_view/matcode_issue are in existing admin role（物料编码平台，默认仅 admin）
+        for rk in ("admin",):
+            role = db.query(Role).filter(Role.key == rk).first()
+            if role:
+                perms = set(role.permissions.split(",")) if role.permissions else set()
+                if "matcode_view" not in perms or "matcode_issue" not in perms:
+                    perms.add("matcode_view")
+                    perms.add("matcode_issue")
                     role.permissions = ",".join(sorted(perms))
         db.commit()
 

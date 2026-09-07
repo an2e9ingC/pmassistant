@@ -10,6 +10,7 @@ AUDIT_CAT_TEMPLATE = "模板规范"
 AUDIT_CAT_SYSTEM   = "系统"
 AUDIT_CAT_UPLOADS  = "上传管理"
 AUDIT_CAT_CONFIG   = "配置管理"
+AUDIT_CAT_MATCODE  = "物料编码"
 
 # NOTE: 后续新增 log_audit() detail 中的英文字段名时必须同步在此增加映射
 FIELD_LABEL = {
@@ -84,4 +85,13 @@ FIELD_LABEL = {
     "products": "产品数",
     "changes": "变更",
     "password_changed": "密码已修改",
+    # Material code (物料编码) fields
+    "segment": "编码段",
+    "suffix": "序号",
+    "drawing": "图号",
+    "spec": "规格型号",
+    "unit": "单位",
+    "remark": "备注",
+    "legacy_prefix": "旧前缀",
+    "created_by": "创建人",
 }
