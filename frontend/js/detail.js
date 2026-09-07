@@ -1757,6 +1757,26 @@ function _boardById(id) {
   return _deliveryData.boards.find(function(b) { return b.id === id; }) || null;
 }
 
+/* 交付记录明细「产品编号」列点击：按板卡号查登记板卡 → 打开其时间线；未登记则提示 */
+function _openBoardTimelineBySerial(serialNo) {
+  var serial = String(serialNo || '');
+  var board = null;
+  if (_deliveryData && _deliveryData.boards) {
+    for (var i = 0; i < _deliveryData.boards.length; i++) {
+      if (String(_deliveryData.boards[i].serial_no) === serial) { board = _deliveryData.boards[i]; break; }
+    }
+  }
+  if (!board) {
+    showToast('未登记板卡 ' + (serial || '') + '，无法查看时间线', 'error');
+    return;
+  }
+  if (typeof showBoardTimeline === 'function') {
+    showBoardTimeline(board.id);
+  } else {
+    showToast('板卡时间线组件未加载，请刷新页面后重试', 'error');
+  }
+}
+
 function _buildBoardCard(boards, meta) {
   _boardMetaData = meta || _boardMetaData;
   var canWrite = _hasBoardPerm();
@@ -2061,8 +2081,11 @@ function buildDelivery(data) {
     records.forEach(function(r) {
       var mcs = (r.material_codes && r.material_codes.length) ? r.material_codes : [''];
       mcs.forEach(function(mc) {
+        // 后端 code_boards 以交付事件为准关联板卡，兼容编码与板卡现编号不一致的历史记录
+        var cb = r.code_boards || {};
         rows.push({
           _recId: r.id,
+          _boardId: cb[mc] != null ? cb[mc] : null,
           date: r.date,
           product_code: r.product_code,
           product_name: r.product_name,
@@ -2079,7 +2102,14 @@ function buildDelivery(data) {
         if (v) return '<span class="proj-code-btn" onclick="event.stopPropagation();openProductDetail(\'' + escHtml(v) + '\')" title="' + escHtml(v) + ' ' + escHtml(row.product_name || '') + '">' + escHtml(v) + '</span>';
         return '<span style="font-size:12px;color:var(--muted)">—</span>';
       }},
-      { key: 'serial_no', title: '产品编号', minWidth: 140, render: function(v) { return '<span style="font-family:var(--mono);font-size:11.5px">'+escHtml(v||'')+'</span>'; } },
+      { key: 'serial_no', title: '产品编号', minWidth: 140, render: function(v, row) {
+        if (!v) return '<span style="font-family:var(--mono);font-size:11.5px">—</span>';
+        var bid = row && row._boardId != null ? row._boardId : null;
+        var onclick = (bid != null)
+          ? 'event.stopPropagation();showBoardTimeline(' + bid + ')'
+          : 'event.stopPropagation();_openBoardTimelineBySerial(\'' + escHtml(String(v)).replace(/'/g, "\\'") + '\')';
+        return '<span class="proj-code-btn" style="font-family:var(--mono);font-size:12px;padding:2px 8px" onclick="' + onclick + '" title="查看该板卡时间线">' + escHtml(v) + '</span>';
+      } },
       { key: 'responsible_person', title: '交付人', minWidth: 90, render: function(v) { return '<span style="font-size:12px">'+escHtml(_userDisplayMap[v] || v || '—')+'</span>'; } },
       { key: 'delivery_method', title: '交付形式', minWidth: 80, render: function(v) { return '<span style="font-size:12px">'+(v||'—')+'</span>'; } },
       { key: 'note', title: '备注', render: function(v) { return '<span style="font-size:12px;color:var(--muted)">'+escHtml(v||'')+'</span>'; } },

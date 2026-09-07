@@ -296,7 +296,7 @@ async function _loadBoardTimeline(boardId, order) {
         '<span style="color:var(--muted)">归属人: ' + escHtml(_userDisplayMap[board.owner] || board.owner || '—') + '</span>' +
         orderBtn +
       '</div>';
-    bodyEl.innerHTML = header + _boardTimelineHtml(data.events || []);
+    bodyEl.innerHTML = header + _boardTimelineHtml(data.events || [], order);
   } catch(e) {
     var bodyEl = document.getElementById('bt-body');
     if (bodyEl) bodyEl.innerHTML = '<div style="color:var(--danger);font-size:12px">加载失败: ' + escHtml(e.message) + '</div>';
@@ -312,12 +312,14 @@ function _boardEventTimeDisplay(iso) {
   return fmtISODateTime(iso);
 }
 
-function _boardTimelineHtml(events) {
+function _boardTimelineHtml(events, order) {
   if (!events.length) return '<div style="color:var(--muted);font-size:12px">暂无事件</div>';
   var html = '<div style="position:relative;padding-left:24px">' +
     '<div style="position:absolute;left:6px;top:8px;bottom:8px;width:2px;background:var(--border);border-radius:1px"></div>';
-  // 最新时间点：插入序 id 最大（id 序=真实时序，event_time 可能 date-only 午夜导致乱序）
-  var newestId = events.reduce(function(m, e) { return (e.id || 0) > m ? (e.id || 0) : m; }, 0);
+  // 最新时间点 = 业务时间线最新（desc 首条 / asc 末条）；后端已按业务日期+id 排序，
+  // 不再按 id 最大判定——补录/反填日期的交付事件不会误当"最新"
+  var newest = (order === 'asc') ? events[events.length - 1] : events[0];
+  var newestId = newest ? (newest.id || 0) : -1;
   events.forEach(function(e) {
     var isNewest = e.id === newestId;
     var dotColor = BOARD_PILL_COLORS[e.to_status] || 'var(--accent)';
@@ -360,12 +362,22 @@ function _boardTimelineHtml(events) {
       '</div>';
     } else {
       var toHolder = d.to_holder || d['转交给谁'] || '';
-      // 第 2 行：生产转交事件显示 转交人 --> 接收人；其余事件显示操作人
+      // 交付事件载荷（记录联动/手动交付：delivery_method 或 responsible_person 或 receiver 存在）
+      var isDelivery = e.delivery_record_id != null || d.delivery_method != null ||
+        d.responsible_person != null || d.receiver != null;
+      var respShow = d.responsible_person ? (_userDisplayMap[d.responsible_person] || d.responsible_person) : '';
+      // 第 2 行：生产转交事件显示 转交人 --> 接收人；
+      // 交付事件显示 交付责任人（高亮）——actor 只是录入/补录操作人（可能 ≠ 责任人），不作为主显示；
+      // 其余事件显示操作人
       if (toHolder) {
         bodyHtml += '<div style="margin-top:3px;font-size:11.5px;color:var(--muted)">' +
           '<span style="color:var(--accent);font-weight:600">' + escHtml(actor || '—') + '</span>' +
           ' <span style="color:var(--muted)">→</span> ' +
           '<span style="color:var(--accent);font-weight:600">' + escHtml(_userDisplayMap[toHolder] || toHolder) + '</span>' +
+        '</div>';
+      } else if (isDelivery && respShow) {
+        bodyHtml += '<div style="margin-top:3px;font-size:11.5px;color:var(--muted)">' +
+          '<span style="color:var(--accent);font-weight:600">' + escHtml(respShow) + '</span>' +
         '</div>';
       } else if (actor) {
         bodyHtml += '<div style="margin-top:3px;font-size:11.5px;color:var(--muted)">' + escHtml(actor) + '</div>';
@@ -374,9 +386,10 @@ function _boardTimelineHtml(events) {
       if (e.note) {
         bodyHtml += '<div style="margin-top:4px;font-size:12px;color:var(--muted)">' + escHtml(e.note) + '</div>';
       }
-      // 其余字段小网格（转交事件已由 转交人→接收人 + 说明 呈现，不再重复展示网格）
+      // 其余字段小网格（转交事件已由 转交人→接收人 + 说明 呈现，不再重复展示网格；
+      // 交付事件已由第 2 行高亮责任人，网格跳过 responsible_person 避免重复）
       if (!toHolder) {
-        bodyHtml += _boardEventDataGrid(d);
+        bodyHtml += _boardEventDataGrid(d, isDelivery ? ['responsible_person'] : null);
       }
     }
 
@@ -400,14 +413,33 @@ function _boardBugJump(bugId) {
 /* 事件 data 中存 username 的字段 → 展示中文名（企微） */
 var _BOARD_USER_DATA_KEYS = ['to_holder', 'owner', 'operator', 'responsible_person', '转交给谁', '归属人', '交付责任人', '操作人', '责任人', '返修处理人', '报修人'];
 
-function _boardEventDataGrid(data) {
-  var keys = Object.keys(data).filter(function(k) { return data[k] !== null && data[k] !== undefined && String(data[k]) !== ''; });
+/* 事件 data 中英文内部 key → 中文标签（交付记录等自动写入的事件）；未收录的 key 原样显示 */
+var _BOARD_DATA_KEY_LABELS = {
+  'delivery_method': '交付方式',
+  'receiver': '收货方',
+  'responsible_person': '交付责任人',
+  'to_holder': '转交给谁',
+  'owner': '归属人',
+  'scrap_reason': '报废原因',
+  'scrap_method': '报废处理方法',
+};
+/* 内部追踪 key，不在时间线展示 */
+var _BOARD_DATA_HIDDEN_KEYS = ['source_delivery_record_id'];
+
+function _boardEventDataGrid(data, skipKeys) {
+  var keys = Object.keys(data).filter(function(k) {
+    if (data[k] === null || data[k] === undefined || String(data[k]) === '') return false;
+    if (_BOARD_DATA_HIDDEN_KEYS.indexOf(k) >= 0) return false;
+    if (skipKeys && skipKeys.indexOf(k) >= 0) return false;
+    return true;
+  });
   if (!keys.length) return '';
   var cells = keys.map(function(k) {
+    var label = _BOARD_DATA_KEY_LABELS[k] || k;
     var v = String(data[k]);
     if (_BOARD_USER_DATA_KEYS.indexOf(k) >= 0 && _userDisplayMap[data[k]]) v = _userDisplayMap[data[k]];
     return '<div style="padding:4px 6px;background:var(--bg);border-radius:5px">' +
-      '<div style="font-size:10px;color:var(--muted)">' + escHtml(k) + '</div>' +
+      '<div style="font-size:10px;color:var(--muted)">' + escHtml(label) + '</div>' +
       '<div style="font-size:11px;margin-top:1px;word-break:break-all">' + escHtml(v) + '</div>' +
     '</div>';
   }).join('');

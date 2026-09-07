@@ -149,16 +149,15 @@ def attach_prev_status(db: Session, boards: list[DeliveryBoard]) -> None:
     if not boards:
         return
     ids = [b.id for b in boards]
-    evs = (db.query(DeliveryBoardEvent)
-             .filter(DeliveryBoardEvent.board_id.in_(ids))
-             .order_by(DeliveryBoardEvent.board_id.asc(),
-                       DeliveryBoardEvent.id.asc())  # 按插入顺序=真实时序（event_time 可能 date-only 午夜导致乱序）
-             .all())
+    evs = db.query(DeliveryBoardEvent).filter(
+        DeliveryBoardEvent.board_id.in_(ids)
+    ).all()
     by_board: dict[int, list] = {}
     for e in evs:
         by_board.setdefault(e.board_id, []).append(e)
     for b in boards:
-        ev_list = by_board.get(b.id) or []
+        # 业务时间线排序（先业务日期、同日按插入 id）——补录/反填日期的事件正确归位
+        ev_list = sorted(by_board.get(b.id) or [], key=_event_sort_key)
         prev_status, prev_owner = None, None
         # 找到进入当前状态的事件 → 其 from_status 即上一状态
         enter_event = None
@@ -354,12 +353,47 @@ def delete_board(db: Session, board_id: int) -> bool:
     return True
 
 
+def _event_sort_key(e: DeliveryBoardEvent):
+    """事件排序键：先按业务日期（event_time 的日期部分）、同日再按插入 id。
+
+    event_time 语义 = 业务发生时间（交付事件取 delivery_date、维修/建档取真实时刻），
+    故跨天按业务日期排序让补录/反填日期的交付事件正确归位，不再被"晚录入→新 id"顶到最前；
+    date-only 事件存成午夜、与同日真实时刻歧义，同日内退回插入序（id）避免乱序。"""
+    t = e.event_time or e.created_at
+    return (t.date() if t else date.min, e.id)
+
+
 def board_timeline(db: Session, board_id: int, order: str = "asc") -> list[DeliveryBoardEvent]:
-    q = db.query(DeliveryBoardEvent).filter(DeliveryBoardEvent.board_id == board_id)
-    # 按插入顺序（id）排列=真实时序：event_time 可能因 date-only 录入存成午夜 UTC 导致乱序
-    q = q.order_by(DeliveryBoardEvent.id.asc() if order != "desc"
-                   else DeliveryBoardEvent.id.desc())
-    return q.all()
+    """板卡时间线 = 业务时间线（事件按业务日期+插入序排列）。"""
+    events = db.query(DeliveryBoardEvent).filter(
+        DeliveryBoardEvent.board_id == board_id
+    ).all()
+    events.sort(key=_event_sort_key, reverse=(order != "asc"))
+    return events
+
+
+def latest_event(db: Session, board_id: int) -> Optional[DeliveryBoardEvent]:
+    """业务时间线上的最新事件（决定板卡当前状态）。无事件返回 None。"""
+    events = db.query(DeliveryBoardEvent).filter(
+        DeliveryBoardEvent.board_id == board_id
+    ).all()
+    if not events:
+        return None
+    return max(events, key=_event_sort_key)
+
+
+def refresh_board_state(db: Session, board_id: int) -> None:
+    """板卡当前状态对齐到业务时间线最新事件（交付记录反填日期/删除后重算）。
+    只重算状态，不动归属/持有人（避免历史 display/username 语义漂移）。"""
+    board = _get_board(db, board_id)
+    if not board:
+        return
+    latest = latest_event(db, board_id)
+    if latest is None:
+        board.status = "在库"
+    else:
+        board.status = latest.to_status
+    db.commit()
 
 
 # ─────────────────────────── 手动状态切换 ───────────────────────────
@@ -503,13 +537,39 @@ def repair_finish(db: Session, board_id: int, bug, actor_name: str) -> Optional[
 
 # ─────────────────────────── 交付记录联动 ───────────────────────────
 
+def _apply_delivery_state(db: Session, board, record_id: int,
+                          responsible: str, receiver: str) -> None:
+    """本次交付事件写完后收敛板卡状态：
+    该交付事件是业务时间线最新 → 置 已交付 + 归属/持有人为交付责任人/收货方；
+    存在更晚业务事件（如返修 Bug 已置 维修中、后续交付）→ 状态跟随最新事件，不再覆盖。"""
+    latest = latest_event(db, board.id)
+    if latest is None:
+        return
+    if latest.delivery_record_id == record_id and latest.to_status == "已交付":
+        board.status = "已交付"
+        board.owner = responsible or board.owner
+        board.current_holder = receiver
+    else:
+        board.status = latest.to_status
+        # 最新事件若为另一条交付（data 存 responsible/receiver），补齐归属/持有人
+        if latest.to_status == "已交付" and latest.data:
+            if latest.data.get("responsible_person"):
+                board.owner = latest.data["responsible_person"]
+            if latest.data.get("receiver"):
+                board.current_holder = latest.data["receiver"]
+
+
 def sync_delivery_record(db: Session, project_id: int, record, material_codes: list[str],
                          actor: str = "") -> list[DeliveryBoard]:
     """交付记录联动：对每个物料编码建档（无则建档→已交付）+ 写交付事件。
-    幂等：已有该记录交付事件的板卡跳过。owner=交付责任人。"""
+    幂等：已有该记录交付事件的板卡跳过。owner=交付责任人。
+    状态收敛见 _apply_delivery_state：仅当本次交付是业务时间线最新时才置 已交付，
+    补录/反填日期时不会覆盖更晚的返修等状态。"""
     boards = []
     receiver = _clean_str(record.receiver)
     responsible = _clean_str(record.responsible_person)
+    # 建档与交付事件时间同源：避免反填日期时"自动建档"(now) 反超交付成为最新
+    event_base = record.delivery_date or datetime.utcnow()
     for mc in material_codes:
         mc = (mc or "").strip()
         if not mc:
@@ -532,7 +592,11 @@ def sync_delivery_record(db: Session, project_id: int, record, material_codes: l
             db.flush()
             db.add(DeliveryBoardEvent(
                 board_id=board.id, from_status=None, to_status="在库",
-                actor=actor, note="交付记录自动建档", created_by=actor or "system",
+                event_time=event_base, actor=actor, note="交付记录自动建档",
+                # 记录建档来源：交付记录反填日期时该建档事件随交付一起归位，
+                # 避免"建档(新日期反超) 顶掉 已交付"重演（见 _sync_delivery_event_times）
+                data={"source_delivery_record_id": record.id},
+                created_by=actor or "system",
             ))
         # 幂等：同一交付记录已写事件则跳过
         dup = db.query(DeliveryBoardEvent).filter(
@@ -546,7 +610,7 @@ def sync_delivery_record(db: Session, project_id: int, record, material_codes: l
             board_id=board.id,
             from_status=board.status,
             to_status="已交付",
-            event_time=record.delivery_date or datetime.utcnow(),
+            event_time=event_base,
             actor=actor,
             note=f"交付:{record.product_name} x{record.quantity}",
             data={
@@ -557,10 +621,10 @@ def sync_delivery_record(db: Session, project_id: int, record, material_codes: l
             delivery_record_id=record.id,
             created_by=actor or "system",
         ))
-        board.status = "已交付"
-        board.owner = responsible or board.owner
-        board.current_holder = receiver
         boards.append(board)
+    db.flush()
+    for b in boards:
+        _apply_delivery_state(db, b, record.id, responsible, receiver)
     db.commit()
     for b in boards:
         db.refresh(b)
@@ -568,8 +632,8 @@ def sync_delivery_record(db: Session, project_id: int, record, material_codes: l
 
 
 def remove_delivery_events(db: Session, record_id: int) -> None:
-    """删除交付记录时回滚：删除该记录关联的交付事件；板卡若无剩余交付事件→回退在库。
-    owner 不自动还原。"""
+    """删除交付记录时回滚：删除该记录关联的交付事件；受影响板卡状态对齐到
+    剩余事件的最新一条（无任何事件→回退在库、清持有人）。owner 不自动还原。"""
     events = db.query(DeliveryBoardEvent).filter(
         DeliveryBoardEvent.delivery_record_id == record_id
     ).all()
@@ -581,11 +645,18 @@ def remove_delivery_events(db: Session, record_id: int) -> None:
         board = _get_board(db, bid)
         if not board:
             continue
-        remaining_delivery = db.query(DeliveryBoardEvent).filter(
-            DeliveryBoardEvent.board_id == bid,
-            DeliveryBoardEvent.delivery_record_id.isnot(None),
-        ).first()
-        if not remaining_delivery:
+        remaining = db.query(DeliveryBoardEvent).filter(
+            DeliveryBoardEvent.board_id == bid
+        ).all()
+        if not remaining:
             board.status = "在库"
+            board.current_holder = None
+            continue
+        # 状态对齐业务时间线最新事件（可能为返修→维修中，而非一刀切回退在库）；
+        # owner 不自动还原；交付事件全删且最新为在库时清持有人
+        latest = max(remaining, key=_event_sort_key)
+        board.status = latest.to_status
+        remaining_delivery = any(e.delivery_record_id is not None for e in remaining)
+        if not remaining_delivery and latest.to_status == "在库":
             board.current_holder = None
     db.commit()

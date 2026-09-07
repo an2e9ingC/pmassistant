@@ -313,16 +313,22 @@ function gotoView(view, opts) {
 }
 
 // Handle browser back/forward buttons
+var _suppressHashchange = false;  // 回退/前进已由 popstate 处理，抑制紧随其后的 hashchange 重复初始化
 window.addEventListener('popstate', function(e) {
   if (e.state && e.state.view) {
     _navigatingBack = true;
+    _suppressHashchange = true;
     gotoView(e.state.view, {params: e.state.params || [], pushState: false});
     _navigatingBack = false;
+    // hashchange（若因回退改变 hash 触发）同步紧随 popstate 之后被消费；
+    // 若本次回退 hash 未变则不触发 hashchange，定时器兜底复位，避免误吞下一次真实 hashchange
+    setTimeout(function() { _suppressHashchange = false; }, 0);
   }
 });
 
 // Handle manual hash changes (user edits address bar hash and hits Enter)
 window.addEventListener('hashchange', function() {
+  if (_suppressHashchange) { _suppressHashchange = false; return; }
   var parsed = parseHash();
   if (parsed.view) {
     gotoView(parsed.view, {params: parsed.params, replace: true});

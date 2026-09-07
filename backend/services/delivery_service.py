@@ -1,13 +1,41 @@
 from __future__ import annotations
 import json
 from collections import Counter
-from datetime import date
+from datetime import date, datetime, time
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from backend.models.delivery import DeliveryRecord, DeliveryMaterialCode, DeliveryBoard
+from backend.models.delivery import (DeliveryRecord, DeliveryMaterialCode,
+                                     DeliveryBoard, DeliveryBoardEvent)
 from backend.services import board_service
+
+
+def _attach_code_boards(db: Session, records: list) -> list[dict]:
+    """给每条交付记录的每个物料编码附上对应板卡 id。
+
+    板卡与交付记录的对应关系以「交付事件」为准：sync_delivery_record 为每个
+    编码各写一条 delivery_record_id=r.id 的交付事件（按 sort_order 顺序）。
+    不能用 编码==serial_no 字符串匹配——历史交付记录的编码可能与板卡现编号
+    不一致（如编码 26080454019 对应板卡 2608030454019，板卡中途改过编号）。
+    返回 [{...record_dict, code_boards: {material_code: board_id|None}}]。"""
+    out = [record_dict(r) for r in records]
+    if not out:
+        return out
+    ids = [d["id"] for d in out]
+    evs = db.query(DeliveryBoardEvent).filter(
+        DeliveryBoardEvent.delivery_record_id.in_(ids)
+    ).order_by(DeliveryBoardEvent.delivery_record_id, DeliveryBoardEvent.id.asc()).all()
+    by_rec: dict[int, list[int]] = {}
+    for e in evs:
+        by_rec.setdefault(e.delivery_record_id, []).append(e.board_id)
+    for d in out:
+        bids = by_rec.get(d["id"], [])
+        cb = {}
+        for i, code in enumerate(d["material_codes"]):
+            cb[code] = bids[i] if i < len(bids) else None
+        d["code_boards"] = cb
+    return out
 
 
 def get_delivery_summary(db: Session, project_id: int) -> dict:
@@ -111,7 +139,7 @@ def get_delivery_summary(db: Session, project_id: int) -> dict:
         "delivery_note": project.delivery_note if project else None,
         "product_delivery_plans": plans,
         "product_stats": prod_stats,
-        "records": [record_dict(r) for r in records],
+        "records": _attach_code_boards(db, records),
         "boards": board_service.boards_with_prev(db, boards),
         "board_meta": board_service.board_meta(),
     }
@@ -159,6 +187,37 @@ def create_delivery_record(db: Session, project_id: int, data: dict, actor: str 
     return record
 
 
+def _sync_delivery_event_times(db: Session, r: DeliveryRecord) -> None:
+    """交付记录 delivery_date 变更 → 就地更新既有交付事件 event_time（保留事件 id）。
+
+    此前编辑一律删旧事件+重建，新 id 会按插入序把事件顶到时间线"最新"，
+    即使其业务日期早于后续返修事件——导致补录/反填日期后时间线错位、状态被覆盖。
+    编码未变时只需改 event_time，随后把受影响板卡状态对齐到业务时间线。"""
+    if not r.delivery_date:
+        return
+    evs = db.query(DeliveryBoardEvent).filter(
+        DeliveryBoardEvent.delivery_record_id == r.id
+    ).all()
+    if not evs:
+        return
+    t = datetime.combine(r.delivery_date, time.min)
+    bid_set = {e.board_id for e in evs}
+    # 同源自动建档事件（建档时打了 source_delivery_record_id 标记）一并归位，
+    # 否则反填日期后建档(旧日期) 会反超交付(新日期) 成为"最新"→ 板卡被顶回在库
+    for bid in bid_set:
+        for e in db.query(DeliveryBoardEvent).filter(
+                DeliveryBoardEvent.board_id == bid,
+                DeliveryBoardEvent.delivery_record_id.is_(None),
+                DeliveryBoardEvent.to_status == "在库").all():
+            if (e.data or {}).get("source_delivery_record_id") == r.id:
+                e.event_time = t
+    for e in evs:
+        e.event_time = t
+    db.commit()
+    for bid in bid_set:
+        board_service.refresh_board_state(db, bid)
+
+
 def update_delivery_record(db: Session, record_id: int, data: dict, actor: str = "") -> Optional[DeliveryRecord]:
     r = db.query(DeliveryRecord).filter(DeliveryRecord.id == record_id).first()
     if not r:
@@ -170,30 +229,38 @@ def update_delivery_record(db: Session, record_id: int, data: dict, actor: str =
     if "delivery_date" in data:
         r.delivery_date = _parse_date(data["delivery_date"])
 
-    # Replace material codes if provided
     if "material_codes" in data:
-        db.query(DeliveryMaterialCode).filter(
+        new_codes = [c.strip() for c in (data["material_codes"] or []) if c and c.strip()]
+        old_codes = [mc.material_code for mc in db.query(DeliveryMaterialCode).filter(
             DeliveryMaterialCode.record_id == record_id
-        ).delete()
-        for idx, mc in enumerate(data["material_codes"]):
-            if mc and mc.strip():
-                db.add(DeliveryMaterialCode(
-                    record_id=record_id,
-                    material_code=mc.strip(),
-                    sort_order=idx,
-                ))
-        valid_codes = [c for c in data["material_codes"] if c and c.strip()]
-        r.quantity = len(valid_codes)
-
-    db.commit()
-    db.refresh(r)
-
-    # 板卡联动：删除旧交付事件后按最新物料编码重新登记
-    if "material_codes" in data:
-        board_service.remove_delivery_events(db, record_id)
-        valid_codes = [c for c in data["material_codes"] if c and c.strip()]
-        if valid_codes:
-            board_service.sync_delivery_record(db, r.project_id, r, valid_codes, actor)
+        ).order_by(DeliveryMaterialCode.sort_order.asc()).all()]
+        r.quantity = len(new_codes)
+        if old_codes != new_codes:
+            # 编码集合真的变化 → 替换编码并重建关联事件（按最新编码重新登记板卡）
+            db.query(DeliveryMaterialCode).filter(
+                DeliveryMaterialCode.record_id == record_id
+            ).delete()
+            for idx, mc in enumerate(new_codes):
+                if mc:
+                    db.add(DeliveryMaterialCode(
+                        record_id=record_id,
+                        material_code=mc,
+                        sort_order=idx,
+                    ))
+            db.commit()
+            db.refresh(r)
+            board_service.remove_delivery_events(db, record_id)
+            if new_codes:
+                board_service.sync_delivery_record(db, r.project_id, r, new_codes, actor)
+        else:
+            # 编码未变（如仅改交付日期）：不删+重建，就地同步事件业务时间
+            db.commit()
+            db.refresh(r)
+            _sync_delivery_event_times(db, r)
+    else:
+        db.commit()
+        db.refresh(r)
+        _sync_delivery_event_times(db, r)
     return r
 
 
