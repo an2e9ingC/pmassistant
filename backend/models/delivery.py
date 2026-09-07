@@ -17,6 +17,7 @@ class DeliveryRecord(Base):
     serial_numbers = Column(Text, nullable=True)  # deprecated, migrated to delivery_material_codes
     quantity = Column(Integer, default=0)
     delivery_date = Column(Date, nullable=True)
+    delivery_time = Column(String(8), nullable=True)  # 交付时刻 HH:MM[:SS]（北京时间墙面时间）
     receiver = Column(String(128), nullable=True)
     responsible_person = Column(String(128), nullable=True)  # 交付责任人
     delivery_method = Column(String(32), nullable=True)  # 交付形式: 快递 / 人工携带

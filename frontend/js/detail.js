@@ -1830,7 +1830,7 @@ function _renderBoardTable(boards) {
                   : '<span style="font-size:12px;color:var(--muted)">—</span>';
       return btn + (span > 1 ? ' <span style="font-size:10px;color:var(--muted)">(' + span + ')</span>' : '');
     }},
-    { key: 'serial_no', title: '产品编号', minWidth: 140, render: function(v, row) { return '<span class="proj-code-btn" style="font-family:var(--mono);font-size:12px;padding:2px 8px" onclick="event.stopPropagation();showBoardTimeline(' + row.id + ')" title="查看时间线">' + escHtml(v) + '</span>'; } },
+    { key: 'serial_no', title: '产品编号', minWidth: 140, sortable: true, render: function(v, row) { return '<span class="proj-code-btn" style="font-family:var(--mono);font-size:12px;padding:2px 8px" onclick="event.stopPropagation();showBoardTimeline(' + row.id + ')" title="查看时间线">' + escHtml(v) + '</span>'; } },
     { key: 'status', title: '状态流转', minWidth: 240, render: function(v, row) {
       var prevPill = row.prev_status
         ? '<span class="pill ' + (_BOARD_PILL_CLASS[row.prev_status] || 'pending') + ' fx4" style="opacity:.72">' + escHtml(row.prev_status) + '</span>'
@@ -1849,7 +1849,7 @@ function _renderBoardTable(boards) {
       return '<div style="display:flex;align-items:center;gap:5px;flex-wrap:nowrap;white-space:nowrap">' + prevSpan + '<span style="color:var(--muted);font-size:11px">→</span>' + curSpan + '</div>';
     }},
     { key: 'current_holder', title: '当前持有人', minWidth: 110, render: function(v) { return '<span style="font-size:12px;color:var(--muted)">' + escHtml(_userDisplayMap[v] || v || '—') + '</span>'; } },
-    { key: 'updated_at', title: '最近更新', minWidth: 120, render: function(v) { return '<span style="font-size:11px;color:var(--muted)">' + (v ? fmtISODateTime(v) : '—') + '</span>'; } },
+    { key: 'updated_at', title: '最近更新', minWidth: 120, sortable: true, render: function(v) { return '<span style="font-size:11px;color:var(--muted)">' + (v ? fmtISODateTime(v) : '—') + '</span>'; } },
     { key: 'actions', title: '操作', width: '120px', minWidth: 120, render: function(v, row) {
       var h = '<button class="btn btn-icon" onclick="showBoardTimeline(' + row.id + ')" title="查看时间线">' +
         '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5"/><path d="M9 2l3 3 3-3"/></svg></button>';
@@ -1859,8 +1859,28 @@ function _renderBoardTable(boards) {
       return h;
     }},
   ];
-  new DataTable({ container: el, columns: cols, data: boards, maxHeight: '400px', density: 'compact', emptyText: '无匹配产品' });
+  new DataTable({
+    container: el, columns: cols, data: boards, maxHeight: '400px', density: 'compact', emptyText: '无匹配产品',
+    defaultSort: { key: 'serial_no', dir: 'asc' }, sortTwoState: true, idleSortInd: false,  // 默认产品编号升序，仅正/倒序，无 ⇅
+  });
+  _fitBoardTableHeight();  // 表格可视行数随窗口高度自适应（无固定行数上限）
   if (window._deliveryHighlightBoard) _highlightBoardRow(window._deliveryHighlightBoard);
+}
+
+/* 产品列表表体高度 = 窗口剩余高度，行数随窗口大小自动增减（超出部分滚动）。
+   DataTable 每次重绘都是新的 .dt-scroll，因此重绘后需重新 fit。 */
+function _fitBoardTableHeight() {
+  var container = document.getElementById('board-table-container');
+  if (!container) return;
+  var scroll = container.querySelector('.dt-scroll');
+  if (!scroll) return;
+  var top = scroll.getBoundingClientRect().top;
+  if (top <= 0 || top > window.innerHeight) return;  // 尚未渲染在可视区
+  scroll.style.maxHeight = Math.max(160, Math.round(window.innerHeight - top - 16)) + 'px';
+}
+if (!window._boardFitBound) {
+  window._boardFitBound = true;
+  window.addEventListener('resize', function() { _fitBoardTableHeight(); });
 }
 
 /* 从 Bug 详情跳转时，在产品列表中定位到对应板卡行并高亮闪烁 */
@@ -2102,7 +2122,7 @@ function buildDelivery(data) {
         if (v) return '<span class="proj-code-btn" onclick="event.stopPropagation();openProductDetail(\'' + escHtml(v) + '\')" title="' + escHtml(v) + ' ' + escHtml(row.product_name || '') + '">' + escHtml(v) + '</span>';
         return '<span style="font-size:12px;color:var(--muted)">—</span>';
       }},
-      { key: 'serial_no', title: '产品编号', minWidth: 140, render: function(v, row) {
+      { key: 'serial_no', title: '产品编号', minWidth: 140, sortable: true, render: function(v, row) {
         if (!v) return '<span style="font-family:var(--mono);font-size:11.5px">—</span>';
         var bid = row && row._boardId != null ? row._boardId : null;
         var onclick = (bid != null)
@@ -2124,6 +2144,7 @@ function buildDelivery(data) {
       container: document.getElementById('delivery-table'),
       columns: cols,
       data: rows,
+      defaultSort: { key: 'date', dir: 'desc' }, sortTwoState: true, idleSortInd: false,  // 默认交付日期新→旧，仅正/倒序，无 ⇅
     });
   }
 }
@@ -2240,6 +2261,8 @@ function showDeliveryForm(record) {
   var currentUser = getCurrentUser();
   var defReceiver = isEdit ? (r.receiver || '') : (_projDetail && _projDetail.customer_name ? _projDetail.customer_name : '');
   var defResponsible = isEdit ? (r.responsible_person || '') : (currentUser ? currentUser.username : '');
+  // 交付时间：编辑记录回填已存时间；新增默认当前 PMA 系统时间
+  var defTime = isEdit ? (r.delivery_time || '') : _nowClock();
 
   // 产品编号勾选池：所选产品型号下已建档的板卡编号 + 编辑时已有的编号（物料编码统一为产品编号）
   // 新建记录时产品下拉默认选中第一个关联产品，勾选池按该默认产品构建
@@ -2266,9 +2289,12 @@ function showDeliveryForm(record) {
     '<div class="note-dialog" style="max-width:560px;max-height:85vh;overflow-y:auto">' +
       '<div class="note-dialog-head"><span class="note-dialog-title">' + (isEdit ? '编辑交付记录' : '添加交付记录') + '</span>' +
         '<button class="note-dialog-close" onclick="cancelDeliveryForm()">&times;</button></div>' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">' +
-        '<div><label style="font-size:11px;color:var(--muted)">产品型号</label><select class="search-inp" id="df-product" onchange="_onDfProductChange()" style="margin-top:4px;padding:8px 10px">' + prodOptions + '</select></div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin-bottom:12px">' +
+        // 第 1 行：产品型号独占整行
+        '<div style="grid-column:1 / -1"><label style="font-size:11px;color:var(--muted)">产品型号</label><select class="search-inp" id="df-product" onchange="_onDfProductChange()" style="margin-top:4px;padding:8px 10px">' + prodOptions + '</select></div>' +
+        // 第 2 行：交付日期 + 交付时间（新增默认当前 PMA 系统时间，可精确到秒）
         '<div><label style="font-size:11px;color:var(--muted)">交付日期</label><input class="search-inp" id="df-date" type="date" value="' + (r.date || (isEdit ? (r.date || '') : fmtLocalDate())) + '" style="margin-top:4px"></div>' +
+        '<div><label style="font-size:11px;color:var(--muted)">交付时间 <span style="color:var(--muted);opacity:.8">(默认当前)</span></label><input class="search-inp" id="df-time" type="time" step="1" value="' + escHtml(defTime) + '" style="margin-top:4px;padding:8px 10px"></div>' +
         '<div><label style="font-size:11px;color:var(--muted)">交付人</label>' + _selectHtml('df-responsible', _userOptions.length ? _userOptions : _userNames, defResponsible, _userOptions.length ? 'code' : null, _userOptions.length ? 'name' : null) + '</div>' +
         '<div><label style="font-size:11px;color:var(--muted)">收货方</label>' + _selectHtml('df-receiver', _customerNames, defReceiver, 'name', 'full_name') + '</div>' +
         '<div><label style="font-size:11px;color:var(--muted)">交付形式</label>' +
@@ -2333,6 +2359,14 @@ function _onDfProductChange() {
   }).join('') || '<span style="font-size:11px;color:var(--muted)">' + (hasDfBoards ? '该产品型号下板卡已全部交付' : '该产品型号暂无已录入板卡编号') + '</span>';
 }
 
+function _pad2(n) { return n < 10 ? '0' + n : '' + n; }
+
+/* 当前系统本地时刻 HH:MM（交付时间输入框新增默认值） */
+function _nowClock() {
+  var d = new Date();
+  return _pad2(d.getHours()) + ':' + _pad2(d.getMinutes());
+}
+
 function cancelDeliveryForm() {
   var overlay = document.querySelector('.note-dialog-overlay');
   if (overlay) overlay.remove();
@@ -2343,6 +2377,7 @@ function cancelDeliveryForm() {
 async function saveDeliveryRecord(recordId) {
   var productCode = document.getElementById('df-product').value.trim();
   var date = document.getElementById('df-date').value;
+  var time = (document.getElementById('df-time').value || '').trim();
   var responsible = document.getElementById('df-responsible').value;
   var receiver = document.getElementById('df-receiver').value;
   var method = document.getElementById('df-method').value;
@@ -2374,6 +2409,15 @@ async function saveDeliveryRecord(recordId) {
     note: note,
     material_codes: mcs,
   };
+  // 交付时间：新增记录总是携带（含默认当前时间）；编辑记录仅在用户改动时才提交，
+  // 避免"未动时间却把历史 date-only 记录误写当前时间/空串"造成无意义更新与审计噪音
+  if (!recordId) {
+    body.delivery_time = time || null;
+  } else {
+    var rec = ((_deliveryData && _deliveryData.records) || []).find(function(x) { return x.id === recordId; });
+    var origTime = (rec && rec.delivery_time) ? rec.delivery_time : '';
+    if ((time || '') !== (origTime || '')) body.delivery_time = time || null;
+  }
 
   // Disable save button during request
   var saveBtn = document.getElementById('df-save-btn');

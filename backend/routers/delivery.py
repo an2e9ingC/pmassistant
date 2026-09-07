@@ -23,6 +23,7 @@ class DeliveryRecordCreate(BaseModel):
     material_codes: Optional[List[str]] = None
     quantity: int = 0
     delivery_date: Optional[str] = None
+    delivery_time: Optional[str] = None
     receiver: Optional[str] = None
     responsible_person: Optional[str] = None
     delivery_method: Optional[str] = None
@@ -35,6 +36,7 @@ class DeliveryRecordUpdate(BaseModel):
     material_codes: Optional[List[str]] = None
     quantity: Optional[int] = None
     delivery_date: Optional[str] = None
+    delivery_time: Optional[str] = None
     receiver: Optional[str] = None
     responsible_person: Optional[str] = None
     delivery_method: Optional[str] = None

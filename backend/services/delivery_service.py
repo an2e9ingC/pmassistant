@@ -1,7 +1,7 @@
 from __future__ import annotations
 import json
 from collections import Counter
-from datetime import date, datetime, time
+from datetime import date
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -152,6 +152,21 @@ def list_delivery_records(db: Session, project_id: int) -> list[dict]:
     return [record_dict(r) for r in records]
 
 
+def _clean_time(val) -> Optional[str]:
+    """规范化 delivery_time 输入（HH:MM / HH:MM:SS）；无效/空返回 None。"""
+    if not val:
+        return None
+    s = str(val).strip()
+    if not s:
+        return None
+    from datetime import time as _time
+    try:
+        _time.fromisoformat(s[:8])
+    except ValueError:
+        return None
+    return s[:8]
+
+
 def create_delivery_record(db: Session, project_id: int, data: dict, actor: str = "") -> DeliveryRecord:
     record = DeliveryRecord(
         project_id=project_id,
@@ -159,6 +174,7 @@ def create_delivery_record(db: Session, project_id: int, data: dict, actor: str 
         product_code=data.get("product_code", ""),
         quantity=data.get("quantity", 0),
         delivery_date=_parse_date(data.get("delivery_date")),
+        delivery_time=_clean_time(data.get("delivery_time")),
         receiver=data.get("receiver", ""),
         responsible_person=data.get("responsible_person", ""),
         delivery_method=data.get("delivery_method", ""),
@@ -200,7 +216,7 @@ def _sync_delivery_event_times(db: Session, r: DeliveryRecord) -> None:
     ).all()
     if not evs:
         return
-    t = datetime.combine(r.delivery_date, time.min)
+    t = board_service.delivery_event_ts(r)
     bid_set = {e.board_id for e in evs}
     # 同源自动建档事件（建档时打了 source_delivery_record_id 标记）一并归位，
     # 否则反填日期后建档(旧日期) 会反超交付(新日期) 成为"最新"→ 板卡被顶回在库
@@ -213,6 +229,11 @@ def _sync_delivery_event_times(db: Session, r: DeliveryRecord) -> None:
                 e.event_time = t
     for e in evs:
         e.event_time = t
+        # 编辑（补/改交付时间）后把墙面时刻快照写进事件 data，前端据此判定完整时刻显示
+        if e.delivery_record_id is not None:
+            d2 = dict(e.data or {})
+            d2["delivery_time"] = r.delivery_time
+            e.data = d2
     db.commit()
     for bid in bid_set:
         board_service.refresh_board_state(db, bid)
@@ -228,6 +249,8 @@ def update_delivery_record(db: Session, record_id: int, data: dict, actor: str =
             setattr(r, field, data[field])
     if "delivery_date" in data:
         r.delivery_date = _parse_date(data["delivery_date"])
+    if "delivery_time" in data:
+        r.delivery_time = _clean_time(data["delivery_time"])
 
     if "material_codes" in data:
         new_codes = [c.strip() for c in (data["material_codes"] or []) if c and c.strip()]
@@ -288,6 +311,7 @@ def record_dict(r: DeliveryRecord) -> dict:
         "material_code": ", ".join(material_codes),
         "qty": r.quantity or 0,
         "date": str(r.delivery_date) if r.delivery_date else None,
+        "delivery_time": r.delivery_time,
         "receiver": r.receiver,
         "responsible_person": r.responsible_person,
         "delivery_method": r.delivery_method,

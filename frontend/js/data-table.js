@@ -59,9 +59,19 @@ var DataTable = (function() {
     this._onRowClick = opts.onRowClick || null;
 
     // ── Sort state ──
+    // 两态排序 / 空闲指示器 / 默认排序均为 opt-in，未开启时保持原三段式行为：
+    //   sortTwoState: true  → 点击仅 asc ⇄ desc，不进入"无排序"（配合业务表"正序倒序2种即可"）
+    //   idleSortInd:  false → 未排序列不显示 ⇅（两态表默认关）
+    //   defaultSort:  {key, dir} → 构建即按该列排序（产品列表按产品编号升序 / 交付明细按日期降序）
+    this._sortTwoState = opts.sortTwoState === true;
+    this._idleSortInd = opts.idleSortInd !== false;
+    this._externalSort = opts.externalSort || null;
     this._sortCol = null;
     this._sortDir = 'asc';
-    this._externalSort = opts.externalSort || null;
+    if (opts.defaultSort && opts.defaultSort.key) {
+      this._sortCol = opts.defaultSort.key;
+      this._sortDir = opts.defaultSort.dir === 'desc' ? 'desc' : 'asc';
+    }
 
     // ── Data ──
     this._data = opts.data || [];
@@ -70,7 +80,9 @@ var DataTable = (function() {
 
     // ── Build DOM ──
     this._buildDOM();
-    this.refresh();
+    // 配置了默认排序 → 构建后即应用（保证初始行序与表头箭头一致）；否则普通刷新
+    if (this._sortCol) this._applySort();
+    else this.refresh();
   }
 
   /* ── DOM Construction ── */
@@ -162,7 +174,7 @@ var DataTable = (function() {
         var ind = document.createElement('span');
         ind.className = 'dt-sort-ind';
         ind.setAttribute('data-sort-col', col.key);
-        ind.textContent = self._sortCol === col.key ? (self._sortDir === 'asc' ? '▲' : '▼') : '⇅';
+        ind.textContent = self._sortGlyph(col.key);
         th.appendChild(ind);
       }
 
@@ -409,10 +421,22 @@ var DataTable = (function() {
     });
   };
 
+  // 列排序指示字形：当前排序列 ▲/▼；未排序列仅在开启空闲指示时显示 ⇅（两态表常关）
+  DataTable.prototype._sortGlyph = function(colKey) {
+    if (colKey === this._sortCol) return this._sortDir === 'asc' ? '▲' : '▼';
+    return this._idleSortInd ? '⇅' : '';
+  };
+
   DataTable.prototype._toggleSort = function(colKey) {
     if (this._sortCol === colKey) {
-      this._sortDir = this._sortDir === 'asc' ? 'desc' : this._sortDir === 'desc' ? 'none' : 'asc';
-      if (this._sortDir === 'none') { this._sortCol = null; this._sortDir = 'asc'; }
+      if (this._sortTwoState) {
+        // 两态：仅 asc ⇄ desc
+        this._sortDir = this._sortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        // 三段式：asc → desc → 无排序
+        this._sortDir = this._sortDir === 'asc' ? 'desc' : this._sortDir === 'desc' ? 'none' : 'asc';
+        if (this._sortDir === 'none') { this._sortCol = null; this._sortDir = 'asc'; }
+      }
     } else {
       this._sortCol = colKey;
       this._sortDir = 'asc';
@@ -461,13 +485,8 @@ var DataTable = (function() {
     var self = this;
     inds.forEach(function(ind) {
       var col = ind.getAttribute('data-sort-col');
-      if (col === self._sortCol) {
-        ind.textContent = self._sortDir === 'asc' ? '▲' : '▼';
-        ind.className = 'dt-sort-ind ' + self._sortDir;
-      } else {
-        ind.textContent = '⇅';
-        ind.className = 'dt-sort-ind';
-      }
+      ind.textContent = self._sortGlyph(col);
+      ind.className = col === self._sortCol ? 'dt-sort-ind ' + self._sortDir : 'dt-sort-ind';
     });
   };
 

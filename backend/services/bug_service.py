@@ -299,6 +299,13 @@ def update_bug(db, bug_id, data, user_id=None):
                 reporter_name = _reporter_display_name(db, b)
                 for bid in added:
                     board_service.repair_start(db, bid, b, reporter_name)
+    # 维修 Bug 责任人转派 → 关联维修流板卡归属人同步为新责任人（人员流转跟随 Bug；
+    # 如 Bug#40 从创建人转派给 陈举，板卡 2608030454019 的归属人自动变为 陈举）
+    if (b.type == BUG_TYPE_REPAIR and "assignee_id" in data
+            and data["assignee_id"] != old_assignee_id
+            and b.status not in ("resolved", "closed")):
+        from backend.services import board_service
+        board_service.repair_sync_assignee(db, b)
     # 维修 Bug 解决/关闭 → 关联板卡 维修中→已维修（系统联动）
     if data.get("status") in ("resolved", "closed") and old_status not in ("resolved", "closed"):
         bid_list = [int(x) for x in (b.board_ids or []) if x is not None]

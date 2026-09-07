@@ -42,7 +42,7 @@
 /* Sortable header */
 .dt-table thead th.dt-sortable { cursor: pointer; }
 .dt-table thead th.dt-sortable:hover { background: var(--border); }
-.dt-table .dt-sort-ind { margin-left: 4px; color: var(--muted); font-size: 10px; }
+.dt-table .dt-sort-ind { display: inline-block; width: 9px; margin-left: 4px; color: var(--muted); font-size: 10px; text-align: left; }
 .dt-table .dt-sort-ind.asc { color: var(--accent); }
 .dt-table .dt-sort-ind.desc { color: var(--accent); }
 

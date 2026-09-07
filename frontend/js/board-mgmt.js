@@ -289,10 +289,13 @@ async function _loadBoardTimeline(boardId, order) {
     if (!bodyEl) return;
     var titleEl = document.querySelector('.note-dialog-title');
     if (titleEl) titleEl.textContent = '板卡时间线 — ' + (board.serial_no || '');
+    // 交付行的前导标识 = 产品型号（缺型号退回名称，再退回编号兜底），标题仍展示板卡编号
+    var boardModel = board.product_code || board.product_name || board.serial_no || '';
     var orderBtn = '<button class="btn" style="font-size:11px;padding:2px 8px" onclick="_loadBoardTimeline(' + boardId + ',\'' + (order === 'asc' ? 'desc' : 'asc') + '\')">' + (order === 'desc' ? '最新在前 ↓' : '最早在前 ↑') + '</button>';
     var header =
       '<div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;font-size:12px;flex-wrap:wrap">' +
         '<span>当前状态: ' + boardStatusPill(board.status) + '</span>' +
+        '<span style="color:var(--muted)">型号: ' + escHtml(boardModel) + '</span>' +
         '<span style="color:var(--muted)">归属人: ' + escHtml(_userDisplayMap[board.owner] || board.owner || '—') + '</span>' +
         orderBtn +
       '</div>';
@@ -304,11 +307,14 @@ async function _loadBoardTimeline(boardId, order) {
 }
 
 /* 操作时间展示：仅录入日期（date-only，存 UTC 午夜）时只显示日期，
-   否则（建档/交付/维修等真实时刻）显示完整本地时间，避免误导性一致的 08:00:00 */
-function _boardEventTimeDisplay(iso) {
+   否则（建档/交付/维修等真实时刻）显示完整本地时间（含 hh:mm:ss），避免误导性一致的 08:00:00。
+   交付事件若带 data.delivery_time（用户实际录入了交付时刻），即使恰为北京时间 08:00
+   （存储 = UTC 00:00）也按完整时刻显示，不当作 date-only。 */
+function _boardEventTimeDisplay(iso, data) {
   if (!iso) return '';
   var m = /T(\d{2}):(\d{2}):(\d{2})/.exec(iso);
-  if (m && m[1] === '00' && m[2] === '00' && m[3] === '00') return formatDate(iso);
+  var wallSpecified = data && data.delivery_time;
+  if (m && m[1] === '00' && m[2] === '00' && m[3] === '00' && !wallSpecified) return formatDate(iso);
   return fmtISODateTime(iso);
 }
 
@@ -327,11 +333,11 @@ function _boardTimelineHtml(events, order) {
     var dot = isNewest
       ? '<span style="position:absolute;left:-24px;top:4px;width:14px;height:14px;border-radius:50%;background:var(--accent);border:2px solid var(--accent);box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);box-sizing:border-box;z-index:1"></span>'
       : '<span style="position:absolute;left:-24px;top:4px;width:14px;height:14px;border-radius:50%;background:var(--surface);border:2px solid ' + dotColor + ';box-sizing:border-box;z-index:1"></span>';
-    var time = e.event_time ? _boardEventTimeDisplay(e.event_time) : '';
     var migrate = (e.from_status ? boardStatusPill(e.from_status) + ' <span style="color:var(--muted)">→</span> ' : '') + boardStatusPill(e.to_status);
     var actor = e.actor ? (_userDisplayMap[e.actor] || e.actor) : '';
     var isBugEvent = !!e.bug_id;
     var d = e.data || {};
+    var time = e.event_time ? _boardEventTimeDisplay(e.event_time, d) : '';
 
     // 第 1 行：时间 + 状态切换（与其他状态事件保持一致）；最新点时间用强调色加粗
     var bodyHtml = '<div style="display:flex;align-items:baseline;gap:6px;font-size:12px;flex-wrap:wrap">' +
@@ -383,19 +389,31 @@ function _boardTimelineHtml(events, order) {
         bodyHtml += '<div style="margin-top:3px;font-size:11.5px;color:var(--muted)">' + escHtml(actor) + '</div>';
       }
       // 第 3 行：转交/操作时填写的说明内容（没有则不显示）
-      if (e.note) {
+      // 交付记录联动事件：note 快照为自动生成的「交付:产品名 x数量」——产品型号已由头部呈现，
+      // 快照不再平铺；本批次交付数量 qty 优先取 data 快照，历史事件回退从 note「xN」解析，
+      // 作为「数量」信息块与 交付方式/收货方 同排、同风格展示。
+      var qtyTiles = [];
+      if (isDelivery && e.delivery_record_id != null) {
+        var dqty = d.qty != null ? String(d.qty) : '';
+        if (!dqty) { var mq = /x\s*(\d+)\s*$/.exec(e.note || ''); if (mq) dqty = mq[1]; }
+        if (dqty) qtyTiles.push({ label: '该批次交付数量', value: dqty });
+        else if (e.note) { bodyHtml += '<div style="margin-top:4px;font-size:12px;color:var(--muted)">' + escHtml(e.note) + '</div>'; }
+      } else if (e.note) {
         bodyHtml += '<div style="margin-top:4px;font-size:12px;color:var(--muted)">' + escHtml(e.note) + '</div>';
       }
       // 其余字段小网格（转交事件已由 转交人→接收人 + 说明 呈现，不再重复展示网格；
       // 交付事件已由第 2 行高亮责任人，网格跳过 responsible_person 避免重复）
+      // insideNewest 让信息块用与面板相反的底色 + 边框，保证与背景拉开层次
       if (!toHolder) {
-        bodyHtml += _boardEventDataGrid(d, isDelivery ? ['responsible_person'] : null);
+        bodyHtml += _boardEventDataGrid(d, isDelivery ? ['responsible_person'] : null, isNewest,
+          qtyTiles.length ? qtyTiles : null);
       }
     }
 
-    // 最新时间点内容强调：浅色强调底 + 边框圆角
+    // 最新时间点内容强调：surface2 底 + 强调色左边条 + 描边——与对话框底色分明，
+    // 信息块在面板上反用 surface 底，杜绝"颜色太接近背景看不清"（原 8% 透明强调底过淡）
     var newestBox = isNewest
-      ? 'background:color-mix(in srgb, var(--accent) 8%, transparent);border:1px solid color-mix(in srgb, var(--accent) 38%, transparent);border-radius:8px;padding:6px 10px;'
+      ? 'background:var(--surface2);border:1px solid color-mix(in srgb, var(--accent) 30%, var(--border));border-left:3px solid var(--accent);border-radius:8px;padding:6px 10px;'
       : '';
     html += '<div style="position:relative;padding:4px 0 14px 0">' + dot + '<div style="' + newestBox + '">' + bodyHtml + '</div></div>';
   });
@@ -424,26 +442,36 @@ var _BOARD_DATA_KEY_LABELS = {
   'scrap_method': '报废处理方法',
 };
 /* 内部追踪 key，不在时间线展示 */
-var _BOARD_DATA_HIDDEN_KEYS = ['source_delivery_record_id'];
+var _BOARD_DATA_HIDDEN_KEYS = ['source_delivery_record_id', 'qty', 'delivery_time'];
 
-function _boardEventDataGrid(data, skipKeys) {
-  var keys = Object.keys(data).filter(function(k) {
-    if (data[k] === null || data[k] === undefined || String(data[k]) === '') return false;
-    if (_BOARD_DATA_HIDDEN_KEYS.indexOf(k) >= 0) return false;
-    if (skipKeys && skipKeys.indexOf(k) >= 0) return false;
-    return true;
-  });
-  if (!keys.length) return '';
-  var cells = keys.map(function(k) {
+function _boardEventDataGrid(data, skipKeys, insideNewest, extraTiles) {
+  var cells = [];
+  Object.keys(data).forEach(function(k) {
+    if (data[k] === null || data[k] === undefined || String(data[k]) === '') return;
+    if (_BOARD_DATA_HIDDEN_KEYS.indexOf(k) >= 0) return;
+    if (skipKeys && skipKeys.indexOf(k) >= 0) return;
     var label = _BOARD_DATA_KEY_LABELS[k] || k;
     var v = String(data[k]);
     if (_BOARD_USER_DATA_KEYS.indexOf(k) >= 0 && _userDisplayMap[data[k]]) v = _userDisplayMap[data[k]];
-    return '<div style="padding:4px 6px;background:var(--bg);border-radius:5px">' +
-      '<div style="font-size:10px;color:var(--muted)">' + escHtml(label) + '</div>' +
-      '<div style="font-size:11px;margin-top:1px;word-break:break-all">' + escHtml(v) + '</div>' +
+    cells.push({ label: label, value: v });
+  });
+  // 额外信息块（如交付记录联动事件的「数量」），与 data 字段同风格、同排展示
+  (extraTiles || []).forEach(function(t) {
+    if (t && t.label && String(t.value) !== '' && String(t.value) !== 'null') cells.push({ label: t.label, value: String(t.value) });
+  });
+  if (!cells.length) return '';
+  // 信息块底色与所在面板相反：普通事件铺在对话框 surface 上 → surface2 色块；
+  // 最新事件已带 surface2 面板 → 信息块用 surface，并统一加边框让每块独立清晰
+  var tileBg = insideNewest ? 'var(--surface)' : 'var(--surface2)';
+  // 列数：带额外块（交付=数量/交付方式/收货方）时按块数等宽单排；纯 data 网格保持 2 列
+  var cols = (extraTiles && extraTiles.length) ? Math.min(cells.length, 3) : 2;
+  var inner = cells.map(function(c) {
+    return '<div style="padding:5px 7px;background:' + tileBg + ';border:1px solid var(--border);border-radius:6px">' +
+      '<div style="font-size:10px;color:var(--muted)">' + escHtml(c.label) + '</div>' +
+      '<div style="font-size:11px;margin-top:2px;color:var(--fg);word-break:break-all">' + escHtml(c.value) + '</div>' +
     '</div>';
   }).join('');
-  return '<div style="margin-top:6px;display:grid;grid-template-columns:1fr 1fr;gap:6px">' + cells + '</div>';
+  return '<div style="margin-top:7px;display:grid;grid-template-columns:repeat(' + cols + ',1fr);gap:6px">' + inner + '</div>';
 }
 
 async function deleteBoard(boardId) {

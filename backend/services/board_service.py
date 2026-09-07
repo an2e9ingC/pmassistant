@@ -10,12 +10,12 @@ only through 维修 (repair) Bugs via repair_start/repair_finish.
 """
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from backend.config import to_iso_str
+from backend.config import to_iso_str, BEIJING_OFFSET
 from backend.middleware.auth import has_perm
 from backend.models.delivery import DeliveryBoard, DeliveryBoardEvent
 from backend.models.zentao import CachedProject  # noqa: F401 — 确保 FK 目标表在 metadata 中
@@ -506,7 +506,11 @@ def repair_start(db: Session, board_id: int, bug, reporter_name: str) -> Optiona
 
 
 def repair_finish(db: Session, board_id: int, bug, actor_name: str) -> Optional[DeliveryBoardEvent]:
-    """维修 Bug 解决/关闭时：维修中→已维修（owner 保持），写事件（含 bug_id）。"""
+    """维修 Bug 解决/关闭时：维修中→已维修，写事件（含 bug_id）。
+
+    归属人随 Bug 责任人流转：无论 Bug 是否中途转派，结束维修时把归属/持有人
+    收敛为 Bug 现任责任人（username→owner，display→持有人），保证交付状态
+    中的人员与 Bug 责任人一致。"""
     board = _get_board(db, board_id)
     if not board or board.status != "维修中":
         return None
@@ -515,6 +519,10 @@ def repair_finish(db: Session, board_id: int, bug, actor_name: str) -> Optional[
     resolver_display = (resolver.display_name or resolver.username) if resolver else ""
     if not resolver_display:
         _, resolver_display = _resolve_assignee(db, bug)
+    owner_username, owner_display = _resolve_assignee(db, bug)
+    if owner_username:
+        board.owner = owner_username
+        board.current_holder = owner_display
     board.status = "已维修"
     event = DeliveryBoardEvent(
         board_id=board.id,
@@ -533,6 +541,33 @@ def repair_finish(db: Session, board_id: int, bug, actor_name: str) -> Optional[
     db.commit()
     db.refresh(event)
     return event
+
+
+def repair_sync_assignee(db: Session, bug, board_ids: Optional[list[int]] = None) -> int:
+    """维修 Bug 责任人变更 → 关联板卡归属/持有人同步为 Bug 现任责任人。
+
+    人员流转跟随 Bug：处于维修流（维修中/已维修）的板卡，归属人 = Bug assignee
+    （username→owner，display→持有人）。已离开维修流（如重新交付）的板卡不改写，
+    避免覆盖交付责任人的归属语义。返回更新的板卡数。"""
+    from backend.models.delivery import DeliveryBoard
+    owner_username, owner_display = _resolve_assignee(db, bug)
+    if not owner_username:
+        return 0
+    ids = board_ids if board_ids is not None \
+        else [int(x) for x in (bug.board_ids or []) if x is not None]
+    if not ids:
+        return 0
+    boards = db.query(DeliveryBoard).filter(DeliveryBoard.id.in_(ids)).all()
+    n = 0
+    for bd in boards:
+        if bd.status not in ("维修中", "已维修"):
+            continue
+        bd.owner = owner_username
+        bd.current_holder = owner_display
+        n += 1
+    if n:
+        db.commit()
+    return n
 
 
 # ─────────────────────────── 交付记录联动 ───────────────────────────
@@ -559,6 +594,34 @@ def _apply_delivery_state(db: Session, board, record_id: int,
                 board.current_holder = latest.data["receiver"]
 
 
+def _parse_clock_time(val) -> Optional[time]:
+    """解析 delivery_time 字符串（HH:MM / HH:MM:SS）→ time；无效/空返回 None。"""
+    if not val:
+        return None
+    s = str(val).strip()
+    if not s:
+        return None
+    try:
+        return time.fromisoformat(s[:8])
+    except ValueError:
+        return None
+
+
+def delivery_event_ts(record) -> datetime:
+    """交付记录的业务时间戳（建档 + 交付事件共用，保证同源归位）。
+
+    - 带 delivery_time：视为北京时间墙面时刻 → 减 8h 存 naive UTC，前端 +8 还原显示
+      (与 DateTime 列统一 naive-UTC 存储约定一致)。08:00-23:59 时 date() 仍落在
+      delivery_date 当天，业务日期排序不受影响。
+    - 无 delivery_time（历史记录/仅补日期）：沿用 date-only 午夜语义，时间线按日期归位。"""
+    if record.delivery_date:
+        t = _parse_clock_time(record.delivery_time)
+        if t is not None:
+            return datetime.combine(record.delivery_date, t) - BEIJING_OFFSET
+        return datetime.combine(record.delivery_date, time.min)
+    return datetime.utcnow()  # naive UTC
+
+
 def sync_delivery_record(db: Session, project_id: int, record, material_codes: list[str],
                          actor: str = "") -> list[DeliveryBoard]:
     """交付记录联动：对每个物料编码建档（无则建档→已交付）+ 写交付事件。
@@ -569,7 +632,7 @@ def sync_delivery_record(db: Session, project_id: int, record, material_codes: l
     receiver = _clean_str(record.receiver)
     responsible = _clean_str(record.responsible_person)
     # 建档与交付事件时间同源：避免反填日期时"自动建档"(now) 反超交付成为最新
-    event_base = record.delivery_date or datetime.utcnow()
+    event_base = delivery_event_ts(record)
     for mc in material_codes:
         mc = (mc or "").strip()
         if not mc:
@@ -617,6 +680,8 @@ def sync_delivery_record(db: Session, project_id: int, record, material_codes: l
                 "delivery_method": _clean_str(record.delivery_method),
                 "receiver": receiver,
                 "responsible_person": responsible,
+                "qty": record.quantity,  # 数量快照：时间线交付行渲染高亮（免解析 note）
+                "delivery_time": record.delivery_time,  # 用户录入的交付时刻（北京时间墙面）：时间线据此显示完整时刻而非 date-only
             },
             delivery_record_id=record.id,
             created_by=actor or "system",

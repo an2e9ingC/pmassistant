@@ -307,6 +307,18 @@ def update_bug(bug_id: int, body: BugUpdate, db: Session = Depends(get_db), user
             if bid in repairing_ids:
                 log_audit(db, user, "delivery_board_repair_finish",
                           f"板卡#{bid} →已维修（维修Bug#{bug_id} 解决）", AUDIT_CAT_PROJECT, "medium")
+    # 维修 Bug 责任人转派 → 关联维修流板卡归属人同步（人员流转跟随 Bug 责任人）
+    if (b.get("type") == BUG_TYPE_REPAIR and body.assignee_id is not None
+            and body.assignee_id != existing.assignee_id
+            and b.get("status") not in ("resolved", "closed")):
+        from backend.models.local import LocalUser
+        def _uname(uid):
+            if not uid: return ""
+            u = db.query(LocalUser).filter(LocalUser.id == uid).first()
+            return u.username if u else f"#{uid}"
+        log_audit(db, user, "delivery_board_owner_sync",
+                  f"维修Bug#{bug_id} 责任人 {_uname(existing.assignee_id)}→{_uname(body.assignee_id)}，关联维修流板卡归属人同步",
+                  AUDIT_CAT_PROJECT, "medium")
     log_audit(db, user, "bug_update", f"更新Bug #{bug_id}", AUDIT_CAT_BUG, "medium")
     return {"code": 0, "data": b, "message": "ok"}
 
