@@ -59,6 +59,8 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 | `product_notes` | `ProductNote` | 0 | 本地-笔记 | 产品维护笔记，记录人对产品的手动备注 |
 | `project_notes` | `ProjectNote` | 14 | 本地-笔记 | 项目维护笔记，记录人对项目各阶段的手动备注 |
 | `project_activities` | `ProjectActivity` | 22 | 本地-活动 | 项目操作审计：记录谁对项目做了什么操作 |
+| `matcode_segments` | `MatcodeSegment` | 0 | 本地-物料编码 | 结构件料号编码段树：8 位码 = 前缀 + 补零序号（如 1171/11761），组/冻结状态标记，启动幂等种子 |
+| `matcode_materials` | `MatcodeMaterial` | 0 | 本地-物料编码 | 每个已发放/已导入的 8 位料号一行，永久保留（code 全局唯一，作废号不回填） |
 | `product_users` | —（无 ORM 模型） | 0 | 关系表 | 产品与本地用户的关联表（预留，尚未使用） |
 | `project_users` | —（无 ORM 模型） | 0 | 关系表 | 项目与本地用户的关联表（预留，尚未使用） |
 | `sync_logs` | `SyncLog` | 5228 | 系统 | 每次 ZenTao 数据同步的执行记录：实体类型、耗时、新增/更新数量、错误信息 |
@@ -695,6 +697,49 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 | 6 | `task_name` | VARCHAR(256) | NULLABLE | 任务名（任务操作时填充） |
 | 7 | `task_assignee` | VARCHAR(64) | NULLABLE | 责任人（任务操作时填充） |
 | 8 | `created_at` | DATETIME | default=now | — |
+
+#### 5.3.14 `matcode_segments` — 编码段树（物料编码，Issue #13）
+
+> 段 = 前缀 + 补零序号，总长 8 位（前缀 4 位→序号 4 位；前缀 5 位→序号 3 位）。**启动幂等种子，非用户数据**。组节点（1176/1177/1178/5011）与冻结段（legacy11723/118）不可发放。
+
+| # | 列名 | 类型 | 约束 | 说明 |
+|---|------|------|------|------|
+| 1 | `id` | INTEGER | **PK** | — |
+| 2 | `key` | String(24) | NOT NULL, **UNIQUE** | 稳定键：1171 / 11761 / legacy11723 / 118 ... |
+| 3 | `parent_key` | String(24) | NULLABLE | 所属组 key（独立段为 NULL） |
+| 4 | `label` | String(64) | NOT NULL | 中文名：座/块、标件、外购件… |
+| 5 | `prefix` | String(8) | NOT NULL, **UNIQUE** | 数字前缀，如 1171 / 11761 |
+| 6 | `suffix_width` | INTEGER | NOT NULL default=4 | 序号补零宽度（8 - len(prefix)） |
+| 7 | `is_group` | INTEGER | NOT NULL default=0 | 组节点（仅聚合子段，不可发放） |
+| 8 | `issueable` | INTEGER | NOT NULL default=0 | 是否可发放（非组非 closed） |
+| 9 | `closed` | INTEGER | NOT NULL default=0 | 冻结段（只读历史） |
+| 10 | `drawing_series` | String(64) | NULLABLE | 图号联号系列，如 LM_LJ.030 |
+| 11 | `drawing_width` | INTEGER | NOT NULL default=0 | 图号序号补零宽度（0=该段无图号联号） |
+| 12 | `sort_order` | INTEGER | NOT NULL default=0 | 展示顺序 |
+| 13 | `created_at` | DATETIME | default=now | — |
+
+#### 5.3.15 `matcode_materials` — 物料编码发放记录
+
+> 每码一行，**永久保留（无 UI 硬删除）**。code 全局唯一（UNIQUE = 并发兜底）；suffix = `int(code[len(prefix):])` 反规范化计数 → autonext = `MAX(suffix)+1`（作废/人工跳号产生的空号永不回填）。name+spec **不建唯一**，查重走「精确命中 → 普通发码人拦截、管理员特批放行」业务规则。
+
+| # | 列名 | 类型 | 约束 | 说明 |
+|---|------|------|------|------|
+| 1 | `id` | INTEGER | **PK** | — |
+| 2 | `code` | String(8) | NOT NULL, INDEX, **UNIQUE** | 8 位料号 |
+| 3 | `segment_id` | INTEGER | NOT NULL, INDEX, **FK→matcode_segments.id** | 所属编码段 |
+| 4 | `legacy_prefix` | String(8) | NULLABLE | 旧前缀（历史导入码：11723） |
+| 5 | `name` | String(256) | NOT NULL | 物料名称（必填；含 PE0xxx 自动提取项目） |
+| 6 | `spec` | String(256) | NULLABLE | 规格型号 / 厂家规格型号 |
+| 7 | `drawing` | String(128) | NULLABLE | 图号（可空；需全局不重复） |
+| 8 | `project` | String(128) | NULLABLE | 使用项目 |
+| 9 | `unit` | String(32) | NULLABLE | 单位 |
+| 10 | `remark` | TEXT | NULLABLE | 备注 |
+| 11 | `source` | String(128) | NULLABLE | 溯源 manual:<u> / import:<f>/<s> / erp:… |
+| 12 | `status` | String(16) | NOT NULL default=active, INDEX | active 在用 / stopped 停用 / void 作废 |
+| 13 | `suffix` | INTEGER | NOT NULL | 段内序号（索引 (segment_id, suffix)） |
+| 14 | `created_by` | String(64) | NULLABLE | 发放/导入人 |
+| 15 | `created_at` | DATETIME | default=now | — |
+| 16 | `updated_at` | DATETIME | default=now, onupdate=now | — |
 
 ---
 

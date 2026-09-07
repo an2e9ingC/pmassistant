@@ -1,0 +1,121 @@
+/* ═══════════════════════════════════════════════════
+   物料编码平台（matcode）视图样式
+   · 仅用 CSS 变量（--xxx），亮/暗主题自适应
+   · 表格用 DataTable（.dt-scroll/.dt-table），此处只补充 matcode 特有形态
+═══════════════════════════════════════════════════ */
+
+/* ── 页内 Tab ── */
+.mc-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.mc-tab {
+  padding: 9px 22px; border: none; background: none; cursor: pointer;
+  color: var(--muted); font-size: 13.5px; font-weight: 500;
+  border-bottom: 2px solid transparent; transition: color .15s, border-color .15s;
+}
+.mc-tab:hover { color: var(--fg); }
+.mc-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* ── 筛选条 ── */
+.mc-filterbar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;
+}
+.mc-filterbar .search-wrap { max-width: 320px; }
+.mc-filterbar select, .mc-filterbar input[type="text"] {
+  height: 28px; padding: 0 8px; font-size: 12.5px;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--fg);
+}
+.mc-filterbar label { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+
+/* ── 状态 pill（物料专用；color 语义同全局 tokens） ── */
+.mc-pill { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; line-height: 17px; white-space: nowrap; }
+.mc-pill.active  { background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success); }
+.mc-pill.stopped { background: color-mix(in srgb, var(--warn) 16%, transparent);    color: var(--warn); }
+.mc-pill.void    { background: color-mix(in srgb, var(--danger) 13%, transparent);   color: var(--muted); text-decoration: line-through; }
+.mc-pill.legacy  { background: var(--surface2); color: var(--muted); border: 1px dashed var(--border); }
+
+/* ── 料号 chip（mono，点击看详情） ── */
+.mc-code {
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 12px; letter-spacing: .02em; cursor: pointer; white-space: nowrap;
+  color: var(--accent); border-bottom: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.mc-code.void { color: var(--muted); border-color: transparent; text-decoration: line-through; }
+.mc-code:hover { border-bottom-style: solid; }
+.mc-sub { font-size: 11px; color: var(--muted); }
+.mc-spec { color: var(--fg); font-size: 12px; }
+.mc-dim { color: var(--muted); font-size: 11.5px; }
+
+/* ── 分页器 ── */
+.mc-pager { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 10px 2px 0; font-size: 12.5px; color: var(--muted); }
+.mc-pager button.btn { min-width: 56px; }
+
+/* ── 发放面板布局 ── */
+.mc-issue-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+@media (max-width: 1080px) { .mc-issue-grid { grid-template-columns: 1fr; } }
+.mc-issue-grid .card-pad { padding: 14px; }
+
+.mc-field { margin-bottom: 10px; }
+.mc-field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.mc-field input[type="text"], .mc-field input[type="number"], .mc-field textarea, .mc-field select {
+  width: 100%; box-sizing: border-box; padding: 6px 9px; font-size: 13px;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--fg);
+}
+.mc-field input:focus, .mc-field textarea:focus, .mc-field select:focus { outline: none; border-color: var(--accent); }
+.mc-field .mc-check { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+.mc-field .hint { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
+
+/* ── 建议码预览卡 ── */
+.mc-preview-card {
+  position: sticky; top: 74px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+  background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.04);
+}
+.mc-preview-hd { padding: 9px 14px; font-size: 12px; font-weight: 600; color: var(--muted); background: var(--surface2); border-bottom: 1px solid var(--border); }
+.mc-preview-body { padding: 14px; }
+.mc-big-code {
+  font-family: var(--mono, ui-monospace, Menlo, Consolas, monospace);
+  font-size: 30px; font-weight: 700; letter-spacing: 2px; color: var(--accent); line-height: 1.15; word-break: break-all;
+}
+.mc-big-code .mc-prev-wait { color: var(--muted); font-size: 14px; font-weight: 500; }
+.mc-big-code .mc-prev-none { color: var(--muted); font-size: 13px; font-weight: 500; letter-spacing: 0; }
+.mc-prev-drawing { margin-top: 6px; font-size: 12px; color: var(--fg); }
+.mc-prev-drawing b { color: var(--muted); font-weight: 500; margin-right: 4px; }
+.mc-dup-note { margin-top: 10px; border-radius: 7px; padding: 8px 10px; font-size: 12px; line-height: 1.55; }
+.mc-dup-note.warn { background: color-mix(in srgb, var(--warn) 12%, transparent); color: color-mix(in srgb, var(--warn) 30%, var(--fg)); }
+.mc-dup-note.ok   { background: color-mix(in srgb, var(--success) 10%, transparent); color: var(--success); }
+.mc-dup-note .mc-codes { font-family: var(--mono, Menlo, Consolas, monospace); }
+
+/* ── 线段信息条 ── */
+.mc-seg-meta { font-size: 12px; color: var(--muted); line-height: 1.6; }
+.mc-seg-meta b { color: var(--fg); font-weight: 600; }
+.mc-closed-tag { display:inline-block; margin-left:6px; font-size:10.5px; color: var(--danger); border:1px dashed var(--danger); border-radius:4px; padding:0 5px; vertical-align:1px; }
+
+/* ── 详情对话框 ── */
+.mc-detail-grid { display: grid; grid-template-columns: 96px 1fr; gap: 4px 10px; font-size: 13px; }
+.mc-detail-grid .k { color: var(--muted); padding-top: 2px; }
+.mc-detail-grid .v { color: var(--fg); word-break: break-all; line-height: 1.5; }
+.mc-detail-grid .v.mono { font-family: var(--mono, Menlo, Consolas, monospace); font-weight: 600; color: var(--accent); font-size: 14px; }
+.mc-detail-grid > div { padding: 5px 0; border-bottom: 1px dashed var(--border); }
+
+/* ── 目录「备注」列（超长省略，悬停看全文） ── */
+.mc-remark {
+  display: inline-block; max-width: 168px; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; vertical-align: bottom; color: var(--fg); font-size: 12px;
+}
+
+/* ── 发放面板 combo（复用 detail.css 的 .proj-combo 结构，此处对齐 .mc-field 字段尺寸） ── */
+.mc-field .proj-combo { width: 100%; }
+.mc-field .proj-combo .proj-combo-input {
+  width: 100%; box-sizing: border-box; padding: 6px 30px 6px 9px; font-size: 13px;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--fg);
+  height: auto;
+}
+.mc-field .proj-combo .proj-combo-input:focus { outline: none; border-color: var(--accent); }
+.mc-field .proj-combo .proj-combo-arrow { top: 8px; }
+
+/* ── 项目提示 / 图号提示颜色（需盖过 .mc-field .hint 的 muted） ── */
+.mc-field .hint.mc-hint-ok { color: var(--success); }
+.mc-field .hint.mc-hint-warn { color: var(--warn); }
+
+/* ── 编辑弹窗 · 图号生成行 ── */
+.mc-draw-edit { display: flex; gap: 6px; }
+.mc-draw-edit input { flex: 1; }
+.mc-draw-edit button { white-space: nowrap; }
