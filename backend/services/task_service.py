@@ -459,6 +459,10 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
                 continue
             old_val = getattr(t, field)
             new_val = data[field]
+            # 日期先规范化再比较：库里是 date 对象、payload 是字符串，date != str 恒成立，
+            # 会导致开始/截止日期未变也被记成变更（历史记录出现 "2026-08-14 → 2026-08-14"）。
+            if field in ("start_date", "due_date"):
+                new_val = _parse_date(new_val) if new_val else None
             if old_val != new_val:
                 if field in ("reviewer_id", "parent_id", "blocked_by_id"):
                     setattr(t, field, int(new_val) if new_val else None)
@@ -469,7 +473,7 @@ def update_task(db: Session, task_id: int, data: dict, user=None) -> Optional[di
                     if "assignee_ids" not in data:
                         t.assignee_ids = [new_id] if new_id else None
                 elif field in ("start_date", "due_date"):
-                    setattr(t, field, _parse_date(new_val) if new_val else None)
+                    setattr(t, field, new_val)  # 已解析为 date
                 else:
                     setattr(t, field, new_val)
                 ov_display = old_val

@@ -1571,6 +1571,18 @@ function createMultiUserSelector(opts) {
     if (opts.onChange) opts.onChange(ids.slice());
   };
 
+  // 共享移除函数（tag × 删除用）— 与 _muSelect_ 一样同步 onChange。
+  // 否则镜像变量型消费方（如任务编辑表单的 _tfAssigneeIds）删除成员后保存时读旧值，
+  // 成员会“删除失败”并随刷新回来。回调缺失时等同原内联逻辑，安全。
+  var removeFn = '_muRemove_' + safeId;
+  window[removeFn] = function(uid) {
+    var ids = window[key];
+    var idx = ids.indexOf(uid);
+    if (idx >= 0) ids.splice(idx, 1);
+    _muRenderTags(containerId);
+    if (opts.onChange) opts.onChange(ids.slice());
+  };
+
   var enterFn = '_muEnter_' + safeId;
   window[enterFn] = function(e) {
     if (e.key === 'Enter') {
@@ -1607,7 +1619,7 @@ function _muRenderTags(containerId) {
       var name = u ? (u.name || u.display_name || u.username) : ('#' + uid);
       html += '<span style="display:inline-flex;align-items:center;gap:2px;background:var(--accent);color:#fff;padding:1px 6px;border-radius:10px;font-size:11px;white-space:nowrap">' +
         escHtml(name) +
-        '<button onclick="event.stopPropagation();var ids=window._mu_' + safeId + ';var idx=ids.indexOf(' + uid + ');if(idx>=0)ids.splice(idx,1);_muRenderTags(\'' + containerId + '\');" ' +
+        '<button onclick="event.stopPropagation();_muRemove_' + safeId + '(' + uid + ');" ' +
         'style="background:none;border:none;color:inherit;cursor:pointer;padding:0;margin-left:2px;font-size:13px;line-height:1;opacity:0.7">×</button>' +
       '</span>';
     });
