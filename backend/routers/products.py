@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.database import get_db, to_local_str, _db_path
-from backend.middleware.auth import get_current_user, has_perm, require_admin, require_perm
+from backend.middleware.auth import get_current_user, has_perm, require_admin, require_any_perm, require_perm
 from backend.models.local import ProductNote, ProductBlockDiagram
 from backend.services import product_service
 from backend.services.product_service import log_product_activity
@@ -315,12 +315,67 @@ def get_note_categories(identifier: str, db: Session = Depends(get_db), _=Depend
 # ── Product Documents (based on doc templates) ──
 
 @router.get("/{identifier}/documents", response_model=dict)
-def get_product_documents(identifier: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
+def get_product_documents(
+    identifier: str,
+    include_removed: bool = Query(False, description="同时返回已移除(软删)的模板文档，用于导入弹窗展示"),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
     product = resolve_product(db, identifier)
     """Return product document instances (synced from templates) with status and actual paths."""
     from backend.services.document_service import get_or_init_product_documents
-    docs = get_or_init_product_documents(db, product.id)
+    docs = get_or_init_product_documents(db, product.id, include_removed=include_removed)
     return {"code": 0, "data": docs, "message": "ok"}
+
+
+class DocSyncBody(BaseModel):
+    doc_ids: list = []  # ProductDocument ids of removed template docs to restore
+
+
+@router.post("/{identifier}/documents/sync", response_model=dict)
+def sync_product_documents(
+    identifier: str,
+    body: DocSyncBody,
+    db: Session = Depends(get_db),
+    user=Depends(require_any_perm("product_link", "admin")),
+):
+    """Force re-import (restore) previously removed optional template product documents."""
+    product = resolve_product(db, identifier)
+    from backend.models.document import ProductDocument
+    from backend.services.document_service import get_or_init_product_documents
+
+    restored = []
+    if body.doc_ids:
+        rows = db.query(ProductDocument).filter(
+            ProductDocument.product_id == product.id,
+            ProductDocument.id.in_(body.doc_ids),
+            ProductDocument.is_removed == 1,
+        ).all()
+        for pd in rows:
+            # Reset to a fresh "pending" doc, mirroring project-doc restore semantics
+            pd.is_removed = 0
+            pd.status = "pending"
+            pd.location = None
+            pd.completed_at = None
+            pd.uploaded_by = None
+            pd.uploaded_at = None
+            pd.file_count = 0
+            pd.svn_author = None
+            pd.svn_last_modified = None
+            pd.svn_rev = None
+            pd.updated_by = user.username
+            restored.append(pd.doc_name)
+
+    # Re-materialize from templates (recomputes doc_path etc.; commits)
+    docs = get_or_init_product_documents(db, product.id)
+
+    if restored:
+        log_product_activity(db, product.id, user.username, "恢复文档",
+                             f"恢复已移除模板文档: {'; '.join(restored)}")
+        log_audit(db, user, "product_doc_restore",
+                  f"product={product.code} 恢复 {len(restored)} 个文档: {'; '.join(restored)}",
+                  AUDIT_CAT_PRODUCT, "medium")
+    return {"code": 0, "data": docs, "message": f"已恢复 {len(restored)} 个文档"}
 
 
 class CustomDocCreate(BaseModel):
