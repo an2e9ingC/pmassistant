@@ -192,8 +192,16 @@ def create_local_product(
     description: str = "",
     project_ids: Optional[list[int]] = None,
     reporter_id: Optional[int] = None,
+    base_code: Optional[str] = None,
+    function_marker: Optional[str] = None,
 ) -> dict:
-    """Create a PMA-local product and optionally link to projects."""
+    """Create a PMA-local product and optionally link to projects.
+
+    When ``base_code`` is provided (命名规范对话框建板卡), the final ``code`` is
+    derived server-side from ``(base_code, function_marker)`` by scanning existing
+    products (avoids preview↔submit TOCTOU on the globally-unique code). The old
+    manual dialog passes ``code`` directly and leaves ``base_code`` empty.
+    """
     # Verify node exists
     node = db.query(ProductLine).filter(ProductLine.id == node_id).first()
     if not node:
@@ -209,6 +217,13 @@ def create_local_product(
     ).first()
     if existing:
         raise ValueError(f"已存在同名本地产品: {name}")
+
+    # 命名规范对话框：按 (base_code, function_marker) 在事务内重算完整编号
+    if base_code:
+        code = full_code_for_branch(db, base_code, function_marker or "")
+        exists = db.query(PmaProduct).filter(PmaProduct.code == code).first()
+        if exists:
+            raise ValueError(f"编号已被占用（{code}），请刷新后重试")
 
     product = PmaProduct(
         name=name,
@@ -681,14 +696,12 @@ def _is_valid_product_name(name: str) -> bool:
     return not any(ch in _NAME_FORBIDDEN for ch in name)
 
 
-def get_next_version(db: Session, base_code: str) -> str:
-    """Compute the next hex version number for a given base code.
+def _next_hex_version(db: Session, prefix: str) -> str:
+    """Return next version string (V1,V2,...,V9,VA,...,VF,V10,...) under a code prefix.
 
-    Format: Vn where n increments as hex (1,2,...,9,A,B,...,F,10,...).
-    Scans existing products whose code starts with ``base_code-V`` and
-    returns the next available version string (e.g. ``V3``).
+    Format: ``V`` + uppercase hex, no zero padding. Scans existing products whose
+    code starts with ``prefix`` (e.g. ``LP2120-V``) and returns the next value.
     """
-    prefix = base_code + "-V"
     existing = (
         db.query(PmaProduct.code)
         .filter(PmaProduct.code.like(prefix + "%"))
@@ -704,6 +717,104 @@ def get_next_version(db: Session, base_code: str) -> str:
         except ValueError:
             pass
     next_dec = max_dec + 1
-    # Format as uppercase hex without zero-padding
-    next_hex = format(next_dec, "X")
-    return "V" + next_hex
+    return "V" + format(next_dec, "X")
+
+
+def _branch_prefix(base_code: str, marker: str) -> str:
+    """Code prefix for one function branch.
+
+    marker=""（原版）→ ``LP2120-V``；marker="A"（功能分支）→ ``LP2120A-V``.
+    """
+    return f"{base_code}{marker}-V"
+
+
+def branch_version(db: Session, base_code: str, marker: str) -> str:
+    """Next hex version string for a (base_code, marker) function branch."""
+    return _next_hex_version(db, _branch_prefix(base_code, marker))
+
+
+def branch_full_code(db: Session, base_code: str, marker: str) -> str:
+    """Next full product code for a (base_code, marker) branch, e.g. ``LP2120A-V2``."""
+    return f"{base_code}{marker}-{branch_version(db, base_code, marker)}"
+
+
+full_code_for_branch = branch_full_code
+
+
+def get_naming_suggestion(db: Session, base_code: str) -> dict:
+    """Naming-dialog suggestion for a spec-derived base code (e.g. ``LP2120``).
+
+    Scans existing products to find which "function branches" already exist under
+    this base — the original (no marker) and lettered siblings (A, B, …). Returns
+    each existing branch's next hardware version (→ 硬件改版) plus, when the base
+    is already in use, the next free letter for a brand-new branch (→ 新建功能分支).
+    Purely code-prefix based; no extra schema.
+    """
+    # Find codes that begin with base and contain '-V' (original or branch versions)
+    rows = db.query(PmaProduct.code, PmaProduct.name).filter(
+        PmaProduct.code.like(base_code + "%-V%")
+    ).all()
+    counts: dict[str, int] = {}
+    latest: dict[str, tuple] = {}  # marker -> (max_version_dec, code, name)
+    for code, name in rows:
+        if not code.startswith(base_code):
+            continue
+        rest = code[len(base_code):]
+        if rest.startswith("-V") or rest.startswith("-v"):
+            marker = ""
+        else:
+            idx = rest.find("-V")
+            if idx <= 0:
+                continue
+            marker = rest[:idx]
+            if not marker or not marker.isalpha():
+                continue
+        counts[marker] = counts.get(marker, 0) + 1
+        # Track the newest product of this branch (highest -Vn) so a hardware
+        # revision can inherit the previous version's product name in the dialog.
+        try:
+            dec = int(rest[len(marker) + 2:], 16)
+        except ValueError:
+            dec = -1
+        prev = latest.get(marker)
+        if prev is None or dec > prev[0]:
+            latest[marker] = (dec, code, name)
+
+    used = bool(counts)
+    families = []
+    # Original branch first, then letters alphabetically
+    for marker in sorted(counts.keys(), key=lambda m: (m != "", m)):
+        nxt = branch_version(db, base_code, marker)
+        _dec, _latest_code, _latest_name = latest.get(marker, (-1, "", ""))
+        families.append({
+            "marker": marker,
+            "label": "原版" if marker == "" else f"功能分支{marker}",
+            "version": nxt,
+            "full_code": f"{base_code}{marker}-{nxt}",
+            "count": counts[marker],
+            "latest_code": _latest_code,
+            "latest_name": _latest_name,
+        })
+
+    new_branch = None
+    if used:
+        for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+            if letter not in counts:
+                new_branch = {
+                    "marker": letter,
+                    "version": "V1",
+                    "full_code": f"{base_code}{letter}-V1",
+                }
+                break
+
+    return {
+        "base_code": base_code,
+        "used": used,
+        "families": families,
+        "new_branch": new_branch,
+    }
+
+
+def get_next_version(db: Session, base_code: str) -> str:
+    """Backward-compatible helper: next version of the original (no-marker) branch."""
+    return branch_version(db, base_code, "")

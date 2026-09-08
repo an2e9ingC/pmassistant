@@ -28,6 +28,9 @@ class LocalProductCreate(BaseModel):
     status: str = "normal"
     description: Optional[str] = None
     project_ids: Optional[List[int]] = None
+    # 命名规范对话框：仅用于后端重算完整编号（不落库）
+    base_code: Optional[str] = None
+    function_marker: Optional[str] = None
 
 
 class LocalProductUpdate(BaseModel):
@@ -191,13 +194,15 @@ def create_local_product(
             description=body.description or "",
             project_ids=body.project_ids,
             reporter_id=user.id,
+            base_code=body.base_code,
+            function_marker=body.function_marker,
         )
         from backend.models.document import ProductLine
         node = db.query(ProductLine).filter(ProductLine.id == body.node_id).first()
         log_audit(db, user, "local_product_create",
-                  f"创建PMA本地产品「{body.name}」（编号: {body.code}, 节点: {node.name if node else body.node_id}）",
+                  f"创建PMA本地产品「{body.name}」（编号: {product.get('code', body.code)}, 节点: {node.name if node else body.node_id}）",
                   AUDIT_CAT_PRODUCT, "medium")
-        log_product_activity(db, product["id"], user.username, "创建产品", f"name:{body.name} code:{body.code}")
+        log_product_activity(db, product["id"], user.username, "创建产品", f"name:{body.name} code:{product.get('code', body.code)}")
         return {"code": 0, "data": product, "message": "ok"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -209,10 +214,14 @@ def next_product_version(
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
-    """Return the next hex version number for a given base product code."""
-    version = pm_service.get_next_version(db, base_code)
-    full_code = f"{base_code}-{version}"
-    return {"code": 0, "data": {"base_code": base_code, "version": version, "full_code": full_code}, "message": "ok"}
+    """Naming dialog suggestion for a spec-derived base code.
+
+    Returns existing function branches (each with its next hardware version, for
+    硬件改版) plus, when the base is already used, the next free letter branch
+    (for 新建功能分支). See ``pm_service.get_naming_suggestion``.
+    """
+    data = pm_service.get_naming_suggestion(db, base_code)
+    return {"code": 0, "data": data, "message": "ok"}
 
 
 @router.put("/products/{identifier}", response_model=dict)
