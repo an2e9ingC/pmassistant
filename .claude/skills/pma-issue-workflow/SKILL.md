@@ -143,6 +143,18 @@ PYEOF
    # c3. 取消 GitLab OAuth 回调 URL 硬编码（后端自动从请求 Host 头推导，适配任意端口）
    sed -i 's/^GITLAB_OAUTH_REDIRECT_URI=.*/# GITLAB_OAUTH_REDIRECT_URI is auto-derived from request Host header (comment out to use auto-detection)/' $PMA_WORKTREE_DIR/.env
 
+   # c4. 关闭数据库级远端备份同步（DB 从备份/trunk 拷贝后继承生产 PmaSetting='1'，
+   #     不关闭会致 worktree 定期向远端 NAS 写备份，污染生产备份目录）
+   #     注意与 c2 区分：c2 关数据源同步（.env 的 SYNC_INTERVAL），c4 关 NAS 远端备份（DB pma_settings）。
+   python3 - "$PMA_WORKTREE_DIR/data/pma-$PORT.db" <<'PYEOF'
+import sqlite3, sys
+con = sqlite3.connect(sys.argv[1])
+con.execute("UPDATE pma_settings SET value='0' WHERE key='db_backup_remote_enabled'")
+con.commit()
+con.close()
+print("[c4] db_backup_remote_enabled -> 0")
+PYEOF
+
    # d. 启动 worktree 服务
    cd $PMA_WORKTREE_DIR && ./server.sh restart -p $PORT
    ```

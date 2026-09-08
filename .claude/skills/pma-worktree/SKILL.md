@@ -201,8 +201,16 @@ echo "$WORKTREE_NAME=$PORT" >> "$PMA_TRUNK_DIR/.claude/worktrees/used_server_por
 
    e. **关闭数据库级远端备份同步**（数据库从 trunk 拷贝后继承了生产环境的 PmaSetting）：
    ```bash
-   sqlite3 $PMA_WORKTREE_DIR/data/pma-$PORT.db "UPDATE pma_settings SET value='0' WHERE key='db_backup_remote_enabled';"
+   python3 - "$PMA_WORKTREE_DIR/data/pma-$PORT.db" <<'PYEOF'
+import sqlite3, sys
+con = sqlite3.connect(sys.argv[1])
+con.execute("UPDATE pma_settings SET value='0' WHERE key='db_backup_remote_enabled'")
+con.commit()
+con.close()
+print("[e] db_backup_remote_enabled -> 0")
+PYEOF
    ```
+   > 本环境无 sqlite3 CLI，统一用 python3 sqlite3 模块（后端即用此模块，必定可用）
    > - 远端备份配置（`db_backup_remote_enabled`）存储在数据库 `pma_settings` 表中
    > - worktree 拷贝 trunk 数据库后会继承生产环境值 `"1"`
    > - 不关闭会导致 worktree 测试服务器定期向远端 NAS 写入备份，污染生产备份目录
