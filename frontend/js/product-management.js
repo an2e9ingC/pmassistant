@@ -709,14 +709,23 @@ async function _pmLoadNamingOpts() {
   }
 }
 
-function _pmBuildProdCode() {
+var _prodNamingSuggestion = null; // {base_code, used, families, new_branch} from /next-product-version
+var _prodNamingFullCode = null;   // full code currently chosen in the dialog (null = not decided)
+var _prodNamingAutoName = null;   // last auto-filled product name (revoke it if user switches away)
+
+// Read just the spec-derived base code (L + 系列/FPGA/CPU/ADC/形态), e.g. LP2120.
+function _pmReadBaseCode() {
   var s = document.getElementById('pmnc-series'); if (!s) return 'L####';
-  var code = 'L' +
+  return 'L' +
     (s.value || '#') +
     (document.getElementById('pmnc-fpga').value || '#') +
     (document.getElementById('pmnc-cpu').value || '#') +
     (document.getElementById('pmnc-adc').value || '#') +
     (document.getElementById('pmnc-form').value || '#');
+}
+
+function _pmBuildProdCode() {
+  var code = _pmReadBaseCode();
   var preview = document.getElementById('pmnc-preview');
   if (preview) preview.textContent = code;
   // Auto-select matching tags from naming options
@@ -732,29 +741,122 @@ function _pmBuildProdCode() {
   document.querySelectorAll('.pm-newprod-tag').forEach(function(cb) {
     cb.checked = !!autoTags[cb.value];
   });
-  // Fetch next version for this base code
-  _pmFetchNextVersion(code);
+  // Fetch naming suggestion for this spec (drives 功能 marker options + version)
+  _pmFetchNamingSuggestion(code);
   return code;
 }
 
-function _pmFetchNextVersion(baseCode) {
+// Pull /next-product-version for a spec base code, then render the 功能 marker select.
+function _pmFetchNamingSuggestion(baseCode) {
+  var markerEl = document.getElementById('pmnc-marker');
+  var verEl = document.getElementById('pmnc-version');
+  var preview = document.getElementById('pmnc-preview');
+  _prodNamingSuggestion = null;
+  _prodNamingFullCode = null;
   if (baseCode.indexOf('#') >= 0) {
-    var verEl = document.getElementById('pmnc-version');
+    if (markerEl) { markerEl.innerHTML = ''; markerEl.disabled = true; }
     if (verEl) verEl.textContent = '—';
+    if (preview) preview.textContent = 'L####';
     return;
   }
   API.get('/product-management/next-product-version?base_code=' + encodeURIComponent(baseCode)).then(function(res) {
-    var verEl = document.getElementById('pmnc-version');
-    if (verEl) verEl.textContent = res.version;
-    var fullEl = document.getElementById('pmnc-full-code');
-    if (fullEl) fullEl.textContent = res.full_code;
-    // Update top preview to show full code with version
-    var preview = document.getElementById('pmnc-preview');
-    if (preview) preview.textContent = res.full_code;
+    if (!res) return;
+    _prodNamingSuggestion = res;
+    _prodNamingFullCode = null;
+    _renderNamingMarker();
   }).catch(function() {
-    var verEl = document.getElementById('pmnc-version');
+    if (markerEl) { markerEl.innerHTML = ''; markerEl.disabled = true; }
     if (verEl) verEl.textContent = '—';
   });
+}
+
+// Fill the 功能（自动生成）select from the suggestion: for a brand-new spec combo
+// show a disabled 无（首块）, otherwise list 硬件改版 of each existing branch plus
+// 新建功能分支. No preselection when choices exist.
+function _renderNamingMarker() {
+  var markerEl = document.getElementById('pmnc-marker');
+  var verEl = document.getElementById('pmnc-version');
+  var preview = document.getElementById('pmnc-preview');
+  if (!markerEl) return;
+  var sug = _prodNamingSuggestion;
+  if (!sug || !sug.used) {
+    // First board for this spec combo: no function marker, plain <base>-V1.
+    // Clear any autofill left over from a previously-selected 硬件改版 branch.
+    var nameEl = document.getElementById('pm-newprod-name');
+    if (nameEl && _prodNamingAutoName && nameEl.value === _prodNamingAutoName) {
+      nameEl.value = '';
+      _prodNamingAutoName = null;
+    }
+    var hintEl = document.getElementById('pm-newprod-name-hint');
+    if (hintEl) hintEl.style.display = 'none';
+    markerEl.innerHTML = '<option value="" data-marker="">无（首块）</option>';
+    markerEl.disabled = true;
+    var base = sug ? sug.base_code : 'L####';
+    _prodNamingFullCode = base + '-V1';
+    if (preview) preview.textContent = _prodNamingFullCode;
+    if (verEl) verEl.textContent = 'V1';
+    return;
+  }
+  // Spec combo already in use: pick 新建功能分支 (next free letter, V1) or the
+  // hardware-version bump of an existing branch (原版 / 功能分支A…).
+  markerEl.disabled = false;
+  var opts = ['<option value="" selected disabled>请选择：新建功能分支 / 硬件改版…</option>'];
+  (sug.families || []).forEach(function(f) {
+    opts.push('<option value="' + f.full_code + '" data-marker="' + f.marker + '"' +
+      (f.latest_name ? ' data-latest-name="' + escHtml(f.latest_name) + '"' : '') + '>' +
+      f.label + ' 硬件改版 → ' + f.full_code + '</option>');
+  });
+  if (sug.new_branch) {
+    opts.push('<option value="' + sug.new_branch.full_code + '" data-marker="' + sug.new_branch.marker + '">' +
+      '新建功能分支 → ' + sug.new_branch.full_code + '</option>');
+  }
+  markerEl.innerHTML = opts.join('');
+  if (preview) preview.textContent = sug.base_code;
+  if (verEl) verEl.textContent = '请选择';
+}
+
+// User chose a function branch in the 功能 select → reflect its full code + version.
+// Choosing a 硬件改版 of an existing branch also pre-fills the product name with
+// the previous version's name + the new -Vn tail, prompting the user to refine it.
+function _pmOnMarkerChange() {
+  var markerEl = document.getElementById('pmnc-marker');
+  var preview = document.getElementById('pmnc-preview');
+  var verEl = document.getElementById('pmnc-version');
+  var opt = markerEl && markerEl.selectedOptions && markerEl.selectedOptions[0];
+  if (!opt || !opt.value) {
+    _prodNamingFullCode = null;
+    if (preview) preview.textContent = (_prodNamingSuggestion && _prodNamingSuggestion.base_code) || 'L####';
+    if (verEl) verEl.textContent = '—';
+    return;
+  }
+  _prodNamingFullCode = opt.value;
+  if (preview) preview.textContent = opt.value;
+  var idx = opt.value.lastIndexOf('-');
+  if (verEl) verEl.textContent = idx >= 0 ? opt.value.substring(idx + 1) : '—';
+
+  var nameEl = document.getElementById('pm-newprod-name');
+  var hintEl = document.getElementById('pm-newprod-name-hint');
+  var latestName = (opt.hasAttribute && opt.hasAttribute('data-latest-name')) ? opt.getAttribute('data-latest-name') : '';
+  if (latestName) {
+    // 硬件改版 of an existing branch: inherit the previous version's name and
+    // append the new -Vn tail (e.g. "4通道…采集卡" -> "4通道…采集卡-V2").
+    var auto = latestName + (idx >= 0 ? opt.value.substring(idx) : '');
+    if (!nameEl.value || nameEl.value === _prodNamingAutoName) {
+      nameEl.value = auto;
+      _prodNamingAutoName = auto;
+      if (hintEl) {
+        hintEl.textContent = '名称已按上一版本自动填入，请手动修改为更明确的名称（不能与已有产品重名）。';
+        hintEl.style.display = 'block';
+      }
+    }
+  } else {
+    // 新建功能分支: drop a stale autofill so the user types a fresh name.
+    if (nameEl && _prodNamingAutoName && nameEl.value === _prodNamingAutoName) {
+      nameEl.value = '';
+      _prodNamingAutoName = null;
+    }
+    if (hintEl) hintEl.style.display = 'none';
+  }
 }
 
 function _pmShowNamingProductDialog() {
@@ -802,26 +904,27 @@ function _pmShowNamingProductDialog() {
         '<div style="font-size:10px;color:var(--muted);margin-bottom:4px">自动生成编号</div>' +
         '<div style="display:inline-block;font-size:22px;font-weight:700;font-family:var(--mono);color:var(--accent);background:var(--accent-lt);padding:6px 18px;border-radius:6px;border:1px solid var(--accent);letter-spacing:0.05em" id="pmnc-preview">L####</div>' +
       '</div>' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">' +
         '<div><label style="font-size:10px;color:var(--muted)">系列</label>' + makeSelect('pmnc-series', _prodNamingOpts.series) + '</div>' +
         '<div><label style="font-size:10px;color:var(--muted)">FPGA</label>' + makeSelect('pmnc-fpga', _prodNamingOpts.fpga) + '</div>' +
         '<div><label style="font-size:10px;color:var(--muted)">CPU</label>' + makeSelect('pmnc-cpu', _prodNamingOpts.cpu) + '</div>' +
         '<div><label style="font-size:10px;color:var(--muted)">ADC</label>' + makeSelect('pmnc-adc', _prodNamingOpts.adc) + '</div>' +
         '<div><label style="font-size:10px;color:var(--muted)">形态</label>' + makeSelect('pmnc-form', _prodNamingOpts.form) + '</div>' +
-        '<div style="display:flex;flex-direction:column;justify-content:flex-end">' +
-          '<div style="text-align:center;padding:4px;background:var(--bg);border-radius:6px;border:1px solid var(--border)">' +
-            '<div style="font-size:9px;color:var(--muted)">自动生成版本号</div>' +
-            '<div style="font-size:14px;font-weight:600;font-family:var(--mono);color:var(--fg)">' +
-              '<span id="pmnc-version" style="font-size:20px;font-weight:700;color:var(--warn)">—</span>' +
-            '</div>' +
-          '</div>' +
-        '</div>' +
+        '<div><label style="font-size:10px;color:var(--muted)">功能标记（自动生成）</label>' +
+          '<select id="pmnc-marker" class="search-inp" onchange="_pmOnMarkerChange()" disabled style="width:100%;box-sizing:border-box;margin-top:4px">' +
+          '<option value="">…</option>' +
+        '</select></div>' +
       '</div>' +
-      // Hidden field to store the full code (base + version)
-      '<input type="hidden" id="pmnc-full-code" value="">' +
+      // Version block — full-width row under the grid; shows the -Vn part of the chosen branch
+      '<div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:12px;padding:6px;background:var(--bg);border-radius:6px;border:1px solid var(--border)">' +
+        '<span style="font-size:11px;color:var(--muted)">版本号</span>' +
+        '<span id="pmnc-version" style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--warn)">—</span>' +
+        '<span style="font-size:10px;color:var(--muted)">同一规格再次新建时选择「新建功能分支」或「硬件改版」</span>' +
+      '</div>' +
       '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">产品名称 <span style="font-weight:400;color:var(--danger)">*</span> <span style="font-weight:400">（不能包含空格和中文符号）</span></label>' +
-      '<input class="search-inp" id="pm-newprod-name" placeholder="输入产品名称" style="width:100%;box-sizing:border-box;margin-top:4px" oninput="_pmValidateProdName(this)">' +
-      '<div id="pm-newprod-name-err" style="font-size:10px;color:var(--danger);margin-top:2px;display:none"></div></div>' +
+      '<input class="search-inp" id="pm-newprod-name" placeholder="输入产品名称" style="width:100%;box-sizing:border-box;margin-top:4px" oninput="_pmValidateProdName(this);_pmOnNameEdited()">' +
+      '<div id="pm-newprod-name-err" style="font-size:10px;color:var(--danger);margin-top:2px;display:none"></div>' +
+      '<div id="pm-newprod-name-hint" style="font-size:10px;color:var(--warn);margin-top:2px;display:none"></div></div>' +
       '<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted)">状态</label>' +
       '<select id="pm-newprod-status" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--fg);margin-top:4px">' +
         '<option value="normal">正常</option><option value="closed">已关闭</option>' +
@@ -873,8 +976,17 @@ function _pmValidateProdName(input) {
   return true;
 }
 
+// User edited the product name by hand → dismiss the autofill hint and stop
+// treating the current value as an auto-filled draft (so re-selecting a branch
+// re-autofills from the previous version instead of overwriting their words).
+function _pmOnNameEdited() {
+  _prodNamingAutoName = null;
+  var hintEl = document.getElementById('pm-newprod-name-hint');
+  if (hintEl) hintEl.style.display = 'none';
+}
+
 async function _pmSubmitNamingProduct() {
-  var baseCode = _pmBuildProdCode();
+  var baseCode = _pmReadBaseCode();
   if (baseCode.indexOf('#') >= 0) { showToast('请选择所有属性', 'error'); return; }
   var name = document.getElementById('pm-newprod-name').value.trim();
   if (!name) { showToast('请输入产品名称', 'error'); return; }
@@ -898,16 +1010,34 @@ async function _pmSubmitNamingProduct() {
   var projectIds = [];
   document.querySelectorAll('.pm-newprod-proj:checked').forEach(function(cb) { projectIds.push(parseInt(cb.value)); });
 
-  // Use full code (base + version)
-  var fullCode = document.getElementById('pmnc-full-code').value || (baseCode + '-V1');
+  // 功能标记决定最终编号：规格已用时必须显式选（新建功能分支 / 该分支硬件改版），
+  // 规格未用则为首块无标记 <base>-V1。后端按 (base_code, function_marker) 重算落库，
+  // 预览只作提示，不做提交依据（避免 TOCTOU 撞唯一 code）。
+  var sug = _prodNamingSuggestion;
+  var functionMarker = '';
+  var fullCode;
+  if (sug && sug.used) {
+    var markerEl = document.getElementById('pmnc-marker');
+    var opt = markerEl && markerEl.selectedOptions && markerEl.selectedOptions[0];
+    if (!opt || !opt.value) {
+      showToast('请选择功能：新建功能分支或该板硬件改版', 'error');
+      return;
+    }
+    functionMarker = opt.getAttribute('data-marker') || '';
+    fullCode = opt.value;
+  } else {
+    fullCode = baseCode + '-V1';
+  }
 
   try {
-    await API.post('/product-management/products', {
+    var resp = await API.post('/product-management/products', {
       name: name, code: fullCode, node_id: _pmSelectedNodeId,
       status: status, project_ids: projectIds,
-      description: tags.join(', ')
+      description: tags.join(', '),
+      base_code: baseCode, function_marker: functionMarker
     });
-    showToast('产品已创建: ' + fullCode, 'success');
+    var createdCode = (resp && resp.code) || fullCode;
+    showToast('产品已创建: ' + createdCode, 'success');
     var d = document.querySelector('.shared-dialog-overlay');
     if (d) d.remove();
     EventBus.emit(EVENTS.PRODUCT_SAVED, {});
