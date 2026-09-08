@@ -748,12 +748,19 @@ function renderProdInfo(p, docs) {
 
 function renderProdDocs(p, preDocs) {
   var nodeIds = (p.linked_node_ids && p.linked_node_ids.length) ? p.linked_node_ids : [];
+  var canEdit = isAdminLike() || hasPerm('product_link');
   var templateLink = '';
   if (nodeIds.length) {
     templateLink = '<a id="prod-docs-template-link" href="javascript:void(0)" onclick="gotoView(\'doc-templates\',{params:[\'product\',String(' + nodeIds[0] + ')]})" style="font-size:11px;color:var(--accent);text-decoration:none;margin-left:8px">查看文档模板详情 →</a>';
   }
+  var headRight = templateLink;
+  if (nodeIds.length && canEdit) {
+    headRight = '<div style="display:flex;align-items:center;gap:8px;margin-left:auto">' +
+      '<button class="btn btn-sm" onclick="importProductTemplateDocs()" style="font-size:11px;padding:4px 12px;color:var(--accent);border-color:var(--accent)">📋 导入模板文档</button>' +
+      templateLink + '</div>';
+  }
   document.getElementById('prodsec-docs').innerHTML =
-    '<div class="section-hd"><div class="section-title">产品文档</div>' + templateLink + '</div>' +
+    '<div class="section-hd"><div class="section-title">产品文档</div>' + headRight + '</div>' +
     '<div id="prod-docs-inline"><div class="loading-spinner" style="padding:20px">加载中...</div></div>';
 
   // Use pre-loaded docs if available, otherwise fetch
@@ -1286,6 +1293,59 @@ async function removeOptionalProductDoc(docId) {
     showToast('已移除可选项', 'success');
     EventBus.emit(EVENTS.PRODUCT_DOC_SAVED, {});
   } catch(e) { showToast('移除失败: ' + (e.message || ''), 'error'); }
+}
+
+/* ── Import Template Docs (restore removed optional template docs) ── */
+
+function importProductTemplateDocs() {
+  if (!_prodDetailCurCode) return;
+  API.get('/products/' + _prodDetailCurCode + '/documents?include_removed=1').then(function(docs) {
+    docs = docs || [];
+    // Group flat list by stage_type, keeping first-seen order
+    var grouped = [];
+    var seen = {};
+    docs.forEach(function(d) {
+      var st = d.stage_type || '通用';
+      if (!(st in seen)) { seen[st] = grouped.length; grouped.push({ stage: st, items: [] }); }
+      grouped[seen[st]].items.push(d);
+    });
+    var hasRemoved = false;
+    var rows = '';
+    grouped.forEach(function(g) {
+      g.items.forEach(function(d) {
+        var isRemoved = d.is_removed;
+        if (isRemoved) hasRemoved = true;
+        rows += '<tr><td><input type="checkbox" value="' + d.id + '" data-removed="' + (isRemoved ? '1' : '0') + '"' + (isRemoved ? '' : ' checked disabled') + '></td>' +
+          '<td style="font-size:11px;color:var(--muted)">' + escHtml(g.stage) + '</td>' +
+          '<td>' + escHtml(d.doc_name) + '</td>' +
+          '<td>' + (isRemoved ? '<span style="color:var(--danger)">已移除</span>' : '已导入') + '</td></tr>';
+      });
+    });
+    if (!rows) { showToast('暂无可导入的模板文档', 'info'); return; }
+    var html = '<div style="max-height:400px;overflow-y:auto"><table class="proj-table"><thead><tr><th style="width:30px">选</th><th>阶段</th><th>文档名</th><th>状态</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+    if (hasRemoved) {
+      html += '<div style="margin-top:8px;font-size:11px;color:var(--warn)">已移除的文档可勾选后重新导入</div>';
+    }
+    openDialog('导入模板文档', html, [
+      {text: '取消', onclick: 'closeSharedDialog()'},
+      {text: '确认导入', cls: 'btn-primary', onclick: 'doImportProductTemplateDocs()'}
+    ], {maxWidth: 600});
+  }).catch(function(e) { showToast('加载失败: ' + (e.message || ''), 'error'); });
+}
+
+function doImportProductTemplateDocs() {
+  var cbs = document.querySelectorAll('.shared-dialog-overlay input[type=checkbox]:checked');
+  var ids = [];
+  cbs.forEach(function(cb) {
+    if (cb.disabled) return;   // 已导入的行无需处理
+    ids.push(parseInt(cb.value));
+  });
+  if (!ids.length) { showToast('请选择要导入的文档', 'error'); return; }
+  API.post('/products/' + _prodDetailCurCode + '/documents/sync', {doc_ids: ids}).then(function(r) {
+    showToast(r.message || '导入完成', 'success');
+    closeSharedDialog();
+    EventBus.emit(EVENTS.PRODUCT_DOC_SAVED, {});
+  }).catch(function(e) { showToast('导入失败: ' + (e.message || ''), 'error'); });
 }
 
 function _resizeProdDocsTable() {

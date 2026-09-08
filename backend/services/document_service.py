@@ -2110,10 +2110,44 @@ def _product_template_dict(t: ProductDocTemplate) -> dict:
 # Product Documents — per-product doc instances from templates
 # ---------------------------------------------------------------------------
 
-def get_or_init_product_documents(db: Session, product_id: int) -> list[dict]:
+def _product_doc_dict(pd, *, doc_path: str = "", mismatch: str = "", node_name: str = "") -> dict:
+    """Map a ProductDocument ORM row to the API list-item dict shape."""
+    return {
+        "id": pd.id,
+        "template_id": pd.template_id,
+        "doc_name": pd.doc_name,
+        "sort_order": pd.sort_order,
+        "stage_type": pd.stage_type or "通用",
+        "description": pd.description or "",
+        "responsible_role": pd.responsible_role or "",
+        "doc_path": doc_path or pd.doc_path or "",
+        "doc_type": pd.doc_type or "",
+        "status": pd.status,
+        "done": pd.status == "submitted",
+        "warn": pd.status == "pending",
+        "is_optional": bool(pd.is_optional),
+        "is_removed": bool(pd.is_removed),
+        "file_count": pd.file_count or 0,
+        "location": pd.location or "",
+        "mismatch": mismatch,
+        "uploaded_by": pd.uploaded_by or "",
+        "uploaded_at": to_local_str(pd.uploaded_at) if pd.uploaded_at else "",
+        "completed_at": to_local_str(pd.completed_at) if pd.completed_at else "",
+        "updated_by": pd.updated_by or "",
+        "updated_at": to_local_str(pd.updated_at) if pd.updated_at else "",
+        "svn_author": pd.svn_author or "",
+        "svn_last_modified": pd.svn_last_modified or "",
+        "svn_rev": pd.svn_rev or "",
+        "node_name": node_name,
+    }
+
+
+def get_or_init_product_documents(db: Session, product_id: int, include_removed: bool = False) -> list[dict]:
     """Sync product document instances from templates, return with status.
     Each template generates one ProductDocument row for this product.
-    Existing rows preserve their status/location/upload info on re-sync."""
+    Existing rows preserve their status/location/upload info on re-sync.
+    When include_removed=True, soft-deleted (is_removed=1) template instances
+    are also surfaced so the import dialog can restore them."""
     from backend.models.document import ProductDocTemplate, ProductDocument
     from backend.models.zentao import PmaProduct, ProductNodeLink
 
@@ -2132,34 +2166,7 @@ def get_or_init_product_documents(db: Session, product_id: int) -> list[dict]:
             or_(ProductDocument.is_removed == 0, ProductDocument.is_removed == None),
         ).order_by(ProductDocument.sort_order).all()
         for cd in custom_docs:
-            results.append({
-                "id": cd.id,
-                "template_id": None,
-                "doc_name": cd.doc_name,
-                "sort_order": cd.sort_order,
-                "stage_type": cd.stage_type or "通用",
-                "description": cd.description or "",
-                "responsible_role": cd.responsible_role or "",
-                "doc_path": cd.doc_path or "",
-                "doc_type": cd.doc_type or "",
-                "status": cd.status,
-                "done": cd.status == "submitted",
-                "warn": cd.status == "pending",
-                "is_optional": bool(cd.is_optional),
-                "is_removed": bool(cd.is_removed),
-                "file_count": cd.file_count or 0,
-                "location": cd.location or "",
-                "mismatch": "",
-                "uploaded_by": cd.uploaded_by or "",
-                "uploaded_at": to_local_str(cd.uploaded_at) if cd.uploaded_at else "",
-                "completed_at": to_local_str(cd.completed_at) if cd.completed_at else "",
-                "updated_by": cd.updated_by or "",
-                "updated_at": to_local_str(cd.updated_at) if cd.updated_at else "",
-                "svn_author": cd.svn_author or "",
-                "svn_last_modified": cd.svn_last_modified or "",
-                "svn_rev": cd.svn_rev or "",
-                "node_name": "",
-            })
+            results.append(_product_doc_dict(cd))
         return results
     for link in links:
         templates = db.query(ProductDocTemplate).filter(
@@ -2191,6 +2198,9 @@ def get_or_init_product_documents(db: Session, product_id: int) -> list[dict]:
                     ProductDocument.is_removed == 1,
                 ).first()
                 if removed:
+                    if include_removed:
+                        # Surface the removed instance so the import dialog can restore it
+                        results.append(_product_doc_dict(removed, doc_path=actual_path))
                     continue
                 existing = ProductDocument(
                     product_id=product_id,
@@ -2247,34 +2257,7 @@ def get_or_init_product_documents(db: Session, product_id: int) -> list[dict]:
                         mismatch = f"路径与模板不匹配（期望: {existing.doc_path}）"
             elif existing.location and existing.doc_path and ('*' in existing.doc_path or '?' in existing.doc_path):
                 mismatch = f"路径包含通配符，无法校验（模板: {existing.doc_path}）"
-            results.append({
-                "id": existing.id,
-                "template_id": tpl.id,
-                "doc_name": existing.doc_name,
-                "sort_order": existing.sort_order,
-                "stage_type": existing.stage_type or "通用",
-                "description": existing.description or "",
-                "responsible_role": existing.responsible_role or "",
-                "doc_path": actual_path,
-                "doc_type": existing.doc_type or tpl.doc_type or "",
-                "status": existing.status,
-                "done": done,
-                "warn": warn,
-                "is_optional": bool(existing.is_optional),
-                "is_removed": bool(existing.is_removed),
-                "file_count": existing.file_count or 0,
-                "location": existing.location or "",
-                "mismatch": mismatch,
-                "uploaded_by": existing.uploaded_by or "",
-                "uploaded_at": to_local_str(existing.uploaded_at) if existing.uploaded_at else "",
-                "completed_at": to_local_str(existing.completed_at) if existing.completed_at else "",
-                "updated_by": existing.updated_by or "",
-                "updated_at": to_local_str(existing.updated_at) if existing.updated_at else "",
-                "svn_author": existing.svn_author or "",
-                "svn_last_modified": existing.svn_last_modified or "",
-                "svn_rev": existing.svn_rev or "",
-                "node_name": "",  # filled below if needed
-            })
+            results.append(_product_doc_dict(existing, doc_path=actual_path, mismatch=mismatch))
 
     # Cleanup: remove doc instances for templates that no longer exist
     # (skip custom docs where template_id is NULL — they were added manually)
@@ -2300,34 +2283,7 @@ def get_or_init_product_documents(db: Session, product_id: int) -> list[dict]:
         or_(ProductDocument.is_removed == 0, ProductDocument.is_removed == None),
     ).order_by(ProductDocument.sort_order).all()
     for cd in custom_docs:
-        results.append({
-            "id": cd.id,
-            "template_id": None,
-            "doc_name": cd.doc_name,
-            "sort_order": cd.sort_order,
-            "stage_type": cd.stage_type or "通用",
-            "description": cd.description or "",
-            "responsible_role": cd.responsible_role or "",
-            "doc_path": cd.doc_path or "",
-            "doc_type": cd.doc_type or "",
-            "status": cd.status,
-            "done": cd.status == "submitted",
-            "warn": cd.status == "pending",
-            "is_optional": bool(cd.is_optional),
-            "is_removed": bool(cd.is_removed),
-            "file_count": cd.file_count or 0,
-            "location": cd.location or "",
-            "mismatch": "",
-            "uploaded_by": cd.uploaded_by or "",
-            "uploaded_at": to_local_str(cd.uploaded_at) if cd.uploaded_at else "",
-            "completed_at": to_local_str(cd.completed_at) if cd.completed_at else "",
-            "updated_by": cd.updated_by or "",
-            "updated_at": to_local_str(cd.updated_at) if cd.updated_at else "",
-            "svn_author": cd.svn_author or "",
-            "svn_last_modified": cd.svn_last_modified or "",
-            "svn_rev": cd.svn_rev or "",
-            "node_name": "",
-        })
+        results.append(_product_doc_dict(cd))
 
     db.commit()
     return results
