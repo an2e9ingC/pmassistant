@@ -59,7 +59,7 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 | `product_notes` | `ProductNote` | 0 | 本地-笔记 | 产品维护笔记，记录人对产品的手动备注 |
 | `project_notes` | `ProjectNote` | 14 | 本地-笔记 | 项目维护笔记，记录人对项目各阶段的手动备注 |
 | `project_activities` | `ProjectActivity` | 22 | 本地-活动 | 项目操作审计：记录谁对项目做了什么操作 |
-| `matcode_segments` | `MatcodeSegment` | 0 | 本地-物料编码 | 结构件料号编码段树：8 位码 = 前缀 + 补零序号（如 1171/11761），组/冻结状态标记，启动幂等种子 |
+| `matcode_segments` | `MatcodeSegment` | 0 | 本地-物料编码 | 全物料编码段树（ERP 8 位）：8 位码 = 前缀 + 补零序号（如 1171/11761），组/冻结状态标记，启动幂等种子 |
 | `matcode_materials` | `MatcodeMaterial` | 0 | 本地-物料编码 | 每个已发放/已导入的 8 位料号一行，永久保留（code 全局唯一，作废号不回填） |
 | `product_users` | —（无 ORM 模型） | 0 | 关系表 | 产品与本地用户的关联表（预留，尚未使用） |
 | `project_users` | —（无 ORM 模型） | 0 | 关系表 | 项目与本地用户的关联表（预留，尚未使用） |
@@ -730,16 +730,27 @@ PMA 使用单文件 SQLite 数据库，通过 SQLAlchemy ORM 管理。数据库�
 | 4 | `legacy_prefix` | String(8) | NULLABLE | 旧前缀（历史导入码：11723） |
 | 5 | `name` | String(256) | NOT NULL | 物料名称（必填；含 PE0xxx 自动提取项目） |
 | 6 | `spec` | String(256) | NULLABLE | 规格型号 / 厂家规格型号 |
-| 7 | `drawing` | String(128) | NULLABLE | 图号（可空；需全局不重复） |
-| 8 | `project` | String(128) | NULLABLE | 使用项目 |
-| 9 | `unit` | String(32) | NULLABLE | 单位 |
-| 10 | `remark` | TEXT | NULLABLE | 备注 |
-| 11 | `source` | String(128) | NULLABLE | 溯源 manual:<u> / import:<f>/<s> / erp:… |
-| 12 | `status` | String(16) | NOT NULL default=active, INDEX | active 在用 / stopped 停用 / void 作废 |
-| 13 | `suffix` | INTEGER | NOT NULL | 段内序号（索引 (segment_id, suffix)） |
-| 14 | `created_by` | String(64) | NULLABLE | 发放/导入人 |
-| 15 | `created_at` | DATETIME | default=now | — |
-| 16 | `updated_at` | DATETIME | default=now, onupdate=now | — |
+| 7 | `manufacturer` | String(256) | NULLABLE | 生产厂商（元器件/外购件查看必需；ERP 导入时回填空位） |
+| 8 | `drawing` | String(128) | NULLABLE | 图号（可空；需全局不重复） |
+| 9 | `project` | String(128) | NULLABLE | 使用项目 |
+| 10 | `unit` | String(32) | NULLABLE | 单位 |
+| 11 | `remark` | TEXT | NULLABLE | 备注 |
+| 12 | `source` | String(128) | NULLABLE | 溯源 manual:<u> / import:<f>/<s> / import:erp:<f> |
+| 13 | `status` | String(16) | NOT NULL default=active, INDEX | active 在用 / stopped 停用 / void 作废 |
+| 14 | `suffix` | INTEGER | NOT NULL | 段内序号（索引 (segment_id, suffix)） |
+| 15 | `created_by` | String(64) | NULLABLE | 发放/导入人 |
+| 16 | `created_at` | DATETIME | default=now | — |
+| 17 | `updated_at` | DATETIME | default=now, onupdate=now | — |
+
+#### 5.3.16 物料分类树（ERP 存货分类）— 代码常量，非表
+
+物料目录左侧的 7 大类分类树**不落库**，由 `backend/services/matcode_families.py` 的 `MATCODE_CATALOG` 常量作为唯一权威：
+
+- 顶层 7 大类按 ERP 编号 (1)(2)(3)(4)(5)(6)(9) 排序：原制料 / 整机外购件 / 半成品 / 产成品 / 低值易耗品 / 附件 / 服务类（显示名以 ERP 原文为准，如「原制料」）。
+- 二级分类 = ERP 存货二级分类文件夹（key = ERP 编号如 `101`，label 带编号前缀如 `101 大规模集成电路`），children 映射到该 ERP 分类下的编码段（引用 `matcode_segments.key`，如 `1011`）。**叶子集合 = 全库可发段，仅重新归组**——同一叶段只出现一次，不新增/删除段，故各段 count 不变。
+- 空分类（ERP 有分类但暂无物料，如 202/204/404）保留为 `children: []` 空文件夹，界面灰显计数 0；点击按空集过滤返回 0 条（`keys=[]` 与 `keys=None` 区分，空集 ≠ 不过滤）。
+- 分类浏览 `GET /matcode/catalog` 返回整树含每节点计数；目录过滤（`?cat=<key>`）一律由 `segment_keys_for()` 展开为段集合 `segment_id IN (...)`，**严禁 `code LIKE prefix%`**（legacy11723 字面以 1172 开头会污染腔体段）。
+- 种子扩容在 `matcode_catalog.seed_segments()` 只 append、不改写既有段元组；ERP 新增叶段先经 `scripts/matcode_import.py analyze` 出报告人工校准后落 seed。
 
 ---
 

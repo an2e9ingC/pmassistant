@@ -1,4 +1,4 @@
-"""结构件物料编码平台 — REST API。
+"""物料编码平台（全物料 ERP 8 位料号）— REST API。
 
 前缀 /api/matcode。
 读写分别用 matcode_view / matcode_issue 权限收敛；管理员级能力（人工改号 override_code、

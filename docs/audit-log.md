@@ -38,7 +38,7 @@
 
 ### 2.2 Category 分类
 
-所有 category 统一定义在 [backend/audit_categories.py](backend/audit_categories.py)，8 个标准分类：
+所有 category 统一定义在 [backend/audit_categories.py](backend/audit_categories.py)（物料编码模块于 Issue #13 全物料平台加入）：
 
 | 常量 | 值 | 说明 | 对应文件 |
 |------|-----|------|---------|
@@ -50,6 +50,7 @@
 | `AUDIT_CAT_USER` | 用户 | 用户管理、角色权限 | `admin_users.py` |
 | `AUDIT_CAT_CUSTOMER` | 客户 | 客户管理 | `customers.py` |
 | `AUDIT_CAT_SYSTEM` | 系统 | 配置、DB管理、清理操作 | `config.py`, `db_manage.py`, `logs.py` |
+| `AUDIT_CAT_MATCODE` | 物料编码 | 料号发放、编辑、状态、冻结段、批量导入 | `matcode.py`, `matcode_import.py` |
 
 ### 2.3 操作 action 清单
 
@@ -95,6 +96,11 @@
 | | `clear_database` | `config.py` | 清除数据库缓存 |
 | | `clear_logs` | `logs.py` | 清除系统日志 |
 | | `db_export/import/delete_backup/restore_backup/rekey` | `db_manage.py` | 数据库管理操作 |
+| **物料编码** | `matcode_issue` | `matcode.py` | 发码（含查重特批放行，medium） |
+| | `matcode_edit` | `matcode.py` | 编辑物料（名称/规格/厂商/图号/单位/备注，medium） |
+| | `matcode_status` | `matcode.py` | 状态变更 active/stopped/void（作废 void 记 high，其余 medium） |
+| | `matcode_segment_close` | `matcode.py` | 冻结/解冻编码段（high） |
+| | `matcode_import` | `matcode_import.py` | ERP 全物料批量导入（system 用户，high） |
 
 ### 2.4 写入方式
 
