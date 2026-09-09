@@ -55,6 +55,7 @@ def material_to_dict(db, m: MatcodeMaterial) -> dict:
         "code": m.code,
         "name": m.name,
         "spec": m.spec,
+        "manufacturer": m.manufacturer,
         "drawing": m.drawing,
         "project": m.project,
         "unit": m.unit,
@@ -158,7 +159,7 @@ def preview_next(db, segment_key: str, name: str, spec: Optional[str] = None,
 # ────────────────────────── 发放 ──────────────────────────
 
 def _build_issue_record(db, seg: MatcodeSegment, *, code: str, suffix: int,
-                        name: str, spec, drawing, project, unit, remark,
+                        name: str, spec, manufacturer, drawing, project, unit, remark,
                         source: str, created_by: str, legacy_prefix: Optional[str] = None):
     return MatcodeMaterial(
         code=code,
@@ -166,6 +167,7 @@ def _build_issue_record(db, seg: MatcodeSegment, *, code: str, suffix: int,
         legacy_prefix=legacy_prefix,
         name=name,
         spec=spec or None,
+        manufacturer=manufacturer or None,
         drawing=drawing or None,
         project=project or None,
         unit=unit or None,
@@ -177,10 +179,10 @@ def _build_issue_record(db, seg: MatcodeSegment, *, code: str, suffix: int,
     )
 
 
-def issue_single(db, user, *, segment_key: str, name: str, spec=None, drawing=None,
-                 project=None, unit=None, remark=None, override_code: Optional[str] = None,
-                 force_duplicate: bool = False, admin: bool = False,
-                 source: Optional[str] = None, auto_drawing: bool = False):
+def issue_single(db, user, *, segment_key: str, name: str, spec=None, manufacturer=None,
+                 drawing=None, project=None, unit=None, remark=None,
+                 override_code: Optional[str] = None, force_duplicate: bool = False,
+                 admin: bool = False, source: Optional[str] = None, auto_drawing: bool = False):
     """单发一条。返回 dict（material）或 require_confirm 结构。
 
     返回 {"action": "issued", "material": {...}} 表示成功；
@@ -229,8 +231,8 @@ def issue_single(db, user, *, segment_key: str, name: str, spec=None, drawing=No
 
     source = source or f"manual:{user.username if user else '?'}"
     m = _build_issue_record(
-        db, seg, code=code, suffix=suffix, name=name, spec=spec, drawing=drawing,
-        project=project, unit=unit, remark=remark, source=source,
+        db, seg, code=code, suffix=suffix, name=name, spec=spec, manufacturer=manufacturer,
+        drawing=drawing, project=project, unit=unit, remark=remark, source=source,
         created_by=user.username if user else "system",
         legacy_prefix="11723" if seg.key == "legacy11723" else None,
     )
@@ -250,8 +252,8 @@ def issue_single(db, user, *, segment_key: str, name: str, spec=None, drawing=No
             if auto_drawing and not drawing:
                 drawing = catalog.drawing_from_suffix(seg, suffix)
             m = _build_issue_record(
-                db, seg, code=code, suffix=suffix, name=name, spec=spec, drawing=drawing,
-                project=project, unit=unit, remark=remark, source=source,
+                db, seg, code=code, suffix=suffix, name=name, spec=spec, manufacturer=manufacturer,
+                drawing=drawing, project=project, unit=unit, remark=remark, source=source,
                 created_by=user.username if user else "system",
                 legacy_prefix="11723" if seg.key == "legacy11723" else None,
             )
@@ -260,8 +262,8 @@ def issue_single(db, user, *, segment_key: str, name: str, spec=None, drawing=No
 
 # ────────────────────────── 编辑 / 状态 / 段冻结 ──────────────────────────
 
-def update_material(db, user, material_id: int, *, name=None, spec=None, drawing=None,
-                    project=None, unit=None, remark=None):
+def update_material(db, user, material_id: int, *, name=None, spec=None, manufacturer=None,
+                    drawing=None, project=None, unit=None, remark=None):
     """编辑描述字段；code/segment 不可改（护编码不变量）。drawing 可改/可生成，需全局不重复。"""
     m = _find_material(db, material_id)
     if name is not None and not (name or "").strip():
@@ -283,8 +285,8 @@ def update_material(db, user, material_id: int, *, name=None, spec=None, drawing
         if (old or "") != (new or ""):
             m.drawing = new
             changes.append(f"drawing:{old!r}->{new!r}")
-    for field, val in (("name", name), ("spec", spec), ("project", project),
-                       ("unit", unit), ("remark", remark)):
+    for field, val in (("name", name), ("spec", spec), ("manufacturer", manufacturer),
+                       ("project", project), ("unit", unit), ("remark", remark)):
         if val is None:
             continue
         old = getattr(m, field)

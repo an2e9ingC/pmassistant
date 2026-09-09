@@ -13,6 +13,14 @@ var _mc = {
   canIssue: false,
   segs: [],            // 全段树（/tree）
   issueSegs: [],       // 可发放叶段（issueable && !closed）
+  catalog: [],         // /catalog 顶层树（大类→中类→叶段，含 count/active_count）
+  catByKey: {},        // 分类节点 key → 节点（folder / seg）
+  catPath: {},         // 节点 key → 祖先链（含自身），供面包屑
+  dirAllCount: 0,      // 全部物料（在用）计数
+  expanded: {},        // 左树展开状态：{ key: bool }
+  catExpandedInit: false,
+  dirScopeKind: 'all', // 目录右区粒度: all / folder / seg
+  dirScopeKey: '',     // folder→cat key, seg→段 key
   dirDt: null,
   dirData: [],
   dirPage: 1,
@@ -90,14 +98,16 @@ async function initMatcode() {
     mcMaybeAutoProject();
   }).catch(function() {});
 
-  // 拉全段树 → 构建下拉 → 渲染发放面板 → 进入上次停留的 Tab
+  // 拉全段树 + 分类目录 → 渲染发放面板/左树 → 进入上次停留的 Tab
   try {
     var tree = await API.get('/matcode/tree');
     _mc.segs = tree || [];
     _mc.issueSegs = (_mc.segs).filter(function(s) {
       return s.issueable && !s.closed && !s.is_group;
     });
-    _buildDirSegSelect();
+    _mc.catalog = (await API.get('/matcode/catalog')) || [];
+    _mcIndexCatalog();
+    if (!_mc.catExpandedInit) { _mcCatDefaultExpand(); _mc.catExpandedInit = true; }
     if (_mc.canIssue) _renderIssuePanel();
     mcSwitchTab(_mc.activeTab === 'issue' && _mc.canIssue ? 'issue' : 'dir');
   } catch (e) {
@@ -124,44 +134,22 @@ function mcSwitchTab(tab) {
   }
 }
 
-/* ═══════════════ 段下拉（目录筛选 + 发放共用逻辑） ═══════════════ */
+/* 左树「发码」按钮：切到发放 Tab 并按该段预选（目录 scope 保留，可随时切回） */
+function mcTreeIssue(el) {
+  if (!_mc.canIssue) return;
+  var key = el.getAttribute('data-mc-key');
+  if (!key || !_segByKey(key)) return;
+  if (!document.getElementById('mc-panel-issue')) return;
+  mcSwitchTab('issue');
+  mcSelectSeg(key);
+  var nameEl = document.getElementById('mc-name');
+  if (nameEl) nameEl.focus();
+}
+
+/* ═══════════════ 段查找（目录/发放/面包屑共用逻辑） ═══════════════ */
 
 function _segLabel(s) {
   return (s.label || s.key) + ' ·' + s.prefix;
-}
-
-function _buildDirSegSelect() {
-  var sel = document.getElementById('mc-dir-seg');
-  if (!sel) return;
-  var leaves = _mc.segs.filter(function(s) { return !s.is_group; });
-  // 段树里存在父子关系 → 按 parent 分组展示
-  var groups = {};
-  _mc.segs.forEach(function(s) { groups[s.key] = s; });
-  var html = '<option value="">全部段</option>';
-  var topLeaves = leaves.filter(function(s) { return !s.parent_key || !groups[s.parent_key]; });
-  var children = leaves.filter(function(s) { return s.parent_key && groups[s.parent_key]; });
-  html += _optGroup('', topLeaves);
-  // 按组归类子段
-  var byParent = {};
-  children.forEach(function(s) {
-    (byParent[s.parent_key] = byParent[s.parent_key] || []).push(s);
-  });
-  Object.keys(byParent).forEach(function(pk) {
-    html += _optGroup(groups[pk] ? groups[pk].label : pk, byParent[pk]);
-  });
-  sel.innerHTML = html;
-}
-
-function _optGroup(groupLabel, arr) {
-  if (!arr || !arr.length) return '';
-  var out = '';
-  if (groupLabel) out += '<optgroup label="' + escHtml(groupLabel) + '">';
-  arr.forEach(function(s) {
-    var tag = s.closed ? '（冻结）' : (s.issueable ? '' : '');
-    out += '<option value="' + escHtml(s.key) + '">' + escHtml(_segLabel(s) + tag) + '</option>';
-  });
-  if (groupLabel) out += '</optgroup>';
-  return out;
 }
 
 function _segByKey(k) {
@@ -169,40 +157,218 @@ function _segByKey(k) {
   return null;
 }
 
+/* ── 分类目录索引（/catalog）→ 供左树渲染 / 三粒度 / 面包屑 ── */
+function _mcIndexCatalog() {
+  _mc.catByKey = {}; _mc.catPath = {}; _mc.dirAllCount = 0;
+  (function walk(nodes, path) {
+    (nodes || []).forEach(function(n) {
+      var p = path.concat([n]);
+      _mc.catByKey[n.key] = n;
+      _mc.catPath[n.key] = p;
+      if (n.kind === 'folder' && n.children) walk(n.children, p);
+    });
+  })(_mc.catalog, []);
+  _mc.catByKey[''] = { key: '', kind: 'all', label: '全部物料' };
+  _mc.catPath[''] = [];
+  (_mc.catalog || []).forEach(function(t) { _mc.dirAllCount += (t.active_count || 0); });
+}
+
+function _mcNode(key) { return _mc.catByKey[key] || null; }
+
+/* 节点 key → 「大类 › 中类 › … › 自身」标签路径（面包屑用） */
+function _mcPathLabel(key) {
+  var p = _mc.catPath[key];
+  if (!p || !p.length) return '';
+  return p.map(function(n) { return n.label; }).join(' › ');
+}
+
+/* 顶层大类默认展开；中类及更深默认收起（叶段随父展开露出） */
+function _mcCatDefaultExpand() {
+  _mc.expanded = {};
+  (_mc.catalog || []).forEach(function(top) { _mc.expanded[top.key] = true; });
+}
+
 /* ═══════════════ Tab 1 — 物料目录 ═══════════════ */
 
 function _renderDirShell() {
   var panel = document.getElementById('mc-panel-dir');
   panel.innerHTML =
-    '<div class="mc-filterbar">' +
-      '<div class="search-wrap" style="max-width:340px">' +
-        '<svg class="search-ico" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">' +
-          '<circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/>' +
-        '</svg>' +
-        '<input class="search-inp" id="mc-dir-q" placeholder="料号 / 名称 / 规格 / 图号 / 备注… 输入即过滤" ' +
-          'oninput="mcDirQChange()" onkeydown="if(event.key===\'Enter\'){clearTimeout(_mc.dirQTimer);mcDirApply()}">' +
-        '<button class="search-clear" onclick="clearTimeout(_mc.dirQTimer);var q=document.getElementById(\'mc-dir-q\');if(q)q.value=\'\';mcDirApply()" title="清除">&times;</button>' +
+    '<div class="mc-dir-layout">' +
+      '<aside class="mc-dir-tree card" style="padding:0">' +
+        '<div class="mc-tree-hd"><span class="mc-tree-hd-t">物料分类</span>' +
+          '<button type="button" class="mc-tree-collapse" onclick="mcCollapseAll()" title="全部收起：只保留一级大类（点击行前箭头可展开下级）">收起</button></div>' +
+        '<div class="mc-tree-body" id="mc-cat-tree"></div>' +
+      '</aside>' +
+      '<div class="mc-dir-main">' +
+        '<div class="mc-filterbar">' +
+          '<div class="search-wrap" style="max-width:320px">' +
+            '<svg class="search-ico" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">' +
+              '<circle cx="6.5" cy="6.5" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/>' +
+            '</svg>' +
+            '<input class="search-inp" id="mc-dir-q" placeholder="料号 / 名称 / 规格 / 厂商 / 图号… 输入即全库过滤" ' +
+              'oninput="mcDirQChange()" onkeydown="if(event.key===\'Enter\'){clearTimeout(_mc.dirQTimer);mcDirApply()}">' +
+            '<button class="search-clear" onclick="clearTimeout(_mc.dirQTimer);var q=document.getElementById(\'mc-dir-q\');if(q)q.value=\'\';mcDirApply()" title="清除">&times;</button>' +
+          '</div>' +
+          '<select id="mc-dir-status" onchange="mcDirApply()">' +
+            '<option value="">在用（不含作废）</option>' +
+            '<option value="active">仅在用</option>' +
+            '<option value="stopped">停用</option>' +
+            '<option value="void">作废（含）</option>' +
+          '</select>' +
+          '<label title="是否显示 11723 旧前缀（已冻结）的历史编码段">' +
+            '<input type="checkbox" id="mc-dir-legacy" checked onchange="mcDirApply()"> 含旧前缀' +
+          '</label>' +
+          '<button class="btn btn-sm" onclick="mcExportCsv()">导出 CSV</button>' +
+          '<span class="mc-dim" id="mc-dir-count" style="margin-left:auto"></span>' +
+        '</div>' +
+        '<div class="section-hd" style="margin:10px 0 8px">' +
+          '<div class="section-title">物料列表 <span id="mc-dir-title" style="font-size:11px;color:var(--muted);font-weight:400"></span></div>' +
+          '<div class="section-acts" style="font-size:11px;color:var(--muted)">料号点击查看详情；编辑/停用/作废需「物料编码发行」权限</div>' +
+        '</div>' +
+        '<div class="card" style="padding:0"><div id="mc-dir-table"></div></div>' +
+        '<div class="mc-pager" id="mc-dir-pager"></div>' +
       '</div>' +
-      '<select id="mc-dir-seg" style="max-width:230px" onchange="mcDirApply()"></select>' +
-      '<select id="mc-dir-status" onchange="mcDirApply()">' +
-        '<option value="">在用（不含作废）</option>' +
-        '<option value="active">仅在用</option>' +
-        '<option value="stopped">停用</option>' +
-        '<option value="void">作废（含）</option>' +
-      '</select>' +
-      '<label title="是否显示 11723 旧前缀（已冻结）的历史编码段">' +
-        '<input type="checkbox" id="mc-dir-legacy" checked onchange="mcDirApply()"> 含旧前缀' +
-      '</label>' +
-      '<button class="btn btn-sm" onclick="mcExportCsv()">导出 CSV</button>' +
-      '<span class="mc-dim" id="mc-dir-count" style="margin-left:auto"></span>' +
-    '</div>' +
-    '<div class="section-hd" style="margin-bottom:8px">' +
-      '<div class="section-title">物料目录 <span id="mc-dir-title" style="font-size:11px;color:var(--muted)"></span></div>' +
-      '<div class="section-acts" style="font-size:11px;color:var(--muted)">料号点击查看详情；编辑/停用/作废需「物料编码发行」权限</div>' +
-    '</div>' +
-    '<div class="card" style="padding:0"><div id="mc-dir-table"></div></div>' +
-    '<div class="mc-pager" id="mc-dir-pager"></div>';
-  _buildDirSegSelect();
+    '</div>';
+  _renderCatTree();
+}
+
+/* ═══════════════ 目录左侧分类树（大类→中类→叶段） ═══════════════ */
+
+function _mcIsExpanded(key) { return !!_mc.expanded[key]; }
+
+function _mcTreeRowAll() {
+  var sel = _mc.dirScopeKind === 'all';
+  return '<div class="dt-tree-node' + (sel ? ' selected' : '') + '" data-mc-key="" data-mc-kind="all"' +
+    ' style="padding-left:4px" onclick="mcCatClick(this)">' +
+    '<span style="width:16px;flex-shrink:0"></span>' +
+    '<span class="dt-tree-icon">🗂</span>' +
+    '<span class="dt-tree-label">全部物料</span>' +
+    '<span class="dt-tree-badge">' + (_mc.dirAllCount || 0) + '</span>' +
+    '</div>';
+}
+
+function _mcTreeFolder(n, depth) {
+  var key = n.key;
+  var sel = (_mc.dirScopeKind === 'folder' && _mc.dirScopeKey === key);
+  var open = _mcIsExpanded(key);
+  var empty = !(n.children && n.children.length);   // ERP 空分类（无段）→ 灰显占位
+  var arrow = empty
+    ? '<span style="width:16px;flex-shrink:0"></span>'
+    : '<span class="dt-tree-arrow' + (open ? '' : ' collapsed') + '" data-mc-key="' + escHtml(key) + '"' +
+      ' onclick="event.stopPropagation();mcCatToggleClick(this)">▼</span>';
+  var cls = 'dt-tree-node non-leaf' + (sel ? ' selected' : '') + (empty ? ' dt-tree-empty' : '');
+  var html = '<div class="' + cls + '"' +
+    ' data-mc-key="' + escHtml(key) + '" data-mc-kind="folder"' +
+    ' style="padding-left:' + (4 + depth * 20) + 'px" onclick="mcCatClick(this)">' +
+    arrow +
+    '<span class="dt-tree-icon">📁</span>' +
+    '<span class="dt-tree-label"' + (empty ? ' title="空分类（当前无物料）"' : '') + '>' +
+      escHtml(n.label) + '</span>' +
+    '<span class="dt-tree-badge">' + (n.active_count || 0) + '</span>' +
+    '</div>';
+  if (open && n.children) {
+    n.children.forEach(function(ch) {
+      html += ch.kind === 'folder' ? _mcTreeFolder(ch, depth + 1) : _mcTreeSeg(ch, depth + 1);
+    });
+  }
+  return html;
+}
+
+function _mcTreeSeg(n, depth) {
+  var key = n.key;
+  var sel = (_mc.dirScopeKind === 'seg' && _mc.dirScopeKey === key);
+  var s = _segByKey(key);
+  var canF = _mc.canIssue && s && s.issueable && !s.closed && !s.is_group;
+  var closedTag = (s && s.closed) ? '<span class="mc-pill legacy" style="margin-left:5px">冻结</span>' : '';
+  var acts = canF
+    ? '<span class="dt-tree-acts"><button type="button" class="btn btn-xs" data-mc-key="' + escHtml(key) + '"' +
+      ' onclick="event.stopPropagation();mcTreeIssue(this)" title="切换到发放并按此段预选">发码</button></span>'
+    : '';
+  return '<div class="dt-tree-node' + (sel ? ' selected' : '') + '"' +
+    ' data-mc-key="' + escHtml(key) + '" data-mc-kind="seg"' +
+    ' style="padding-left:' + (4 + depth * 20) + 'px" onclick="mcCatClick(this)">' +
+    '<span style="width:16px;flex-shrink:0"></span>' +
+    '<span class="dt-tree-icon"></span>' +
+    '<span class="dt-tree-label" title="' + escHtml(n.label) + ' ' + escHtml(n.prefix || '') + '">' + escHtml(n.label) +
+      '<span class="mc-dim" style="margin-left:4px;font-size:10.5px">' + escHtml(n.prefix || '') + '</span>' + closedTag +
+    '</span>' +
+    '<span class="dt-tree-badge">' + (n.active_count || 0) + '</span>' +
+    acts + '</div>';
+}
+
+function _renderCatTree() {
+  var host = document.getElementById('mc-cat-tree');
+  if (!host) return;
+  var st = host.scrollTop;  // 折叠/展开后保持滚动位置
+  var html = _mcTreeRowAll();
+  (_mc.catalog || []).forEach(function(top) { html += _mcTreeFolder(top, 0); });
+  host.innerHTML = html;
+  host.scrollTop = st;
+}
+
+/* 折叠箭头：仅切换展开/收起，不改变右区 scope */
+function mcCatToggleClick(el) {
+  var key = el.getAttribute('data-mc-key');
+  if (!key) return;
+  _mc.expanded[key] = !_mcIsExpanded(key);
+  _renderCatTree();
+}
+
+/* 树行点击：folder=展开(若收)+按 cat 过滤；seg=按段过滤；all=全库 */
+function mcCatClick(el) {
+  mcPickScope(el.getAttribute('data-mc-kind') || 'all', el.getAttribute('data-mc-key') || '');
+}
+
+/* 选择右区粒度并刷新列表；自动展开祖先链，保证树高亮可见 */
+function mcPickScope(kind, key) {
+  kind = kind || 'all'; key = key || '';
+  _mc.dirScopeKind = kind;
+  _mc.dirScopeKey = key;
+  var path = _mc.catPath[key];
+  var rebuild = false;
+  if (kind !== 'all' && path) {
+    path.forEach(function(n) {
+      if (n.kind === 'folder' && !_mcIsExpanded(n.key)) {
+        _mc.expanded[n.key] = true; rebuild = true;
+      }
+    });
+  }
+  if (rebuild) _renderCatTree();
+  _mcTreeSyncHighlight();
+  _mc.dirPage = 1;
+  mcDirLoad();
+}
+
+function _mcTreeSyncHighlight() {
+  var host = document.getElementById('mc-cat-tree');
+  if (!host) return;
+  var old = host.querySelector('.dt-tree-node.selected');
+  if (old) old.classList.remove('selected');
+  var nd = host.querySelector('.dt-tree-node[data-mc-key="' + _mc.dirScopeKey + '"]');
+  if (nd) nd.classList.add('selected');
+}
+
+/* 当前目录 scope 的中文标签：加入「物料列表」标题，补足面包屑移除后的归属感。
+   搜索时跨全库、不随 scope 收窄 → 返回空串。 */
+function _mcScopeLabel() {
+  var qEl = document.getElementById('mc-dir-q');
+  var q = qEl ? (qEl.value || '').trim() : '';
+  if (q) return '';
+  if (_mc.dirScopeKind === 'folder') {
+    var n = _mcNode(_mc.dirScopeKey);
+    return n ? n.label : '';
+  }
+  if (_mc.dirScopeKind === 'seg') {
+    var s = _segByKey(_mc.dirScopeKey);
+    return s ? s.label : '';
+  }
+  return '';
+}
+
+/* 一键收起：清空展开状态，分类树只保留一级大类（全部物料根行常显） */
+function mcCollapseAll() {
+  _mc.expanded = {};
+  _renderCatTree();
 }
 
 function _initDirTable() {
@@ -219,15 +385,21 @@ function _initDirTable() {
         var legacy = row.legacy_prefix ? '<span class="mc-pill legacy" title="旧前缀历史码">11723旧</span> ' : '';
         return legacy + escHtml(v || '');
       } },
-    { key: 'spec', title: '规格型号', width: '170px', align: 'left',
+    { key: 'spec', title: '规格型号', width: '150px', align: 'left',
       render: function(v) { return v ? '<span class="mc-spec">' + escHtml(v) + '</span>' : '<span class="mc-dim">—</span>'; } },
-    { key: 'drawing', title: '图号', width: '150px', align: 'left',
+    { key: 'manufacturer', title: '生产厂商', width: '140px', align: 'left',
+      render: function(v) {
+        return v ? '<span class="mc-manu" title="' + escHtml(v) + '">' + escHtml(v) + '</span>' : '<span class="mc-dim">—</span>';
+      } },
+    { key: 'unit', title: '单位', width: '54px', align: 'left',
+      render: function(v) { return v ? escHtml(v) : '<span class="mc-dim">—</span>'; } },
+    { key: 'drawing', title: '图号', width: '132px', align: 'left',
       render: function(v) { return v ? '<span class="mc-dim" style="font-size:11px">' + escHtml(v) + '</span>' : '—'; } },
-    { key: 'segment_label', title: '段', width: '120px', align: 'left',
+    { key: 'segment_label', title: '段', width: '100px', align: 'left',
       render: function(v) { return escHtml(v || ''); } },
-    { key: 'project', title: '项目', width: '110px', align: 'left',
+    { key: 'project', title: '项目', width: '92px', align: 'left',
       render: function(v) { return v ? '<span class="mc-dim">' + escHtml(v) + '</span>' : '—'; } },
-    { key: 'remark', title: '备注', width: '170px', align: 'left',
+    { key: 'remark', title: '备注', width: '150px', align: 'left',
       render: function(v) {
         return v ? '<span class="mc-remark" title="' + escHtml(v) + '">' + escHtml(v) + '</span>' : '<span class="mc-dim">—</span>';
       } },
@@ -274,9 +446,13 @@ function _renderRowOps(m) {
 }
 
 function _dirFilters() {
+  var q = (document.getElementById('mc-dir-q') || {}).value ? document.getElementById('mc-dir-q').value.trim() : '';
+  // 搜索跨全库、不随分类收窄 → q 存在时丢弃 cat/segment（三粒度仅作浏览定位）
+  var scoped = !q;
   return {
-    q: (document.getElementById('mc-dir-q') || {}).value ? document.getElementById('mc-dir-q').value.trim() : '',
-    segment: document.getElementById('mc-dir-seg') ? document.getElementById('mc-dir-seg').value : '',
+    q: q,
+    cat: scoped && _mc.dirScopeKind === 'folder' ? _mc.dirScopeKey : '',
+    segment: scoped && _mc.dirScopeKind === 'seg' ? _mc.dirScopeKey : '',
     status: document.getElementById('mc-dir-status') ? document.getElementById('mc-dir-status').value : '',
     include_legacy: document.getElementById('mc-dir-legacy') ? document.getElementById('mc-dir-legacy').checked : true,
   };
@@ -296,7 +472,8 @@ async function mcDirLoad() {
   var qs = 'page=' + _mc.dirPage + '&page_size=' + _mc.dirPerPage +
     '&include_legacy=' + (f.include_legacy ? 'true' : 'false');
   if (f.q) qs += '&q=' + encodeURIComponent(f.q);
-  if (f.segment) qs += '&segment=' + encodeURIComponent(f.segment);
+  if (f.cat) qs += '&cat=' + encodeURIComponent(f.cat);
+  else if (f.segment) qs += '&segment=' + encodeURIComponent(f.segment);
   if (f.status) qs += '&status=' + encodeURIComponent(f.status);
 
   var seq = ++_mc.dirSeq;  // 本次请求序号：实时输入会连发，只认最后一次的结果
@@ -309,7 +486,11 @@ async function mcDirLoad() {
     var pages = Math.max(1, Math.ceil(_mc.dirTotal / _mc.dirPerPage));
     if (countEl) countEl.textContent = '共 ' + _mc.dirTotal + ' 条';
     var titleEl = document.getElementById('mc-dir-title');
-    if (titleEl) titleEl.textContent = '（第 ' + _mc.dirPage + '/' + pages + ' 页）';
+    if (titleEl) {
+      var lbl = _mcScopeLabel();
+      titleEl.textContent = lbl ? '（' + lbl + ' · 第 ' + _mc.dirPage + '/' + pages + ' 页）'
+                               : '（第 ' + _mc.dirPage + '/' + pages + ' 页）';
+    }
     _renderPager(pages);
     _mc.dirLoaded = true;
     _mc.dirDirty = false;
@@ -354,7 +535,8 @@ function mcExportCsv() {
   var f = _dirFilters();
   var qs = 'page=1&page_size=1000&include_legacy=' + (f.include_legacy ? 'true' : 'false');
   if (f.q) qs += '&q=' + encodeURIComponent(f.q);
-  if (f.segment) qs += '&segment=' + encodeURIComponent(f.segment);
+  if (f.cat) qs += '&cat=' + encodeURIComponent(f.cat);
+  else if (f.segment) qs += '&segment=' + encodeURIComponent(f.segment);
   if (f.status) qs += '&status=' + encodeURIComponent(f.status);
   var collect = [];
   function grab(page) {
@@ -366,11 +548,12 @@ function mcExportCsv() {
     });
   }
   grab(1).then(function(rows) {
-    var head = ['料号', '段', '名称', '规格型号', '图号', '备注', '适用项目', '单位', '状态', '旧前缀', '更新时间'];
+    var head = ['料号', '段', '名称', '规格型号', '生产厂商', '单位', '图号', '备注', '适用项目', '状态', '旧前缀', '更新时间'];
     var lines = [head.join(',')];
     rows.forEach(function(m) {
-      var arr = [m.code, m.segment_label || '', m.name || '', m.spec || '', m.drawing || '',
-        m.remark || '', m.project || '', m.unit || '', { active: '在用', stopped: '停用', void: '已作废' }[m.status] || m.status,
+      var arr = [m.code, m.segment_label || '', m.name || '', m.spec || '', m.manufacturer || '', m.unit || '',
+        m.drawing || '', m.remark || '', m.project || '',
+        { active: '在用', stopped: '停用', void: '已作废' }[m.status] || m.status,
         m.legacy_prefix || '', (m.updated_at || '').slice(0, 10)];
       lines.push(arr.map(_csvCell).join(','));
     });
@@ -409,6 +592,7 @@ function mcDetail(id) {
       '<div class="k">编码段</div><div class="v">' + escHtml(m.segment_label || '') + ' <span class="mc-dim">(' + escHtml(m.segment_key || '') + ')</span></div>' +
       '<div class="k">名称</div><div class="v">' + escHtml(m.name) + '</div>' +
       '<div class="k">规格型号</div><div class="v">' + escHtml(m.spec || '—') + '</div>' +
+      '<div class="k">生产厂商</div><div class="v">' + escHtml(m.manufacturer || '—') + '</div>' +
       '<div class="k">图号</div><div class="v" style="font-family:var(--mono)">' + escHtml(m.drawing || '—') + '</div>' +
       '<div class="k">适用项目</div><div class="v">' + escHtml(m.project || '—') + '</div>' +
       '<div class="k">单位</div><div class="v">' + escHtml(m.unit || '—') + '</div>' +
@@ -436,6 +620,7 @@ function mcEditRow(id) {
       '<input type="text" value="' + escHtml(segName) + '" readonly style="background:var(--surface2)"></div>' +
     '<div class="mc-field"><label>名称 *</label><input type="text" id="mc-edit-name" value="' + escHtml(m.name || '') + '"></div>' +
     '<div class="mc-field"><label>规格型号</label><input type="text" id="mc-edit-spec" value="' + escHtml(m.spec || '') + '"></div>' +
+    '<div class="mc-field"><label>生产厂商</label><input type="text" id="mc-edit-manufacturer" value="' + escHtml(m.manufacturer || '') + '" placeholder="元器件：供应商/品牌"></div>' +
     '<div class="mc-field"><label>图号</label>' +
       '<div class="mc-draw-edit">' +
         '<input type="text" id="mc-edit-drawing" value="' + escHtml(m.drawing || '') + '" placeholder="自动生成或手动修改（需全局唯一）">' +
@@ -504,15 +689,15 @@ async function mcSaveEdit() {
   var id = _mc.editId;
   function g(x) { var el = document.getElementById(x); return el ? el.value : ''; }
   var payload = {
-    name: g('mc-edit-name'), spec: g('mc-edit-spec'),
+    name: g('mc-edit-name'), spec: g('mc-edit-spec'), manufacturer: g('mc-edit-manufacturer'),
     drawing: g('mc-edit-drawing'), project: g('mc-edit-project'),
     unit: g('mc-edit-unit'), remark: g('mc-edit-remark'),
   };
   if (!payload.name || !payload.name.trim()) { showToast('名称必填', 'error'); return; }
   try {
     await API.put('/matcode/materials/' + id, {
-      name: payload.name.trim(), spec: payload.spec, drawing: payload.drawing,
-      project: payload.project, unit: payload.unit, remark: payload.remark,
+      name: payload.name.trim(), spec: payload.spec, manufacturer: payload.manufacturer,
+      drawing: payload.drawing, project: payload.project, unit: payload.unit, remark: payload.remark,
     });
     closeSharedDialog();
     showToast('已保存', 'success');
@@ -580,43 +765,53 @@ function _renderIssuePanel() {
   });
 
   panel.innerHTML =
-    '<div class="mc-issue-grid">' +
-      '<div class="card-pad">' +
-        '<div class="section-hd" style="margin-bottom:12px"><div class="section-title">单条发码</div>' +
-          '<div class="section-acts" style="font-size:11px;color:var(--muted)">系统按段自动取下一未占用号（段满/被占 409 拦截）</div></div>' +
-        '<div class="mc-field"><label>编码段</label>' +
-          segComboHtml +
-          '<input type="hidden" id="mc-seg" value="">' +
-          '<div class="hint" id="mc-seg-meta"></div></div>' +
-        '<div class="mc-field"><label>物料名称 *</label>' +
-          '<input type="text" id="mc-name" placeholder="必填；名称含 PE0xxx 将自动带出项目，如：PE0141-1326UA 锁紧条" oninput="mcOnNameInput()"></div>' +
-        '<div class="mc-field"><label>规格型号 / 厂家规格型号</label>' +
-          '<input type="text" id="mc-spec" placeholder="选填；同名称+同规格将被判重拦截" oninput="mcSchedulePreview()"></div>' +
-        '<div class="mc-field"><label>图号</label>' +
-          '<label class="mc-check"><input type="checkbox" id="mc-drawing-auto" onchange="mcOnFormChange()"> 随编码自动联号' +
-          '</label><input type="text" id="mc-drawing" placeholder="手填图号；或勾选自动按段规则取号（可留空不生成）" oninput="mcSchedulePreview()">' +
-          '<div class="hint">默认不自动生成图号；需联号图号（如 LM_LJ.030.0001）时勾选「随编码自动联号」</div></div>' +
-        '<div class="mc-field"><label>适用项目</label>' +
-          projComboHtml +
-          '<div class="hint" id="mc-proj-hint"></div></div>' +
-        '<div class="mc-field"><label>单位</label><input type="text" id="mc-unit" placeholder="件 / 套 / m …"></div>' +
-        '<div class="mc-field"><label>备注</label><textarea id="mc-remark" rows="2" placeholder="用途/采购备注（选填）"></textarea></div>' +
-        (_mc.isAdmin
-          ? '<div class="mc-field"><label>自定义料号（仅管理员）</label>' +
-            '<input type="text" id="mc-override" maxlength="8" placeholder="留空 = 系统自动建议下一号；8 位数字" ' +
-            'style="font-family:var(--mono)" oninput="mcValidateOverride()">' +
-            '<div class="hint" id="mc-override-msg"></div></div>'
-          : '') +
-        '<div style="margin-top:4px"><button class="btn btn-primary" style="min-width:120px" onclick="mcSubmitIssue()">发码</button>' +
-          '<span class="mc-dim" style="margin-left:8px" id="mc-issue-note"></span></div>' +
-      '</div>' +
+    '<div class="mc-issue">' +
+      /* ① 建议码实时预览 —— 置顶居中，整页视觉焦点 */
       '<div class="mc-preview-card">' +
         '<div class="mc-preview-hd">建议码实时预览</div>' +
         '<div class="mc-preview-body">' +
-          '<div class="mc-big-code" id="mc-prev-code"><span class="mc-prev-none">输入名称后预览</span></div>' +
+          '<div class="mc-big-code" id="mc-prev-code"><span class="mc-prev-none">输入物料名称后预览建议码</span></div>' +
           '<div class="mc-prev-drawing" id="mc-prev-drawing"></div>' +
-          '<div id="mc-prev-dup"></div>' +
-          '<div class="mc-dim" style="margin-top:10px" id="mc-prev-seg"></div>' +
+          '<div class="mc-prev-dup" id="mc-prev-dup"></div>' +
+          '<div class="mc-dim mc-prev-seg" id="mc-prev-seg"></div>' +
+        '</div>' +
+      '</div>' +
+      /* ② 录入表单 —— 两列网格；编码段/名称/图号/备注/管理员覆盖整行，其余两两一组 */
+      '<div class="mc-issue-card card-pad">' +
+        '<div class="section-hd" style="margin-bottom:14px"><div class="section-title">单条发码</div>' +
+          '<div class="section-acts" style="font-size:11px;color:var(--muted)">系统按段自动取下一未占用号（段满/被占 409 拦截）</div></div>' +
+        '<div class="mc-fields-grid">' +
+          '<div class="mc-field mc-span2"><label>编码段</label>' +
+            '<div class="mc-dim" id="mc-seg-crumb" style="margin:0 0 5px;font-size:11.5px;line-height:1.5"></div>' +
+            segComboHtml +
+            '<input type="hidden" id="mc-seg" value="">' +
+            '<div class="hint" id="mc-seg-meta"></div></div>' +
+          '<div class="mc-field mc-span2"><label>物料名称 *</label>' +
+            '<input type="text" id="mc-name" placeholder="必填；名称含 PE0xxx 将自动带出项目，如：PE0141-1326UA 锁紧条" oninput="mcOnNameInput()"></div>' +
+          '<div class="mc-field"><label>生产厂商（元器件/外购件等）</label>' +
+            '<input type="text" id="mc-mfr" placeholder="选填；品牌/供应商，如 TI / Murata"></div>' +
+          '<div class="mc-field"><label>单位</label>' +
+            '<input type="text" id="mc-unit" placeholder="件 / 套 / m …"></div>' +
+          '<div class="mc-field"><label>规格型号 / 厂家规格型号</label>' +
+            '<input type="text" id="mc-spec" placeholder="选填；同名称+同规格将被判重拦截" oninput="mcSchedulePreview()"></div>' +
+          '<div class="mc-field"><label>适用项目</label>' +
+            projComboHtml +
+            '<div class="hint" id="mc-proj-hint"></div></div>' +
+          '<div class="mc-field mc-span2"><label>图号</label>' +
+            '<label class="mc-check"><input type="checkbox" id="mc-drawing-auto" onchange="mcOnFormChange()"> 随编码自动联号' +
+            '</label><input type="text" id="mc-drawing" placeholder="手填图号；或勾选自动按段规则取号（可留空不生成）" oninput="mcSchedulePreview()">' +
+            '<div class="hint">默认不自动生成图号；需联号图号（如 LM_LJ.030.0001）时勾选「随编码自动联号」</div></div>' +
+          '<div class="mc-field mc-span2"><label>备注</label>' +
+            '<textarea id="mc-remark" rows="2" placeholder="用途/采购备注（选填）"></textarea></div>' +
+          (_mc.isAdmin
+            ? '<div class="mc-field mc-span2"><label>自定义料号（仅管理员）</label>' +
+              '<input type="text" id="mc-override" maxlength="8" placeholder="留空 = 系统自动建议下一号；8 位数字" ' +
+              'style="font-family:var(--mono)" oninput="mcValidateOverride()">' +
+              '<div class="hint" id="mc-override-msg"></div></div>'
+            : '') +
+          '<div class="mc-issue-actions">' +
+            '<button class="btn btn-primary" style="min-width:120px" onclick="mcSubmitIssue()">发码</button>' +
+            '<span class="mc-dim" id="mc-issue-note"></span></div>' +
         '</div>' +
       '</div>' +
     '</div>';
@@ -721,7 +916,10 @@ function mcOnNameInput() {
 
 function mcOnSegmentChange() {
   _syncDrawingVisibility();
-  var seg = _segByKey(document.getElementById('mc-seg').value);
+  var segKey = (document.getElementById('mc-seg') || {}).value;
+  var seg = _segByKey(segKey);
+  var crumb = document.getElementById('mc-seg-crumb');
+  if (crumb) crumb.textContent = segKey ? _mcPathLabel(segKey) : '';
   var meta = document.getElementById('mc-seg-meta');
   if (meta && seg) {
     meta.innerHTML = '前缀 <b>' + escHtml(seg.prefix) + '</b> · 序号宽 ' + seg.suffix_width +
@@ -760,6 +958,7 @@ async function mcRefreshPreview() {
     codeBox.innerHTML = '<span class="mc-prev-none">输入名称后预览建议码</span>';
     dupBox.innerHTML = ''; drawBox.innerHTML = '';
     _mc.preview = null; _mc.dupExact = []; _mc.dupSimilar = [];
+    _mc.dupExactN = 0; _mc.dupSimilarN = 0;
     return;
   }
   codeBox.innerHTML = '<span class="mc-prev-wait">计算中…</span>';
@@ -775,6 +974,8 @@ async function mcRefreshPreview() {
     _mc.preview = p;
     _mc.dupExact = (p.dup && p.dup.exact) || [];
     _mc.dupSimilar = (p.dup && p.dup.similar) || [];
+    _mc.dupExactN = (p.dup && p.dup.exact_count != null) ? p.dup.exact_count : _mc.dupExact.length;
+    _mc.dupSimilarN = (p.dup && p.dup.similar_count != null) ? p.dup.similar_count : _mc.dupSimilar.length;
     codeBox.innerHTML = escHtml(p.code || '');
     drawBox.innerHTML = '';
     if (p.drawing && document.getElementById('mc-drawing-auto') && document.getElementById('mc-drawing-auto').checked) {
@@ -787,26 +988,49 @@ async function mcRefreshPreview() {
   } catch (e) {
     codeBox.innerHTML = '<span class="mc-prev-none" style="color:var(--danger)">' + escHtml(e.message) + '</span>';
     _mc.preview = null; _mc.dupExact = []; _mc.dupSimilar = [];
+    _mc.dupExactN = 0; _mc.dupSimilarN = 0;
     dupBox.innerHTML = ''; drawBox.innerHTML = '';
   }
+}
+
+function _mcDupListHtml(items) {
+  var out = '<div class="mc-dup-list">';
+  (items || []).forEach(function(m) {
+    out += '<div class="mc-dup-item"><span class="mc-codes">' + escHtml(m.code || '') + '</span>' +
+      (m.name ? '：' + escHtml(m.name) : '') + '</div>';
+  });
+  out += '</div>';
+  return out;
 }
 
 function _renderDupNote() {
   var dupBox = document.getElementById('mc-prev-dup');
   if (!dupBox) return;
   var html = '';
-  if (_mc.dupExact.length) {
-    var codes = _mc.dupExact.map(function(m) { return m.code; }).join(' / ');
-    html = '<div class="mc-dup-note warn">⚠ 已存在 <b>' + _mc.dupExact.length + '</b> 条<b>同名+同规格</b>物料：' +
-      '<span class="mc-codes">' + escHtml(codes) + '</span><br>' +
-      (_mc.isAdmin
-        ? '系统管理员可点「发码」并在确认框选择「仍要发放（特批）」，系统仍会取新空号。'
-        : '普通发码人被拦截：如需发放需系统管理员特批。') +
+  var exact = _mc.dupExact || [];
+  var similar = _mc.dupSimilar || [];
+  var exactN = (_mc.dupExactN != null) ? _mc.dupExactN : exact.length;
+  var similarN = (_mc.dupSimilarN != null) ? _mc.dupSimilarN : similar.length;
+  var actNote = _mc.isAdmin
+    ? '系统管理员可点「发码」并在确认框选择「仍要发放（特批）」，系统仍会取新空号。'
+    : '普通发码人被拦截：如需发放需系统管理员特批。';
+  if (exact.length) {
+    var head = '⚠ 已存在 <b>' + exactN + '</b> 条<b>同名+同规格</b>物料：';
+    if (exact.length === 1) {
+      var m = exact[0];
+      html = '<div class="mc-dup-note warn">' + head +
+        '<span class="mc-codes">' + escHtml(m.code || '') + '</span>' +
+        (m.name ? '：' + escHtml(m.name) : '') + '<br>' + actNote + '</div>';
+    } else {
+      html = '<div class="mc-dup-note warn">' + head + _mcDupListHtml(exact) +
+        (exactN > exact.length ? '<div class="mc-dim">… 共 ' + exactN + ' 条，仅列前 ' + exact.length + '</div>' : '') +
+        '<div class="mc-dup-act">' + actNote + '</div></div>';
+    }
+  } else if (similar.length) {
+    html = '<div class="mc-dup-note ok">可正常发放编码，但存在近似的同名物料（规格不同），请关注：' +
+      _mcDupListHtml(similar) +
+      (similarN > similar.length ? '<div class="mc-dim">… 共 ' + similarN + ' 条，仅列前 ' + similar.length + '</div>' : '') +
       '</div>';
-  } else if (_mc.dupSimilar.length) {
-    var scodes = _mc.dupSimilar.map(function(m) { return m.code; }).join(' / ');
-    html = '<div class="mc-dup-note ok">近似的同名物料（规格不同）：<span class="mc-codes">' + escHtml(scodes) +
-      '</span>，可正常发放。</div>';
   } else if (_mc.preview && _mc.preview.code) {
     html = '<div class="mc-dup-note ok">✓ 无重复，可发放</div>';
   }
@@ -840,6 +1064,7 @@ function _issuePayload(force) {
     segment_key: segKey,
     name: ((document.getElementById('mc-name') || {}).value || '').trim(),
     spec: ((document.getElementById('mc-spec') || {}).value || '').trim(),
+    manufacturer: ((document.getElementById('mc-mfr') || {}).value || '').trim() || undefined,
     drawing: autoDraw ? undefined : (manual || undefined),
     auto_drawing: autoDraw,
     project: ((document.getElementById('mc-project') || {}).value || '').trim() || undefined,
@@ -900,7 +1125,7 @@ async function mcDoIssue(force) {
     showToast('发码成功：' + m.code, 'success');
     if (note) note.textContent = '';
     // 重置表单（保留编码段）
-    ['mc-name', 'mc-spec', 'mc-unit', 'mc-remark', 'mc-drawing', 'mc-override', 'mc-project'].forEach(function(id) {
+    ['mc-name', 'mc-spec', 'mc-mfr', 'mc-unit', 'mc-remark', 'mc-drawing', 'mc-override', 'mc-project'].forEach(function(id) {
       var el = document.getElementById(id);
       if (el) el.value = '';
     });
@@ -930,7 +1155,7 @@ async function mcDoIssue(force) {
   }
 }
 
-/* ═══════════════ 轻量刷新段计数（发放后 /tree 现量保持一致） ═══════════════ */
+/* ═══════════════ 轻量刷新段计数（发放后 /tree + /catalog 计数保持一致） ═══════════════ */
 async function mcRefreshCounts() {
   try {
     var t = await API.get('/matcode/tree');
@@ -938,6 +1163,13 @@ async function mcRefreshCounts() {
     _mc.issueSegs = (_mc.segs).filter(function(s) {
       return s.issueable && !s.closed && !s.is_group;
     });
+    var c = await API.get('/matcode/catalog');
+    _mc.catalog = c || [];
+    _mcIndexCatalog();
+    if (document.getElementById('mc-cat-tree')) {
+      // 目录已渲染过：重建树（scope/展开状态保留在 _mc 上）
+      _renderCatTree();
+    }
     if (document.getElementById('mc-seg')) mcOnSegmentChange();
   } catch (e) { /* 静默：下次进页会重拉 */ }
 }

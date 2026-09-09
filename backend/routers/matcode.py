@@ -20,6 +20,7 @@ from backend.middleware.auth import get_current_user, require_perm
 from backend.models.matcode import MatcodeMaterial, MatcodeSegment
 from backend.routers.logs import log_audit
 from backend.services import matcode_catalog as catalog
+from backend.services import matcode_families as fams
 from backend.services import matcode_service as svc
 
 router = APIRouter(prefix="/api/matcode", tags=["matcode"])
@@ -31,6 +32,7 @@ class IssueBody(BaseModel):
     segment_key: str
     name: str
     spec: Optional[str] = None
+    manufacturer: Optional[str] = None
     drawing: Optional[str] = None          # 显式图号（优先于自动联号）
     auto_drawing: bool = False             # 未显式给图号时，按码段联号规则自动生成
     project: Optional[str] = None
@@ -43,6 +45,7 @@ class IssueBody(BaseModel):
 class MaterialUpdateBody(BaseModel):
     name: Optional[str] = None
     spec: Optional[str] = None
+    manufacturer: Optional[str] = None
     drawing: Optional[str] = None       # 显式传参才改；'' = 清除
     project: Optional[str] = None
     unit: Optional[str] = None
@@ -88,10 +91,71 @@ def get_tree(db: Session = Depends(get_db), _=Depends(require_perm("matcode_view
     return {"code": 0, "data": data, "message": "ok"}
 
 
+@router.get("/catalog", response_model=dict)
+def get_catalog(db: Session = Depends(get_db),
+                _=Depends(require_perm("matcode_view"))):
+    """分类目录树：大类 → 中类/段，叶段含 count/active_count（复用 /tree 聚合口径）。
+    树由 MATCODE_CATALOG 常量驱动，叶子引用 matcode_segments.key。"""
+    segs = {s.key: s for s in db.query(MatcodeSegment).all()}
+    counts = dict(
+        db.query(MatcodeMaterial.segment_id, func.count(MatcodeMaterial.id))
+        .group_by(MatcodeMaterial.segment_id).all()
+    )
+    active_counts = dict(
+        db.query(MatcodeMaterial.segment_id, func.count(MatcodeMaterial.id))
+        .filter(MatcodeMaterial.status.in_(("active", "stopped")))
+        .group_by(MatcodeMaterial.segment_id).all()
+    )
+
+    def build(children):
+        out = []
+        for c in children:
+            if isinstance(c, str):
+                s = segs.get(c)
+                if not s:
+                    continue
+                out.append({
+                    "key": c, "kind": "seg", "label": s.label, "prefix": s.prefix,
+                    "suffix_width": s.suffix_width, "is_group": bool(s.is_group),
+                    "issueable": bool(s.issueable), "closed": bool(s.closed),
+                    "count": counts.get(s.id, 0), "active_count": active_counts.get(s.id, 0),
+                })
+            else:
+                sub = build(c["children"])
+                out.append({
+                    "key": c["key"], "kind": "folder", "label": c["label"],
+                    "count": sum(x["count"] for x in sub),
+                    "active_count": sum(x["active_count"] for x in sub),
+                    "children": sub,
+                })
+        return out
+
+    tree = [{"key": t["key"], "kind": "folder", "label": t["label"],
+             "count": 0, "active_count": 0, "children": []} for t in fams.MATCODE_CATALOG]
+    for i, t in enumerate(fams.MATCODE_CATALOG):
+        tree[i]["children"] = build(t["children"])
+        tree[i]["count"] = sum(x["count"] for x in tree[i]["children"])
+        tree[i]["active_count"] = sum(x["active_count"] for x in tree[i]["children"])
+    return {"code": 0, "data": tree, "message": "ok"}
+
+
+def _scope_segment_keys(db, cat: Optional[str], segment: Optional[str]):
+    """cat（大类/中类 key）或 segment（段 key）→ 段 key 集合；两者都不给 → None（不限）。"""
+    if cat:
+        keys = fams.segment_keys_for(cat)
+        if keys is None:
+            raise HTTPException(status_code=400, detail=f"未知分类 {cat!r}")
+        return keys
+    if segment:
+        return [segment]
+    return None
+
+
 @router.get("/materials", response_model=dict)
 def list_materials(
     q: Optional[str] = Query(None, description="名称/规格/料号/图号 模糊"),
     segment: Optional[str] = Query(None, description="段 key"),
+    cat: Optional[str] = Query(None, description="大类/中类 key（segment_keys_for 展开）"),
     status: Optional[str] = Query(None, description="active/stopped/void；空=不含作废"),
     project: Optional[str] = Query(None),
     include_legacy: bool = Query(True, description="是否包含 legacy11723 旧前缀段"),
@@ -108,12 +172,14 @@ def list_materials(
         query = query.filter(
             (MatcodeMaterial.name.like(like)) |
             (MatcodeMaterial.spec.like(like)) |
+            (MatcodeMaterial.manufacturer.like(like)) |
             (MatcodeMaterial.code.like(like)) |
             (MatcodeMaterial.drawing.like(like)) |
             (MatcodeMaterial.remark.like(like))
         )
-    if segment:
-        query = query.filter(MatcodeSegment.key == segment)
+    keys = _scope_segment_keys(db, cat, segment)
+    if keys is not None:  # [] = 空分类（无段可展）→ 空结果；None = 不限
+        query = query.filter(MatcodeSegment.key.in_(keys))
     if status:
         query = query.filter(MatcodeMaterial.status == status)
     else:
@@ -140,6 +206,7 @@ def list_materials(
 def export_materials(
     q: Optional[str] = Query(None),
     segment: Optional[str] = Query(None),
+    cat: Optional[str] = Query(None),
     include_legacy: bool = Query(True),
     db: Session = Depends(get_db),
     _=Depends(require_perm("matcode_view")),
@@ -155,24 +222,26 @@ def export_materials(
         query = query.filter(
             (MatcodeMaterial.name.like(like)) |
             (MatcodeMaterial.spec.like(like)) |
+            (MatcodeMaterial.manufacturer.like(like)) |
             (MatcodeMaterial.code.like(like)) |
             (MatcodeMaterial.drawing.like(like)) |
             (MatcodeMaterial.remark.like(like))
         )
-    if segment:
-        query = query.filter(MatcodeSegment.key == segment)
+    keys = _scope_segment_keys(db, cat, segment)
+    if keys is not None:  # [] = 空分类 → 空结果；None = 不限
+        query = query.filter(MatcodeSegment.key.in_(keys))
     if not include_legacy:
         query = query.filter(MatcodeSegment.key != "legacy11723")
     items = query.order_by(MatcodeMaterial.code.asc()).all()
 
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow(["料号", "段", "名称", "规格型号", "图号", "使用项目", "单位", "状态", "创建人", "创建时间"])
+    writer.writerow(["料号", "段", "名称", "规格型号", "生产厂商", "图号", "使用项目", "单位", "状态", "创建人", "创建时间"])
     for m in items:
         seg = m.segment
         writer.writerow([
-            m.code, seg.label if seg else "", m.name or "", m.spec or "", m.drawing or "",
-            m.project or "", m.unit or "", m.status, m.created_by or "",
+            m.code, seg.label if seg else "", m.name or "", m.spec or "", m.manufacturer or "",
+            m.drawing or "", m.project or "", m.unit or "", m.status, m.created_by or "",
             (m.created_at + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if m.created_at else "",
         ])
     content = "﻿" + buf.getvalue()
@@ -215,7 +284,7 @@ def issue_material(body: IssueBody, db: Session = Depends(get_db),
         raise HTTPException(status_code=400, detail="物料名称必填")
     result = svc.issue_single(
         db, user,
-        segment_key=body.segment_key, name=name, spec=body.spec,
+        segment_key=body.segment_key, name=name, spec=body.spec, manufacturer=body.manufacturer,
         drawing=body.drawing, auto_drawing=body.auto_drawing, project=body.project,
         unit=body.unit, remark=body.remark, override_code=body.override_code,
         force_duplicate=body.force_duplicate,
@@ -240,8 +309,8 @@ def update_material(material_id: int, body: MaterialUpdateBody,
                     db: Session = Depends(get_db), user=Depends(require_perm("matcode_issue"))):
     m, changes = svc.update_material(
         db, user, material_id,
-        name=body.name, spec=body.spec, drawing=body.drawing, project=body.project,
-        unit=body.unit, remark=body.remark,
+        name=body.name, spec=body.spec, manufacturer=body.manufacturer,
+        drawing=body.drawing, project=body.project, unit=body.unit, remark=body.remark,
     )
     if changes:
         log_audit(db, user, "matcode_edit", f"料号 {m.code} {'; '.join(changes)}",
