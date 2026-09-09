@@ -25,3 +25,5 @@ pma-8000.log.*
 scripts/build/
 pma-docker-*.tar.gz
 install.log
+# ERP 物料编码导入参考文件（不入库，仅本地导入用）
+docs/物料编码导入资料/
