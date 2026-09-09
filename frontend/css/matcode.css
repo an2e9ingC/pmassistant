@@ -48,10 +48,21 @@
 .mc-pager { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 10px 2px 0; font-size: 12.5px; color: var(--muted); }
 .mc-pager button.btn { min-width: 56px; }
 
-/* ── 发放面板布局 ── */
-.mc-issue-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
-@media (max-width: 1080px) { .mc-issue-grid { grid-template-columns: 1fr; } }
-.mc-issue-grid .card-pad { padding: 14px; }
+/* ── 发放面板布局：置顶居中「建议码实时预览」 + 下方两列录入网格 ── */
+.mc-issue { max-width: 940px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+@media (max-width: 1000px) { .mc-issue { max-width: none; } }
+.mc-issue-card { padding: 16px 18px 18px; }
+.mc-fields-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 18px; }
+.mc-fields-grid .mc-field { margin-bottom: 12px; }
+.mc-span2 { grid-column: span 2; }
+.mc-issue-actions {
+  grid-column: span 2; display: flex; align-items: center; gap: 10px;
+  margin-top: 4px; padding-top: 12px; border-top: 1px dashed var(--border);
+}
+@media (max-width: 720px) {
+  .mc-fields-grid { grid-template-columns: 1fr; }
+  .mc-span2 { grid-column: auto; }
+}
 
 .mc-field { margin-bottom: 10px; }
 .mc-field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
@@ -63,25 +74,31 @@
 .mc-field .mc-check { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
 .mc-field .hint { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
 
-/* ── 建议码预览卡 ── */
-.mc-preview-card {
-  position: sticky; top: 74px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
-  background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.04);
-}
-.mc-preview-hd { padding: 9px 14px; font-size: 12px; font-weight: 600; color: var(--muted); background: var(--surface2); border-bottom: 1px solid var(--border); }
-.mc-preview-body { padding: 14px; }
+/* ── 建议码实时预览（置顶居中，作为整页视觉焦点） ── */
+.mc-preview-card { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+.mc-preview-hd { padding: 9px 14px; font-size: 12px; font-weight: 600; color: var(--muted); background: var(--surface2); border-bottom: 1px solid var(--border); text-align: center; }
+.mc-preview-body { padding: 20px 18px 18px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .mc-big-code {
   font-family: var(--mono, ui-monospace, Menlo, Consolas, monospace);
-  font-size: 30px; font-weight: 700; letter-spacing: 2px; color: var(--accent); line-height: 1.15; word-break: break-all;
+  font-size: 40px; font-weight: 700; letter-spacing: 3px; color: var(--accent);
+  line-height: 1.2; word-break: break-all; overflow-wrap: anywhere; text-align: center; max-width: 100%;
 }
-.mc-big-code .mc-prev-wait { color: var(--muted); font-size: 14px; font-weight: 500; }
-.mc-big-code .mc-prev-none { color: var(--muted); font-size: 13px; font-weight: 500; letter-spacing: 0; }
-.mc-prev-drawing { margin-top: 6px; font-size: 12px; color: var(--fg); }
+.mc-big-code .mc-prev-wait { display: inline-block; vertical-align: middle; color: var(--muted); font-size: 14px; font-weight: 500; letter-spacing: 0; }
+.mc-big-code .mc-prev-none { display: inline-block; vertical-align: middle; color: var(--muted); font-size: 13px; font-weight: 500; letter-spacing: 0; }
+.mc-prev-drawing { margin: 0; font-size: 12px; color: var(--fg); }
 .mc-prev-drawing b { color: var(--muted); font-weight: 500; margin-right: 4px; }
+.mc-prev-dup { width: 100%; max-width: 640px; }
+.mc-prev-dup .mc-dup-note { margin-top: 0; }
+.mc-prev-seg { text-align: center; font-size: 11.5px; }
 .mc-dup-note { margin-top: 10px; border-radius: 7px; padding: 8px 10px; font-size: 12px; line-height: 1.55; }
 .mc-dup-note.warn { background: color-mix(in srgb, var(--warn) 12%, transparent); color: color-mix(in srgb, var(--warn) 30%, var(--fg)); }
 .mc-dup-note.ok   { background: color-mix(in srgb, var(--success) 10%, transparent); color: var(--success); }
 .mc-dup-note .mc-codes { font-family: var(--mono, Menlo, Consolas, monospace); }
+/* 多候选逐行：码:名称，等宽码列对齐 */
+.mc-dup-list { margin-top: 6px; line-height: 1.9; }
+.mc-dup-item { word-break: break-all; }
+.mc-dup-item .mc-codes { color: var(--fg); font-weight: 600; }
+.mc-dup-act { margin-top: 4px; }
 
 /* ── 线段信息条 ── */
 .mc-seg-meta { font-size: 12px; color: var(--muted); line-height: 1.6; }
