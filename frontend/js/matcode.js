@@ -251,13 +251,19 @@ function _mcTreeFolder(n, depth) {
   var key = n.key;
   var sel = (_mc.dirScopeKind === 'folder' && _mc.dirScopeKey === key);
   var open = _mcIsExpanded(key);
-  var html = '<div class="dt-tree-node non-leaf' + (sel ? ' selected' : '') + '"' +
+  var empty = !(n.children && n.children.length);   // ERP 空分类（无段）→ 灰显占位
+  var arrow = empty
+    ? '<span style="width:16px;flex-shrink:0"></span>'
+    : '<span class="dt-tree-arrow' + (open ? '' : ' collapsed') + '" data-mc-key="' + escHtml(key) + '"' +
+      ' onclick="event.stopPropagation();mcCatToggleClick(this)">▼</span>';
+  var cls = 'dt-tree-node non-leaf' + (sel ? ' selected' : '') + (empty ? ' dt-tree-empty' : '');
+  var html = '<div class="' + cls + '"' +
     ' data-mc-key="' + escHtml(key) + '" data-mc-kind="folder"' +
     ' style="padding-left:' + (4 + depth * 20) + 'px" onclick="mcCatClick(this)">' +
-    '<span class="dt-tree-arrow' + (open ? '' : ' collapsed') + '" data-mc-key="' + escHtml(key) + '"' +
-      ' onclick="event.stopPropagation();mcCatToggleClick(this)">▼</span>' +
+    arrow +
     '<span class="dt-tree-icon">📁</span>' +
-    '<span class="dt-tree-label">' + escHtml(n.label) + '</span>' +
+    '<span class="dt-tree-label"' + (empty ? ' title="空分类（当前无物料）"' : '') + '>' +
+      escHtml(n.label) + '</span>' +
     '<span class="dt-tree-badge">' + (n.active_count || 0) + '</span>' +
     '</div>';
   if (open && n.children) {

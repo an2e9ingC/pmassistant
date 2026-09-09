@@ -159,3 +159,7 @@
 
 /* 左树 发码按钮随行 hover 显现（.dt-tree-acts 由 doc-templates.css 控制显隐） */
 .mc-tree-body .dt-tree-acts .btn { margin-left: 2px; }
+
+/* ERP 空分类（无段可展）：整行弱化，仅作层级占位，点击过滤仍返回空结果 */
+.mc-tree-body .dt-tree-node.dt-tree-empty { opacity: .55; cursor: default; }
+.mc-tree-body .dt-tree-node.dt-tree-empty:hover { background: none; }

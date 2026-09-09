@@ -178,7 +178,7 @@ def list_materials(
             (MatcodeMaterial.remark.like(like))
         )
     keys = _scope_segment_keys(db, cat, segment)
-    if keys:
+    if keys is not None:  # [] = 空分类（无段可展）→ 空结果；None = 不限
         query = query.filter(MatcodeSegment.key.in_(keys))
     if status:
         query = query.filter(MatcodeMaterial.status == status)
@@ -228,7 +228,7 @@ def export_materials(
             (MatcodeMaterial.remark.like(like))
         )
     keys = _scope_segment_keys(db, cat, segment)
-    if keys:
+    if keys is not None:  # [] = 空分类 → 空结果；None = 不限
         query = query.filter(MatcodeSegment.key.in_(keys))
     if not include_legacy:
         query = query.filter(MatcodeSegment.key != "legacy11723")
