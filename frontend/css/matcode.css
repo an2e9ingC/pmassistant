@@ -119,3 +119,43 @@
 .mc-draw-edit { display: flex; gap: 6px; }
 .mc-draw-edit input { flex: 1; }
 .mc-draw-edit button { white-space: nowrap; }
+
+/* ═══════════════════════════════════════════════════
+   目录页 · 左树右表（M5：全物料分类）
+═══════════════════════════════════════════════════ */
+
+.mc-dir-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 1160px) {
+  .mc-dir-layout { grid-template-columns: 1fr; }
+  .mc-dir-tree { position: static !important; max-height: 300px !important; }
+}
+.mc-dir-tree {
+  position: sticky; top: 74px; max-height: calc(100vh - 150px);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.mc-dir-main { min-width: 0; }
+
+.mc-tree-hd {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 7px 10px 7px 12px; font-size: 12px; font-weight: 600; color: var(--muted);
+  border-bottom: 1px solid var(--border); background: var(--surface2);
+}
+.mc-tree-hd-t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mc-tree-collapse {
+  flex-shrink: 0; border: 1px solid var(--border); background: var(--surface); color: var(--muted);
+  font-size: 11px; line-height: 1; padding: 3px 9px; border-radius: 10px; cursor: pointer;
+  transition: color .12s, border-color .12s;
+}
+.mc-tree-collapse:hover { color: var(--accent); border-color: var(--accent); }
+.mc-tree-body { overflow-y: auto; padding: 8px 4px 12px; flex: 1; }
+.mc-tree-body .dt-tree-node { font-size: 12.5px; padding-top: 5px; padding-bottom: 5px; }
+.mc-tree-body .dt-tree-node .dt-tree-label .mc-dim { letter-spacing: 0.02em; }
+
+/* 目录表 生产厂商列（超长省略，悬停看全文） */
+.mc-manu {
+  display: inline-block; max-width: 138px; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; vertical-align: bottom; color: var(--fg); font-size: 12px;
+}
+
+/* 左树 发码按钮随行 hover 显现（.dt-tree-acts 由 doc-templates.css 控制显隐） */
+.mc-tree-body .dt-tree-acts .btn { margin-left: 2px; }

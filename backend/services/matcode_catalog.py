@@ -179,3 +179,11 @@ def is_admin_user(user) -> bool:
         return True
     from backend.middleware.auth import has_perm
     return has_perm(user, "admin")
+
+
+# ERP 全量族扩容种子：只增不改既有 38 段（append-only，保证现有归属零破坏）。
+# 依据 7 个 ERP 导出文件的 8 位码实测派生 + CIS 规则书空族；seed_segments 幂等跳过已存在 key。
+# 定义在 matcode_families.py（与分类树常量同源），此处合并进唯一种子权威列表。
+from backend.services.matcode_families import FAMILY_SEGMENT_SEEDS  # noqa: E402
+
+SEGMENT_SEEDS = SEGMENT_SEEDS + FAMILY_SEGMENT_SEEDS

@@ -81,6 +81,7 @@ class MatcodeMaterial(Base):
     legacy_prefix = Column(String(8), nullable=True)            # 旧前缀（仅历史导入码：11723）
     name = Column(String(256), nullable=False)                  # 物料名称（必填）
     spec = Column(String(256), nullable=True)                   # 规格型号 / 厂家规格型号
+    manufacturer = Column(String(256), nullable=True)           # 生产厂商（元器件/外购件查看必需）
     drawing = Column(String(128), nullable=True)                # 图号（如 LM_LJ.030.0001，可空）
     project = Column(String(128), nullable=True)                # 使用项目
     unit = Column(String(32), nullable=True)                    # 单位
