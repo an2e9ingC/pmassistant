@@ -308,7 +308,9 @@ function buildInfo(p, notes, delivery, docs, taskStats, bugStats) {
       if (stage.documents) projDocs = projDocs.concat(stage.documents);
     });
   }
-  var agreementOptions = ['对外销售-技术协议', '研发内部-技术协议'];
+  // 基础协议：固定展示，缺失时提示「请按要求提交」
+  var BASE_AGREEMENTS = ['对外销售-技术协议', '研发内部-技术协议'];
+  var agreementOptions = BASE_AGREEMENTS.slice();
   var findAgreementDoc = function(name) {
     var found = null;
     projDocs.forEach(function(d) {
@@ -316,9 +318,23 @@ function buildInfo(p, notes, delivery, docs, taskStats, bugStats) {
     });
     return found;
   };
-  var defaultAgreement = findAgreementDoc('对外销售-技术协议') || findAgreementDoc('研发内部-技术协议');
+
+  // 补充协议：非所有项目都有，从项目已提交文档中动态发现（文档模板体系可随时新增
+  // 补充协议类型，前端不再维护独立于此的硬编码名单），已提交的才纳入切换列表。
+  var supplementDocs = [];
+  projDocs.forEach(function(d) {
+    if (!d.location || !d.doc_name || d.doc_name.indexOf('补充协议') < 0) return;
+    if (supplementDocs.some(function(x) { return x.doc_name === d.doc_name; })) return;
+    supplementDocs.push(d);
+    agreementOptions.push(d.doc_name);
+  });
+  var hasSupplement = supplementDocs.length > 0;
+
+  var defaultAgreement = findAgreementDoc('对外销售-技术协议') || findAgreementDoc('研发内部-技术协议') || supplementDocs[0];
   var currentAgreementName = defaultAgreement
-    ? (findAgreementDoc('对外销售-技术协议') ? '对外销售-技术协议' : '研发内部-技术协议')
+    ? (findAgreementDoc('对外销售-技术协议') ? '对外销售-技术协议'
+      : findAgreementDoc('研发内部-技术协议') ? '研发内部-技术协议'
+      : supplementDocs[0].doc_name)
     : null;
 
   // 2-column layout: Left (info + notes + activity), Right (agreement doc, full height)
@@ -436,8 +452,13 @@ function buildInfo(p, notes, delivery, docs, taskStats, bugStats) {
   html += '<div style="flex:1;min-width:0;display:flex;flex-direction:column">';
   html += '<div class="card card-clip" style="padding:0;overflow:hidden;flex:1;display:flex;flex-direction:column">';
   html += '<div style="padding:8px 12px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">';
-  html += '<span id="proj-agreement-title" style="font-size:12px;font-weight:600">' + escHtml(currentAgreementName || '技术协议') + '</span>';
-  html += '<div style="display:flex;align-items:center;gap:4px">';
+  html += '<div style="display:flex;align-items:center;gap:6px;min-width:0">';
+  html += '<span id="proj-agreement-title" style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(currentAgreementName || '技术协议') + '</span>';
+  if (hasSupplement) {
+    html += '<span class="badge badge-planning" style="flex-shrink:0" title="该项目已提交技术补充协议，可在右侧下拉切换查看">有补充协议</span>';
+  }
+  html += '</div>';
+  html += '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0">';
   html += '<select id="agreement-doc-select" style="font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--fg);cursor:pointer" onchange="switchAgreementDoc(this.value)">';
   agreementOptions.forEach(function(opt) {
     html += '<option value="' + escHtml(opt) + '"' + (currentAgreementName === opt ? ' selected' : '') + '>' + escHtml(opt) + '</option>';
@@ -500,8 +521,6 @@ function buildInfo(p, notes, delivery, docs, taskStats, bugStats) {
   window.loadAgreementDoc = function() { renderAgreementDoc(_curAgreementName()); };
 
   window.switchAgreementDoc = function(docName) {
-    var hdr = document.querySelector('#info-content .section-hd .section-title');
-    if (hdr) hdr.textContent = docName;
     var title = document.getElementById('proj-agreement-title');
     if (title) title.textContent = docName;
     renderAgreementDoc(docName);
