@@ -120,7 +120,7 @@ FAMILY_SEGMENT_SEEDS = [
 
 # ── 分类树常量（层级镜像 ERP(U8) 存货分类；ERP 码文件夹 = key 用码字符串） ──
 MATCODE_CATALOG = [
-    {"key": 'raw', "label": '原制料', "children": [          # ERP(1) 原制料
+    {"key": 'raw', "label": '原材料', "children": [          # ERP(1) 原材料（ERP 原文「原制料」）
             {"key": '101', "label": '101 大规模集成电路', "children": ["1011", "1012", "1013", "1014", "1015", "1016"]},
             {"key": '102', "label": '102 逻辑', "children": ["1021", "1022"]},
             {"key": '103', "label": '103 存储', "children": ["1031", "1032", "1033"]},
